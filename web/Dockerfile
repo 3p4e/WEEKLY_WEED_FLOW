@@ -1,5 +1,5 @@
-# WWF front-end — static GrowFlow task-tracker served by nginx,
-# with /ai, /agents and /health reverse-proxied to the gateway.
+# WWF front-end — the GrowFlow UI served by nginx, with the backend API
+# (/auth, /departments, /weeks, /tasks, /ai) reverse-proxied same-origin.
 FROM nginx:1.27-alpine
 
 # Static app (index.html + gf/ + assets/)
@@ -10,5 +10,6 @@ RUN rm -f /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=4s --retries=3 \
-  CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1
+# NOTE: intentionally no HEALTHCHECK — Traefik (host network mode here) won't
+# route to a container marked "unhealthy", and busybox wget to "localhost" is
+# unreliable in this image. nginx availability is observed via the route itself.
