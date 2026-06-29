@@ -34,6 +34,13 @@ GF.API = {
     this.token = ''; this.user = null;
     sessionStorage.removeItem('wwf_token'); sessionStorage.removeItem('wwf_user');
   },
+  changePassword(newPassword, currentPassword) {
+    return this._req('POST', '/auth/change-password', { new_password: newPassword, current_password: currentPassword || null });
+  },
+  me() { return this._req('GET', '/auth/me'); },
+  listUsers()      { return this._req('GET', '/auth/users'); },
+  createUser(body) { return this._req('POST', '/auth/users', body); },
+  deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
 
   departments() { return this._req('GET', '/departments'); },
   weeks()       { return this._req('GET', '/weeks'); },

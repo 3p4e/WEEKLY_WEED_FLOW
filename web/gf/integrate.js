@@ -18,6 +18,16 @@ const DEPT_STYLE = {
 
 GF.WWF.meId = 'me';
 
+// GrowFlow role keys <-> backend role enum
+const ROLE_OUT = { admin:'ADMIN', hod:'DEPT_HEAD', qa:'QA_AUDITOR', qp:'PROJECT_LEAD', operator:'USER', viewer:'TEAM_LEADER' };
+const ROLE_IN  = { ADMIN:'admin', DEPT_HEAD:'hod', QA_AUDITOR:'qa', PROJECT_LEAD:'qp', USER:'operator', TEAM_LEADER:'viewer' };
+GF.WWF.colorFor = (id) => {
+  const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
+    : ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C'];
+  let h = 0; String(id).split('').forEach(ch => h = (h * 31 + ch.charCodeAt(0)) >>> 0);
+  return c[h % c.length];
+};
+
 GF.WWF.transform = (t) => ({
   id: t.id, title: t.title, desc: t.description || '',
   dept: t.department_id || (GF.DEPTS[0] && GF.DEPTS[0].id),
@@ -89,24 +99,82 @@ GF.WWF.showLogin = (msg) => {
 GF.WWF.doLogin = async () => {
   const u = (GF.$('wwf-u')||{}).value, p = (GF.$('wwf-p')||{}).value;
   const m = GF.$('wwf-login-msg'); if (m) m.textContent = 'Signing in…';
-  try { await GF.API.login(u, p); GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender(); }
-  catch (e) { if (m) m.textContent = e.message === 'unauthorized' ? 'Invalid username or password' : ('Error: ' + e.message); }
+  try {
+    const data = await GF.API.login(u, p);
+    if (data.user && data.user.must_change_password) { GF.WWF.showChangePw(p); return; }
+    GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
+  } catch (e) { if (m) m.textContent = e.message === 'unauthorized' ? 'Invalid username or password' : ('Error: ' + e.message); }
+};
+
+/* ── first-login password change (must_change_password) ────────────── */
+GF.WWF.showChangePw = (currentPw) => {
+  GF.WWF._curPw = currentPw || '';
+  let el = GF.$('wwf-login'); if (!el) { GF.WWF.showLogin(); el = GF.$('wwf-login'); }
+  const IN = 'width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #E3E8F0;border-radius:10px;margin-bottom:10px;font-size:14px';
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:18px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <span class="pp-leaf-anim" style="width:42px;height:50px;flex-shrink:0"></span>
+        <div><div style="font-size:22px;font-weight:800;color:#16233B">Grow<span style="color:#15A86B">Flow</span></div></div>
+      </div>
+      <div style="font-size:15px;font-weight:700;color:#16233B;margin:8px 0 2px">Set a new password</div>
+      <div style="font-size:12px;color:#8A99B0;margin-bottom:16px">First login — choose a password (min 8 characters).</div>
+      <input id="wwf-np" type="password" placeholder="New password" style="${IN}">
+      <input id="wwf-np2" type="password" placeholder="Confirm password" style="${IN}" onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()">
+      <button onclick="GF.WWF.doChangePw()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#15A86B;color:#fff;font-weight:700;font-size:14px;cursor:pointer">Set password & continue</button>
+      <div id="wwf-login-msg" style="color:#E5484D;font-size:12px;margin-top:10px;min-height:16px"></div>
+    </div>`;
+  el.style.display = 'flex';
+  setTimeout(() => GF.$('wwf-np') && GF.$('wwf-np').focus(), 60);
+};
+GF.WWF.doChangePw = async () => {
+  const a = (GF.$('wwf-np')||{}).value || '', b = (GF.$('wwf-np2')||{}).value || '';
+  const m = GF.$('wwf-login-msg');
+  if (a.length < 8) { if (m) m.textContent = 'Password must be at least 8 characters'; return; }
+  if (a !== b) { if (m) m.textContent = 'Passwords do not match'; return; }
+  if (m) m.textContent = 'Saving…';
+  try {
+    await GF.API.changePassword(a, GF.WWF._curPw);
+    try { GF.API.user = await GF.API.me(); sessionStorage.setItem('wwf_user', JSON.stringify(GF.API.user)); } catch (e) {}
+    GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
+  } catch (e) { if (m) m.textContent = 'Error: ' + e.message; }
 };
 
 /* ── load real data + render ───────────────────────────────────────── */
+GF.WWF.loadTeam = async () => {
+  let users = null;
+  try { users = await GF.API.listUsers(); } catch (e) { users = [GF.API.user].filter(Boolean); }
+  GF.PEOPLE = {};
+  (users || []).forEach(p => { if (!p || !p.id) return;
+    GF.PEOPLE[p.id] = {
+      name: p.full_name || p.username, username: p.username,
+      init: ((p.full_name || p.username || 'U').trim().split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase()) || 'U',
+      role: ROLE_IN[p.role] || 'operator', roleLabel: p.function_role || p.role || '',
+      dept: p.department_id || (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(p.id),
+      backendRole: p.role, mcp: p.must_change_password, active: p.is_active };
+  });
+  const me = GF.API.user;
+  if (me && me.id && !GF.PEOPLE[me.id]) GF.PEOPLE[me.id] = {
+    name: me.full_name || me.username, username: me.username, init: 'ME',
+    role: ROLE_IN[me.role] || 'operator', roleLabel: me.function_role || '',
+    dept: (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
+};
+
 GF.WWF.loadAndRender = async () => {
-  const [depts, weeks, tasks] = await Promise.all([GF.API.departments(), GF.API.weeks(), GF.API.tasks()]);
-  GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
-    return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
   const u = GF.API.user || {};
   GF.WWF.meId = u.id || 'me';
-  GF.PEOPLE = {}; GF.PEOPLE[GF.WWF.meId] = {
-    name:u.full_name || u.username || 'User', init:(u.full_name||u.username||'U').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase(),
-    role: u.role==='ADMIN'?'admin':'hod', roleLabel:u.function_role || u.role || '', dept:(GF.DEPTS[0]||{}).id, bg:'#15A86B' };
   GF.state.user = GF.WWF.meId;
+  // Load each independently so one failure never blanks the UI.
+  let depts = [], weeks = [], tasks = [];
+  try { depts = (await GF.API.departments()) || []; } catch (e) { GF.toast('Departments: ' + e.message, 'error'); }
+  try { weeks = (await GF.API.weeks()) || []; } catch (e) {}
+  try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast('Tasks: ' + e.message, 'error'); }
+  if (depts.length) GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
+    return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
+  await GF.WWF.loadTeam();
   GF.WWF.buildCalendar(weeks);
   GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
-  GF.render.all();
+  try { GF.render.all(); } catch (e) { console.error('render error', e); }
 };
 
 /* ── persistence overrides (writes -> API) ─────────────────────────── */
@@ -165,3 +233,73 @@ GF.WWF.install = () => {
 };
 
 GF.WWF.install();
+
+/* ── Team / account provisioning (real backend, OTP shown to admin) ── */
+GF.openUser = (id) => {
+  if (!GF.can('team')) return GF.denyToast();
+  GF._editUser = null;  // create only (no in-place edit endpoint)
+  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.depName(d.id)}</option>`).join('');
+  const roleOpts = Object.keys(GF.ROLES).filter(r => ROLE_OUT[r]).map(r =>
+    `<option value="${r}" ${r==='operator'?'selected':''}>${GF.roleLabel(r)}</option>`).join('');
+  GF.$('user-title').textContent = GF.t('add_user');
+  GF.$('user-body').innerHTML = `
+    <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" placeholder="e.g. Ana Nikolova"></div>
+    <div class="field"><label>Username</label><input id="u-username" placeholder="e.g. ana" autocapitalize="off" autocomplete="off"></div>
+    <div class="field"><label>${GF.t('role')}</label><select id="u-role">${roleOpts}</select></div>
+    <div class="field"><label>${GF.t('dept_label')}</label><select id="u-dept">${deptOpts}</select></div>
+    <div class="field"><label>Title (optional)</label><input id="u-fn" placeholder="e.g. Head of QC"></div>
+    <div style="font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.5">
+      A <b>one-time password</b> is generated and shown to you on save. Give the username + one-time
+      password to the person — they set their own password on first login.</div>`;
+  GF.openModal('user-modal');
+};
+
+GF.submitUser = async () => {
+  const name = (GF.$('u-name')?.value || '').trim();
+  const username = (GF.$('u-username')?.value || '').trim().toLowerCase();
+  if (!name) { GF.toast('Enter a full name', 'error'); return; }
+  if (!username) { GF.toast('Enter a username', 'error'); return; }
+  const role = ROLE_OUT[GF.$('u-role').value] || 'USER';
+  const department_id = GF.$('u-dept').value;
+  const function_role = (GF.$('u-fn')?.value || '').trim() || null;
+  GF.toast('Creating account…', 'info');
+  try {
+    const res = await GF.API.createUser({ username, full_name: name, role, department_id, function_role });
+    GF.closeModal('user-modal');
+    GF.WWF.showOtp(res.user || { username, full_name: name }, res.otp);
+    await GF.WWF.loadAndRender();
+  } catch (e) { GF.toast('Create failed: ' + (e.message || e), 'error'); }
+};
+
+GF.removeUser = async (id) => {
+  if (!GF.can('team')) return GF.denyToast();
+  if (id === GF.state.user) { GF.toast('You cannot remove your own account', 'error'); return; }
+  const p = GF.PEOPLE[id] || {};
+  if (!confirm('Deactivate the account for ' + (p.name || id) + '?')) return;
+  try { await GF.API.deleteUser(id); delete GF.PEOPLE[id]; GF.render.all(); GF.toast('Account removed ✓', 'success'); }
+  catch (e) { GF.toast('Remove failed: ' + e.message, 'error'); }
+};
+
+// Real auth: no local impersonation — switching accounts means logging in as them.
+GF.setActiveUser = () => GF.toast(GF.state.lang === 'mk'
+  ? 'За друга сметка, одјавете се и најавете се како тој корисник.'
+  : 'To use another account, log out and sign in as that user.', 'info');
+
+GF.WWF.showOtp = (user, otp) => {
+  let el = GF.$('wwf-otp');
+  if (!el) { el = document.createElement('div'); el.id = 'wwf-otp'; el.className = 'overlay'; document.body.appendChild(el); }
+  el.innerHTML = `
+    <div class="modal" style="max-width:420px">
+      <div class="modal-head"><h3>Account created</h3>
+        <button class="btn-ghost" onclick="GF.closeModal('wwf-otp')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+      <div class="modal-body">
+        <div style="font-size:13px;color:var(--ink-2);margin-bottom:14px">Share these with <b>${GF.esc(user.full_name || user.username)}</b>. They set their own password on first login; this one-time password works once.</div>
+        <div class="field"><label>Username</label>
+          <div style="font:700 18px ui-monospace,monospace;color:var(--ink)">${GF.esc(user.username)}</div></div>
+        <div class="field" style="margin-top:12px"><label>One-time password</label>
+          <div style="font:800 24px ui-monospace,monospace;letter-spacing:2px;color:var(--green)">${GF.esc(otp || '—')}</div></div>
+      </div>
+      <div class="modal-foot"><button class="btn btn-primary" onclick="GF.closeModal('wwf-otp')">Done</button></div>
+    </div>`;
+  GF.openModal('wwf-otp');
+};
