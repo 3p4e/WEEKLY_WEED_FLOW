@@ -1,0 +1,78 @@
+# ════════════════════════════════════════════════════════════════════════
+#  WWF — Weekly Weed Flow : single-stack deployment
+#  Project name: wwf   →   containers: wwf-web, wwf-gateway   network: wwf-net
+#
+#  Hosts the GrowFlow task-tracker (static web) + the AI gateway, and connects
+#  the gateway to:
+#    • Letta stateful agents (KVM4)         via LETTA_BASE_URL / LETTA_API_KEY
+#    • the suma_db task-capture database     via SUPABASE_URL / SUMA_DB_URL
+#
+#  Deploy on KVM4 (Ubuntu 24.04 + Docker + Traefik):
+#     cp .env.example .env   # fill in the values
+#     docker compose up -d --build
+# ════════════════════════════════════════════════════════════════════════
+name: wwf
+
+services:
+  # ── Static front-end (nginx) — serves web/ and reverse-proxies /ai,/agents,/health to the gateway
+  web:
+    build:
+      context: ./web
+    image: wwf-web:latest
+    container_name: wwf-web
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - wwf-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.wwf-web.rule=Host(`${APP_HOST:-wwf.localhost}`)"
+      - "traefik.http.routers.wwf-web.entrypoints=websecure"
+      - "traefik.http.routers.wwf-web.tls=true"
+      - "traefik.http.routers.wwf-web.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.wwf-web.loadbalancer.server.port=80"
+
+  # ── AI gateway (FastAPI + Letta) — bridges the app to KVM4 Letta agents + suma_db
+  gateway:
+    build:
+      context: ./backend
+    image: wwf-gateway:latest
+    container_name: wwf-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Letta stateful agents (KVM4). host.docker.internal resolves to the VPS host
+      # so the gateway can reach a Letta published on :8283, or point at your Letta URL.
+      - LETTA_BASE_URL=${LETTA_BASE_URL:-http://host.docker.internal:8283}
+      - LETTA_TOKEN=${LETTA_TOKEN:-}
+      - LETTA_API_KEY=${LETTA_API_KEY:-}
+      - LETTA_MODEL=${LETTA_MODEL:-openai/gpt-4o-mini}
+      - LETTA_EMBEDDING=${LETTA_EMBEDDING:-openai/text-embedding-3-small}
+      - LETTA_AGENT_PREFIX=${LETTA_AGENT_PREFIX:-growflow}
+      # Task-capture store = the Letta agents' own database (Postgres + pgvector).
+      # Day-to-day capture goes through the Letta API above; set this only if the
+      # gateway needs direct DB access (e.g. analytics queries).
+      - LETTA_DB_URL=${LETTA_DB_URL:-}
+      # Vector DB + embeddings for RAG (Letta <-> Qdrant)
+      - QDRANT_URL=${QDRANT_URL:-}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY:-}
+      # CORS — set to your real origin in production
+      - GROWFLOW_ALLOWED_ORIGINS=${GROWFLOW_ALLOWED_ORIGINS:-*}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8080"
+    ports:
+      - "${GATEWAY_PORT:-8000}:8080"
+    networks:
+      - wwf-net
+
+networks:
+  wwf-net:
+    name: wwf-net

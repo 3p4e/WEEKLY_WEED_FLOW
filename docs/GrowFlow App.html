@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>GrowFlow — Production Task Manager</title>
+  <link rel="stylesheet" href="gf/app.css?v=r5">
+  <link rel="stylesheet" href="gf/brand.css?v=r5">
+  <link rel="stylesheet" href="gf/mobile.css?v=r5">
+</head>
+<body>
+<div id="app">
+  <!-- Sidebar -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand" style="gap:12px">
+      <span class="pp-leaf-anim" style="width:58px;height:67px;flex-shrink:0"></span>
+      <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+        <div class="brand-name pp-brand-text" style="font-size:19px;line-height:1.05">GrowFlow</div>
+        <div style="font-size:10.5px;font-weight:800;letter-spacing:.16em;color:#16233B;line-height:1.1">PURELY<span style="font-style:italic;font-weight:700">PLANT</span></div>
+        <div style="font-size:6px;font-weight:600;letter-spacing:.22em;color:var(--ink-3);text-transform:uppercase">The Future of Cannabis</div>
+      </div>
+    </div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="side-divider"></div>
+    <div class="side-label" id="side-label">Departments</div>
+    <div class="dept-list" id="dept-list"></div>
+    <div class="user-card" id="user-card" onclick="GF.openSettings()"></div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="header">
+      <button class="btn-ghost hamburger" id="hamburger">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
+      <div class="search">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M17 17l-3.2-3.2M15.5 9.5a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+        <input id="search-input" placeholder="Search tasks, batches, rooms…">
+      </div>
+      <div class="spacer"></div>
+      <div class="lang-toggle">
+        <span id="lang-en" class="on" onclick="GF.setLang('en')">EN</span>
+        <span id="lang-mk" onclick="GF.setLang('mk')">МК</span>
+      </div>
+      <button class="btn btn-orange" onclick="GF.voice.openCapture(GF.state.selWeek)">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:#fff"><path d="M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5"/></svg>
+        <span id="voice-btn-label">Voice task</span>
+      </button>
+      <button class="btn btn-sm" onclick="GF.goToday()">Today</button>
+      <button class="icon-btn" onclick="GF.openSettings()" title="Settings">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1"/></svg>
+      </button>
+      <div id="header-avatar"></div>
+    </header>
+
+    <div class="workspace">
+      <div id="week-strip" class="week-strip"></div>
+      <div id="day-pills" class="day-pills"></div>
+      <div id="telemetry" class="telemetry"></div>
+      <div id="panels" class="panels"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<!-- ═══════════ MODALS ═══════════ -->
+
+<!-- Voice capture -->
+<div class="overlay" id="voice-modal">
+  <div class="modal voice-modal" style="max-width:440px">
+    <div class="modal-head">
+      <h3 style="color:#fff">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:#fff;width:20px;height:20px"><path d="M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5"/></svg>
+        Voice task
+      </h3>
+      <button class="btn-ghost" style="color:rgba(255,255,255,.7)" onclick="GF.closeModal('voice-modal')">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="voice-content" style="padding:0 22px 22px"></div>
+  </div>
+</div>
+
+<!-- AI summary -->
+<div class="overlay" id="ai-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--orange);width:20px;height:20px"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>
+        AI Summary
+      </h3>
+      <button class="btn-ghost" onclick="GF.closeModal('ai-modal')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="ai-out" style="min-height:120px"></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="GF.closeModal('ai-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export -->
+<div class="overlay" id="export-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-head">
+      <h3 id="export-title">Export</h3>
+      <button class="btn-ghost" onclick="GF.closeModal('export-modal')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('csv')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M4 6h12v11H4zM4 6V4m12 2V4M7 3v3m6-3v3M4 9h12"/></svg>
+        Export CSV
+      </button>
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('json')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/></svg>
+        Export JSON
+      </button>
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('pdf')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>
+        Export PDF
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Add task -->
+<div class="overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--blue);width:20px;height:20px"><path d="M10 4v12M4 10h12"/></svg>
+        New task
+      </h3>
+      <button class="btn-ghost" onclick="GF.closeModal('add-modal')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="add-body"></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="GF.closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="GF.submitAdd()">Create task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="overlay" id="settings-modal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-head">
+      <h3>
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--ink-2);width:20px;height:20px"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1"/></svg>
+        Settings
+      </h3>
+      <button class="btn-ghost" onclick="GF.closeModal('settings-modal')">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>AI backend (Letta gateway URL)</label>
+        <input id="set-ai-base" placeholder="http://your-kvm4:8080">
+      </div>
+      <div class="field">
+        <label>Language</label>
+        <select id="set-lang">
+          <option value="en">English</option>
+          <option value="mk">Македонски</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Active user (prototype)</label>
+        <select id="set-user">
+          <option value="marko">Marko Petrov — HOD Cultivation</option>
+          <option value="elena">Elena Stojanova — HOD QC</option>
+          <option value="dimitar">Dimitar Ilievski — HOD Production</option>
+          <option value="ana">Ana Nikolova — Cultivation Op.</option>
+          <option value="viktor">Viktor Angelov — Irrigation Op.</option>
+          <option value="nina">Nina Ristova — Warehouse Op.</option>
+          <option value="goran">Goran Markovski — Maintenance</option>
+          <option value="sofija">Sofija Trajkova — QA Officer</option>
+          <option value="jana">Jana Kostova — QP Release</option>
+        </select>
+      </div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px;line-height:1.5">
+        Point the AI backend at your <b>GrowFlow AI Gateway</b> (FastAPI + Letta stateful agents).
+        If blank, the app falls back to its built-in browser AI for demo purposes.
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="GF.closeModal('settings-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="GF.saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts (load order matters: data → core → render → ai → voice → export → main) -->
+<script src="qc/boot-guard.js?v=r5"></script>
+<script src="gf/data.js?v=r5"></script>
+<script src="gf/core.js?v=r5"></script>
+<script src="gf/render.js?v=r5"></script>
+<script src="gf/ai.js?v=r5"></script>
+<script src="gf/voice.js?v=r5"></script>
+<script src="gf/export.js?v=r5"></script>
+<script src="gf/main.js?v=r5"></script>
+</body>
+</html>

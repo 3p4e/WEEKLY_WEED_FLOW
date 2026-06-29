@@ -1,0 +1,35 @@
+# Brings up the Letta server and the GrowFlow AI gateway on a shared network.
+# On KVM4:  cp .env.example .env  &&  docker compose up -d
+services:
+  letta:
+    image: letta/letta:latest
+    container_name: letta
+    ports:
+      - "8283:8283"            # expose only if you need direct access; the gateway uses the internal network
+    environment:
+      # Give Letta at least one provider key so LETTA_MODEL / LETTA_EMBEDDING resolve.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional: secure the server and set LETTA_TOKEN in the gateway to match.
+      - SECURE=${LETTA_SECURE:-false}
+    volumes:
+      - letta_data:/root/.letta
+    restart: unless-stopped
+
+  gateway:
+    build: .
+    container_name: growflow-gateway
+    depends_on:
+      - letta
+    ports:
+      - "8080:8080"
+    environment:
+      - LETTA_BASE_URL=http://letta:8283
+      - LETTA_TOKEN=${LETTA_TOKEN:-}
+      - LETTA_MODEL=${LETTA_MODEL:-openai/gpt-4o-mini}
+      - LETTA_EMBEDDING=${LETTA_EMBEDDING:-openai/text-embedding-3-small}
+      - GROWFLOW_ALLOWED_ORIGINS=${GROWFLOW_ALLOWED_ORIGINS:-*}
+    restart: unless-stopped
+
+volumes:
+  letta_data:
