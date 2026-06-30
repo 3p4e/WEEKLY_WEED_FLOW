@@ -25,6 +25,11 @@ app, Qdrant RAG, automated snapshots) is the larger build it grows toward.
     accept/decline **acknowledgment** (assigning a teammate makes the task
     visible in their week; a decline reason is recorded as a comment).
   - **AI** — functions proxied to a bound **Letta** stateful agent.
+  - **Weekly report + plan** — `GET /reports/weekly?mode=report|plan` with
+    Fri→Thu rolling-window logic; 7-day activity time band bucketed by hour
+    from real `task_progress` timestamps (regular/overtime/weekend coloring);
+    AI-generated insights via the Letta `weekly_summary` function; department
+    breakdown, summary stats, prev/next week navigation; bilingual UI view.
 - **Schema** — [`backend/schema.sql`](../backend/schema.sql): tables, RLS
   policies, and the `app.fn_audit_row` audit trigger.
 - **Docker stack** — [`docker-compose.yml`](../docker-compose.yml): db +
@@ -35,9 +40,8 @@ app, Qdrant RAG, automated snapshots) is the larger build it grows toward.
 
 ## 🔜 Remaining for full spec (proposed phases)
 
-1. **Weekly report + plan** — Fri→Thu rolling-window report (this week) and plan
-   (next week) from the real timestamped data, with the 7-day estimated-time
-   band and AI-generated insights.
+1. ~~**Weekly report + plan**~~ ✅ Done — core Fri→Thu report + plan with
+   activity time band and AI insights (see above).
 2. **RAG + agents** — Qdrant + VoyageAI; semantic SOP search and the analytics /
    compliance agents wired into the UI.
 3. **Automated weekly snapshot** — asyncio Thu 18:00 UTC job → JSON + Markdown

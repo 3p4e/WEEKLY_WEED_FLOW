@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, audit, auth, collab, tasks
+from app.api import ai, audit, auth, collab, reports, tasks
 from app.config import settings
 from app.db import close_pools, init_pools
 
@@ -31,6 +31,7 @@ app.include_router(tasks.router)
 app.include_router(ai.router)
 app.include_router(audit.router)
 app.include_router(collab.router)
+app.include_router(reports.router)
 
 
 @app.get("/health")

@@ -23,7 +23,8 @@ jobs:
             paths=[getattr(r,'path','') for r in m.app.routes]; \
             print('routes:', len(paths)); \
             assert any(p.startswith('/audit') for p in paths), 'audit router not wired'; \
-            assert any(p.startswith('/auth') for p in paths), 'auth router not wired'"
+            assert any(p.startswith('/auth') for p in paths), 'auth router not wired'; \
+            assert any(p.startswith('/reports') for p in paths), 'reports router not wired'"
 
   images:
     name: Build container images

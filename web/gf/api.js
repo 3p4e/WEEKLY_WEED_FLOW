@@ -66,4 +66,9 @@ GF.API = {
   assign(taskId, userId, role) { return this._req('POST', '/tasks/' + taskId + '/assignees', { user_id: userId, role: role || 'assignee' }); },
   unassign(taskId, userId)  { return this._req('DELETE', '/tasks/' + taskId + '/assignees/' + userId); },
   ack(taskId, accepted, reason) { return this._req('POST', '/tasks/' + taskId + '/ack', { accepted: accepted, reason: reason || null }); },
+
+  weeklyReport(q = {}) {
+    const p = new URLSearchParams(q).toString();
+    return this._req('GET', '/reports/weekly' + (p ? '?' + p : ''));
+  },
 };
