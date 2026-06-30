@@ -52,4 +52,11 @@ GF.API = {
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
+
+  audit(q = {}) {
+    const p = new URLSearchParams(q).toString();
+    return this._req('GET', '/audit' + (p ? '?' + p : ''));
+  },
+  auditTables() { return this._req('GET', '/audit/tables'); },
+  auditVerify() { return this._req('GET', '/audit/verify'); },
 };

@@ -1,68 +1,72 @@
-# GrowFlow AI Gateway → Letta stateful agents
+# WEEKLY_WEED_FLOW — backend API
 
-A small **FastAPI** service that connects the GrowFlow task‑manager front‑end to
-**Letta stateful agents** running in Docker (e.g. on the **KVM4** cloud server).
+**FastAPI** (async) + **asyncpg** over **Postgres** (RLS-enforced), with JWT auth,
+no-self-signup provisioning, a hash-chained audit trail, and an always-on AI
+layer backed by **Letta** stateful agents. It is the real backend behind the
+GrowFlow UI in [`../web`](../web); nginx serves the UI and reverse-proxies the
+API paths below same-origin.
 
 ```
- Browser (GrowFlow app) ──HTTPS──▶ FastAPI gateway ──REST──▶ Letta server
-     web/gf/ai.js                  main.py (Docker, KVM4)        :8283
-                                   letta_service.py
+ Browser (GrowFlow UI) ──HTTPS──▶ nginx (wwf-gf-frontend) ──┬─▶ FastAPI API (:8000)
+   web/gf/*.js                     same-origin proxy         │      app/ (this dir)
+                                                             │         │
+                                              static files ──┘         ├─▶ Postgres (RLS, audit trigger)
+                                                                       └─▶ Letta agent (AI functions)
 ```
 
-Each GrowFlow user is mapped to **their own persistent Letta agent**
-(`growflow-<userId>`), so the agent remembers that person's department,
-recurring blockers and weekly context across sessions.
+## Layout
 
-## Endpoints (task‑tracking only)
+| File | Role |
+|------|------|
+| `app/main.py`        | App factory, lifespan (pool init), router wiring |
+| `app/config.py`      | Pydantic settings (two DSNs, JWT, Letta, CORS) |
+| `app/db.py`          | Two asyncpg pools (`app_user` RLS / `app_admin` BYPASSRLS) + `rls()` identity GUCs |
+| `app/security.py`    | bcrypt hashing + JWT (HS256) create/decode |
+| `app/deps.py`        | `get_current_user`, `require_role`, `require_password_set` |
+| `app/api/auth.py`    | Login, change-password, user provisioning (OTP, forced first-login change) |
+| `app/api/tasks.py`   | Departments, calendar weeks, task lifecycle (RLS-scoped) |
+| `app/api/ai.py`      | AI functions proxied to a bound Letta agent |
+| `app/api/audit.py`   | Read-only, tamper-evident audit trail (see below) |
+| `schema.sql`         | Full DB schema: roles, tables, RLS policies, audit trigger |
 
-| Method | Path                  | Purpose                                              |
-|--------|-----------------------|-----------------------------------------------------|
-| GET    | `/health`             | Gateway + Letta connectivity check                  |
-| POST   | `/ai/paraphrase`      | Clean a dictated note into one professional sentence |
-| POST   | `/ai/parse-voice`     | Turn a spoken sentence into a structured task (JSON) |
-| POST   | `/ai/weekly-summary`  | Status report (this week) / planning analysis (next) |
-| POST   | `/ai/chat`            | Free‑form chat with the user's stateful agent        |
-| POST   | `/agents/reset`       | Drop the cached agent mapping for a user             |
+## Security model
 
-> The QC‑laboratory endpoints (`/ai/lab-search`, `/ai/anomaly-check`) from the
-> original combined design are intentionally **not** part of this task‑tracking
-> build.
+- **Two roles, two pools.** Request handlers use `app_user` (NOBYPASSRLS); every
+  query runs inside `rls()`, which stamps `app.user_id / app.org_id / app.role`
+  as transaction-local GUCs so RLS policies and the audit trigger see the caller.
+  Auth lookups and provisioning use `app_admin` (BYPASSRLS).
+- **No self-signup.** `ADMIN` / `DEPT_HEAD` provision accounts; the creator is
+  shown a one-time password once, and the user must set their own on first login
+  (`must_change_password`).
+- **Audit trail.** Every write to audited tables fires `app.fn_audit_row`, which
+  appends a hash-chained row to `audit_log`
+  (`entry_hash = sha256(prev_hash || actor || op || table || record_id || ts ||
+  new || old)`). Deleting or reordering a row breaks every later link.
 
-All POST bodies include a `user` object (`{ id, name, role, department, lang }`);
-`user.id` is the stable key that selects the Letta agent.
+## Audit endpoints (`app/api/audit.py`)
+
+| Method | Path             | Access | Purpose |
+|--------|------------------|--------|---------|
+| GET    | `/audit`         | elevated¹ | Org-scoped trail, filterable by `table_name` / `record_id` / `action`, keyset-paginated via `before_id` |
+| GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
+| GET    | `/audit/verify`  | `ADMIN`   | Walks the **global** chain and reports the first linkage break, if any |
+
+¹ elevated = `ADMIN`, `DEPT_HEAD`, `PROJECT_LEAD`, `QA_AUDITOR` — mirrors the DB
+`audit_read` policy (`app.is_elevated()`). Secret columns (e.g. `password_hash`)
+are redacted from the payload server-side.
 
 ## Run locally (dev)
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # point LETTA_BASE_URL at your Letta server
-export $(grep -v '^#' .env | xargs)
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+cp .env.example .env          # set DATABASE_URL / ADMIN_DATABASE_URL / SECRET_KEY
+docker compose up -d --build  # db (loads schema.sql) + backend on :8000
+curl localhost:8000/health
 ```
 
-Visit `http://localhost:8080/docs` for the interactive API.
+## Production (KVM4)
 
-## Run with Docker (alongside Letta on KVM4)
-
-`docker-compose.yml` brings up both the Letta server and this gateway on a shared
-network so the gateway can reach Letta at `http://letta:8283`:
-
-```bash
-cd backend
-cp .env.example .env           # set provider keys for Letta below
-docker compose up -d
-```
-
-Letta needs at least one model‑provider key (e.g. `OPENAI_API_KEY`) so
-`LETTA_MODEL` / `LETTA_EMBEDDING` resolve. See <https://docs.letta.com> for
-self‑hosting and provider configuration.
-
-## Point the app at the gateway
-
-In the GrowFlow app open **Settings → AI backend** and set the gateway URL
-(e.g. `https://ai.yourdomain.com` or `http://KVM4-HOST:8080`). The app stores it
-locally and routes paraphrase / voice‑parse / summary / chat calls here. If the
-gateway is unreachable, the app falls back to its built‑in in‑browser model so
-the demo keeps working.
+Built as `weekly_weed_flow-backend:latest` and run as a standalone container on a
+shared docker network with the Postgres container and the GrowFlow nginx
+frontend; the frontend is published over HTTPS by Traefik (Let's Encrypt). The
+Letta stack is pre-existing and reached via `host.docker.internal`.

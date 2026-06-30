@@ -1,35 +1,38 @@
-# Brings up the Letta server and the GrowFlow AI gateway on a shared network.
-# On KVM4:  cp .env.example .env  &&  docker compose up -d
+# Local / dev reproduction of the WEEKLY_WEED_FLOW stack:
+#   db  (Postgres + pgvector, RLS roles, audit trigger)  +  backend API.
+#
+#   cp .env.example .env   &&   docker compose up -d --build
+#
+# Production on KVM4 runs these as standalone containers behind Traefik
+# (TLS via Let's Encrypt) on a shared docker network — see README.md. The
+# always-on Letta agent layer (AI functions) runs in its own pre-existing
+# stack and is reached over host.docker.internal, so it is not defined here.
 services:
-  letta:
-    image: letta/letta:latest
-    container_name: letta
-    ports:
-      - "8283:8283"            # expose only if you need direct access; the gateway uses the internal network
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: weekly_weed_flow-db-1
     environment:
-      # Give Letta at least one provider key so LETTA_MODEL / LETTA_EMBEDDING resolve.
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # Optional: secure the server and set LETTA_TOKEN in the gateway to match.
-      - SECURE=${LETTA_SECURE:-false}
+      - POSTGRES_DB=weekly_weed_flow
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
-      - letta_data:/root/.letta
+      - wwf_db:/var/lib/postgresql/data
+      # schema.sql defines tables, RLS policies and the hash-chained audit
+      # trigger. NOTE: the app_user / app_admin login roles (the latter with
+      # BYPASSRLS) are cluster-level and must be created separately before the
+      # API can connect — they are not part of this schema dump.
+      - ./schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
     restart: unless-stopped
 
-  gateway:
+  backend:
     build: .
-    container_name: growflow-gateway
+    container_name: weekly_weed_flow-backend-1
     depends_on:
-      - letta
-    ports:
-      - "8080:8080"
-    environment:
-      - LETTA_BASE_URL=http://letta:8283
-      - LETTA_TOKEN=${LETTA_TOKEN:-}
-      - LETTA_MODEL=${LETTA_MODEL:-openai/gpt-4o-mini}
-      - LETTA_EMBEDDING=${LETTA_EMBEDDING:-openai/text-embedding-3-small}
-      - GROWFLOW_ALLOWED_ORIGINS=${GROWFLOW_ALLOWED_ORIGINS:-*}
+      - db
+    env_file: .env
+    expose:
+      - "8000"
     restart: unless-stopped
 
 volumes:
-  letta_data:
+  wwf_db:
