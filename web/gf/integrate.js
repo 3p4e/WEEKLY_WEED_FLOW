@@ -6,7 +6,7 @@ GF.WWF = {};
 
 /* ── enum mapping (backend <-> GrowFlow) ───────────────────────────── */
 const S_IN  = { ongoing:'working', completed:'done', pending:'pending', stuck:'stuck', review:'review', postponed:'postponed' };
-const S_OUT = { working:'ongoing', done:'completed', pending:'pending', stuck:'stuck', review:'ongoing', postponed:'pending' };
+const S_OUT = { working:'ongoing', done:'completed', pending:'pending', stuck:'stuck', review:'review', postponed:'postponed' };
 const P_IN  = { normal:'medium', high:'high', critical:'critical', low:'low' };
 const P_OUT = { medium:'normal', high:'high', critical:'critical', low:'low' };
 const DEPT_STYLE = {
@@ -14,6 +14,12 @@ const DEPT_STYLE = {
   production:{icon:'box',color:'#2F6BFF'}, qc:{icon:'flask',color:'#7A5BE0'},
   quality_control:{icon:'flask',color:'#7A5BE0'}, quality_assurance:{icon:'shield',color:'#C2410C'},
   logistics:{icon:'box',color:'#0891B2'}, tooling:{icon:'wrench',color:'#5A6B82'},
+};
+// Cross-department handoff pipeline, keyed by the backend's department `code`
+// (resolved to real ids once /departments loads — see loadAndRender).
+const CODE_HANDOFF = {
+  cultivation:'production', production:'qc', qc:'quality_control',
+  quality_control:'quality_assurance', quality_assurance:'logistics',
 };
 
 GF.WWF.meId = 'me';
@@ -31,7 +37,7 @@ GF.WWF.colorFor = (id) => {
 GF.WWF.transform = (t) => ({
   id: t.id, title: t.title, desc: t.description || '',
   dept: t.department_id || (GF.DEPTS[0] && GF.DEPTS[0].id),
-  owner: GF.WWF.meId, helpers: [],
+  owner: t.user_id || GF.WWF.meId, helpers: [],
   status: S_IN[t.status] || 'pending', pr: P_IN[t.priority] || 'medium',
   days: Array.isArray(t.days) ? t.days.map(d => d.slice(0,3)) : [],
   weekId: GF.WWF.weekIndex(t), room: '', batch: '',
@@ -169,8 +175,16 @@ GF.WWF.loadAndRender = async () => {
   try { depts = (await GF.API.departments()) || []; } catch (e) { GF.toast('Departments: ' + e.message, 'error'); }
   try { weeks = (await GF.API.weeks()) || []; } catch (e) {}
   try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast('Tasks: ' + e.message, 'error'); }
-  if (depts.length) GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
-    return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
+  if (depts.length) {
+    GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
+      return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
+    // Resolve the code-keyed handoff pipeline to the real backend ids.
+    const byCode = {}; depts.forEach(d => { byCode[d.code] = d.id; });
+    GF.HANDOFF = {};
+    Object.entries(CODE_HANDOFF).forEach(([from, to]) => {
+      if (byCode[from] && byCode[to]) GF.HANDOFF[byCode[from]] = byCode[to];
+    });
+  }
   await GF.WWF.loadTeam();
   GF.WWF.buildCalendar(weeks);
   GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
@@ -224,20 +238,89 @@ GF.WWF.install = () => {
     } catch(e) { GF.toast('Create failed: '+e.message,'error'); }
   };
 
-  // AI weekly summary / plan -> backend Letta function
+  // AI features -> real backend Letta functions (/ai/{function_key}, body: {input}).
+  // Every call degrades to "AI agent unavailable" when no binding is configured —
+  // see backend/app/api/ai.py — instead of throwing.
   GF.ai = GF.ai || {};
   GF.ai.summary = async (kind) => {
     GF.$('ai-out').innerHTML = `<div class="ai-loading"><span class="spinner"></span>${GF.t('generate')}…</div>`;
     GF.openModal('ai-modal');
     try {
       const wk = GF.calendar.weeks[GF.state.selWeek + (kind==='plan'?1:0)] || GF.calendar.weeks[GF.state.selWeek];
-      const r = await GF.API.ai('weekly_summary', { week_id: wk && wk.realId, kind });
-      const text = (r && (r.text || r.reply || r.message)) || (r.available===false ? 'AI agent unavailable ('+(r.reason||'')+')' : JSON.stringify(r));
+      const tasks = GF.weekTasks(wk ? wk.id : GF.state.selWeek);
+      const body = tasks.map(t => `- [${t.status}] ${t.title} (${GF.depName(t.dept)}, ${t.pr})`).join('\n') || '(no tasks)';
+      const prompt = (kind === 'plan'
+        ? 'Analyse next week\'s plan: priorities, risks, workload. Bullet points.\n\n'
+        : 'Summarise this week\'s status: completed, in-progress, blockers. Bullet points.\n\n') + body;
+      const r = await GF.API.ai('weekly_summary', { input: prompt, context: { week_id: wk && wk.realId, kind } });
+      const text = (r && r.available) ? r.output : ('AI agent unavailable' + (r && r.reason ? ' (' + r.reason + ')' : ''));
       GF.$('ai-out').innerHTML = `<div class="ai-out">${GF.esc(text)}</div>`;
     } catch(e) { GF.$('ai-out').innerHTML = `<div class="ai-out">AI error: ${GF.esc(e.message)}</div>`; }
   };
+
+  GF.ai.paraphraseInput = async (inputId) => {
+    const el = GF.$(inputId); if (!el || !el.value.trim()) return;
+    const orig = el.value.trim();
+    GF.toast(GF.t('paraphrase') + '…', 'info');
+    try {
+      const r = await GF.API.ai('draft_description', { input:
+        `Rewrite this task note as one clear professional sentence for a GMP cannabis facility. Keep batch/room IDs.\n\n${orig}` });
+      if (r && r.available && r.output) el.value = r.output.trim();
+      else GF.toast('AI unavailable', 'info');
+    } catch (e) { GF.toast('AI error: ' + e.message, 'error'); }
+  };
+
+  GF.ai.paraphraseTask = async (taskId) => {
+    const t = GF.task(taskId); if (!t || !t.desc) { GF.toast('Nothing to rewrite', 'info'); return; }
+    GF.toast(GF.t('paraphrase') + '…', 'info');
+    try {
+      const r = await GF.API.ai('draft_description', { input: `Rewrite concisely for GMP cannabis: ${t.desc}` });
+      if (!(r && r.available && r.output)) { GF.toast('AI unavailable', 'info'); return; }
+      t.desc = r.output.trim();
+      await GF.API.updateTask(taskId, { description: t.desc });
+      GF.render.panels(); GF.toast('Rewritten ✓', 'success');
+    } catch (e) { GF.toast('AI error', 'error'); }
+  };
+
+  GF.ai.parseVoice = async (transcript) => {
+    const depts = GF.DEPTS.map(d => GF.state.lang === 'mk' ? d.mk : d.name);
+    const people = Object.entries(GF.PEOPLE).map(([, p]) => p.name);
+    try {
+      const r = await GF.API.ai('voice_capture', { input:
+        `Parse this spoken task into JSON {title,department,priority,assignee,due,days}. ` +
+        `Valid depts: ${depts.join(', ')}. Valid people: ${people.join(', ')}. ` +
+        `priority: critical|high|medium|low. Return ONLY JSON.\n\n"${transcript}"` });
+      if (r && r.available && r.output) {
+        const m = r.output.match(/\{[\s\S]*\}/);
+        if (m) return JSON.parse(m[0]);
+      }
+    } catch (e) {}
+    return { title: transcript };
+  };
+
   if (GF.assistant) GF.assistant.complete = async (prompt) => {
-    const r = await GF.API.ai('corpus_qa', { message: prompt }); return (r && (r.text||r.reply)) || ''; };
+    const r = await GF.API.ai('corpus_qa', { input: prompt }); return (r && r.available && r.output) || ''; };
+
+  // Voice-captured tasks must persist through the same API path as GF.submitAdd.
+  GF.voice.createFromVoice = async () => {
+    const p = GF.voice._parsed || {};
+    const deptMatch = GF.DEPTS.find(d => d.name.toLowerCase().includes((p.department || '').toLowerCase())
+      || d.mk.toLowerCase().includes((p.department || '').toLowerCase()));
+    const ownerMatch = Object.entries(GF.PEOPLE).find(([, v]) => v.name.toLowerCase().includes((p.assignee || '').toLowerCase()));
+    const days = Array.isArray(p.days) && p.days.length ? p.days : [GF.todayDay];
+    const wk = GF.calendar.weeks[GF.voice._weekId] || GF.calendar.weeks[GF.calendar.todayId];
+    try {
+      const created = await GF.API.createTask({
+        title: p.title || GF.voice._transcript, description: '', status: 'pending',
+        priority: P_OUT[p.priority] || 'normal',
+        department_id: deptMatch ? deptMatch.id : null, department: deptMatch ? deptMatch.name : null,
+        week_id: wk && wk.realId, week_start: wk ? wk.start.toISOString().slice(0,10) : null, days,
+      });
+      GF.state.tasks.push(GF.WWF.transform(created));
+      if (ownerMatch && ownerMatch[0] !== GF.WWF.meId) GF.API.assign(created.id, ownerMatch[0]).catch(()=>{});
+      GF.closeModal('voice-modal'); GF.render.all(); GF.toast(GF.t('create_task') + ' ✓', 'success');
+    } catch (e) { GF.toast('Create failed: ' + e.message, 'error'); }
+  };
 
   // logout from the user card / settings
   GF.openSettings = () => { if (confirm('Log out of Weekly Weed Flow?')) { GF.API.logout(); location.reload(); } };

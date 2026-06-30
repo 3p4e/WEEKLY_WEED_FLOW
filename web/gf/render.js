@@ -69,6 +69,8 @@ GF.render = {
   weekStrip() {
     const w = GF.calendar.weeks[GF.state.selWeek];
     const isNow = GF.state.selWeek === GF.calendar.todayId;
+    const active = [...new Set(GF.weekTasks(GF.state.selWeek).flatMap(t => [t.owner, ...(t.helpers || [])]))]
+      .filter(id => GF.PEOPLE[id]).slice(0, 5);
     GF.$('week-strip').innerHTML = `
       <div class="weeknav">
         <button class="icon-btn btn-sm" style="width:34px;height:34px" onclick="GF.selectWeek(${GF.state.selWeek - 1})">${GF.icon('chevL')}</button>
@@ -78,7 +80,7 @@ GF.render = {
       <div class="week-dates">${w.label}, ${w.year}</div>
       ${isNow ? `<span class="badge-now">${GF.t('this_week_badge')}</span>` : ''}
       <div class="spacer"></div>
-      ${GF.avatars(['marko', 'elena', 'dimitar', 'viktor', 'nina'], 30)}`;
+      ${GF.avatars(active, 30)}`;
   },
 
   dayPills() {

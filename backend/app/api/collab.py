@@ -15,7 +15,8 @@ from app.deps import require_password_set
 router = APIRouter(tags=["collab"])
 
 # Roles allowed to (un)assign others, in addition to a task's own owner.
-_ELEVATED = {"ADMIN", "DEPT_HEAD", "PROJECT_LEAD", "TEAM_LEADER"}
+# Mirrors the DB's app.is_elevated() definition — keep these in sync.
+_ELEVATED = {"ADMIN", "DEPT_HEAD", "PROJECT_LEAD", "QA_AUDITOR"}
 
 
 class CommentReq(BaseModel):
@@ -96,13 +97,22 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can assign")
+        # The FK on task_assignees.user_id only requires the row to exist in
+        # profiles, not that it shares this org — check explicitly so a
+        # cross-org id can't be assigned (which would leak the task via the
+        # tasks_read assignee clause).
+        target = await c.fetchrow(
+            "SELECT id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",
+            body.user_id, user["org_id"])
+        if target is None:
+            raise HTTPException(404, "User not found in this organization")
         try:
             await c.execute(
                 "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
                 "VALUES ($1,$2,$3,$4,$5) "
                 "ON CONFLICT (task_id, user_id) DO UPDATE SET role=EXCLUDED.role",
                 task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
-        except Exception as e:  # FK violation (unknown user / cross-org), etc.
+        except Exception as e:  # unique violation etc.
             raise HTTPException(400, f"Could not assign: {type(e).__name__}")
     return {"ok": True}
 

@@ -1,6 +1,6 @@
 """Task lifecycle API (RLS-scoped via app_user + per-request identity GUCs)."""
 from datetime import date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.db import rls
@@ -43,7 +43,7 @@ async def list_tasks(
     where = " AND ".join(clauses)
     async with rls(user) as c:
         return _ser(await c.fetch(
-            f"SELECT id,parent_id,title,description,status,priority,workflow_state,department,"
+            f"SELECT id,user_id,parent_id,title,description,status,priority,workflow_state,department,"
             f"department_id,week_id,week_start,days,tags,deps,progress_notes,due_date,"
             f"completed_date,created_at,updated_at FROM tasks WHERE {where} ORDER BY created_at", *args))
 
@@ -110,7 +110,9 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         row = await c.fetchrow(
             f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
             f" AND is_deleted=false RETURNING *", *args)
-    return dict(row) if row else {"error": "not_found_or_forbidden"}
+    if row is None:
+        raise HTTPException(404, "Task not found or not permitted")
+    return dict(row)
 
 
 class ProgressIn(BaseModel):
