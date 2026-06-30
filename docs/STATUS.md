@@ -21,6 +21,9 @@ app, Qdrant RAG, automated snapshots) is the larger build it grows toward.
   - **Audit trail** — hash-chained `audit_log` with a read-only, tamper-evident
     API (`/audit`, `/audit/tables`, `/audit/verify`) and a UI view for elevated
     roles; secrets redacted; chain verified live (218 entries, 0 breaks).
+  - **Collaboration** — per-task comment threads and assignment with
+    accept/decline **acknowledgment** (assigning a teammate makes the task
+    visible in their week; a decline reason is recorded as a comment).
   - **AI** — functions proxied to a bound **Letta** stateful agent.
 - **Schema** — [`backend/schema.sql`](../backend/schema.sql): tables, RLS
   policies, and the `app.fn_audit_row` audit trigger.
@@ -35,14 +38,13 @@ app, Qdrant RAG, automated snapshots) is the larger build it grows toward.
 1. **Weekly report + plan** — Fri→Thu rolling-window report (this week) and plan
    (next week) from the real timestamped data, with the 7-day estimated-time
    band and AI-generated insights.
-2. **Assignment lifecycle** — acknowledgment (accept/decline + reason) on cards.
-3. **RAG + agents** — Qdrant + VoyageAI; semantic SOP search and the analytics /
+2. **RAG + agents** — Qdrant + VoyageAI; semantic SOP search and the analytics /
    compliance agents wired into the UI.
-4. **Automated weekly snapshot** — asyncio Thu 18:00 UTC job → JSON + Markdown
+3. **Automated weekly snapshot** — asyncio Thu 18:00 UTC job → JSON + Markdown
    digest → DB upsert → agent knowledge base.
-5. **More general (non-QC) capabilities** adopted from the QC lab — e.g.
+4. **More general (non-QC) capabilities** adopted from the QC lab — e.g.
    electronic signatures, notifications, attachments, Alembic migrations.
-6. **Front-end** — optional migration to React 18 + TS + Vite with the SUMA
+5. **Front-end** — optional migration to React 18 + TS + Vite with the SUMA
    design system.
 
 Tackled in order, each phase is independently shippable on top of the current

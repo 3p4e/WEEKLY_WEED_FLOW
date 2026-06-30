@@ -59,4 +59,11 @@ GF.API = {
   },
   auditTables() { return this._req('GET', '/audit/tables'); },
   auditVerify() { return this._req('GET', '/audit/verify'); },
+
+  comments(taskId)          { return this._req('GET',  '/tasks/' + taskId + '/comments'); },
+  addComment(taskId, text)  { return this._req('POST', '/tasks/' + taskId + '/comments', { content: text }); },
+  assignees(taskId)         { return this._req('GET',  '/tasks/' + taskId + '/assignees'); },
+  assign(taskId, userId, role) { return this._req('POST', '/tasks/' + taskId + '/assignees', { user_id: userId, role: role || 'assignee' }); },
+  unassign(taskId, userId)  { return this._req('DELETE', '/tasks/' + taskId + '/assignees/' + userId); },
+  ack(taskId, accepted, reason) { return this._req('POST', '/tasks/' + taskId + '/ack', { accepted: accepted, reason: reason || null }); },
 };
