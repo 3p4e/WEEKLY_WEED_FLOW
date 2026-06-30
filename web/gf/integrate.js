@@ -174,7 +174,18 @@ GF.WWF.loadAndRender = async () => {
   await GF.WWF.loadTeam();
   GF.WWF.buildCalendar(weeks);
   GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
-  try { GF.render.all(); } catch (e) { console.error('render error', e); }
+  // If current week is empty, navigate to the most recent past week that has tasks
+  if (GF.state.tasks.filter(t => t.weekId === GF.state.selWeek).length === 0 && GF.state.tasks.length > 0) {
+    const taskWeeks = [...new Set(GF.state.tasks.map(t => t.weekId))]
+      .filter(w => Number.isFinite(w) && w < GF.state.selWeek);
+    if (taskWeeks.length) GF.state.selWeek = Math.max(...taskWeeks);
+  }
+  try {
+    GF.render.all();
+  } catch (e) {
+    console.error('[WWF] render error', e);
+    GF.toast('Render error: ' + (e && e.message || e), 'error');
+  }
 };
 
 /* ── persistence overrides (writes -> API) ─────────────────────────── */

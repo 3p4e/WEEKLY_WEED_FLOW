@@ -61,7 +61,7 @@ GF.render = {
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
       </div>`).join('');
 
-    const u = GF.PEOPLE[GF.state.user];
+    const u = GF.PEOPLE[GF.state.user] || { name: '—', roleLabel: '' };
     GF.$('user-card').innerHTML = `${GF.avatar(GF.state.user, 34)}
       <div style="min-width:0"><div class="nm">${GF.esc(u.name)}</div><div class="rl">${GF.esc(u.roleLabel)}</div></div>`;
   },
