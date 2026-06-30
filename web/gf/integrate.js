@@ -320,7 +320,7 @@ const ACT = {
 const AUDIT_HIDE = ['password_hash'];   // never surface secrets in the trail
 
 GF.WWF.canAudit = () => AUDIT_ROLES.includes((GF.API.user || {}).role);
-GF.WWF._audit = { entries: [], before: null, tables: null, verify: null, hasMore: false };
+GF.WWF._audit = { entries: [], before: null, tables: null, verify: null, hasMore: false, gen: 0 };
 GF.WWF._auditFilter = { table_name: '', action: '' };
 
 GF.WWF._auditActor = (e) => {
@@ -360,12 +360,16 @@ GF.views.audit = function () {
 GF.WWF.loadAudit = async ({ reset = false } = {}) => {
   const st = GF.WWF._audit;
   if (reset) { st.entries = []; st.before = null; }
+  // Bump a generation token so a slower in-flight load can't append its rows
+  // on top of a newer reset/filter load (which would duplicate entries).
+  const gen = ++st.gen;
   const q = { limit: 100 };
   if (GF.WWF._auditFilter.table_name) q.table_name = GF.WWF._auditFilter.table_name;
   if (GF.WWF._auditFilter.action) q.action = GF.WWF._auditFilter.action;
   if (st.before) q.before_id = st.before;
   try {
     const page = await GF.API.audit(q);
+    if (gen !== st.gen) return;   // a newer load superseded this one
     st.entries = st.entries.concat(page);
     st.before = page.length ? page[page.length - 1].id : st.before;
     st.hasMore = page.length === q.limit;
@@ -439,7 +443,7 @@ GF.WWF.renderAudit = () => {
       <details class="audit-entry" style="background:#fff;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;overflow:hidden">
         <summary style="display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;list-style:none">
           <span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:148px">${GF.esc(when)}</span>
-          <span style="background:${a.c}1A;color:${a.c};font-weight:700;font-size:11px;padding:3px 9px;border-radius:6px;white-space:nowrap">${AL(a.en, a.mk)}</span>
+          <span style="background:${a.c}1A;color:${a.c};font-weight:700;font-size:11px;padding:3px 9px;border-radius:6px;white-space:nowrap">${GF.esc(AL(a.en, a.mk))}</span>
           <span style="font-weight:700;font-size:13px;color:var(--ink);font-family:ui-monospace,monospace">${GF.esc(e.table_name || '—')}</span>
           <span style="font-size:12px;color:var(--ink-3);font-family:ui-monospace,monospace">#${GF.esc(String(e.record_id || '').slice(0, 8))}</span>
           <span style="flex:1"></span>
