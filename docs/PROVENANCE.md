@@ -23,8 +23,8 @@ a clean standalone app.
 | `gf/*.js`, `gf/*.css`                   | `web/gf/`                    |
 | `assets/pp-*.png`                       | `web/assets/`                |
 | `GrowFlow App.html` / `Unified.html`    | basis for `web/index.html` (+ kept in `docs/` for reference) |
-| `backend/` (FastAPI + Letta)            | `backend/` (QC endpoints removed) |
-| `deploy/` (Docker + nginx)              | `deploy/`                    |
+| `backend/` (FastAPI + Letta)            | `backend/app/` (QC endpoints removed; grown into the real API) |
+| Docker + nginx serving config           | `web/Dockerfile` + `web/nginx.conf`, `docker-compose.yml` |
 
 ## Decoupling changes
 
@@ -35,8 +35,8 @@ a clean standalone app.
   to the `GF.*` API (the app self‑boots via `gf/main.js` on `DOMContentLoaded`),
   instead of the QC‑coupled `window.APP` mode‑switch controller.
 - **Backend QC endpoints removed** — `/ai/lab-search` and `/ai/anomaly-check`
-  (and their request models) were dropped from `backend/main.py`; the
-  task‑relevant endpoints remain.
+  (and their request models) were dropped; the task-relevant endpoints remain
+  in `backend/app/api/ai.py`.
 - The single remaining optional QC reference (`window.QC && QC.lang` in
   `gf/leaf-fx.js`) is a guarded fallback and is harmless without the QC module.
 

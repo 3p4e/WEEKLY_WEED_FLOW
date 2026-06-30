@@ -1,20 +1,24 @@
 name: Deploy WWF to KVM4
 
-# CI/CD path for the WWF stack. GitHub-hosted runners have full outbound
-# network, so they CAN ssh to KVM4 (the Claude sandbox cannot — port 22 there
-# is blocked, which is why deployment runs from CI rather than inline).
+# Optional, MANUAL-ONLY deploy path. It rsyncs the repo to /opt/wwf and runs
+# `docker compose up -d --build` against docker-compose.yml.
+#
+# ⚠️  Production on KVM4 is currently provisioned out-of-band (the live
+#     containers were created directly, not by this compose). Running this
+#     would converge /opt/wwf onto docker-compose.yml — recreating the live
+#     db/backend/frontend containers. That is intentional only when you mean
+#     it, so this workflow is dispatch-only (no auto-run on push) to avoid
+#     surprising the live site on merge.
 #
 # Required repository secrets:
 #   KVM4_HOST     -> 72.60.35.12 (or srv1231216.hstgr.cloud)
 #   KVM4_USER     -> root
-#   KVM4_SSH_KEY  -> a private deploy key whose public half is in the VPS authorized_keys
+#   KVM4_SSH_KEY  -> a PRIVATE deploy key whose public half is in the VPS authorized_keys
 #
 # One-time on the server: create /opt/wwf/.env from .env.example (this workflow
 # preserves it — it is excluded from the sync).
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

@@ -57,12 +57,17 @@ are redacted from the payload server-side.
 
 ## Run locally (dev)
 
+The full stack (db + backend + frontend) is defined at the repo root:
+
 ```bash
-cd backend
-cp .env.example .env          # set DATABASE_URL / ADMIN_DATABASE_URL / SECRET_KEY
-docker compose up -d --build  # db (loads schema.sql) + backend on :8000
-curl localhost:8000/health
+cp .env.example .env           # repo root: set POSTGRES_PASSWORD / *_DATABASE_URL / SECRET_KEY
+docker compose up -d --build   # db (loads schema.sql) + backend (:8000) + frontend
+curl localhost:8000/health     # if you publish the backend port for local testing
 ```
+
+> `schema.sql` carries structure + RLS + the audit trigger only; the
+> `app_user` / `app_admin` roles and their GRANTs are a one-time bootstrap
+> (see [`../docs/DEPLOY.md`](../docs/DEPLOY.md)).
 
 ## Production (KVM4)
 

@@ -39,7 +39,11 @@ none of the QC‑laboratory / CoA / compliance modules.
   flagging, handoff suggestions, and free chat. Works offline for the
   deterministic quick actions; richer prose when an AI backend is reachable.
 - **Export** — CSV · JSON · PDF.
-- **Local‑first** — state persists in `localStorage`; no server required to run.
+- **Audit Trail** — read-only, tamper-evident view of the hash-chained audit
+  log (elevated roles), with chain-integrity verification and before/after diffs.
+- **Two modes** — the `web/` UI can run standalone on `localStorage` for a quick
+  look, but the deployed build is wired to the real backend (live auth, data
+  and audit) via `gf/integrate.js`.
 
 ## Repository layout
 
@@ -58,11 +62,16 @@ web/                 Standalone front-end (open web/index.html — no build step
     export.js        CSV / JSON / PDF export
     leaf-fx.js       Brand leaf animation
     main.js          Boot, CRUD, add-task, team mgmt, settings, shortcuts
+    api.js           Backend client (login, tasks, ai, audit)
+    integrate.js     Wires the UI to the live backend (auth, real data, audit view)
     *.css            app / brand / mobile / views / leaf-fx styles
   assets/            Purely Plant brand images
-backend/             Optional FastAPI + Letta "AI Gateway" (stateful agents)
-deploy/              Dockerfile + nginx + compose for serving the app
-docs/                Provenance + the original design HTML for reference
+  Dockerfile         nginx image; nginx.conf reverse-proxies the API same-origin
+backend/             FastAPI API (asyncpg, JWT, RLS, audit) — app/ package
+  app/               main, config, db, security, deps, api/{auth,tasks,ai,audit}
+  schema.sql         DB structure + RLS policies + hash-chained audit trigger
+docker-compose.yml   Deployed stack: db + backend + frontend (mirrors KVM4)
+docs/                Spec, status, deploy guide, provenance + design HTML
 ```
 
 ## Run the front-end
@@ -82,36 +91,35 @@ The app runs **fully offline**: tasks, all views, filtering, voice capture and
 export need no backend. AI features light up automatically when either the
 in‑browser model is available or an AI gateway is configured in **Settings**.
 
-## Run the AI backend (optional)
+## Run the backend
 
-The front‑end talks to an optional **GrowFlow AI Gateway** — a small FastAPI
-service that maps each user to their own persistent **Letta stateful agent**
-(running in Docker, e.g. on the KVM4 server). See [`backend/README.md`](backend/README.md).
+The real backend is a **FastAPI** app (asyncpg over Postgres, JWT auth, RLS,
+provisioning, and a hash-chained audit trail) that the GrowFlow UI talks to
+same-origin via nginx. AI functions are proxied to a **Letta stateful agent**;
+credentials never reach the browser. See [`backend/README.md`](backend/README.md).
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # point LETTA_BASE_URL at your Letta server
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+cp ../.env.example .env      # DATABASE_URL / ADMIN_DATABASE_URL / SECRET_KEY / LETTA_*
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Then in the app open **Settings → AI backend** and set the gateway URL.
+## Deploy — Docker stack
 
-## Deploy — single Docker stack (`wwf`)
+[`docker-compose.yml`](docker-compose.yml) describes the deployed stack
+(Ubuntu 24.04 + Docker + Traefik on KVM4):
 
-The whole thing ships as one Compose project named **`wwf`** (`wwf-web` +
-`wwf-gateway`), built for KVM4 (Ubuntu 24.04 + Docker + Traefik):
+| Service    | Image                          | Role |
+|------------|--------------------------------|------|
+| `db`       | `postgres:17-alpine`           | RLS policies + audit trigger |
+| `backend`  | `weekly_weed_flow-backend`     | FastAPI API (:8000, internal) |
+| `frontend` | `wwf-growflow`                 | nginx + GrowFlow UI, published by Traefik (HTTPS) |
 
-```bash
-cp .env.example .env        # Letta URL/key, Qdrant, JWT, Traefik host…
-docker compose up -d --build
-```
-
-The gateway connects to the **Letta stateful agents and their database** (the
-task‑capture store — not Supabase). Because the build sandbox blocks outbound
-SSH, live deployment runs from **GitHub Actions** (`.github/workflows/deploy.yml`)
-which SSH‑deploys to the VPS. Full guide: [`docs/DEPLOY.md`](docs/DEPLOY.md).
+The always-on **Letta** agent layer runs in its own pre-existing stack and is
+reached over `host.docker.internal`. Production was provisioned out-of-band, so
+the SSH-based [`deploy.yml`](.github/workflows/deploy.yml) is **manual-dispatch
+only**. Full guide incl. the one-time role bootstrap: [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Status & roadmap
 
