@@ -1,4 +1,5 @@
 """Task lifecycle API (RLS-scoped via app_user + per-request identity GUCs)."""
+from datetime import date
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -66,7 +67,7 @@ class TaskIn(BaseModel):
     department: str | None = None
     department_id: str | None = None
     week_id: str | None = None
-    week_start: str | None = None
+    week_start: date | None = None
     parent_id: str | None = None
     days: list[str] = []
     tags: list[str] = []
