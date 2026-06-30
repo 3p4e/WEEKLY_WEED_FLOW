@@ -9,7 +9,7 @@ Plan mode: active/incomplete tasks that carry forward into the next week.
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls
 from app.deps import require_password_set
@@ -64,7 +64,13 @@ async def weekly_report(
     department_id: str | None = None,
     user: dict = Depends(require_password_set),
 ):
-    ref = date.fromisoformat(ref_date) if ref_date else date.today()
+    if ref_date:
+        try:
+            ref = date.fromisoformat(ref_date)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="ref_date must be ISO format YYYY-MM-DD")
+    else:
+        ref = date.today()
     fri, thu = _fri_thu(ref)
 
     if mode == "plan":
