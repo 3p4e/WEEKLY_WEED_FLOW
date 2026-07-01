@@ -74,10 +74,15 @@ async def functions(user: dict = Depends(require_password_set)):
 _DATA_FUNCS = {"weekly_summary", "dependency_advisor", "corpus_qa", "risk_flag", "progress_digest"}
 
 
-async def _task_context(conn, limit: int = 200) -> str:
-    rows = await conn.fetch(
-        "SELECT title,status,priority,department,week_start,tags FROM tasks"
-        " WHERE is_deleted=false ORDER BY week_start DESC NULLS LAST, created_at DESC LIMIT $1", limit)
+async def _task_context(conn, week_id: str | None = None, limit: int = 200) -> str:
+    if week_id:
+        rows = await conn.fetch(
+            "SELECT title,status,priority,department,week_start,tags FROM tasks"
+            " WHERE is_deleted=false AND week_id=$1 ORDER BY created_at DESC LIMIT $2", week_id, limit)
+    else:
+        rows = await conn.fetch(
+            "SELECT title,status,priority,department,week_start,tags FROM tasks"
+            " WHERE is_deleted=false ORDER BY week_start DESC NULLS LAST, created_at DESC LIMIT $1", limit)
     if not rows:
         return ""
     lines = [
@@ -92,11 +97,12 @@ async def _task_context(conn, limit: int = 200) -> str:
 async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(require_password_set)):
     if function_key not in CATALOG:
         return {"available": False, "reason": "unknown_function"}
+    week_id = (body.context or {}).get("week_id")
     async with rls(user) as c:
         binding = await c.fetchrow(
             "SELECT letta_agent_id FROM ai_agent_bindings"
             " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", function_key)
-        context = await _task_context(c) if function_key in _DATA_FUNCS else ""
+        context = await _task_context(c, week_id=week_id) if function_key in _DATA_FUNCS else ""
     if binding is None:
         return {"available": False, "reason": "not_configured", "function": function_key}
     prompt = f"{context}\n\nREQUEST: {body.input}" if context else body.input

@@ -18,7 +18,18 @@ GF.API = {
       body: body == null ? undefined : JSON.stringify(body),
     });
     if (res.status === 401) { GF.API.logout(); throw new Error('unauthorized'); }
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + path);
+    if (!res.ok) {
+      let detail = '';
+      try {
+        if ((res.headers.get('content-type') || '').includes('application/json')) {
+          const errBody = await res.json();
+          detail = (errBody && (errBody.detail || errBody.error)) || '';
+        }
+      } catch (e) {}
+      const err = new Error(detail || ('HTTP ' + res.status + ' ' + path));
+      err.status = res.status;
+      throw err;
+    }
     const ct = res.headers.get('content-type') || '';
     return ct.includes('application/json') ? res.json() : res.text();
   },
@@ -38,6 +49,7 @@ GF.API = {
     return this._req('POST', '/auth/change-password', { new_password: newPassword, current_password: currentPassword || null });
   },
   me() { return this._req('GET', '/auth/me'); },
+  directory()      { return this._req('GET', '/auth/directory'); },
   listUsers()      { return this._req('GET', '/auth/users'); },
   createUser(body) { return this._req('POST', '/auth/users', body); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import admin_pool, rls
-from app.deps import get_current_user, require_role
+from app.deps import get_current_user, require_password_set, require_role
 from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -113,6 +113,21 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("A
             raise HTTPException(409, f"Could not create account: {type(e).__name__}")
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
+
+
+@router.get("/directory")
+async def directory(user: dict = Depends(require_password_set)):
+    """Read-only name/avatar roster for every org member — no management fields.
+    Unlike /users (ADMIN/DEPT_HEAD-gated, includes is_active/must_change_password),
+    this is safe for any authenticated user so avatars/assignee pickers work for
+    non-elevated roles too."""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT id,username,full_name,role,department_id,function_role"
+            " FROM profiles WHERE is_deleted=false AND org_id=$1 ORDER BY full_name", user["org_id"])
+    return [{"id": str(r["id"]), "username": r["username"], "full_name": r["full_name"],
+             "role": r["role"], "department_id": str(r["department_id"]) if r["department_id"] else None,
+             "function_role": r["function_role"]} for r in rows]
 
 
 @router.get("/users")

@@ -33,19 +33,22 @@ async def list_tasks(
     parents_only: bool = False,
     user: dict = Depends(require_password_set),
 ):
-    clauses, args = ["is_deleted=false"], []
+    clauses, args = ["t.is_deleted=false"], []
     if week_id:
-        args.append(week_id); clauses.append(f"week_id=${len(args)}")
+        args.append(week_id); clauses.append(f"t.week_id=${len(args)}")
     if department_id:
-        args.append(department_id); clauses.append(f"department_id=${len(args)}")
+        args.append(department_id); clauses.append(f"t.department_id=${len(args)}")
     if parents_only:
-        clauses.append("parent_id IS NULL")
+        clauses.append("t.parent_id IS NULL")
     where = " AND ".join(clauses)
     async with rls(user) as c:
         return _ser(await c.fetch(
-            f"SELECT id,user_id,parent_id,title,description,status,priority,workflow_state,department,"
-            f"department_id,week_id,week_start,days,tags,deps,progress_notes,due_date,"
-            f"completed_date,created_at,updated_at FROM tasks WHERE {where} ORDER BY created_at", *args))
+            f"SELECT t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
+            f"t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.deps,t.progress_notes,"
+            f"t.due_date,t.completed_date,t.created_at,t.updated_at,"
+            f"COALESCE(array_agg(ta.user_id) FILTER (WHERE ta.user_id IS NOT NULL), '{{}}') AS assignee_ids "
+            f"FROM tasks t LEFT JOIN task_assignees ta ON ta.task_id=t.id "
+            f"WHERE {where} GROUP BY t.id ORDER BY t.created_at", *args))
 
 
 @router.get("/tasks/{task_id}")

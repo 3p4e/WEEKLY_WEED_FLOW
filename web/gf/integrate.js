@@ -37,7 +37,8 @@ GF.WWF.colorFor = (id) => {
 GF.WWF.transform = (t) => ({
   id: t.id, title: t.title, desc: t.description || '',
   dept: t.department_id || (GF.DEPTS[0] && GF.DEPTS[0].id),
-  owner: t.user_id || GF.WWF.meId, helpers: [],
+  owner: t.user_id || GF.WWF.meId,
+  helpers: (t.assignee_ids || []).filter(id => id !== t.user_id),
   status: S_IN[t.status] || 'pending', pr: P_IN[t.priority] || 'medium',
   days: Array.isArray(t.days) ? t.days.map(d => d.slice(0,3)) : [],
   weekId: GF.WWF.weekIndex(t), room: '', batch: '',
@@ -148,8 +149,11 @@ GF.WWF.doChangePw = async () => {
 
 /* ── load real data + render ───────────────────────────────────────── */
 GF.WWF.loadTeam = async () => {
+  // /auth/directory works for every role (no ADMIN/DEPT_HEAD gate) so avatars,
+  // week-strip, and assignee pickers show the real org roster for everyone —
+  // /auth/users (full management fields) is only used by the Team admin view.
   let users = null;
-  try { users = await GF.API.listUsers(); } catch (e) { users = [GF.API.user].filter(Boolean); }
+  try { users = await GF.API.directory(); } catch (e) { users = [GF.API.user].filter(Boolean); }
   GF.PEOPLE = {};
   (users || []).forEach(p => { if (!p || !p.id) return;
     GF.PEOPLE[p.id] = {
@@ -208,11 +212,16 @@ GF.WWF.install = () => {
   GF.store.save = () => {};   // explicit API calls below own persistence
 
   const origCycle = GF.cycleStatus, origSet = GF.setStatus, origToggle = GF.toggleDone;
-  const pushStatus = async (id) => { const t = GF.task(id); if (!t) return;
-    try { await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' }); } catch(e){ GF.toast('Save failed','error'); } };
-  GF.cycleStatus = (id) => { origCycle(id); pushStatus(id); };
-  GF.toggleDone  = (id) => { origToggle(id); pushStatus(id); };
-  GF.setStatus   = (id, s) => { const ok = origSet(id, s); if (ok) pushStatus(id); return ok; };
+  // Revert the optimistic status change if the save fails (permission lost,
+  // task deleted/reassigned, network error) so the UI never shows an unsaved
+  // status as if it were persisted.
+  const pushStatus = async (id, prevStatus) => { const t = GF.task(id); if (!t) return;
+    try { await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' }); }
+    catch(e){ if (prevStatus !== undefined) { t.status = prevStatus; GF.render.panels(); } GF.toast(e.message || 'Save failed','error'); } };
+  GF.cycleStatus = (id) => { const t = GF.task(id); const prev = t && t.status; origCycle(id); pushStatus(id, prev); };
+  GF.toggleDone  = (id) => { const t = GF.task(id); const prev = t && t.status; origToggle(id); pushStatus(id, prev); };
+  GF.setStatus   = (id, s) => { const t = GF.task(id); const prev = t && t.status;
+    const ok = origSet(id, s); if (ok) pushStatus(id, prev); return ok; };
 
   GF.deleteTask = (id) => GF.toast(GF.state.lang==='mk'?'Бришењето е оневозможено (ревизија)':'Delete disabled (audit retention)','info');
 
@@ -276,10 +285,13 @@ GF.WWF.install = () => {
     try {
       const r = await GF.API.ai('draft_description', { input: `Rewrite concisely for GMP cannabis: ${t.desc}` });
       if (!(r && r.available && r.output)) { GF.toast('AI unavailable', 'info'); return; }
-      t.desc = r.output.trim();
-      await GF.API.updateTask(taskId, { description: t.desc });
+      const rewritten = r.output.trim();
+      // Only mutate local state once the backend save succeeds — otherwise a
+      // failed PATCH leaves the card showing text that was never persisted.
+      await GF.API.updateTask(taskId, { description: rewritten });
+      t.desc = rewritten;
       GF.render.panels(); GF.toast('Rewritten ✓', 'success');
-    } catch (e) { GF.toast('AI error', 'error'); }
+    } catch (e) { GF.toast('AI error: ' + e.message, 'error'); }
   };
 
   GF.ai.parseVoice = async (transcript) => {
@@ -298,15 +310,35 @@ GF.WWF.install = () => {
     return { title: transcript };
   };
 
-  if (GF.assistant) GF.assistant.complete = async (prompt) => {
-    const r = await GF.API.ai('corpus_qa', { input: prompt }); return (r && r.available && r.output) || ''; };
+  if (GF.assistant) {
+    // assistant.js's own send()/_maybeEnrich() gate on provider() === 'none'
+    // (checking window.claude / GF.state.aiBase) before ever calling complete() —
+    // neither is set now that complete() always targets the real backend, so
+    // without this override the chat/enrichment paths never fire at all.
+    GF.assistant.provider = () => 'backend';
+    GF.assistant.statusInfo = () => ({
+      dot: 'var(--green)', on: true,
+      label: GF.state.lang === 'mk' ? 'Поврзан' : 'Connected',
+    });
+    GF.assistant.complete = async (prompt) => {
+      const r = await GF.API.ai('corpus_qa', { input: prompt });
+      if (r && r.available) return r.output || '';
+      throw new Error('no-ai');
+    };
+  }
 
   // Voice-captured tasks must persist through the same API path as GF.submitAdd.
   GF.voice.createFromVoice = async () => {
     const p = GF.voice._parsed || {};
-    const deptMatch = GF.DEPTS.find(d => d.name.toLowerCase().includes((p.department || '').toLowerCase())
-      || d.mk.toLowerCase().includes((p.department || '').toLowerCase()));
-    const ownerMatch = Object.entries(GF.PEOPLE).find(([, v]) => v.name.toLowerCase().includes((p.assignee || '').toLowerCase()));
+    // Guard on a non-empty department/assignee before matching — String.includes('')
+    // is always true, so without this guard an undetected field would "match"
+    // whatever entry happens to be first in GF.DEPTS/GF.PEOPLE.
+    const deptQuery = (p.department || '').trim().toLowerCase();
+    const deptMatch = deptQuery ? GF.DEPTS.find(d => d.name.toLowerCase().includes(deptQuery)
+      || d.mk.toLowerCase().includes(deptQuery)) : null;
+    const assigneeQuery = (p.assignee || '').trim().toLowerCase();
+    const ownerMatch = assigneeQuery
+      ? Object.entries(GF.PEOPLE).find(([, v]) => v.name.toLowerCase().includes(assigneeQuery)) : null;
     const days = Array.isArray(p.days) && p.days.length ? p.days : [GF.todayDay];
     const wk = GF.calendar.weeks[GF.voice._weekId] || GF.calendar.weeks[GF.calendar.todayId];
     try {
@@ -317,8 +349,13 @@ GF.WWF.install = () => {
         week_id: wk && wk.realId, week_start: wk ? wk.start.toISOString().slice(0,10) : null, days,
       });
       GF.state.tasks.push(GF.WWF.transform(created));
-      if (ownerMatch && ownerMatch[0] !== GF.WWF.meId) GF.API.assign(created.id, ownerMatch[0]).catch(()=>{});
       GF.closeModal('voice-modal'); GF.render.all(); GF.toast(GF.t('create_task') + ' ✓', 'success');
+      if (ownerMatch && ownerMatch[0] !== GF.WWF.meId) {
+        try {
+          await GF.API.assign(created.id, ownerMatch[0]);
+          await GF.WWF.loadCollab(created.id);
+        } catch (e) { GF.toast('Could not assign ' + ownerMatch[1].name + ': ' + e.message, 'error'); }
+      }
     } catch (e) { GF.toast('Create failed: ' + e.message, 'error'); }
   };
 

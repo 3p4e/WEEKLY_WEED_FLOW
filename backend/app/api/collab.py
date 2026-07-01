@@ -6,6 +6,8 @@ visibility (the `tasks_read` policy) are enforced by the database. The
 to a task makes it visible to them (tasks_read has an assignee clause) and it
 shows up in their week, which is what gives acknowledgment something to act on.
 """
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -24,7 +26,7 @@ class CommentReq(BaseModel):
 
 
 class AssignReq(BaseModel):
-    user_id: str
+    user_id: UUID
     role: str = "assignee"
 
 

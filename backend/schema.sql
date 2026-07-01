@@ -1105,7 +1105,9 @@ CREATE POLICY tasks_read ON public.tasks FOR SELECT USING (((org_id = app.curren
 -- Name: tasks tasks_write; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()) AND ((user_id = app.current_user_id()) OR app.is_elevated()))) WITH CHECK ((org_id = app.current_org_id()));
+CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()) AND ((user_id = app.current_user_id()) OR app.is_elevated() OR (EXISTS ( SELECT 1
+   FROM public.task_assignees a
+  WHERE ((a.task_id = tasks.id) AND (a.user_id = app.current_user_id()))))))) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
