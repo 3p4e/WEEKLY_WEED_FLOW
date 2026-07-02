@@ -69,6 +69,39 @@ curl localhost:8000/health     # if you publish the backend port for local testi
 > `app_user` / `app_admin` roles and their GRANTs are a one-time bootstrap
 > (see [`../docs/DEPLOY.md`](../docs/DEPLOY.md)).
 
+## Tests
+
+`tests/` runs against a real Postgres database — RLS is the app's actual
+security model, so it can't be meaningfully exercised against a mock. Each
+test gets its own fresh organization (`org` fixture in `tests/conftest.py`);
+deleting it at teardown cascades to everything it owns, so tests never share
+or leak state even though they run against one shared database.
+
+```bash
+# one-time: a local test database + the app_user/app_admin roles it needs
+# (same roles as docs/DEPLOY.md's production bootstrap, test-only passwords)
+sudo -u postgres psql -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';"
+sudo -u postgres psql -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;"
+sudo -u postgres psql -c "CREATE DATABASE weekly_weed_flow_test OWNER postgres;"
+sudo -u postgres backend/scripts/load_schema.sh weekly_weed_flow_test
+sudo -u postgres psql -d weekly_weed_flow_test -c "
+  GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+  GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+  GRANT USAGE ON SCHEMA app TO app_user, app_admin;"
+
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+
+ENVIRONMENT=development \
+SECRET_KEY=local-test-secret-not-for-production \
+DATABASE_URL=postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test \
+ADMIN_DATABASE_URL=postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test \
+  python -m pytest -v
+```
+
+CI runs the same steps against a `postgres:16` service container on every PR
+(`.github/workflows/ci.yml`).
+
 ## Production (KVM4)
 
 Built as `weekly_weed_flow-backend:latest` and run as a standalone container on a

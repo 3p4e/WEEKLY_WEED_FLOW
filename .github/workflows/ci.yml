@@ -31,6 +31,52 @@ jobs:
             assert any(p.startswith('/auth') for p in paths), 'auth router not wired'; \
             assert any(p.startswith('/reports') for p in paths), 'reports router not wired'"
 
+  tests:
+    name: Backend test suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: weekly_weed_flow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r backend/requirements-dev.txt
+      - name: Bootstrap test roles + schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
+            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
+          "
+          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+          "
+      - name: Run tests
+        working-directory: backend
+        env:
+          ENVIRONMENT: development
+          SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
+          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
+          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
+        run: python -m pytest -v
+
   images:
     name: Build container images
     runs-on: ubuntu-latest
