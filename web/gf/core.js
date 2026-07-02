@@ -115,18 +115,15 @@ GF.calendar = { weeks: [], todayId: 0 };
 GF.todayDay = GF.DAYS[(new Date().getDay() + 6) % 7];
 
 // ── Storage ──
+// integrate.js (loaded last) overrides both methods before this is ever
+// called in normal operation — it always drives tasks from the real API.
+// This localStorage path only matters if integrate.js itself fails to load.
 GF.store = {
   load() {
     try { GF.people.load(); } catch (e) {}
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem('gf_tasks_v1')); } catch {}
-    if (saved && Array.isArray(saved)) { GF.state.tasks = saved; return; }
-    // seed: map relative wOff to absolute weekId
-    GF.state.tasks = GF.SEED.map(s => ({
-      ...s, weekId: GF.calendar.todayId + (s.wOff || 0),
-      subs: (s.subs || []).map(x => ({ id: GF.uid(), t: x.t, done: x.done })),
-    }));
-    this.save();
+    if (saved && Array.isArray(saved)) GF.state.tasks = saved;
   },
   save() { try { localStorage.setItem('gf_tasks_v1', JSON.stringify(GF.state.tasks)); } catch {} },
 };

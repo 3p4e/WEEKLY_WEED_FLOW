@@ -15,19 +15,9 @@ GF.DEPTS = [
   { id: 'maint',  name: 'Maintenance',       mk: 'Одржување',            icon: 'wrench', color: '#5A6B82' },
 ];
 
-GF.PEOPLE = {
-  marko:   { name: 'Marko Petrov',     init: 'MP', role: 'hod',      roleLabel: 'HOD · Cultivation', dept: 'veg',   bg: '#2F6BFF' },
-  elena:   { name: 'Elena Stojanova',  init: 'ES', role: 'hod',      roleLabel: 'HOD · QC',          dept: 'qc',    bg: '#15A86B' },
-  dimitar: { name: 'Dimitar Ilievski', init: 'DI', role: 'hod',      roleLabel: 'HOD · Production',  dept: 'prod',  bg: '#FF7A1A' },
-  sofija:  { name: 'Sofija Trajkova',  init: 'ST', role: 'qa',       roleLabel: 'QA Officer',        dept: 'qa',    bg: '#7A5BE0' },
-  jana:    { name: 'Jana Kostova',     init: 'JK', role: 'qp',       roleLabel: 'QP · Release',      dept: 'qa',    bg: '#C2410C' },
-  viktor:  { name: 'Viktor Angelov',   init: 'VA', role: 'operator', roleLabel: 'Irrigation Op.',    dept: 'irr',   bg: '#0EA5A5' },
-  ana:     { name: 'Ana Nikolova',     init: 'AN', role: 'operator', roleLabel: 'Cultivation Op.',   dept: 'veg',   bg: '#E5484D' },
-  nina:    { name: 'Nina Ristova',     init: 'NR', role: 'operator', roleLabel: 'Warehouse Op.',     dept: 'whout', bg: '#D6336C' },
-  goran:   { name: 'Goran Markovski',  init: 'GM', role: 'operator', roleLabel: 'Maintenance',       dept: 'maint', bg: '#5A6B82' },
-  biljana: { name: 'Biljana Petkova',  init: 'BP', role: 'admin',    roleLabel: 'Administrator',     dept: 'prod',  bg: '#0891B2' },
-  trajko:  { name: 'Trajko Mladenov',  init: 'TM', role: 'viewer',   roleLabel: 'Viewer',            dept: 'sec',   bg: '#566884' },
-};
+// Populated from the real org roster by integrate.js's loadTeam() before
+// first render; starts empty so lookups like GF.PEOPLE[id] are always safe.
+GF.PEOPLE = {};
 
 // status cycle order
 GF.STATUS_ORDER = ['pending', 'working', 'review', 'stuck', 'postponed', 'done'];
@@ -47,55 +37,6 @@ GF.PRIORITY = {
 };
 GF.DAYS    = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 GF.DAYS_MK = ['Пон', 'Вто', 'Сре', 'Чет', 'Пет', 'Саб', 'Нед'];
-
-// ── Seed tasks (wOff: 0 = this week, 1 = next week) ──
-GF.SEED = [
-  { id:'T-101', dept:'clone', title:'Take 240 cuttings — Gorilla Glue #4', owner:'ana', helpers:['marko'], status:'done',
-    pr:'medium', days:['Mon'], wOff:0, room:'Nursery A', batch:'GG4', tags:['EU-GMP'],
-    desc:'Cut 240 clones from mother GG4-M3. Dip in rooting hormone, set in propagation tray under dome.',
-    notes:[{d:'Mon',n:'240 cut, 100% turgid. Logged in batch record.'}], subs:[{t:'Sanitise scalpels',done:true},{t:'Label trays',done:true}], deps:[] },
-  { id:'T-102', dept:'clone', title:'Rooting hormone dip + tray label', owner:'ana', helpers:[], status:'working',
-    pr:'medium', days:['Tue'], wOff:0, room:'Nursery A', batch:'BD', tags:[], desc:'', notes:[], subs:[], deps:[] },
-  { id:'T-201', dept:'veg', title:'Transplant to 11L pots — Veg Room 2', owner:'marko', helpers:['ana'], status:'working',
-    pr:'high', days:['Tue','Wed'], wOff:0, room:'Veg 2', batch:'GG4', tags:['EU-GMP'],
-    desc:'Up-pot rooted GG4 clones to 11L coco. Space at 16/m². Record substrate lot.',
-    notes:[{d:'Tue',n:'48 of 120 done before shift end.'}], subs:[{t:'Stage substrate',done:true},{t:'Up-pot 120 plants',done:false},{t:'Update plant map',done:false}], deps:['T-101'] },
-  { id:'T-301', dept:'irr', title:'Calibrate EC/pH dosing — Line 3', owner:'viktor', helpers:[], status:'stuck',
-    pr:'critical', days:['Mon'], wOff:0, room:'Fertigation', batch:'', tags:['MK-GMP'],
-    desc:'Calibrate EC to 2.2 mS and pH to 5.8 on fertigation line 3.', blocker:'Dosing pump #3 fault — Maintenance ticket open',
-    notes:[{d:'Mon',n:'Pump #3 not priming. Raised maintenance ticket M-901.'}], subs:[], deps:[] },
-  { id:'T-401', dept:'flower', title:'Flip Flower Room 3 to 12/12', owner:'marko', helpers:[], status:'review',
-    pr:'high', days:['Wed'], wOff:0, room:'Flower 3', batch:'GG4', tags:[], desc:'Switch photoperiod to 12/12, confirm blackout integrity.',
-    notes:[], subs:[{t:'Blackout check',done:true},{t:'Set timer 12/12',done:true}], deps:['T-201'] },
-  { id:'T-501', dept:'prod', title:'Trim & wet-weigh — Batch GG4-2401', owner:'dimitar', helpers:['nina'], status:'working',
-    pr:'high', days:['Thu','Fri'], wOff:0, room:'Trim Hall', batch:'GG4', tags:['EU-GMP'],
-    desc:'Machine + hand trim harvested GG4. Wet-weigh each plant, reconcile against harvest log.',
-    notes:[{d:'Thu',n:'Line A running. 12 kg wet logged so far.'}], subs:[{t:'Sanitise trim hall',done:true},{t:'Wet-weigh',done:false}], deps:[] },
-  { id:'T-601', dept:'qc', title:'Moisture & water-activity test — Lot 2398', owner:'elena', helpers:[], status:'review',
-    pr:'medium', days:['Wed'], wOff:0, room:'Lab', batch:'BD', tags:['EU-GMP','sampling'], desc:'Aw must be < 0.65 before packaging release.',
-    notes:[{d:'Wed',n:'Aw 0.58, moisture 11.2% — within spec.'}], subs:[], deps:[] },
-  { id:'T-602', dept:'qc', title:'Microbial + potency sampling — GG4', owner:'elena', helpers:['sofija'], status:'stuck',
-    pr:'critical', days:['Thu'], wOff:0, room:'Lab', batch:'GG4', tags:['EU-GMP','sampling'],
-    desc:'Pull samples from 4 zones of GG4-2401 for TYMC/TAMC and HPLC potency.', blocker:'Awaiting HPLC reagent — Procurement notified',
-    notes:[{d:'Thu',n:'Samples pulled. HPLC down to reagent — flagged procurement.'}],
-    subs:[{t:'Pull 4-zone samples',done:true},{t:'Microbial plates',done:false},{t:'HPLC potency',done:false}], deps:[] },
-  { id:'T-701', dept:'qa', title:'Batch record review — GG4-2401', owner:'sofija', helpers:['jana'], status:'pending',
-    pr:'high', days:['Fri'], wOff:0, room:'QA Office', batch:'GG4', tags:['EU-GMP'], desc:'', notes:[], subs:[], deps:['T-602'] },
-  { id:'T-801', dept:'whin', title:'Receive nutrient delivery + GRN', owner:'nina', helpers:[], status:'done',
-    pr:'low', days:['Mon'], wOff:0, room:'WH In', batch:'', tags:[], desc:'', notes:[], subs:[], deps:[] },
-  { id:'T-802', dept:'whout', title:'Pick & pack order #SO-4471', owner:'nina', helpers:[], status:'working',
-    pr:'medium', days:['Thu'], wOff:0, room:'WH Out', batch:'BD', tags:[], desc:'', notes:[], subs:[], deps:[] },
-  { id:'T-901', dept:'maint', title:'Repair dosing pump #3 (Irrigation)', owner:'goran', helpers:['viktor'], status:'working',
-    pr:'critical', days:['Mon'], wOff:0, room:'Fertigation', batch:'', tags:[], desc:'Strip and reseal dosing pump #3, test prime.',
-    notes:[{d:'Mon',n:'Seal kit fitted, bench-tested OK. Reinstalling.'}], subs:[], deps:[] },
-  // next week
-  { id:'T-110', dept:'flower', title:'Trichome check + harvest window — GG4', owner:'elena', helpers:['marko'], status:'pending',
-    pr:'high', days:['Tue'], wOff:1, room:'Flower 3', batch:'GG4', tags:['sampling'], desc:'', notes:[], subs:[], deps:[] },
-  { id:'T-111', dept:'qa', title:'QP release sign-off — Lot 2398', owner:'jana', helpers:[], status:'pending',
-    pr:'critical', days:['Wed'], wOff:1, room:'QA Office', batch:'BD', tags:['EU-GMP'], desc:'', notes:[], subs:[], deps:[] },
-  { id:'T-112', dept:'prod', title:'Dry-room RH log — set 58% / 18°C', owner:'dimitar', helpers:[], status:'pending',
-    pr:'medium', days:['Mon','Tue','Wed'], wOff:1, room:'Dry 2', batch:'GG4', tags:[], desc:'', notes:[], subs:[], deps:[] },
-];
 
 // ── i18n ──
 GF.I18N = {
