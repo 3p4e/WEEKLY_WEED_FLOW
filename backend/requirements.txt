@@ -8,3 +8,6 @@ httpx==0.28.1
 pydantic==2.10.4
 pydantic-settings==2.7.1
 python-multipart==0.0.20
+alembic==1.18.5
+sqlalchemy==2.0.51
+greenlet==3.5.3

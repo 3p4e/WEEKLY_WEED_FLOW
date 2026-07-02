@@ -111,6 +111,42 @@ redo the schema-load step above), or just run everything except
 `test_audit.py` while iterating on something else
 (`.github/workflows/ci.yml`).
 
+## Migrations (Alembic)
+
+`schema.sql` is a raw `pg_dump` — useful as a human-readable "current shape
+of the DB" reference, but not a reviewable, incremental change history.
+Schema changes now go through `alembic/versions/`, hand-written (no ORM
+models in this app, so no `--autogenerate`).
+
+`alembic/versions/0001_baseline.py` is a frozen snapshot of `schema.sql` as
+of the point Alembic was introduced. Every environment that predates this
+migration (production, any existing dev DB) already has that exact schema
+— point it there with `alembic stamp 0001`, which records the version
+without re-running any DDL. A genuinely empty database (CI, a fresh
+non-Docker environment) needs the DDL to actually run: `alembic upgrade
+head`.
+
+Migrations need DDL privileges the app's own `app_user`/`app_admin` roles
+intentionally don't have (see "One-time DB bootstrap" in
+[`../docs/DEPLOY.md`](../docs/DEPLOY.md)) — they connect with their own
+`MIGRATION_DATABASE_URL` (a `postgres`-superuser-or-equivalent DSN), kept
+separate from `app.config.Settings` on purpose (that module's own startup
+checks — e.g. refusing to run with a placeholder `SECRET_KEY` in
+production — have nothing to do with running a migration).
+
+```bash
+MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/weekly_weed_flow \
+  alembic upgrade head      # apply pending migrations
+  alembic current            # what's applied now
+  alembic downgrade -1       # revert the most recent migration
+```
+
+Every new migration needs a working `downgrade()` — `0001`'s is not
+`DROP SCHEMA public CASCADE` despite `upgrade()` being "create everything";
+that would also drop Alembic's own `alembic_version` tracking table (it
+lives in `public` too), breaking Alembic's bookkeeping in the same
+transaction. It drops exactly the tables `upgrade()` created instead.
+
 ## Production (KVM4)
 
 Built as `weekly_weed_flow-backend:latest` and run as a standalone container on a

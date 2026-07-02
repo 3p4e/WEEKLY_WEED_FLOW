@@ -38,6 +38,26 @@ GRANT USAGE ON SCHEMA app TO app_user, app_admin;           -- helper fns (is_el
 
 (RLS still constrains `app_user`; `app_admin` bypasses it for auth/provisioning.)
 
+## Schema changes (Alembic)
+
+`schema.sql` was the only source of schema truth up to the point
+`backend/alembic/versions/0001_baseline.py` was introduced as a frozen
+snapshot of it. Production and every other already-provisioned environment
+already has that exact schema, so it's stamped rather than re-applied:
+
+```bash
+MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/weekly_weed_flow \
+  alembic stamp 0001
+```
+
+Every schema change from here on is a new file in `backend/alembic/versions/`
+(see `backend/README.md`'s "Migrations" section), applied with
+`alembic upgrade head` using the same `postgres`-superuser-class
+`MIGRATION_DATABASE_URL` — DDL privileges the app's own `app_user`/
+`app_admin` roles don't have. `schema.sql` stays as the human-readable
+"current shape of the DB" reference; regenerate it after a migration lands
+(`pg_dump --schema-only`) rather than hand-editing it.
+
 ## Deploying
 
 Production was provisioned **out-of-band** (containers created directly, behind
