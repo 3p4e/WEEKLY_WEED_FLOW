@@ -18,6 +18,11 @@ jobs:
         run: pip install -r backend/requirements.txt
       - name: Import app (route check)
         working-directory: backend
+        # SECRET_KEY must be a real (non-placeholder) value here: app/config.py
+        # refuses to start with the insecure default while ENVIRONMENT=production
+        # (the default), same as it would for an actual deployment.
+        env:
+          SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
         run: |
           python -c "import app.main as m; \
             paths=[getattr(r,'path','') for r in m.app.routes]; \
