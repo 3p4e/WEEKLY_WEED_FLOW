@@ -180,6 +180,7 @@ async def weekly_report(
             "stuck": statuses.get("stuck", 0),
             "pending": statuses.get("pending", 0),
             "review": statuses.get("review", 0),
+            "postponed": statuses.get("postponed", 0),
             "estimated_hours": round(est_h, 1),
             "actual_hours": round(act_h, 1),
         },

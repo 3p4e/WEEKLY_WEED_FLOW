@@ -7,7 +7,7 @@ GF.WWF = {};
 /* ── enum mapping (backend <-> GrowFlow) ───────────────────────────── */
 const S_IN  = { ongoing:'working', completed:'done', pending:'pending', stuck:'stuck', review:'review', postponed:'postponed' };
 const S_OUT = { working:'ongoing', done:'completed', pending:'pending', stuck:'stuck', review:'review', postponed:'postponed' };
-const P_IN  = { normal:'medium', high:'high', critical:'critical', low:'low' };
+const P_IN  = { normal:'medium', medium:'medium', high:'high', critical:'critical', low:'low' };
 const P_OUT = { medium:'normal', high:'high', critical:'critical', low:'low' };
 const DEPT_STYLE = {
   cultivation:{icon:'leaf',color:'#15A86B'}, vegetation:{icon:'leaf',color:'#3FA34D'},
@@ -41,10 +41,10 @@ GF.WWF.transform = (t) => ({
   helpers: (t.assignee_ids || []).filter(id => id !== t.user_id),
   status: S_IN[t.status] || 'pending', pr: P_IN[t.priority] || 'medium',
   days: Array.isArray(t.days) ? t.days.map(d => d.slice(0,3)) : [],
-  weekId: GF.WWF.weekIndex(t), room: '', batch: '',
+  weekId: GF.WWF.weekIndex(t),
   tags: t.tags || [], deps: [],
   notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n })),
-  subs: [], blocker: '', completed_date: t.completed_date, week_start: t.week_start,
+  blocker: '', completed_date: t.completed_date, week_start: t.week_start,
 });
 
 GF.WWF.weekIndex = (t) => {
@@ -208,7 +208,14 @@ GF.WWF.loadAndRender = async () => {
 
 /* ── persistence overrides (writes -> API) ─────────────────────────── */
 GF.WWF.install = () => {
-  GF.store.load = () => { if (GF.API.token) GF.WWF.loadAndRender().catch(()=>GF.WWF.showLogin()); else GF.WWF.showLogin(); };
+  GF.store.load = () => {
+    if (!GF.API.token) { GF.WWF.showLogin(); return; }
+    // A token can be persisted (login succeeded) from a session that never
+    // finished the forced first-login password change — go straight back to
+    // that screen instead of letting loadAndRender() 403 on every call.
+    if (GF.API.user && GF.API.user.must_change_password) { GF.WWF.showChangePw(); return; }
+    GF.WWF.loadAndRender().catch(()=>GF.WWF.showLogin());
+  };
   GF.store.save = () => {};   // explicit API calls below own persistence
 
   const origCycle = GF.cycleStatus, origSet = GF.setStatus, origToggle = GF.toggleDone;
@@ -361,6 +368,34 @@ GF.WWF.install = () => {
 
   // logout from the user card / settings
   GF.openSettings = () => { if (confirm('Log out of Weekly Weed Flow?')) { GF.API.logout(); location.reload(); } };
+
+  // Roll over incomplete tasks to next week. Persists via the real API —
+  // the original local-only version mutated state and called the now-no-op
+  // GF.store.save(), so tasks appeared to move but reverted on next reload.
+  // Bounded to weeks that already exist in GF.calendar.weeks (there is no
+  // API to create a calendar_weeks row) rather than faking a week forward.
+  GF.rollover = async () => {
+    const weekIdx = GF.state.selWeek;
+    const nextWeek = GF.calendar.weeks[weekIdx + 1];
+    if (!nextWeek) {
+      GF.toast(GF.state.lang === 'mk'
+        ? 'Следната недела сè уште не е креирана'
+        : 'Next week has not been created yet', 'error');
+      return;
+    }
+    const incomplete = GF.weekTasks(weekIdx).filter(t => t.status !== 'done');
+    if (!incomplete.length) { GF.toast('All tasks are done — nothing to roll over', 'info'); return; }
+    const weekStart = nextWeek.start.toISOString().slice(0, 10);
+    const results = await Promise.allSettled(incomplete.map(t =>
+      GF.API.updateTask(t.id, { week_id: nextWeek.realId, week_start: weekStart })));
+    let moved = 0;
+    incomplete.forEach((t, i) => { if (results[i].status === 'fulfilled') { t.weekId = nextWeek.id; moved++; } });
+    GF.render.all();
+    const failed = incomplete.length - moved;
+    if (!moved) GF.toast('Roll over failed', 'error');
+    else if (failed) GF.toast(`${moved} task(s) rolled over, ${failed} failed`, 'info');
+    else GF.toast(`${moved} task(s) rolled to next week`, 'success');
+  };
 };
 
 GF.WWF.install();
@@ -914,6 +949,8 @@ GF.WWF.renderReport = () => {
       ${GF.WWF._sc(AL('In Progress', 'Во тек'), s.in_progress, '#FF7A1A')}
       ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, '#E5484D')}
       ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, '#5A6B82')}
+      ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, '#7A5BE0') : ''}
+      ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, '#F6A609') : ''}
       ${(s.estimated_hours || s.actual_hours) ? GF.WWF._sc(AL('Hours', 'Часови'), s.actual_hours + '/' + s.estimated_hours, '#7A5BE0') : ''}
     </div>`;
 
@@ -937,7 +974,7 @@ GF.WWF.renderReport = () => {
   }
 
   const SC = { completed: '#15A86B', done: '#15A86B', ongoing: '#FF7A1A', in_progress: '#FF7A1A',
-               stuck: '#E5484D', pending: '#5A6B82', review: '#7A5BE0' };
+               stuck: '#E5484D', pending: '#5A6B82', review: '#7A5BE0', postponed: '#F6A609' };
   let taskList;
   if (d.tasks.length) {
     taskList = `<div style="margin:18px 0">

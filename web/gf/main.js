@@ -9,18 +9,6 @@ GF.addNote = (taskId) => {
   t.notes.push({ d: GF.todayDay.slice(0, 3), n: el.value.trim() });
   GF.store.save(); GF.render.panels();
 };
-GF.addSub = (taskId) => {
-  const t = GF.task(taskId); if (!t) return;
-  const el = GF.$('sub-' + taskId); if (!el || !el.value.trim()) return;
-  t.subs = t.subs || [];
-  t.subs.push({ id: GF.uid(), t: el.value.trim(), done: false });
-  GF.store.save(); GF.render.panels();
-};
-GF.toggleSub = (taskId, subId) => {
-  const t = GF.task(taskId); if (!t) return;
-  const s = (t.subs || []).find(x => x.id === subId); if (!s) return;
-  s.done = !s.done; GF.store.save(); GF.render.panels();
-};
 GF.deleteTask = (taskId) => {
   const t = GF.task(taskId);
   if (!GF.can('delete', t)) return GF.denyToast();
@@ -49,9 +37,7 @@ GF.openAdd = (weekId) => {
     <div class="field"><label>${GF.t('accountable')} <span class="lbl-hint">${GF.t('accountable_hint')}</span></label><select id="add-owner">${ownerOpts}</select></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
     <div class="field"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
-    <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>
-    <div class="field"><label>Room</label><input id="add-room" placeholder="e.g. Flower 3"></div>
-    <div class="field"><label>Batch</label><input id="add-batch" placeholder="e.g. GG4"></div>`;
+    <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
   GF.openModal('add-modal');
 };
 GF.submitAdd = () => {
@@ -63,8 +49,7 @@ GF.submitAdd = () => {
   const task = {
     id: GF.uid(), title, dept: GF.$('add-dept').value, owner, helpers,
     status: 'pending', pr: GF.$('add-pr').value, days: days.length ? days : [GF.todayDay],
-    weekId: GF._addWeek, room: GF.$('add-room')?.value || '', batch: GF.$('add-batch')?.value || '',
-    tags: [], desc: '', notes: [], subs: [], deps: [], blocker: '',
+    weekId: GF._addWeek, tags: [], desc: '', notes: [], deps: [], blocker: '',
   };
   GF.state.tasks.push(task); GF.store.save();
   GF.closeModal('add-modal'); GF.render.all();
@@ -111,24 +96,6 @@ GF.submitUser = () => {
   GF.people.upsert(GF._editUser, person);
   GF.closeModal('user-modal'); GF.render.all();
   GF.toast((GF._editUser ? GF.t('save') : GF.t('add_user')) + ' ✓', 'success');
-};
-
-// ── Settings modal ──
-GF.openSettings = () => {
-  GF.$('set-ai-base').value = GF.state.aiBase;
-  GF.$('set-lang').value = GF.state.lang;
-  GF.$('set-user').value = GF.state.user;
-  GF.openModal('settings-modal');
-};
-GF.saveSettings = () => {
-  GF.state.aiBase = (GF.$('set-ai-base')?.value || '').trim();
-  localStorage.setItem('gf_ai_base', GF.state.aiBase);
-  const newLang = GF.$('set-lang')?.value || 'en';
-  const newUser = GF.$('set-user')?.value || 'marko';
-  GF.closeModal('settings-modal');
-  if (newLang !== GF.state.lang) GF.setLang(newLang);
-  if (newUser !== GF.state.user) GF.setUser(newUser);
-  GF.toast(GF.t('save') + ' ✓', 'success');
 };
 
 // ── Keyboard ──

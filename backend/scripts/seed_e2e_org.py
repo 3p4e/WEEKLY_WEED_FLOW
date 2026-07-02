@@ -55,6 +55,14 @@ async def main():
         await conn.execute(
             "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES ($1,$2,$3,$4,$5)",
             org_id, iso_year, iso_week, starts_on, ends_on)
+        # A second, following week — needed for the roll-over-to-next-week
+        # e2e flow (there is no POST /weeks endpoint to create one on demand).
+        next_starts_on = starts_on + datetime.timedelta(days=7)
+        next_ends_on = next_starts_on + datetime.timedelta(days=6)
+        next_iso_year, next_iso_week, _ = next_starts_on.isocalendar()
+        await conn.execute(
+            "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES ($1,$2,$3,$4,$5)",
+            org_id, next_iso_year, next_iso_week, next_starts_on, next_ends_on)
     finally:
         await conn.close()
 

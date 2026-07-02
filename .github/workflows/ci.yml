@@ -77,6 +77,59 @@ jobs:
           ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
         run: python -m pytest -v
 
+  migrations:
+    name: Alembic baseline matches schema.sql
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Build one DB via alembic upgrade head, one via schema.sql
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_alembic;"
+          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_schemasql;"
+          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
+            alembic -c backend/alembic.ini upgrade head
+          backend/scripts/load_schema.sh wwf_via_schemasql -h localhost -U postgres
+      - name: Diff the two schemas (fails if 0001_baseline.py has drifted from schema.sql)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # exclude alembic_version (Alembic's own bookkeeping table, not
+          # part of the app schema) and the \restrict/\unrestrict lines
+          # (random per-dump lock tokens, not real schema content).
+          dump() { pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-privileges \
+            --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict'; }
+          dump wwf_via_alembic    > /tmp/via_alembic.sql
+          dump wwf_via_schemasql  > /tmp/via_schemasql.sql
+          diff /tmp/via_alembic.sql /tmp/via_schemasql.sql && echo "alembic 0001 baseline matches schema.sql exactly"
+      - name: alembic downgrade cleanly reverses the baseline
+        env:
+          PGPASSWORD: postgres
+        run: |
+          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
+            alembic -c backend/alembic.ini downgrade base
+          remaining=$(psql -h localhost -U postgres -d wwf_via_alembic -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name != 'alembic_version'")
+          test "$remaining" = "0" && echo "downgrade removed every table it created"
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest

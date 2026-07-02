@@ -3,7 +3,16 @@ import logging
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Every placeholder ever shipped in an .env.example, plus the code's own
+# default. A guard that only caught its own default would pass a deployer
+# who copied .env.example and forgot to regenerate the key.
 _INSECURE_DEFAULT_SECRET = "dev-change-me"
+_INSECURE_SECRETS = {
+    _INSECURE_DEFAULT_SECRET,
+    "change-me-to-a-long-random-string",
+    "CHANGE_ME",
+}
+_MIN_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -39,14 +48,18 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-if settings.secret_key == _INSECURE_DEFAULT_SECRET:
+_secret_is_weak = (
+    settings.secret_key in _INSECURE_SECRETS or len(settings.secret_key) < _MIN_SECRET_LENGTH
+)
+if _secret_is_weak:
     if settings.environment == "production":
         raise RuntimeError(
-            "SECRET_KEY is still the insecure placeholder 'dev-change-me'. Set a real "
-            "SECRET_KEY (e.g. `openssl rand -hex 32`) before running with ENVIRONMENT=production, "
-            "or set ENVIRONMENT=development to bypass this check for local development."
+            f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters. "
+            "Set a real SECRET_KEY (e.g. `openssl rand -hex 32`) before running with "
+            "ENVIRONMENT=production, or set ENVIRONMENT=development to bypass this check for "
+            "local development."
         )
     logging.getLogger(__name__).warning(
-        "SECRET_KEY is the insecure placeholder 'dev-change-me' — fine for local development, "
-        "never deploy this to production."
+        f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters — "
+        "fine for local development, never deploy this to production."
     )

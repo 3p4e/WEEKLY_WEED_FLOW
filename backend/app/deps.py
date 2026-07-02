@@ -25,16 +25,20 @@ async def get_current_user(cred: HTTPAuthorizationCredentials | None = Depends(b
     return dict(row)
 
 
-def require_role(*roles: str):
-    async def _guard(user: dict = Depends(get_current_user)) -> dict:
-        if user["role"] not in roles:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient role")
-        return user
-    return _guard
-
-
 async def require_password_set(user: dict = Depends(get_current_user)) -> dict:
     """Block the app until a first-login password change is done."""
     if user["must_change_password"]:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
     return user
+
+
+def require_role(*roles: str):
+    # Depends on require_password_set (not get_current_user directly) so a
+    # leaked/intercepted one-time password can't be used for role-gated
+    # actions (user management, audit trail) before the real user has
+    # completed their mandatory first-login password change.
+    async def _guard(user: dict = Depends(require_password_set)) -> dict:
+        if user["role"] not in roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient role")
+        return user
+    return _guard

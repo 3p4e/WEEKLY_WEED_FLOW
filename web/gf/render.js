@@ -7,10 +7,7 @@ GF.avatar = (id, size = 28, ring) => {
     font-size:${size * 0.38}px${ring ? `;box-shadow:0 0 0 2px #fff,0 0 0 4px ${p.bg}40` : ''}">${p.init}</div>`;
 };
 GF.avatars = (ids, size = 26) => `<div class="avatars">${ids.map(i => GF.avatar(i, size)).join('')}</div>`;
-GF.progress = (t) => {
-  if (t.subs && t.subs.length) return Math.round(t.subs.filter(s => s.done).length / t.subs.length * 100);
-  return { done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0;
-};
+GF.progress = (t) => ({ done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0);
 GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:'whout', irr:'prod', whin:'prod', maint:'irr' };
 
 GF.render = {
@@ -161,7 +158,7 @@ GF.render = {
     const exp = GF.state.expanded.has(t.id);
     const prog = GF.progress(t);
     const daytags = (t.days || []).map(x => `<span class="daytag">${GF.dayLabel(x)}</span>`).join('');
-    const meta = [t.id, t.room, t.batch].filter(Boolean);
+    const meta = [t.id].filter(Boolean);
     const head = `
       <div class="card-head" onclick="GF.toggleExpand('${t.id}')">
         <button class="check ${t.status === 'done' ? 'done' : ''}" onclick="event.stopPropagation();GF.toggleDone('${t.id}')">
@@ -179,12 +176,8 @@ GF.render = {
       </div>`;
     if (!exp) return `<div class="card s-${t.status}">${head}</div>`;
 
-    const noteId = 'note-' + t.id, subId = 'sub-' + t.id;
+    const noteId = 'note-' + t.id;
     const notes = (t.notes || []).map(n => `<div class="note"><span class="nd">${GF.dayLabel(n.d)}</span><span>${GF.esc(n.n)}</span></div>`).join('');
-    const subs = (t.subs || []).map(s => `
-      <div class="subtask ${s.done ? 'done' : ''}">
-        <button class="check ${s.done ? 'done' : ''}" style="width:18px;height:18px" onclick="GF.toggleSub('${t.id}','${s.id}')">${s.done ? GF.icon('check','icon','#fff') : ''}</button>
-        <span class="stt">${GF.esc(s.t)}</span></div>`).join('');
     const deps = (t.deps || []).map(id => { const dt = GF.task(id); if (!dt) return ''; const met = dt.status === 'done';
       return `<span class="dep-chip ${met ? 'met' : 'unmet'}">${GF.icon('link','icon')}${GF.esc(dt.title.slice(0, 28))}</span>`; }).join('');
     const toDept = GF.HANDOFF[t.dept];
@@ -210,8 +203,6 @@ GF.render = {
           <button class="mini-btn ai" title="${GF.t('paraphrase')}" onclick="GF.ai.paraphraseInput('${noteId}')">${GF.icon('sparkle')}</button>
           <button class="mini-btn" style="color:var(--blue)" onclick="GF.addNote('${t.id}')">${GF.icon('plus')}</button>
         </div>
-        ${(t.subs && t.subs.length) || true ? `<div class="sec-label">${GF.icon('grid','icon')}${GF.t('subtasks')} ${t.subs && t.subs.length ? `· ${t.subs.filter(s=>s.done).length}/${t.subs.length}` : ''}</div>
-        <div class="subtasks">${subs}<div class="sub-add"><input id="${subId}" placeholder="${GF.t('add_sub')}" onkeydown="if(event.key==='Enter')GF.addSub('${t.id}')"><button class="mini-btn" style="color:var(--blue)" onclick="GF.addSub('${t.id}')">${GF.icon('plus')}</button></div></div>` : ''}
         ${deps ? `<div class="sec-label">${GF.icon('link','icon')}${GF.t('deps')}</div><div class="deps">${deps}</div>` : ''}
         ${handoff}
         <div class="card-actions">

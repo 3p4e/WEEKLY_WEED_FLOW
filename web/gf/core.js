@@ -167,7 +167,6 @@ GF.cycleStatus = (id) => {
   if (!GF.can('status', t)) return GF.denyToast();
   const i = GF.STATUS_ORDER.indexOf(t.status);
   t.status = GF.STATUS_ORDER[(i + 1) % GF.STATUS_ORDER.length];
-  if (t.status === 'done') t.subs = (t.subs || []).map(s => ({ ...s, done: true }));
   GF.store.save(); GF.render.panels(); GF.render.telemetry();
 };
 GF.setStatus = (id, status) => {
@@ -175,7 +174,6 @@ GF.setStatus = (id, status) => {
   if (!GF.can('status', t)) { GF.denyToast(); return false; }
   if (t.status === status) return false;
   t.status = status;
-  if (status === 'done') t.subs = (t.subs || []).map(s => ({ ...s, done: true }));
   GF.store.save();
   return true;
 };
@@ -194,7 +192,7 @@ GF.visibleTasks = (weekId) => {
   return GF.weekTasks(weekId).filter(t => {
     if (selDay !== 'All' && !(t.days || []).includes(selDay)) return false;
     if (deptFilter && t.dept !== deptFilter) return false;
-    if (q && !(`${t.title} ${t.room} ${t.batch} ${t.id}`.toLowerCase().includes(q))) return false;
+    if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;
     return true;
   });
 };

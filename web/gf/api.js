@@ -17,7 +17,14 @@ GF.API = {
       method, headers: this._headers(),
       body: body == null ? undefined : JSON.stringify(body),
     });
-    if (res.status === 401) { GF.API.logout(); throw new Error('unauthorized'); }
+    if (res.status === 401) {
+      GF.API.logout();
+      // Re-show the login overlay from every call site, not just the 3 that
+      // happened to check for it — otherwise an expired/invalidated token
+      // mid-session leaves a half-rendered app behind a toast.
+      if (GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
+      throw new Error('unauthorized');
+    }
     if (!res.ok) {
       let detail = '';
       try {
@@ -26,6 +33,12 @@ GF.API = {
           detail = (errBody && (errBody.detail || errBody.error)) || '';
         }
       } catch (e) {}
+      // A session can go from must_change_password=false to true mid-session
+      // (e.g. an admin resets it) — route back to the forced-change screen
+      // instead of leaving the user stuck behind a toast with no way back.
+      if (res.status === 403 && /password change required/i.test(detail) && GF.WWF && GF.WWF.showChangePw) {
+        GF.WWF.showChangePw();
+      }
       const err = new Error(detail || ('HTTP ' + res.status + ' ' + path));
       err.status = res.status;
       throw err;

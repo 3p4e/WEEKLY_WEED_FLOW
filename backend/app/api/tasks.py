@@ -56,7 +56,7 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         task = await c.fetchrow("SELECT * FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
-            return {"error": "not_found"}
+            raise HTTPException(404, "Task not found or not permitted")
         subs = await c.fetch("SELECT * FROM tasks WHERE parent_id=$1 AND is_deleted=false ORDER BY created_at", task_id)
         prog = await c.fetch("SELECT day_label,note,created_at FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
         return {"task": dict(task), "subtasks": _ser(subs), "progress": _ser(prog)}
@@ -98,6 +98,8 @@ class TaskPatch(BaseModel):
     workflow_state: str | None = None
     days: list[str] | None = None
     tags: list[str] | None = None
+    week_id: str | None = None
+    week_start: date | None = None
 
 
 @router.patch("/tasks/{task_id}")

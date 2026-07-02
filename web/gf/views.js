@@ -71,7 +71,7 @@ GF.views = {
       return `<div class="coord-row ${ready?'ready':''}">
         <div class="coord-task">
           <div class="coord-title">${GF.esc(t.title)}</div>
-          <div class="coord-id">${GF.esc(t.id)}${t.batch?' · '+GF.esc(t.batch):''}</div>
+          <div class="coord-id">${GF.esc(t.id)}</div>
         </div>
         <div class="coord-flow">
           <span class="hbadge"><span class="chip-dept">${GF.icon(from.icon,'icon',from.color)}</span>${GF.depName(t.dept)}</span>

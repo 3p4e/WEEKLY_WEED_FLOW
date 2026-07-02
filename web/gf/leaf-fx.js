@@ -162,6 +162,7 @@ GF.leafFX = {
   /* GrowFlow wordmark: periodic bloom on the static .gf-grow-word spans.
      "Grow" span + "Flow" <b> are already in the HTML — no DOM surgery. */
   initMark() {
+    if (this._markInit) return; this._markInit = true;
     const bloom = () => {
       document.querySelectorAll('.gf-grow-word').forEach(w => {
         w.classList.remove('blooming'); void w.offsetWidth; w.classList.add('blooming');
@@ -171,13 +172,6 @@ GF.leafFX = {
     setTimeout(bloom, 2000 + Math.random() * 3000);
   },
 };
-
-// Boot
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => GF.leafFX.init());
-} else {
-  GF.leafFX.init();
-}
 
 // Boot
 if (document.readyState === 'loading') {

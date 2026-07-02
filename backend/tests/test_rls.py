@@ -43,7 +43,7 @@ async def test_task_not_visible_or_writable_across_orgs(client):
 
         # ...can't fetch it directly...
         r = await client.get(f"/tasks/{task_id}", headers=headers_b)
-        assert r.json().get("error") == "not_found"
+        assert r.status_code == 404
 
         # ...and can't write to it, even as an ADMIN of their own org.
         r = await client.patch(f"/tasks/{task_id}", json={"status": "ongoing"}, headers=headers_b)

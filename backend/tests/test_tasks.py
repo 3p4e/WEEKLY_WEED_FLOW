@@ -5,6 +5,8 @@ client-side, but this pins the backend's side of that contract: every
 status the frontend can send must round-trip through PATCH unchanged."""
 import pytest
 
+from app.db import admin_pool
+
 ALL_STATUSES = ["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 
 
@@ -26,6 +28,33 @@ async def test_create_and_list_task(client, admin_headers):
     assert listed["assignee_ids"] == []
 
 
+async def test_patch_week_id_moves_task_to_a_different_week(client, admin_headers, org):
+    """Regression test for GF.rollover: it used to mutate local state and
+    call a no-op GF.store.save(), so 'rolled over' tasks silently reverted
+    to their original week on reload. week_id/week_start must be real,
+    persisted PATCH fields, same as status/priority/etc."""
+    await admin_pool().execute(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
+        " ($1,2026,1,'2026-01-05','2026-01-11'), ($1,2026,2,'2026-01-12','2026-01-18')", org["org_id"])
+    r = await client.get("/weeks", headers=admin_headers)
+    weeks = sorted(r.json(), key=lambda w: w["iso_week"])
+    this_week, next_week = weeks[0], weeks[1]
+
+    r = await client.post("/tasks", json={
+        "title": "Roll me over", "status": "pending", "week_id": this_week["id"], "week_start": "2026-01-05",
+    }, headers=admin_headers)
+    task_id = r.json()["id"]
+
+    r = await client.patch(f"/tasks/{task_id}",
+                            json={"week_id": next_week["id"], "week_start": "2026-01-12"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["week_id"] == next_week["id"]
+    assert r.json()["week_start"] == "2026-01-12"
+
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["week_id"] == next_week["id"]
+
+
 @pytest.mark.parametrize("status", ALL_STATUSES)
 async def test_status_round_trips_unchanged(client, admin_headers, status):
     r = await client.post("/tasks", json={"title": "Status round-trip", "status": "pending"},
@@ -41,6 +70,14 @@ async def test_status_round_trips_unchanged(client, admin_headers, status):
 async def test_patch_nonexistent_task_returns_404_with_detail(client, admin_headers):
     r = await client.patch("/tasks/00000000-0000-0000-0000-000000000000",
                             json={"status": "ongoing"}, headers=admin_headers)
+    assert r.status_code == 404
+    assert "detail" in r.json()
+
+
+async def test_get_nonexistent_task_returns_a_real_404(client, admin_headers):
+    """Regression test: GET used to return HTTP 200 with {"error": "not_found"}
+    instead of a real 404, inconsistent with PATCH on the same resource."""
+    r = await client.get("/tasks/00000000-0000-0000-0000-000000000000", headers=admin_headers)
     assert r.status_code == 404
     assert "detail" in r.json()
 

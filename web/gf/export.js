@@ -30,15 +30,22 @@ GF.export = {
   },
 
   _csv(base, w, tasks, u) {
-    const esc = s => '"' + String(s || '').replace(/"/g, '""') + '"';
+    // Spreadsheet apps (Excel/Sheets) treat a leading =+-@ as a formula \u2014
+    // prefix with a quote to neutralize it before quoting the field, or a
+    // task title becomes an arbitrary-formula injection vector on export.
+    const esc = s => {
+      let v = String(s || '');
+      if (/^[=+\-@]/.test(v)) v = "'" + v;
+      return '"' + v.replace(/"/g, '""') + '"';
+    };
     let csv = '\uFEFF';
     csv += `${esc('GrowFlow Export')},${esc('W' + w.weekNum)},${esc(w.label)},${esc(new Date().toLocaleDateString())}\n`;
     csv += `${esc('User')},${esc(u.name)},${esc(u.roleLabel)}\n\n`;
-    csv += 'ID,Title,Department,Status,Priority,Days,Owner,Room,Batch,Progress Notes\n';
+    csv += 'ID,Title,Department,Status,Priority,Days,Owner,Progress Notes\n';
     tasks.forEach(t => {
       const d = GF.dep(t.dept);
       const notes = (t.notes || []).map(n => `${n.d}: ${n.n}`).join(' | ');
-      csv += `${t.id},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(t.room)},${esc(t.batch)},${esc(notes)}\n`;
+      csv += `${t.id},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(notes)}\n`;
     });
     this._download(csv, base + '.csv', 'text/csv');
   },
@@ -52,8 +59,7 @@ GF.export = {
       telemetry: { total: tasks.length, done, rate: tasks.length ? Math.round(done / tasks.length * 100) : 0 },
       tasks: tasks.map(t => ({
         id: t.id, title: t.title, dept: t.dept, status: t.status, pr: t.pr,
-        days: t.days, owner: t.owner, room: t.room, batch: t.batch,
-        notes: t.notes, subs: t.subs, deps: t.deps,
+        days: t.days, owner: t.owner, notes: t.notes, deps: t.deps,
       })),
     };
     this._download(JSON.stringify(payload, null, 2), base + '.json', 'application/json');
@@ -90,7 +96,7 @@ GF.export = {
       html += `<div style="border-left:4px solid ${sc};padding:8px 14px;margin-bottom:10px;border-radius:0 10px 10px 0;background:#F6F8FC">
         <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;font-size:13px">${GF.esc(t.title)}</span>
         <span style="font-size:10px;font-weight:700;color:${sc};text-transform:uppercase">${t.status}</span></div>
-        <div style="font-size:10px;color:#566884;margin-top:2px">${[t.id, GF.dep(t.dept).name, t.room, t.batch].filter(Boolean).join(' · ')}</div>
+        <div style="font-size:10px;color:#566884;margin-top:2px">${[t.id, GF.dep(t.dept).name].filter(Boolean).join(' · ')}</div>
         ${(t.notes || []).map(n => `<div style="font-size:10px;color:#16233B;margin-top:4px;padding-left:8px;border-left:2px solid #E2E8F1"><b>${n.d}:</b> ${GF.esc(n.n)}</div>`).join('')}
       </div>`;
     });

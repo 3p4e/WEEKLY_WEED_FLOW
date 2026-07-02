@@ -157,49 +157,6 @@
       <button class="btn btn-primary" onclick="GF.submitAdd()">Create task</button></div></div>
 </div>
 
-<!-- ═══ Settings (standalone GrowFlow) ═══ -->
-<div class="overlay" id="settings-modal">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-head"><h3>Settings</h3>
-      <button class="btn-ghost" onclick="GF.closeModal('settings-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
-    <div class="modal-body">
-      <div class="field">
-        <label>AI backend (Letta gateway URL)</label>
-        <input id="set-ai-base" placeholder="http://your-kvm4:8080">
-      </div>
-      <div class="field">
-        <label>Language</label>
-        <select id="set-lang">
-          <option value="en">English</option>
-          <option value="mk">Македонски</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Active user (prototype)</label>
-        <select id="set-user">
-          <option value="marko">Marko Petrov — HOD Cultivation</option>
-          <option value="elena">Elena Stojanova — HOD QC</option>
-          <option value="dimitar">Dimitar Ilievski — HOD Production</option>
-          <option value="ana">Ana Nikolova — Cultivation Op.</option>
-          <option value="viktor">Viktor Angelov — Irrigation Op.</option>
-          <option value="nina">Nina Ristova — Warehouse Op.</option>
-          <option value="goran">Goran Markovski — Maintenance</option>
-          <option value="sofija">Sofija Trajkova — QA Officer</option>
-          <option value="jana">Jana Kostova — QP Release</option>
-        </select>
-      </div>
-      <div style="font-size:12px;color:var(--ink-3);margin-top:4px;line-height:1.5">
-        Point the AI backend at your <b>GrowFlow AI Gateway</b> (FastAPI + Letta stateful agents).
-        If blank, the app uses its built-in browser AI when available, and all quick actions still work offline.
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" onclick="GF.closeModal('settings-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="GF.saveSettings()">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- Live design-tweaks panel mount -->
 <div id="tweaks-root"></div>
 
