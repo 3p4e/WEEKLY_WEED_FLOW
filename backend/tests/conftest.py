@@ -38,6 +38,17 @@ async def client():
         yield ac
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_login_rate_limit():
+    # ASGITransport gives every request the same fake client IP, so
+    # auth.py's in-process rate limiter would otherwise accumulate failed
+    # attempts across unrelated tests and eventually 429 a legitimate one.
+    from app.api import auth
+    auth._failed_attempts.clear()
+    yield
+    auth._failed_attempts.clear()
+
+
 @pytest_asyncio.fixture
 async def org():
     """A fresh org + one ADMIN profile with a known password (must_change_password

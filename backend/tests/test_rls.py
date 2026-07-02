@@ -1,7 +1,13 @@
 """P1 — org isolation. The RLS model is the app's actual security boundary
 (every table is FORCE ROW LEVEL SECURITY); this pins that a user in one org
 can never see or touch another org's data through the API, regardless of
-role."""
+role.
+
+Covers every table with a real API read path: tasks, profiles (via
+directory), departments, calendar_weeks. handoffs / ai_pins /
+ai_agent_bindings / password_reset_codes have RLS policies but no API
+routes at all today, so their isolation is unreachable via HTTP and out of
+scope here."""
 import uuid
 
 from app.db import admin_pool
@@ -63,6 +69,46 @@ async def test_directory_scoped_to_own_org(client):
         usernames = [u["username"] for u in r.json()]
         assert org_a["username"] in usernames
         assert org_b["username"] not in usernames
+    finally:
+        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
+        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+
+
+async def test_departments_scoped_to_own_org(client):
+    """departments has a real API read path (GET /departments) but no
+    existing test proves org isolation on it specifically."""
+    org_a = await _make_org_admin("depta")
+    org_b = await _make_org_admin("deptb")
+    try:
+        await admin_pool().execute(
+            "INSERT INTO departments(org_id, code, name) VALUES ($1,'secret','Org A Secret Dept')",
+            org_a["org_id"])
+        r = await client.post("/auth/login", json={"email": org_b["username"], "password": "TestPassword123456"})
+        token_b = r.json()["access_token"]
+        r = await client.get("/departments", headers={"Authorization": f"Bearer {token_b}"})
+        assert r.status_code == 200
+        names = [d["name"] for d in r.json()]
+        assert "Org A Secret Dept" not in names
+    finally:
+        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
+        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+
+
+async def test_calendar_weeks_scoped_to_own_org(client):
+    """calendar_weeks has a real API read path (GET /weeks) but no existing
+    test proves org isolation on it specifically."""
+    org_a = await _make_org_admin("weeka")
+    org_b = await _make_org_admin("weekb")
+    try:
+        await admin_pool().execute(
+            "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
+            " VALUES ($1,2026,1,'2026-01-05','2026-01-11')",
+            org_a["org_id"])
+        r = await client.post("/auth/login", json={"email": org_b["username"], "password": "TestPassword123456"})
+        token_b = r.json()["access_token"]
+        r = await client.get("/weeks", headers={"Authorization": f"Bearer {token_b}"})
+        assert r.status_code == 200
+        assert r.json() == []
     finally:
         await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
         await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])

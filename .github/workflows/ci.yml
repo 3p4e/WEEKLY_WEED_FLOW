@@ -178,7 +178,7 @@ jobs:
       - name: Install Playwright + browsers
         working-directory: web/e2e
         run: |
-          npm install
+          npm ci
           npx playwright install --with-deps chromium
       - name: Run e2e suite
         working-directory: web/e2e

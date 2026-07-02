@@ -97,5 +97,5 @@ traefik.http.services.wwf.loadbalancer.server.port=80
 > with `--no-healthcheck`.
 
 nginx serves the UI and reverse-proxies `/auth /departments /weeks /tasks /ai
-/audit /health` to the backend same-origin (resolved at request time via Docker
-DNS), so the browser only ever talks to one origin.
+/audit /reports /health` to the backend same-origin (resolved at request time
+via Docker DNS), so the browser only ever talks to one origin.

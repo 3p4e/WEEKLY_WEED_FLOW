@@ -58,8 +58,18 @@ GF.API = {
     this.token = ''; this.user = null;
     sessionStorage.removeItem('wwf_token'); sessionStorage.removeItem('wwf_user');
   },
-  changePassword(newPassword, currentPassword) {
-    return this._req('POST', '/auth/change-password', { new_password: newPassword, current_password: currentPassword || null });
+  async changePassword(newPassword, currentPassword) {
+    const data = await this._req('POST', '/auth/change-password',
+      { new_password: newPassword, current_password: currentPassword || null });
+    // The old token is invalidated server-side the instant this succeeds
+    // (its pwv claim no longer matches profiles.password_set_at) — adopt
+    // the fresh one the response carries, or every call right after this
+    // one 401s.
+    if (data.access_token) {
+      this.token = data.access_token;
+      sessionStorage.setItem('wwf_token', this.token);
+    }
+    return data;
   },
   me() { return this._req('GET', '/auth/me'); },
   directory()      { return this._req('GET', '/auth/directory'); },

@@ -1,8 +1,9 @@
 # WEEKLY_WEED_FLOW API — FastAPI (async, asyncpg) served by uvicorn.
 # Built and run on KVM4 as `weekly_weed_flow-backend:latest`; the GrowFlow
 # nginx frontend reverse-proxies /auth /departments /weeks /tasks /ai /audit
-# to it over the internal Docker network. Intentionally no HEALTHCHECK —
-# Traefik (host network mode) won't route containers marked "unhealthy".
+# /reports /health to it over the internal Docker network. Intentionally no
+# HEALTHCHECK — Traefik (host network mode) won't route containers marked
+# "unhealthy".
 FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

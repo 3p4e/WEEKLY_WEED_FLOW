@@ -127,3 +127,73 @@ async def test_comment_and_ack_flow(client, admin_headers):
     r = await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)
     assignee_row = next(a for a in r.json() if a["user_id"] == user["id"])
     assert assignee_row["accepted"] is True
+
+
+async def test_ack_decline_records_reason_as_a_comment(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Decline test", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    user, otp = await create_user(client, admin_headers, role="USER")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"]}, headers=admin_headers)
+
+    r = await client.post(f"/tasks/{task_id}/ack", json={"accepted": False, "reason": "Overloaded this week"},
+                           headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["accepted"] is False
+
+    r = await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)
+    assignee_row = next(a for a in r.json() if a["user_id"] == user["id"])
+    assert assignee_row["accepted"] is False
+
+    r = await client.get(f"/tasks/{task_id}/comments", headers=admin_headers)
+    comments = [c["content"] for c in r.json()]
+    assert any("Declined" in c and "Overloaded this week" in c for c in comments)
+
+
+async def test_ack_by_someone_not_assigned_returns_404(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Not your task", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    bystander, otp = await create_user(client, admin_headers, role="USER")
+    token = await login_and_set_password(client, bystander["username"], otp)
+    r = await client.post(f"/tasks/{task_id}/ack", json={"accepted": True},
+                           headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 404
+
+
+async def test_owner_can_unassign(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Unassign test", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    user, otp = await create_user(client, admin_headers, role="USER")
+    await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"]}, headers=admin_headers)
+
+    r = await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)
+    assert any(a["user_id"] == user["id"] for a in r.json())
+
+    r = await client.delete(f"/tasks/{task_id}/assignees/{user['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+    r = await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)
+    assert not any(a["user_id"] == user["id"] for a in r.json())
+
+
+async def test_non_owner_non_assignee_cannot_unassign_others(client, admin_headers):
+    """Mirrors test_non_owner_non_assignee_cannot_assign_others for the
+    DELETE side — _can_manage_task gates both the same way. Uses a second
+    assignee (not a bystander) as the actor: a true bystander can't see the
+    task at all via tasks_read RLS and would 404 before ever reaching the
+    _can_manage_task check, which would prove the wrong thing."""
+    r = await client.post("/tasks", json={"title": "Unassign permission check", "status": "pending"},
+                           headers=admin_headers)
+    task_id = r.json()["id"]
+
+    assignee1, otp1 = await create_user(client, admin_headers, role="USER")
+    assignee2, otp2 = await create_user(client, admin_headers, role="USER")
+    assignee1_token = await login_and_set_password(client, assignee1["username"], otp1)
+
+    await client.post(f"/tasks/{task_id}/assignees", json={"user_id": assignee1["id"]}, headers=admin_headers)
+    await client.post(f"/tasks/{task_id}/assignees", json={"user_id": assignee2["id"]}, headers=admin_headers)
+
+    r = await client.delete(f"/tasks/{task_id}/assignees/{assignee2['id']}",
+                             headers={"Authorization": f"Bearer {assignee1_token}"})
+    assert r.status_code == 403

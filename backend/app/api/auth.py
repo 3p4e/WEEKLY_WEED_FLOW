@@ -1,7 +1,9 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
 import secrets
+import time
+from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.config import settings
@@ -17,6 +19,40 @@ _OTP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
 def generate_otp() -> str:
     g = lambda: "".join(secrets.choice(_OTP_ALPHABET) for _ in range(4))
     return f"{g()}-{g()}-{g()}"
+
+
+# ── Login rate limiting ──────────────────────────────────────────────
+# In-process (single backend replica — see docs/DEPLOY.md), so a plain dict
+# is enough; no Redis for a facility-internal app this size. Two independent
+# thresholds: identifier is tight (guards one account against brute force),
+# IP is much looser — this is a single-facility app where many real staff
+# plausibly share one office IP, so a low IP threshold would let one
+# person's typos lock out everyone else on the same network.
+_LOGIN_WINDOW_S = 300
+_LOGIN_MAX_ATTEMPTS_PER_ID = 8
+_LOGIN_MAX_ATTEMPTS_PER_IP = 30
+_failed_attempts: dict[str, list[float]] = defaultdict(list)
+
+
+def _rate_limit_check(id_key: str, ip_key: str) -> None:
+    now = time.monotonic()
+    for key, limit in ((id_key, _LOGIN_MAX_ATTEMPTS_PER_ID), (ip_key, _LOGIN_MAX_ATTEMPTS_PER_IP)):
+        attempts = _failed_attempts[key]
+        while attempts and now - attempts[0] > _LOGIN_WINDOW_S:
+            attempts.pop(0)
+        if len(attempts) >= limit:
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many login attempts — try again later")
+
+
+def _rate_limit_record_failure(*keys: str) -> None:
+    now = time.monotonic()
+    for key in keys:
+        _failed_attempts[key].append(now)
+
+
+def _rate_limit_clear(*keys: str) -> None:
+    for key in keys:
+        _failed_attempts.pop(key, None)
 
 
 class LoginReq(BaseModel):
@@ -48,18 +84,28 @@ def _public(row) -> dict:
 
 
 @router.post("/login")
-async def login(body: LoginReq):
+async def login(body: LoginReq, request: Request):
+    ip = request.client.host if request.client else "unknown"
+    identifier = body.email.lower()
+    _rate_limit_check(f"id:{identifier}", f"ip:{ip}")
+
     row = await admin_pool().fetchrow(
         "SELECT * FROM profiles WHERE (username=$1 OR email=$1) AND is_deleted=false",
         body.email,
     )
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
-    if row is None or not row["is_active"]:
+    # Always pay the bcrypt cost, even on a miss (unknown/inactive user) —
+    # short-circuiting before it is a timing side-channel that lets an
+    # attacker enumerate valid usernames by response latency.
+    active = row is not None and row["is_active"]
+    ok = verify_password(body.password, row["password_hash"] if active else None)
+    if not active or not ok:
+        _rate_limit_record_failure(f"ip:{ip}", f"id:{identifier}")
         raise invalid
-    if not verify_password(body.password, row["password_hash"]):
-        raise invalid
+    _rate_limit_clear(f"ip:{ip}", f"id:{identifier}")
     days = settings.remember_device_expire_days if body.remember_device else None
-    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), days=days)
+    pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
+    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)
     return {"access_token": token, "token_type": "bearer", "user": _public(row)}
 
 
@@ -78,12 +124,17 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
         if row is None or not body.current_password or not verify_password(body.current_password, row["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password incorrect")
     async with rls(user, admin=True) as conn:
-        await conn.execute(
+        new_pwv = await conn.fetchval(
             "UPDATE profiles SET password_hash=$1, must_change_password=false,"
-            " password_set_at=now(), updated_at=now() WHERE id=$2",
+            " password_set_at=now(), updated_at=now() WHERE id=$2 RETURNING password_set_at",
             hash_password(body.new_password), user["id"],
         )
-    return {"ok": True}
+    # The token that authenticated this request is now stale (its pwv claim
+    # no longer matches the password_set_at we just wrote) — mint a fresh
+    # one bound to the new value, or the caller's very next request 401s.
+    token = create_access_token(
+        str(user["id"]), user["role"], str(user["org_id"]), password_set_at=new_pwv.isoformat())
+    return {"ok": True, "access_token": token, "token_type": "bearer"}
 
 
 def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:

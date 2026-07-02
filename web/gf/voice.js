@@ -111,20 +111,6 @@ GF.voice = {
     this._renderCapture();
   },
 
-  createFromVoice() {
-    const p = this._parsed || {};
-    const deptMatch = GF.DEPTS.find(d => d.name.toLowerCase().includes((p.department || '').toLowerCase())
-      || d.mk.toLowerCase().includes((p.department || '').toLowerCase()));
-    const ownerMatch = Object.entries(GF.PEOPLE).find(([, v]) => v.name.toLowerCase().includes((p.assignee || '').toLowerCase()));
-    const task = {
-      id: GF.uid(), title: p.title || this._transcript, dept: deptMatch ? deptMatch.id : 'prod',
-      owner: ownerMatch ? ownerMatch[0] : GF.state.user, helpers: [],
-      status: 'pending', pr: p.priority || 'medium',
-      days: Array.isArray(p.days) && p.days.length ? p.days : [GF.todayDay],
-      weekId: this._weekId, room: '', batch: '', tags: [], desc: '', notes: [], subs: [], deps: [],
-    };
-    GF.state.tasks.push(task); GF.store.save();
-    GF.closeModal('voice-modal');
-    GF.render.all(); GF.toast(GF.t('create_task') + ' ✓', 'success');
-  },
+  // createFromVoice() is defined by integrate.js (loaded last), which
+  // persists through the real API instead of local-only state.
 };

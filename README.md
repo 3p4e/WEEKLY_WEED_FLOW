@@ -52,11 +52,10 @@ web/                 Standalone front-end (open web/index.html — no build step
   index.html         App shell + all modals, loads the gf/ modules in order
   gf/                Vanilla-JS app modules
     boot-guard.js    Schema-guard (drops stale gf_* data on version change)
-    data.js          Seed data + bilingual EN/МК dictionary
+    data.js          Bilingual EN/МК dictionary + status/priority/department definitions
     core.js          State, storage, calendar, roles/permissions, helpers
     render.js        My-Week + task-card rendering
     views.js         Board / Timeline / Coordination / Dashboard / Team
-    ai.js            AI helpers (Letta gateway → built-in fallback)
     assistant.js     Assistant drawer (quick actions + chat)
     voice.js         Voice capture + parse-to-task
     export.js        CSV / JSON / PDF export

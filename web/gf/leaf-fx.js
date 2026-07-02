@@ -106,8 +106,7 @@ GF.leafFX = {
       el.className = 'leaf-mode-tag';
       stage.appendChild(el);
     }
-    const lang = (window.GF  && GF.state  && GF.state.lang) ||
-                 (window.QC  && QC.lang)  || 'en';
+    const lang = (window.GF && GF.state && GF.state.lang) || 'en';
     el.textContent = (this.labels[mode] || {})[lang] || this.labels[mode].en;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   },

@@ -63,6 +63,33 @@ async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
+async def test_team_leader_is_not_elevated(client, admin_headers):
+    """TEAM_LEADER is a real role (schema.sql's profiles_role_check) that's
+    deliberately excluded from app.is_elevated() — never exercised by any
+    other test, so nothing pins that it stays excluded."""
+    from tests.conftest import login_and_set_password
+    user, otp = await create_user(client, admin_headers, role="TEAM_LEADER")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/audit", headers=headers)).status_code == 403
+    assert (await client.get("/audit/tables", headers=headers)).status_code == 403
+
+
+async def test_qa_auditor_and_project_lead_are_elevated(client, admin_headers):
+    """Both are in app.is_elevated()'s role list but neither is exercised by
+    any other test."""
+    from tests.conftest import login_and_set_password
+    for role in ("QA_AUDITOR", "PROJECT_LEAD"):
+        user, otp = await create_user(client, admin_headers, role=role)
+        token = await login_and_set_password(client, user["username"], otp,
+                                              new_password=f"Password123456{role}")
+        headers = {"Authorization": f"Bearer {token}"}
+        assert (await client.get("/audit", headers=headers)).status_code == 200, role
+        assert (await client.get("/audit/tables", headers=headers)).status_code == 200, role
+        # Neither is ADMIN, so /verify must still be forbidden.
+        assert (await client.get("/audit/verify", headers=headers)).status_code == 403, role
+
+
 async def test_verify_reports_ok_when_chain_intact(client, admin_headers):
     await client.post("/tasks", json={"title": "Keeps the chain honest", "status": "pending"},
                        headers=admin_headers)

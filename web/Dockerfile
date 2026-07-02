@@ -1,5 +1,6 @@
 # WWF front-end — the GrowFlow UI served by nginx, with the backend API
-# (/auth, /departments, /weeks, /tasks, /ai) reverse-proxied same-origin.
+# (/auth, /departments, /weeks, /tasks, /ai, /audit, /reports, /health)
+# reverse-proxied same-origin.
 FROM nginx:1.27-alpine
 
 # Static app (index.html + gf/ + assets/)
