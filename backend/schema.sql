@@ -104,7 +104,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD','QA_AUDITOR') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD') $$;
 
 
 SET default_tablespace = '';
@@ -297,7 +297,7 @@ CREATE TABLE public.profiles (
     is_deleted boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'DEPT_HEAD'::text, 'PROJECT_LEAD'::text, 'TEAM_LEADER'::text, 'USER'::text, 'QA_AUDITOR'::text])))
+    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'DEPT_HEAD'::text, 'PROJECT_LEAD'::text, 'TEAM_LEADER'::text, 'USER'::text])))
 );
 
 ALTER TABLE ONLY public.profiles FORCE ROW LEVEL SECURITY;

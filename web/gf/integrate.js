@@ -25,8 +25,8 @@ const CODE_HANDOFF = {
 GF.WWF.meId = 'me';
 
 // GrowFlow role keys <-> backend role enum
-const ROLE_OUT = { admin:'ADMIN', hod:'DEPT_HEAD', qa:'QA_AUDITOR', qp:'PROJECT_LEAD', operator:'USER', viewer:'TEAM_LEADER' };
-const ROLE_IN  = { ADMIN:'admin', DEPT_HEAD:'hod', QA_AUDITOR:'qa', PROJECT_LEAD:'qp', USER:'operator', TEAM_LEADER:'viewer' };
+const ROLE_OUT = { admin:'ADMIN', hod:'DEPT_HEAD', qp:'PROJECT_LEAD', operator:'USER', viewer:'TEAM_LEADER' };
+const ROLE_IN  = { ADMIN:'admin', DEPT_HEAD:'hod', PROJECT_LEAD:'qp', USER:'operator', TEAM_LEADER:'viewer' };
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C'];
@@ -473,11 +473,11 @@ GF.WWF.showOtp = (user, otp) => {
 /* ══════════════════════════════════════════════════════════════════════
    Audit Trail — a general (non-QC) GxP capability adopted from the QC lab.
    Read-only, tamper-evident view of the hash-chained audit_log. Visible to
-   elevated roles only (ADMIN / DEPT_HEAD / PROJECT_LEAD / QA_AUDITOR), which
-   mirrors the DB `audit_read` policy.
+   elevated roles only (ADMIN / DEPT_HEAD / PROJECT_LEAD), which mirrors
+   the DB `audit_read` policy.
    ════════════════════════════════════════════════════════════════════ */
 const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
-const AUDIT_ROLES = ['ADMIN', 'DEPT_HEAD', 'PROJECT_LEAD', 'QA_AUDITOR'];
+const AUDIT_ROLES = ['ADMIN', 'DEPT_HEAD', 'PROJECT_LEAD'];
 const ACT = {
   INSERT: { c: '#15A86B', en: 'Created', mk: 'Создадено' },
   UPDATE: { c: '#2F6BFF', en: 'Updated', mk: 'Изменето' },

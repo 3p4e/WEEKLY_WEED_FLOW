@@ -51,7 +51,7 @@ API paths below same-origin.
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
 | GET    | `/audit/verify`  | `ADMIN`   | Walks the **global** chain and reports the first linkage break, if any |
 
-¹ elevated = `ADMIN`, `DEPT_HEAD`, `PROJECT_LEAD`, `QA_AUDITOR` — mirrors the DB
+¹ elevated = `ADMIN`, `DEPT_HEAD`, `PROJECT_LEAD` — mirrors the DB
 `audit_read` policy (`app.is_elevated()`). Secret columns (e.g. `password_hash`)
 are redacted from the payload server-side.
 

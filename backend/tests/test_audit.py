@@ -75,19 +75,29 @@ async def test_team_leader_is_not_elevated(client, admin_headers):
     assert (await client.get("/audit/tables", headers=headers)).status_code == 403
 
 
-async def test_qa_auditor_and_project_lead_are_elevated(client, admin_headers):
-    """Both are in app.is_elevated()'s role list but neither is exercised by
-    any other test."""
+async def test_project_lead_is_elevated(client, admin_headers):
+    """PROJECT_LEAD is in app.is_elevated()'s role list but isn't exercised
+    by any other test."""
     from tests.conftest import login_and_set_password
-    for role in ("QA_AUDITOR", "PROJECT_LEAD"):
-        user, otp = await create_user(client, admin_headers, role=role)
-        token = await login_and_set_password(client, user["username"], otp,
-                                              new_password=f"Password123456{role}")
-        headers = {"Authorization": f"Bearer {token}"}
-        assert (await client.get("/audit", headers=headers)).status_code == 200, role
-        assert (await client.get("/audit/tables", headers=headers)).status_code == 200, role
-        # Neither is ADMIN, so /verify must still be forbidden.
-        assert (await client.get("/audit/verify", headers=headers)).status_code == 403, role
+    user, otp = await create_user(client, admin_headers, role="PROJECT_LEAD")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/audit", headers=headers)).status_code == 200
+    assert (await client.get("/audit/tables", headers=headers)).status_code == 200
+    # Not ADMIN, so /verify must still be forbidden.
+    assert (await client.get("/audit/verify", headers=headers)).status_code == 403
+
+
+async def test_qa_auditor_role_no_longer_exists(client, admin_headers):
+    """QA_AUDITOR was removed entirely — profiles_role_check must reject it
+    at the database level, not just exclude it from app.is_elevated().
+    create_user's generic exception handler turns the CHECK violation into
+    a 409 (same path as e.g. a duplicate username)."""
+    r = await client.post("/auth/users", json={
+        "username": "should_not_be_creatable", "full_name": "X", "role": "QA_AUDITOR",
+    }, headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "CheckViolation" in r.json()["detail"]
 
 
 async def test_verify_reports_ok_when_chain_intact(client, admin_headers):
