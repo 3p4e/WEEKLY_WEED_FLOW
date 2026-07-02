@@ -100,6 +100,15 @@ ADMIN_DATABASE_URL=postgresql://app_admin:testpw_admin@localhost:5432/weekly_wee
 ```
 
 CI runs the same steps against a `postgres:16` service container on every PR
+(fresh for every run). `tests/test_audit.py`'s last two tests deliberately
+tamper with / delete rows in the global `audit_log` chain to prove
+`/audit/verify` catches (and doesn't catch) specific things — safe for CI
+since it always starts from an empty database, but running the suite twice
+locally against the *same* test database will fail the chain-intact
+assertions on the second run. Recreate the test database between local runs
+if you've run the full suite (`DROP DATABASE weekly_weed_flow_test;` +
+redo the schema-load step above), or just run everything except
+`test_audit.py` while iterating on something else
 (`.github/workflows/ci.yml`).
 
 ## Production (KVM4)
