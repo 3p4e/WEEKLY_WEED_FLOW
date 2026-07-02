@@ -12,6 +12,11 @@ node_modules/
 dist/
 build/
 
+# Playwright (web/e2e)
+test-results/
+playwright-report/
+blob-report/
+
 # OS / editor
 .DS_Store
 Thumbs.db

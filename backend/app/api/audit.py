@@ -14,8 +14,6 @@ it.
   • GET /audit/verify   → walk the *global* chain (admin pool, ADMIN only) and
                           report the first linkage break, if any.
 """
-import json
-
 from fastapi import APIRouter, Depends, Query
 
 from app.db import admin_pool, rls
@@ -33,22 +31,15 @@ _REDACT = {"password_hash", "password", "otp", "secret", "token", "api_key"}
 
 
 def _ser(r) -> dict:
-    """asyncpg returns jsonb as text; parse it so the client gets real JSON.
-
-    Sensitive columns captured by the row-level trigger (e.g. password_hash)
-    are redacted here so they never leave the API."""
+    """old_values/new_values arrive already parsed (db.py registers a jsonb
+    codec). Sensitive columns captured by the row-level trigger (e.g.
+    password_hash) are redacted here so they never leave the API."""
     def _j(v):
-        if v is None:
-            return None
-        try:
-            val = json.loads(v)
-        except (TypeError, ValueError):
-            return v
-        if isinstance(val, dict):
-            for k in list(val.keys()):
-                if k in _REDACT and val[k] is not None:
-                    val[k] = "***"
-        return val
+        if isinstance(v, dict):
+            for k in list(v.keys()):
+                if k in _REDACT and v[k] is not None:
+                    v[k] = "***"
+        return v
     return {
         "id": r["id"],
         "org_id": str(r["org_id"]) if r["org_id"] else None,

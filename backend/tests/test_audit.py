@@ -10,8 +10,6 @@ without touching the hash columns is invisible to /verify. Both properties
 are pinned below so the distinction stays visible in the test suite, not
 just in a docstring.
 """
-import json
-
 from app.db import admin_pool
 from tests.conftest import create_user
 
@@ -87,7 +85,7 @@ async def test_verify_does_not_detect_in_place_content_tampering(client, admin_h
     row = await admin_pool().fetchrow(
         "SELECT id FROM audit_log WHERE table_name='tasks' AND record_id=$1 AND action='INSERT'", task_id)
     assert row is not None
-    tampered = json.dumps({"title": "SOMEONE EDITED THIS ROW DIRECTLY", "status": "pending"})
+    tampered = {"title": "SOMEONE EDITED THIS ROW DIRECTLY", "status": "pending"}
     await admin_pool().execute("UPDATE audit_log SET new_values=$1 WHERE id=$2", tampered, row["id"])
 
     r = await client.get("/audit/verify", headers=admin_headers)

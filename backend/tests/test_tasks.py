@@ -58,3 +58,29 @@ async def test_departments_and_weeks_endpoints(client, admin_headers):
     assert r.status_code == 200
     r = await client.get("/weeks", headers=admin_headers)
     assert r.status_code == 200
+
+
+async def test_progress_notes_is_a_real_list_not_a_json_string(client, admin_headers):
+    """Regression: tasks.progress_notes is jsonb (DEFAULT '[]'::jsonb NOT
+    NULL); without a jsonb codec on the asyncpg pools it comes back as the
+    raw string "[]" instead of an empty list. The frontend's
+    GF.WWF.transform does `(t.progress_notes || []).map(...)` — a non-empty
+    string is truthy, so the `|| []` fallback never kicks in, and `.map` on
+    a string throws for every task, every load. Caught by a real browser
+    (e2e) hitting this exact path via GF.submitAdd; pinned here at the API
+    layer so it can't regress silently again."""
+    r = await client.post("/tasks", json={"title": "Progress notes shape check", "status": "pending"},
+                           headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert isinstance(r.json()["progress_notes"], list)
+    assert r.json()["progress_notes"] == []
+
+    task_id = r.json()["id"]
+    r = await client.get("/tasks?parents_only=true", headers=admin_headers)
+    listed = next(t for t in r.json() if t["id"] == task_id)
+    assert isinstance(listed["progress_notes"], list)
+
+    await client.post(f"/tasks/{task_id}/progress", json={"day_label": "Mon", "note": "watered"},
+                       headers=admin_headers)
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert isinstance(r.json()["task"]["progress_notes"], list)

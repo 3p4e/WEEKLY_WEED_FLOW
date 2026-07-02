@@ -77,6 +77,70 @@ jobs:
           ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
         run: python -m pytest -v
 
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: weekly_weed_flow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install nginx
+        run: sudo apt-get update -q && sudo apt-get install -y -q nginx-light
+      - name: Bootstrap test roles + schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
+            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
+          "
+          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+          "
+      - name: Set up backend venv
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+      - name: Install Playwright + browsers
+        working-directory: web/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Run e2e suite
+        working-directory: web/e2e
+        env:
+          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
+          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
+          CI: true
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/e2e/test-results/
+          retention-days: 7
+
   images:
     name: Build container images
     runs-on: ubuntu-latest

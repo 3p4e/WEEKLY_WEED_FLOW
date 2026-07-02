@@ -10,6 +10,7 @@ Two pools mirror the two Postgres roles:
 RLS policies and the audit trigger see the caller. SET LOCAL is transaction
 scoped → pool-safe (never leaks across requests on a shared connection).
 """
+import json
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -19,9 +20,20 @@ from app.config import settings
 _pools: dict[str, asyncpg.Pool] = {}
 
 
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    # asyncpg returns jsonb columns as raw text by default; every jsonb
+    # column (tasks.progress_notes, audit_log.old_values/new_values,
+    # ai_agent_bindings.config) should come back as real JSON to callers,
+    # not a string they then have to know to parse themselves.
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog", format="text")
+
+
 async def init_pools() -> None:
-    _pools["user"] = await asyncpg.create_pool(settings.database_url, min_size=2, max_size=10)
-    _pools["admin"] = await asyncpg.create_pool(settings.admin_database_url, min_size=1, max_size=5)
+    _pools["user"] = await asyncpg.create_pool(
+        settings.database_url, min_size=2, max_size=10, init=_init_connection)
+    _pools["admin"] = await asyncpg.create_pool(
+        settings.admin_database_url, min_size=1, max_size=5, init=_init_connection)
 
 
 async def close_pools() -> None:
