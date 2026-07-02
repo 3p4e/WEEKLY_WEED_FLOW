@@ -1065,7 +1065,7 @@ CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_o
 -- Name: password_reset_codes reset_self; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.current_user_id()) OR app.is_elevated())) WITH CHECK (true);
+CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.current_user_id()) OR app.is_elevated())) WITH CHECK (((user_id = app.current_user_id()) OR app.is_elevated()));
 
 
 --
