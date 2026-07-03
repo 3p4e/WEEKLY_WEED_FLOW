@@ -1,7 +1,8 @@
 """Task lifecycle API (RLS-scoped via app_user + per-request identity GUCs)."""
 from datetime import date
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db import rls
 from app.deps import require_password_set
@@ -45,7 +46,7 @@ async def list_tasks(
         return _ser(await c.fetch(
             f"SELECT t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
             f"t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.deps,t.progress_notes,"
-            f"t.due_date,t.completed_date,t.created_at,t.updated_at,"
+            f"t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at,"
             f"COALESCE(array_agg(ta.user_id) FILTER (WHERE ta.user_id IS NOT NULL), '{{}}') AS assignee_ids "
             f"FROM tasks t LEFT JOIN task_assignees ta ON ta.task_id=t.id "
             f"WHERE {where} GROUP BY t.id ORDER BY t.created_at", *args))
@@ -74,6 +75,7 @@ class TaskIn(BaseModel):
     parent_id: str | None = None
     days: list[str] = []
     tags: list[str] = []
+    estimated_hours: Decimal | None = Field(default=None, ge=0)
 
 
 @router.post("/tasks", status_code=201)
@@ -81,11 +83,11 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         row = await c.fetchrow(
             "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-            " department,department_id,week_id,week_start,days,tags,created_by,updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$2,$2) RETURNING *",
+            " department,department_id,week_id,week_start,days,tags,estimated_hours,created_by,updated_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$2,$2) RETURNING *",
             user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
             body.priority, body.department, body.department_id, body.week_id,
-            body.week_start, body.days, body.tags,
+            body.week_start, body.days, body.tags, body.estimated_hours,
         )
     return dict(row)
 
@@ -100,6 +102,8 @@ class TaskPatch(BaseModel):
     tags: list[str] | None = None
     week_id: str | None = None
     week_start: date | None = None
+    estimated_hours: Decimal | None = Field(default=None, ge=0)
+    actual_hours: Decimal | None = Field(default=None, ge=0)
 
 
 @router.patch("/tasks/{task_id}")

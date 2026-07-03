@@ -37,6 +37,7 @@ GF.openAdd = (weekId) => {
     <div class="field"><label>${GF.t('accountable')} <span class="lbl-hint">${GF.t('accountable_hint')}</span></label><select id="add-owner">${ownerOpts}</select></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
     <div class="field"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
+    <div class="field"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
     <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
   GF.openModal('add-modal');
 };

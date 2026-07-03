@@ -106,4 +106,8 @@ GF.API = {
     const p = new URLSearchParams(q).toString();
     return this._req('GET', '/reports/weekly' + (p ? '?' + p : ''));
   },
+  pins(q = {}) {
+    const p = new URLSearchParams(q).toString();
+    return this._req('GET', '/ai/pins' + (p ? '?' + p : ''));
+  },
 };

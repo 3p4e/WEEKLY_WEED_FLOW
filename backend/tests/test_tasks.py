@@ -121,3 +121,36 @@ async def test_progress_notes_is_a_real_list_not_a_json_string(client, admin_hea
                        headers=admin_headers)
     r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
     assert isinstance(r.json()["task"]["progress_notes"], list)
+
+
+async def test_estimated_hours_set_at_create_and_listed(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Trim batch", "status": "pending", "estimated_hours": 4},
+                           headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert float(r.json()["estimated_hours"]) == 4.0
+    task_id = r.json()["id"]
+
+    # Surfaced in the list (the frontend transform reads it from here).
+    r = await client.get("/tasks?parents_only=true", headers=admin_headers)
+    listed = next(t for t in r.json() if t["id"] == task_id)
+    assert float(listed["estimated_hours"]) == 4.0
+    assert listed["actual_hours"] is None
+
+
+async def test_actual_hours_patch_round_trips(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Log my hours", "status": "ongoing"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    r = await client.patch(f"/tasks/{task_id}", json={"actual_hours": 5.5}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert float(r.json()["actual_hours"]) == 5.5
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert float(r.json()["task"]["actual_hours"]) == 5.5
+
+
+async def test_negative_hours_rejected_with_422(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Bad estimate", "estimated_hours": -1}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/tasks", json={"title": "Real task", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    r = await client.patch(f"/tasks/{task_id}", json={"actual_hours": -2}, headers=admin_headers)
+    assert r.status_code == 422

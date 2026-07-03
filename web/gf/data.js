@@ -63,6 +63,8 @@ GF.I18N = {
     coord_sub:'Cross-department handoffs for the week', board_sub:'Tasks by status', timeline_sub:'Tasks across the week',
     dash_sub:'Production overview', team_sub:'People & roles',
     view_only:'View only', your_role:'Your role', drag_hint:'Drag cards between columns to change status',
+    est_hours:'Estimated hours', hours_spent:'Hours spent', ai_weekly_report:'AI Weekly Report',
+    ai_next_week_plan:'AI Next-Week Plan', no_ai_report:'No AI report generated yet.',
   },
   mk: {
     my_week:'Моја недела', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -87,5 +89,7 @@ GF.I18N = {
     coord_sub:'Меѓуодделски предавања за неделата', board_sub:'Задачи по статус', timeline_sub:'Задачи низ неделата',
     dash_sub:'Преглед на производство', team_sub:'Луѓе и улоги',
     view_only:'Само преглед', your_role:'Ваша улога', drag_hint:'Повлечете картички меѓу колони за промена на статус',
+    est_hours:'Проценети часови', hours_spent:'Потрошени часови', ai_weekly_report:'АИ неделен извештај',
+    ai_next_week_plan:'АИ план за следна недела', no_ai_report:'Сè уште нема генериран АИ извештај.',
   },
 };

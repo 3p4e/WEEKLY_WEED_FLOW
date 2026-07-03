@@ -8,7 +8,7 @@ unreachable, the endpoint returns {available:false} instead of erroring, so the
 UI can fall back.
 """
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from app.config import settings
@@ -70,26 +70,68 @@ async def functions(user: dict = Depends(require_password_set)):
     }
 
 
+@router.get("/pins")
+async def list_pins(
+    function_key: str | None = None,
+    week_id: str | None = None,
+    limit: int = Query(default=10, ge=1, le=50),
+    user: dict = Depends(require_password_set),
+):
+    """Read the archived AI outputs (weekly report / next-week plan / snapshot
+    digest) the scheduler writes to ai_pins. Org-scoped by RLS. Newest first."""
+    clauses, args = [], []
+    if function_key:
+        args.append(function_key); clauses.append(f"function_key=${len(args)}")
+    if week_id:
+        args.append(week_id); clauses.append(f"week_id=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    args.append(limit)
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT id, function_key, task_id, week_id, title, body, created_at FROM ai_pins"
+            f"{where} ORDER BY created_at DESC LIMIT ${len(args)}", *args)
+    return [
+        {"id": str(r["id"]), "function_key": r["function_key"],
+         "task_id": str(r["task_id"]) if r["task_id"] else None,
+         "week_id": str(r["week_id"]) if r["week_id"] else None,
+         "title": r["title"], "body": r["body"],
+         "created_at": r["created_at"].isoformat()}
+        for r in rows
+    ]
+
+
 # Functions that should be grounded in the live task corpus.
 _DATA_FUNCS = {"weekly_summary", "dependency_advisor", "corpus_qa", "risk_flag", "progress_digest"}
+
+
+_CTX_COLS = ("t.id, t.title, t.status, t.priority, t.department, t.week_start, t.tags,"
+             " t.estimated_hours, t.actual_hours, t.completed_date, p.username AS owner")
 
 
 async def _task_context(conn, week_id: str | None = None, limit: int = 200) -> str:
     if week_id:
         rows = await conn.fetch(
-            "SELECT title,status,priority,department,week_start,tags FROM tasks"
-            " WHERE is_deleted=false AND week_id=$1 ORDER BY created_at DESC LIMIT $2", week_id, limit)
+            f"SELECT {_CTX_COLS} FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+            " WHERE t.is_deleted=false AND t.week_id=$1 ORDER BY t.created_at DESC LIMIT $2", week_id, limit)
     else:
         rows = await conn.fetch(
-            "SELECT title,status,priority,department,week_start,tags FROM tasks"
-            " WHERE is_deleted=false ORDER BY week_start DESC NULLS LAST, created_at DESC LIMIT $1", limit)
+            f"SELECT {_CTX_COLS} FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+            " WHERE t.is_deleted=false ORDER BY t.week_start DESC NULLS LAST, t.created_at DESC LIMIT $1", limit)
     if not rows:
         return ""
-    lines = [
-        f"- [{r['status']}/{r['priority']}] {r['title']} "
-        f"(dept={r['department']}, week={r['week_start']}, tags={list(r['tags'] or [])})"
-        for r in rows
-    ]
+
+    def _hrs(v):
+        return "-" if v is None else f"{float(v):g}"
+
+    lines = []
+    for r in rows:
+        done = f", done={r['completed_date']}" if r["completed_date"] else ""
+        lines.append(
+            f"- [task:{str(r['id'])[:8]}] [{r['status']}/{r['priority']}] {r['title']} "
+            f"(dept={r['department']}, owner={r['owner']}, week={r['week_start']}, "
+            f"hours={_hrs(r['actual_hours'])}/{_hrs(r['estimated_hours'])}, "
+            f"tags={list(r['tags'] or [])}{done})"
+        )
     return f"TASK DATA ({len(rows)} tasks, most recent first):\n" + "\n".join(lines)
 
 

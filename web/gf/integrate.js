@@ -45,6 +45,8 @@ GF.WWF.transform = (t) => ({
   tags: t.tags || [], deps: [],
   notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n })),
   blocker: '', completed_date: t.completed_date, week_start: t.week_start,
+  est: t.estimated_hours != null ? Number(t.estimated_hours) : null,
+  act: t.actual_hours != null ? Number(t.actual_hours) : null,
 });
 
 GF.WWF.weekIndex = (t) => {
@@ -243,11 +245,14 @@ GF.WWF.install = () => {
     const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
     const deptId = GF.$('add-dept').value;
     const wk = GF.calendar.weeks[GF._addWeek] || GF.calendar.weeks[GF.calendar.todayId];
+    const estRaw = parseFloat(GF.$('add-est')?.value);
+    const estHours = Number.isFinite(estRaw) && estRaw > 0 ? estRaw : null;
     try {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
         week_start: wk ? wk.start.toISOString().slice(0,10) : null, days: days.length?days:[GF.todayDay],
+        estimated_hours: estHours,
       });
       GF.state.tasks.push(GF.WWF.transform(created));
       GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('create_task')+' ✓','success');
@@ -773,7 +778,39 @@ GF.WWF.doAck = async (taskId, accepted) => {
   catch (e) { GF.toast('Failed: ' + e.message, 'error'); }
 };
 
-// Inject the collab section into every expanded card, just above its actions.
+// Effort capture: hours-spent input on the expanded card (persists to the
+// real backend). estimated_hours is set at creation; actual_hours here.
+GF.WWF.hoursSection = (t) => {
+  const est = (t.est != null) ? t.est : '—';
+  const act = (t.act != null) ? t.act : '';
+  return `
+    <div class="sec-label">${GF.icon('clock','icon')}${AL('Hours', 'Часови')}</div>
+    <div class="note-input">
+      <input id="hrs-${t.id}" type="number" min="0" step="0.5" value="${act}"
+             placeholder="${AL('Hours spent', 'Потрошени часови')}"
+             onchange="GF.WWF.saveHours('${t.id}')"
+             style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+      <span style="font-size:12px;color:var(--ink-3);white-space:nowrap">/ ${AL('est', 'проц.')} ${est}</span>
+    </div>`;
+};
+
+GF.WWF.saveHours = async (taskId) => {
+  const el = GF.$('hrs-' + taskId); const t = GF.task(taskId);
+  if (!el || !t) return;
+  const raw = el.value.trim();
+  const v = raw === '' ? null : parseFloat(raw);
+  if (v !== null && (!Number.isFinite(v) || v < 0)) { GF.toast(AL('Enter a valid number', 'Внесете важечки број'), 'error'); return; }
+  const prev = t.act;
+  try {
+    // Persist first — only mutate local state once the backend confirms.
+    await GF.API.updateTask(taskId, { actual_hours: v });
+    t.act = v; GF.render.panels(); GF.toast(AL('Hours saved ✓', 'Часовите се зачувани ✓'), 'success');
+  } catch (e) {
+    t.act = prev; GF.render.panels(); GF.toast('Save failed: ' + e.message, 'error');
+  }
+};
+
+// Inject the hours + collab sections into every expanded card, above actions.
 (function () {
   const _card = GF.render.card.bind(GF.render);
   GF.render.card = function (t) {
@@ -783,7 +820,7 @@ GF.WWF.doAck = async (taskId, accepted) => {
     // Function replacement → returned text is inserted literally (a string
     // replacement would interpret $&/$'/$1 patterns inside comment content).
     return html.indexOf(anchor) >= 0
-      ? html.replace(anchor, () => GF.WWF.collabSection(t) + anchor)
+      ? html.replace(anchor, () => GF.WWF.hoursSection(t) + GF.WWF.collabSection(t) + anchor)
       : html;
   };
 })();
@@ -792,7 +829,7 @@ GF.WWF.doAck = async (taskId, accepted) => {
    Weekly Report + Plan — Fri→Thu rolling window with 7-day activity
    time band and AI-generated insights. All data from real timestamps.
    ════════════════════════════════════════════════════════════════════ */
-GF.WWF._report = { data: null, mode: 'report', refDate: null, loading: false, aiInsights: null, aiLoading: false };
+GF.WWF._report = { data: null, mode: 'report', refDate: null, loading: false, aiInsights: null, aiLoading: false, pins: null, pinsUser: null };
 
 GF.WWF._sc = (label, value, color) =>
   `<div style="background:#fff;border:1px solid var(--line);border-radius:11px;padding:14px 16px;text-align:center">
@@ -812,10 +849,21 @@ GF.WWF.loadReport = async () => {
   if (st.loading) return;
   st.loading = true;
   st.aiInsights = null;
+  st.pins = null; st.pinsUser = null;
   try {
     const q = { mode: st.mode };
     if (st.refDate) q.ref_date = st.refDate;
     st.data = await GF.API.weeklyReport(q);
+    // The scheduler archives the AI weekly report / next-week plan to ai_pins
+    // (function_key weekly_report / next_week_plan, +_user per person). Best
+    // effort — the panel just shows an empty state until the first run lands.
+    const orgKey = st.mode === 'plan' ? 'next_week_plan' : 'weekly_report';
+    const [org, per] = await Promise.all([
+      GF.API.pins({ function_key: orgKey, limit: 1 }).catch(() => []),
+      GF.API.pins({ function_key: orgKey + '_user', limit: 10 }).catch(() => []),
+    ]);
+    st.pins = (org && org[0]) || null;
+    st.pinsUser = per || [];
     GF.WWF.renderReport();
     if (st.mode === 'report') GF.WWF._loadAiInsights();
   } catch (e) {
@@ -857,6 +905,34 @@ GF.WWF._renderAiBox = () => {
   if (st.aiLoading) return `<div style="padding:16px;text-align:center;color:var(--ink-3)">${GF.icon('sparkle')} ${AL('Generating AI insights…', 'Генерирање AI увиди…')}</div>`;
   if (!st.aiInsights) return `<div style="padding:16px;color:var(--ink-3);font-size:13px">${AL('AI insights unavailable.', 'AI увидите не се достапни.')}</div>`;
   return `<div style="padding:14px;font-size:13.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${GF.esc(st.aiInsights)}</div>`;
+};
+
+GF.WWF._renderPinsPanel = () => {
+  const st = GF.WWF._report;
+  const title = st.mode === 'plan' ? GF.t('ai_next_week_plan') : GF.t('ai_weekly_report');
+  const accent = st.mode === 'plan' ? '#FF7A1A' : '#2F6BFF';
+  const soft = st.mode === 'plan' ? '#FFF4EC' : '#F8F9FF';
+  const line = st.mode === 'plan' ? '#FFE0C7' : '#D6E0FF';
+  let inner;
+  if (st.pins) {
+    const when = GF.WWF._when(st.pins.created_at);
+    const perDetails = (st.pinsUser || []).map(p => `
+      <details style="margin-top:8px;border-top:1px solid ${line};padding-top:8px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:${accent}">${GF.esc(p.title || '')}</summary>
+        <div style="padding:8px 2px;font-size:13px;line-height:1.6;color:var(--ink);white-space:pre-wrap">${GF.esc(p.body || '')}</div>
+      </details>`).join('');
+    inner = `<div style="padding:14px">
+      <div style="font-size:13.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${GF.esc(st.pins.body || '')}</div>
+      ${perDetails}
+      <div style="margin-top:10px;font-size:11px;color:var(--ink-3)">${GF.esc(when)}</div>
+    </div>`;
+  } else {
+    inner = `<div style="padding:16px;color:var(--ink-3);font-size:13px">${GF.t('no_ai_report')}</div>`;
+  }
+  return `<div style="margin:18px 0;background:${soft};border:1px solid ${line};border-radius:11px;overflow:hidden">
+    <div style="padding:12px 14px;border-bottom:1px solid ${line};font-weight:700;font-size:14px;color:${accent}">
+      ${GF.icon('trend')} ${title}
+    </div>${inner}</div>`;
 };
 
 GF.WWF.switchReportMode = (mode) => {
@@ -1001,7 +1077,8 @@ GF.WWF.renderReport = () => {
       <div id="report-ai">${GF.WWF._renderAiBox()}</div>
     </div>` : '';
 
-  v.innerHTML = toolbar + period + cards + band + depts + taskList + ai;
+  const pinsPanel = GF.WWF._renderPinsPanel();
+  v.innerHTML = toolbar + period + cards + band + pinsPanel + depts + taskList + ai;
 };
 
 /* nav item for the report/plan view */

@@ -10,3 +10,6 @@ python-multipart==0.0.20
 alembic==1.18.5
 sqlalchemy==2.0.51
 greenlet==3.5.3
+# IANA tz database for zoneinfo — the scheduler fires at wall-clock 14:00
+# Europe/Skopje and python:3.12-slim ships no /usr/share/zoneinfo.
+tzdata==2025.2

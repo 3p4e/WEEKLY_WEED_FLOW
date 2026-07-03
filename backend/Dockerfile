@@ -16,5 +16,10 @@ COPY app ./app
 # running app itself (uvicorn only ever imports app/).
 COPY alembic.ini .
 COPY alembic ./alembic
+# scripts/ ships too: the weekly-snapshot job + scheduler run from this same
+# image as a separate container (`python scripts/scheduler.py`) and via
+# `docker exec ... python scripts/weekly_snapshot.py --once`. Not imported by
+# the uvicorn app.
+COPY scripts ./scripts
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

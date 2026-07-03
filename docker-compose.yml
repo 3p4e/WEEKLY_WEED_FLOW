@@ -46,6 +46,18 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  scheduler:
+    build: ./backend
+    image: weekly_weed_flow-backend:latest
+    container_name: wwf-scheduler
+    depends_on: [db]
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
+    command: ["python", "scripts/scheduler.py"]
+    networks: [internal]
+    restart: unless-stopped
+
   frontend:
     build: ./web
     image: wwf-growflow:latest

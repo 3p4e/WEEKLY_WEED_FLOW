@@ -101,3 +101,20 @@ async def test_department_filter_excludes_other_departments(client, admin_header
     ids = [t["id"] for t in r.json()["tasks"]]
     assert cult_task_id in ids
     assert qc_task_id not in ids
+
+
+async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):
+    """Effort capture flows through to the report: hours entered on tasks sum
+    into summary.estimated_hours / actual_hours (drives the Hours stat card)."""
+    await client.post("/tasks", json={"title": "Estimated 4 done 5.5", "status": "ongoing",
+                                       "estimated_hours": 4}, headers=admin_headers)
+    r = await client.post("/tasks", json={"title": "logged", "status": "ongoing",
+                                          "estimated_hours": 2}, headers=admin_headers)
+    tid = r.json()["id"]
+    await client.patch(f"/tasks/{tid}", json={"actual_hours": 5.5}, headers=admin_headers)
+
+    r = await client.get("/reports/weekly", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    s = r.json()["summary"]
+    assert s["estimated_hours"] == 6.0
+    assert s["actual_hours"] == 5.5
