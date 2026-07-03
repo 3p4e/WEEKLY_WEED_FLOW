@@ -11,14 +11,17 @@ import os
 
 import httpx
 
-PROMPT_VERSION = "wwf-prompts/v2"
+PROMPT_VERSION = "wwf-prompts/v3"
 
 LETTA_BASE_URL = os.environ.get("LETTA_BASE_URL", "http://host.docker.internal:8283")
 LETTA_API_KEY = os.environ.get("LETTA_API_KEY", "")
 
 _RULES = """\
 Rules that apply to every response:
-- Cite the source task for EVERY factual claim using its short id token, e.g. [task:1a2b3c4d]. Do not invent ids.
+- Cite the source task for factual claims using its short id token, e.g. [task:1a2b3c4d], whenever
+  that token appears in your input. NEVER invent or guess an id. For org-rollup requests the input
+  is aggregate sections plus a bounded task sample — claims grounded only in aggregates (counts,
+  totals, percentages) must quote the aggregate number instead of citing a task id.
 - Report carry-over aging: if a task has rolled unfinished across weeks, say "rolled N weeks".
 - Name blockers with their owner (e.g. "STUCK — owner marko") and surface any DECLINED assignments.
 - Compare hours actual-vs-estimated where present; flag over-run (actual > estimated) and untracked effort.

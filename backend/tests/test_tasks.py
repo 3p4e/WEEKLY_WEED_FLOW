@@ -147,6 +147,43 @@ async def test_actual_hours_patch_round_trips(client, admin_headers):
     assert float(r.json()["task"]["actual_hours"]) == 5.5
 
 
+async def test_patch_null_clears_actual_hours(client, admin_headers):
+    """Regression: update_task used model_dump(exclude_none=True), which
+    can't distinguish "field omitted" from "field explicitly null" — so
+    blanking the hours input sent {actual_hours: null}, the backend silently
+    dropped it, returned 200, and the stale value reappeared on reload."""
+    r = await client.post("/tasks", json={"title": "Clear my hours", "status": "ongoing"},
+                           headers=admin_headers)
+    task_id = r.json()["id"]
+    await client.patch(f"/tasks/{task_id}", json={"actual_hours": 5.5}, headers=admin_headers)
+
+    r = await client.patch(f"/tasks/{task_id}", json={"actual_hours": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["actual_hours"] is None
+
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["actual_hours"] is None
+
+
+async def test_patch_null_on_not_null_column_is_ignored_not_500(client, admin_headers):
+    """An explicit null on a NOT NULL column (status) must be treated as
+    not-provided — never forwarded to SQL as NULL."""
+    r = await client.post("/tasks", json={"title": "Null status probe", "status": "ongoing"},
+                           headers=admin_headers)
+    task_id = r.json()["id"]
+    r = await client.patch(f"/tasks/{task_id}", json={"status": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["status"] == "ongoing"
+
+
+async def test_zero_estimate_is_a_value_not_missing(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Trivial task", "estimated_hours": 0},
+                           headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert float(r.json()["estimated_hours"]) == 0.0
+
+
 async def test_negative_hours_rejected_with_422(client, admin_headers):
     r = await client.post("/tasks", json={"title": "Bad estimate", "estimated_hours": -1}, headers=admin_headers)
     assert r.status_code == 422

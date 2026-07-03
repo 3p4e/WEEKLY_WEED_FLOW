@@ -74,7 +74,11 @@ def compute_windows(ref: date) -> tuple[tuple[date, date], tuple[date, date]]:
 
 
 def iso_week_label(fri: date, thu: date) -> str:
-    return f"W{thu.isocalendar()[1]} {thu.year} ({fri.isoformat()} → {thu.isoformat()})"
+    # Week number from the FRIDAY, matching app.api.reports.weekly_report's
+    # period label — a Fri->Thu window always straddles two ISO weeks, so
+    # deriving from the Thursday would disagree with the in-app report by
+    # one week, every week.
+    return f"W{fri.isocalendar()[1]} {fri.year} ({fri.isoformat()} → {thu.isoformat()})"
 
 
 def carry_over_weeks(created_at, window_end: date) -> int:
@@ -89,6 +93,21 @@ def _hrs(v) -> str:
 
 def _cite(task_id) -> str:
     return f"[task:{str(task_id)[:8]}]"
+
+
+def _clean(text) -> str:
+    """Collapse all whitespace (incl. newlines) in free text before it goes
+    into a digest line. Titles are unrestricted user input; a newline in one
+    would otherwise let a title fabricate its own markdown section — or
+    collide with TASKS_HEADER below."""
+    return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
+# The heading that separates the digest's aggregate sections from the
+# unbounded per-task list. process_org splits on this (newline-anchored) to
+# build the size-bounded org-rollup prompt — keep the two in sync via this
+# constant, never a literal.
+TASKS_HEADER = "## Tasks this week"
 
 
 def build_digest(snap: dict) -> str:
@@ -156,7 +175,7 @@ def build_digest(snap: dict) -> str:
     L.append("## Carry-over aging (unfinished, rolled N weeks)")
     if aged:
         for t in sorted(aged, key=lambda x: -x["carry_over_weeks"]):
-            L.append(f"- {_cite(t['id'])} {t['title']} — rolled {t['carry_over_weeks']}w "
+            L.append(f"- {_cite(t['id'])} {_clean(t['title'])} — rolled {t['carry_over_weeks']}w "
                      f"[{t['status']}, owner={t['owner']}]")
     else:
         L.append("- none")
@@ -166,18 +185,18 @@ def build_digest(snap: dict) -> str:
     L.append("## Blockers")
     stuck = [t for t in tasks if t["status"] == "stuck"]
     for t in stuck:
-        L.append(f"- {_cite(t['id'])} {t['title']} — STUCK, owner={t['owner']}")
+        L.append(f"- {_cite(t['id'])} {_clean(t['title'])} — STUCK, owner={t['owner']}")
     for a in snap["declined"]:
-        L.append(f"- {_cite(a['task_id'])} {a['title']} — assignment DECLINED by {a['username']}")
+        L.append(f"- {_cite(a['task_id'])} {_clean(a['title'])} — assignment DECLINED by {a['username']}")
     if not stuck and not snap["declined"]:
         L.append("- none")
     L.append("")
 
     # Task lines with citations
-    L.append("## Tasks this week")
+    L.append(TASKS_HEADER)
     for t in tasks:
         done_s = f", done={t['completed_date']}" if t["completed_date"] else ""
-        L.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {t['title']} "
+        L.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {_clean(t['title'])} "
                  f"(dept={t['department']}, owner={t['owner']}, "
                  f"hours={_hrs(t['actual_hours'])}/{_hrs(t['estimated_hours'])}{done_s})")
     L.append("")
@@ -187,9 +206,27 @@ def build_digest(snap: dict) -> str:
 def _task_bullets(tasks: list[dict], limit: int = 120) -> str:
     out = []
     for t in tasks[:limit]:
-        out.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {t['title']} "
+        out.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {_clean(t['title'])} "
                    f"(owner={t['owner']}, hours={_hrs(t['actual_hours'])}/{_hrs(t['estimated_hours'])})")
     return "\n".join(out)
+
+
+def rollup_task_sample(tasks: list[dict], limit: int = 60) -> list[dict]:
+    """A bounded, citation-worthy subset of the week's tasks for the org
+    rollup prompt: everything stuck, then everything completed, then the
+    rest in their existing (priority) order — so the agent can cite real
+    [task:id] tokens for the claims its rules require, at constant prompt
+    size regardless of org volume."""
+    stuck = [t for t in tasks if t["status"] == "stuck"]
+    done = [t for t in tasks if t["status"] in ("completed", "done")]
+    rest = [t for t in tasks if t not in stuck and t not in done]
+    seen, out = set(), []
+    for t in stuck + done + rest:
+        if t["id"] not in seen:
+            seen.add(t["id"]); out.append(t)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _extract_json_field(raw: str, key: str) -> str | None:
@@ -268,6 +305,20 @@ async def letta_attach_source(client: httpx.AsyncClient, agent_id: str, source_i
     return False
 
 
+async def _ensure_week(conn, org_id, day: date):
+    """id of the ISO (Mon->Sun) calendar week containing *day*, creating the
+    row if the org hasn't seeded that far ahead. ON CONFLICT DO UPDATE is a
+    no-op field-set purely so RETURNING id works on the existing row."""
+    iso_year, iso_week, _ = day.isocalendar()
+    monday = day - timedelta(days=day.weekday())
+    return await conn.fetchval(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
+        " VALUES ($1,$2,$3,$4,$5)"
+        " ON CONFLICT (org_id, iso_year, iso_week) DO UPDATE SET iso_year=EXCLUDED.iso_year"
+        " RETURNING id",
+        org_id, iso_year, iso_week, monday, monday + timedelta(days=6))
+
+
 # ── DB gather (all queries org_id-scoped; runs on BYPASSRLS admin conn) ──────
 async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
     r_fri, r_thu = report_win
@@ -321,12 +372,14 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
         "SELECT id, username, full_name FROM profiles"
         " WHERE org_id=$1 AND is_active AND NOT is_deleted ORDER BY full_name", org_id)
 
-    report_week_id = await conn.fetchval(
-        "SELECT id FROM calendar_weeks WHERE org_id=$1 AND starts_on<=$2 AND ends_on>=$2",
-        org_id, r_thu)
-    plan_week_id = await conn.fetchval(
-        "SELECT id FROM calendar_weeks WHERE org_id=$1 AND starts_on<=$2 AND ends_on>=$2",
-        org_id, p_thu)
+    # Resolve — and auto-provision — the calendar week for each window.
+    # Nothing else in the app creates calendar_weeks rows ahead of time, so a
+    # plain SELECT returns NULL for un-seeded weeks; NULL week_id made every
+    # run's replace-DELETE match ALL prior NULL-keyed pins, silently erasing
+    # the archive instead of appending to it. Upserting here guarantees the
+    # pins are always week-linked.
+    report_week_id = await _ensure_week(conn, org_id, r_thu)
+    plan_week_id = await _ensure_week(conn, org_id, p_thu)
 
     def _t(row):
         d = dict(row)
@@ -391,7 +444,10 @@ async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, use
                        f"Weekly report — {r_lbl}", org_report)
     await _replace_pin(conn, org_id, "next_week_plan", p_wk,
                        f"Next week plan — {p_lbl}", org_plan)
-    # Per-user: clear the week's set first, then insert each.
+    # Per-user: clear the week's set first, then insert each. subject_user_id
+    # is what the tightened RLS policy keys visibility on — a per-user pin
+    # without it would be readable by the whole org.
+    uid_by_name = {u["username"]: u["id"] for u in snap["users"]}
     await conn.execute(
         "DELETE FROM ai_pins WHERE org_id=$1 AND function_key='weekly_report_user'"
         " AND week_id IS NOT DISTINCT FROM $2", org_id, r_wk)
@@ -400,14 +456,14 @@ async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, use
         " AND week_id IS NOT DISTINCT FROM $2", org_id, p_wk)
     for username, body in user_reports.items():
         await conn.execute(
-            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body)"
-            " VALUES ($1,'weekly_report_user',$2,$3,$4)",
-            org_id, r_wk, f"Weekly report — {r_lbl} — {username}", body)
+            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id)"
+            " VALUES ($1,'weekly_report_user',$2,$3,$4,$5)",
+            org_id, r_wk, f"Weekly report — {r_lbl} — {username}", body, uid_by_name.get(username))
     for username, body in user_plans.items():
         await conn.execute(
-            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body)"
-            " VALUES ($1,'next_week_plan_user',$2,$3,$4)",
-            org_id, p_wk, f"Next week plan — {p_lbl} — {username}", body)
+            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id)"
+            " VALUES ($1,'next_week_plan_user',$2,$3,$4,$5)",
+            org_id, p_wk, f"Next week plan — {p_lbl} — {username}", body, uid_by_name.get(username))
 
 
 # ── Per-org orchestration ───────────────────────────────────────────────────
@@ -418,21 +474,33 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
 
     report_agent, plan_agent = (None, None) if skip_letta else await resolve_agents(conn, org_id)
 
-    def _fallback(kind, label):
-        return (f"> AI unavailable at {datetime.now(timezone.utc).strftime('%H:%M UTC')} "
-                f"— deterministic fallback.\n\n{label}\n\n" + digest[:4000])
+    # Upload the full digest to the RAG source FIRST (best effort), so the
+    # planner agents called below can in principle retrieve this week's
+    # per-task detail, not only prior weeks'.
+    if not skip_letta and SNAPSHOT_SOURCE_ID:
+        slug = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
+        fname = f"wwf_{slug}_{snap['report_window']['from']}_{snap['report_window']['to']}.md"
+        await letta_upload_digest(client, SNAPSHOT_SOURCE_ID, fname, digest)
 
-    # Org rollup. The digest's per-task section ("## Tasks this week") grows
-    # unbounded with task count (33K+ chars for ~200 tasks) and blew the
-    # weekly_report agent's context on the first production run. The rollup
-    # only needs the aggregate sections (totals, by-status/owner, hours,
-    # aging, blockers) — per-task detail is what the RAG source is for, and
-    # the full digest is still uploaded there below. Bound the prompt to the
-    # summary half so it stays constant-size regardless of task volume.
-    digest_summary = digest.split("## Tasks this week")[0].rstrip()
+    # Org rollup. The digest's per-task section grows unbounded with task
+    # count (33K+ chars for ~200 tasks) and blew the weekly_report agent's
+    # context on the first production run. The rollup prompt is therefore
+    # the aggregate sections plus a bounded, citation-worthy task sample
+    # (stuck + completed + top-priority), so the agent can honor its
+    # cite-every-claim rule at constant prompt size regardless of volume.
+    digest_summary = digest.split("\n" + TASKS_HEADER + "\n")[0].rstrip()
+    sample = rollup_task_sample(snap["report_tasks"])
+    rollup_ctx = (f"{digest_summary}\n\n## Task sample for citations "
+                  f"({len(sample)} of {len(snap['report_tasks'])} tasks: all stuck, "
+                  f"all completed, then top priority)\n{_task_bullets(sample)}")
+
+    def _fallback(label):
+        return (f"> AI unavailable at {datetime.now(timezone.utc).strftime('%H:%M UTC')} "
+                f"— deterministic fallback.\n\n{label}\n\n" + digest_summary)
+
     org_report = org_plan = None
     if report_agent:
-        rp = (f"{digest_summary}\n\nREQUEST: Produce the WEEKLY REPORT for the whole facility "
+        rp = (f"{rollup_ctx}\n\nREQUEST: Produce the WEEKLY REPORT for the whole facility "
               f"'{org_name}' for {snap['report_window']['label']}. "
               f"Return ONLY JSON: {{\"weekly_report\": \"<markdown>\"}}")
         org_report = _extract_json_field(await letta_message(client, report_agent, rp), "weekly_report")
@@ -441,40 +509,51 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
               f"REQUEST: Produce the NEXT-WEEK PLAN for the facility '{org_name}' for "
               f"{snap['plan_window']['label']}. Return ONLY JSON: {{\"next_week_plan\": \"<markdown>\"}}")
         org_plan = _extract_json_field(await letta_message(client, plan_agent, pp), "next_week_plan")
-    org_report = org_report or _fallback("report", f"# Weekly report — {snap['report_window']['label']}")
-    org_plan = org_plan or _fallback("plan", f"# Next-week plan — {snap['plan_window']['label']}")
+    org_report = org_report or _fallback(f"# Weekly report — {snap['report_window']['label']}")
+    org_plan = org_plan or _fallback(f"# Next-week plan — {snap['plan_window']['label']}")
 
-    # Per-person
+    # Per-person. Each user's report+plan go to two DIFFERENT agents, so the
+    # pair runs concurrently (2x). Users stay sequential on purpose: all the
+    # report calls target the same stateful Letta agent, and hammering one
+    # agent with concurrent messages risks serialized-queue contention there
+    # for no reliable speedup.
     user_reports: dict[str, str] = {}
     user_plans: dict[str, str] = {}
+
+    async def _ask(agent_id, prompt, key):
+        return _extract_json_field(await letta_message(client, agent_id, prompt), key)
+
+    async def _none():
+        return None
+
     for u in snap["users"]:
         uname = u["username"]
+        who = u["full_name"] or uname
         mine_r = [t for t in snap["report_tasks"] if t["owner"] == uname]
         mine_p = [t for t in snap["plan_tasks"] if t["owner"] == uname]
-        if report_agent and mine_r:
-            rp = (f"TASK DATA for {u['full_name'] or uname}:\n{_task_bullets(mine_r)}\n\n"
-                  f"REQUEST: Weekly report for {u['full_name'] or uname}, "
-                  f"{snap['report_window']['label']}. Return ONLY JSON: {{\"weekly_report\": \"<markdown>\"}}")
-            out = _extract_json_field(await letta_message(client, report_agent, rp), "weekly_report")
-            if out:
-                user_reports[uname] = out
-        if plan_agent and mine_p:
-            pp = (f"OPEN/CARRY-OVER for {u['full_name'] or uname}:\n{_task_bullets(mine_p)}\n\n"
-                  f"REQUEST: Next-week plan for {u['full_name'] or uname}, "
-                  f"{snap['plan_window']['label']}. Return ONLY JSON: {{\"next_week_plan\": \"<markdown>\"}}")
-            out = _extract_json_field(await letta_message(client, plan_agent, pp), "next_week_plan")
-            if out:
-                user_plans[uname] = out
+        # Build each side conditionally — a pre-created placeholder coroutine
+        # that then gets replaced is never awaited and warns at shutdown.
+        r_coro = (_ask(report_agent,
+                       f"TASK DATA for {who}:\n{_task_bullets(mine_r)}\n\n"
+                       f"REQUEST: Weekly report for {who}, {snap['report_window']['label']}. "
+                       f"Return ONLY JSON: {{\"weekly_report\": \"<markdown>\"}}",
+                       "weekly_report")
+                  if report_agent and mine_r else _none())
+        p_coro = (_ask(plan_agent,
+                       f"OPEN/CARRY-OVER for {who}:\n{_task_bullets(mine_p)}\n\n"
+                       f"REQUEST: Next-week plan for {who}, {snap['plan_window']['label']}. "
+                       f"Return ONLY JSON: {{\"next_week_plan\": \"<markdown>\"}}",
+                       "next_week_plan")
+                  if plan_agent and mine_p else _none())
+        r_out, p_out = await asyncio.gather(r_coro, p_coro)
+        if r_out:
+            user_reports[uname] = r_out
+        if p_out:
+            user_plans[uname] = p_out
 
     await write_pins(conn, snap, digest, org_report, org_plan, user_reports, user_plans)
     log(f"org {org_name}: pinned report/plan ({len(user_reports)} user reports, "
         f"{len(user_plans)} user plans); {len(snap['report_tasks'])} tasks in window")
-
-    # Upload digest to the RAG source (best effort).
-    if not skip_letta and SNAPSHOT_SOURCE_ID:
-        slug = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
-        fname = f"wwf_{slug}_{snap['report_window']['from']}_{snap['report_window']['to']}.md"
-        await letta_upload_digest(client, SNAPSHOT_SOURCE_ID, fname, digest)
 
 
 async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:

@@ -143,7 +143,8 @@ CREATE TABLE public.ai_pins (
     title text,
     body text NOT NULL,
     created_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    subject_user_id uuid
 );
 
 ALTER TABLE ONLY public.ai_pins FORCE ROW LEVEL SECURITY;
@@ -387,7 +388,8 @@ CREATE TABLE public.tasks (
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric))))
 );
 
 ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;
@@ -566,6 +568,13 @@ CREATE INDEX tasks_org_idx ON public.tasks USING btree (org_id);
 
 
 --
+-- Name: tasks_org_week_start_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_org_week_start_idx ON public.tasks USING btree (org_id, week_start DESC, created_at DESC);
+
+
+--
 -- Name: tasks_owner_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -643,6 +652,14 @@ ALTER TABLE ONLY public.ai_pins
 
 ALTER TABLE ONLY public.ai_pins
     ADD CONSTRAINT ai_pins_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ai_pins ai_pins_subject_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_pins
+    ADD CONSTRAINT ai_pins_subject_user_id_fkey FOREIGN KEY (subject_user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -970,7 +987,7 @@ CREATE POLICY org_isolation ON public.ai_agent_bindings USING ((org_id = app.cur
 -- Name: ai_pins org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY org_isolation ON public.ai_pins USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+CREATE POLICY org_isolation ON public.ai_pins USING (((org_id = app.current_org_id()) AND ((subject_user_id IS NULL) OR (subject_user_id = app.current_user_id()) OR app.is_elevated()))) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --

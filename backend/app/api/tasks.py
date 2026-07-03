@@ -106,10 +106,19 @@ class TaskPatch(BaseModel):
     actual_hours: Decimal | None = Field(default=None, ge=0)
 
 
+# Columns a PATCH may set to SQL NULL. exclude_unset (not exclude_none)
+# distinguishes "field omitted" from "field explicitly null", so clearing
+# logged hours / a week assignment round-trips; None on a NOT NULL column
+# (title, status, ...) is still treated as not-provided.
+_NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours", "actual_hours"}
+
+
 @router.patch("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(require_password_set)):
     fields, args = [], []
-    for col, val in body.model_dump(exclude_none=True).items():
+    for col, val in body.model_dump(exclude_unset=True).items():
+        if val is None and col not in _NULLABLE_PATCH_COLS:
+            continue
         args.append(val); fields.append(f"{col}=${len(args)}")
     if not fields:
         return {"ok": True, "noop": True}

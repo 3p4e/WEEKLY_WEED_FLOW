@@ -246,7 +246,8 @@ GF.WWF.install = () => {
     const deptId = GF.$('add-dept').value;
     const wk = GF.calendar.weeks[GF._addWeek] || GF.calendar.weeks[GF.calendar.todayId];
     const estRaw = parseFloat(GF.$('add-est')?.value);
-    const estHours = Number.isFinite(estRaw) && estRaw > 0 ? estRaw : null;
+    // >= 0, not > 0: a deliberate zero-hour estimate is a value, not "no estimate".
+    const estHours = Number.isFinite(estRaw) && estRaw >= 0 ? estRaw : null;
     try {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',

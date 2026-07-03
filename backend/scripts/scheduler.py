@@ -70,9 +70,12 @@ async def _already_ran(since: datetime) -> bool:
         return False
     conn = await asyncpg.connect(dsn)
     try:
+        # *since* is tz-aware; asyncpg compares timestamptz by instant, so
+        # pass it as-is (converting wall-clock and relabelling the tzinfo
+        # would silently shift the boundary by the UTC offset).
         n = await conn.fetchval(
             "SELECT count(*) FROM ai_pins WHERE function_key='weekly_report' AND created_at >= $1",
-            since.astimezone(_tz()).replace(tzinfo=since.tzinfo) if since.tzinfo else since)
+            since)
         return (n or 0) > 0
     except Exception as e:
         snap.log(f"missed-run check failed: {type(e).__name__} — assuming not run")
@@ -115,19 +118,20 @@ async def main():
             snap.log(f"recovery run failed: {type(e).__name__}: {e}")
 
     while True:
-        now = datetime.now(timezone.utc)
-        fire = next_fire(now, tz)
-        remaining = (fire - now).total_seconds()
-        if remaining > 0:
+        # Pick the fire target ONCE, then sleep toward it in chunks. The
+        # target must stay fixed while we wait: next_fire() always returns a
+        # time strictly in the future, so recomputing it after every wake
+        # (the previous shape of this loop) means "remaining" never reaches
+        # zero and the job never fires.
+        fire = next_fire(datetime.now(timezone.utc), tz)
+        while (remaining := (fire - datetime.now(timezone.utc)).total_seconds()) > 0:
             await asyncio.sleep(min(1800, remaining))
-            continue
-        snap.log(f"firing weekly snapshot for {fire.date().isoformat()}")
+        snap.log(f"firing weekly snapshot for {fire.astimezone(tz).date().isoformat()}")
         try:
             await snap.run_all(fire.astimezone(tz).date())
         except Exception as e:
             snap.log(f"scheduled run failed: {type(e).__name__}: {e}")
-        # Nudge past the fire instant so we don't re-fire in the same second.
-        await asyncio.sleep(61)
+        # Loop continues: now > fire, so next_fire() lands on next Thursday.
 
 
 if __name__ == "__main__":

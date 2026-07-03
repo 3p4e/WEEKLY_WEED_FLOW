@@ -78,7 +78,9 @@ async def list_pins(
     user: dict = Depends(require_password_set),
 ):
     """Read the archived AI outputs (weekly report / next-week plan / snapshot
-    digest) the scheduler writes to ai_pins. Org-scoped by RLS. Newest first."""
+    digest) the scheduler writes to ai_pins. Newest first. Visibility is the
+    RLS policy's: org-scoped, and per-user pins (subject_user_id set) only to
+    their subject or elevated roles."""
     clauses, args = [], []
     if function_key:
         args.append(function_key); clauses.append(f"function_key=${len(args)}")
@@ -88,14 +90,15 @@ async def list_pins(
     args.append(limit)
     async with rls(user) as c:
         rows = await c.fetch(
-            "SELECT id, function_key, task_id, week_id, title, body, created_at FROM ai_pins"
-            f"{where} ORDER BY created_at DESC LIMIT ${len(args)}", *args)
+            "SELECT id, function_key, task_id, week_id, title, body, created_at, subject_user_id"
+            f" FROM ai_pins{where} ORDER BY created_at DESC LIMIT ${len(args)}", *args)
     return [
         {"id": str(r["id"]), "function_key": r["function_key"],
          "task_id": str(r["task_id"]) if r["task_id"] else None,
          "week_id": str(r["week_id"]) if r["week_id"] else None,
          "title": r["title"], "body": r["body"],
-         "created_at": r["created_at"].isoformat()}
+         "created_at": r["created_at"].isoformat(),
+         "subject_user_id": str(r["subject_user_id"]) if r["subject_user_id"] else None}
         for r in rows
     ]
 
