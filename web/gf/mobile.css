@@ -1,0 +1,147 @@
+/* gf/mobile.css — Mobile + tablet adaptations for the unified GrowFlow shell.
+   Applied on top of gf/app.css. Two breakpoints:
+     ≤ 880px  → tablet (sidebar becomes drawer, denser headers)
+     ≤ 600px  → phone (cards instead of tables, full-width buttons, bottom nav bar)
+   Targets QC + Production modules uniformly. */
+
+/* ── Touch-friendly defaults everywhere ── */
+@media (hover: none) and (pointer: coarse) {
+  .btn, .btn-sm, .icon-btn, .pill { min-height: 36px; }
+  .nav-item { padding-top: 12px; padding-bottom: 12px; }
+  input, select, textarea { font-size: 16px !important; /* iOS no-zoom */ }
+}
+
+/* ════════════ TABLET (≤ 880px) ════════════ */
+@media (max-width: 880px) {
+  .sidebar { width: 280px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .header { padding: 0 14px; gap: 8px; height: 56px; }
+  .search { max-width: none; padding: 0 12px; }
+  .search input { padding: 9px 0; font-size: 14px; }
+  .header .btn:not(.hamburger):not(.btn-primary):not(.btn-orange) { display: none; }
+  .lang-toggle { display: none; }
+  /* Hide nav badges, mode switch stays */
+  .nav-badge { display: none; }
+  /* Make workspace edge-to-edge */
+  .workspace { padding: 0; }
+  .week-strip { padding: 14px 16px 6px; }
+  .day-pills { padding: 6px 16px; }
+  .telemetry { margin: 10px 16px 4px; }
+  .panels { padding: 6px 16px 28px; }
+  /* QC content: tighter padding */
+  #content > div { padding: 16px !important; }
+  /* Tables: collapse less-critical columns */
+  [style*="grid-template-columns"] { font-size: 12px !important; }
+}
+
+/* ════════════ PHONE (≤ 600px) ════════════ */
+@media (max-width: 600px) {
+  /* ── Header collapses to brand + ham + search ── */
+  .header { padding: 0 10px; gap: 6px; }
+  .header h2 { font-size: 14px !important; }
+  .header h2 span { display: none; }      /* hide "QC Lab" subtitle */
+  #header-avatar .avatar { width: 32px !important; height: 32px !important; font-size: 11px !important; }
+  .header .btn-primary, .header .btn-orange { padding: 8px 10px; font-size: 12px; }
+  .header .btn-primary span, .header .btn-orange span { display: none; } /* icon-only */
+  .icon-btn { width: 34px; height: 34px; }
+
+  /* ── Sidebar fills 90% on phones ── */
+  .sidebar { width: 86vw; max-width: 320px; }
+
+  /* ── Hide all data-table-style grids' less-important columns ── */
+  /* Most QC list rows use display:grid with 5-7 cols; stack as 2-row cards */
+  #content [style*="display:grid"][style*="grid-template-columns"]:not([style*="repeat(12"]):not([style*="repeat(7"]) {
+    grid-template-columns: 1fr 1fr !important;
+    padding: 10px 12px !important;
+    row-gap: 4px;
+  }
+  #content [style*="display:grid"][style*="grid-template-columns"] > div { padding: 2px 0 !important; }
+
+  /* ── KPI cards stack vertically ── */
+  .row[style*="gap:14px"], .row[style*="gap:16px"], .row[style*="gap:12px"] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .row[style*="gap:14px"] > *, .row[style*="gap:16px"] > *, .row[style*="gap:12px"] > * { width: 100%; }
+
+  /* ── Two-pane Progressive Review stacks ── */
+  div[style*="display:flex"][style*="height:100%"] { flex-direction: column !important; }
+  div[style*="width:380px"], div[style*="width:340px"], div[style*="width:320px"], div[style*="width:300px"] {
+    width: 100% !important; border-left: none !important; border-top: 1px solid var(--line) !important;
+  }
+
+  /* ── Modals fill screen ── */
+  .modal { max-width: 100% !important; border-radius: 16px 16px 0 0 !important; max-height: 92vh; margin-top: auto; }
+  .overlay { padding: 0; align-items: flex-end; }
+  .modal-head { padding: 14px 18px; }
+  .modal-body { padding: 16px 18px; }
+  .modal-foot { padding: 12px 18px; flex-direction: column-reverse; }
+  .modal-foot .btn { width: 100%; justify-content: center; }
+
+  /* ── Voice modal: bigger mic, full screen ── */
+  .voice-modal { border-radius: 24px 24px 0 0; }
+  .mic-rings { width: 140px !important; height: 140px !important; }
+  .mic-core { width: 96px !important; height: 96px !important; }
+
+  /* ── Task card head stacks: title row + meta row ── */
+  .card-head { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+  .card-head .pill, .card-head .prtag { font-size: 11px; padding: 3px 8px; }
+  .daytags { order: 99; flex-basis: 100%; }
+  .card-meta { font-size: 10.5px; }
+
+  /* ── Buttons full-width inline rows ── */
+  .row[style*="gap:8px"] .btn, .row[style*="gap:10px"] .btn { flex: 1; justify-content: center; }
+
+  /* ── Toasts span full width with safe area ── */
+  #toasts { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .toast { width: auto; }
+
+  /* ── Hide non-critical decorations ── */
+  .pp-wordmark, .pp-wordmark--sm { display: none; }
+  .pp-brand-text { font-size: 20px !important; }
+  .brand { padding: 16px 18px 12px; }
+  .mode-switch { margin: 0 10px 6px; }
+  .side-divider { margin: 10px 18px; }
+}
+
+/* ════════════ BOTTOM NAV BAR (phone only) ════════════ */
+/* Quick access to the 4 most-used QC views, fixed at the bottom.
+   Renders only on small screens and only if QC Lab mode is active. */
+@media (max-width: 600px) {
+  .mobile-bottombar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    display: flex; height: 64px;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 24px rgba(20,35,60,.06);
+  }
+  .mobile-bottombar button {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3px;
+    background: none; border: none; cursor: pointer;
+    font-size: 10px; font-weight: 700; color: var(--ink-3); font-family: var(--font);
+    padding: 8px 4px;
+  }
+  .mobile-bottombar button.on { color: var(--blue); }
+  .mobile-bottombar button .icon { width: 22px; height: 22px; stroke-width: 2; }
+  .main { padding-bottom: 64px; }
+  /* Add a hamburger floating action button on phone */
+  .mobile-fab {
+    position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); right: 18px;
+    width: 56px; height: 56px; border-radius: 999px; border: none; cursor: pointer;
+    background: var(--orange); color: #fff;
+    box-shadow: 0 8px 24px rgba(255,122,26,.45);
+    display: flex; align-items: center; justify-content: center; z-index: 49;
+  }
+  .mobile-fab .icon { width: 28px; height: 28px; stroke-width: 2; }
+}
+@media (min-width: 601px) {
+  .mobile-bottombar, .mobile-fab { display: none !important; }
+}
+
+/* ════════════ Print-friendly tweaks ════════════ */
+@media print {
+  .sidebar, .header, .mobile-bottombar, .mobile-fab, .overlay { display: none !important; }
+  .main { margin: 0 !important; padding: 0 !important; }
+  body { background: #fff !important; }
+}

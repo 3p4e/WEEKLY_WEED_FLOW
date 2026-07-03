@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>GrowFlow — Production + QC Laboratory</title>
+  <link rel="stylesheet" href="gf/app.css?v=r6-1780284251287">
+  <link rel="stylesheet" href="gf/brand.css?v=r6-1780284251287">
+  <link rel="stylesheet" href="gf/mobile.css?v=r6-1780284251287">
+  <link rel="stylesheet" href="gf/views.css?v=r7">
+  <link rel="stylesheet" href="gf/leaf-fx.css?v=r8">
+  <style>
+    .mode-divider{height:1px;background:var(--line-2);margin:10px 20px}
+    .mode-label{padding:0 16px;font-size:10px;font-weight:700;letter-spacing:.6px;color:var(--ink-3);text-transform:uppercase;margin-bottom:6px}
+    .mode-switch{display:flex;gap:2px;margin:0 12px 8px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+    .mode-switch span{flex:1;text-align:center;padding:7px 0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-3);transition:all .15s}
+    .mode-switch span.on{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand" style="gap:13px">
+      <span class="leaf-stage" id="brand-leaf" data-mode="calm" style="width:62px;height:72px" title="Click me">
+        <span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span>
+      </span>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+        <div class="gf-name" style="font-size:21px"><span class="gf-grow-word">Grow</span><b>Flow</b></div>
+        <span class="pp-wordmark" style="width:118px;height:20px" title="Purely Plant — The Future of Cannabis"></span>
+      </div>
+    </div>
+
+    <!-- Mode switch -->
+    <div class="mode-switch" id="mode-switch">
+      <span class="on" onclick="APP.setMode('prod')">Production</span>
+      <span onclick="APP.setMode('qc')">QC Lab</span>
+    </div>
+
+    <!-- Production nav -->
+    <div id="prod-nav"><nav id="nav"></nav></div>
+    <!-- QC nav -->
+    <div id="qc-nav" style="display:none"></div>
+
+    <div class="mode-divider"></div>
+    <div class="mode-label" id="side-label">Departments</div>
+    <div class="dept-list" id="dept-list"></div>
+
+    <div style="flex:1"></div>
+    <div class="mode-divider"></div>
+    <div style="padding:0 16px;display:flex;align-items:center;gap:7px;margin-bottom:8px">
+      <span class="qc-conn-dot" style="width:8px;height:8px;border-radius:999px;background:var(--ink-3);flex-shrink:0" title="Offline (local demo data)"></span>
+      <span class="qc-conn-label" style="font-size:11px;font-weight:700;color:var(--ink-3)">Offline</span>
+      <span style="font-size:10px;color:var(--ink-3);font-weight:500;margin-left:auto">QC backend</span>
+    </div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:5px;margin-bottom:8px" id="compliance-badges">
+      <div class="row" style="gap:7px;font-size:11px;font-weight:600;color:var(--ink-2)">
+        <span class="dot" style="background:var(--green)"></span>EU GMP Annex 11</div>
+      <div class="row" style="gap:7px;font-size:11px;font-weight:600;color:var(--ink-2)">
+        <span class="dot" style="background:var(--blue)"></span>MK GMP</div>
+    </div>
+    <div class="user-card" id="user-card"></div>
+  </aside>
+
+  <div class="main">
+    <header class="header">
+      <button class="btn-ghost hamburger" id="hamburger">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
+      <h2 class="gf-mark">
+        <span class="leaf-stage" id="header-leaf" data-mode="calm" style="width:30px;height:35px" title="Click me">
+          <span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span>
+        </span>
+        <span class="gf-name" style="font-size:21px"><span class="gf-grow-word">Grow</span><b>Flow</b></span>
+        <span id="header-mode" style="color:var(--ink-3);font-weight:600;font-size:13px;margin-left:2px;font-family:'Outfit',sans-serif"></span>
+      </h2>
+      <div class="search" style="margin-left:16px">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M17 17l-3.2-3.2M15.5 9.5a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+        <input id="search-input" placeholder="Search…">
+      </div>
+      <div class="spacer"></div>
+      <div class="lang-toggle" id="lang-toggle">
+        <span id="lang-en" onclick="APP.setLang('en')">EN</span>
+        <span id="lang-mk" onclick="APP.setLang('mk')">МК</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="newtask-btn" onclick="GF.openAdd(GF.state.selWeek)" style="display:none">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M10 4v12M4 10h12"/></svg>
+        <span id="newtask-label">New task</span>
+      </button>
+      <button class="btn btn-orange btn-sm" id="voice-btn" onclick="GF.voice.openCapture(GF.state.selWeek)" style="display:none">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:#fff"><path d="M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5"/></svg>
+        <span id="voice-btn-label">Voice task</span>
+      </button>
+      <button class="icon-btn" id="assistant-btn" title="Assistant" onclick="GF.assistant.open()">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--orange)"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>
+      </button>
+      <button class="btn btn-sm" onclick="APP.mode==='prod'?GF.goToday():null" id="today-btn" style="display:none">Today</button>
+      <button class="icon-btn" onclick="APP.openSettings()" title="Settings">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1"/></svg>
+      </button>
+      <div id="header-avatar"></div>
+    </header>
+
+    <!-- Content: production workspace OR QC content -->
+    <div class="workspace" id="prod-workspace" style="overflow:auto">
+      <div id="week-strip" class="week-strip"></div>
+      <div id="day-pills" class="day-pills"></div>
+      <div id="telemetry" class="telemetry"></div>
+      <div id="panels" class="panels"></div>
+    </div>
+    <div class="workspace" id="content" style="overflow:auto;display:none"></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<!-- Mobile-only: bottom nav bar (QC mode) + sidebar FAB -->
+<nav class="mobile-bottombar" id="mobile-bottombar"></nav>
+<button class="mobile-fab" id="mobile-fab" aria-label="Open menu" onclick="document.getElementById('sidebar').classList.add('open');document.getElementById('sidebar-overlay').classList.add('open')">
+  <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+</button>
+
+<!-- ═══ AI Assistant drawer (Production + QC) ═══ -->
+<div class="assistant-overlay" id="assistant-overlay" onclick="GF.assistant.close()"></div>
+<aside class="assistant-drawer" id="assistant-drawer" aria-label="GrowFlow Assistant">
+  <div class="asst-head">
+    <span class="pp-leaf"></span>
+    <div style="flex:1;min-width:0">
+      <div class="asst-title">GrowFlow <span class="asst-tag">Assistant</span></div>
+    </div>
+    <button class="btn-ghost" onclick="GF.assistant.close()"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <div class="asst-body" id="assistant-body"></div>
+  <div class="asst-foot">
+    <input id="assistant-input" placeholder="Ask anything…" onkeydown="if(event.key==='Enter')GF.assistant.send()">
+    <button class="btn btn-primary btn-sm" onclick="GF.assistant.send()"><svg class="icon" viewBox="0 0 20 20" style="stroke:#fff"><path d="M4 10h12M11 5l5 5-5 5"/></svg></button>
+  </div>
+</aside>
+
+<!-- ═══ User create / edit modal ═══ -->
+<div class="overlay" id="user-modal">
+  <div class="modal" style="max-width:400px"><div class="modal-head"><h3 id="user-title">Add person</h3>
+    <button class="btn-ghost" onclick="GF.closeModal('user-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="user-body"></div>
+    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('user-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="GF.submitUser()">Save</button></div></div>
+</div>
+
+<!-- ═══ Shared modals ═══ -->
+<!-- Voice capture -->
+<div class="overlay" id="voice-modal">
+  <div class="modal voice-modal" style="max-width:440px">
+    <div class="modal-head"><h3 style="color:#fff">Voice task</h3>
+      <button class="btn-ghost" style="color:rgba(255,255,255,.7)" onclick="GF.closeModal('voice-modal')">
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="voice-content" style="padding:0 22px 22px"></div>
+  </div>
+</div>
+<!-- AI summary -->
+<div class="overlay" id="ai-modal">
+  <div class="modal"><div class="modal-head"><h3>AI Summary</h3>
+    <button class="btn-ghost" onclick="GF.closeModal('ai-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="ai-out" style="min-height:120px"></div>
+    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('ai-modal')">Close</button></div></div>
+</div>
+<!-- Export -->
+<div class="overlay" id="export-modal">
+  <div class="modal" style="max-width:380px"><div class="modal-head"><h3 id="export-title">Export</h3>
+    <button class="btn-ghost" onclick="GF.closeModal('export-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('csv')">CSV</button>
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('json')">JSON</button>
+      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('pdf')">PDF</button></div></div>
+</div>
+<!-- Add task -->
+<div class="overlay" id="add-modal">
+  <div class="modal"><div class="modal-head"><h3>New task</h3>
+    <button class="btn-ghost" onclick="GF.closeModal('add-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="add-body"></div>
+    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="GF.submitAdd()">Create</button></div></div>
+</div>
+<!-- Settings -->
+<div class="overlay" id="settings-modal">
+  <div class="modal" style="max-width:520px"><div class="modal-head"><h3 id="settings-title">Settings</h3>
+    <button class="btn-ghost" onclick="GF.closeModal('settings-modal');QC.closeModal&&QC.closeModal('settings-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body">
+      <div class="set-tabs" id="set-tabs">
+        <span class="set-tab on" data-pane="general" onclick="APP.setTab('general')">General</span>
+        <span class="set-tab" data-pane="lab" onclick="APP.setTab('lab')">Lab profile</span>
+        <span class="set-tab" data-pane="specs" onclick="APP.setTab('specs')">Spec limits</span>
+        <span class="set-tab" data-pane="coa" onclick="APP.setTab('coa')">CoA</span>
+        <span class="set-tab" data-pane="notif" onclick="APP.setTab('notif')">Notifications</span>
+      </div>
+
+      <div class="set-pane on" data-pane="general">
+        <div class="field"><label>AI provider</label>
+          <select id="set-ai-provider">
+            <option value="builtin">Built-in Claude (recommended)</option>
+            <option value="gateway">Custom gateway / LIMS backend</option>
+          </select></div>
+        <div class="field"><label>Backend API URL</label><input id="set-ai-base" placeholder="http://your-kvm4:8000"></div>
+        <div class="set-grid2">
+          <div class="field"><label>Language</label><select id="set-lang"><option value="en">English</option><option value="mk">Македонски</option></select></div>
+          <div class="field"><label>Active user (prototype)</label><select id="set-user"></select></div>
+        </div>
+        <div class="set-note"><b>Built-in Claude</b> works immediately — no setup. Choose <b>Custom gateway</b> and set the URL to route the Assistant, weekly summaries and voice parsing through your <b>QC_LIMS / CoA_TRACK</b> backend or <b>GrowFlow AI Gateway</b>. Use the <b>Test</b> button in the Assistant to verify.</div>
+      </div>
+
+      <div class="set-pane" data-pane="lab">
+        <div class="field"><label>Laboratory name</label><input id="set-lab-name" placeholder="Purely Plant QC Laboratory"></div>
+        <div class="set-grid2">
+          <div class="field"><label>Accreditation no.</label><input id="set-lab-accr" placeholder="ISO 17025 · MK-LAB-014"></div>
+          <div class="field"><label>GMP licence</label><input id="set-lab-gmp" placeholder="EU GMP Annex 11"></div>
+        </div>
+        <div class="set-grid2">
+          <div class="field"><label>Default mass unit</label><select id="set-unit-mass"><option>g</option><option>mg</option><option>kg</option></select></div>
+          <div class="field"><label>Default potency unit</label><select id="set-unit-pot"><option>% w/w</option><option>mg/g</option></select></div>
+        </div>
+      </div>
+
+      <div class="set-pane" data-pane="specs">
+        <div class="set-note" style="margin-top:0;margin-bottom:12px">Release thresholds applied to incoming results.</div>
+        <div class="set-grid2">
+          <div class="field"><label>Water activity (Aw) max</label><input id="set-aw" type="number" step="0.01" placeholder="0.65"></div>
+          <div class="field"><label>Moisture max (%)</label><input id="set-moist" type="number" step="0.1" placeholder="12"></div>
+        </div>
+        <div class="set-grid2">
+          <div class="field"><label>TYMC max (CFU/g)</label><input id="set-tymc" placeholder="10000"></div>
+          <div class="field"><label>TAMC max (CFU/g)</label><input id="set-tamc" placeholder="100000"></div>
+        </div>
+        <div class="field"><label>Potency tolerance (± %)</label><input id="set-pot-tol" type="number" step="0.1" placeholder="10"></div>
+      </div>
+
+      <div class="set-pane" data-pane="coa">
+        <div class="field"><label>CoA signatory</label><select id="set-coa-sign"></select></div>
+        <div class="field"><label>Signatory title</label><input id="set-coa-title" placeholder="Qualified Person (QP)"></div>
+        <div class="set-grid2">
+          <div class="field"><label>CoA prefix</label><input id="set-coa-prefix" placeholder="PP-CoA-"></div>
+          <div class="field"><label>Validity (days)</label><input id="set-coa-valid" type="number" placeholder="365"></div>
+        </div>
+        <label class="set-check"><input type="checkbox" id="set-coa-logo" checked> Include Purely Plant logo on CoA</label>
+      </div>
+
+      <div class="set-pane" data-pane="notif">
+        <label class="set-check"><input type="checkbox" id="set-n-oos" checked> Alert on out-of-spec (OOS) result</label>
+        <label class="set-check"><input type="checkbox" id="set-n-stab" checked> Stability time-point due reminder</label>
+        <label class="set-check"><input type="checkbox" id="set-n-cal"> Equipment calibration due</label>
+        <label class="set-check"><input type="checkbox" id="set-n-handoff" checked> Cross-department handoff ready</label>
+        <div class="field" style="margin-top:10px"><label>Notify email (mock)</label><input id="set-n-email" placeholder="qc@purelyplant.mk"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('settings-modal');QC.closeModal&&QC.closeModal('settings-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="APP.saveSettings()">Save</button></div></div>
+</div>
+
+<!-- Load production modules -->
+<script src="gf/data.js?v=r6-1780284251287"></script>
+<script src="gf/core.js?v=r6-1780284251287"></script>
+<script src="gf/render.js?v=r6-1780284251287"></script>
+<script src="gf/ai.js?v=r6-1780284251287"></script>
+<script src="gf/voice.js?v=r6-1780284251287"></script>
+<script src="gf/export.js?v=r6-1780284251287"></script>
+<script src="gf/views.js?v=r7"></script>
+<script src="gf/leaf-fx.js?v=r8"></script>
+<script src="gf/assistant.js?v=r7"></script>
+<script src="gf/main.js?v=r6-1780284251287"></script>
+
+<!-- Load QC modules -->
+<script src="qc/boot-guard.js?v=r6-1780284251287"></script>
+<script src="qc/api.js?v=r6-1780284251287"></script>
+<script src="qc/data.js?v=r6-1780284251287"></script>
+<script src="qc/core.js?v=r6-1780284251287"></script>
+<script src="qc/render.js?v=r6-1780284251287"></script>
+<script src="qc/ai.js?v=r6-1780284251287"></script>
+<script src="qc/p1.js?v=r6-1780284251287"></script>
+<script src="qc/p3.js?v=r6-1780284251287"></script>
+<script src="qc/naming.js?v=r6-1780284251287"></script>
+<script src="qc/stability-oox.js?v=r6-1780284251287"></script>
+<script src="qc/lifecycle.js?v=r6-1780284251287"></script>
+<script src="qc/sprint3.js?v=r6-1780284251287"></script>
+<script src="qc/sprint4.js?v=r6-1780284251287"></script>
+<script src="qc/water-log.js?v=r8"></script>
+<script src="qc/facility.js?v=r8"></script>
+<script src="qc/sprint5.js?v=r6-1780284251287"></script>
+<script src="qc/mobile.js?v=r6-1780284251287"></script>
+<script src="qc/coa-print.js?v=r6-1780284251287"></script>
+<script src="qc/specs-coq.js?v=r6-1780284251287"></script>
+<script src="qc/equipment-qual.js?v=r6-1780284251287"></script>
+<script src="qc/login.js?v=r6-1780284251287"></script>
+<script src="qc/registers.js?v=r6-1780284251287"></script>
+<script src="qc/live.js?v=r6-1780284251287"></script>
+<script src="qc/sampling-sp06.js?v=r8"></script>
+<script src="qc/oos-detail.js?v=r9"></script>
+<script src="qc/rqs-new.js?v=r9"></script>
+<script src="qc/main.js?v=r6-1780284251287"></script>
+
+<!-- Unified controller -->
+<script>
+window.APP = {
+  mode: localStorage.getItem('app_mode') || 'prod',
+
+  init() {
+    // Boot both modules — each phase isolated so one failure can't blank the app
+    try { GF.store.load(); } catch (e) { console.warn('GF.store.load failed', e); }
+    try { QC.boot(); } catch (e) { console.warn('QC.boot failed', e); }
+    try { if (QC.API_BASE && QC.loadFromAPI) QC.loadFromAPI(); } catch (e) {}
+    try { this.setMode(this.mode, true); }
+    catch (e) {
+      console.warn('setMode failed, retrying prod', e);
+      try { this.setMode('prod', true); } catch (e2) { console.error('boot fatal', e2); }
+    }
+
+    // Sidebar toggle
+    document.getElementById('hamburger')?.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('open');
+    });
+    document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('open');
+    });
+
+    // Search
+    document.getElementById('search-input')?.addEventListener('input', e => {
+      if (this.mode === 'prod') { GF.state.search = e.target.value; GF.render.panels(); }
+    });
+  },
+
+  setMode(m, skipSave) {
+    this.mode = m;
+    if (!skipSave) { try { localStorage.setItem('app_mode', m); } catch (e) {} }
+
+    // Switch panels (all guarded — a missing element must never abort boot)
+    const $ = id => document.getElementById(id);
+    const sw = $('mode-switch');
+    if (sw && sw.children[0]) sw.children[0].className = m === 'prod' ? 'on' : '';
+    if (sw && sw.children[1]) sw.children[1].className = m === 'qc' ? 'on' : '';
+
+    const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('prod-nav', m === 'prod');
+    show('qc-nav', m === 'qc');
+    show('prod-workspace', m === 'prod');
+    show('content', m === 'qc');
+    show('newtask-btn', m === 'prod');
+    show('voice-btn', m === 'prod');
+    show('today-btn', m === 'prod');
+    const hm = $('header-mode'); if (hm) hm.textContent = m === 'prod' ? '' : 'QC Lab';
+
+    // Labels
+    const deptLabel = $('side-label'), deptList = $('dept-list'), compBadges = $('compliance-badges');
+    if (m === 'prod') {
+      if (deptLabel) { deptLabel.textContent = GF.t('departments'); deptLabel.style.display = ''; }
+      if (deptList) deptList.style.display = '';
+      if (compBadges) compBadges.style.display = 'none';
+    } else {
+      if (deptLabel) deptLabel.style.display = 'none';
+      if (deptList) deptList.style.display = 'none';
+      if (compBadges) compBadges.style.display = '';
+    }
+
+    // Render active module — isolated so a module render error can't blank the shell
+    try { if (m === 'prod') { GF.render.all(); } else { QC.render.all(); } }
+    catch (e) { console.warn('render failed for mode ' + m, e); }
+
+    // Shared header parts
+    try { this._updateLangToggle(); } catch (e) {}
+    try { this._updateAvatar(); } catch (e) {}
+  },
+
+  setLang(l) {
+    GF.setLang(l);
+    QC.lang = l; localStorage.setItem('qc_lang', l);
+    if (this.mode === 'qc') QC.render.all();
+    this._updateLangToggle();
+  },
+
+  _updateLangToggle() {
+    const l = this.mode === 'prod' ? GF.state.lang : QC.lang;
+    document.getElementById('lang-en').className = l === 'en' ? 'on' : '';
+    document.getElementById('lang-mk').className = l === 'mk' ? 'on' : '';
+  },
+
+  _updateAvatar() {
+    const userId = this.mode === 'prod' ? GF.state.user : 'elena';
+    const p = (this.mode === 'prod' ? GF.PEOPLE : QC.PEOPLE)[userId];
+    if (p) {
+      document.getElementById('header-avatar').innerHTML =
+        `<div class="avatar" style="width:38px;height:38px;background:${p.bg};font-size:14px;box-shadow:0 0 0 2px #fff,0 0 0 4px ${p.bg}40">${p.init}</div>`;
+      document.getElementById('user-card').innerHTML =
+        `<div class="avatar" style="width:34px;height:34px;background:${p.bg};font-size:13px">${p.init}</div>
+         <div style="min-width:0"><div class="nm">${p.name}</div><div class="rl">${p.role||p.roleLabel||''}</div></div>`;
+    }
+  },
+
+  openSettings() {
+    const $ = id => document.getElementById(id);
+    // populate people-driven selects
+    const people = (this.mode === 'prod' ? GF.PEOPLE : (GF.PEOPLE));
+    const opts = Object.entries(people).map(([k, v]) =>
+      `<option value="${k}">${GF.esc(v.name)} — ${GF.esc(GF.roleLabel ? GF.roleLabel(v.role) : (v.roleLabel||''))}</option>`).join('');
+    if ($('set-user')) { $('set-user').innerHTML = opts; $('set-user').value = GF.state.user; }
+    if ($('set-coa-sign')) $('set-coa-sign').innerHTML = opts;
+    if ($('set-ai-base')) $('set-ai-base').value = GF.state.aiBase || '';
+    if ($('set-ai-provider')) $('set-ai-provider').value = GF.state.aiProvider || 'builtin';
+    if ($('set-lang')) $('set-lang').value = this.mode === 'prod' ? GF.state.lang : QC.lang;
+    // load saved QC settings
+    let s = {}; try { s = JSON.parse(localStorage.getItem('qc_settings')) || {}; } catch (e) {}
+    const set = (id, v) => { const el = $(id); if (el != null && v != null) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; } };
+    set('set-lab-name', s.labName); set('set-lab-accr', s.accr); set('set-lab-gmp', s.gmp);
+    set('set-unit-mass', s.unitMass); set('set-unit-pot', s.unitPot);
+    set('set-aw', s.aw); set('set-moist', s.moist); set('set-tymc', s.tymc); set('set-tamc', s.tamc); set('set-pot-tol', s.potTol);
+    if ($('set-coa-sign') && s.coaSign) $('set-coa-sign').value = s.coaSign;
+    set('set-coa-title', s.coaTitle); set('set-coa-prefix', s.coaPrefix); set('set-coa-valid', s.coaValid);
+    if ($('set-coa-logo')) $('set-coa-logo').checked = s.coaLogo !== false;
+    set('set-n-oos', s.nOos !== false); set('set-n-stab', s.nStab !== false);
+    set('set-n-cal', !!s.nCal); set('set-n-handoff', s.nHandoff !== false); set('set-n-email', s.nEmail);
+    const ttl = $('settings-title'); if (ttl) ttl.textContent = this.mode === 'qc' ? 'QC Lab settings' : 'Settings';
+    this.setTab('general');
+    GF.openModal('settings-modal');
+  },
+
+  setTab(name) {
+    document.querySelectorAll('#set-tabs .set-tab').forEach(t => t.classList.toggle('on', t.dataset.pane === name));
+    document.querySelectorAll('#settings-modal .set-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  },
+
+  saveSettings() {
+    const $ = id => document.getElementById(id);
+    const base = $('set-ai-base')?.value?.trim() || '';
+    const lang = $('set-lang')?.value || 'en';
+    const user = $('set-user')?.value || 'marko';
+    const provider = $('set-ai-provider')?.value || 'builtin';
+
+    GF.state.aiBase = base; localStorage.setItem('gf_ai_base', base);
+    GF.state.aiProvider = provider; localStorage.setItem('gf_ai_provider', provider);
+    GF.state.user = user; localStorage.setItem('gf_user', user);
+    QC.API_BASE = base; localStorage.setItem('qc_api_base', base);
+    if (base && QC.loadFromAPI) { try { QC.loadFromAPI(); } catch (e) {} }
+
+    // QC lab settings bundle
+    const v = id => { const el = $(id); return el ? (el.type === 'checkbox' ? el.checked : el.value) : undefined; };
+    const s = {
+      labName: v('set-lab-name'), accr: v('set-lab-accr'), gmp: v('set-lab-gmp'),
+      unitMass: v('set-unit-mass'), unitPot: v('set-unit-pot'),
+      aw: v('set-aw'), moist: v('set-moist'), tymc: v('set-tymc'), tamc: v('set-tamc'), potTol: v('set-pot-tol'),
+      coaSign: v('set-coa-sign'), coaTitle: v('set-coa-title'), coaPrefix: v('set-coa-prefix'),
+      coaValid: v('set-coa-valid'), coaLogo: v('set-coa-logo'),
+      nOos: v('set-n-oos'), nStab: v('set-n-stab'), nCal: v('set-n-cal'), nHandoff: v('set-n-handoff'), nEmail: v('set-n-email'),
+    };
+    try { localStorage.setItem('qc_settings', JSON.stringify(s)); } catch (e) {}
+
+    GF.closeModal('settings-modal');
+    this.setLang(lang);
+    if (this.mode === 'prod') GF.render.all();
+    GF.toast('Settings saved ✓', 'success');
+  },
+};
+
+window.addEventListener('DOMContentLoaded', () => APP.init());
+</script>
+
+<!-- Self-healing watchdog: if the app fails to render (corrupt saved state,
+     a throwing module, etc.), clear all stored state and reload ONCE. -->
+<script>
+(function () {
+  function visible(el) {
+    if (!el) return false;
+    // Truly visible = laid out (has a box) and not display:none anywhere up the tree
+    if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return false;
+    var r = el.getBoundingClientRect();
+    return r.width > 4 && r.height > 4;
+  }
+  function rendered() {
+    var login = document.getElementById('qc-login');
+    if (login && visible(login)) return true;
+    // The app is healthy only if the ACTIVE module's content is visibly on screen,
+    // not merely populated in the DOM (a hidden-but-filled nav is still "blank").
+    var nav     = document.getElementById('nav');
+    var qcnav   = document.getElementById('qc-nav');
+    var panels  = document.getElementById('panels');
+    var content = document.getElementById('content');
+    return (nav && nav.children.length && visible(nav)) ||
+           (qcnav && qcnav.children.length && visible(qcnav)) ||
+           (panels && panels.children.length && visible(panels)) ||
+           (content && content.children.length && visible(content));
+  }
+  function reinit() {
+    // Non-destructive recovery: force a clean prod-mode render without touching saved data.
+    try {
+      if (window.APP && APP.init) {
+        if (!APP.mode || (APP.mode !== 'prod' && APP.mode !== 'qc')) APP.mode = 'prod';
+        APP.init();
+        APP.setMode(APP.mode, true);
+      }
+    } catch (e) {}
+  }
+  function check(attempt) {
+    if (rendered()) { try { sessionStorage.removeItem('gf_heal'); } catch (e) {} return; }
+    // Non-destructive re-init on each attempt — NEVER auto-reload (that loops & flashes blank)
+    reinit();
+    if (rendered()) return;
+    if (attempt < 8) { setTimeout(function(){ check(attempt + 1); }, 400); return; }
+    // Still blank after ~3.2s of retries — offer a manual reset, but do NOT auto-wipe/reload
+    reinit();
+    if (rendered()) return;
+    if (document.getElementById('gf-reset-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'gf-reset-bar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#16233B;color:#fff;'
+      + 'font-family:system-ui,sans-serif;font-size:14px;font-weight:600;padding:12px 18px;display:flex;'
+      + 'align-items:center;gap:14px;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+    bar.innerHTML = '<span>The app could not start from saved data.</span>'
+      + '<button id="gf-reset-btn" style="margin-left:auto;background:#2F6BFF;color:#fff;border:none;'
+      + 'border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-family:inherit">Reset &amp; reload</button>';
+    document.body.appendChild(bar);
+    document.getElementById('gf-reset-btn').onclick = function () {
+      try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}
+      location.reload();
+    };
+  }
+  // Kick off after initial boot has had a chance to run
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(function(){ check(0); }, 400);
+  } else {
+    window.addEventListener('load', function(){ setTimeout(function(){ check(0); }, 400); });
+  }
+})();
+</script>
+
+<!-- FINAL SYNCHRONOUS BOOTSTRAP — runs immediately (this script is last in body,
+     so the DOM is fully parsed). No events, no timers, no races. Idempotent. -->
+<script>
+(function finalBoot(){
+  try {
+    // 1) Ensure the app shell rendered. If nav is empty, init now.
+    var nav = document.getElementById('nav');
+    var qcnav = document.getElementById('qc-nav');
+    var navEmpty = (!nav || !nav.childElementCount) && (!qcnav || !qcnav.childElementCount);
+    if (window.APP && APP.init && navEmpty) {
+      try { APP.init(); } catch (e) { try { APP.setMode('prod', true); } catch (e2) {} }
+    }
+    // 2) Ensure auth gate: if no session and no login overlay, show login now.
+    var hasSession = false;
+    try { hasSession = !!localStorage.getItem('qc_session_user'); } catch (e) {}
+    if (window.QC && QC.renderLogin && !document.getElementById('qc-login')) {
+      if (!hasSession) QC.renderLogin(false);
+      else if (QC.applyRBAC) { try { QC.applyRBAC(); } catch (e) {} }
+    }
+  } catch (e) { /* never let bootstrap throw */ }
+})();
+</script>
+<div id="tweaks-root"></div>
+<script src="gf/tweaks-vanilla.js?v=r9"></script>
+</body>
+</html>

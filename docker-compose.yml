@@ -1,0 +1,84 @@
+# ════════════════════════════════════════════════════════════════════════
+#  WEEKLY_WEED_FLOW — deployed stack (mirrors what runs on KVM4)
+#
+#    db        Postgres 17  (RLS policies + hash-chained audit trigger)
+#    backend   FastAPI API (asyncpg, JWT, RLS) on :8000 — internal only
+#    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
+#              /auth /departments /weeks /tasks /ai /audit to the backend;
+#              published over HTTPS by Traefik (Let's Encrypt).
+#
+#  The always-on Letta agent layer (AI functions) runs in its own pre-existing
+#  stack and is reached over host.docker.internal — it is intentionally NOT
+#  defined or managed here.
+#
+#  NOTE — this file faithfully describes the architecture (images, names,
+#  labels, networks) but is not a turnkey `up`: the app_user / app_admin login
+#  roles (the latter BYPASSRLS) and their table GRANTs are a one-time DB
+#  bootstrap, separate from schema.sql (which carries only structure + RLS +
+#  the audit trigger). See docs/DEPLOY.md. Production was provisioned this way
+#  out-of-band, not via `compose up`.
+# ════════════════════════════════════════════════════════════════════════
+name: weekly_weed_flow
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: weekly_weed_flow-db-1
+    environment:
+      - POSTGRES_DB=weekly_weed_flow
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - weekly_weed_flow_pgdata:/var/lib/postgresql/data
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    networks: [internal]
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    image: weekly_weed_flow-backend:latest
+    container_name: weekly_weed_flow-backend-1
+    depends_on: [db]
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
+    expose: ["8000"]
+    networks: [internal]
+    restart: unless-stopped
+
+  scheduler:
+    build: ./backend
+    image: weekly_weed_flow-backend:latest
+    container_name: wwf-scheduler
+    depends_on: [db]
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
+    command: ["python", "scripts/scheduler.py"]
+    networks: [internal]
+    restart: unless-stopped
+
+  frontend:
+    build: ./web
+    image: wwf-growflow:latest
+    container_name: wwf-gf-frontend
+    depends_on: [backend]
+    networks: [internal, traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_network"
+      - "traefik.http.routers.wwf.rule=Host(`${APP_HOST:-wwf.srv1231216.hstgr.cloud}`)"
+      - "traefik.http.routers.wwf.entrypoints=websecure"
+      - "traefik.http.routers.wwf.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wwf.loadbalancer.server.port=80"
+    restart: unless-stopped
+
+networks:
+  internal:
+    name: weekly_weed_flow_internal
+  traefik:
+    name: traefik_network
+    external: true
+
+volumes:
+  weekly_weed_flow_pgdata:

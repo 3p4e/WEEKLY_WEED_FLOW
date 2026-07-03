@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend deps + import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Import app (route check)
+        working-directory: backend
+        # SECRET_KEY must be a real (non-placeholder) value here: app/config.py
+        # refuses to start with the insecure default while ENVIRONMENT=production
+        # (the default), same as it would for an actual deployment.
+        env:
+          SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
+        run: |
+          python -c "import app.main as m; \
+            paths=[getattr(r,'path','') for r in m.app.routes]; \
+            print('routes:', len(paths)); \
+            assert any(p.startswith('/audit') for p in paths), 'audit router not wired'; \
+            assert any(p.startswith('/auth') for p in paths), 'auth router not wired'; \
+            assert any(p.startswith('/reports') for p in paths), 'reports router not wired'"
+
+  tests:
+    name: Backend test suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: weekly_weed_flow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r backend/requirements-dev.txt
+      - name: Bootstrap test roles + schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
+            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
+          "
+          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+          "
+      - name: Run tests
+        working-directory: backend
+        env:
+          ENVIRONMENT: development
+          SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
+          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
+          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
+        run: python -m pytest -v
+
+  migrations:
+    name: Alembic baseline matches schema.sql
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Build one DB via alembic upgrade head, one via schema.sql
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_alembic;"
+          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_schemasql;"
+          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
+            alembic -c backend/alembic.ini upgrade head
+          backend/scripts/load_schema.sh wwf_via_schemasql -h localhost -U postgres
+      - name: Diff the two schemas (fails if 0001_baseline.py has drifted from schema.sql)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # exclude alembic_version (Alembic's own bookkeeping table, not
+          # part of the app schema) and the \restrict/\unrestrict lines
+          # (random per-dump lock tokens, not real schema content).
+          dump() { pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-privileges \
+            --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict'; }
+          dump wwf_via_alembic    > /tmp/via_alembic.sql
+          dump wwf_via_schemasql  > /tmp/via_schemasql.sql
+          diff /tmp/via_alembic.sql /tmp/via_schemasql.sql && echo "alembic 0001 baseline matches schema.sql exactly"
+      - name: alembic downgrade cleanly reverses the baseline
+        env:
+          PGPASSWORD: postgres
+        run: |
+          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
+            alembic -c backend/alembic.ini downgrade base
+          remaining=$(psql -h localhost -U postgres -d wwf_via_alembic -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name != 'alembic_version'")
+          test "$remaining" = "0" && echo "downgrade removed every table it created"
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: weekly_weed_flow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install nginx
+        run: sudo apt-get update -q && sudo apt-get install -y -q nginx-light
+      - name: Bootstrap test roles + schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
+            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
+          "
+          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
+          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+          "
+      - name: Set up backend venv
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+      - name: Install Playwright + browsers
+        working-directory: web/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run e2e suite
+        working-directory: web/e2e
+        env:
+          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
+          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
+          CI: true
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/e2e/test-results/
+          retention-days: 7
+
+  images:
+    name: Build container images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t wwf-backend:ci ./backend
+      - name: Build web image
+        run: docker build -t wwf-web:ci ./web
+
+  compose:
+    name: Validate compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null && echo "compose config valid (project: wwf)"
