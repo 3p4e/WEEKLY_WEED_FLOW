@@ -422,10 +422,17 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
         return (f"> AI unavailable at {datetime.now(timezone.utc).strftime('%H:%M UTC')} "
                 f"— deterministic fallback.\n\n{label}\n\n" + digest[:4000])
 
-    # Org rollup
+    # Org rollup. The digest's per-task section ("## Tasks this week") grows
+    # unbounded with task count (33K+ chars for ~200 tasks) and blew the
+    # weekly_report agent's context on the first production run. The rollup
+    # only needs the aggregate sections (totals, by-status/owner, hours,
+    # aging, blockers) — per-task detail is what the RAG source is for, and
+    # the full digest is still uploaded there below. Bound the prompt to the
+    # summary half so it stays constant-size regardless of task volume.
+    digest_summary = digest.split("## Tasks this week")[0].rstrip()
     org_report = org_plan = None
     if report_agent:
-        rp = (f"{digest}\n\nREQUEST: Produce the WEEKLY REPORT for the whole facility "
+        rp = (f"{digest_summary}\n\nREQUEST: Produce the WEEKLY REPORT for the whole facility "
               f"'{org_name}' for {snap['report_window']['label']}. "
               f"Return ONLY JSON: {{\"weekly_report\": \"<markdown>\"}}")
         org_report = _extract_json_field(await letta_message(client, report_agent, rp), "weekly_report")
