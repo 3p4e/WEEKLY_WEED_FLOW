@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.config import settings
-from app.db import admin_pool, rls
+from app.db import rls_users, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role
 from app.security import create_access_token, hash_password, verify_password
 
@@ -89,7 +89,7 @@ async def login(body: LoginReq, request: Request):
     identifier = body.email.lower()
     _rate_limit_check(f"id:{identifier}", f"ip:{ip}")
 
-    row = await admin_pool().fetchrow(
+    row = await users_admin_pool().fetchrow(
         "SELECT * FROM profiles WHERE (username=$1 OR email=$1) AND is_deleted=false",
         body.email,
     )
@@ -120,10 +120,10 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
         raise HTTPException(422, f"Password must be at least {settings.password_min_length} characters")
     # Voluntary change (flag already cleared) must prove the current password.
     if not user["must_change_password"]:
-        row = await admin_pool().fetchrow("SELECT password_hash FROM profiles WHERE id=$1", user["id"])
+        row = await users_admin_pool().fetchrow("SELECT password_hash FROM profiles WHERE id=$1", user["id"])
         if row is None or not body.current_password or not verify_password(body.current_password, row["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password incorrect")
-    async with rls(user, admin=True) as conn:
+    async with rls_users(user, admin=True) as conn:
         new_pwv = await conn.fetchval(
             "UPDATE profiles SET password_hash=$1, must_change_password=false,"
             " password_set_at=now(), updated_at=now() WHERE id=$2 RETURNING password_set_at",
@@ -151,7 +151,7 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("A
     if not _can_manage(actor, body.role, body.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     otp = generate_otp()
-    async with rls(actor, admin=True) as conn:
+    async with rls_users(actor, admin=True) as conn:
         try:
             row = await conn.fetchrow(
                 "INSERT INTO profiles(org_id,username,email,password_hash,full_name,role,"
@@ -174,7 +174,7 @@ async def directory(user: dict = Depends(require_password_set)):
     assignee pickers work for non-elevated roles too. Deactivated accounts are
     excluded — same rule the weekly snapshot's roster query uses — so they
     can't be picked as assignees; /users still shows them for management."""
-    async with rls(user) as c:
+    async with rls_users(user) as c:
         rows = await c.fetch(
             "SELECT id,username,full_name,role,department_id,function_role"
             " FROM profiles WHERE is_deleted=false AND is_active AND org_id=$1"
@@ -189,7 +189,7 @@ async def list_users(actor: dict = Depends(require_role("ADMIN", "DEPT_HEAD"))):
     # Scope to the caller's org explicitly: the admin pool is BYPASSRLS, so the
     # profiles_read policy does NOT filter it — without org_id this would leak
     # every organisation's user directory.
-    async with rls(actor, admin=True) as conn:
+    async with rls_users(actor, admin=True) as conn:
         rows = await conn.fetch(
             "SELECT id,username,full_name,role,department_id,function_role,is_active,must_change_password"
             " FROM profiles WHERE is_deleted=false AND org_id=$1 ORDER BY full_name", actor["org_id"])
@@ -206,7 +206,7 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role("ADMIN", 
     # Admin pool is BYPASSRLS, so authorisation is enforced here: the target
     # must be in the actor's org AND manageable by them (a DEPT_HEAD cannot
     # delete an ADMIN or anyone outside their department). Same gate as create.
-    async with rls(actor, admin=True) as conn:
+    async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(
             "SELECT role, department_id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",
             user_id, actor["org_id"])

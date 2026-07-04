@@ -32,9 +32,9 @@ async def test_assign_cross_org_user_rejected(client, admin_headers, org):
     # A second, independent org with its own admin.
     other_org_id = uuid.uuid4()
     other_admin_id = uuid.uuid4()
-    from app.db import admin_pool
+    from app.db import users_admin_pool
     from app.security import hash_password
-    pool = admin_pool()
+    pool = users_admin_pool()
     await pool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
                         other_org_id, "Other Org", f"other-{other_org_id.hex[:8]}")
     await pool.execute(
@@ -48,7 +48,8 @@ async def test_assign_cross_org_user_rejected(client, admin_headers, org):
         assert r.status_code == 404, r.text
         assert "organization" in r.json()["detail"].lower()
     finally:
-        await pool.execute("DELETE FROM organizations WHERE id=$1", other_org_id)
+        from tests.conftest import purge_org
+        await purge_org(other_org_id)
 
 
 async def test_assign_malformed_uuid_returns_422_not_500(client, admin_headers):

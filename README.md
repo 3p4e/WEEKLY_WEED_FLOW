@@ -70,7 +70,7 @@ web/                 Standalone front-end (open web/index.html — no build step
   Dockerfile         nginx image; nginx.conf reverse-proxies the API same-origin
 backend/             FastAPI API (asyncpg, JWT, RLS, audit) — app/ package
   app/               main, config, db, security, deps, api/{auth,tasks,ai,audit}
-  schema.sql         DB structure + RLS policies + hash-chained audit trigger
+  schema.users.sql / schema.tasks.sql   per-database structure + RLS + audit trigger (generated)
 docker-compose.yml   Deployed stack: db + backend + frontend (mirrors KVM4)
 docs/                Spec, status, deploy guide, provenance + design HTML
 ```
@@ -102,7 +102,7 @@ credentials never reach the browser. See [`backend/README.md`](backend/README.md
 ```bash
 cd backend
 pip install -r requirements.txt
-cp ../.env.example .env      # DATABASE_URL / ADMIN_DATABASE_URL / SECRET_KEY / LETTA_*
+cp ../.env.example .env      # USERS_/TASKS_DATABASE_URL (+_ADMIN_) / SECRET_KEY / LETTA_*
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 

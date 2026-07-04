@@ -11,8 +11,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.db import rls
+from app.db import rls, rls_users
 from app.deps import require_password_set
+from app.roster import display_name, roster
 
 router = APIRouter(tags=["collab"])
 
@@ -35,10 +36,6 @@ class AckReq(BaseModel):
     reason: str | None = None
 
 
-def _author(r) -> str:
-    return r["full_name"] or r["username"] or "—"
-
-
 async def _task_or_404(conn, task_id: str) -> dict:
     t = await conn.fetchrow("SELECT id, user_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
     if t is None:
@@ -56,10 +53,12 @@ async def list_comments(task_id: str, user: dict = Depends(require_password_set)
     async with rls(user) as c:
         await _task_or_404(c, task_id)
         rows = await c.fetch(
-            "SELECT cm.id, cm.user_id, cm.content, cm.created_at, p.full_name, p.username "
-            "FROM task_comments cm LEFT JOIN profiles p ON p.id=cm.user_id "
-            "WHERE cm.task_id=$1 ORDER BY cm.created_at", task_id)
-    return [{"id": str(r["id"]), "user_id": str(r["user_id"]), "author": _author(r),
+            "SELECT id, user_id, content, created_at "
+            "FROM task_comments WHERE task_id=$1 ORDER BY created_at", task_id)
+    # Author names live in the users database — merge app-side.
+    names = await roster(user) if rows else {}
+    return [{"id": str(r["id"]), "user_id": str(r["user_id"]),
+             "author": display_name(names, r["user_id"]),
              "content": r["content"], "created_at": r["created_at"].isoformat()} for r in rows]
 
 
@@ -85,10 +84,10 @@ async def list_assignees(task_id: str, user: dict = Depends(require_password_set
     async with rls(user) as c:
         await _task_or_404(c, task_id)
         rows = await c.fetch(
-            "SELECT a.user_id, a.role, a.accepted, a.accepted_at, a.assigned_at, p.full_name, p.username "
-            "FROM task_assignees a LEFT JOIN profiles p ON p.id=a.user_id "
-            "WHERE a.task_id=$1 ORDER BY a.assigned_at", task_id)
-    return [{"user_id": str(r["user_id"]), "name": _author(r), "role": r["role"],
+            "SELECT user_id, role, accepted, accepted_at, assigned_at "
+            "FROM task_assignees WHERE task_id=$1 ORDER BY assigned_at", task_id)
+    names = await roster(user) if rows else {}
+    return [{"user_id": str(r["user_id"]), "name": display_name(names, r["user_id"]), "role": r["role"],
              "accepted": r["accepted"],
              "accepted_at": r["accepted_at"].isoformat() if r["accepted_at"] else None} for r in rows]
 
@@ -99,13 +98,14 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can assign")
-        # The FK on task_assignees.user_id only requires the row to exist in
-        # profiles, not that it shares this org — check explicitly so a
-        # cross-org id can't be assigned (which would leak the task via the
-        # tasks_read assignee clause).
-        target = await c.fetchrow(
-            "SELECT id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",
-            body.user_id, user["org_id"])
+        # task_assignees.user_id has NO foreign key (profiles live in the
+        # users database), so this org-membership check is the ONLY integrity
+        # guard on assignee ids: it stops both a dangling uuid and a cross-org
+        # id (which would leak the task via the tasks_read assignee clause).
+        async with rls_users(user) as uc:
+            target = await uc.fetchrow(
+                "SELECT id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",
+                body.user_id, user["org_id"])
         if target is None:
             raise HTTPException(404, "User not found in this organization")
         try:

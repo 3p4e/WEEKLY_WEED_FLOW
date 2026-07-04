@@ -1,55 +1,11 @@
-"""baseline: full schema as of this branch (tables, RLS policies, audit trigger)
-
-Revision ID: 0001
-Revises:
-Create Date: 2026-07-02
-
-Snapshot of schema.sql at the point Alembic was introduced -- NOT a live
-reference to that file, so later edits to schema.sql don't retroactively
-change what this migration does. schema.sql remains the human-readable
-"current shape of the DB" doc; this is the frozen step that builds it.
-
-Two ways this gets used, matching two different starting points:
-  * A database that already has this exact schema (schema.sql was mounted
-    into Postgres's docker-entrypoint-initdb.d and ran on container init,
-    or someone applied it by hand -- this is how every environment before
-    this migration existed) -> `alembic stamp 0001`, which just records
-    "already here" without re-running the DDL.
-  * A genuinely empty database (CI, a fresh non-Docker-init'd environment)
-    -> `alembic upgrade head`, which actually builds it.
-
-Requires a role with DDL privileges (schema/table/policy creation) -- the
-app's own app_user/app_admin roles are intentionally DML-only (see
-docs/DEPLOY.md's bootstrap grants). See alembic/env.py for how the
-migration connection is configured (MIGRATION_DATABASE_URL, not
-app.config.Settings).
-"""
-from typing import Sequence, Union
-
-import sqlalchemy as sa
-
-from alembic import op
-
-# revision identifiers, used by Alembic.
-revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
-
-# Verbatim schema.sql content, minus the PG17-only SET transaction_timeout
-# line and the \restrict/\unrestrict psql meta-commands (pg_dump's
-# dump/restore consistency guard -- psql understands them, the asyncpg
-# driver this migration runs under does not) -- see scripts/load_schema.sh
-# for the psql-side equivalent of this same filtering. Frozen as of this
-# migration's creation; do not regenerate from a newer schema.sql.
-_SCHEMA_SQL = r"""
 --
 -- PostgreSQL database dump
 --
 
+\restrict LL7k5Fxy9CQWuwayc3cdy15u90DUqhn0te0sYidXOuaNU75Hh4XT06T7R8YJNIC
 
--- Dumped from database version 17.10
--- Dumped by pg_dump version 17.10
+-- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
+-- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -147,7 +103,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD','QA_AUDITOR') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD') $$;
 
 
 SET default_tablespace = '';
@@ -186,7 +142,9 @@ CREATE TABLE public.ai_pins (
     title text,
     body text NOT NULL,
     created_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    subject_user_id uuid,
+    prompt_version text
 );
 
 ALTER TABLE ONLY public.ai_pins FORCE ROW LEVEL SECURITY;
@@ -287,66 +245,6 @@ ALTER TABLE ONLY public.handoffs FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: organizations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.organizations (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    slug text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-ALTER TABLE ONLY public.organizations FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.password_reset_codes (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    code_hash text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    used_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-ALTER TABLE ONLY public.password_reset_codes FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: profiles; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.profiles (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    org_id uuid NOT NULL,
-    username text NOT NULL,
-    email text,
-    password_hash text NOT NULL,
-    full_name text NOT NULL,
-    display_name text,
-    role text DEFAULT 'USER'::text NOT NULL,
-    function_role text,
-    department_id uuid,
-    avatar_url text,
-    is_active boolean DEFAULT true NOT NULL,
-    must_change_password boolean DEFAULT true NOT NULL,
-    password_set_at timestamp with time zone,
-    created_by uuid,
-    is_deleted boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'DEPT_HEAD'::text, 'PROJECT_LEAD'::text, 'TEAM_LEADER'::text, 'USER'::text, 'QA_AUDITOR'::text])))
-);
-
-ALTER TABLE ONLY public.profiles FORCE ROW LEVEL SECURITY;
-
-
---
 -- Name: task_assignees; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -382,6 +280,25 @@ ALTER TABLE ONLY public.task_comments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: task_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.task_links (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    url text NOT NULL,
+    label text,
+    kind text DEFAULT 'other'::text NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT task_links_kind_check CHECK ((kind = ANY (ARRAY['drive'::text, 'sop'::text, 'doc'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.task_links FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: task_progress; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -412,14 +329,16 @@ CREATE TABLE public.tasks (
     status text DEFAULT 'pending'::text NOT NULL,
     priority text DEFAULT 'medium'::text NOT NULL,
     workflow_state text DEFAULT 'draft'::text NOT NULL,
+    task_type text DEFAULT 'other'::text NOT NULL,
+    reference_code text,
+    blocker_reason text,
+    recurrence jsonb,
     department text,
     department_id uuid,
     week_id uuid,
     week_start date,
     days text[] DEFAULT '{}'::text[] NOT NULL,
     tags text[] DEFAULT '{}'::text[] NOT NULL,
-    deps uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    progress_notes jsonb DEFAULT '[]'::jsonb NOT NULL,
     due_date date,
     completed_date date,
     estimated_hours numeric,
@@ -430,10 +349,37 @@ CREATE TABLE public.tasks (
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
+    CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text]))),
+    CONSTRAINT tasks_task_type_check CHECK ((task_type = ANY (ARRAY['capa'::text, 'sop'::text, 'validation'::text, 'document'::text, 'lab'::text, 'meeting'::text, 'admin'::text, 'other'::text])))
 );
 
 ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: work_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone,
+    hours numeric,
+    note text,
+    source text DEFAULT 'manual'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT work_sessions_duration_check CHECK (((hours IS NOT NULL) OR (ended_at IS NOT NULL))),
+    CONSTRAINT work_sessions_hours_positive_check CHECK (((hours IS NULL) OR (hours > (0)::numeric))),
+    CONSTRAINT work_sessions_range_check CHECK (((ended_at IS NULL) OR (ended_at > started_at))),
+    CONSTRAINT work_sessions_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'timer'::text, 'capture'::text])))
+);
+
+ALTER TABLE ONLY public.work_sessions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -509,46 +455,6 @@ ALTER TABLE ONLY public.handoffs
 
 
 --
--- Name: organizations organizations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.organizations
-    ADD CONSTRAINT organizations_pkey PRIMARY KEY (id);
-
-
---
--- Name: organizations organizations_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.organizations
-    ADD CONSTRAINT organizations_slug_key UNIQUE (slug);
-
-
---
--- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_pkey PRIMARY KEY (id);
-
-
---
--- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.profiles
-    ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
-
-
---
--- Name: profiles profiles_username_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.profiles
-    ADD CONSTRAINT profiles_username_key UNIQUE (username);
-
-
---
 -- Name: task_assignees task_assignees_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -562,6 +468,14 @@ ALTER TABLE ONLY public.task_assignees
 
 ALTER TABLE ONLY public.task_comments
     ADD CONSTRAINT task_comments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: task_links task_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_links
+    ADD CONSTRAINT task_links_pkey PRIMARY KEY (id);
 
 
 --
@@ -581,10 +495,25 @@ ALTER TABLE ONLY public.tasks
 
 
 --
+-- Name: work_sessions work_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_sessions
+    ADD CONSTRAINT work_sessions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: audit_log_table_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, record_id);
+
+
+--
+-- Name: task_links_task_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX task_links_task_idx ON public.task_links USING btree (task_id);
 
 
 --
@@ -602,10 +531,24 @@ CREATE INDEX tasks_dept_idx ON public.tasks USING btree (department_id);
 
 
 --
+-- Name: tasks_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_due_idx ON public.tasks USING btree (org_id, due_date) WHERE (due_date IS NOT NULL);
+
+
+--
 -- Name: tasks_org_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX tasks_org_idx ON public.tasks USING btree (org_id);
+
+
+--
+-- Name: tasks_org_week_start_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_org_week_start_idx ON public.tasks USING btree (org_id, week_start DESC, created_at DESC);
 
 
 --
@@ -630,6 +573,20 @@ CREATE INDEX tasks_week_idx ON public.tasks USING btree (week_id);
 
 
 --
+-- Name: work_sessions_org_started_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_sessions_org_started_idx ON public.work_sessions USING btree (org_id, started_at);
+
+
+--
+-- Name: work_sessions_task_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_sessions_task_idx ON public.work_sessions USING btree (task_id);
+
+
+--
 -- Name: departments audit_departments; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -641,13 +598,6 @@ CREATE TRIGGER audit_departments AFTER INSERT OR DELETE OR UPDATE ON public.depa
 --
 
 CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoffs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
-
-
---
--- Name: profiles audit_profiles; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER audit_profiles AFTER INSERT OR DELETE OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -665,27 +615,10 @@ CREATE TRIGGER audit_tasks AFTER INSERT OR DELETE OR UPDATE ON public.tasks FOR 
 
 
 --
--- Name: ai_agent_bindings ai_agent_bindings_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: work_sessions audit_work_sessions; Type: TRIGGER; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ai_agent_bindings
-    ADD CONSTRAINT ai_agent_bindings_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: ai_pins ai_pins_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ai_pins
-    ADD CONSTRAINT ai_pins_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
--- Name: ai_pins ai_pins_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ai_pins
-    ADD CONSTRAINT ai_pins_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+CREATE TRIGGER audit_work_sessions AFTER INSERT OR DELETE OR UPDATE ON public.work_sessions FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -705,30 +638,6 @@ ALTER TABLE ONLY public.ai_pins
 
 
 --
--- Name: calendar_weeks calendar_weeks_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.calendar_weeks
-    ADD CONSTRAINT calendar_weeks_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: departments departments_head_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.departments
-    ADD CONSTRAINT departments_head_fk FOREIGN KEY (head_user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
--- Name: departments departments_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.departments
-    ADD CONSTRAINT departments_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
 -- Name: departments departments_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -742,30 +651,6 @@ ALTER TABLE ONLY public.departments
 
 ALTER TABLE ONLY public.handoffs
     ADD CONSTRAINT handoffs_from_dept_id_fkey FOREIGN KEY (from_dept_id) REFERENCES public.departments(id) ON DELETE SET NULL;
-
-
---
--- Name: handoffs handoffs_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.handoffs
-    ADD CONSTRAINT handoffs_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: handoffs handoffs_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.handoffs
-    ADD CONSTRAINT handoffs_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id);
-
-
---
--- Name: handoffs handoffs_resolved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.handoffs
-    ADD CONSTRAINT handoffs_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -785,75 +670,11 @@ ALTER TABLE ONLY public.handoffs
 
 
 --
--- Name: password_reset_codes password_reset_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
-
-
---
--- Name: profiles profiles_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.profiles
-    ADD CONSTRAINT profiles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
--- Name: profiles profiles_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.profiles
-    ADD CONSTRAINT profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
-
-
---
--- Name: profiles profiles_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.profiles
-    ADD CONSTRAINT profiles_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: task_assignees task_assignees_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_assignees
-    ADD CONSTRAINT task_assignees_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
--- Name: task_assignees task_assignees_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_assignees
-    ADD CONSTRAINT task_assignees_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
 -- Name: task_assignees task_assignees_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.task_assignees
     ADD CONSTRAINT task_assignees_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
-
-
---
--- Name: task_assignees task_assignees_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_assignees
-    ADD CONSTRAINT task_assignees_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
-
-
---
--- Name: task_comments task_comments_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_comments
-    ADD CONSTRAINT task_comments_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 
 --
@@ -865,19 +686,11 @@ ALTER TABLE ONLY public.task_comments
 
 
 --
--- Name: task_comments task_comments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: task_links task_links_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.task_comments
-    ADD CONSTRAINT task_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
-
-
---
--- Name: task_progress task_progress_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_progress
-    ADD CONSTRAINT task_progress_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.task_links
+    ADD CONSTRAINT task_links_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
 
 
 --
@@ -889,35 +702,11 @@ ALTER TABLE ONLY public.task_progress
 
 
 --
--- Name: task_progress task_progress_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.task_progress
-    ADD CONSTRAINT task_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
-
-
---
--- Name: tasks tasks_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tasks
-    ADD CONSTRAINT tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
 -- Name: tasks tasks_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
-
-
---
--- Name: tasks tasks_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tasks
-    ADD CONSTRAINT tasks_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 
 --
@@ -929,27 +718,19 @@ ALTER TABLE ONLY public.tasks
 
 
 --
--- Name: tasks tasks_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tasks
-    ADD CONSTRAINT tasks_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-
-
---
--- Name: tasks tasks_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tasks
-    ADD CONSTRAINT tasks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
-
-
---
 -- Name: tasks tasks_week_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_week_id_fkey FOREIGN KEY (week_id) REFERENCES public.calendar_weeks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: work_sessions work_sessions_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_sessions
+    ADD CONSTRAINT work_sessions_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
 
 
 --
@@ -1013,7 +794,7 @@ CREATE POLICY org_isolation ON public.ai_agent_bindings USING ((org_id = app.cur
 -- Name: ai_pins org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY org_isolation ON public.ai_pins USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+CREATE POLICY org_isolation ON public.ai_pins USING (((org_id = app.current_org_id()) AND ((subject_user_id IS NULL) OR (subject_user_id = app.current_user_id()) OR app.is_elevated()))) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -1052,49 +833,17 @@ CREATE POLICY org_isolation ON public.task_comments USING ((org_id = app.current
 
 
 --
--- Name: organizations org_self; Type: POLICY; Schema: public; Owner: -
+-- Name: task_links org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY org_self ON public.organizations USING ((id = app.current_org_id()));
-
-
---
--- Name: organizations; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: password_reset_codes; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.password_reset_codes ENABLE ROW LEVEL SECURITY;
-
---
--- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
---
--- Name: profiles profiles_manage; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY profiles_manage ON public.profiles USING (((org_id = app.current_org_id()) AND app.is_elevated())) WITH CHECK (((org_id = app.current_org_id()) AND app.is_elevated()));
+CREATE POLICY org_isolation ON public.task_links USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
--- Name: profiles profiles_read; Type: POLICY; Schema: public; Owner: -
+-- Name: work_sessions org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_read ON public.profiles FOR SELECT USING ((org_id = app.current_org_id()));
-
-
---
--- Name: profiles profiles_self; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.current_user_id())) WITH CHECK ((id = app.current_user_id()));
+CREATE POLICY org_isolation ON public.work_sessions USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -1102,13 +851,6 @@ CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.curre
 --
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
-
-
---
--- Name: password_reset_codes reset_self; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.current_user_id()) OR app.is_elevated())) WITH CHECK (((user_id = app.current_user_id()) OR app.is_elevated()));
 
 
 --
@@ -1122,6 +864,12 @@ ALTER TABLE public.task_assignees ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: task_links; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.task_links ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_progress; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1154,51 +902,14 @@ CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()
 
 
 --
+-- Name: work_sessions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
+
+--
 -- PostgreSQL database dump complete
 --
 
+\unrestrict LL7k5Fxy9CQWuwayc3cdy15u90DUqhn0te0sYidXOuaNU75Hh4XT06T7R8YJNIC
 
-"""
-
-
-def upgrade() -> None:
-    # _SCHEMA_SQL is many semicolon-separated statements in one string.
-    # SQLAlchemy's asyncpg dialect routes op.execute() through asyncpg's
-    # prepared-statement path, which rejects multiple commands in one
-    # prepare call ("cannot insert multiple commands into a prepared
-    # statement"). asyncpg's own Connection.execute() natively supports a
-    # multi-statement string via Postgres's simple query protocol — drop
-    # to the raw driver connection and use SQLAlchemy's own greenlet
-    # bridge (the same primitive its asyncpg dialect uses internally, per
-    # sqlalchemy/dialects/postgresql/asyncpg.py) to await it from this
-    # nominally-sync migration function.
-    from sqlalchemy.util import await_only
-
-    raw_connection = op.get_bind().connection.driver_connection
-    await_only(raw_connection.execute(_SCHEMA_SQL))
-    # _SCHEMA_SQL's pg_dump header sets search_path to '' (a pg_dump
-    # convention forcing its own DDL to be fully schema-qualified). That
-    # persists on this connection after the multi-statement execute
-    # returns, and Alembic's own alembic_version bookkeeping that runs
-    # right after this — on the same connection — is NOT schema-qualified,
-    # so it silently fails to resolve "alembic_version" without this reset.
-    await_only(raw_connection.execute("RESET search_path"))
-
-
-def downgrade() -> None:
-    # Drop exactly what upgrade() created, table by table — NOT
-    # `DROP SCHEMA public CASCADE`, which would also take Alembic's own
-    # alembic_version tracking table with it (it lives in public too);
-    # Alembic runs its version-bookkeeping DELETE against that table right
-    # after this function returns, on the same connection.
-    op.execute("""
-        DROP TABLE IF EXISTS
-            public.task_comments, public.task_progress, public.task_assignees,
-            public.password_reset_codes, public.handoffs, public.ai_pins,
-            public.ai_agent_bindings, public.tasks, public.calendar_weeks,
-            public.departments, public.audit_log, public.profiles,
-            public.organizations
-        CASCADE
-    """)
-    op.execute("DROP SCHEMA IF EXISTS app CASCADE")
-    op.execute("DROP EXTENSION IF EXISTS pgcrypto")

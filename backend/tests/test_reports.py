@@ -1,6 +1,6 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
-from app.db import admin_pool
+from app.db import tasks_admin_pool
 
 
 async def test_weekly_report_summary_counts_postponed_tasks(client, admin_headers):
@@ -82,7 +82,7 @@ async def test_report_mode_only_includes_tasks_with_activity_in_the_window(clien
 
 
 async def test_department_filter_excludes_other_departments(client, admin_headers, org):
-    rows = await admin_pool().fetch(
+    rows = await tasks_admin_pool().fetch(
         "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'), ($1,'qc','QC')"
         " RETURNING id, code",
         org["org_id"],

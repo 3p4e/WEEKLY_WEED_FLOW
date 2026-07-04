@@ -1,5 +1,5 @@
 """P1 — account provisioning, forced first-login password change, RBAC gates."""
-from app.db import admin_pool
+from app.db import users_admin_pool
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -110,7 +110,7 @@ async def test_directory_excludes_deactivated_accounts(client, admin_headers, or
     inactive account would otherwise remain assignable forever. /users (the
     management view) is where inactive accounts stay visible."""
     user, _ = await create_user(client, admin_headers, full_name="Soon Inactive")
-    await admin_pool().execute(
+    await users_admin_pool().execute(
         "UPDATE profiles SET is_active=false WHERE id=$1", user["id"])
 
     r = await client.get("/auth/directory", headers=admin_headers)
@@ -171,8 +171,8 @@ async def test_dept_head_confined_to_own_department(client, admin_headers, org):
     fixture's ADMIN in every other test — nothing pins that a DEPT_HEAD is
     actually confined to their own department, or barred from creating an
     ADMIN account."""
-    from app.db import admin_pool
-    rows = await admin_pool().fetch(
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
         "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','Dept A'), ($1,'b','Dept B')"
         " RETURNING id, code",
         org["org_id"],

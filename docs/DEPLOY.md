@@ -4,10 +4,18 @@
 
 | Service     | Container                     | Image                        | Role |
 |-------------|--------------------------------|------------------------------|------|
-| `db`        | `weekly_weed_flow-db-1`       | `postgres:17-alpine`         | RLS policies + hash-chained audit trigger |
+| `db-users`  | `wwf-db-users`                | `postgres:17-alpine`         | Identity data (organizations, profiles) + its own audit chain |
+| `db-tasks`  | `wwf-db-tasks`                | `postgres:17-alpine`         | Work data (tasks, work_sessions, pins, ...) + its own audit chain |
 | `backend`   | `weekly_weed_flow-backend-1`  | `weekly_weed_flow-backend`   | FastAPI API (:8000, internal) |
+| `scheduler` | `wwf-scheduler`               | `weekly_weed_flow-backend`   | Thursday 14:00 weekly snapshot job |
 | `frontend`  | `wwf-gf-frontend`             | `wwf-growflow`               | nginx + GrowFlow UI, published by Traefik over HTTPS |
-| `db-backup` | `wwf-db-backup`               | `postgres:17-alpine`         | Rotating local `pg_dump` backups — see [`docs/BACKUP.md`](BACKUP.md) |
+| `db-backup` | `wwf-db-backup`               | `postgres:17-alpine`         | Rotating local `pg_dump` backups of BOTH DBs — see [`docs/BACKUP.md`](BACKUP.md) |
+
+The two databases are a deliberate v2 architecture decision: identity and
+work data live in **separate Postgres containers** with no cross-database
+foreign keys (bare uuids across the boundary; app-side joins via
+`backend/app/roster.py`). Each database has its own independent
+hash-chained `audit_log`; `/audit/verify` reports both chains.
 
 The **Letta** stateful-agent layer (AI functions) runs in its own pre-existing
 stack and is reached over `host.docker.internal` — it is not managed here.
@@ -24,12 +32,14 @@ stack and is reached over `host.docker.internal` — it is not managed here.
 
 ## One-time DB bootstrap (roles + grants)
 
-`schema.sql` (mounted into the db container's init dir) carries **structure +
-RLS policies + the audit trigger only**. The two login roles and their table
-privileges are a separate, one-time step — without them the API cannot connect:
+`schema.users.sql` / `schema.tasks.sql` (each mounted into its container's
+init dir) carry **structure + RLS policies + the audit trigger only**. The
+two login roles and their table privileges are a separate, one-time step
+**in EACH database** — without them the API cannot connect:
 
 ```sql
--- passwords must match DATABASE_URL / ADMIN_DATABASE_URL in .env
+-- run in BOTH wwf_users and wwf_tasks;
+-- passwords must match the four *_DATABASE_URL values in .env
 CREATE ROLE app_user  LOGIN PASSWORD '...';                 -- NOBYPASSRLS
 CREATE ROLE app_admin LOGIN PASSWORD '...' BYPASSRLS;       -- provisioning + audit verify
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
@@ -39,25 +49,51 @@ GRANT USAGE ON SCHEMA app TO app_user, app_admin;           -- helper fns (is_el
 
 (RLS still constrains `app_user`; `app_admin` bypasses it for auth/provisioning.)
 
-## Schema changes (Alembic)
+## Schema changes (Alembic — two chains)
 
-`schema.sql` was the only source of schema truth up to the point
-`backend/alembic/versions/0001_baseline.py` was introduced as a frozen
-snapshot of it. Production and every other already-provisioned environment
-already has that exact schema, so it's stamped rather than re-applied:
+Each database has its own migration chain: `backend/alembic_users/` and
+`backend/alembic_tasks/`, selected with `-n users|tasks` against the shared
+`backend/alembic.ini`. Each env.py reads its own superuser-class URL
+(`USERS_MIGRATION_DATABASE_URL` / `TASKS_MIGRATION_DATABASE_URL`) — DDL
+privileges the app's own `app_user`/`app_admin` roles don't have.
+
+A database freshly initialized from its schema file is stamped, not
+re-upgraded:
 
 ```bash
-MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/weekly_weed_flow \
-  alembic stamp 0001
+USERS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PW@wwf-db-users:5432/wwf_users \
+  alembic -c backend/alembic.ini -n users stamp 0001
+TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PW@wwf-db-tasks:5432/wwf_tasks \
+  alembic -c backend/alembic.ini -n tasks stamp 0001
 ```
 
-Every schema change from here on is a new file in `backend/alembic/versions/`
-(see `backend/README.md`'s "Migrations" section), applied with
-`alembic upgrade head` using the same `postgres`-superuser-class
-`MIGRATION_DATABASE_URL` — DDL privileges the app's own `app_user`/
-`app_admin` roles don't have. `schema.sql` stays as the human-readable
-"current shape of the DB" reference; regenerate it after a migration lands
-(`pg_dump --schema-only`) rather than hand-editing it.
+Every schema change from here on is a new file in the relevant chain's
+`versions/`, applied with `alembic -n users|tasks upgrade head`.
+`schema.users.sql` / `schema.tasks.sql` are **generated** from the
+alembic-built databases (`pg_dump --schema-only --no-owner --no-privileges
+--exclude-table=alembic_version`), never hand-edited — CI byte-diffs the two
+builds per database.
+
+## v2 blank-state cutover (performed 2026-07)
+
+The v2 rebuild replaced the single `weekly_weed_flow` database with the two
+containers above, starting from a **blank state** (admin + qcm.blani only).
+Runbook, for the record and for any future rebuild:
+
+1. Final safety dump of the old DB: `docker exec wwf-db-backup sh /usr/local/bin/db_backup.sh --once`.
+2. Stop backend/scheduler/db-backup; leave the old `weekly_weed_flow-db-1`
+   container + volume in place (it is the archive) but disconnect it.
+3. Start `wwf-db-users` / `wwf-db-tasks` (fresh volumes; initdb runs the
+   schema files mounted at `/docker-entrypoint-initdb.d/10-schema.sql`).
+4. Bootstrap roles + grants in both (SQL above), `alembic stamp 0001` twice.
+5. Hand-insert: the organization row (users DB), the 7 departments rows
+   (tasks DB, same org uuid), and the `admin` + `qcm.blani` profiles
+   (users DB; qcm.blani gets a fresh OTP with must_change_password=true).
+6. Rebuild the backend image, recreate backend/scheduler/frontend/db-backup
+   with the new env (four DSNs — see `.env.example`).
+7. Verify: both logins, create a task, log a weekend work session, confirm
+   the report shows it in the per-person overtime buckets, `/audit/verify`
+   reports both chains ok.
 
 ## Deploying
 
@@ -97,6 +133,6 @@ traefik.http.services.wwf.loadbalancer.server.port=80
 > so the images intentionally ship **without a HEALTHCHECK** and containers run
 > with `--no-healthcheck`.
 
-nginx serves the UI and reverse-proxies `/auth /departments /weeks /tasks /ai
-/audit /reports /health` to the backend same-origin (resolved at request time
+nginx serves the UI and reverse-proxies `/auth /departments /weeks /tasks
+/sessions /ai /audit /reports /health` to the backend same-origin (resolved at request time
 via Docker DNS), so the browser only ever talks to one origin.

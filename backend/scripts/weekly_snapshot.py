@@ -20,7 +20,7 @@ deterministic fallback body are always pinned. Kept dependency-light
 are unit-testable without a DB or the config guard.
 
 Usage:
-  ADMIN_DATABASE_URL=... python scripts/weekly_snapshot.py --once
+  USERS_ADMIN_DATABASE_URL=... TASKS_ADMIN_DATABASE_URL=... python scripts/weekly_snapshot.py --once
   ... --ref-date 2026-07-02       # run as if "today" were this date
   ... --org-id <uuid>             # limit to one org
   ... --skip-letta                # DB-only (test/dry-run)
@@ -33,14 +33,21 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 
+import sys
+
 import asyncpg
 import httpx
 
 import planner_prompts
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from app.worktime import classify, session_hours  # noqa: E402  (pure helpers, no config import)
+
 
 # ── Config from env (no app.config dependency) ──────────────────────────────
-ADMIN_DSN = os.environ.get("ADMIN_DATABASE_URL", "")
+# Two databases: identity (organizations/profiles) vs work data — see app/db.py.
+USERS_ADMIN_DSN = os.environ.get("USERS_ADMIN_DATABASE_URL", "")
+TASKS_ADMIN_DSN = os.environ.get("TASKS_ADMIN_DATABASE_URL", "")
 LETTA_BASE_URL = os.environ.get("LETTA_BASE_URL", "http://host.docker.internal:8283")
 LETTA_API_KEY = os.environ.get("LETTA_API_KEY", "")
 SNAPSHOT_SOURCE_ID = os.environ.get(
@@ -170,6 +177,26 @@ def build_digest(snap: dict) -> str:
     for o, (pa, pe) in per_owner.items():
         if pa or pe:
             L.append(f"- {o}: {pa:g} / {pe:g}")
+    L.append("")
+
+    # Time-class hours from logged work sessions — the overtime evidence.
+    L.append("## Hours by time class (work sessions)")
+    hbp = snap.get("hours_by_person") or {}
+    if hbp:
+        for o, b in sorted(hbp.items(), key=lambda kv: -kv[1]["total"]):
+            L.append(f"- {o}: total {b['total']:g}h — regular {b['regular']:g}, "
+                     f"overtime {b['overtime']:g}, night {b['night']:g}, weekend {b['weekend']:g}")
+    else:
+        L.append("- none logged")
+    L.append("")
+
+    L.append("## Overdue")
+    if snap.get("overdue"):
+        for o in snap["overdue"]:
+            L.append(f"- {_cite(o['id'])} {_clean(o['title'])} — due {o['due_date']}, "
+                     f"[{o['status']}, owner={o['owner']}]")
+    else:
+        L.append("- none")
     L.append("")
 
     # Carry-over aging
@@ -322,29 +349,33 @@ async def _ensure_week(conn, org_id, day: date):
 
 
 # ── DB gather (all queries org_id-scoped; runs on BYPASSRLS admin conn) ──────
-async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
+async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
+    """*conn* is the tasks database, *uconn* the users database — owner names
+    are merged app-side (no cross-database SQL join exists)."""
     r_fri, r_thu = report_win
     p_fri, p_thu = plan_win
 
     report_tasks = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.department, t.week_start,"
         " t.estimated_hours, t.actual_hours, t.completed_date, t.created_at,"
-        " p.username AS owner"
-        " FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+        " t.user_id, t.task_type, t.due_date, t.blocker_reason"
+        " FROM tasks t"
         " WHERE t.org_id=$1 AND t.is_deleted=false AND ("
         "   (t.created_at >= $2::date AND t.created_at < ($3::date + 1))"
         "   OR (t.updated_at >= $2::date AND t.updated_at < ($3::date + 1))"
         "   OR (t.completed_date >= $2 AND t.completed_date <= $3)"
         "   OR EXISTS (SELECT 1 FROM task_progress tp WHERE tp.task_id=t.id"
-        "              AND tp.created_at >= $2::date AND tp.created_at < ($3::date + 1)))"
+        "              AND tp.created_at >= $2::date AND tp.created_at < ($3::date + 1))"
+        "   OR EXISTS (SELECT 1 FROM work_sessions ws WHERE ws.task_id=t.id"
+        "              AND ws.started_at >= $2::date AND ws.started_at < ($3::date + 1)))"
         " ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,"
         " t.priority DESC, t.created_at",
         org_id, r_fri, r_thu)
 
     plan_rows = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.department, t.created_at,"
-        " t.estimated_hours, t.actual_hours, p.username AS owner"
-        " FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+        " t.estimated_hours, t.actual_hours, t.user_id, t.due_date"
+        " FROM tasks t"
         " WHERE t.org_id=$1 AND t.is_deleted=false AND t.is_archived=false"
         " AND t.status <> 'completed'"
         " ORDER BY t.priority DESC, t.department, t.created_at",
@@ -366,13 +397,40 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
         org_id, r_fri, r_thu)
 
     declined = await conn.fetch(
-        "SELECT a.task_id, t.title, p.username FROM task_assignees a"
-        " JOIN tasks t ON t.id=a.task_id LEFT JOIN profiles p ON p.id=a.user_id"
+        "SELECT a.task_id, t.title, a.user_id FROM task_assignees a"
+        " JOIN tasks t ON t.id=a.task_id"
         " WHERE t.org_id=$1 AND a.accepted=false", org_id)
 
-    users = await conn.fetch(
+    # Work sessions in the report window — the overtime evidence.
+    sessions = await conn.fetch(
+        "SELECT user_id, started_at, ended_at, hours FROM work_sessions"
+        " WHERE org_id=$1 AND started_at >= $2::date AND started_at < ($3::date + 1)",
+        org_id, r_fri, r_thu)
+
+    overdue_rows = await conn.fetch(
+        "SELECT t.id, t.title, t.status, t.priority, t.due_date, t.user_id FROM tasks t"
+        " WHERE t.org_id=$1 AND t.is_deleted=false AND t.is_archived=false"
+        " AND t.due_date IS NOT NULL AND t.due_date <= $2 AND t.status <> 'completed'"
+        " ORDER BY t.due_date", org_id, r_thu)
+
+    users = await uconn.fetch(
         "SELECT id, username, full_name FROM profiles"
         " WHERE org_id=$1 AND is_active AND NOT is_deleted ORDER BY full_name", org_id)
+    # Owner names for ALL referenced profiles (incl. deactivated) — merged
+    # app-side because profiles live in the other database.
+    names = {str(r["id"]): r["username"]
+             for r in await uconn.fetch(
+                 "SELECT id, username FROM profiles WHERE org_id=$1", org_id)}
+
+    # Per-person regular/overtime/night/weekend buckets.
+    hours_by_person: dict[str, dict] = {}
+    for sess in sessions:
+        uname = names.get(str(sess["user_id"]), "—")
+        b = hours_by_person.setdefault(
+            uname, {"regular": 0.0, "overtime": 0.0, "night": 0.0, "weekend": 0.0, "total": 0.0})
+        h = session_hours(sess)
+        b[classify(sess["started_at"])] += h
+        b["total"] += h
 
     # Resolve — and auto-provision — the calendar week for each window.
     # Nothing else in the app creates calendar_weeks rows ahead of time, so a
@@ -386,6 +444,7 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
     def _t(row):
         d = dict(row)
         d["id"] = str(d["id"])
+        d["owner"] = names.get(str(d.pop("user_id")), "—")
         return d
 
     rtasks = [_t(r) for r in report_tasks]
@@ -407,7 +466,12 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
         "report_tasks": rtasks, "plan_tasks": ptasks,
         "created_count": created_count, "completed_count": completed_count,
         "notes_count": notes_count, "comments_count": comments_count,
-        "declined": [dict(a, task_id=str(a["task_id"])) for a in declined],
+        "declined": [{"task_id": str(a["task_id"]), "title": a["title"],
+                      "username": names.get(str(a["user_id"]), "—")} for a in declined],
+        "hours_by_person": hours_by_person,
+        "overdue": [{"id": str(o["id"]), "title": o["title"], "status": o["status"],
+                     "priority": o["priority"], "due_date": o["due_date"].isoformat(),
+                     "owner": names.get(str(o["user_id"]), "—")} for o in overdue_rows],
         "users": [dict(u, id=str(u["id"])) for u in users],
     }
 
@@ -477,9 +541,9 @@ async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, use
 
 
 # ── Per-org orchestration ───────────────────────────────────────────────────
-async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: bool):
+async def process_org(conn, uconn, client, org_id, org_name, ref: date, skip_letta: bool):
     report_win, plan_win = compute_windows(ref)
-    snap = await gather(conn, org_id, org_name, report_win, plan_win)
+    snap = await gather(conn, uconn, org_id, org_name, report_win, plan_win)
     digest = build_digest(snap)
 
     report_agent, plan_agent = (None, None) if skip_letta else await resolve_agents(conn, org_id)
@@ -572,22 +636,24 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
 
 
 async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:
-    if not ADMIN_DSN:
-        raise SystemExit("ADMIN_DATABASE_URL not set")
-    conn = await asyncpg.connect(ADMIN_DSN)
+    if not USERS_ADMIN_DSN or not TASKS_ADMIN_DSN:
+        raise SystemExit("USERS_ADMIN_DATABASE_URL / TASKS_ADMIN_DATABASE_URL not set")
+    uconn = await asyncpg.connect(USERS_ADMIN_DSN)
+    conn = await asyncpg.connect(TASKS_ADMIN_DSN)
     client = None if skip_letta else httpx.AsyncClient(timeout=60)
     try:
-        orgs = await conn.fetch("SELECT id, name FROM organizations"
-                                + (" WHERE id=$1" if only_org else ""),
-                                *([only_org] if only_org else []))
+        orgs = await uconn.fetch("SELECT id, name FROM organizations"
+                                 + (" WHERE id=$1" if only_org else ""),
+                                 *([only_org] if only_org else []))
         log(f"processing {len(orgs)} org(s) for ref={ref.isoformat()} skip_letta={skip_letta}")
         for o in orgs:
             try:
-                await process_org(conn, client, o["id"], o["name"], ref, skip_letta)
+                await process_org(conn, uconn, o["id"], o["name"], ref, skip_letta)
             except Exception as e:
                 log(f"org {o['name']} FAILED: {type(e).__name__}: {e}")
     finally:
         await conn.close()
+        await uconn.close()
         if client:
             await client.aclose()
 

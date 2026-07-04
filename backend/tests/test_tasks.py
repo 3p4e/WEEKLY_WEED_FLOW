@@ -5,7 +5,7 @@ client-side, but this pins the backend's side of that contract: every
 status the frontend can send must round-trip through PATCH unchanged."""
 import pytest
 
-from app.db import admin_pool
+from app.db import tasks_admin_pool
 
 ALL_STATUSES = ["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 
@@ -33,7 +33,7 @@ async def test_patch_week_id_moves_task_to_a_different_week(client, admin_header
     call a no-op GF.store.save(), so 'rolled over' tasks silently reverted
     to their original week on reload. week_id/week_start must be real,
     persisted PATCH fields, same as status/priority/etc."""
-    await admin_pool().execute(
+    await tasks_admin_pool().execute(
         "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
         " ($1,2026,1,'2026-01-05','2026-01-11'), ($1,2026,2,'2026-01-12','2026-01-18')", org["org_id"])
     r = await client.get("/weeks", headers=admin_headers)

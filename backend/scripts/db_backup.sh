@@ -9,16 +9,24 @@ set -eu
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-PGHOST="${PGHOST:-db}"
 PGUSER="${PGUSER:-postgres}"
-PGDATABASE="${PGDATABASE:-weekly_weed_flow}"
+# Two databases in two containers. The dumps run back-to-back, NOT atomically
+# across the pair — a restore of both files can be up to a few seconds apart
+# in state. Acceptable for this app (see docs/BACKUP.md).
+USERS_PGHOST="${USERS_PGHOST:-wwf-db-users}"
+TASKS_PGHOST="${TASKS_PGHOST:-wwf-db-tasks}"
+USERS_PGDATABASE="${USERS_PGDATABASE:-wwf_users}"
+TASKS_PGDATABASE="${TASKS_PGDATABASE:-wwf_tasks}"
 
 dump_once() {
   ts=$(date -u +%Y%m%dT%H%M%SZ)
-  out="$BACKUP_DIR/weekly_weed_flow_${ts}.sql.gz"
-  echo "[db_backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) dumping -> $out"
-  pg_dump -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" --format=plain | gzip > "$out"
-  find "$BACKUP_DIR" -name 'weekly_weed_flow_*.sql.gz' -mtime "+${RETENTION_DAYS}" -print -delete
+  for pair in "users:$USERS_PGHOST:$USERS_PGDATABASE" "tasks:$TASKS_PGHOST:$TASKS_PGDATABASE"; do
+    which=${pair%%:*}; rest=${pair#*:}; host=${rest%%:*}; db=${rest#*:}
+    out="$BACKUP_DIR/wwf_${which}_${ts}.sql.gz"
+    echo "[db_backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) dumping $db@$host -> $out"
+    pg_dump -h "$host" -U "$PGUSER" -d "$db" --format=plain | gzip > "$out"
+  done
+  find "$BACKUP_DIR" -name 'wwf_*.sql.gz' -mtime "+${RETENTION_DAYS}" -print -delete
   echo "[db_backup] done"
 }
 
