@@ -139,6 +139,34 @@
   .mobile-bottombar, .mobile-fab { display: none !important; }
 }
 
+/* ════════════ REPORT + AUDIT views on phones (~390px) ════════════
+   Tables and wide rows scroll horizontally inside their own container
+   instead of squishing columns into unreadable slivers. */
+@media (max-width: 600px) {
+  /* Report: hours-by-person table keeps its natural width and scrolls */
+  #report-view .report-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #report-view table { min-width: 520px; }
+  /* Report toolbar wraps instead of overflowing */
+  #report-view h2 { font-size: 16px !important; }
+  /* Summary stat cards: 2-up grid instead of auto-fit slivers */
+  #report-view > div[style*="grid-template-columns"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Time band scrolls sideways (24h × 7d doesn't fit 390px) */
+  #report-view div[style*="overflow-x:auto"] { -webkit-overflow-scrolling: touch; }
+
+  /* Audit: entry summary rows wrap onto two lines instead of clipping */
+  .audit-entry summary { flex-wrap: wrap; row-gap: 4px; padding: 10px 12px !important; }
+  .audit-entry summary > span[style*="min-width:148px"] { min-width: 0 !important; flex-basis: 100%; }
+  /* Audit field-level diffs: label stacks above the value */
+  .audit-entry details > div > div[style*="grid-template-columns"],
+  .audit-entry div[style*="grid-template-columns:170px"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Audit toolbar: filters go full-width */
+  .audit-select { flex: 1 1 100%; }
+}
+
 /* ════════════ Print-friendly tweaks ════════════ */
 @media print {
   .sidebar, .header, .mobile-bottombar, .mobile-fab, .overlay { display: none !important; }

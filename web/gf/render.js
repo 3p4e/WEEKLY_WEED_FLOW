@@ -125,12 +125,20 @@ GF.render = {
     const cur = GF.visibleTasks(GF.state.selWeek);
     const nextId = GF.state.selWeek + 1;
     const nxt = GF.weekTasks(nextId);
+    // Tags filter: every tag on this week's tasks, filtered client-side.
+    const allTags = [...new Set(GF.weekTasks(GF.state.selWeek).flatMap(t => t.tags || []))].sort();
+    const tagFilter = (allTags.length || GF.state.tagFilter) ? `
+      <select id="tag-filter" class="tag-filter" onchange="GF.setTagFilter(this.value)">
+        <option value="">${GF.t('all_tags')}</option>
+        ${allTags.map(tg => `<option value="${GF.esc(tg)}" ${GF.state.tagFilter === tg ? 'selected' : ''}>#${GF.esc(tg)}</option>`).join('')}
+      </select>` : '';
     GF.$('panels').innerHTML = `
       <div class="panel">
         <div class="panel-head">
           <span class="ttl">${GF.state.selWeek === GF.calendar.todayId ? GF.t('this_week') : 'Week ' + GF.calendar.weeks[GF.state.selWeek].weekNum}</span>
           <span class="cnt">${cur.length}</span>
           <div class="spacer"></div>
+          ${tagFilter}
           <button class="btn btn-sm" onclick="GF.export.open('report')">${GF.icon('forward','icon')}${GF.t('report')}</button>
           <button class="btn btn-sm" onclick="GF.ai.summary('report')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_summary')}</button>
           <button class="btn btn-sm" onclick="GF.rollover()">${GF.icon('forward','icon')}${GF.t('rollover')}</button>
@@ -159,6 +167,16 @@ GF.render = {
     const prog = GF.progress(t);
     const daytags = (t.days || []).map(x => `<span class="daytag">${GF.dayLabel(x)}</span>`).join('');
     const meta = [t.id].filter(Boolean);
+    // v2 badges: due date (danger when overdue + not done), type chip,
+    // reference code, subtask progress, logged session hours, tags.
+    const overdue = t.due && t.status !== 'done' && t.due < new Date().toISOString().slice(0, 10);
+    const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
+      ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
+    const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
+    const refCode = t.ref ? `<span class="ref-code">${GF.esc(t.ref)}</span>` : '';
+    const subProg = t.subCount > 0 ? `<span class="sub-prog" title="${GF.t('subtasks')}">${GF.icon('check', 'icon')}${t.subDone || 0}/${t.subCount}</span>` : '';
+    const sessHours = t.sessionHours > 0 ? `<span class="sess-hours" title="${GF.t('log_work')}">${GF.icon('clock', 'icon')}${t.sessionHours}h</span>` : '';
+    const tagChips = (t.tags || []).map(tg => `<span class="tag-chip">#${GF.esc(tg)}</span>`).join('');
     const head = `
       <div class="card-head" onclick="GF.toggleExpand('${t.id}')">
         <button class="check ${t.status === 'done' ? 'done' : ''}" onclick="event.stopPropagation();GF.toggleDone('${t.id}')">
@@ -166,7 +184,8 @@ GF.render = {
         <div style="flex:1;min-width:0">
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}">${GF.esc(GF.depName(t.dept))}</span>
-            ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}</div>
+            ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
+            ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${tagChips}</div>
         </div>
         <div class="daytags">${daytags}</div>
         ${GF.avatars([t.owner, ...(t.helpers || [])], 26)}
@@ -206,10 +225,14 @@ GF.render = {
         ${deps ? `<div class="sec-label">${GF.icon('link','icon')}${GF.t('deps')}</div><div class="deps">${deps}</div>` : ''}
         ${handoff}
         <div class="card-actions">
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">${GF.icon('clock','icon','var(--blue)')}${GF.t('log_work')}</button>
+          <button class="btn btn-sm" onclick="GF.openAdd(${JSON.stringify(t.weekId)},'${t.id}')">${GF.icon('plus','icon')}${GF.t('add_subtask')}</button>
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${t.id}')">${GF.icon('settings','icon')}${GF.t('edit')}</button>
           <button class="btn btn-sm" onclick="GF.ai.paraphraseTask('${t.id}')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('paraphrase')}</button>
           <div class="track" style="max-width:160px;margin:0 6px"><span style="width:${prog}%;background:${d.color}"></span></div>
           <span class="mono" style="font-size:12px;color:var(--ink-2);font-weight:600">${prog}%</span>
           <div class="spacer"></div>
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
           <button class="btn btn-sm btn-danger" onclick="GF.deleteTask('${t.id}')">${GF.icon('trash','icon')}${GF.t('delete')}</button>
         </div>
       </div>`;

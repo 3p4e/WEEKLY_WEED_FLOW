@@ -219,6 +219,65 @@ GF.WWF.renderReport = () => {
 
   const band = isR ? GF.WWF._renderTimeBand(d.time_band) : '';
 
+  // ── Hours by time class (per person, from work_sessions) ──
+  const HB_COLORS = { regular: '#15A86B', overtime: '#FF7A1A', night: '#7A5BE0', weekend: '#E5484D' };
+  let hoursByPerson = '';
+  if (isR && d.hours_by_person && d.hours_by_person.length) {
+    const cell = (v, cls) => {
+      const hot = cls !== 'regular' && v > 0;
+      return `<td class="hb-${cls}${hot ? ' nonzero' : ''}" style="padding:8px 10px;text-align:right;font-family:var(--mono);font-size:12.5px;${hot ? `color:${HB_COLORS[cls]};font-weight:800;background:${HB_COLORS[cls]}14` : 'color:var(--ink-2)'}">${v || '—'}</td>`;
+    };
+    hoursByPerson = `<div style="margin:18px 0" id="report-hours">
+      <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Hours by time class', 'Часови по временска класа')}</div>
+      <div class="report-scroll" style="overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:11px">
+        <table style="width:100%;border-collapse:collapse;min-width:520px">
+          <thead><tr style="border-bottom:1px solid var(--line)">
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px">${AL('Person', 'Лице')}</th>
+            <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--ink-3)">${AL('Regular', 'Редовно')}</th>
+            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.overtime}">${AL('Overtime', 'Прекувремено')}</th>
+            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.night}">${AL('Night', 'Ноќно')}</th>
+            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.weekend}">${AL('Weekend', 'Викенд')}</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--ink-3)">${AL('Total', 'Вкупно')}</th>
+          </tr></thead>
+          <tbody>${d.hours_by_person.map(p => `
+            <tr style="border-bottom:1px solid var(--line-2)">
+              <td style="padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap">${GF.esc(p.full_name || p.username || p.user_id)}</td>
+              ${cell(p.regular, 'regular')}${cell(p.overtime, 'overtime')}${cell(p.night, 'night')}${cell(p.weekend, 'weekend')}
+              <td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12.5px;font-weight:800;color:var(--ink)">${p.total}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── Overdue (due_date passed, not completed) ──
+  let overdueList = '';
+  if (isR && d.overdue && d.overdue.length) {
+    const today = new Date();
+    overdueList = `<div style="margin:18px 0" id="report-overdue">
+      <div style="font-weight:700;font-size:14px;color:#E5484D;margin-bottom:8px">${GF.icon('flag', 'icon', '#E5484D')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
+      ${d.overdue.map(t => {
+        const daysLate = Math.max(1, Math.floor((today - new Date(t.due_date)) / 86400000));
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
+          <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
+          <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>
+          <span style="font-size:11px;font-weight:800;color:#E5484D;white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // ── Task-type breakdown (one line of chips) ──
+  let typeLine = '';
+  if (d.task_types && Object.keys(d.task_types).length) {
+    typeLine = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:14px 0" id="report-types">
+      <span style="font-weight:700;font-size:13px;color:var(--ink)">${GF.t('task_type')}:</span>
+      ${Object.entries(d.task_types).sort((a, b) => b[1] - a[1]).map(([tt, n]) =>
+        `<span style="font-size:11.5px;font-weight:700;background:var(--violet-soft);color:var(--violet);padding:3px 10px;border-radius:999px">${GF.esc(GF.taskTypeLabel(tt))} · ${n}</span>`).join('')}
+    </div>`;
+  }
+
   let depts = '';
   if (d.departments.length) {
     depts = `<div style="margin:18px 0">
@@ -265,7 +324,7 @@ GF.WWF.renderReport = () => {
     </div>` : '';
 
   const pinsPanel = GF.WWF._renderPinsPanel();
-  v.innerHTML = toolbar + period + cards + band + pinsPanel + depts + taskList + ai;
+  v.innerHTML = toolbar + period + cards + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
 };
 
 /* nav item for the report/plan view, above Audit Trail */

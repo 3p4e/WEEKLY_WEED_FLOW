@@ -65,6 +65,10 @@ GF.I18N = {
     view_only:'View only', your_role:'Your role', drag_hint:'Drag cards between columns to change status',
     est_hours:'Estimated hours', hours_spent:'Hours spent', ai_weekly_report:'AI Weekly Report',
     ai_next_week_plan:'AI Next-Week Plan', no_ai_report:'No AI report generated yet.',
+    due_date:'Due date', task_type:'Type', reference_code:'Reference code', recurrence:'Repeats',
+    rec_none:'Does not repeat', rec_daily:'Daily', rec_weekly:'Weekly', rec_monthly:'Monthly',
+    log_work:'Log work', add_subtask:'Add subtask', archive:'Archive', outcome:'Outcome',
+    all_tags:'All tags', overdue:'Overdue',
   },
   mk: {
     my_week:'Моја недела', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -91,5 +95,21 @@ GF.I18N = {
     view_only:'Само преглед', your_role:'Ваша улога', drag_hint:'Повлечете картички меѓу колони за промена на статус',
     est_hours:'Проценети часови', hours_spent:'Потрошени часови', ai_weekly_report:'АИ неделен извештај',
     ai_next_week_plan:'АИ план за следна недела', no_ai_report:'Сè уште нема генериран АИ извештај.',
+    due_date:'Рок (датум)', task_type:'Тип', reference_code:'Референтен код', recurrence:'Се повторува',
+    rec_none:'Не се повторува', rec_daily:'Дневно', rec_weekly:'Неделно', rec_monthly:'Месечно',
+    log_work:'Внеси работа', add_subtask:'Додај под-задача', archive:'Архивирај', outcome:'Резултат',
+    all_tags:'Сите ознаки', overdue:'Задоцнето',
   },
+};
+
+// v2 task-type labels (backend enum values — kept short for card chips)
+GF.TASK_TYPE_LABELS = {
+  capa:       { en: 'CAPA',       mk: 'CAPA' },
+  sop:        { en: 'SOP',        mk: 'СОП' },
+  validation: { en: 'Validation', mk: 'Валидација' },
+  document:   { en: 'Document',   mk: 'Документ' },
+  lab:        { en: 'Lab',        mk: 'Лабораторија' },
+  meeting:    { en: 'Meeting',    mk: 'Состанок' },
+  admin:      { en: 'Admin',      mk: 'Админ' },
+  other:      { en: 'Other',      mk: 'Друго' },
 };

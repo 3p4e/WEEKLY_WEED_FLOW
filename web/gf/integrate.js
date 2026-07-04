@@ -44,9 +44,15 @@ GF.WWF.transform = (t) => ({
   weekId: GF.WWF.weekIndex(t),
   tags: t.tags || [], deps: [],
   notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n })),
-  blocker: '', completed_date: t.completed_date, week_start: t.week_start,
+  blocker: t.blocker_reason || '', completed_date: t.completed_date, week_start: t.week_start,
   est: t.estimated_hours != null ? Number(t.estimated_hours) : null,
   act: t.actual_hours != null ? Number(t.actual_hours) : null,
+  // v2 model
+  type: t.task_type || 'other', ref: t.reference_code || '',
+  due: t.due_date || null, recurrence: t.recurrence || null,
+  outcome: t.outcome || '', archived: !!t.is_archived, parentId: t.parent_id || null,
+  sessionHours: t.session_hours != null ? Number(t.session_hours) : 0,
+  subCount: Number(t.subtask_count || 0), subDone: Number(t.subtask_done_count || 0),
 });
 
 GF.WWF.weekIndex = (t) => {
@@ -225,7 +231,20 @@ GF.WWF.install = () => {
   // task deleted/reassigned, network error) so the UI never shows an unsaved
   // status as if it were persisted.
   const pushStatus = async (id, prevStatus) => { const t = GF.task(id); if (!t) return;
-    try { await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' }); }
+    try {
+      const resp = await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' });
+      if (resp && resp.completed_date !== undefined) t.completed_date = resp.completed_date;
+      // Completing a recurring task auto-creates its next instance server-side.
+      if (t.status === 'done' && resp && resp.next_instance) {
+        GF.state.tasks.push(GF.WWF.transform(resp.next_instance));
+        GF.render.all();
+        GF.toast(GF.state.lang === 'mk' ? 'Следната повторлива задача е креирана ✓' : 'Next recurring task created ✓', 'success');
+      }
+      // Non-blocking follow-up prompts (defined in worklog.js, loaded later):
+      // outcome note on completion, blocker reason when stuck.
+      if (t.status === 'done' && GF.WWF.promptOutcome) GF.WWF.promptOutcome(id);
+      else if (t.status === 'stuck' && GF.WWF.promptBlocker) GF.WWF.promptBlocker(id);
+    }
     catch(e){ if (prevStatus !== undefined) { t.status = prevStatus; GF.render.panels(); } GF.toast(e.message || 'Save failed','error'); } };
   GF.cycleStatus = (id) => { const t = GF.task(id); const prev = t && t.status; origCycle(id); pushStatus(id, prev); };
   GF.toggleDone  = (id) => { const t = GF.task(id); const prev = t && t.status; origToggle(id); pushStatus(id, prev); };
@@ -248,14 +267,48 @@ GF.WWF.install = () => {
     const estRaw = parseFloat(GF.$('add-est')?.value);
     // >= 0, not > 0: a deliberate zero-hour estimate is a value, not "no estimate".
     const estHours = Number.isFinite(estRaw) && estRaw >= 0 ? estRaw : null;
+    // v2 fields (due date, typology, recurrence)
+    const dueDate = GF.$('add-due')?.value || null;
+    const refCode = (GF.$('add-ref')?.value || '').trim() || null;
+    const recFreq = GF.$('add-rec')?.value || '';
+    const recurrence = recFreq ? { freq: recFreq, interval: 1 } : null;
+
+    // Edit mode (openEdit in worklog.js sets GF._editTask) → PATCH instead of POST.
+    if (GF._editTask) {
+      const id = GF._editTask, t = GF.task(id);
+      try {
+        const patched = await GF.API.updateTask(id, {
+          title, priority: P_OUT[GF.$('add-pr').value]||'normal',
+          department_id: deptId, days: days.length?days:[GF.todayDay],
+          estimated_hours: estHours, due_date: dueDate,
+          task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
+          recurrence,
+        });
+        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: t.helpers, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
+          Object.assign(t, GF.WWF.transform(patched), keep); }
+        GF._editTask = null;
+        GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
+      } catch(e) { GF.toast('Save failed: '+e.message,'error'); }
+      return;
+    }
+
     try {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
         week_start: wk ? wk.start.toISOString().slice(0,10) : null, days: days.length?days:[GF.todayDay],
         estimated_hours: estHours,
+        due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
+        reference_code: refCode, recurrence, parent_id: GF._addParent || null,
       });
-      GF.state.tasks.push(GF.WWF.transform(created));
+      if (GF._addParent) {
+        // Subtasks never render as top-level cards — bump the parent's counter instead.
+        const parent = GF.task(GF._addParent);
+        if (parent) parent.subCount = (parent.subCount || 0) + 1;
+        GF._addParent = null;
+      } else {
+        GF.state.tasks.push(GF.WWF.transform(created));
+      }
       GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('create_task')+' ✓','success');
     } catch(e) { GF.toast('Create failed: '+e.message,'error'); }
   };

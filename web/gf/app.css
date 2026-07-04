@@ -284,3 +284,25 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
   .search{max-width:none}
   .lang-toggle,.header .hide-sm{display:none}
 }
+
+/* ── v2 task badges & chips (due date, type, ref code, subtasks, hours, tags) ── */
+.card-meta .icon{width:12px;height:12px}
+.due-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surface-3);color:var(--ink-2);white-space:nowrap}
+.due-badge.overdue{background:var(--red-soft);color:var(--red-fg)}
+.due-badge.overdue .icon{stroke:var(--red-fg)}
+.type-chip{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border-radius:6px;background:var(--violet-soft);color:var(--violet);white-space:nowrap}
+.ref-code{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink-2);background:var(--surface-3);padding:2px 6px;border-radius:5px;white-space:nowrap}
+.sub-prog{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;color:var(--blue);white-space:nowrap}
+.sub-prog .icon{stroke:var(--blue)}
+.sess-hours{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;color:var(--green-fg);white-space:nowrap}
+.sess-hours .icon{stroke:var(--green-fg)}
+.tag-chip{font-size:10.5px;font-weight:700;color:var(--blue-700);background:var(--blue-soft);padding:2px 7px;border-radius:999px;white-space:nowrap}
+.tag-filter{padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:12.5px;font-weight:600;color:var(--ink-2);font-family:var(--font)}
+
+/* Work-session list rows (worklog modal) */
+.sess-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;margin-bottom:6px;font-size:12.5px}
+.sess-class{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.sess-class.regular{background:var(--green-soft);color:var(--green-fg)}
+.sess-class.overtime{background:var(--orange-soft);color:var(--orange-700)}
+.sess-class.night{background:var(--violet-soft);color:var(--violet)}
+.sess-class.weekend{background:var(--red-soft);color:var(--red-fg)}

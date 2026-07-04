@@ -38,7 +38,7 @@ GF.state = {
   aiBase: localStorage.getItem('gf_ai_base') || '',
   aiProvider: localStorage.getItem('gf_ai_provider') || 'builtin',
   view: localStorage.getItem('gf_view') || 'mywork',
-  selWeek: 0, selDay: 'All', deptFilter: null, search: '',
+  selWeek: 0, selDay: 'All', deptFilter: null, tagFilter: null, search: '',
   tasks: [], expanded: new Set(), teleOpen: false,
 };
 
@@ -88,6 +88,7 @@ GF.depName = (id) => { const d = GF.dep(id); return GF.state.lang === 'mk' ? d.m
 GF.statusLabel = (s) => GF.STATUS[s] ? GF.STATUS[s][GF.state.lang] : s;
 GF.prLabel = (p) => GF.PRIORITY[p] ? GF.PRIORITY[p][GF.state.lang] : p;
 GF.dayLabel = (d) => { const i = GF.DAYS.indexOf(d); return GF.state.lang === 'mk' && i >= 0 ? GF.DAYS_MK[i] : d; };
+GF.taskTypeLabel = (t) => { const l = GF.TASK_TYPE_LABELS && GF.TASK_TYPE_LABELS[t]; return l ? (l[GF.state.lang] || l.en) : t; };
 
 // ── Calendar ──
 GF.calendar = { weeks: [], todayId: 0 };
@@ -185,15 +186,17 @@ GF.toggleDone = (id) => {
 // ── Filters / nav ──
 GF.weekTasks = (weekId) => GF.state.tasks.filter(t => t.weekId === weekId && !t.parentId);
 GF.visibleTasks = (weekId) => {
-  const { selDay, deptFilter, search, user } = GF.state;
+  const { selDay, deptFilter, tagFilter, search, user } = GF.state;
   const q = search.trim().toLowerCase();
   return GF.weekTasks(weekId).filter(t => {
     if (selDay !== 'All' && !(t.days || []).includes(selDay)) return false;
     if (deptFilter && t.dept !== deptFilter) return false;
+    if (tagFilter && !(t.tags || []).includes(tagFilter)) return false;
     if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;
     return true;
   });
 };
+GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(); };
 
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };
 GF.setView = (v) => {
