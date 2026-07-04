@@ -1,4 +1,5 @@
 """P1 — account provisioning, forced first-login password change, RBAC gates."""
+from app.db import admin_pool
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -101,6 +102,25 @@ async def test_non_admin_can_read_directory(client, admin_headers):
     assert len(r.json()) >= 2  # the admin + this new user, at least
     assert "is_active" not in r.json()[0]  # management-only field must not leak here
     assert "must_change_password" not in r.json()[0]
+
+
+async def test_directory_excludes_deactivated_accounts(client, admin_headers, org):
+    """A deactivated (is_active=false) account must vanish from the
+    /auth/directory roster — it feeds avatars and assignee pickers, so an
+    inactive account would otherwise remain assignable forever. /users (the
+    management view) is where inactive accounts stay visible."""
+    user, _ = await create_user(client, admin_headers, full_name="Soon Inactive")
+    await admin_pool().execute(
+        "UPDATE profiles SET is_active=false WHERE id=$1", user["id"])
+
+    r = await client.get("/auth/directory", headers=admin_headers)
+    assert r.status_code == 200
+    assert user["username"] not in [u["username"] for u in r.json()]
+
+    r = await client.get("/auth/users", headers=admin_headers)
+    assert r.status_code == 200
+    inactive = next(u for u in r.json() if u["username"] == user["username"])
+    assert inactive["is_active"] is False
 
 
 async def test_admin_cannot_delete_own_account(client, admin_headers, org):

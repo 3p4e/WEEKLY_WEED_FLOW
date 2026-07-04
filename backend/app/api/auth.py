@@ -168,14 +168,17 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("A
 
 @router.get("/directory")
 async def directory(user: dict = Depends(require_password_set)):
-    """Read-only name/avatar roster for every org member — no management fields.
-    Unlike /users (ADMIN/DEPT_HEAD-gated, includes is_active/must_change_password),
-    this is safe for any authenticated user so avatars/assignee pickers work for
-    non-elevated roles too."""
+    """Read-only name/avatar roster for every ACTIVE org member — no management
+    fields. Unlike /users (ADMIN/DEPT_HEAD-gated, includes is_active/
+    must_change_password), this is safe for any authenticated user so avatars/
+    assignee pickers work for non-elevated roles too. Deactivated accounts are
+    excluded — same rule the weekly snapshot's roster query uses — so they
+    can't be picked as assignees; /users still shows them for management."""
     async with rls(user) as c:
         rows = await c.fetch(
             "SELECT id,username,full_name,role,department_id,function_role"
-            " FROM profiles WHERE is_deleted=false AND org_id=$1 ORDER BY full_name", user["org_id"])
+            " FROM profiles WHERE is_deleted=false AND is_active AND org_id=$1"
+            " ORDER BY full_name", user["org_id"])
     return [{"id": str(r["id"]), "username": r["username"], "full_name": r["full_name"],
              "role": r["role"], "department_id": str(r["department_id"]) if r["department_id"] else None,
              "function_role": r["function_role"]} for r in rows]
