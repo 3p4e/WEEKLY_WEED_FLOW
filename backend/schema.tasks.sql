@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict LL7k5Fxy9CQWuwayc3cdy15u90DUqhn0te0sYidXOuaNU75Hh4XT06T7R8YJNIC
+\restrict 4OGwOMIdDtbWhrbsH5J6SFtR917mXvFvnoGiEWlByhNsvtFDX1xBU5bbuIFgKyT
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -350,6 +350,7 @@ CREATE TABLE public.tasks (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    external_ref text,
     CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text]))),
     CONSTRAINT tasks_task_type_check CHECK ((task_type = ANY (ARRAY['capa'::text, 'sop'::text, 'validation'::text, 'document'::text, 'lab'::text, 'meeting'::text, 'admin'::text, 'other'::text])))
@@ -535,6 +536,13 @@ CREATE INDEX tasks_dept_idx ON public.tasks USING btree (department_id);
 --
 
 CREATE INDEX tasks_due_idx ON public.tasks USING btree (org_id, due_date) WHERE (due_date IS NOT NULL);
+
+
+--
+-- Name: tasks_org_external_ref_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX tasks_org_external_ref_key ON public.tasks USING btree (org_id, external_ref) WHERE ((external_ref IS NOT NULL) AND (is_deleted = false));
 
 
 --
@@ -911,5 +919,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict LL7k5Fxy9CQWuwayc3cdy15u90DUqhn0te0sYidXOuaNU75Hh4XT06T7R8YJNIC
+\unrestrict 4OGwOMIdDtbWhrbsH5J6SFtR917mXvFvnoGiEWlByhNsvtFDX1xBU5bbuIFgKyT
 

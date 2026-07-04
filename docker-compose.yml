@@ -7,9 +7,11 @@
 #              + its own hash-chained audit trail
 #    backend   FastAPI API (asyncpg, JWT, RLS) on :8000 — internal only
 #    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
-#              /auth /departments /weeks /tasks /sessions /ai /audit /reports
-#              to the backend; published over HTTPS by Traefik (Let's Encrypt).
+#              /auth /departments /weeks /tasks /sessions /capture /ai /audit
+#              /reports to the backend; published over HTTPS by Traefik.
 #    db-backup rotating local pg_dump backups of BOTH databases — docs/BACKUP.md
+#    capture-mcp remote MCP connector for claude.ai/Cowork auto-delivery of
+#              task captures (secret path, single-purpose token)
 #
 #  The always-on Letta agent layer (AI functions) runs in its own pre-existing
 #  stack and is reached over host.docker.internal — it is intentionally NOT
@@ -110,6 +112,30 @@ services:
       - weekly_weed_flow_backups:/backups
     entrypoint: ["/bin/sh", "/usr/local/bin/db_backup.sh"]
     networks: [internal]
+    restart: unless-stopped
+
+  # Capture connector — remote MCP server claude.ai/Cowork chats call to
+  # deliver Master-Capture-Prompt output straight into /capture/import.
+  # Reachable only at a secret path behind Traefik TLS; holds a single
+  # narrowly-scoped token (valid only on /capture/import). Deployment of
+  # this public-but-secret-path service was explicitly user-approved.
+  capture-mcp:
+    build: ./connector
+    image: wwf-capture-mcp:latest
+    container_name: wwf-capture-mcp
+    depends_on: [backend]
+    environment:
+      - WWF_IMPORT_URL=http://weekly_weed_flow-backend-1:8000/capture/import
+      - CAPTURE_IMPORT_TOKEN=${CAPTURE_IMPORT_TOKEN:?set in .env}
+      - MCP_PATH=${CAPTURE_MCP_PATH:?set in .env}
+    networks: [internal, traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_network"
+      - "traefik.http.routers.wwfmcp.rule=Host(`${APP_HOST:-wwf.srv1231216.hstgr.cloud}`) && PathPrefix(`${CAPTURE_MCP_PATH:?set in .env}`)"
+      - "traefik.http.routers.wwfmcp.entrypoints=websecure"
+      - "traefik.http.routers.wwfmcp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wwfmcp.loadbalancer.server.port=8000"
     restart: unless-stopped
 
 networks:

@@ -117,6 +117,24 @@ Manual dispatch only. Add secrets `KVM4_HOST`, `KVM4_USER`, `KVM4_SSH_KEY` (a
 to `/opt/wwf` (preserving `.env`) and runs `docker compose up -d --build`. Note
 this **converges the live containers onto compose** — dispatch it deliberately.
 
+## Capture connector (wwf-capture-mcp)
+
+`connector/` is a one-tool remote MCP server (`submit_capture`) that
+claude.ai / Cowork chats call to deliver Master-Capture-Prompt output
+straight into `POST /capture/import`. Its security model — explicitly
+user-approved — is: reachable only at a secret random path
+(`CAPTURE_MCP_PATH`, e.g. `/mcp-<16 hex>`) behind Traefik TLS on the wwf
+host; it holds `CAPTURE_IMPORT_TOKEN`, a static credential the backend
+accepts ONLY on `/capture/import`, acting as `CAPTURE_IMPORT_USER`
+(qcm.blani); a small in-process rate limit caps abuse. Worst case if the
+URL leaks: junk task rows (auditable, deletable) — no reads, no other
+routes. Rotate by changing the token + path and recreating the container.
+
+Enable it in a Claude client: claude.ai → Settings → Connectors → Add
+custom connector → URL `https://<APP_HOST><CAPTURE_MCP_PATH>/mcp` (no
+auth) → then any chat running the capture prompt v2.1 delivers
+automatically. The Import view in WWF is the manual fallback.
+
 ## Routing (Traefik)
 
 The frontend carries the Traefik labels (host-mode Traefik):

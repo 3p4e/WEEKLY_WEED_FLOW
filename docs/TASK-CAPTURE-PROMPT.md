@@ -1,4 +1,4 @@
-# WWF Master Task-Capture Prompt (v2)
+# WWF Master Task-Capture Prompt (v2.1)
 
 A copy-paste prompt for **any** Claude surface — Claude chat, Claude Cowork,
 Claude Code, Claude Design, projects — that turns whatever you worked on in
@@ -19,11 +19,18 @@ This file contains **no credentials** and never should.
 ## How to use
 
 - **Session start (best):** paste the prompt below as your first message and
-  work normally; at the end say `capture tasks now`.
+  work normally; at the end say `capture tasks now`. Even better: put it in
+  a claude.ai **Project's instructions** once — every chat in that project
+  then tracks itself.
 - **Session end (sweep):** paste it at the end of any conversation and it
   sweeps everything discussed.
-- Either way the output is one fenced JSON block you paste back into a WWF
-  import (or hand to Claude Code with "import this into WWF").
+- **Delivery:** if the **WWF Capture connector** is enabled in claude.ai /
+  Cowork (Settings → Connectors → the custom `submit_capture` connector —
+  see docs/DEPLOY.md), the capture is sent to WWF automatically and you get
+  back the created/updated counts. Without it, the output is one fenced
+  JSON block you paste into WWF's **Import** view (or hand to Claude Code
+  with "import this into WWF"). Both paths hit the same idempotent
+  `/capture/import` — double delivery is harmless.
 
 ---
 
@@ -114,7 +121,7 @@ OUTPUT CONTRACT — one fenced json block, exactly this shape:
 {
   "session_meta": {
     "surface": "claude-chat | claude-code | cowork | design | other",
-    "prompt_version": "wwf-capture/v2",
+    "prompt_version": "wwf-capture/v2.1",
     "captured_at": "<ISO timestamp, Europe/Skopje>",
     "covers": {"from": "<ISO date>", "to": "<ISO date>"},
     "task_count": <n>
@@ -157,10 +164,14 @@ OUTPUT CONTRACT — one fenced json block, exactly this shape:
   ]
 }
 
-Do not wrap the JSON in commentary inside the block. Before the block, give
-me a 2-3 line plain-language summary (n created, n updated, total session
-hours captured, anything you were unsure about). If a rule and reality
-conflict, prefer accuracy and flag it in the summary.
+DELIVERY — after giving me a 2-3 line plain-language summary (n created,
+n updated, total session hours captured, anything you were unsure about):
+- If a tool named "submit_capture" is available in this conversation, call
+  it with the complete JSON object (as a JSON string) and report back the
+  created/updated/skipped counts it returns. Do not also print the JSON.
+- If no such tool is available, output the JSON as ONE fenced json block
+  with no commentary inside it — I will paste it into WWF's Import box.
+If a rule and reality conflict, prefer accuracy and flag it in the summary.
 ```
 
 ---
@@ -193,3 +204,7 @@ be traced to the prompt version that produced them.
 `reference_code`, `due_date`, `outcome`, `subtasks[]`, `links[]`,
 `recurrence_hint`. Department list, dedup (`external_ref`), enum
 discipline, and honest-nulls carried over unchanged.
+
+**v2 → v2.1:** added the DELIVERY step — call the `submit_capture`
+connector tool when present, emit the fenced JSON block when not. The JSON
+contract itself is unchanged; v2 captures import identically.

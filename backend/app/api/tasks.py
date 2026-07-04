@@ -40,7 +40,7 @@ async def weeks(user: dict = Depends(require_password_set)):
 
 _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
-    "t.task_type,t.reference_code,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
+    "t.task_type,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
     "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,"
     "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
 )
@@ -106,6 +106,7 @@ class TaskIn(BaseModel):
     priority: str = "medium"
     task_type: TaskType = "other"
     reference_code: str | None = None
+    external_ref: str | None = None
     blocker_reason: str | None = None
     recurrence: dict | None = None
     department: str | None = None
@@ -137,14 +138,14 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         row = await c.fetchrow(
             "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-            " task_type,reference_code,blocker_reason,recurrence,"
+            " task_type,reference_code,external_ref,blocker_reason,recurrence,"
             " department,department_id,week_id,week_start,due_date,days,tags,estimated_hours,"
             " created_by,updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$2,$2)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$2,$2)"
             " RETURNING *",
             user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
-            body.priority, body.task_type, body.reference_code, body.blocker_reason, body.recurrence,
-            body.department, body.department_id, body.week_id,
+            body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
+            body.recurrence, body.department, body.department_id, body.week_id,
             body.week_start, body.due_date, body.days, body.tags, body.estimated_hours,
         )
     return dict(row)
@@ -158,6 +159,7 @@ class TaskPatch(BaseModel):
     workflow_state: str | None = None
     task_type: TaskType | None = None
     reference_code: str | None = None
+    external_ref: str | None = None
     blocker_reason: str | None = None
     recurrence: dict | None = None
     outcome: str | None = None
@@ -177,8 +179,8 @@ class TaskPatch(BaseModel):
 # logged hours / a week assignment / a due date round-trips; None on a
 # NOT NULL column (title, status, ...) is still treated as not-provided.
 _NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours", "actual_hours",
-                        "due_date", "completed_date", "reference_code", "blocker_reason",
-                        "recurrence", "outcome"}
+                        "due_date", "completed_date", "reference_code", "external_ref",
+                        "blocker_reason", "recurrence", "outcome"}
 
 
 def _advance(d: date, rec: dict) -> date:
