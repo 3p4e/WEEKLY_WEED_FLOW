@@ -138,11 +138,11 @@ async def test_deleted_user_cannot_log_in(client, admin_headers):
 
 
 async def test_role_gated_endpoints_blocked_before_forced_password_change(client, admin_headers):
-    """A leaked/intercepted OTP for a freshly-provisioned DEPT_HEAD must not
+    """A leaked/intercepted OTP for a freshly-provisioned DEP_MGR must not
     grant role-gated actions (user management, audit) before the real user
     completes their mandatory first-login password change — require_role()
     must enforce the same gate as require_password_set(), not bypass it."""
-    dept_head, otp = await create_user(client, admin_headers, role="DEPT_HEAD")
+    dept_head, otp = await create_user(client, admin_headers, role="DEP_MGR")
     r = await client.post("/auth/login", json={"email": dept_head["username"], "password": otp})
     assert r.status_code == 200, r.text
     assert r.json()["user"]["must_change_password"] is True
@@ -167,8 +167,8 @@ async def test_role_gated_endpoints_blocked_before_forced_password_change(client
 
 
 async def test_dept_head_confined_to_own_department(client, admin_headers, org):
-    """_can_manage()'s DEPT_HEAD branch is only ever exercised via the
-    fixture's ADMIN in every other test — nothing pins that a DEPT_HEAD is
+    """_can_manage()'s DEP_MGR branch is only ever exercised via the
+    fixture's ADMIN in every other test — nothing pins that a DEP_MGR is
     actually confined to their own department, or barred from creating an
     ADMIN account."""
     from app.db import tasks_admin_pool
@@ -180,7 +180,7 @@ async def test_dept_head_confined_to_own_department(client, admin_headers, org):
     dept_ids = {r["code"]: str(r["id"]) for r in rows}
 
     r = await client.post("/auth/users", json={
-        "username": "depthead_a", "full_name": "Dept Head A", "role": "DEPT_HEAD",
+        "username": "depthead_a", "full_name": "Dept Head A", "role": "DEP_MGR",
         "department_id": dept_ids["a"],
     }, headers=admin_headers)
     assert r.status_code == 201, r.text

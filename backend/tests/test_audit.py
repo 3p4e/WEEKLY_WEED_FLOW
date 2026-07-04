@@ -53,9 +53,9 @@ async def test_non_elevated_cannot_read_audit(client, admin_headers):
 
 
 async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin_headers):
-    """DEPT_HEAD is elevated enough for /audit and /audit/tables, but /verify
+    """DEP_MGR is elevated enough for /audit and /audit/tables, but /verify
     is explicitly ADMIN-only (require_role("ADMIN"), not the _ELEVATED tuple)."""
-    user, otp = await create_user(client, admin_headers, role="DEPT_HEAD")
+    user, otp = await create_user(client, admin_headers, role="DEP_MGR")
     from tests.conftest import login_and_set_password
     token = await login_and_set_password(client, user["username"], otp)
     headers = {"Authorization": f"Bearer {token}"}
@@ -75,17 +75,16 @@ async def test_team_leader_is_not_elevated(client, admin_headers):
     assert (await client.get("/audit/tables", headers=headers)).status_code == 403
 
 
-async def test_project_lead_is_elevated(client, admin_headers):
-    """PROJECT_LEAD is in app.is_elevated()'s role list but isn't exercised
-    by any other test."""
-    from tests.conftest import login_and_set_password
-    user, otp = await create_user(client, admin_headers, role="PROJECT_LEAD")
-    token = await login_and_set_password(client, user["username"], otp)
-    headers = {"Authorization": f"Bearer {token}"}
-    assert (await client.get("/audit", headers=headers)).status_code == 200
-    assert (await client.get("/audit/tables", headers=headers)).status_code == 200
-    # Not ADMIN, so /verify must still be forbidden.
-    assert (await client.get("/audit/verify", headers=headers)).status_code == 403
+async def test_project_lead_role_no_longer_exists(client, admin_headers):
+    """PROJECT_LEAD was removed entirely (Purely Plant has no such role) —
+    profiles_role_check must reject it at the database level, same as
+    QA_AUDITOR. create_user's generic exception handler turns the CHECK
+    violation into a 409."""
+    r = await client.post("/auth/users", json={
+        "username": "no_project_lead", "full_name": "X", "role": "PROJECT_LEAD",
+    }, headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "CheckViolation" in r.json()["detail"]
 
 
 async def test_qa_auditor_role_no_longer_exists(client, admin_headers):

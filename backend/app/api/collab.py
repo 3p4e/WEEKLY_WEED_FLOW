@@ -19,7 +19,7 @@ router = APIRouter(tags=["collab"])
 
 # Roles allowed to (un)assign others, in addition to a task's own owner.
 # Mirrors the DB's app.is_elevated() definition — keep these in sync.
-_ELEVATED = {"ADMIN", "DEPT_HEAD", "PROJECT_LEAD"}
+_ELEVATED = {"ADMIN", "DEP_MGR"}
 
 
 class CommentReq(BaseModel):

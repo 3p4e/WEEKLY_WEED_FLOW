@@ -25,8 +25,8 @@ const CODE_HANDOFF = {
 GF.WWF.meId = 'me';
 
 // GrowFlow role keys <-> backend role enum
-const ROLE_OUT = { admin:'ADMIN', hod:'DEPT_HEAD', qp:'PROJECT_LEAD', operator:'USER', viewer:'TEAM_LEADER' };
-const ROLE_IN  = { ADMIN:'admin', DEPT_HEAD:'hod', PROJECT_LEAD:'qp', USER:'operator', TEAM_LEADER:'viewer' };
+const ROLE_OUT = { admin:'ADMIN', hod:'DEP_MGR', operator:'USER', viewer:'TEAM_LEADER' };
+const ROLE_IN  = { ADMIN:'admin', DEP_MGR:'hod', USER:'operator', TEAM_LEADER:'viewer' };
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C'];
@@ -157,7 +157,7 @@ GF.WWF.doChangePw = async () => {
 
 /* ── load real data + render ───────────────────────────────────────── */
 GF.WWF.loadTeam = async () => {
-  // /auth/directory works for every role (no ADMIN/DEPT_HEAD gate) so avatars,
+  // /auth/directory works for every role (no ADMIN/DEP_MGR gate) so avatars,
   // week-strip, and assignee pickers show the real org roster for everyone —
   // /auth/users (full management fields) is only used by the Team admin view.
   let users = null;

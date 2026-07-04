@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════
    Audit Trail — a general (non-QC) GxP capability adopted from the QC lab.
    Read-only, tamper-evident view of the hash-chained audit_log. Visible to
-   elevated roles only (ADMIN / DEPT_HEAD / PROJECT_LEAD), which mirrors
+   elevated roles only (ADMIN / DEP_MGR), which mirrors
    the DB `audit_read` policy.
 
    Split out of integrate.js (first decomposition cut of its monkey-patch
@@ -10,7 +10,7 @@
    because classic <script> tags share one lexical scope in document order.
    ════════════════════════════════════════════════════════════════════ */
 const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
-const AUDIT_ROLES = ['ADMIN', 'DEPT_HEAD', 'PROJECT_LEAD'];
+const AUDIT_ROLES = ['ADMIN', 'DEP_MGR'];
 const ACT = {
   INSERT: { c: '#15A86B', en: 'Created', mk: 'Создадено' },
   UPDATE: { c: '#2F6BFF', en: 'Updated', mk: 'Изменето' },

@@ -44,8 +44,7 @@ GF.state = {
 
 // ── Roles (used by Team / user management) ──
 GF.ROLES = {
-  hod:      { en: 'Head of Department', mk: 'Раководител на оддел' },
-  qp:       { en: 'Qualified Person',   mk: 'Квалификувано лице' },
+  hod:      { en: 'Department Manager', mk: 'Раководител на оддел' },
   operator: { en: 'Operator',           mk: 'Оператор' },
   admin:    { en: 'Administrator',      mk: 'Администратор' },
   viewer:   { en: 'Viewer (read-only)', mk: 'Прегледувач' },
@@ -58,7 +57,6 @@ GF.AVATAR_COLORS = ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5',
 GF.PERMS = {
   admin:    { create: true,  editAny: true,  deleteAny: true,  status: 'any', team: true },
   hod:      { create: true,  editAny: true,  deleteAny: true,  status: 'any', team: true },
-  qp:       { create: true,  editAny: true,  deleteAny: false, status: 'any', team: false },
   operator: { create: true,  editAny: false, deleteAny: false, status: 'own', team: false },
   viewer:   { create: false, editAny: false, deleteAny: false, status: 'no',  team: false },
 };

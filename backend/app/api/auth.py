@@ -140,13 +140,13 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
 def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
     if actor["role"] == "ADMIN":
         return True
-    if actor["role"] == "DEPT_HEAD":
+    if actor["role"] == "DEP_MGR":
         return role != "ADMIN" and department_id is not None and str(department_id) == str(actor["department_id"])
     return False
 
 
 @router.post("/users", status_code=201)
-async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("ADMIN", "DEPT_HEAD"))):
+async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
     """Provision an account with a one-time password (always returned to the creator)."""
     if not _can_manage(actor, body.role, body.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
@@ -169,7 +169,7 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("A
 @router.get("/directory")
 async def directory(user: dict = Depends(require_password_set)):
     """Read-only name/avatar roster for every ACTIVE org member — no management
-    fields. Unlike /users (ADMIN/DEPT_HEAD-gated, includes is_active/
+    fields. Unlike /users (ADMIN/DEP_MGR-gated, includes is_active/
     must_change_password), this is safe for any authenticated user so avatars/
     assignee pickers work for non-elevated roles too. Deactivated accounts are
     excluded — same rule the weekly snapshot's roster query uses — so they
@@ -185,7 +185,7 @@ async def directory(user: dict = Depends(require_password_set)):
 
 
 @router.get("/users")
-async def list_users(actor: dict = Depends(require_role("ADMIN", "DEPT_HEAD"))):
+async def list_users(actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
     # Scope to the caller's org explicitly: the admin pool is BYPASSRLS, so the
     # profiles_read policy does NOT filter it — without org_id this would leak
     # every organisation's user directory.
@@ -200,11 +200,11 @@ async def list_users(actor: dict = Depends(require_role("ADMIN", "DEPT_HEAD"))):
 
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: str, actor: dict = Depends(require_role("ADMIN", "DEPT_HEAD"))):
+async def delete_user(user_id: str, actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
     # Admin pool is BYPASSRLS, so authorisation is enforced here: the target
-    # must be in the actor's org AND manageable by them (a DEPT_HEAD cannot
+    # must be in the actor's org AND manageable by them (a DEP_MGR cannot
     # delete an ADMIN or anyone outside their department). Same gate as create.
     async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(

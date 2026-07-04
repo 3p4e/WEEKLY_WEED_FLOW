@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 32t2NCDPJa49mvjrculKmZAwz4dxuEJeUZOAgrJB5xHqL4bhIR18MGtIslD9WXY
+\restrict r5JqiJXCu9CAgu0avBxg0lIdMl2Agj5MGEd7ZAUkiTesNhurEkfI4Mqoj3i7fHK
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -103,7 +103,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','DEP_MGR') $$;
 
 
 SET default_tablespace = '';
@@ -200,7 +200,7 @@ CREATE TABLE public.profiles (
     is_deleted boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'DEPT_HEAD'::text, 'PROJECT_LEAD'::text, 'TEAM_LEADER'::text, 'USER'::text])))
+    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'DEP_MGR'::text, 'TEAM_LEADER'::text, 'USER'::text])))
 );
 
 ALTER TABLE ONLY public.profiles FORCE ROW LEVEL SECURITY;
@@ -369,5 +369,5 @@ CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.c
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 32t2NCDPJa49mvjrculKmZAwz4dxuEJeUZOAgrJB5xHqL4bhIR18MGtIslD9WXY
+\unrestrict r5JqiJXCu9CAgu0avBxg0lIdMl2Agj5MGEd7ZAUkiTesNhurEkfI4Mqoj3i7fHK
 

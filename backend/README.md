@@ -43,7 +43,7 @@ API paths below same-origin.
   (users DB), which stamps `app.user_id / app.org_id / app.role` as
   transaction-local GUCs so RLS policies and the audit trigger see the caller.
   Auth lookups and provisioning use `app_admin` (BYPASSRLS).
-- **No self-signup.** `ADMIN` / `DEPT_HEAD` provision accounts; the creator is
+- **No self-signup.** `ADMIN` / `DEP_MGR` provision accounts; the creator is
   shown a one-time password once, and the user must set their own on first login
   (`must_change_password`).
 - **Audit trail.** Every write to audited tables fires `app.fn_audit_row`, which
@@ -59,7 +59,7 @@ API paths below same-origin.
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
 | GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains and reports each chain's first linkage break, if any |
 
-¹ elevated = `ADMIN`, `DEPT_HEAD`, `PROJECT_LEAD` — mirrors the DB
+¹ elevated = `ADMIN`, `DEP_MGR` — mirrors the DB
 `audit_read` policy (`app.is_elevated()`). Secret columns (e.g. `password_hash`)
 are redacted from the payload server-side.
 

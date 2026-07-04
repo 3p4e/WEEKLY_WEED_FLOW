@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vUo1G34vDZTzfTQbjNpcxOqfgLb0FUhkpM3CBS6ryKhvuJY6lz5WabrvpJtdYIY
+\restrict Xu5CVLHsL3I0JetPhVK6NcRsJO1vcM7vzW9ItIQeQjPOjRZFOiKjMSQTlPlCeOh
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -103,7 +103,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','DEP_MGR') $$;
 
 
 SET default_tablespace = '';
@@ -918,5 +918,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vUo1G34vDZTzfTQbjNpcxOqfgLb0FUhkpM3CBS6ryKhvuJY6lz5WabrvpJtdYIY
+\unrestrict Xu5CVLHsL3I0JetPhVK6NcRsJO1vcM7vzW9ItIQeQjPOjRZFOiKjMSQTlPlCeOh
 

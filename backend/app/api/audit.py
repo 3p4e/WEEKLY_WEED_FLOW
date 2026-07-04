@@ -31,7 +31,7 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 
 # Roles the DB `audit_read` policy (app.is_elevated) admits — mirrored here so
 # the API rejects early instead of silently returning an empty list.
-_ELEVATED = ("ADMIN", "DEPT_HEAD", "PROJECT_LEAD")
+_ELEVATED = ("ADMIN", "DEP_MGR")
 
 
 # Secret columns are never exposed through the trail, even to admins.
