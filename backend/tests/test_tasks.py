@@ -97,30 +97,39 @@ async def test_departments_and_weeks_endpoints(client, admin_headers):
     assert r.status_code == 200
 
 
-async def test_progress_notes_is_a_real_list_not_a_json_string(client, admin_headers):
-    """Regression: tasks.progress_notes is jsonb (DEFAULT '[]'::jsonb NOT
-    NULL); without a jsonb codec on the asyncpg pools it comes back as the
-    raw string "[]" instead of an empty list. The frontend's
-    GF.WWF.transform does `(t.progress_notes || []).map(...)` — a non-empty
-    string is truthy, so the `|| []` fallback never kicks in, and `.map` on
-    a string throws for every task, every load. Caught by a real browser
-    (e2e) hitting this exact path via GF.submitAdd; pinned here at the API
-    layer so it can't regress silently again."""
+async def test_progress_notes_reflects_real_task_progress_rows(client, admin_headers):
+    """Regression: tasks.progress_notes used to be its own jsonb column, set
+    once at INSERT (DEFAULT '[]') and never updated by any write path — the
+    only place progress is ever written is POST /tasks/{id}/progress, which
+    inserts into the separate task_progress table and never touched
+    tasks.progress_notes. Net effect: every task card in the live UI showed
+    zero progress notes, always, no matter how many a user added. list_tasks
+    now aggregates progress_notes live from task_progress instead of trusting
+    a column that could never reflect it; this pins actual content, not just
+    shape, so a regression back to a static/stale column fails loudly."""
     r = await client.post("/tasks", json={"title": "Progress notes shape check", "status": "pending"},
                            headers=admin_headers)
     assert r.status_code == 201, r.text
-    assert isinstance(r.json()["progress_notes"], list)
-    assert r.json()["progress_notes"] == []
-
     task_id = r.json()["id"]
+
     r = await client.get("/tasks?parents_only=true", headers=admin_headers)
     listed = next(t for t in r.json() if t["id"] == task_id)
-    assert isinstance(listed["progress_notes"], list)
+    assert listed["progress_notes"] == []
 
     await client.post(f"/tasks/{task_id}/progress", json={"day_label": "Mon", "note": "watered"},
                        headers=admin_headers)
+    r = await client.get("/tasks?parents_only=true", headers=admin_headers)
+    listed = next(t for t in r.json() if t["id"] == task_id)
+    assert len(listed["progress_notes"]) == 1
+    assert listed["progress_notes"][0]["note"] == "watered"
+    assert listed["progress_notes"][0]["day_label"] == "Mon"
+
+    # progress_notes/deps were dropped as dead columns — get_task's `SELECT *`
+    # must not resurrect them; task_progress rows still come back via `progress`.
     r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
-    assert isinstance(r.json()["task"]["progress_notes"], list)
+    assert r.json()["progress"][0]["note"] == "watered"
+    assert "progress_notes" not in r.json()["task"]
+    assert "deps" not in r.json()["task"]
 
 
 async def test_estimated_hours_set_at_create_and_listed(client, admin_headers):
@@ -182,6 +191,20 @@ async def test_zero_estimate_is_a_value_not_missing(client, admin_headers):
                            headers=admin_headers)
     assert r.status_code == 201, r.text
     assert float(r.json()["estimated_hours"]) == 0.0
+
+
+async def test_invalid_status_rejected_with_422(client, admin_headers):
+    """Regression: tasks.status gained a DB CHECK constraint (migration 0004)
+    restricting it to the six canonical values. Without matching Pydantic
+    validation, a bad value would hit that constraint as an unhandled 500
+    instead of a clean 422 — this pins the API-layer counterpart, same
+    precedent as the existing hours ge=0 / DB CHECK pairing."""
+    r = await client.post("/tasks", json={"title": "Bad status", "status": "bogus"}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/tasks", json={"title": "Real task", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    r = await client.patch(f"/tasks/{task_id}", json={"status": "bogus"}, headers=admin_headers)
+    assert r.status_code == 422
 
 
 async def test_negative_hours_rejected_with_422(client, admin_headers):

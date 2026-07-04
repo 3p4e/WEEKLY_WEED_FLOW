@@ -2,11 +2,12 @@
 
 [`docker-compose.yml`](../docker-compose.yml) describes the deployed stack:
 
-| Service    | Container                     | Image                        | Role |
-|------------|-------------------------------|------------------------------|------|
-| `db`       | `weekly_weed_flow-db-1`       | `postgres:17-alpine`         | RLS policies + hash-chained audit trigger |
-| `backend`  | `weekly_weed_flow-backend-1`  | `weekly_weed_flow-backend`   | FastAPI API (:8000, internal) |
-| `frontend` | `wwf-gf-frontend`             | `wwf-growflow`               | nginx + GrowFlow UI, published by Traefik over HTTPS |
+| Service     | Container                     | Image                        | Role |
+|-------------|--------------------------------|------------------------------|------|
+| `db`        | `weekly_weed_flow-db-1`       | `postgres:17-alpine`         | RLS policies + hash-chained audit trigger |
+| `backend`   | `weekly_weed_flow-backend-1`  | `weekly_weed_flow-backend`   | FastAPI API (:8000, internal) |
+| `frontend`  | `wwf-gf-frontend`             | `wwf-growflow`               | nginx + GrowFlow UI, published by Traefik over HTTPS |
+| `db-backup` | `wwf-db-backup`               | `postgres:17-alpine`         | Rotating local `pg_dump` backups — see [`docs/BACKUP.md`](BACKUP.md) |
 
 The **Letta** stateful-agent layer (AI functions) runs in its own pre-existing
 stack and is reached over `host.docker.internal` — it is not managed here.

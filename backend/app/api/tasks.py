@@ -1,6 +1,7 @@
 """Task lifecycle API (RLS-scoped via app_user + per-request identity GUCs)."""
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -8,6 +9,8 @@ from app.db import rls
 from app.deps import require_password_set
 
 router = APIRouter(tags=["tasks"])
+
+Status = Literal["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 
 
 def _ser(rows):
@@ -45,8 +48,15 @@ async def list_tasks(
     async with rls(user) as c:
         return _ser(await c.fetch(
             f"SELECT t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
-            f"t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.deps,t.progress_notes,"
+            f"t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,"
             f"t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at,"
+            # progress_notes has no column of its own — task_progress is the only
+            # write path (POST /tasks/{id}/progress), so this reads live from it
+            # instead of trusting a denormalized copy that could go stale.
+            f"COALESCE((SELECT jsonb_agg(jsonb_build_object("
+            f"  'day_label', tp.day_label, 'note', tp.note, 'created_at', tp.created_at"
+            f") ORDER BY tp.created_at DESC) FROM (SELECT day_label, note, created_at FROM task_progress"
+            f" WHERE task_id=t.id ORDER BY created_at DESC LIMIT 20) tp), '[]'::jsonb) AS progress_notes,"
             f"COALESCE(array_agg(ta.user_id) FILTER (WHERE ta.user_id IS NOT NULL), '{{}}') AS assignee_ids "
             f"FROM tasks t LEFT JOIN task_assignees ta ON ta.task_id=t.id "
             f"WHERE {where} GROUP BY t.id ORDER BY t.created_at", *args))
@@ -66,7 +76,7 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
 class TaskIn(BaseModel):
     title: str
     description: str | None = None
-    status: str = "pending"
+    status: Status = "pending"
     priority: str = "medium"
     department: str | None = None
     department_id: str | None = None
@@ -95,7 +105,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
 class TaskPatch(BaseModel):
     title: str | None = None
     description: str | None = None
-    status: str | None = None
+    status: Status | None = None
     priority: str | None = None
     workflow_state: str | None = None
     days: list[str] | None = None

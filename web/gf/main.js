@@ -23,7 +23,7 @@ GF.openAdd = (weekId) => {
   if (!GF.can('create')) return GF.denyToast();
   GF._addWeek = weekId;
   const el = GF.$('add-body');
-  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.depName(d.id)}</option>`).join('');
+  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
   const ownerOpts = Object.entries(GF.PEOPLE).map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
   const respChips = Object.entries(GF.PEOPLE).map(([k, v]) =>
     `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
@@ -77,7 +77,7 @@ GF.openUser = (id) => {
   if (!GF.can('team')) return GF.denyToast();
   GF._editUser = id || null;
   const p = id ? GF.PEOPLE[id] : { name: '', role: 'operator', dept: 'veg', bg: GF.AVATAR_COLORS[0] };
-  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}" ${d.id===p.dept?'selected':''}>${GF.depName(d.id)}</option>`).join('');
+  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}" ${d.id===p.dept?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
   const roleOpts = Object.keys(GF.ROLES).map(r => `<option value="${r}" ${r===p.role?'selected':''}>${GF.roleLabel(r)}</option>`).join('');
   const swatches = GF.AVATAR_COLORS.map(c => `<span class="swatch ${c===p.bg?'on':''}" data-color="${c}" style="background:${c}" onclick="this.parentNode.querySelectorAll('.swatch').forEach(s=>s.classList.remove('on'));this.classList.add('on')"></span>`).join('');
   GF.$('user-title').textContent = id ? GF.t('edit_user') : GF.t('add_user');

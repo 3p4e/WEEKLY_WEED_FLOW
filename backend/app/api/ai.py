@@ -90,7 +90,7 @@ async def list_pins(
     args.append(limit)
     async with rls(user) as c:
         rows = await c.fetch(
-            "SELECT id, function_key, task_id, week_id, title, body, created_at, subject_user_id"
+            "SELECT id, function_key, task_id, week_id, title, body, created_at, subject_user_id, prompt_version"
             f" FROM ai_pins{where} ORDER BY created_at DESC LIMIT ${len(args)}", *args)
     return [
         {"id": str(r["id"]), "function_key": r["function_key"],
@@ -98,7 +98,8 @@ async def list_pins(
          "week_id": str(r["week_id"]) if r["week_id"] else None,
          "title": r["title"], "body": r["body"],
          "created_at": r["created_at"].isoformat(),
-         "subject_user_id": str(r["subject_user_id"]) if r["subject_user_id"] else None}
+         "subject_user_id": str(r["subject_user_id"]) if r["subject_user_id"] else None,
+         "prompt_version": r["prompt_version"]}
         for r in rows
     ]
 

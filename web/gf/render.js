@@ -54,7 +54,7 @@ GF.render = {
     GF.weekTasks(GF.state.selWeek).forEach(t => { counts[t.dept] = (counts[t.dept] || 0) + 1; });
     GF.$('dept-list').innerHTML = GF.DEPTS.map(d => `
       <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
-        <span class="dept-dot" style="background:${d.color}"></span>${GF.depName(d.id)}
+        <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
       </div>`).join('');
 
@@ -165,7 +165,7 @@ GF.render = {
           ${t.status === 'done' ? GF.icon('check', 'icon', '#fff') : ''}</button>
         <div style="flex:1;min-width:0">
           <div class="card-title">${GF.esc(t.title)}</div>
-          <div class="card-meta"><span class="dn" style="color:${d.color}">${GF.depName(t.dept)}</span>
+          <div class="card-meta"><span class="dn" style="color:${d.color}">${GF.esc(GF.depName(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}</div>
         </div>
         <div class="daytags">${daytags}</div>
@@ -184,11 +184,11 @@ GF.render = {
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>
       <div class="handoff">
-        <span class="hbadge"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.depName(t.dept)}</span>
+        <span class="hbadge"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
         ${GF.icon('arrowR','icon','var(--ink-3)')}
-        <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.depName(toDept)}</span>
+        <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depName(toDept))}</span>
         <div class="spacer"></div>
-        <button class="btn btn-orange btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.depName(toDept)}','success')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
+        <button class="btn btn-orange btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.esc(GF.depName(toDept))}','success')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
       </div>` : '';
 
     const body = `

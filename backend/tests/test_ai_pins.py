@@ -10,11 +10,11 @@ from app.security import hash_password
 from tests.conftest import create_user, login_and_set_password
 
 
-async def _pin(org_id, function_key, title, body="body", subject_user_id=None):
+async def _pin(org_id, function_key, title, body="body", subject_user_id=None, prompt_version=None):
     await admin_pool().execute(
-        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id)"
-        " VALUES ($1,$2,$3,$4,$5)",
-        org_id, function_key, title, body, subject_user_id)
+        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id, prompt_version)"
+        " VALUES ($1,$2,$3,$4,$5,$6)",
+        org_id, function_key, title, body, subject_user_id, prompt_version)
 
 
 async def test_pins_returned_newest_first_and_filterable(client, admin_headers, org):
@@ -95,3 +95,17 @@ async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_head
     r = await client.get("/ai/pins", headers=admin_headers)  # elevated: sees all
     titles = [p["title"] for p in r.json()]
     assert {"Org report — W1", "Report — Alice", "Report — Bob"} <= set(titles)
+
+
+async def test_pins_expose_prompt_version(client, admin_headers, org):
+    """ai_pins.prompt_version (migration 0004) records which
+    planner_prompts.PROMPT_VERSION produced a pin — or NULL for the raw
+    digest, which is never LLM-authored. Must round-trip through the API."""
+    await _pin(org["org_id"], "weekly_report", "AI report", prompt_version="wwf-prompts/v3")
+    await _pin(org["org_id"], "weekly_snapshot", "Raw digest", prompt_version=None)
+
+    r = await client.get("/ai/pins", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    by_title = {p["title"]: p for p in r.json()}
+    assert by_title["AI report"]["prompt_version"] == "wwf-prompts/v3"
+    assert by_title["Raw digest"]["prompt_version"] is None

@@ -144,7 +144,8 @@ CREATE TABLE public.ai_pins (
     body text NOT NULL,
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    subject_user_id uuid
+    subject_user_id uuid,
+    prompt_version text
 );
 
 ALTER TABLE ONLY public.ai_pins FORCE ROW LEVEL SECURITY;
@@ -376,8 +377,6 @@ CREATE TABLE public.tasks (
     week_start date,
     days text[] DEFAULT '{}'::text[] NOT NULL,
     tags text[] DEFAULT '{}'::text[] NOT NULL,
-    deps uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    progress_notes jsonb DEFAULT '[]'::jsonb NOT NULL,
     due_date date,
     completed_date date,
     estimated_hours numeric,
@@ -389,7 +388,8 @@ CREATE TABLE public.tasks (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric))))
+    CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
+    CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text])))
 );
 
 ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;

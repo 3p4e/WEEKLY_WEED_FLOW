@@ -1,4 +1,8 @@
-"""Read-only audit trail API (GxP / 21 CFR Part 11 style).
+"""Read-only audit trail API.
+
+Uses GxP-style patterns (hash-chained, tamper-evident) for internal
+traceability. This is informational, not a compliance claim — WWF is not a
+validated Part 11 system (see docs/SCOPE.md).
 
 The `audit_log` table is written by the `app.fn_audit_row` trigger and is
 hash-chained: every row's `prev_hash` is the `entry_hash` of the row inserted

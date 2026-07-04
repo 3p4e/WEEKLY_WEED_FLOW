@@ -3,7 +3,9 @@
 A standalone **task‑tracking application** for a GMP‑licensed medical‑cannabis
 production facility (Purely Plant). It is the task‑management surface isolated
 from the larger GrowFlow QMS/QC‑LIMS design — every task‑tracking capability,
-none of the QC‑laboratory / CoA / compliance modules.
+none of the QC‑laboratory / CoA / compliance modules. **WWF is an internal
+operational planning tool, not a validated GxP/Part‑11 computerized system and
+not part of the QMS — see [`docs/SCOPE.md`](docs/SCOPE.md).**
 
 > Plan, assign, schedule and track production work across the week — by
 > department, person, priority and status — with bilingual EN/МК UI, voice

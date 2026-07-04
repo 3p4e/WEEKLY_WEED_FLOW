@@ -114,7 +114,7 @@ GF.assistant = {
       const ready = all.filter(t => t.status === 'done' && GF.HANDOFF[t.dept]);
       this._push('me', GF.t('suggest_handoffs'));
       const rows = ready.map(t =>
-        `<div class="asst-li">${GF.depName(t.dept)} ${GF.icon('arrowR', 'icon', 'var(--ink-3)')} ${GF.depName(GF.HANDOFF[t.dept])}<div class="asst-sub">${GF.esc(t.title)}</div></div>`).join('');
+        `<div class="asst-li">${GF.esc(GF.depName(t.dept))} ${GF.icon('arrowR', 'icon', 'var(--ink-3)')} ${GF.esc(GF.depName(GF.HANDOFF[t.dept]))}<div class="asst-sub">${GF.esc(t.title)}</div></div>`).join('');
       this._push('ai', '', rows || (GF.state.lang === 'mk' ? 'Нема готови предавања.' : 'No handoffs ready yet.'));
     }
   },

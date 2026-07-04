@@ -95,7 +95,7 @@ async def weekly_report(
                 f"             WHERE tp.task_id=t.id "
                 f"             AND tp.created_at >= $1::date AND tp.created_at < ($2::date + 1))"
                 f") "
-                f"ORDER BY CASE WHEN t.status IN ('completed','done') THEN 1 ELSE 0 END, "
+                f"ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, "
                 f"t.priority DESC, t.created_at",
                 *args,
             )
@@ -137,7 +137,7 @@ async def weekly_report(
             rows = await c.fetch(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false AND t.is_archived=false{dept_clause} "
-                f"AND t.status NOT IN ('completed','done') "
+                f"AND t.status <> 'completed' "
                 f"ORDER BY t.priority DESC, t.department, t.created_at",
                 *args,
             )
@@ -159,7 +159,7 @@ async def weekly_report(
         if dn not in dept_map:
             dept_map[dn] = {"name": dn, "total": 0, "completed": 0}
         dept_map[dn]["total"] += 1
-        if t["status"] in ("completed", "done"):
+        if t["status"] == "completed":
             dept_map[dn]["completed"] += 1
 
     iso_week = fri.isocalendar()[1]
@@ -175,8 +175,8 @@ async def weekly_report(
         "mode": mode,
         "summary": {
             "total": len(tasks_out),
-            "completed": statuses.get("completed", 0) + statuses.get("done", 0),
-            "in_progress": statuses.get("ongoing", 0) + statuses.get("in_progress", 0),
+            "completed": statuses.get("completed", 0),
+            "in_progress": statuses.get("ongoing", 0),
             "stuck": statuses.get("stuck", 0),
             "pending": statuses.get("pending", 0),
             "review": statuses.get("review", 0),

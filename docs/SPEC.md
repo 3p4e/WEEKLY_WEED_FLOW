@@ -35,8 +35,9 @@ navigation; draft → submit workflow.
 
 ### Document export
 JSON (full snapshot) · CSV (status‑summary + per‑task rows, UTF‑8 BOM) ·
-PDF (A4 table + GMP sign‑off block: Prepared/Reviewed/Approved + dates) ·
-Markdown digest (pushed to AI agents).
+PDF (A4 table + GMP sign‑off block: Prepared/Reviewed/Approved + dates)
+— *not implemented; out of scope per [`docs/SCOPE.md`](SCOPE.md), WWF is a
+non‑GMP planning tool* · Markdown digest (pushed to AI agents).
 
 ### Automated weekly snapshot
 In‑process asyncio job (Thu 18:00 UTC) captures the closing week → writes JSON +
@@ -69,7 +70,8 @@ change; login‑attempt limiting with timed lockout.
 ### Compliance & audit
 Soft delete everywhere (`is_deleted`, 10‑year retention, no hard erase);
 hash‑chained audit trail on every write; Row‑Level Security at the DB layer;
-UTC timestamps; electronic‑signature metadata.
+UTC timestamps; electronic‑signature metadata — *not implemented; out of
+scope per [`docs/SCOPE.md`](SCOPE.md), WWF is a non‑GMP planning tool*.
 
 ### Internationalization & theming
 Bilingual UI (English + second language), runtime switch; six visual themes,

@@ -6,6 +6,7 @@
 #    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
 #              /auth /departments /weeks /tasks /ai /audit to the backend;
 #              published over HTTPS by Traefik (Let's Encrypt).
+#    db-backup rotating local pg_dump backups — see docs/BACKUP.md
 #
 #  The always-on Letta agent layer (AI functions) runs in its own pre-existing
 #  stack and is reached over host.docker.internal — it is intentionally NOT
@@ -73,6 +74,25 @@ services:
       - "traefik.http.services.wwf.loadbalancer.server.port=80"
     restart: unless-stopped
 
+  # Rotating local pg_dump backups — see docs/BACKUP.md for scope, retention,
+  # the documented no-offsite-copy risk, and the restore procedure.
+  db-backup:
+    image: postgres:17-alpine
+    container_name: wwf-db-backup
+    depends_on: [db]
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:?set in .env}
+      - PGHOST=weekly_weed_flow-db-1
+      - PGUSER=postgres
+      - PGDATABASE=weekly_weed_flow
+      - RETENTION_DAYS=14
+    volumes:
+      - ./backend/scripts/db_backup.sh:/usr/local/bin/db_backup.sh:ro
+      - weekly_weed_flow_backups:/backups
+    entrypoint: ["/bin/sh", "/usr/local/bin/db_backup.sh"]
+    networks: [internal]
+    restart: unless-stopped
+
 networks:
   internal:
     name: weekly_weed_flow_internal
@@ -82,3 +102,4 @@ networks:
 
 volumes:
   weekly_weed_flow_pgdata:
+  weekly_weed_flow_backups:

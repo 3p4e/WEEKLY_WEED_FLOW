@@ -24,7 +24,7 @@ GF.views = {
             const d = GF.dep(t.dept);
             const drag = GF.can('status', t);
             return `<div class="kcard${drag?' drag':''}" ${drag?`draggable="true" ondragstart="GF.dndStart(event,'${t.id}')" ondragend="GF.dndEnd(event)"`:''} onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
-              <div class="kcard-dept" style="color:${d.color}">${GF.depName(t.dept)}</div>
+              <div class="kcard-dept" style="color:${d.color}">${GF.esc(GF.depName(t.dept))}</div>
               <div class="kcard-title">${GF.esc(t.title)}</div>
               <div class="kcard-foot">
                 ${GF.avatars([t.owner, ...(t.helpers||[])], 22)}
@@ -74,15 +74,15 @@ GF.views = {
           <div class="coord-id">${GF.esc(t.id)}</div>
         </div>
         <div class="coord-flow">
-          <span class="hbadge"><span class="chip-dept">${GF.icon(from.icon,'icon',from.color)}</span>${GF.depName(t.dept)}</span>
+          <span class="hbadge"><span class="chip-dept">${GF.icon(from.icon,'icon',from.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
           ${GF.icon('arrowR','icon','var(--ink-3)')}
-          <span class="hbadge"><span class="chip-dept">${GF.icon(to.icon,'icon',to.color)}</span>${GF.depName(toId)}</span>
+          <span class="hbadge"><span class="chip-dept">${GF.icon(to.icon,'icon',to.color)}</span>${GF.esc(GF.depName(toId))}</span>
         </div>
         <div class="coord-status">
           ${ready ? `<span class="coord-tag ok">${GF.icon('check','icon','#fff')}Ready</span>`
             : blockedDeps.length ? `<span class="coord-tag wait">${GF.icon('clock','icon')}Waiting on ${blockedDeps.length}</span>`
             : `<span class="coord-tag prog">${GF.icon('clock','icon')}${GF.statusLabel(t.status)}</span>`}
-          <button class="btn btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.depName(toId)}','success')">${GF.t('request_handoff')}</button>
+          <button class="btn btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.esc(GF.depName(toId))}','success')">${GF.t('request_handoff')}</button>
         </div>
       </div>`;
     }).join('');
@@ -107,7 +107,7 @@ GF.views = {
     const deptCounts = {}; all.forEach(t => deptCounts[t.dept] = (deptCounts[t.dept]||0)+1);
     const deptRows = GF.DEPTS.filter(d => deptCounts[d.id]).sort((a,b)=>deptCounts[b.id]-deptCounts[a.id]).map(d => {
       const c = deptCounts[d.id], pct = Math.round(c/n*100);
-      return `<div class="dash-bar-row"><span class="dbl" style="color:${d.color};font-weight:700">${GF.depName(d.id)}</span>
+      return `<div class="dash-bar-row"><span class="dbl" style="color:${d.color};font-weight:700">${GF.esc(GF.depName(d.id))}</span>
         <div class="track" style="flex:1"><span style="width:${pct}%;background:${d.color}"></span></div>
         <span class="dbv">${c}</span></div>`;
     }).join('');
@@ -153,7 +153,7 @@ GF.views = {
             <div class="tc-name">${GF.esc(p.name)}${isMe?` <span class="tc-you">${GF.t('you')}</span>`:''}</div>
             <div class="tc-role">${GF.esc(GF.roleLabel(p.role))}</div>
           </div></div>
-        <div class="tc-dept"><span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.depName(p.dept)}</div>
+        <div class="tc-dept"><span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.esc(GF.depName(p.dept))}</div>
         <div class="tc-actions">
           ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`
             :`<button class="btn btn-sm" onclick="GF.setActiveUser('${id}')">${GF.t('set_active')}</button>`}

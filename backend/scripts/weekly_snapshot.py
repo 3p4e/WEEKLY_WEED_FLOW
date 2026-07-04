@@ -36,6 +36,8 @@ from datetime import date, datetime, timedelta, timezone
 import asyncpg
 import httpx
 
+import planner_prompts
+
 
 # ── Config from env (no app.config dependency) ──────────────────────────────
 ADMIN_DSN = os.environ.get("ADMIN_DATABASE_URL", "")
@@ -121,7 +123,7 @@ def build_digest(snap: dict) -> str:
     L.append("")
 
     tasks = snap["report_tasks"]
-    done = sum(1 for t in tasks if t["status"] in ("completed", "done"))
+    done = sum(1 for t in tasks if t["status"] == "completed")
     L.append("## Totals")
     L.append(f"- Tasks active in window: {len(tasks)}")
     L.append(f"- Created this week: {snap['created_count']}")
@@ -137,7 +139,7 @@ def build_digest(snap: dict) -> str:
         return c
 
     L.append("## By status")
-    for s in ("done", "completed", "working", "ongoing", "review", "stuck", "postponed", "pending"):
+    for s in ("completed", "ongoing", "review", "stuck", "postponed", "pending"):
         n = sum(1 for t in tasks if t["status"] == s)
         if n:
             L.append(f"- {s}: {n}")
@@ -218,7 +220,7 @@ def rollup_task_sample(tasks: list[dict], limit: int = 60) -> list[dict]:
     [task:id] tokens for the claims its rules require, at constant prompt
     size regardless of org volume."""
     stuck = [t for t in tasks if t["status"] == "stuck"]
-    done = [t for t in tasks if t["status"] in ("completed", "done")]
+    done = [t for t in tasks if t["status"] == "completed"]
     rest = [t for t in tasks if t not in stuck and t not in done]
     seen, out = set(), []
     for t in stuck + done + rest:
@@ -335,7 +337,7 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
         "   OR (t.completed_date >= $2 AND t.completed_date <= $3)"
         "   OR EXISTS (SELECT 1 FROM task_progress tp WHERE tp.task_id=t.id"
         "              AND tp.created_at >= $2::date AND tp.created_at < ($3::date + 1)))"
-        " ORDER BY CASE WHEN t.status IN ('completed','done') THEN 1 ELSE 0 END,"
+        " ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,"
         " t.priority DESC, t.created_at",
         org_id, r_fri, r_thu)
 
@@ -344,7 +346,7 @@ async def gather(conn, org_id, org_name, report_win, plan_win) -> dict:
         " t.estimated_hours, t.actual_hours, p.username AS owner"
         " FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
         " WHERE t.org_id=$1 AND t.is_deleted=false AND t.is_archived=false"
-        " AND t.status NOT IN ('completed','done')"
+        " AND t.status <> 'completed'"
         " ORDER BY t.priority DESC, t.department, t.created_at",
         org_id)
 
@@ -422,31 +424,37 @@ async def resolve_agents(conn, org_id) -> tuple[str | None, str | None]:
 
 
 # ── ai_pins archival ────────────────────────────────────────────────────────
-async def _replace_pin(conn, org_id, function_key, week_id, title, body, created_by=None):
+async def _replace_pin(conn, org_id, function_key, week_id, title, body,
+                       created_by=None, prompt_version=None):
     await conn.execute(
         "DELETE FROM ai_pins WHERE org_id=$1 AND function_key=$2"
         " AND week_id IS NOT DISTINCT FROM $3 AND title=$4",
         org_id, function_key, week_id, title)
     await conn.execute(
-        "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, created_by)"
-        " VALUES ($1,$2,$3,$4,$5,$6)",
-        org_id, function_key, week_id, title, body, created_by)
+        "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, created_by, prompt_version)"
+        " VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        org_id, function_key, week_id, title, body, created_by, prompt_version)
 
 
-async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, user_plans):
+async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, user_plans,
+                     report_pv=None, plan_pv=None):
     org_id = snap["org_id"]
     r_lbl, p_lbl = snap["report_window"]["label"], snap["plan_window"]["label"]
     r_wk, p_wk = snap["report_week_id"], snap["plan_week_id"]
 
+    # weekly_snapshot is the raw deterministic digest — no prompt was ever
+    # involved, so its prompt_version stays NULL rather than a fake sentinel.
     await _replace_pin(conn, org_id, "weekly_snapshot", r_wk,
                        f"Weekly snapshot — {r_lbl}", digest)
     await _replace_pin(conn, org_id, "weekly_report", r_wk,
-                       f"Weekly report — {r_lbl}", org_report)
+                       f"Weekly report — {r_lbl}", org_report, prompt_version=report_pv)
     await _replace_pin(conn, org_id, "next_week_plan", p_wk,
-                       f"Next week plan — {p_lbl}", org_plan)
+                       f"Next week plan — {p_lbl}", org_plan, prompt_version=plan_pv)
     # Per-user: clear the week's set first, then insert each. subject_user_id
     # is what the tightened RLS policy keys visibility on — a per-user pin
-    # without it would be readable by the whole org.
+    # without it would be readable by the whole org. Per-user pins only ever
+    # exist when the agent actually replied (no fallback path for them), so
+    # they always carry the real prompt version.
     uid_by_name = {u["username"]: u["id"] for u in snap["users"]}
     await conn.execute(
         "DELETE FROM ai_pins WHERE org_id=$1 AND function_key='weekly_report_user'"
@@ -456,14 +464,16 @@ async def write_pins(conn, snap, digest, org_report, org_plan, user_reports, use
         " AND week_id IS NOT DISTINCT FROM $2", org_id, p_wk)
     for username, body in user_reports.items():
         await conn.execute(
-            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id)"
-            " VALUES ($1,'weekly_report_user',$2,$3,$4,$5)",
-            org_id, r_wk, f"Weekly report — {r_lbl} — {username}", body, uid_by_name.get(username))
+            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id, prompt_version)"
+            " VALUES ($1,'weekly_report_user',$2,$3,$4,$5,$6)",
+            org_id, r_wk, f"Weekly report — {r_lbl} — {username}", body,
+            uid_by_name.get(username), planner_prompts.PROMPT_VERSION)
     for username, body in user_plans.items():
         await conn.execute(
-            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id)"
-            " VALUES ($1,'next_week_plan_user',$2,$3,$4,$5)",
-            org_id, p_wk, f"Next week plan — {p_lbl} — {username}", body, uid_by_name.get(username))
+            "INSERT INTO ai_pins(org_id, function_key, week_id, title, body, subject_user_id, prompt_version)"
+            " VALUES ($1,'next_week_plan_user',$2,$3,$4,$5,$6)",
+            org_id, p_wk, f"Next week plan — {p_lbl} — {username}", body,
+            uid_by_name.get(username), planner_prompts.PROMPT_VERSION)
 
 
 # ── Per-org orchestration ───────────────────────────────────────────────────
@@ -509,6 +519,10 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
               f"REQUEST: Produce the NEXT-WEEK PLAN for the facility '{org_name}' for "
               f"{snap['plan_window']['label']}. Return ONLY JSON: {{\"next_week_plan\": \"<markdown>\"}}")
         org_plan = _extract_json_field(await letta_message(client, plan_agent, pp), "next_week_plan")
+    # Capture AI-vs-fallback before _fallback()'s `or` reassignment below
+    # overwrites the variable — prompt_version needs to know which happened.
+    report_pv = planner_prompts.PROMPT_VERSION if org_report else "fallback"
+    plan_pv = planner_prompts.PROMPT_VERSION if org_plan else "fallback"
     org_report = org_report or _fallback(f"# Weekly report — {snap['report_window']['label']}")
     org_plan = org_plan or _fallback(f"# Next-week plan — {snap['plan_window']['label']}")
 
@@ -551,7 +565,8 @@ async def process_org(conn, client, org_id, org_name, ref: date, skip_letta: boo
         if p_out:
             user_plans[uname] = p_out
 
-    await write_pins(conn, snap, digest, org_report, org_plan, user_reports, user_plans)
+    await write_pins(conn, snap, digest, org_report, org_plan, user_reports, user_plans,
+                     report_pv=report_pv, plan_pv=plan_pv)
     log(f"org {org_name}: pinned report/plan ({len(user_reports)} user reports, "
         f"{len(user_plans)} user plans); {len(snap['report_tasks'])} tasks in window")
 
