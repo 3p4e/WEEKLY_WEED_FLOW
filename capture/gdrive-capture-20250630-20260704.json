@@ -13,7 +13,8 @@
   "unreadable_count": 0,
   "task_count": 154,
   "excluded_received_and_filed": 25,
-  "exclusion_note": "25 QCLB/MNLB equipment-logbook entries removed 2026-07-04 on user review: these are pre-existing signed physical logbooks the user received and filed on Drive for his own tracking, not documents he authored or completed himself."
+  "exclusion_note": "25 QCLB/MNLB equipment-logbook entries removed 2026-07-04 on user review: these are pre-existing signed physical logbooks the user received and filed on Drive for his own tracking, not documents he authored or completed himself.",
+  "sessions_method": "v2: session dates derived from real Google Drive createdTime/modifiedTime per source file (converted to Europe/Skopje); hours-per-session are a task_type-based estimate (time_estimated=true), capped at 6 sessions/task."
  },
  "unreadable": [],
  "tasks": [
@@ -33,10 +34,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2025-10-07T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T03:53:05",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "plan prepared/authorised (evidence: printed approval dates ~07.10.2025)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -76,10 +77,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2025-12-03T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T03:52:59",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP prepared/checked and signed (evidence: printed signature dates in document)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -118,10 +119,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2025-11-28T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T04:35:25",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP v2.0 regenerated + 8 Mermaid + 8 PlantUML diagrams + header standard (~42min est, evidence: TASKLOG)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [
@@ -174,10 +175,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W01 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 16-26.02.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -219,22 +226,28 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-03-06T10:00:00",
-     "hours": null,
+     "started_at": "2026-03-06T06:59:13",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "A02/A04/A03/A01 annex forms authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-03-09T10:00:00",
-     "hours": null,
+     "started_at": "2026-03-09T12:36:44",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Article Code List, Receipt Bill List, Rejected & Barred Logbook, Release-Status Logbook authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-04-21T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-21T05:41:55",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Internal Article Code List docx revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-31T03:31:43",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -380,10 +393,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W02 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 02-06.03.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -422,10 +441,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W03 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 30.03-03.04.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -464,10 +489,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W04 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 06-09.04.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:57",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -509,10 +540,10 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-11T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-11T23:01:57",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "report authored/finalized (evidence: Drive modifiedTime); underlying study 28.10.2025-27.11.2025"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -551,10 +582,16 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-17T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-17T05:14:30",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "STP document revised (evidence: Drive modifiedTime); printed effective date 09.10.2024"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-04-20T07:41:41",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -593,10 +630,10 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-20T05:46:41",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "skill markdown authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -651,16 +688,16 @@
    ],
    "sessions": [
     {
-     "started_at": "2026-04-17T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-20T07:36:37",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "project sessions 1-5 (per QASOP_031 project record): SOP + annex build, formatting iterations, GMP review"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-04-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-26T00:59:44",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "v3.0 visual upgrade + annex/pdf exports finalized (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -781,10 +818,16 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-20T07:43:28",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP body v2.1 authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-18T05:18:05",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -822,10 +865,10 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-23T00:53:36",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "qualification report form authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -861,10 +904,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W05 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 20-24.04.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -906,22 +955,34 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-19T03:16:51",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP v3.0 authored/exported (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-25T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-29T03:24:05",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "QCSOP_001 v2.0 revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-25T22:27:07",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "PP-QC-SOP-001 v3.0 revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T03:53:34",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -993,10 +1054,16 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-29T03:24:05",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP v02 revised/exported (evidence: Drive modifiedTime); printed change-approval date 24.07.2025"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T03:53:00",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -1051,10 +1118,16 @@
    ],
    "sessions": [
     {
-     "started_at": "2026-04-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-29T03:24:05",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP-012 body + annexes A01-A05 authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T03:52:36",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -1122,10 +1195,16 @@
    "subtasks": [],
    "sessions": [
     {
-     "started_at": "2026-04-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-29T03:24:05",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "sampling plan annex authored/exported (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T03:52:36",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "links": [
@@ -1160,10 +1239,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W06 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 27-30.04.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1204,10 +1289,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T06:18:00",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1269,10 +1354,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T06:18:00",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1378,10 +1463,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T06:18:00",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1520,10 +1605,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T08:05:00",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-12T13:53:45",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1618,10 +1709,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T23:22:30",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1661,10 +1752,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-13T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T22:19:10",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1704,10 +1795,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-19T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-19T08:28:23",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1758,10 +1849,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-20T04:30:14",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-26T00:59:49",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1801,10 +1898,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-20T20:11:26",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "partner SOP draft filed/reviewed (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1844,10 +1941,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-20T20:16:01",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "signed SOP v02 scanned and archived to Drive (evidence: Drive modifiedTime); effective date printed 03.06.2025"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1887,10 +1984,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-05-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-20T22:01:00",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-26T00:59:47",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1950,10 +2053,16 @@
    "description": "Blank bilingual (MK/EN) SOP header/title-block template for equipment SOPs. Template scaffold, authored.",
    "sessions": [
     {
-     "started_at": "2026-05-20T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-21T01:01:48",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-26T00:59:50",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -1991,10 +2100,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W07 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 11-15.05.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:57",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2033,10 +2148,16 @@
    "description": "Bilingual water specification/test-results form for demineralised RO water (physical, physico-chemical, chemical, microbiological parameters with methods). Annex A06 of water SOP PP-QC-SOP-002.",
    "sessions": [
     {
-     "started_at": "2026-05-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-21T00:11:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-22T08:54:25",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2074,10 +2195,16 @@
    "description": "Bilingual master SOP for pre-qualification, DQ/IQ/OQ/PQ/RQ qualification of equipment & systems and calibration of measuring instruments. Rev02, effective 18.02.2026 (signatures present). docx + signed PDF.",
    "sessions": [
     {
-     "started_at": "2026-05-24T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-21T19:12:33",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-25T00:44:13",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2127,10 +2254,16 @@
    "description": "Populated Performance Qualification Phase 1 plan/report for Reverse Osmosis Water Production/Storage/Distribution System (EQP-RO01): 15-day / 20-WSL intensive sampling with external lab GenLight DOOEL. Plan phase, results TBD. Prepared by Blagoj Nikolov (QC/QP).",
    "sessions": [
     {
-     "started_at": "2026-05-24T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T08:22:19",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-25T01:03:23",
+     "hours": 3.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2168,10 +2301,10 @@
    "description": "Reusable PQ Plan/Report template (Quali SOP Annex 07). English source + bilingual MK/EN transformed v22 + PDF render. Template authoring/localization.",
    "sessions": [
     {
-     "started_at": "2026-05-24T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-25T01:03:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2231,16 +2364,10 @@
    "description": "Planned deviation memo justifying pre-printing of Head-of-QC digitized signatures on 54 historical DCF batches' Quarantine/Released labels (3,420 labels), ICH Q9 risk assessment. Rev01→Rev02 (added batch P060092; 4-variant signature rotation). Authored by B. Nikolov, dated 2026-05-26. Regulator-facing/GMP-critical.",
    "sessions": [
     {
-     "started_at": "2026-05-26T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-26T08:45:08",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Rev01 authored (evidence: Drive modifiedTime + printed date 2026-05-26)"
-    },
-    {
-     "started_at": "2026-05-26T12:00:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "Rev02 issued, scope expanded to 54 batches"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2290,16 +2417,22 @@
    "description": "Label template creation & change-control form (risk class, technical spec, wet-ink approval chain). v3.0 PDF + v3.1 docx of the QASOP_031 label-control annex A05.",
    "sessions": [
     {
-     "started_at": "2026-05-26T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-26T12:28:38",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "v3.0 (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-05-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-30T06:42:09",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "v3.1 revision"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:16:29",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2348,10 +2481,10 @@
    "description": "Label template sheet (water sampling / storage-location labels: RO/PW WSL descriptors per room). Annex A09 of QASOP_031 label control.",
    "sessions": [
     {
-     "started_at": "2026-05-26T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-26T00:59:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2389,10 +2522,10 @@
    "description": "Bilingual master logbook template for retention/counter-samples (50-page). Annex A03 of QA_SOP_008.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T10:42:14",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2430,10 +2563,10 @@
    "description": "Bilingual master sampling logbook template (50-page). Annex A05 of QA_SOP_008.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T10:42:31",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2471,10 +2604,10 @@
    "description": "Bilingual master sample-inventory logbook template (50-page). Annex A04 of QA_SOP_008.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T10:42:21",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2512,10 +2645,16 @@
    "description": "INSPECTED status label template (52.5x33mm perforated sheet). docx + signed PDF variant.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T12:44:57",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:10:48",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2564,10 +2703,16 @@
    "description": "'APPROVED FOR STORAGE / Released for Storage' status label template sheet.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T13:30:11",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-07-01T02:13:27",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2605,10 +2750,16 @@
    "description": "QUARANTINE status label template sheet (PP x10), signed variant.",
    "sessions": [
     {
-     "started_at": "2026-05-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-27T13:58:05",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:12:21",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2646,10 +2797,10 @@
    "description": "CAPA form (QAT 013) initiated by Jovana Romevska Cvetkovski (QA) 18.03.2026 from CUMCS IMC-G.A.P. self-inspection: 3 non-conformities — substrate pathogen certificates, 2-yr substrate retention samples, glass/hard-plastic breakage SOP. Deadline 06.04.2026. Checked by B. Nikolov. Doc captured 2026-05-27.",
    "sessions": [
     {
-     "started_at": "2026-03-18T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-28T01:16:38",
+     "hours": 2.5,
      "time_estimated": true,
-     "note": "CAPA initiated (evidence: printed date 18.03.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [
@@ -2700,16 +2851,28 @@
    "description": "Master bilingual SOP for labeling and label control (label classes, master register, template change control). Revised v3.0 → v3.1.",
    "sessions": [
     {
-     "started_at": "2026-05-28T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-20T09:04:06",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "v3.0 (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-05-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-28T03:03:33",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "v3.1 revision"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-30T06:42:09",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:16:29",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2758,10 +2921,16 @@
    "description": "Master authoring template for all new Equipment SOPs (EQSOP_nnn): mandatory section scaffold with guidance/example text, RACI, safety, calibration, annexes. Two-column MK/EN.",
    "sessions": [
     {
-     "started_at": "2026-05-28T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-25T23:58:15",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-05-28T03:27:07",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2799,10 +2968,16 @@
    "description": "Label Request Form (LRF) annex of QASOP_031 label control — requesting dept, label details, custody, wet-ink approval.",
    "sessions": [
     {
-     "started_at": "2026-05-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-30T06:45:44",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:16:29",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2840,10 +3015,16 @@
    "description": "Master label register (password custody, template register with print settings, revision history). Annex A06 of QASOP_031.",
    "sessions": [
     {
-     "started_at": "2026-05-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-30T06:56:25",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T05:16:29",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2881,10 +3062,10 @@
    "description": "Three Mettler Toledo periodic balance-check SOPs (Eccentricity, Repeatability, Sensitivity), 4pp each, Adobe InDesign source. Captured as markdown metadata stubs (Deviation/CAPA/Release/Risk-Assessment key terms).",
    "sessions": [
     {
-     "started_at": "2026-05-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-30T13:36:19",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2944,10 +3125,10 @@
    "description": "Warehouse SOP (Main Incoming Materials Warehouse C167) for cultivation-material receipt/quarantine/QC status/storage/issuing. Version 02 approved 30.10.2024 (revision list present). '-old-' copy captured 2026-05-31.",
    "sessions": [
     {
-     "started_at": "2026-05-31T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-31T03:29:27",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document revised/captured (evidence: Drive modifiedTime; v02 approval 30.10.2024)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -2986,16 +3167,10 @@
    "description": "Equipment SOP for Memmert ICH750L stability climate chamber (PP/QC/013) plus annexes: A03 D65/UV Light Source Calibration, A06 Daily Verification Checklist, A08 Equipment Logbook. Prepared by Blagoj Nikolov (HoQC). ICH Q1A/Q1B, ALCOA+.",
    "sessions": [
     {
-     "started_at": "2026-05-31T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-31T06:39:21",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "main SOP authored (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-05-31T10:00:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "annexes A06/A08/A03 authored"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [
@@ -3079,10 +3254,16 @@
    "description": "Bilingual SOP for transport of cannabis QC samples to outsourced labs (COO order, MoIA notification, cold chain 2-8C, chain of custody, security escort). Prepared by Blagoj Nikolov. Initial release (draft, approvals blank).",
    "sessions": [
     {
-     "started_at": "2026-06-03T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T08:25:56",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-03T10:44:00",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3120,10 +3301,16 @@
    "description": "Blank Analytical Method Status Form (method passport / lifecycle control): identification, validation status, key validation results, lifecycle change history, periodic review, approval. Annex A01 of PP-QC-SOP-015.",
    "sessions": [
     {
-     "started_at": "2026-06-03T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-20T07:03:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-03T10:47:20",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3161,10 +3348,10 @@
    "description": "Bilingual Risk Classification (Annex 01) for existing Magan Mak/Valter RO water treatment system PP/S/002: GxP screening, component-level qualification-phase matrix, deferred-prospective-qualification justification. Prepared by B. Nikolov; reviewed F. Meshkova; QA J. Romevska Cvetkovski.",
    "sessions": [
     {
-     "started_at": "2026-06-03T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-03T19:16:52",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3202,10 +3389,10 @@
    "description": "Bilingual retrospective URS (Annex 02) for existing Valter/Magan Mak RO water system PP/S/002 (100 m3/day): detailed operational/regulatory/data requirements, supplier selection (Valter Skupina). Prepared by B. Nikolov; reviewed F. Meshkova; QA J. Romevska Cvetkovski.",
    "sessions": [
     {
-     "started_at": "2026-06-03T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-03T19:16:52",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3243,10 +3430,10 @@
    "description": "External-lab analysis request (Bio Engineering LLC) for organic substrate 'COCO PERLITE 70/30' batch RTM642, receipt 26-100-00021: pathogen/microbiological panel (Fusarium/Rhizoctonia/Phytophthora/Pythium; TAMC/TYMC/E.coli/Salmonella/etc). Dated 04.06.2026; sampling 05.06.2026 by Martina Trajkovska (QC). Linked to CAPA CM-03/26.",
    "sessions": [
     {
-     "started_at": "2026-06-04T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-04T12:15:17",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "analysis request prepared (evidence: printed date 04.06.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3285,10 +3472,10 @@
    "description": "Incoming-goods acceptance specification (Variation F HTML) for PET/ALU/PE primary packaging alu bag, product-contact, Grade D. Supplier-agnostic. Effective 01.06.2026; signed B. Nikolov (QC) + J. Romevska Cvetkovski (QA).",
    "sessions": [
     {
-     "started_at": "2026-06-04T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-04T17:59:03",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/rendered (evidence: Drive modifiedTime; effective 01.06.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3327,10 +3514,16 @@
    "description": "One-page IMG (indirect materials / packaging) specification approval-submission sample with mock EXAMPLE values, demonstrating the QCSP-IMG specification structure (acceptance criteria per EU GMP Ch.4, ICH Q6A/Q9; sampling/receipt/traceability/retest per Annex 8) for QA/Management approval. Prepared & approved by Blagoj Nikolov (QC Manager), reviewed by Jovana Romevska Cvetkovski (QA Manager), dated 01.06.2026. Explicitly marked not for release use.",
    "sessions": [
     {
-     "started_at": "2026-06-01T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-10T09:34:58",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "IMG spec approval sample; in-doc date 01.06.2026 (file modifiedTime 2026-06-30, in-doc date used)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T12:33:12",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3369,10 +3562,10 @@
    "description": "Software/system architecture, URS and roadmap for the eCoA ingestion & CoQ compilation system (HTML spec doc). Infrastructure/QMS software design for PP CoA/CoQ automation.",
    "sessions": [
     {
-     "started_at": "2026-06-07T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-07T08:16:51",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3410,10 +3603,10 @@
    "description": "Internal single-parameter CoA (Variation F HTML): Foreign Matter (Ph.Eur.2.8.2) for FP bulk P060078/GG112502 Gorilla Glue THC19. Result 1.20% w/w PASS, seeds absent. Issued 06.03.2026; 3-tier signoff (Pavlova/Trajkovska/Nikolov). Doc captured 2026-06-07.",
    "sessions": [
     {
-     "started_at": "2026-03-06T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-07T16:32:01",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "analysis performed & iCoA issued (evidence: printed date 06.03.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3452,10 +3645,10 @@
    "description": "Source-of-truth design-system spec (Navy & Gold 'Variation F') for the 5-document QC family: palette, typography, safe-zone layout, business rules (MK GMP wording, signatories, grade tiers, Ph.Eur.3028 panel), render recipe. Last updated 7 Jun 2026; repo 3p4e/coa_track PR#20.",
    "sessions": [
     {
-     "started_at": "2026-06-07T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-07T16:32:01",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime; last updated 7 Jun 2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3493,10 +3686,10 @@
    "description": "Reusable Certificate of Quality (CoQ) HTML template in Variation F identity — aggregates outsourced eCoAs against spec; QC Manager + QA Manager signoff. Part of the CoA/CoQ document family.",
    "sessions": [
     {
-     "started_at": "2026-06-07T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-07T16:32:01",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "template authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3534,10 +3727,10 @@
    "description": "Internal single-parameter CoA (Variation F HTML): Loss on Drying (Ph.Eur.2.2.32 Method E) for FP bulk P060089/WC112503 Wedding Crasher THC23. Mean LoD 7.83% w/w PASS. Issued 11.03.2026; 3-tier signoff. Doc captured 2026-06-07.",
    "sessions": [
     {
-     "started_at": "2026-03-11T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-07T16:32:01",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "analysis performed & iCoA issued (evidence: printed date 11.03.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3576,10 +3769,16 @@
    "description": "Filled Certificate of Quality for Dry Cannabis Flower intermediate bulk, cultivar Crimson Blaze, processing batch CB250725 / production batch P0501242, THC25:CBD1. Full Ph.Eur.3028 results table populated (THC 25.21%, LoD 8.2%, FM 0.8%, micro/metals/pesticides pass). QC_SOP_004_A03 CoQ template, OB 8066 copy.",
    "sessions": [
     {
-     "started_at": "2026-06-08T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-13T08:24:04",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "certificate compiled (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-08T05:26:57",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3618,22 +3817,28 @@
    "description": "Method validation protocol (bilingual) for HPLC-DAD cannabinoid assay (method PP-QC-AM17-2 v2.1) on Cannabis flos per Ph.Eur.mon.3028 & ICH Q2(R2). Status Provisional→Validated. Effective 09.06.2026; reviewed J. Romevska (QA), approved S. Petrova (QP), prepared by QC.",
    "sessions": [
     {
-     "started_at": "2026-06-09T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-07T11:08:43",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "protocol authored/revised (evidence: Drive modifiedTime; effective 09.06.2026)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-11T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-09T10:17:39",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "protocol v3.1 revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-16T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-11T09:24:07",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "content-stage text outputs (evidence: Drive modifiedTime; assumed MVP-003 family)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-16T17:44:27",
+     "hours": 3.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3719,10 +3924,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-10T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-10T09:51:06",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3761,10 +3966,22 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-10T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-10T02:41:06",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "HTML templates authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-11T19:37:50",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T12:34:48",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3825,10 +4042,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-10T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-10T13:23:08",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "memo authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3864,10 +4081,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W08 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 01-05.06.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:57",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3909,10 +4132,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-12T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-12T13:53:45",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "logbook master authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3951,10 +4174,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-12T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-12T13:59:41",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "RSA form completed (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -3993,10 +4216,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-15T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-15T11:49:10",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "gap analysis report issued (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4035,10 +4258,16 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-18T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-12T13:53:45",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "logbook master authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-18T11:24:27",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4077,16 +4306,16 @@
    "blocker_reason": "Guard band/IPQC action limit provisional; reference method a02.2 verification pending (unanchored) and signatures/dates blank.",
    "sessions": [
     {
-     "started_at": "2026-06-18T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-18T15:55:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "AMSF (CHARACTERISED) + register extract drafted (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T07:28:40",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "initial PROVISIONAL AMSF variant (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4166,10 +4395,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W09 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 08-12.06.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4211,10 +4446,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T17:01:08",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "report finalized (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4253,16 +4488,16 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-19T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-19T09:04:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "protocol content build-ready + executed version (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T07:28:43",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "2025 blank-forms protocol variant (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4334,10 +4569,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T04:30:59",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "validation protocol authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4387,10 +4622,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T05:22:44",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "validation report finalized (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4429,16 +4664,16 @@
    "blocker_reason": "Route decision (Verification vs Validation) open; SST reference material invalid at 40°C; u_cal provisional pending balance certificate/oven IQ-OQ-PQ.",
    "sessions": [
     {
-     "started_at": "2026-06-19T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-19T20:21:19",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "PROVISIONAL (verification-pending) AMSF pdf (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T05:02:22",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "VALIDATED + PROVISIONAL route variants drafted (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4510,10 +4745,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T05:24:30",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "handover docs authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4563,10 +4798,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T05:22:44",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "skill specs authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4649,10 +4884,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T08:02:26",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "smoke-test docs generated (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4724,10 +4959,10 @@
    "blocker_reason": "DRAFT pending QA/QP review; six open items require QC Head confirmation; approval signatures/effective date blank.",
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T08:17:35",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP consolidation drafted + merge notes (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4777,10 +5012,10 @@
    "blocker_reason": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-22T17:50:43",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "correlation matrix authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4827,10 +5062,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T17:39:00",
-     "hours": null,
+     "started_at": "2026-06-22T11:31:53",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "AMVR/AMVP/AMSF-a02.2 docx authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -4908,16 +5143,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T17:03:00",
-     "hours": null,
+     "started_at": "2026-06-22T13:08:17",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "PROVISIONAL AMSF-SAM_a02.1 authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-23T03:24:00",
-     "hours": null,
+     "started_at": "2026-06-23T05:24:01",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "AMVR/AMVP/AMSF-a02.1 correlation package authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5006,10 +5241,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-23T03:48:00",
-     "hours": null,
+     "started_at": "2026-06-23T05:48:13",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "AMVP-a04 foreign-matter protocol authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5053,10 +5288,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T17:03:00",
-     "hours": null,
+     "started_at": "2026-06-22T17:51:29",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Outsourced correlation matrix authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5100,10 +5335,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-23T22:21:00",
-     "hours": null,
+     "started_at": "2026-06-23T08:42:13",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "MVP-003/26 v3.1 verification protocol authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-24T00:21:30",
+     "hours": 3.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5159,10 +5400,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-23T22:21:00",
-     "hours": null,
+     "started_at": "2026-06-23T08:34:03",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "AMVR-003/26 illustrative verification report authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-24T00:21:36",
+     "hours": 3.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5218,10 +5465,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-23T06:34:00",
-     "hours": null,
+     "started_at": "2026-06-23T08:34:06",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "MVR-003/26 illustrative validation report authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5259,10 +5506,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Cumulative report authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:57",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5301,10 +5554,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:08:40",
-     "hours": null,
+     "started_at": "2026-06-22T21:08:40",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Weekly report W10 retroactively authored in 22.06.2026 batch (evidence: Drive modifiedTime); reporting week 15-19.06.2026"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-23T00:21:58",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5343,10 +5602,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:44:16",
-     "hours": null,
+     "started_at": "2026-06-22T21:44:16",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Task registry auto-extracted/authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5385,10 +5644,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-22T19:45:08",
-     "hours": null,
+     "started_at": "2026-06-22T21:45:08",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "Handoff note authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5427,10 +5686,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-23T20:26:42",
-     "hours": null,
+     "started_at": "2026-06-23T22:26:42",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "TaskLog automation pack authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T01:20:17",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5469,28 +5734,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-24T12:26:12",
-     "hours": null,
+     "started_at": "2026-06-24T12:35:38",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "QTA PP-Tetra draft variant 'j' (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-24T18:34:47",
-     "hours": null,
+     "started_at": "2026-06-25T01:46:13",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "QTA PP-Tetra base revision (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-06-24T19:41:38",
-     "hours": null,
-     "time_estimated": true,
-     "note": "QTA PP-Tetra _BN revision (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-06-24T23:46:13",
-     "hours": null,
-     "time_estimated": true,
-     "note": "QTA PP-Tetra _BN_reviewed revision with populated appendices (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5546,16 +5799,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-25T17:22:46",
-     "hours": null,
+     "started_at": "2026-04-30T22:57:36",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "Annex 06 OQ authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-25T17:26:11",
-     "hours": null,
+     "started_at": "2026-06-25T19:22:46",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "Annex 07 PQ and Annex 08 DEV authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5615,10 +5868,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-25T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-30T22:57:36",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "qualification annexes authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-25T19:26:11",
+     "hours": 3.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5701,10 +5960,22 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-25T10:00:00",
-     "hours": null,
+     "started_at": "2026-04-19T23:44:57",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP + annexes authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-04-20T01:57:34",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-25T22:08:42",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5764,16 +6035,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2025-05-25T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-27T08:13:59",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "initial OCR + 53-entry JSON + base RAG passages (~90min est, evidence: TASKLOG)"
-    },
-    {
-     "started_at": "2026-06-25T10:00:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "enrichment + 43/53 passages + strain analysis (~22min est, evidence: TASKLOG)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5811,10 +6076,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-24T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T04:38:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "regulatory determination (~90min est, evidence: TASKLOG)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5853,28 +6118,34 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-24T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T04:38:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "built 7-page plan (21-batch N/n table, 419 samples) (~120min est)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T23:04:12",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "removed tranche terms, blanked personnel names, added secure-warehouse row (~30min est)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-01T10:00:00",
-     "hours": null,
+     "started_at": "2026-07-01T08:38:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "sp_chk proof render (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-02T09:06:00",
-     "hours": null,
+     "started_at": "2026-07-02T07:53:21",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "v2.0 .docx revision + PDF render + sp2/sp3 proofs (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-07-03T10:35:12",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -5968,10 +6239,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP + 5 annexes authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6064,10 +6335,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "v03 complete revision (revision approval date printed 11.05.2026; evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6105,10 +6376,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "OOx register template authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6146,10 +6417,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "stability annexes authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6198,10 +6469,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "spec v02 (printed date 2026-05-26) surfaced/handled (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6239,10 +6510,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:13:56",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "LIMS specs/artifacts authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-07-01T10:20:05",
+     "hours": 1.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [
@@ -6378,16 +6655,22 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-25T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-25T22:13:03",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "capture/planning prompt docs authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-06-28T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-27T01:05:36",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "Capture Prompt v6 finalized (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T01:20:13",
+     "hours": 0.75,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6491,10 +6774,16 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-27T03:40:27",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "candidate register authored (evidence: Drive modifiedTime + printed date)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-28T01:20:19",
+     "hours": 0.75,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6532,10 +6821,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-28T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-28T18:43:33",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "design-system skill + component specimen authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6584,10 +6873,10 @@
    "estimated_hours": null,
    "sessions": [
     {
-     "started_at": "2026-06-27T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-27T08:13:52",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "app built + smoke-tested, deploy attempted; evidence: TASKLOG (build ~270min, deploy ~30min est)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [
@@ -6634,10 +6923,10 @@
    "description": "Bilingual MK/EN QC SOP establishing risk-based framework for OOS/OOT/OOE/OOC investigation (Phase I laboratory, Phase II extended, CAPA, batch disposition), cannabis-specific limits per Ph.Eur.3028. Version 01, approval block blank (draft).",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6675,10 +6964,10 @@
    "description": "Parent SOP governing the cannabis dry-flower stability programme (charging, chambers, withdrawals, reporting). v1 draft. Full body exceeded token limit (persisted).",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6716,10 +7005,10 @@
    "description": "Long-term stability protocol, Grape Pie 10g triplex, batches P160012/P160022/P160032, 25C/60%RH, 24 months, 7 timepoints. Author Blagoj Nikolov. Status Draft; supersedes QC_SOP_003_A01-01.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6757,10 +7046,10 @@
    "description": "Accelerated stability protocol, Grape Pie 10g triplex, 3 batches, 40C/75%RH, 6 months, 7 monthly timepoints. Author Blagoj Nikolov. Status Draft; supersedes QC_SOP_003_A02-01.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6798,10 +7087,10 @@
    "description": "Intermediate stability study report template (30C/65%RH, ACC+LT+INT three-condition comparative / Arrhenius). Author Blagoj Nikolov. Status Draft; supersedes QC_SOP_003_A06-01.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6839,10 +7128,10 @@
    "description": "Consolidated stability programme plan (ACC + LT, shared T0, Gantt, sample calc, lab routing CNP/IPH) for Grape Pie 10g x3 batches. Status Draft.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6880,10 +7169,10 @@
    "description": "Central per-batch/per-study execution record template (randomized selection, charging, withdrawal log, reconciliation, closure). Status Draft template.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6921,10 +7210,10 @@
    "description": "Bilingual SOP for lifecycle of QC specifications (development, technical review, approval, numbering, revision/change control, master register). Version 02. Full body exceeded token limit (persisted).",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -6962,10 +7251,10 @@
    "description": "In-process material specification for dry cannabis flower production, 5 intermediary products with IPC parameters (moisture, foreign matter, visual). Version 01, approval block blank.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7003,10 +7292,10 @@
    "description": "Complete v5 revision of cannabis material sampling SOP (GACP/GMP, Ph.Eur.2.8.20) plus annexes: A01 In-Process Sampling Plan, A02 Sampling Logbook, A03 Visual Inspection Form, A04 Bulk Sample Resampling, A05 Material Quantity Review, A06 Sample Labels. Author B. Nikolov; v5 change history dated 19.02.2026, files exported 2026-06-29. Approval block blank.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T21:01:00",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7110,10 +7399,22 @@
    "description": "QC sampling bilingual SOP evolving through versions and a numbering migration from PP-QC-SOP-017 to QCSOP 011 (and 'fQCSOP 011'). Same document family: v01, v02, v02 FINAL, plus renamed A06 Sample Labels annex, with docx+pdf exports. Multiple naming schemes same week indicates ongoing rework. Merged to one task.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-05-21T18:51:37",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-29T21:01:00",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
+    },
+    {
+     "started_at": "2026-06-30T01:42:42",
+     "hours": 2.0,
+     "time_estimated": true,
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7250,10 +7551,10 @@
    "description": "Water quality-control SOP annex set: A01 2026 Annual Water Testing Plan (v1, prepared B. Nikolov 07.11.2025), A02 Water Testing Results Log, A03 Municipality Tap Water spec, A05 Treated Water spec, A06 RO Water spec, A08 Sampling Quick Reference Guide (prepared QP B. Nikolov). Bilingual, mostly v1/draft.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7346,10 +7647,10 @@
    "description": "CEO executive order (authored by QC/B. Nikolov) mandating 600g representative sampling + micro testing of 21 aged dry-flower batches (~1.65t) before sale; preserves QP Annex-16 release independence. docx+pdf. Issue date blank (draft, pending signatures).",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:35",
+     "hours": 0.75,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7398,16 +7699,10 @@
    "description": "Per-batch sampling execution record family for the micro-verification campaign (WHO r-plan n=ceil(1.5*sqrt(N)), 600g bRS split micro/rRS/sRS/mRS). One record per batch; slice contains BG1024(-01), BSS1024(-02), HPA1024(-13), HPA1024_01(-14), PM092501(-20). Blank data-entry templates, drafts to be executed at bench.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:35",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "execution record series authored/issued (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7898,10 +8193,10 @@
    "description": "Handover/context document authored by B. Nikolov summarizing the 21-batch micro-verification sampling package: locked decisions (WHO r-plan, scope, 600g split), dataset table, open items (21 vs 25, shelf-life gap, PQ homogeneity study), document manifest and build toolchain. Draft set pending QA/QP approval.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7939,10 +8234,10 @@
    "description": "Bilingual production material-transfer forms: A01 Cannabis material handover and A02 Cannabis material receipt during production/processing (department/room/process, batch, container weights, sign-offs). Blank form templates.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T21:34:10",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -7991,10 +8286,10 @@
    "description": "Product requirements document for the Purely Plant QC LIMS software (dated 2026-05-25). Full body exceeded token limit; identified from filename and related LIMS docs. Software/infra work for PP systems.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8032,10 +8327,10 @@
    "description": "Detailed 17-week engineering roadmap mapping PP QC SOPs (012/010/011/003/002/019/018) to CoA_TRACK code reuse and new QC_LIMS modules, data-model grid, AI/Letta pipeline, phased plan. Authored 2026-05-24. Software work for PP systems.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8073,10 +8368,10 @@
    "description": "Regulatory compliance framework document for the QC LIMS (EU GMP Annexes 1/11/15/16, ICH Q10, ALCOA++, 21 CFR Part 11, Ph.Eur. methods, Annex 11 validation & audit-trail requirements). Supporting doc for the LIMS build.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-29T18:14:47",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "document authored/revised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8114,10 +8409,10 @@
    "description": "Authored request from Head of QC to the secure warehouse to issue/hand over 2 batches for representative sampling per plan PP-QC-SP-001/26: CashCow CC012601/1 (23 bags, 8.93 kg) and Cap Junkie CJ082501/2 (35 bags, 13.91 kg). ALCOA+ (EU GMP Annex 11). DOCX+PDF.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:35",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "handover request authored/issued (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8167,10 +8462,10 @@
    "description": "Authored request from Head of QC to the secure warehouse to issue/hand over 3 batches for sampling per plan PP-QC-SP-001/26: Permanent Marker PM092501 (49 bags, 19.38 kg), Grape Pie GP082501/2 (55 bags, 22.00 kg), Jokerz 31 J31102501 (57 bags, 22.76 kg). ALCOA+ (EU GMP Annex 11). DOCX+PDF.",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:35",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "handover request authored/issued (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8220,10 +8515,10 @@
    "description": "Authored a full method comparison/correlation validation report: Halogen Moisture Analyser (HMA, 105C) Loss-on-Drying vs Ph.Eur 2.2.32 vacuum-oven reference on batch Cannabis flos CJ072501, 5 moisture ranges (R1~60% to R5~3%), studies run Oct-Nov 2025 by Blagoj Nikolov (retrospectively formalised via QASOP014 change control). Includes raw gravimetric data, descriptive stats, Q-ratio precision, bias, Pearson/OLS/Passing-Bablok/Deming regression, Bland-Altman, GUM uncertainty (k=2), paired t/F-tests. Verdict per QCSOP-009 §6.5.3: CHARACTERISED (IPQC ONLY), authorised ranges R2/R4/R5, R1/R3 excluded (Q>2). NOTE: content is stored in the Drive file named 'PP_BASE_TEMPLATE.docx' (misnamed; body is the AMVR report).",
    "sessions": [
     {
-     "started_at": "2026-06-29T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T00:09:36",
+     "hours": 3.0,
      "time_estimated": true,
-     "note": "validation report authored/formalised (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8262,10 +8557,10 @@
    "description": "Authored bilingual (MK/EN) blank handover form for transfer of cannabis material between departments/rooms during production and processing (batch, strain, container ordinal, net/gross weights, operator/supervisor signatures, handover confirmation). Blank template form (PDF).",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T03:22:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "form authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8304,10 +8599,10 @@
    "description": "Authored bilingual (MK/EN) blank receipt form for cannabis material received between departments/rooms during production and processing (batch, strain, container ordinal, net/gross weights, operator/supervisor signatures, receipt confirmation). Blank template form (PDF).",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T03:22:51",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "form authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8346,10 +8641,10 @@
    "description": "Authored the full set of bilingual (MK/EN) QC assay sample labels for dry cannabis flower: cannabinoid quant/qual determination, mycotoxin (Aflatoxin B1), microbiological purity, total ash, loss on drying, heavy metals, pesticide residues, and counter/retention sample. Each label carries material name, strain/plant ID, sID, batch/lot, harvest/packaging dates, net/gross, storage conditions, sampling date/by. Blank template labels.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T04:39:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "label set authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8388,10 +8683,10 @@
    "description": "Authored bilingual (MK/EN) blank RS (representative sample) storage-box/logbook label template with sampling-logbook action table (sampling, re-weighing, quarterly net-loss (kalo) determination, routine gross/theoretical-net check, annual inventory, sales, gross check on receipt); ties to QASOP-031 / PO_SOP_007_A14. Blank template (4 label copies).",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T04:49:23",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "label template authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8430,10 +8725,10 @@
    "description": "Authored bilingual (MK/EN) sample storage/logbook labels (PO_SOP_007_A14 v3.0) with net-loss (kalo) tracking table. Partly populated with example/legacy entries: Super Critical batch 8062 (ID 240502_RS_8062/SC_002, net 218g/gross 260g), Moon Light 8061 (240510_bRS_8061/ML_001, 536/596g), Jack Herer 9049 (RS_9049/JH_001, box 9, 157.5/201.5g). Mostly template fields left blank.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T04:37:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "sampled label template authored (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8472,16 +8767,16 @@
    "description": "Bilingual (MK/EN) QC sampling SOP for Cannabis flos (TD1-DF400), 30 pages, operational document for Stage 2 (Sampling & Forwarding) of the QC lifecycle. Prepared by B. Nikolov, reviewed J. Romevska, approved S. Petrova. Multiple working renders/versions in this slice: a LEGACY-GREEN draft (deprecated gray/green formatting), a current bilingual .docx, a PDF render, a full-text dump (docdump.txt) and a proof-check PDF (sop_chk). Draft/revision in progress -> ongoing.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T02:28:16",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "SOP body/version work; legacy-green draft + docdump + sop_chk proof (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-02T10:00:00",
-     "hours": null,
+     "started_at": "2026-07-02T10:17:51",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "current bilingual .docx + PDF render (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8563,16 +8858,10 @@
    "description": "Bilingual controlled execution-form annexes for PP-QC-SOP-008 sampling: A05 Material Quantity Review (before/after sampling reconciliation, +/-0.5% tolerance) v5.0, A06 Sample Identification Labels v5.0, A06 Sampling Logbook v5.0, plus a legacy A02 quantity-review annex v4.0 (20.05.2024). Note filename says 'QCSOP 011_A05/A06' but document code inside reads PP-QC-SOP-008; family kept together. Marked Controlled Copy; form templates authored/revised.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T08:03:01",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "A05/A06 v5 annex templates authored (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-06-30T09:27:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "legacy QC_SOP_008_A02 v4 annex (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8643,16 +8932,16 @@
    "description": "Bilingual campaign close-out report summarising the 21-batch bRS sampling: per-batch execution roll-up, quantity reconciliation, visual inspection, micro-sample dispatch, deviations/OOS/CAPA, conclusion & disposition, per-batch records index. Summary only (does not replace controlled per-batch records). Data fields still blank (approval/signatures pending) -> ongoing. .docx revision updates record references to QCT 024/QCT 021 model; renders and proof-check PDFs (sr_chk, sr2, sr3).",
    "sessions": [
     {
-     "started_at": "2026-07-01T10:00:00",
-     "hours": null,
+     "started_at": "2026-07-01T08:24:49",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "sr_chk proof render (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-02T08:19:00",
-     "hours": null,
+     "started_at": "2026-07-02T07:53:35",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "PDF + .docx revision + sr2/sr3 proofs (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8734,10 +9023,10 @@
    "description": "Bilingual reusable template for the per-day daily sampling work plan derived from PP-QC-SP-001/26: batch calculations (N, r-plan n), systematic bag selection (K#B#), bRS composite/split, labels-required-by-type, forms & workflow (MHR -> QCT 024 -> QCT 021 -> QASOP_031 labels). Template with placeholder fields; .docx + PDF render.",
    "sessions": [
     {
-     "started_at": "2026-07-02T09:06:00",
-     "hours": null,
+     "started_at": "2026-07-02T10:41:34",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "template .docx + PDF render (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8787,16 +9076,10 @@
    "description": "Day-1 populated daily sampling work plan for batches HPA1024 (N=100, n=15) and OPM1024 (N=110, n=16), 31 bags to open, with computed systematic bag IDs (K#B#), bRS split, and labels-required counts (60 labels, +10% spare = 66). Sampling date field still blank; .docx + PDF render.",
    "sessions": [
     {
-     "started_at": "2026-07-02T09:08:00",
-     "hours": null,
+     "started_at": "2026-07-02T11:08:28",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Day-1 plan PDF render (evidence: Drive modifiedTime)"
-    },
-    {
-     "started_at": "2026-07-02T10:08:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "Day-1 plan .docx (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8845,16 +9128,16 @@
    "description": "Bilingual perforated-label master sheets (52.5x33mm, 10-up A4) per QASOP 031 label lifecycle SOP: RELEASED (A02), QUARANTINE (A01), SAMPLED (A05), and APPROVED FOR STORAGE (A05). Mostly blank master templates; the Approved-for-Storage sheet is partly populated for batch JD012601/P060312 dated 26.05.2026. Authored/revised 30.06-01.07.2026.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T05:04:23",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "PP x10 Released label sheet (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-01T14:52:00",
-     "hours": null,
+     "started_at": "2026-07-01T02:12:54",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "Sampled / Approved-for-Storage / Released / Quarantine label sheets (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -8936,16 +9219,16 @@
    "description": "Generation and printing of the per-sample labels for the HPA1024 (and OPM1024) micro-sampling execution: microbiological purity sample-ID labels (sID 020726_HPA1024_001..016, strain High Pro Amnesia), bRS labels (020726_bRS_HPA1024), SAMPLED bag labels (K__B__, dated 02.07.2026), and retention mRS labels (030726_mRS_HPA1024 / HPA1024_01, dated 03.07.2026). Label sub-codes QASOP_031_A07 and PO_SOP_007_A13. Includes blank micro-label master and several .docx/.pdf/merged-print variants. Sampling dates printed on labels (02-03.07.2026) evidence real execution -> completed.",
    "sessions": [
     {
-     "started_at": "2026-07-02T10:00:00",
-     "hours": null,
+     "started_at": "2026-07-02T09:59:15",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "HPA1024 micro sample-ID + SAMPLED bag labels generated/printed, sampling date 02.07.2026 (evidence: printed label dates + Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     },
     {
-     "started_at": "2026-07-03T08:05:00",
-     "hours": null,
+     "started_at": "2026-07-03T10:05:11",
+     "hours": 2.0,
      "time_estimated": true,
-     "note": "retention mRS labels + RS HPA1024/OPM1024 labels, sampling date 03.07.2026 (evidence: printed label dates + Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -9105,10 +9388,10 @@
    "description": "Markdown addendum to the pp-document-suite authoring SKILL (to paste into SKILL.md via Settings -> Capabilities): a new Section 6D of mandatory layout & revision rules (D1-D10) capturing corrections from 30.06.2026 for the PP document generator (annex engine, use-aware column distribution, compact kv blocks, setgrid table-clipping fix, SOP regeneration vs patching). Software/tooling documentation work for PP document systems.",
    "sessions": [
     {
-     "started_at": "2026-06-30T10:00:00",
-     "hours": null,
+     "started_at": "2026-06-30T05:16:56",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "SKILL addendum authored (evidence: Drive modifiedTime + in-doc date 2026-06-30)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -9147,10 +9430,10 @@
    "description": "Three NotebookLM-generated training/presentation decks explaining the QC sampling & labeling system to EU GMP standards: 'GMP Labeling and Sampling' (two pillars, label lifecycle, RACI, ALCOA+), 'The Golden Thread of Traceability' (SP-12 training, A02/A03/A05/A08/A09 record chain, CashCow batch CC012601/1 walkthrough) and 'GMP Sampling Integrity' (r-plan hotspot rationale, mass reconciliation, chain of custody). Knowledge/training material tied to QASOP 031 and PP-QC-SP-001/26.",
    "sessions": [
     {
-     "started_at": "2026-06-30T23:04:00",
-     "hours": null,
+     "started_at": "2026-07-01T01:04:42",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "three training decks exported (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
@@ -9211,16 +9494,10 @@
    "description": "25-page internal handover / knowledge-transfer record (not a controlled GMP SOP) authored by B. Nikolov capturing the QC micro-sampling documentation program and session work record (work spanning 24 Jun - 3 Jul 2026): five-phase sampling workflow, computational rules, document architecture, decisions & corrections register, QCT code register, toolchain to regenerate documents, 45 captured user prompts. .docx working file (bbbb prefix) + PDF issued.",
    "sessions": [
     {
-     "started_at": "2026-07-03T02:22:00",
-     "hours": null,
+     "started_at": "2026-07-03T04:15:37",
+     "hours": 1.0,
      "time_estimated": true,
-     "note": "handover PDF (evidence: Drive modifiedTime + doc date 3 Jul 2026)"
-    },
-    {
-     "started_at": "2026-07-03T03:37:00",
-     "hours": null,
-     "time_estimated": true,
-     "note": "handover .docx working file (evidence: Drive modifiedTime)"
+     "note": "Derived from Drive file creation/modification metadata (real date/time; hours are a task-type estimate, not measured)."
     }
    ],
    "subtasks": [],
