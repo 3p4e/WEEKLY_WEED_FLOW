@@ -67,12 +67,13 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -c "
-            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
-            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
-            CREATE DATABASE wwf_users_test;
-            CREATE DATABASE wwf_tasks_test;
-          "
+          # one statement per -c: CREATE DATABASE cannot run inside the
+          # implicit transaction a multi-statement -c string gets wrapped in.
+          psql -h localhost -U postgres \
+            -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';" \
+            -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;" \
+            -c "CREATE DATABASE wwf_users_test;" \
+            -c "CREATE DATABASE wwf_tasks_test;"
           for which in users tasks; do
             backend/scripts/load_schema.sh $which wwf_${which}_test -h localhost -U postgres
             psql -h localhost -U postgres -d wwf_${which}_test -c "
@@ -170,12 +171,13 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -c "
-            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
-            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
-            CREATE DATABASE wwf_users_test;
-            CREATE DATABASE wwf_tasks_test;
-          "
+          # one statement per -c: CREATE DATABASE cannot run inside the
+          # implicit transaction a multi-statement -c string gets wrapped in.
+          psql -h localhost -U postgres \
+            -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';" \
+            -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;" \
+            -c "CREATE DATABASE wwf_users_test;" \
+            -c "CREATE DATABASE wwf_tasks_test;"
           for which in users tasks; do
             backend/scripts/load_schema.sh $which wwf_${which}_test -h localhost -U postgres
             psql -h localhost -U postgres -d wwf_${which}_test -c "

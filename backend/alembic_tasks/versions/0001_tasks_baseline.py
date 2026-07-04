@@ -350,6 +350,10 @@ CREATE POLICY org_isolation ON public.ai_agent_bindings
 """
 
 _DOWN = r"""
+-- tasks_read/tasks_write reference task_assignees in their USING subqueries,
+-- so they must go before that table can be dropped.
+DROP POLICY IF EXISTS tasks_read ON public.tasks;
+DROP POLICY IF EXISTS tasks_write ON public.tasks;
 DROP TABLE IF EXISTS public.ai_agent_bindings;
 DROP TABLE IF EXISTS public.ai_pins;
 DROP TABLE IF EXISTS public.handoffs;
