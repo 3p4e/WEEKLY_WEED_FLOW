@@ -61,6 +61,29 @@ async def test_import_create_then_idempotent_reimport(client, admin_headers, org
     assert s["classification"] == "weekend" and s["source"] == "capture"
 
 
+async def test_import_date_only_session(client, admin_headers, org):
+    """A session with only started_at — duration genuinely unknown, per the
+    capture contract — is legal: it contributes 0 hours but is still recorded
+    and classified from its start time."""
+    r = await client.post("/capture/import", json=_payload(
+        ref="date-only-1",
+        sessions=[{"started_at": "2026-07-04T14:00:00", "hours": None,
+                   "ended_at": None, "time_estimated": True, "note": "unknown duration"}],
+    ), headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 1 and body["skipped"] == []
+    assert body["sessions_added"] == 1
+
+    r = await client.get("/tasks?include_archived=true", headers=admin_headers)
+    t = next(x for x in r.json() if x.get("external_ref") == "date-only-1")
+    assert float(t["session_hours"]) == 0.0
+
+    r = await client.get(f"/tasks/{t['id']}/sessions", headers=admin_headers)
+    s = r.json()[0]
+    assert s["hours"] == 0.0 and s["classification"] == "weekend"
+
+
 async def test_import_status_never_regresses(client, admin_headers, org):
     await client.post("/capture/import",
                       json=_payload(ref="reg-1", status="completed", completed_date="2026-07-01"),

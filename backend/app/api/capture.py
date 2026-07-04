@@ -148,9 +148,6 @@ def _validate(t: CaptureTask) -> str | None:
         return f"invalid recurrence_hint '{t.recurrence_hint}'"
     if t.status == "completed" and not t.completed_date:
         return "completed without completed_date"
-    for s in t.sessions:
-        if s.hours is None and s.ended_at is None:
-            return "session without hours or ended_at"
     return None
 
 

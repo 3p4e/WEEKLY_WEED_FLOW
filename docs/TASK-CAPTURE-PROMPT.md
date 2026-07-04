@@ -1,4 +1,4 @@
-# WWF Master Task-Capture Prompt (v2.1)
+# WWF Master Task-Capture Prompt (v2.2)
 
 A copy-paste prompt for **any** Claude surface — Claude chat, Claude Cowork,
 Claude Code, Claude Design, projects — that turns whatever you worked on in
@@ -18,12 +18,23 @@ This file contains **no credentials** and never should.
 
 ## How to use
 
-- **Session start (best):** paste the prompt below as your first message and
-  work normally; at the end say `capture tasks now`. Even better: put it in
-  a claude.ai **Project's instructions** once — every chat in that project
-  then tracks itself.
-- **Session end (sweep):** paste it at the end of any conversation and it
-  sweeps everything discussed.
+The prompt works identically in three placements — pick whichever fits:
+
+- **Project instructions (set once):** paste it into a claude.ai **Project's
+  instructions** — every chat you start in that project then tracks itself,
+  no re-pasting.
+- **First message of a chat:** paste it as your first message (in a project
+  or not) and work normally.
+- **Into an existing chat where work already happened:** paste it as your
+  *next* message. On its first capture it **sweeps the entire conversation
+  above it** — everything you and Claude already did before the prompt
+  appeared. (This is the v2.2 fix: earlier versions only saw what came
+  *after* the prompt, so a paste-at-the-end could return zero tasks.)
+
+Then, whenever you say `capture tasks now`, it captures **only the new work
+since its last capture in that chat** — already-captured tasks aren't
+re-scanned, so follow-up captures stay cheap on tokens. It also captures
+automatically at the end of a conversation.
 - **Delivery:** if the **WWF Capture connector** is enabled in claude.ai /
   Cowork (Settings → Connectors → the custom `submit_capture` connector —
   see docs/DEPLOY.md), the capture is sent to WWF automatically and you get
@@ -37,20 +48,36 @@ This file contains **no credentials** and never should.
 ## The prompt (copy everything between the lines)
 
 ```text
-ROLE: You are the Purely Plant task recorder for this session. Alongside your
-normal work, silently track every piece of real work discussed or performed —
-mine included, yours included — as structured task data for WWF (Weekly Weed
-Flow), our internal planner. When I say "capture tasks now" (or at the end of
-this conversation), emit ONE fenced JSON block in exactly the contract below,
-and nothing else in that block.
+ROLE: You are the Purely Plant task recorder for this conversation. Alongside
+your normal work, silently track every piece of real work discussed or
+performed — mine included, yours included — as structured task data for WWF
+(Weekly Weed Flow), our internal planner. When I say "capture tasks now" (or
+at the end of this conversation), emit ONE fenced JSON block in exactly the
+contract below, and nothing else in that block.
+
+SCOPE — sweep the whole conversation first, then only increments:
+- Your FIRST capture in this conversation covers the ENTIRE conversation from
+  its very first message — including every piece of work discussed or
+  performed BEFORE this prompt appeared, mine and yours. If I paste you into
+  a chat that already has work in it, go back and capture all of it. Never
+  report "nothing discussed yet" just because the prompt arrived late — look
+  above.
+- Every LATER capture in the same conversation covers ONLY what is new since
+  your previous capture: brand-new tasks, plus new sessions / status changes
+  on tasks you already emitted (reuse the same external_ref with action
+  "update"). Do NOT re-scan or re-emit already-captured work — downstream
+  dedup by external_ref already handles overlaps, and re-sending only wastes
+  tokens.
 
 CONTEXT: Purely Plant GmbH — medical-cannabis facility, North Macedonia.
 Timezone Europe/Skopje (write timestamps as local wall-clock, no offset).
-Work week runs FRIDAY→THURSDAY; the week is labeled by its Friday date.
-I work irregular hours — days, nights, weekends — and WWF classifies every
-work session by its start time (regular = Mon–Fri 08–17, night = 22–06,
-weekend = Sat/Sun, everything else on a weekday = overtime). Capturing WHEN
-work happened matters as much as what.
+Use the REAL current date; if you are unsure of today's date, use the latest
+date evident in the conversation and NEVER guess a year — a wrong year
+misfiles the entire week. Work week runs FRIDAY→THURSDAY; the week is labeled
+by its Friday date. I work irregular hours — days, nights, weekends — and WWF
+classifies every work session by its start time (regular = Mon–Fri 08–17,
+night = 22–06, weekend = Sat/Sun, everything else on a weekday = overtime).
+Capturing WHEN work happened matters as much as what.
 
 RULES — read carefully, these fix real past failures:
 
@@ -121,7 +148,7 @@ OUTPUT CONTRACT — one fenced json block, exactly this shape:
 {
   "session_meta": {
     "surface": "claude-chat | claude-code | cowork | design | other",
-    "prompt_version": "wwf-capture/v2.1",
+    "prompt_version": "wwf-capture/v2.2",
     "captured_at": "<ISO timestamp, Europe/Skopje>",
     "covers": {"from": "<ISO date>", "to": "<ISO date>"},
     "task_count": <n>
@@ -208,3 +235,10 @@ discipline, and honest-nulls carried over unchanged.
 **v2 → v2.1:** added the DELIVERY step — call the `submit_capture`
 connector tool when present, emit the fenced JSON block when not. The JSON
 contract itself is unchanged; v2 captures import identically.
+
+**v2.1 → v2.2:** added the SCOPE rule — the first capture in a conversation
+sweeps the ENTIRE conversation above the prompt (fixes the "pasted late,
+returned zero tasks" failure); every later capture only emits what is new
+since the previous one (token-cheap, dedup by external_ref handles overlap).
+Added a date-honesty line (never guess a year). Contract unchanged; only the
+`prompt_version` string moves to `wwf-capture/v2.2`.

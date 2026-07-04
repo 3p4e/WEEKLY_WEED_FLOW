@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 4OGwOMIdDtbWhrbsH5J6SFtR917mXvFvnoGiEWlByhNsvtFDX1xBU5bbuIFgKyT
+\restrict vUo1G34vDZTzfTQbjNpcxOqfgLb0FUhkpM3CBS6ryKhvuJY6lz5WabrvpJtdYIY
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -374,7 +374,6 @@ CREATE TABLE public.work_sessions (
     note text,
     source text DEFAULT 'manual'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT work_sessions_duration_check CHECK (((hours IS NOT NULL) OR (ended_at IS NOT NULL))),
     CONSTRAINT work_sessions_hours_positive_check CHECK (((hours IS NULL) OR (hours > (0)::numeric))),
     CONSTRAINT work_sessions_range_check CHECK (((ended_at IS NULL) OR (ended_at > started_at))),
     CONSTRAINT work_sessions_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'timer'::text, 'capture'::text])))
@@ -919,5 +918,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 4OGwOMIdDtbWhrbsH5J6SFtR917mXvFvnoGiEWlByhNsvtFDX1xBU5bbuIFgKyT
+\unrestrict vUo1G34vDZTzfTQbjNpcxOqfgLb0FUhkpM3CBS6ryKhvuJY6lz5WabrvpJtdYIY
 
