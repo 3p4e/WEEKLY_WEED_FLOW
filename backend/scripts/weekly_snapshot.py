@@ -648,7 +648,7 @@ async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:
         log(f"processing {len(orgs)} org(s) for ref={ref.isoformat()} skip_letta={skip_letta}")
         for o in orgs:
             try:
-                await process_org(conn, uconn, o["id"], o["name"], ref, skip_letta)
+                await process_org(conn, uconn, client, o["id"], o["name"], ref, skip_letta)
             except Exception as e:
                 log(f"org {o['name']} FAILED: {type(e).__name__}: {e}")
     finally:
