@@ -464,8 +464,103 @@ GF.WWF.install = () => {
     } catch (e) { GF.toast('Create failed: ' + e.message, 'error'); }
   };
 
-  // logout from the user card / settings
-  GF.openSettings = () => { if (confirm('Log out of Weekly Weed Flow?')) { GF.API.logout(); location.reload(); } };
+  // Settings modal — replaces the old logout-only gear. Tabs: Preferences,
+  // Security (change my own password), AI agent bindings (admin), Account.
+  GF._setTab = 'prefs';
+  GF.openSettings = (tab) => { GF._setTab = (typeof tab === 'string') ? tab : 'prefs'; GF.WWF.renderSettings(); GF.openModal('settings-modal'); };
+  GF.WWF.setTab = (t) => { GF._setTab = t; GF.WWF.renderSettings(); };
+  GF.WWF.setLangKeep = (l) => { GF.setLang(l); GF.WWF.renderSettings(); };
+  GF.WWF.settingsLogout = () => { if (confirm(AL('Log out of Weekly Weed Flow?', 'Одјава од Weekly Weed Flow?'))) { GF.API.logout(); location.reload(); } };
+
+  GF.WWF.renderSettings = () => {
+    const body = GF.$('set-body'); if (!body) return;
+    const admin = !!(GF.WWF.canProvision && GF.WWF.canProvision());
+    if (GF._setTab === 'ai' && !admin) GF._setTab = 'prefs';
+    if (GF.$('set-title')) GF.$('set-title').textContent = AL('Settings', 'Поставки');
+    const tabs = [['prefs', AL('Preferences', 'Поставки')], ['security', AL('Security', 'Безбедност')]];
+    if (admin) tabs.push(['ai', AL('AI agents', 'AI агенти')]);
+    tabs.push(['account', AL('Account', 'Сметка')]);
+    const bar = tabs.map(([k, l]) => `<button class="set-tab ${GF._setTab === k ? 'on' : ''}" onclick="GF.WWF.setTab('${k}')">${l}</button>`).join('');
+    let pane = '';
+    if (GF._setTab === 'prefs') {
+      const lg = GF.state.lang;
+      pane = `<div class="set-pane"><div class="set-row">
+          <div><div class="set-lab">${AL('Language', 'Јазик')}</div>
+            <div class="set-hint">${AL('Interface language for menus and reports.', 'Јазик на интерфејсот за менијата и извештаите.')}</div></div>
+          <div class="seg">
+            <button class="seg-b ${lg === 'en' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('en')">English</button>
+            <button class="seg-b ${lg === 'mk' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('mk')">Македонски</button>
+          </div></div></div>`;
+    } else if (GF._setTab === 'security') {
+      pane = `<div class="set-pane">
+        <div class="field"><label>${AL('Current password', 'Тековна лозинка')}</label><input id="set-cur" type="password" autocomplete="current-password"></div>
+        <div class="field"><label>${AL('New password', 'Нова лозинка')}</label><input id="set-new" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>${AL('Confirm new password', 'Потврди нова лозинка')}</label><input id="set-conf" type="password" autocomplete="new-password"></div>
+        <div id="set-pw-msg" class="set-msg"></div>
+        <button class="btn btn-primary" onclick="GF.WWF.changeMyPassword()">${AL('Change password', 'Смени лозинка')}</button></div>`;
+    } else if (GF._setTab === 'ai') {
+      pane = `<div class="set-pane"><div class="set-hint" style="margin-bottom:10px">${AL('Point each AI function at a Letta agent. Changes save immediately.', 'Поврзете ја секоја AI функција со Letta агент. Промените се зачувуваат веднаш.')}</div>
+        <div id="set-ai"><div class="ai-loading"><span class="spinner"></span>${GF.t('generate')}…</div></div></div>`;
+      setTimeout(GF.WWF.renderAiTab, 0);
+    } else {
+      const u = GF.API.user || {};
+      pane = `<div class="set-pane">
+        <div class="set-kv"><span>${AL('Name', 'Име')}</span><b>${GF.esc(u.full_name || u.username || '—')}</b></div>
+        <div class="set-kv"><span>${AL('Username', 'Корисник')}</span><b>${GF.esc(u.username || '—')}</b></div>
+        <div class="set-kv"><span>${AL('Role', 'Улога')}</span><b>${GF.esc(GF.roleLabel(u.role || GF.curRole()))}</b></div>
+        <div class="set-kv"><span>${AL('Department', 'Оддел')}</span><b>${GF.esc(u.department_id ? GF.depName(u.department_id) : '—')}</b></div>
+        <button class="btn btn-danger" style="margin-top:16px" onclick="GF.WWF.settingsLogout()">${AL('Log out', 'Одјава')}</button></div>`;
+    }
+    body.innerHTML = `<div class="set-tabs">${bar}</div>${pane}`;
+  };
+
+  GF.WWF.changeMyPassword = async () => {
+    const cur = (GF.$('set-cur') || {}).value || '', nw = (GF.$('set-new') || {}).value || '', cf = (GF.$('set-conf') || {}).value || '';
+    const msg = GF.$('set-pw-msg');
+    const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? 'var(--green-fg)' : 'var(--red)'; } };
+    if (!nw) return show(AL('Enter a new password.', 'Внесете нова лозинка.'));
+    if (nw !== cf) return show(AL('New passwords do not match.', 'Лозинките не се совпаѓаат.'));
+    try {
+      await GF.API.changePassword(nw, cur || null);
+      ['set-cur', 'set-new', 'set-conf'].forEach(id => { const el = GF.$(id); if (el) el.value = ''; });
+      show(AL('Password changed ✓', 'Лозинката е сменета ✓'), true);
+      GF.toast(AL('Password changed ✓', 'Лозинката е сменета ✓'), 'success');
+    } catch (e) { show(AL('Failed: ', 'Неуспешно: ') + (e.message || e)); }
+  };
+
+  GF.WWF.renderAiTab = async () => {
+    const box = GF.$('set-ai'); if (!box) return;
+    try {
+      const [fns, ag, binds] = await Promise.all([GF.API.aiFunctions(), GF.API.aiAgents(), GF.API.aiBindings()]);
+      const agents = (ag && ag.agents) || [];
+      const bindByFn = {}; (binds || []).forEach(b => { bindByFn[b.function_key] = b; });
+      const catalog = (fns && fns.catalog) || {};
+      const opts = (sel) => ['<option value="">' + AL('— none —', '— ништо —') + '</option>']
+        .concat(agents.map(a => `<option value="${GF.esc(a.id)}" ${a.id === sel ? 'selected' : ''}>${GF.esc(a.name || a.id)}</option>`)).join('');
+      const rows = Object.keys(catalog).map(fn => {
+        const b = bindByFn[fn] || {};
+        return `<div class="ai-bind">
+          <div class="ai-bind-h"><b>${GF.esc(fn)}</b>
+            <label class="ai-bind-on"><input type="checkbox" ${b.is_active ? 'checked' : ''} onchange="GF.WWF.saveBinding('${fn}')"> ${AL('Active', 'Активно')}</label></div>
+          <div class="set-hint">${GF.esc(catalog[fn])}</div>
+          <select id="ai-sel-${fn}" onchange="GF.WWF.saveBinding('${fn}')">${opts(b.letta_agent_id)}</select></div>`;
+      }).join('');
+      box.innerHTML = agents.length ? rows : `<div class="set-msg">${AL('No Letta agents found.', 'Нема пронајдени Letta агенти.')}</div>`;
+    } catch (e) {
+      box.innerHTML = `<div class="set-msg" style="color:var(--red)">${AL('Could not load AI settings: ', 'Не може да се вчитаат AI поставки: ')}${GF.esc(e.message || String(e))}</div>`;
+    }
+  };
+
+  GF.WWF.saveBinding = async (fn) => {
+    const sel = GF.$('ai-sel-' + fn); if (!sel) return;
+    const agentId = sel.value;
+    const cb = sel.closest('.ai-bind').querySelector('input[type=checkbox]');
+    const on = cb ? cb.checked : true;
+    try {
+      if (!agentId) { await GF.API.deleteAiBinding(fn); GF.toast(fn + ': ' + AL('cleared', 'исчистено'), 'info'); }
+      else { await GF.API.setAiBinding(fn, { letta_agent_id: agentId, is_active: on }); GF.toast(fn + ' ✓', 'success'); }
+    } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно: ') + (e.message || e), 'error'); }
+  };
 
   // Roll over incomplete tasks to next week. Persists via the real API —
   // the original local-only version mutated state and called the now-no-op

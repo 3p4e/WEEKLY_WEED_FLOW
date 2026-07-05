@@ -164,6 +164,14 @@
       <button class="btn btn-primary" id="add-submit-btn" onclick="GF.submitAdd()">Create task</button></div></div>
 </div>
 
+<div class="overlay" id="settings-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head"><h3 id="set-title">Settings</h3>
+      <button class="btn-ghost" onclick="GF.closeModal('settings-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="set-body"></div>
+  </div>
+</div>
+
 <!-- Scripts — load order matters: boot-guard → data → core → render → voice → export → views → leaf-fx → assistant → main
      → api → integrate → audit-view → collab → worklog → report-view → tweaks-vanilla.
      audit-view/collab/worklog/report-view are integrate.js's monkey-patch pattern
