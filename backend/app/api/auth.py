@@ -148,15 +148,16 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
 
 
 def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
-    # ADMIN is never assignable through the app — it is seeded in the DB only.
-    if role == ADMIN:
-        return False
-    # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any
-    # non-admin account in any department.
+    # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any account
+    # in the org, including other ADMIN accounts — assigning the ADMIN role
+    # itself is blocked separately via CREATABLE_ROLES at each call site
+    # (before _can_manage ever runs), so this can never promote anyone TO
+    # admin; it only lets a real admin edit/delete/reset an existing one.
     if actor["role"] == ADMIN:
         return True
     # A department manager manages only USER staff, and only in their own
-    # department. Managers can't create/deactivate other managers or executives.
+    # department. Managers can't create/deactivate other managers, executives,
+    # or admins.
     if actor["role"] in MANAGER_ROLES:
         return (role == "USER" and department_id is not None
                 and str(department_id) == str(actor["department_id"]))

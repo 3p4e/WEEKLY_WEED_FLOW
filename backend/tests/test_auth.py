@@ -339,6 +339,70 @@ async def test_update_user_edit(client, admin_headers, org):
         json={"department_id": "00000000-0000-0000-0000-000000000000"}, headers=admin_headers)).status_code == 422
 
 
+async def test_admin_can_edit_an_existing_admin_account(client, admin_headers, org):
+    """A second ADMIN-role account (e.g. a QC manager who is also an admin, like
+    production's qcm.blani) must still be editable/manageable by the real admin
+    — _can_manage() must not blanket-reject a target whose CURRENT role is
+    ADMIN, only ever block ASSIGNING the ADMIN role (already 422'd separately)."""
+    from app.db import tasks_admin_pool, users_admin_pool
+    import uuid
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id",
+        org["org_id"])
+    other_admin_id = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role,"
+        " department_id, function_role, must_change_password)"
+        " VALUES ($1,$2,'qcm.other','qcm.other@test.invalid','x','QC Manager','ADMIN',$3,'QC Manager',false)",
+        other_admin_id, org["org_id"], dept["id"])
+
+    r = await client.patch(f"/auth/users/{other_admin_id}",
+        json={"full_name": "QC Manager Renamed", "function_role": "Senior QC Manager"},
+        headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["full_name"] == "QC Manager Renamed"
+
+    # Demoting an existing admin to a normal elevated role is allowed too.
+    r = await client.patch(f"/auth/users/{other_admin_id}", json={"role": "QC_MGR"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "QC_MGR"
+
+    # Reset-password and delete on an (still-)admin account also work for the real admin.
+    other_admin_id2 = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role, must_change_password)"
+        " VALUES ($1,$2,'qcm.other2','qcm.other2@test.invalid','x','Other Admin','ADMIN',false)",
+        other_admin_id2, org["org_id"])
+    assert (await client.post(f"/auth/users/{other_admin_id2}/reset-password", headers=admin_headers)).status_code == 200
+    assert (await client.delete(f"/auth/users/{other_admin_id2}", headers=admin_headers)).status_code == 200
+
+
+async def test_manager_still_cannot_touch_an_admin_account(client, admin_headers, org):
+    """A department manager must never be able to edit/delete/reset an ADMIN
+    account, even one parked in their own department."""
+    from app.db import tasks_admin_pool, users_admin_pool
+    import uuid
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id",
+        org["org_id"])
+    r = await client.post("/auth/users", json={"username": "mgr3", "full_name": "Mgr",
+        "role": "QC_MGR", "department_id": str(dept["id"])}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+
+    admin_in_dept_id = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role,"
+        " department_id, must_change_password)"
+        " VALUES ($1,$2,'qcm.other3','qcm.other3@test.invalid','x','QC Admin','ADMIN',$3,false)",
+        admin_in_dept_id, org["org_id"], dept["id"])
+
+    assert (await client.patch(f"/auth/users/{admin_in_dept_id}",
+        json={"full_name": "x"}, headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{admin_in_dept_id}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.delete(f"/auth/users/{admin_in_dept_id}", headers=mgr_h)).status_code == 403
+
+
 async def test_account_endpoints_reject_malformed_id_with_404(client, admin_headers):
     """A non-uuid {user_id} path param must be a clean 404, not a 500 from
     asyncpg failing to cast it to uuid inside the lookup query."""
