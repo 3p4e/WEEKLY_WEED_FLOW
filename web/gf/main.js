@@ -29,8 +29,11 @@ GF.openAdd = (weekId, parentId) => {
   GF._editTask = null;                // openEdit (worklog.js) flips this to PATCH mode
   const el = GF.$('add-body');
   const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
-  const ownerOpts = Object.entries(GF.PEOPLE).map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
-  const respChips = Object.entries(GF.PEOPLE).map(([k, v]) =>
+  // Deactivated accounts stay in GF.PEOPLE for historical name/avatar lookups
+  // but must not be offered as Accountable/Responsible for new work.
+  const activePeople = Object.entries(GF.PEOPLE).filter(([, v]) => !v.inactive);
+  const ownerOpts = activePeople.map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
+  const respChips = activePeople.map(([k, v]) =>
     `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
   const prOpts = ['critical','high','medium','low'].map(p => `<option value="${p}" ${p==='medium'?'selected':''}>${GF.prLabel(p)}</option>`).join('');
   const dayChips = GF.DAYS.slice(0, 5).map(d => `<span class="chip-opt" data-day="${d}" onclick="this.classList.toggle('on')">${GF.dayLabel(d)}</span>`).join('');

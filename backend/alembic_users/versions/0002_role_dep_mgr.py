@@ -31,9 +31,14 @@ _ROLES_OLD = ("ARRAY['ADMIN'::text, 'DEPT_HEAD'::text, 'PROJECT_LEAD'::text,"
 
 
 def upgrade() -> None:
+    # The CHECK on profiles_role_check is validated immediately against every
+    # existing row, including by an UPDATE — not just at ADD CONSTRAINT time.
+    # The still-active OLD constraint doesn't allow 'DEP_MGR', so the rename
+    # UPDATE below must run with NO constraint in effect: drop first, update
+    # while unconstrained, then add the new constraint over the final state.
+    op.execute("ALTER TABLE public.profiles DROP CONSTRAINT profiles_role_check")
     op.execute("UPDATE public.profiles SET role='DEP_MGR' WHERE role='DEPT_HEAD'")
     op.execute("UPDATE public.profiles SET role='USER' WHERE role='PROJECT_LEAD'")
-    op.execute("ALTER TABLE public.profiles DROP CONSTRAINT profiles_role_check")
     op.execute("ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check"
                f" CHECK ((role = ANY ({_ROLES_NEW})))")
     op.execute("CREATE OR REPLACE FUNCTION app.is_elevated() RETURNS boolean"
@@ -41,10 +46,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Mirror upgrade()'s ordering for the same reason: the still-active NEW
+    # constraint doesn't allow 'DEPT_HEAD', so drop it before the data UPDATE,
+    # not after.
     op.execute("CREATE OR REPLACE FUNCTION app.is_elevated() RETURNS boolean"
                " LANGUAGE sql STABLE AS $$ SELECT app.current_role()"
                " IN ('ADMIN','DEPT_HEAD','PROJECT_LEAD') $$")
     op.execute("ALTER TABLE public.profiles DROP CONSTRAINT profiles_role_check")
+    op.execute("UPDATE public.profiles SET role='DEPT_HEAD' WHERE role='DEP_MGR'")
     op.execute("ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check"
                f" CHECK ((role = ANY ({_ROLES_OLD})))")
-    op.execute("UPDATE public.profiles SET role='DEPT_HEAD' WHERE role='DEP_MGR'")

@@ -52,7 +52,7 @@ GF.WWF.renderCollabInner = (t) => {
   let assignRow = '';
   if (manage) {
     const have = new Set(c.assignees.map(a => a.user_id));
-    const opts = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id))
+    const opts = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id) && !GF.PEOPLE[id].inactive)
       .map(id => `<option value="${id}">${GF.esc(GF.PEOPLE[id].name)}</option>`).join('');
     assignRow = opts ? `
       <div class="note-input" style="margin-top:6px">

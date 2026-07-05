@@ -292,6 +292,13 @@ GF.WWF.install = () => {
       return;
     }
 
+    // Accountable (add-owner) has no backend counterpart — POST /tasks always
+    // owns the task as the creator (TaskIn has no owner field) — so only
+    // Responsible (helpers) is actually assignable; wire it the same way
+    // GF.voice.createFromVoice does for its single ownerMatch.
+    const helperIds = GF._addParent ? [] :
+      [...GF.$('add-resp').querySelectorAll('.on')].map(el => el.dataset.who).filter(w => w !== GF.WWF.meId);
+
     try {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
@@ -310,6 +317,11 @@ GF.WWF.install = () => {
         GF.state.tasks.push(GF.WWF.transform(created));
       }
       GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('create_task')+' ✓','success');
+      for (const who of helperIds) {
+        try { await GF.API.assign(created.id, who); } catch (e) {
+          GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+      }
+      if (helperIds.length) { await GF.WWF.loadCollab(created.id); GF.render.panels(); }
     } catch(e) { GF.toast('Create failed: '+e.message,'error'); }
   };
 
@@ -501,8 +513,14 @@ GF.removeUser = async (id) => {
   if (id === GF.state.user) { GF.toast('You cannot remove your own account', 'error'); return; }
   const p = GF.PEOPLE[id] || {};
   if (!confirm('Deactivate the account for ' + (p.name || id) + '?')) return;
-  try { await GF.API.deleteUser(id); delete GF.PEOPLE[id]; GF.render.all(); GF.toast('Account removed ✓', 'success'); }
-  catch (e) { GF.toast('Remove failed: ' + e.message, 'error'); }
+  try {
+    await GF.API.deleteUser(id);
+    // Deactivate is a soft-delete — keep the entry (flagged inactive) so
+    // avatars/names on that person's existing tasks still resolve instead
+    // of falling back to a blank '?' until the next full roster reload.
+    if (GF.PEOPLE[id]) GF.PEOPLE[id].inactive = true;
+    GF.render.all(); GF.toast('Account removed ✓', 'success');
+  } catch (e) { GF.toast('Remove failed: ' + e.message, 'error'); }
 };
 
 // Real auth: no local impersonation — switching accounts means logging in as them.

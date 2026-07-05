@@ -132,6 +132,31 @@ async def test_progress_notes_reflects_real_task_progress_rows(client, admin_hea
     assert "deps" not in r.json()["task"]
 
 
+async def test_add_progress_rejects_task_caller_cannot_see(client, admin_headers):
+    """Regression: add_progress used to insert straight into task_progress
+    with no prior visibility check (unlike add_session/add_comment, which
+    both look the task up under RLS first), so a non-elevated caller could
+    POST notes onto a task they don't own, aren't assigned to, and can't
+    even see — task_progress RLS is org-scoped only, not owner/assignee
+    scoped, so the insert would silently succeed with no error at all."""
+    from tests.conftest import create_user, login_and_set_password
+    user, otp = await create_user(client, admin_headers)
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post("/tasks", json={"title": "Admin-only task", "status": "pending"},
+                          headers=admin_headers)
+    task_id = r.json()["id"]
+
+    r = await client.post(f"/tasks/{task_id}/progress", json={"day_label": "Mon", "note": "sneaking in"},
+                          headers=headers)
+    assert r.status_code == 404, r.text
+
+    r = await client.post("/tasks/00000000-0000-0000-0000-000000000000/progress",
+                          json={"day_label": "Mon", "note": "x"}, headers=admin_headers)
+    assert r.status_code == 404
+
+
 async def test_estimated_hours_set_at_create_and_listed(client, admin_headers):
     r = await client.post("/tasks", json={"title": "Trim batch", "status": "pending", "estimated_hours": 4},
                            headers=admin_headers)

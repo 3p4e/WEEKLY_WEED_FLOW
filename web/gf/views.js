@@ -142,7 +142,10 @@ GF.views = {
 
   /* ── Team: people & roles management ───────────────────── */
   team() {
-    const ids = Object.keys(GF.PEOPLE);
+    // Deactivated accounts are kept in GF.PEOPLE (not deleted) so their
+    // existing task cards still resolve a name/avatar, but they must not
+    // reappear in the active roster list itself.
+    const ids = Object.keys(GF.PEOPLE).filter(id => !GF.PEOPLE[id].inactive);
     const canManage = GF.can('team');
     const cards = ids.map(id => {
       const p = GF.PEOPLE[id];

@@ -16,6 +16,12 @@ The other two guards stay: hours (when given) must be > 0, and ended_at
 (when given) must be after started_at. A date-only session contributes 0 to
 hour totals but still appears in the activity time band and is classified
 (regular/overtime/night/weekend) from its start time.
+
+downgrade() is one-way once any date-only session exists: re-adding the
+dropped CHECK would reject those rows, and the honest-over-fabricated design
+this migration exists for rules out silently backfilling hours (or deleting
+the rows) just to make the constraint pass. Repair or remove any date-only
+sessions by hand first if a downgrade is ever genuinely required.
 """
 from typing import Sequence, Union
 

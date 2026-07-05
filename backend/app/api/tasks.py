@@ -260,6 +260,9 @@ class ProgressIn(BaseModel):
 @router.post("/tasks/{task_id}/progress", status_code=201)
 async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
+        task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if task is None:
+            raise HTTPException(404, "Task not found or not permitted")
         row = await c.fetchrow(
             "INSERT INTO task_progress(org_id,task_id,user_id,day_label,note)"
             " VALUES ($1,$2,$3,$4,$5) RETURNING day_label,note,created_at",

@@ -24,6 +24,15 @@ from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+# work_sessions/task_progress RLS is org-scoped only (no owner/assignee
+# restriction like tasks_read), so a non-elevated caller must be filtered to
+# their own rows here — otherwise the per-person hours and activity time
+# band leak every colleague's sessions regardless of task visibility.
+_ELEVATED = {"ADMIN", "DEP_MGR"}
+
+_PRIORITY_RANK = ("CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
+                  "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
+
 
 def _fri_thu(ref: date) -> tuple[date, date]:
     """Return the Friday→Thursday window containing *ref*."""
@@ -115,25 +124,33 @@ async def weekly_report(
                 f"             AND ws.started_at >= $1::date AND ws.started_at < ($2::date + 1))"
                 f") "
                 f"ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, "
-                f"t.priority DESC, t.created_at",
+                f"{_PRIORITY_RANK}, t.created_at",
                 *args,
             )
 
+            # Non-elevated callers only ever see their OWN sessions/notes here:
+            # work_sessions/task_progress RLS is org-scoped only, not
+            # owner/assignee-scoped like tasks_read, so without this filter a
+            # regular user would get every colleague's hours and activity.
+            elevated = user["role"] in _ELEVATED
+            who = "" if elevated else " AND user_id = $3"
+            who_args = [] if elevated else [user["id"]]
+
             events = await c.fetch(
                 "SELECT created_at AS at FROM task_progress "
-                "WHERE created_at >= $1::date AND created_at < ($2::date + 1) "
+                f"WHERE created_at >= $1::date AND created_at < ($2::date + 1){who} "
                 "UNION ALL "
                 "SELECT started_at AS at FROM work_sessions "
-                "WHERE started_at >= $1::date AND started_at < ($2::date + 1) "
+                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who} "
                 "ORDER BY at",
-                fri, thu,
+                fri, thu, *who_args,
             )
 
             # Per-person regular/overtime/night/weekend from work sessions.
             sess = await c.fetch(
                 "SELECT user_id, started_at, ended_at, hours FROM work_sessions "
-                "WHERE started_at >= $1::date AND started_at < ($2::date + 1)",
-                fri, thu,
+                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who}",
+                fri, thu, *who_args,
             )
             for s in sess:
                 uid = str(s["user_id"])
@@ -190,7 +207,7 @@ async def weekly_report(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false AND t.is_archived=false{dept_clause} "
                 f"AND t.status <> 'completed' "
-                f"ORDER BY t.priority DESC, t.department, t.created_at",
+                f"ORDER BY {_PRIORITY_RANK}, t.department, t.created_at",
                 *args,
             )
             time_band = []
