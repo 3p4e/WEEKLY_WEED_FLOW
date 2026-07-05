@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls
 from app.deps import require_password_set
+from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.worktime import TZ, classify, session_hours
 
@@ -28,7 +29,8 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 # restriction like tasks_read), so a non-elevated caller must be filtered to
 # their own rows here — otherwise the per-person hours and activity time
 # band leak every colleague's sessions regardless of task visibility.
-_ELEVATED = {"ADMIN", "DEP_MGR"}
+# app.roles.ELEVATED_ROLES is the single source of truth.
+_ELEVATED = ELEVATED_ROLES
 
 _PRIORITY_RANK = ("CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
                   "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")

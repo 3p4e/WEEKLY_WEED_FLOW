@@ -13,13 +13,15 @@ from pydantic import BaseModel
 
 from app.db import rls, rls_users
 from app.deps import require_password_set
+from app.roles import ELEVATED_ROLES
 from app.roster import display_name, roster
 
 router = APIRouter(tags=["collab"])
 
-# Roles allowed to (un)assign others, in addition to a task's own owner.
-# Mirrors the DB's app.is_elevated() definition — keep these in sync.
-_ELEVATED = {"ADMIN", "DEP_MGR"}
+# Roles allowed to (un)assign others, in addition to a task's own owner —
+# app.roles.ELEVATED_ROLES is the single source of truth (mirrors the DB's
+# app.is_elevated()).
+_ELEVATED = ELEVATED_ROLES
 
 
 class CommentReq(BaseModel):

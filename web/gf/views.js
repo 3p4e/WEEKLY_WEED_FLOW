@@ -146,7 +146,11 @@ GF.views = {
     // existing task cards still resolve a name/avatar, but they must not
     // reappear in the active roster list itself.
     const ids = Object.keys(GF.PEOPLE).filter(id => !GF.PEOPLE[id].inactive);
-    const canManage = GF.can('team');
+    // Team VIEW is reachable by any elevated role (nav gate = GF.can('team')),
+    // but the add/edit/remove controls are provisioning — admin or a department
+    // manager only (executives see the roster read-only). integrate.js defines
+    // canProvision; fall back to the perms gate if it hasn't loaded yet.
+    const canManage = GF.WWF && GF.WWF.canProvision ? GF.WWF.canProvision() : GF.can('team');
     const cards = ids.map(id => {
       const p = GF.PEOPLE[id];
       const isMe = id === GF.state.user;

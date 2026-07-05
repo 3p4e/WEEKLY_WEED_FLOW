@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.db import rls
 from app.deps import require_password_set
+from app.roles import ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
 router = APIRouter(tags=["tasks"])
@@ -331,7 +332,7 @@ async def list_sessions(task_id: str, user: dict = Depends(require_password_set)
     return [_session_out(r) for r in rows]
 
 
-_ELEVATED = {"ADMIN", "DEP_MGR"}
+_ELEVATED = ELEVATED_ROLES
 
 
 @router.delete("/sessions/{session_id}")

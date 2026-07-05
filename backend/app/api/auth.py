@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.db import rls_users, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role
+from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -138,16 +139,28 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
 
 
 def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
-    if actor["role"] == "ADMIN":
+    # ADMIN is never assignable through the app — it is seeded in the DB only.
+    if role == ADMIN:
+        return False
+    # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any
+    # non-admin account in any department.
+    if actor["role"] == ADMIN:
         return True
-    if actor["role"] == "DEP_MGR":
-        return role != "ADMIN" and department_id is not None and str(department_id) == str(actor["department_id"])
+    # A department manager manages only USER staff, and only in their own
+    # department. Managers can't create/deactivate other managers or executives.
+    if actor["role"] in MANAGER_ROLES:
+        return (role == "USER" and department_id is not None
+                and str(department_id) == str(actor["department_id"]))
     return False
 
 
 @router.post("/users", status_code=201)
-async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
+async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
     """Provision an account with a one-time password (always returned to the creator)."""
+    # Reject unknown / non-assignable roles (esp. ADMIN) up front with a clean
+    # 422, rather than letting a bad value reach the DB CHECK as a 409.
+    if body.role not in CREATABLE_ROLES:
+        raise HTTPException(422, f"Role '{body.role}' cannot be assigned")
     if not _can_manage(actor, body.role, body.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     otp = generate_otp()
@@ -169,7 +182,7 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role("A
 @router.get("/directory")
 async def directory(user: dict = Depends(require_password_set)):
     """Read-only name/avatar roster for every ACTIVE org member — no management
-    fields. Unlike /users (ADMIN/DEP_MGR-gated, includes is_active/
+    fields. Unlike /users (elevated-gated, includes is_active/
     must_change_password), this is safe for any authenticated user so avatars/
     assignee pickers work for non-elevated roles too. Deactivated accounts are
     excluded — same rule the weekly snapshot's roster query uses — so they
@@ -185,7 +198,7 @@ async def directory(user: dict = Depends(require_password_set)):
 
 
 @router.get("/users")
-async def list_users(actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
+async def list_users(actor: dict = Depends(require_role(*ELEVATED_ROLES))):
     # Scope to the caller's org explicitly: the admin pool is BYPASSRLS, so the
     # profiles_read policy does NOT filter it — without org_id this would leak
     # every organisation's user directory.
@@ -200,11 +213,11 @@ async def list_users(actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
 
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: str, actor: dict = Depends(require_role("ADMIN", "DEP_MGR"))):
+async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
     # Admin pool is BYPASSRLS, so authorisation is enforced here: the target
-    # must be in the actor's org AND manageable by them (a DEP_MGR cannot
+    # must be in the actor's org AND manageable by them (a manager cannot
     # delete an ADMIN or anyone outside their department). Same gate as create.
     async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(

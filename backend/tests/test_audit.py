@@ -53,9 +53,9 @@ async def test_non_elevated_cannot_read_audit(client, admin_headers):
 
 
 async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin_headers):
-    """DEP_MGR is elevated enough for /audit and /audit/tables, but /verify
+    """QC_MGR is elevated enough for /audit and /audit/tables, but /verify
     is explicitly ADMIN-only (require_role("ADMIN"), not the _ELEVATED tuple)."""
-    user, otp = await create_user(client, admin_headers, role="DEP_MGR")
+    user, otp = await create_user(client, admin_headers, role="QC_MGR")
     from tests.conftest import login_and_set_password
     token = await login_and_set_password(client, user["username"], otp)
     headers = {"Authorization": f"Bearer {token}"}
@@ -63,40 +63,50 @@ async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
-async def test_team_leader_is_not_elevated(client, admin_headers):
-    """TEAM_LEADER is a real role (the users baseline's profiles_role_check) that's
-    deliberately excluded from app.is_elevated() — never exercised by any
-    other test, so nothing pins that it stays excluded."""
+async def test_executives_and_qp_are_elevated(client, admin_headers):
+    """CEO, COO and QP all sit above USER in the reshaped role model — each is
+    recognized by app.is_elevated(), so each may read the audit trail and its
+    table list, but /verify stays ADMIN-only for all of them."""
     from tests.conftest import login_and_set_password
-    user, otp = await create_user(client, admin_headers, role="TEAM_LEADER")
-    token = await login_and_set_password(client, user["username"], otp)
-    headers = {"Authorization": f"Bearer {token}"}
-    assert (await client.get("/audit", headers=headers)).status_code == 403
-    assert (await client.get("/audit/tables", headers=headers)).status_code == 403
+    for role in ("CEO", "COO", "QP"):
+        user, otp = await create_user(client, admin_headers, role=role)
+        token = await login_and_set_password(client, user["username"], otp)
+        headers = {"Authorization": f"Bearer {token}"}
+        assert (await client.get("/audit", headers=headers)).status_code == 200, role
+        assert (await client.get("/audit/tables", headers=headers)).status_code == 200, role
+        assert (await client.get("/audit/verify", headers=headers)).status_code == 403, role
+
+
+async def test_team_leader_role_no_longer_exists(client, admin_headers):
+    """TEAM_LEADER was removed in the role-model reshape (Purely Plant has no
+    such rank). create_user validates against CREATABLE_ROLES up front, so a
+    non-assignable role is a clean 422 before it ever reaches the DB CHECK
+    (profiles_role_check, which also no longer lists it — defence in depth)."""
+    r = await client.post("/auth/users", json={
+        "username": "no_team_leader", "full_name": "X", "role": "TEAM_LEADER",
+    }, headers=admin_headers)
+    assert r.status_code == 422, r.text
 
 
 async def test_project_lead_role_no_longer_exists(client, admin_headers):
-    """PROJECT_LEAD was removed entirely (Purely Plant has no such role) —
-    profiles_role_check must reject it at the database level, same as
-    QA_AUDITOR. create_user's generic exception handler turns the CHECK
-    violation into a 409."""
+    """PROJECT_LEAD was removed entirely (Purely Plant has no such role).
+    create_user rejects any role outside CREATABLE_ROLES up front with a clean
+    422, before it can reach the DB — profiles_role_check no longer lists it
+    either, so the database CHECK remains a second line of defence."""
     r = await client.post("/auth/users", json={
         "username": "no_project_lead", "full_name": "X", "role": "PROJECT_LEAD",
     }, headers=admin_headers)
-    assert r.status_code == 409, r.text
-    assert "CheckViolation" in r.json()["detail"]
+    assert r.status_code == 422, r.text
 
 
 async def test_qa_auditor_role_no_longer_exists(client, admin_headers):
-    """QA_AUDITOR was removed entirely — profiles_role_check must reject it
-    at the database level, not just exclude it from app.is_elevated().
-    create_user's generic exception handler turns the CHECK violation into
-    a 409 (same path as e.g. a duplicate username)."""
+    """QA_AUDITOR was removed entirely — a non-assignable role is rejected up
+    front with a 422 (not in CREATABLE_ROLES), and profiles_role_check no
+    longer lists it either (defence in depth)."""
     r = await client.post("/auth/users", json={
         "username": "should_not_be_creatable", "full_name": "X", "role": "QA_AUDITOR",
     }, headers=admin_headers)
-    assert r.status_code == 409, r.text
-    assert "CheckViolation" in r.json()["detail"]
+    assert r.status_code == 422, r.text
 
 
 async def test_verify_reports_ok_when_chain_intact(client, admin_headers):

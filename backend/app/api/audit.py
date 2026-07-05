@@ -26,12 +26,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import require_role
+from app.roles import ELEVATED_ROLES
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
-# Roles the DB `audit_read` policy (app.is_elevated) admits — mirrored here so
-# the API rejects early instead of silently returning an empty list.
-_ELEVATED = ("ADMIN", "DEP_MGR")
+# Roles the DB `audit_read` policy (app.is_elevated) admits — app.roles is the
+# single source of truth, so the API rejects early instead of silently
+# returning an empty list.
+_ELEVATED = ELEVATED_ROLES
 
 
 # Secret columns are never exposed through the trail, even to admins.

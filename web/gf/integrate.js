@@ -24,9 +24,17 @@ const CODE_HANDOFF = {
 
 GF.WWF.meId = 'me';
 
-// GrowFlow role keys <-> backend role enum
-const ROLE_OUT = { admin:'ADMIN', hod:'DEP_MGR', operator:'USER', viewer:'TEAM_LEADER' };
-const ROLE_IN  = { ADMIN:'admin', DEP_MGR:'hod', USER:'operator', TEAM_LEADER:'viewer' };
+// GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
+// (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
+const ROLE_OUT = { admin:'ADMIN', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
+  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', sc_mgr:'SC_MGR', cu_mgr:'CU_MGR', qp:'QP', operator:'USER' };
+const ROLE_IN  = { ADMIN:'admin', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
+  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SC_MGR:'sc_mgr', CU_MGR:'cu_mgr', QP:'qp', USER:'operator' };
+// Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
+// the DB app.is_elevated()). Everything but USER.
+const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
+// The 7 department-manager roles (create only USER staff in their own dept).
+const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C'];
@@ -157,7 +165,7 @@ GF.WWF.doChangePw = async () => {
 
 /* ── load real data + render ───────────────────────────────────────── */
 GF.WWF.loadTeam = async () => {
-  // /auth/directory works for every role (no ADMIN/DEP_MGR gate) so avatars,
+  // /auth/directory works for every role (no elevated gate) so avatars,
   // week-strip, and assignee pickers show the real org roster for everyone —
   // /auth/users (full management fields) is only used by the Team admin view.
   let users = null;
@@ -472,18 +480,36 @@ GF.WWF.install = () => {
 GF.WWF.install();
 
 /* ── Team / account provisioning (real backend, OTP shown to admin) ── */
+// Who may create/deactivate accounts: an admin (incl. qcm.blani, an ADMIN
+// titled "QC Manager") or a department manager. Executives are elevated (they
+// see the roster + audit) but are NOT account creators — mirrors the backend
+// create_user guard (require_role(ADMIN, *MANAGER_ROLES)). ADMIN itself is
+// never assignable through the app.
+GF.WWF.canProvision = () => {
+  const r = (GF.API.user || {}).role;
+  return r === 'ADMIN' || MANAGER_ROLES.includes(r);
+};
+
 GF.openUser = (id) => {
-  if (!GF.can('team')) return GF.denyToast();
+  if (!GF.WWF.canProvision()) return GF.denyToast();
   GF._editUser = null;  // create only (no in-place edit endpoint)
-  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
-  const roleOpts = Object.keys(GF.ROLES).filter(r => ROLE_OUT[r]).map(r =>
-    `<option value="${r}" ${r==='operator'?'selected':''}>${GF.roleLabel(r)}</option>`).join('');
+  const me = GF.API.user || {};
+  const iAmAdmin = me.role === 'ADMIN';
+  // Admin offers every role EXCEPT admin (ADMIN is DB-seeded only, never
+  // picked). A manager may create only Operator staff, locked to their own
+  // department. The backend _can_manage enforces both regardless.
+  const roleKeys = iAmAdmin ? Object.keys(GF.ROLES).filter(r => r !== 'admin') : ['operator'];
+  const roleOpts = roleKeys.map(r =>
+    `<option value="${r}" ${r==='operator'?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
+  const deptOpts = GF.DEPTS.map(d =>
+    `<option value="${d.id}" ${(!iAmAdmin && String(d.id)===String(me.department_id))?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
+  const deptLocked = iAmAdmin ? '' : 'disabled';
   GF.$('user-title').textContent = GF.t('add_user');
   GF.$('user-body').innerHTML = `
     <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" placeholder="e.g. Ana Nikolova"></div>
     <div class="field"><label>Username</label><input id="u-username" placeholder="e.g. ana" autocapitalize="off" autocomplete="off"></div>
-    <div class="field"><label>${GF.t('role')}</label><select id="u-role">${roleOpts}</select></div>
-    <div class="field"><label>${GF.t('dept_label')}</label><select id="u-dept">${deptOpts}</select></div>
+    <div class="field"><label>${GF.t('role')}</label><select id="u-role" ${iAmAdmin?'':'disabled'}>${roleOpts}</select></div>
+    <div class="field"><label>${GF.t('dept_label')}</label><select id="u-dept" ${deptLocked}>${deptOpts}</select></div>
     <div class="field"><label>Title (optional)</label><input id="u-fn" placeholder="e.g. Head of QC"></div>
     <div style="font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.5">
       A <b>one-time password</b> is generated and shown to you on save. Give the username + one-time
@@ -509,7 +535,7 @@ GF.submitUser = async () => {
 };
 
 GF.removeUser = async (id) => {
-  if (!GF.can('team')) return GF.denyToast();
+  if (!GF.WWF.canProvision()) return GF.denyToast();
   if (id === GF.state.user) { GF.toast('You cannot remove your own account', 'error'); return; }
   const p = GF.PEOPLE[id] || {};
   if (!confirm('Deactivate the account for ' + (p.name || id) + '?')) return;

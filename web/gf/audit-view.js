@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════
    Audit Trail — a general (non-QC) GxP capability adopted from the QC lab.
    Read-only, tamper-evident view of the hash-chained audit_log. Visible to
-   elevated roles only (ADMIN / DEP_MGR), which mirrors
-   the DB `audit_read` policy.
+   elevated roles only (everything but USER), which mirrors the DB
+   `audit_read` policy / app.is_elevated().
 
    Split out of integrate.js (first decomposition cut of its monkey-patch
    pattern). Loads right after integrate.js — AL/AUDIT_ROLES declared below
@@ -10,7 +10,9 @@
    because classic <script> tags share one lexical scope in document order.
    ════════════════════════════════════════════════════════════════════ */
 const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
-const AUDIT_ROLES = ['ADMIN', 'DEP_MGR'];
+// Reuse integrate.js's ELEVATED_ROLES (same shared <script> scope, loaded
+// first) so the elevated set has one definition on the frontend.
+const AUDIT_ROLES = ELEVATED_ROLES;
 const ACT = {
   INSERT: { c: '#15A86B', en: 'Created', mk: 'Создадено' },
   UPDATE: { c: '#2F6BFF', en: 'Updated', mk: 'Изменето' },

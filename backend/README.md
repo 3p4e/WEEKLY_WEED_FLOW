@@ -43,8 +43,10 @@ API paths below same-origin.
   (users DB), which stamps `app.user_id / app.org_id / app.role` as
   transaction-local GUCs so RLS policies and the audit trigger see the caller.
   Auth lookups and provisioning use `app_admin` (BYPASSRLS).
-- **No self-signup.** `ADMIN` / `DEP_MGR` provision accounts; the creator is
-  shown a one-time password once, and the user must set their own on first login
+- **No self-signup.** Accounts are provisioned by an `ADMIN` (any non-admin
+  role, any department) or by a department manager (only `USER` staff, only in
+  their own department — see `app/roles.py`); the creator is shown a one-time
+  password once, and the user must set their own on first login
   (`must_change_password`).
 - **Audit trail.** Every write to audited tables fires `app.fn_audit_row`, which
   appends a hash-chained row to `audit_log`
@@ -59,9 +61,11 @@ API paths below same-origin.
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
 | GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains and reports each chain's first linkage break, if any |
 
-¹ elevated = `ADMIN`, `DEP_MGR` — mirrors the DB
-`audit_read` policy (`app.is_elevated()`). Secret columns (e.g. `password_hash`)
-are redacted from the payload server-side.
+¹ elevated = every role except `USER` (`ADMIN`, the `CEO`/`COO` executives, the
+department managers `QA_MGR`/`QC_MGR`/`PR_MGR`/`WH_MGR`/`SC_MGR`/`CU_MGR`, and
+`QP`) — mirrors the DB `audit_read` policy (`app.is_elevated()`), defined once in
+`app/roles.py`. Secret columns (e.g. `password_hash`) are redacted from the
+payload server-side.
 
 ## Run locally (dev)
 
