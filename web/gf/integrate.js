@@ -496,11 +496,6 @@ GF.WWF.canProvision = () => {
   return r === 'ADMIN' || MANAGER_ROLES.includes(r);
 };
 
-// Handoff request toast — looks the department name up at click time from a
-// safe uuid, so the (unescaped-in-JS-string) name is never embedded in an
-// inline onclick attribute.
-GF.WWF.requestHandoff = (deptId) => GF.toast(GF.t('request_handoff') + ' → ' + GF.depName(deptId), 'success');
-
 // openUser(id) → edit an existing person (name/role/dept/title + reset password);
 // openUser() with no id → create a new account. The Team-card gear icon passes id.
 GF.openUser = (id) => {

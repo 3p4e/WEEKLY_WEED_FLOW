@@ -149,7 +149,7 @@ GF.render = {
           ${cur.length ? cur.map(t => this.card(t)).join('') : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
         </div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus')}<span>${GF.t('add_task')}</span>
-          <div class="spacer"></div>${GF.icon('mic','icon','var(--orange)')}</div>` : ''}
+          <div class="spacer"></div><span title="${GF.t('voice_task')}" style="cursor:pointer;display:inline-flex" onclick="event.stopPropagation();GF.voice.openCapture(${GF.state.selWeek})">${GF.icon('mic','icon','var(--orange)')}</span></div>` : ''}
       </div>
       <div class="panel collapsed" id="next-panel">
         <div class="panel-head" onclick="GF.$('next-panel').classList.toggle('collapsed')" style="cursor:pointer">
@@ -206,8 +206,6 @@ GF.render = {
         <span class="hbadge"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
         ${GF.icon('arrowR','icon','var(--ink-3)')}
         <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depName(toDept))}</span>
-        <div class="spacer"></div>
-        <button class="btn btn-orange btn-sm" onclick="GF.WWF&&GF.WWF.requestHandoff&&GF.WWF.requestHandoff('${toDept}')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
       </div>` : '';
 
     const body = `
@@ -232,7 +230,6 @@ GF.render = {
           <span class="mono" style="font-size:12px;color:var(--ink-2);font-weight:600">${prog}%</span>
           <div class="spacer"></div>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
-          <button class="btn btn-sm btn-danger" onclick="GF.deleteTask('${t.id}')">${GF.icon('trash','icon')}${GF.t('delete')}</button>
         </div>
       </div>`;
     return `<div class="card s-${t.status} expanded">${head}${body}</div>`;

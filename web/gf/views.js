@@ -82,7 +82,6 @@ GF.views = {
         <div class="coord-status">
           ${ready ? `<span class="coord-tag ok">${GF.icon('check','icon','#fff')}${AL('Ready','Подготвено')}</span>`
             : `<span class="coord-tag prog">${GF.icon('clock','icon')}${GF.statusLabel(t.status)}</span>`}
-          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.requestHandoff&&GF.WWF.requestHandoff('${toId}')">${GF.t('request_handoff')}</button>
         </div>
       </div>`;
     }).join('');
@@ -163,8 +162,7 @@ GF.views = {
           </div></div>
         <div class="tc-dept"><span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.esc(GF.depName(p.dept))}</div>
         <div class="tc-actions">
-          ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`
-            :`<button class="btn btn-sm" onclick="GF.setActiveUser('${id}')">${GF.t('set_active')}</button>`}
+          ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`:''}
           <div class="spacer"></div>
           ${canManage?`<button class="icon-btn btn-sm" title="${GF.t('edit')}" onclick="GF.openUser('${id}')">${GF.icon('settings')}</button>`:''}
           ${canManage && ids.length>1?`<button class="icon-btn btn-sm" title="${GF.t('remove')}" onclick="GF.removeUser('${id}')">${GF.icon('trash')}</button>`:''}

@@ -35,7 +35,6 @@ GF.openAdd = (weekId, parentId) => {
   // Deactivated accounts stay in GF.PEOPLE for historical name/avatar lookups
   // but must not be offered as Accountable/Responsible for new work.
   const activePeople = Object.entries(GF.PEOPLE).filter(([, v]) => !v.inactive);
-  const ownerOpts = activePeople.map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
   const respChips = activePeople.map(([k, v]) =>
     `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
   const prOpts = ['critical','high','medium','low'].map(p => `<option value="${p}" ${p==='medium'?'selected':''}>${GF.prLabel(p)}</option>`).join('');
@@ -48,7 +47,6 @@ GF.openAdd = (weekId, parentId) => {
       <div class="row" style="gap:8px"><input id="add-title" placeholder="${GF.t('new_task')}…" style="flex:1">
         <button class="mini-btn" title="${GF.t('dictate')}" id="mic-add-title" onclick="GF.voice.dictate('add-title')">${GF.icon('mic')}</button></div></div>
     <div class="field"><label>${GF.t('dept_label')}</label><select id="add-dept">${deptOpts}</select></div>
-    <div class="field"><label>${GF.t('accountable')} <span class="lbl-hint">${GF.t('accountable_hint')}</span></label><select id="add-owner">${ownerOpts}</select></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
@@ -73,7 +71,9 @@ GF.submitAdd = () => {
   const title = (GF.$('add-title')?.value || '').trim();
   if (!title) { GF.toast('Enter a title', 'error'); return; }
   const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
-  const owner = GF.$('add-owner').value;
+  // The "Accountable" owner select was removed (TaskIn has no owner field — the
+  // creator owns the task), so default to the current user if it's absent.
+  const owner = GF.$('add-owner')?.value || GF.state.user;
   const helpers = [...GF.$('add-resp').querySelectorAll('.on')].map(el => el.dataset.who).filter(w => w !== owner);
   const recFreq = GF.$('add-rec')?.value || '';
   const task = {
