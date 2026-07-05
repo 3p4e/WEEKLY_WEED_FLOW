@@ -1,6 +1,7 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
 import secrets
 import time
+import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -162,6 +163,15 @@ def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
     return False
 
 
+def _require_uuid(value) -> None:
+    """A malformed (non-uuid) {user_id} path param must be a clean 404, not a
+    500 from asyncpg trying to cast it to uuid inside the lookup query."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(404, "User not found")
+
+
 async def _validate_department(org_id, department_id) -> None:
     """profiles.department_id is a bare uuid — departments live in the tasks DB
     with no cross-database FK, so validate app-side that it names a real
@@ -239,6 +249,7 @@ async def list_users(actor: dict = Depends(require_role(*ELEVATED_ROLES))):
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
     # Admin pool is BYPASSRLS, so authorisation is enforced here: the target
@@ -266,6 +277,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
     real password. Same authorisation gate as create/delete: a manager may only
     reset a USER in their own department; nobody may reset an ADMIN through the
     app."""
+    _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         # Self-service password change goes through /auth/change-password (which
         # proves the current password); the admin reset path is for OTHER users.
@@ -293,6 +305,7 @@ async def update_user(user_id: str, body: UpdateUserReq,
     authorisation model as create/delete — a manager may only touch a USER in
     their own department, ADMIN is never assignable, and the caller must be able
     to manage BOTH the account's current state and its requested new state."""
+    _require_uuid(user_id)
     fields = body.model_dump(exclude_unset=True)
     if not fields:
         return {"ok": True, "noop": True}

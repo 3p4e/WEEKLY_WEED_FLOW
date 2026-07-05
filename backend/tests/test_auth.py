@@ -339,6 +339,14 @@ async def test_update_user_edit(client, admin_headers, org):
         json={"department_id": "00000000-0000-0000-0000-000000000000"}, headers=admin_headers)).status_code == 422
 
 
+async def test_account_endpoints_reject_malformed_id_with_404(client, admin_headers):
+    """A non-uuid {user_id} path param must be a clean 404, not a 500 from
+    asyncpg failing to cast it to uuid inside the lookup query."""
+    assert (await client.post("/auth/users/not-a-uuid/reset-password", headers=admin_headers)).status_code == 404
+    assert (await client.patch("/auth/users/not-a-uuid", json={"full_name": "x"}, headers=admin_headers)).status_code == 404
+    assert (await client.delete("/auth/users/not-a-uuid", headers=admin_headers)).status_code == 404
+
+
 async def test_update_user_manager_confined(client, admin_headers, org):
     """A manager may rename a USER in their own department, but may not move that
     user to another department or promote them to a manager role."""
