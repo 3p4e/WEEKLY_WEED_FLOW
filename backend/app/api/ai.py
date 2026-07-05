@@ -111,23 +111,22 @@ async def list_bindings(actor: dict = Depends(require_role(ADMIN))):
 
 @router.put("/bindings/{function_key}")
 async def set_binding(function_key: str, body: BindingReq, actor: dict = Depends(require_role(ADMIN))):
-    """Point an AI function at a Letta agent (org-scoped upsert). No unique
-    constraint on (org, function_key, scope), so update-or-insert by hand."""
+    """Point an AI function at a Letta agent (org-scoped upsert). Atomic via
+    the partial unique index on (org_id, function_key) WHERE scope='org'
+    (migration 0006) — a plain UNIQUE(...,scope_id) doesn't dedupe org-scoped
+    rows since scope_id is NULL there and Postgres treats NULLs as distinct."""
     if function_key not in CATALOG:
         raise HTTPException(422, f"Unknown function '{function_key}'")
     agent = (body.letta_agent_id or "").strip()
     if not agent:
         raise HTTPException(422, "letta_agent_id is required")
     async with rls(actor) as c:
-        updated = await c.execute(
-            "UPDATE ai_agent_bindings SET letta_agent_id=$1, is_active=$2"
-            " WHERE org_id=$3 AND function_key=$4 AND scope='org'",
-            agent, body.is_active, actor["org_id"], function_key)
-        if updated.split()[-1] == "0":
-            await c.execute(
-                "INSERT INTO ai_agent_bindings(org_id, function_key, letta_agent_id, scope, is_active)"
-                " VALUES ($1,$2,$3,'org',$4)",
-                actor["org_id"], function_key, agent, body.is_active)
+        await c.execute(
+            "INSERT INTO ai_agent_bindings(org_id, function_key, letta_agent_id, scope, is_active)"
+            " VALUES ($1,$2,$3,'org',$4)"
+            " ON CONFLICT (org_id, function_key) WHERE scope='org'"
+            " DO UPDATE SET letta_agent_id=EXCLUDED.letta_agent_id, is_active=EXCLUDED.is_active",
+            actor["org_id"], function_key, agent, body.is_active)
     return {"ok": True, "function_key": function_key, "letta_agent_id": agent, "is_active": body.is_active}
 
 

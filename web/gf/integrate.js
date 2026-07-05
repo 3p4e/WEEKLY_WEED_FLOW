@@ -300,9 +300,15 @@ GF.WWF.install = () => {
         });
         // Persist Responsible changes: diff the selected chips against the
         // task's current helpers and add/remove via the collab endpoints.
+        // Exclude the task OWNER (not the editing session's user — those
+        // differ whenever a non-owner Responsible helper is the one editing)
+        // since the owner is implicit and never an explicit assignee.
         const desired = [...GF.$('add-resp').querySelectorAll('.on')]
-          .map(el => el.dataset.who).filter(w => w !== GF.WWF.meId);
-        const current = (t && t.helpers) || [];
+          .map(el => el.dataset.who).filter(w => w !== (t && t.owner));
+        // GF._editHelpers (populated by worklog.js's openEdit from the real
+        // assignees endpoint) is the ground truth; t.helpers is only a
+        // fallback for the rare case that fetch hadn't resolved yet.
+        const current = GF._editHelpers || (t && t.helpers) || [];
         for (const who of desired) if (!current.includes(who)) {
           try { await GF.API.assign(id, who); }
           catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
@@ -313,7 +319,7 @@ GF.WWF.install = () => {
         }
         if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: desired, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
           Object.assign(t, GF.WWF.transform(patched), keep); }
-        GF._editTask = null;
+        GF._editTask = null; GF._editHelpers = null;
         GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
       } catch(e) { GF.toast(AL('Save failed: ','Неуспешно зачувување: ')+e.message,'error'); }
       return;
@@ -474,7 +480,7 @@ GF.WWF.install = () => {
 
   GF.WWF.renderSettings = () => {
     const body = GF.$('set-body'); if (!body) return;
-    const admin = !!(GF.WWF.canProvision && GF.WWF.canProvision());
+    const admin = !!(GF.WWF.isAdmin && GF.WWF.isAdmin());
     if (GF._setTab === 'ai' && !admin) GF._setTab = 'prefs';
     if (GF.$('set-title')) GF.$('set-title').textContent = AL('Settings', 'Поставки');
     const tabs = [['prefs', AL('Preferences', 'Поставки')], ['security', AL('Security', 'Безбедност')]];
@@ -507,7 +513,7 @@ GF.WWF.install = () => {
       pane = `<div class="set-pane">
         <div class="set-kv"><span>${AL('Name', 'Име')}</span><b>${GF.esc(u.full_name || u.username || '—')}</b></div>
         <div class="set-kv"><span>${AL('Username', 'Корисник')}</span><b>${GF.esc(u.username || '—')}</b></div>
-        <div class="set-kv"><span>${AL('Role', 'Улога')}</span><b>${GF.esc(GF.roleLabel(u.role || GF.curRole()))}</b></div>
+        <div class="set-kv"><span>${AL('Role', 'Улога')}</span><b>${GF.esc(GF.roleLabel(u.role ? (ROLE_IN[u.role] || 'operator') : GF.curRole()))}</b></div>
         <div class="set-kv"><span>${AL('Department', 'Оддел')}</span><b>${GF.esc(u.department_id ? GF.depName(u.department_id) : '—')}</b></div>
         <button class="btn btn-danger" style="margin-top:16px" onclick="GF.WWF.settingsLogout()">${AL('Log out', 'Одјава')}</button></div>`;
     }
@@ -603,6 +609,12 @@ GF.WWF.canProvision = () => {
   const r = (GF.API.user || {}).role;
   return r === 'ADMIN' || MANAGER_ROLES.includes(r);
 };
+
+// Strict ADMIN check — mirrors the AI-bindings endpoints' require_role(ADMIN)
+// (backend/app/api/ai.py). Deliberately narrower than canProvision (which also
+// admits department managers): reusing canProvision here previously showed the
+// Settings "AI agents" tab to managers who then got a raw 403 from every call.
+GF.WWF.isAdmin = () => (GF.API.user || {}).role === 'ADMIN';
 
 // openUser(id) → edit an existing person (name/role/dept/title + reset password);
 // openUser() with no id → create a new account. The Team-card gear icon passes id.

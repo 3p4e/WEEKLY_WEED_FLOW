@@ -232,14 +232,25 @@ GF.WWF.openEdit = (taskId) => {
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });
-  // Pre-select the Responsible chips from the task's current helpers so the
-  // edit form shows who's already assigned; submitAdd diffs against this to
-  // add/remove assignees on save.
-  if (GF.$('add-resp')) {
+  // Pre-select the Responsible chips from the task's cached helpers as an
+  // immediate best guess, then refresh from the real assignees endpoint —
+  // t.helpers is a client-side cache that the separate Assignees/collab
+  // panel (collab.js's doAssign/removeAssignee) never updates, so it can be
+  // stale if someone was assigned/removed there without a full reload.
+  // GF._editHelpers becomes the ground truth submitAdd diffs against on save.
+  const applyRespSelection = (ids) => {
+    if (!GF.$('add-resp')) return;
     [...GF.$('add-resp').querySelectorAll('.chip-opt')].forEach(el => {
-      el.classList.toggle('on', (t.helpers || []).includes(el.dataset.who));
+      el.classList.toggle('on', ids.includes(el.dataset.who));
     });
-  }
+  };
+  applyRespSelection(t.helpers || []);
+  GF.API.assignees(taskId).then(list => {
+    if (GF._editTask !== taskId) return;   // modal closed/reused before this resolved
+    const ids = (list || []).map(a => a.user_id);
+    GF._editHelpers = ids;
+    applyRespSelection(ids);
+  }).catch(() => {});
   // openAdd defaulted the modal to create-mode labels — flip to edit.
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('edit_task');
   if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('save');

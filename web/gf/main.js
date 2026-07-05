@@ -30,6 +30,7 @@ GF.openAdd = (weekId, parentId) => {
   GF._addWeek = weekId;
   GF._addParent = parentId || null;   // "Add subtask" presets the parent
   GF._editTask = null;                // openEdit (worklog.js) flips this to PATCH mode
+  GF._editHelpers = null;             // openEdit refreshes this from the live assignees list
   const el = GF.$('add-body');
   const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
   // Deactivated accounts stay in GF.PEOPLE for historical name/avatar lookups

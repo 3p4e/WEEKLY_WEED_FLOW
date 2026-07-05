@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict FIJH52dH9Fhwq4w5BWgOiVjWDYiiVbvt5sT1UseFV4g0kkdm2EyLsvfKZaF4mJa
+\restrict bnnrXzCUtz6lQzwJezPTDQ0bxqHpGVH73LrfZDabgu7xQXUe5gD2HDztRdtvAIj
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -503,6 +503,13 @@ ALTER TABLE ONLY public.work_sessions
 
 
 --
+-- Name: ai_agent_bindings_org_scope_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ai_agent_bindings_org_scope_uniq ON public.ai_agent_bindings USING btree (org_id, function_key) WHERE (scope = 'org'::text);
+
+
+--
 -- Name: audit_log_table_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -918,5 +925,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict FIJH52dH9Fhwq4w5BWgOiVjWDYiiVbvt5sT1UseFV4g0kkdm2EyLsvfKZaF4mJa
+\unrestrict bnnrXzCUtz6lQzwJezPTDQ0bxqHpGVH73LrfZDabgu7xQXUe5gD2HDztRdtvAIj
 
