@@ -73,16 +73,26 @@ GF.WWF.renderCollabInner = (t) => {
     </div>`;
 };
 
+GF.WWF._collabSeq = GF.WWF._collabSeq || {};
+
 GF.WWF.loadCollab = async (taskId) => {
+  // Every action on this task's card (comment, assign, ack, ...) triggers
+  // its own independent loadCollab(taskId) call; without a sequence guard,
+  // an older call's response can resolve after (and overwrite) a newer
+  // one's, making a just-added comment/assignee vanish from the render.
+  const seq = (GF.WWF._collabSeq[taskId] = (GF.WWF._collabSeq[taskId] || 0) + 1);
+  let result;
   try {
     const [comments, assignees] = await Promise.all([
       GF.API.comments(taskId).catch(() => []),
       GF.API.assignees(taskId).catch(() => []),
     ]);
-    GF.WWF._collab[taskId] = { comments: comments || [], assignees: assignees || [], loaded: true };
+    result = { comments: comments || [], assignees: assignees || [], loaded: true };
   } catch (e) {
-    GF.WWF._collab[taskId] = { comments: [], assignees: [], loaded: true };
+    result = { comments: [], assignees: [], loaded: true };
   }
+  if (GF.WWF._collabSeq[taskId] !== seq) return;  // a newer call already resolved
+  GF.WWF._collab[taskId] = result;
   const t = GF.task(taskId);
   const el = GF.$('collab-' + taskId);
   if (el && t) el.innerHTML = GF.WWF.renderCollabInner(t);

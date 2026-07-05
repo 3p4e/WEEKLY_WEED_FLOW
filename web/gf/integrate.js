@@ -309,18 +309,34 @@ GF.WWF.install = () => {
         // assignees endpoint) is the ground truth; t.helpers is only a
         // fallback for the rare case that fetch hadn't resolved yet.
         const current = GF._editHelpers || (t && t.helpers) || [];
-        for (const who of desired) if (!current.includes(who)) {
-          try { await GF.API.assign(id, who); }
-          catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
-        }
-        for (const who of current) if (!desired.includes(who)) {
-          try { await GF.API.unassign(id, who); }
-          catch (e) { GF.toast('Could not unassign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+        // The backend's assign/unassign endpoints require the task owner or
+        // an elevated role (collab.py's _can_manage_task) — mirror that gate
+        // here (GF.WWF.canManageTask matches it exactly) so a non-owner
+        // helper doesn't get a confusing per-person 403 for every attempted
+        // change; instead, tell them up front that the change won't stick.
+        const respChanged = desired.some(w => !current.includes(w)) || current.some(w => !desired.includes(w));
+        if (respChanged && t && GF.WWF.canManageTask(t)) {
+          for (const who of desired) if (!current.includes(who)) {
+            try { await GF.API.assign(id, who); }
+            catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+          }
+          for (const who of current) if (!desired.includes(who)) {
+            try { await GF.API.unassign(id, who); }
+            catch (e) { GF.toast('Could not unassign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+          }
+        } else if (respChanged) {
+          GF.toast(AL("Only the task owner or a manager can change who's responsible.",
+                      'Само сопственикот на задачата или менаџер може да ја смени одговорноста.'), 'info');
         }
         if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: desired, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
           Object.assign(t, GF.WWF.transform(patched), keep); }
-        GF._editTask = null; GF._editHelpers = null;
-        GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
+        // Only reset the shared edit-session globals / close the modal if
+        // they still refer to THIS save — if the user has since opened a
+        // different edit session (openEdit reassigns these synchronously),
+        // clobbering them here would discard that other session's state and
+        // force-close its modal out from under the user.
+        if (GF._editTask === id) { GF._editTask = null; GF._editHelpers = null; GF.closeModal('add-modal'); }
+        GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
       } catch(e) { GF.toast(AL('Save failed: ','Неуспешно зачувување: ')+e.message,'error'); }
       return;
     }

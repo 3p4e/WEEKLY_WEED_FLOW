@@ -49,7 +49,7 @@ GF.WWF.openWorklog = (taskId) => {
 GF.WWF._renderWorklog = () => {
   const body = GF.$('worklog-modal-body'); if (!body) return;
   const st = GF.WWF._worklog;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = GF.todayISO();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 
@@ -105,14 +105,23 @@ GF.WWF.submitWorklog = async () => {
   // No offset = facility wall-clock (Europe/Skopje) — backend interprets it so.
   const body = { started_at: `${date}T${start}:00`, note, source: 'manual' };
   if (end) {
-    // An end time at or before the start means the shift crossed midnight —
-    // roll ended_at to the next day so a 22:00→01:00 session logs instead of
-    // 422-ing on "ended_at must be after started_at".
+    if (end === start) {
+      GF.toast(AL('End time must differ from the start time', 'Крајниот час мора да се разликува од почетниот'), 'error');
+      return;
+    }
+    // An end time BEFORE the start means the shift crossed midnight — roll
+    // ended_at to the next day so a 22:00→01:00 session logs instead of
+    // 422-ing on "ended_at must be after started_at". An end time equal to
+    // the start is rejected above rather than rolled over, so it doesn't
+    // silently log a full 24-hour session for a zero-duration entry.
     let endDate = date;
-    if (end <= start) {
+    if (end < start) {
       const d = new Date(date + 'T00:00:00');
       d.setDate(d.getDate() + 1);
-      endDate = d.toISOString().slice(0, 10);
+      // GF.localDateStr (not d.toISOString()): converting a local midnight
+      // through toISOString() lands on the previous UTC day for any
+      // positive UTC offset (e.g. Skopje), silently undoing the +1 day.
+      endDate = GF.localDateStr(d);
     }
     body.ended_at = `${endDate}T${end}:00`;
   } else body.hours = hoursRaw;

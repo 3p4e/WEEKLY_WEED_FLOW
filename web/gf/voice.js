@@ -23,7 +23,10 @@ GF.voice = {
       const el = GF.$(inputId); if (el) el.value = (final + interim).trim();
     };
     rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast(AL('Mic error: ', 'Грешка со микрофон: ') + e.error, 'error'); };
-    rec.onend = () => { this._rec = null; this._setMicUI(inputId, false); };
+    // Only clear _rec if it still points at THIS recognizer — a fast
+    // stop-then-start-elsewhere can leave a newer recognizer's reference
+    // wiped by this (older) instance's late-firing 'end' event otherwise.
+    rec.onend = () => { if (this._rec === rec) this._rec = null; this._setMicUI(inputId, false); };
     rec.start(); this._rec = rec;
     this._setMicUI(inputId, true);
     GF.toast(GF.t('listening'), 'info');
@@ -60,7 +63,7 @@ GF.voice = {
         <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.createFromVoice()">${GF.icon('check','icon','#fff')}${GF.t('create_task')}</button>
       </div>` : `
       <div class="row" style="gap:10px">
-        <button class="btn" style="flex:1;justify-content:center" onclick="GF.closeModal('voice-modal')">${GF.t('cancel')}</button>
+        <button class="btn" style="flex:1;justify-content:center" onclick="GF.voice.closeCapture()">${GF.t('cancel')}</button>
         <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','#fff')}${GF.t('create_task')}</button>
       </div>`;
 
@@ -100,8 +103,17 @@ GF.voice = {
       this._renderCapture();
     };
     rec.onerror = () => {};
-    rec.onend = () => { this._modalRec = null; this._renderCapture(); };
+    rec.onend = () => { if (this._modalRec === rec) this._modalRec = null; this._renderCapture(); };
     rec.start(); this._modalRec = rec; this._renderCapture();
+  },
+
+  // Stop any in-flight recognition before closing the modal — GF.closeModal
+  // is a plain CSS-class toggle with no cleanup hook, so without this the
+  // recognizer keeps listening (and re-rendering hidden DOM) in the
+  // background until it errors out or the modal is reopened.
+  closeCapture() {
+    if (this._modalRec) { this._modalRec.stop(); this._modalRec = null; }
+    GF.closeModal('voice-modal');
   },
 
   async parseCapture() {

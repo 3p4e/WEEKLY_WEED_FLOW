@@ -171,7 +171,7 @@ GF.render = {
     const meta = [t.id].filter(Boolean);
     // v2 badges: due date (danger when overdue + not done), type chip,
     // reference code, subtask progress, logged session hours, tags.
-    const overdue = t.due && t.status !== 'done' && t.due < new Date().toISOString().slice(0, 10);
+    const overdue = t.due && t.status !== 'done' && t.due < GF.todayISO();
     const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
