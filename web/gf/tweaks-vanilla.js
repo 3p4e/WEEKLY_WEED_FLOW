@@ -2,6 +2,13 @@
    Three expressive axes: Character · Palette · Density.
    Persists to localStorage as gf_tweaks_v1. */
 (function () {
+  // The live design-tweaks editor is a design-time tool, not a shipped user
+  // feature. Only mount its floating panel/toggle when explicitly opted in
+  // (localStorage gf_design='1' or ?design=1) so normal users never see it.
+  var _designMode = false;
+  try { _designMode = localStorage.getItem('gf_design') === '1' || /[?&]design=1(&|$)/.test(location.search); } catch (e) {}
+  if (!_designMode) return;
+
   /* ── Presets ───────────────────────────────────────────────────────── */
   const CHAR = {
     Clinical: {
@@ -232,7 +239,4 @@
 
   applyAll();
   render();
-
-  // Now tackle the OOS deep-link: when viewOOS is called, scroll/jump to current phase
-  // (see separate OOS enhancement below)
 })();

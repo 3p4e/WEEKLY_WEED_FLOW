@@ -298,7 +298,20 @@ GF.WWF.install = () => {
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
           recurrence,
         });
-        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: t.helpers, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
+        // Persist Responsible changes: diff the selected chips against the
+        // task's current helpers and add/remove via the collab endpoints.
+        const desired = [...GF.$('add-resp').querySelectorAll('.on')]
+          .map(el => el.dataset.who).filter(w => w !== GF.WWF.meId);
+        const current = (t && t.helpers) || [];
+        for (const who of desired) if (!current.includes(who)) {
+          try { await GF.API.assign(id, who); }
+          catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+        }
+        for (const who of current) if (!desired.includes(who)) {
+          try { await GF.API.unassign(id, who); }
+          catch (e) { GF.toast('Could not unassign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+        }
+        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: desired, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
           Object.assign(t, GF.WWF.transform(patched), keep); }
         GF._editTask = null;
         GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('save')+' ✓','success');

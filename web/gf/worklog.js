@@ -232,6 +232,14 @@ GF.WWF.openEdit = (taskId) => {
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });
+  // Pre-select the Responsible chips from the task's current helpers so the
+  // edit form shows who's already assigned; submitAdd diffs against this to
+  // add/remove assignees on save.
+  if (GF.$('add-resp')) {
+    [...GF.$('add-resp').querySelectorAll('.chip-opt')].forEach(el => {
+      el.classList.toggle('on', (t.helpers || []).includes(el.dataset.who));
+    });
+  }
   // openAdd defaulted the modal to create-mode labels — flip to edit.
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('edit_task');
   if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('save');
