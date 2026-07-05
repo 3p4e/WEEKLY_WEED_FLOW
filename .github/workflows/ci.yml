@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
 
+# The app runs against TWO databases (identity vs work data — separate
+# Postgres containers in production). CI mirrors that: one postgres service
+# hosting two databases, bootstrapped from the two generated schema files.
+env:
+  USERS_DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/wwf_users_test
+  USERS_ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/wwf_users_test
+  TASKS_DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/wwf_tasks_test
+  TASKS_ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/wwf_tasks_test
+
 jobs:
   backend:
     name: Backend deps + import
@@ -29,7 +38,8 @@ jobs:
             print('routes:', len(paths)); \
             assert any(p.startswith('/audit') for p in paths), 'audit router not wired'; \
             assert any(p.startswith('/auth') for p in paths), 'auth router not wired'; \
-            assert any(p.startswith('/reports') for p in paths), 'reports router not wired'"
+            assert any(p.startswith('/reports') for p in paths), 'reports router not wired'; \
+            assert any('/sessions' in p for p in paths), 'work-session routes not wired'"
 
   tests:
     name: Backend test suite
@@ -39,7 +49,6 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: weekly_weed_flow_test
         ports:
           - 5432:5432
         options: >-
@@ -54,31 +63,34 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r backend/requirements-dev.txt
-      - name: Bootstrap test roles + schema
+      - name: Bootstrap test roles + both schemas
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
-            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
-            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
-          "
-          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
-          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
-            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
-            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
-          "
+          # one statement per -c: CREATE DATABASE cannot run inside the
+          # implicit transaction a multi-statement -c string gets wrapped in.
+          psql -h localhost -U postgres \
+            -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';" \
+            -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;" \
+            -c "CREATE DATABASE wwf_users_test;" \
+            -c "CREATE DATABASE wwf_tasks_test;"
+          for which in users tasks; do
+            backend/scripts/load_schema.sh $which wwf_${which}_test -h localhost -U postgres
+            psql -h localhost -U postgres -d wwf_${which}_test -c "
+              GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+              GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+              GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+            "
+          done
       - name: Run tests
         working-directory: backend
         env:
           ENVIRONMENT: development
           SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
-          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
-          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
         run: python -m pytest -v
 
   migrations:
-    name: Alembic baseline matches schema.sql
+    name: Alembic baselines match schema files
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -99,36 +111,36 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
-      - name: Build one DB via alembic upgrade head, one via schema.sql
+      - name: Build each DB via alembic upgrade head and via its schema file, then diff
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_alembic;"
-          psql -h localhost -U postgres -c "CREATE DATABASE wwf_via_schemasql;"
-          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
-            alembic -c backend/alembic.ini upgrade head
-          backend/scripts/load_schema.sh wwf_via_schemasql -h localhost -U postgres
-      - name: Diff the two schemas (fails if 0001_baseline.py has drifted from schema.sql)
-        env:
-          PGPASSWORD: postgres
-        run: |
-          # exclude alembic_version (Alembic's own bookkeeping table, not
-          # part of the app schema) and the \restrict/\unrestrict lines
-          # (random per-dump lock tokens, not real schema content).
           dump() { pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-privileges \
             --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict'; }
-          dump wwf_via_alembic    > /tmp/via_alembic.sql
-          dump wwf_via_schemasql  > /tmp/via_schemasql.sql
-          diff /tmp/via_alembic.sql /tmp/via_schemasql.sql && echo "alembic 0001 baseline matches schema.sql exactly"
-      - name: alembic downgrade cleanly reverses the baseline
+          for which in users tasks; do
+            VAR=$(echo $which | tr a-z A-Z)_MIGRATION_DATABASE_URL
+            psql -h localhost -U postgres -c "CREATE DATABASE wwf_${which}_via_alembic;"
+            psql -h localhost -U postgres -c "CREATE DATABASE wwf_${which}_via_schemasql;"
+            env $VAR=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_${which}_via_alembic \
+              alembic -c backend/alembic.ini -n $which upgrade head
+            backend/scripts/load_schema.sh $which wwf_${which}_via_schemasql -h localhost -U postgres
+            dump wwf_${which}_via_alembic   > /tmp/${which}_via_alembic.sql
+            dump wwf_${which}_via_schemasql > /tmp/${which}_via_schemasql.sql
+            diff /tmp/${which}_via_alembic.sql /tmp/${which}_via_schemasql.sql \
+              && echo "$which: alembic baseline matches schema.${which}.sql exactly"
+          done
+      - name: alembic downgrade cleanly reverses each baseline
         env:
           PGPASSWORD: postgres
         run: |
-          MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_via_alembic \
-            alembic -c backend/alembic.ini downgrade base
-          remaining=$(psql -h localhost -U postgres -d wwf_via_alembic -tAc \
-            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name != 'alembic_version'")
-          test "$remaining" = "0" && echo "downgrade removed every table it created"
+          for which in users tasks; do
+            VAR=$(echo $which | tr a-z A-Z)_MIGRATION_DATABASE_URL
+            env $VAR=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_${which}_via_alembic \
+              alembic -c backend/alembic.ini -n $which downgrade base
+            remaining=$(psql -h localhost -U postgres -d wwf_${which}_via_alembic -tAc \
+              "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name != 'alembic_version'")
+            test "$remaining" = "0" && echo "$which: downgrade removed every table it created"
+          done
 
   e2e:
     name: End-to-end (Playwright)
@@ -138,7 +150,6 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: weekly_weed_flow_test
         ports:
           - 5432:5432
         options: >-
@@ -156,20 +167,25 @@ jobs:
           node-version: '22'
       - name: Install nginx
         run: sudo apt-get update -q && sudo apt-get install -y -q nginx-light
-      - name: Bootstrap test roles + schema
+      - name: Bootstrap test roles + both schemas
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
-            CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';
-            CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;
-          "
-          backend/scripts/load_schema.sh weekly_weed_flow_test -h localhost -U postgres
-          psql -h localhost -U postgres -d weekly_weed_flow_test -c "
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
-            GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
-            GRANT USAGE ON SCHEMA app TO app_user, app_admin;
-          "
+          # one statement per -c: CREATE DATABASE cannot run inside the
+          # implicit transaction a multi-statement -c string gets wrapped in.
+          psql -h localhost -U postgres \
+            -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';" \
+            -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;" \
+            -c "CREATE DATABASE wwf_users_test;" \
+            -c "CREATE DATABASE wwf_tasks_test;"
+          for which in users tasks; do
+            backend/scripts/load_schema.sh $which wwf_${which}_test -h localhost -U postgres
+            psql -h localhost -U postgres -d wwf_${which}_test -c "
+              GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+              GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+              GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+            "
+          done
       - name: Set up backend venv
         working-directory: backend
         run: |
@@ -183,8 +199,6 @@ jobs:
       - name: Run e2e suite
         working-directory: web/e2e
         env:
-          DATABASE_URL: postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test
-          ADMIN_DATABASE_URL: postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test
           CI: true
         run: npx playwright test
       - uses: actions/upload-artifact@v4

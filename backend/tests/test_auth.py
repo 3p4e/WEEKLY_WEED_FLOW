@@ -1,4 +1,5 @@
 """P1 — account provisioning, forced first-login password change, RBAC gates."""
+from app.db import users_admin_pool
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -103,6 +104,25 @@ async def test_non_admin_can_read_directory(client, admin_headers):
     assert "must_change_password" not in r.json()[0]
 
 
+async def test_directory_excludes_deactivated_accounts(client, admin_headers, org):
+    """A deactivated (is_active=false) account must vanish from the
+    /auth/directory roster — it feeds avatars and assignee pickers, so an
+    inactive account would otherwise remain assignable forever. /users (the
+    management view) is where inactive accounts stay visible."""
+    user, _ = await create_user(client, admin_headers, full_name="Soon Inactive")
+    await users_admin_pool().execute(
+        "UPDATE profiles SET is_active=false WHERE id=$1", user["id"])
+
+    r = await client.get("/auth/directory", headers=admin_headers)
+    assert r.status_code == 200
+    assert user["username"] not in [u["username"] for u in r.json()]
+
+    r = await client.get("/auth/users", headers=admin_headers)
+    assert r.status_code == 200
+    inactive = next(u for u in r.json() if u["username"] == user["username"])
+    assert inactive["is_active"] is False
+
+
 async def test_admin_cannot_delete_own_account(client, admin_headers, org):
     r = await client.delete(f"/auth/users/{org['admin_id']}", headers=admin_headers)
     assert r.status_code == 400
@@ -118,12 +138,12 @@ async def test_deleted_user_cannot_log_in(client, admin_headers):
 
 
 async def test_role_gated_endpoints_blocked_before_forced_password_change(client, admin_headers):
-    """A leaked/intercepted OTP for a freshly-provisioned DEPT_HEAD must not
+    """A leaked/intercepted OTP for a freshly-provisioned QC_MGR must not
     grant role-gated actions (user management, audit) before the real user
     completes their mandatory first-login password change — require_role()
     must enforce the same gate as require_password_set(), not bypass it."""
-    dept_head, otp = await create_user(client, admin_headers, role="DEPT_HEAD")
-    r = await client.post("/auth/login", json={"email": dept_head["username"], "password": otp})
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR")
+    r = await client.post("/auth/login", json={"email": mgr["username"], "password": otp})
     assert r.status_code == 200, r.text
     assert r.json()["user"]["must_change_password"] is True
     otp_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
@@ -141,18 +161,18 @@ async def test_role_gated_endpoints_blocked_before_forced_password_change(client
 
     # Sanity: the same account can use the role-gated endpoints normally
     # once the forced password change is actually completed.
-    token = await login_and_set_password(client, dept_head["username"], otp)
+    token = await login_and_set_password(client, mgr["username"], otp)
     r = await client.get("/auth/users", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
 
 
-async def test_dept_head_confined_to_own_department(client, admin_headers, org):
-    """_can_manage()'s DEPT_HEAD branch is only ever exercised via the
-    fixture's ADMIN in every other test — nothing pins that a DEPT_HEAD is
-    actually confined to their own department, or barred from creating an
-    ADMIN account."""
-    from app.db import admin_pool
-    rows = await admin_pool().fetch(
+async def test_manager_confined_to_own_department(client, admin_headers, org):
+    """_can_manage()'s manager branch is only ever exercised via the fixture's
+    ADMIN in every other test — nothing pins that a department manager is
+    actually confined to their own department, barred from creating a peer
+    manager, or barred from creating an ADMIN account."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
         "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','Dept A'), ($1,'b','Dept B')"
         " RETURNING id, code",
         org["org_id"],
@@ -160,19 +180,19 @@ async def test_dept_head_confined_to_own_department(client, admin_headers, org):
     dept_ids = {r["code"]: str(r["id"]) for r in rows}
 
     r = await client.post("/auth/users", json={
-        "username": "depthead_a", "full_name": "Dept Head A", "role": "DEPT_HEAD",
+        "username": "qc_mgr_a", "full_name": "QC Manager A", "role": "QC_MGR",
         "department_id": dept_ids["a"],
     }, headers=admin_headers)
     assert r.status_code == 201, r.text
-    dept_head, otp = r.json()["user"], r.json()["otp"]
-    dh_token = await login_and_set_password(client, dept_head["username"], otp)
-    dh_headers = {"Authorization": f"Bearer {dh_token}"}
+    mgr, otp = r.json()["user"], r.json()["otp"]
+    mgr_token = await login_and_set_password(client, mgr["username"], otp)
+    mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
 
     # Can create a USER within their own department.
     r = await client.post("/auth/users", json={
         "username": "same_dept_user", "full_name": "Same Dept", "role": "USER",
         "department_id": dept_ids["a"],
-    }, headers=dh_headers)
+    }, headers=mgr_headers)
     assert r.status_code == 201, r.text
     same_dept_user = r.json()["user"]
 
@@ -180,18 +200,27 @@ async def test_dept_head_confined_to_own_department(client, admin_headers, org):
     r = await client.post("/auth/users", json={
         "username": "other_dept_user", "full_name": "Other Dept", "role": "USER",
         "department_id": dept_ids["b"],
-    }, headers=dh_headers)
+    }, headers=mgr_headers)
     assert r.status_code == 403
 
-    # Cannot create an ADMIN, even within their own department.
+    # Cannot create a peer manager, even in their own department — managers
+    # provision only USER staff; managers/executives are admin-only.
+    r = await client.post("/auth/users", json={
+        "username": "peer_mgr", "full_name": "Peer Manager", "role": "PR_MGR",
+        "department_id": dept_ids["a"],
+    }, headers=mgr_headers)
+    assert r.status_code == 403
+
+    # Cannot create an ADMIN — rejected up front as a non-assignable role (422),
+    # before _can_manage is ever consulted.
     r = await client.post("/auth/users", json={
         "username": "sneaky_admin", "full_name": "Sneaky", "role": "ADMIN",
         "department_id": dept_ids["a"],
-    }, headers=dh_headers)
-    assert r.status_code == 403
+    }, headers=mgr_headers)
+    assert r.status_code == 422
 
     # Delete mirrors create: can delete within their department...
-    r = await client.delete(f"/auth/users/{same_dept_user['id']}", headers=dh_headers)
+    r = await client.delete(f"/auth/users/{same_dept_user['id']}", headers=mgr_headers)
     assert r.status_code == 200, r.text
 
     # ...but not a user in a different department.
@@ -199,5 +228,22 @@ async def test_dept_head_confined_to_own_department(client, admin_headers, org):
         "username": "victim_dept_b", "full_name": "Victim", "role": "USER", "department_id": dept_ids["b"],
     }, headers=admin_headers)
     victim = r.json()["user"]
-    r = await client.delete(f"/auth/users/{victim['id']}", headers=dh_headers)
+    r = await client.delete(f"/auth/users/{victim['id']}", headers=mgr_headers)
     assert r.status_code == 403
+
+
+async def test_admin_creates_managers_and_executives(client, admin_headers):
+    """The create matrix's top row: an admin may provision any non-admin role —
+    department managers, the QP, and executives (CEO/COO) alike — but ADMIN
+    itself is never assignable, even by an admin (DB-seeded only → 422)."""
+    for role in ("QC_MGR", "QP", "CEO", "COO"):
+        r = await client.post("/auth/users", json={
+            "username": f"role_{role.lower()}", "full_name": role, "role": role,
+        }, headers=admin_headers)
+        assert r.status_code == 201, r.text
+        assert r.json()["user"]["role"] == role
+
+    r = await client.post("/auth/users", json={
+        "username": "another_admin", "full_name": "Nope", "role": "ADMIN",
+    }, headers=admin_headers)
+    assert r.status_code == 422

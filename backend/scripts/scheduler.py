@@ -65,7 +65,7 @@ def last_fire(now: datetime, tz) -> datetime:
 
 async def _already_ran(since: datetime) -> bool:
     """True if any org already has a weekly_report pin created at/after *since*."""
-    dsn = os.environ.get("ADMIN_DATABASE_URL", "")
+    dsn = os.environ.get("TASKS_ADMIN_DATABASE_URL", "")  # ai_pins live in the tasks DB
     if not dsn:
         return False
     conn = await asyncpg.connect(dsn)

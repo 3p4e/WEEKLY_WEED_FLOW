@@ -11,11 +11,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 # alembic.ini + alembic/ ship in the same image so migrations run via
-# `docker exec <container> alembic upgrade head` with MIGRATION_DATABASE_URL
-# set — see backend/README.md's "Migrations" section. Not used by the
+# `docker exec <container> alembic -n users|tasks upgrade head` with the
+# per-database *_MIGRATION_DATABASE_URL set — see backend/README.md's "Migrations" section. Not used by the
 # running app itself (uvicorn only ever imports app/).
 COPY alembic.ini .
-COPY alembic ./alembic
+COPY alembic_users ./alembic_users
+COPY alembic_tasks ./alembic_tasks
 # scripts/ ships too: the weekly-snapshot job + scheduler run from this same
 # image as a separate container (`python scripts/scheduler.py`) and via
 # `docker exec ... python scripts/weekly_snapshot.py --once`. Not imported by

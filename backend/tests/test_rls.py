@@ -10,15 +10,16 @@ routes at all today, so their isolation is unreachable via HTTP and out of
 scope here."""
 import uuid
 
-from app.db import admin_pool
+from app.db import tasks_admin_pool, users_admin_pool
 from app.security import hash_password
+from tests.conftest import purge_org
 
 
 async def _make_org_admin(username_prefix="admin"):
     org_id = uuid.uuid4()
     admin_id = uuid.uuid4()
     suffix = uuid.uuid4().hex[:8]
-    pool = admin_pool()
+    pool = users_admin_pool()
     await pool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
                         org_id, f"Org {suffix}", f"org-{suffix}")
     await pool.execute(
@@ -55,8 +56,8 @@ async def test_task_not_visible_or_writable_across_orgs(client):
         r = await client.patch(f"/tasks/{task_id}", json={"status": "ongoing"}, headers=headers_b)
         assert r.status_code == 404
     finally:
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])
 
 
 async def test_directory_scoped_to_own_org(client):
@@ -70,8 +71,8 @@ async def test_directory_scoped_to_own_org(client):
         assert org_a["username"] in usernames
         assert org_b["username"] not in usernames
     finally:
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])
 
 
 async def test_departments_scoped_to_own_org(client):
@@ -80,7 +81,7 @@ async def test_departments_scoped_to_own_org(client):
     org_a = await _make_org_admin("depta")
     org_b = await _make_org_admin("deptb")
     try:
-        await admin_pool().execute(
+        await tasks_admin_pool().execute(
             "INSERT INTO departments(org_id, code, name) VALUES ($1,'secret','Org A Secret Dept')",
             org_a["org_id"])
         r = await client.post("/auth/login", json={"email": org_b["username"], "password": "TestPassword123456"})
@@ -90,8 +91,8 @@ async def test_departments_scoped_to_own_org(client):
         names = [d["name"] for d in r.json()]
         assert "Org A Secret Dept" not in names
     finally:
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])
 
 
 async def test_calendar_weeks_scoped_to_own_org(client):
@@ -100,7 +101,7 @@ async def test_calendar_weeks_scoped_to_own_org(client):
     org_a = await _make_org_admin("weeka")
     org_b = await _make_org_admin("weekb")
     try:
-        await admin_pool().execute(
+        await tasks_admin_pool().execute(
             "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
             " VALUES ($1,2026,1,'2026-01-05','2026-01-11')",
             org_a["org_id"])
@@ -110,5 +111,5 @@ async def test_calendar_weeks_scoped_to_own_org(client):
         assert r.status_code == 200
         assert r.json() == []
     finally:
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_a["org_id"])
-        await admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_b["org_id"])
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])

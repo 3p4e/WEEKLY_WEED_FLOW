@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <!-- no maximum-scale: pinch-zoom must stay available (a11y) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GrowFlow — Production Task Manager</title>
   <link rel="icon" type="image/png" href="assets/pp-leaf.png">
+  <!-- PWA: installable app shell (see manifest.webmanifest + sw.js) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#16233B">
+  <link rel="apple-touch-icon" href="assets/wwf-icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="gf/app.css">
   <link rel="stylesheet" href="gf/brand.css">
   <link rel="stylesheet" href="gf/mobile.css">
@@ -160,7 +167,13 @@
 <!-- Live design-tweaks panel mount -->
 <div id="tweaks-root"></div>
 
-<!-- Scripts — load order matters: boot-guard → data → core → render → voice → export → views → leaf-fx → assistant → main -->
+<!-- Scripts — load order matters: boot-guard → data → core → render → voice → export → views → leaf-fx → assistant → main
+     → api → integrate → audit-view → collab → worklog → report-view → tweaks-vanilla.
+     audit-view/collab/worklog/report-view are integrate.js's monkey-patch pattern
+     split into per-concern files (first decomposition cut); collab.js's canManageTask
+     and worklog.js both read AUDIT_ROLES/AL (bare top-level consts declared in
+     audit-view.js) — classic <script> tags share one lexical scope in document
+     order, so audit-view must load before them. -->
 <script src="gf/boot-guard.js"></script>
 <script src="gf/data.js"></script>
 <script src="gf/core.js"></script>
@@ -173,6 +186,17 @@
 <script src="gf/main.js"></script>
 <script src="gf/api.js"></script>
 <script src="gf/integrate.js"></script>
+<script src="gf/audit-view.js"></script>
+<script src="gf/collab.js"></script>
+<script src="gf/worklog.js"></script>
+<script src="gf/report-view.js"></script>
+<script src="gf/import-view.js"></script>
 <script src="gf/tweaks-vanilla.js"></script>
+<script>
+// PWA: register the version-keyed service worker (sw.js) — app shell works offline.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
 </body>
 </html>

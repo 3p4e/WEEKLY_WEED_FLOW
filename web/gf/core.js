@@ -38,29 +38,38 @@ GF.state = {
   aiBase: localStorage.getItem('gf_ai_base') || '',
   aiProvider: localStorage.getItem('gf_ai_provider') || 'builtin',
   view: localStorage.getItem('gf_view') || 'mywork',
-  selWeek: 0, selDay: 'All', deptFilter: null, search: '',
+  selWeek: 0, selDay: 'All', deptFilter: null, tagFilter: null, search: '',
   tasks: [], expanded: new Set(), teleOpen: false,
 };
 
 // ── Roles (used by Team / user management) ──
+// Keys are GF tokens (lowercased backend role codes; see ROLE_IN/ROLE_OUT in
+// integrate.js). ADMIN is a system role and is never offered in a role picker.
 GF.ROLES = {
-  hod:      { en: 'Head of Department', mk: 'Раководител на оддел' },
-  qp:       { en: 'Qualified Person',   mk: 'Квалификувано лице' },
-  operator: { en: 'Operator',           mk: 'Оператор' },
-  admin:    { en: 'Administrator',      mk: 'Администратор' },
-  viewer:   { en: 'Viewer (read-only)', mk: 'Прегледувач' },
+  admin:   { en: 'Administrator',          mk: 'Администратор' },
+  ceo:     { en: 'CEO',                    mk: 'Извршен директор' },
+  coo:     { en: 'COO',                    mk: 'Оперативен директор' },
+  qa_mgr:  { en: 'QA Manager',             mk: 'Менаџер за КО' },
+  qc_mgr:  { en: 'QC Manager',             mk: 'Менаџер за КК' },
+  pr_mgr:  { en: 'Production Manager',     mk: 'Менаџер за производство' },
+  wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
+  sc_mgr:  { en: 'Supply Chain Manager',   mk: 'Менаџер за снабдување' },
+  cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
+  operator:{ en: 'Operator',               mk: 'Оператор' },
 };
 GF.roleLabel = (r) => (GF.ROLES[r] ? GF.ROLES[r][GF.state.lang] || GF.ROLES[r].en : r);
 GF.AVATAR_COLORS = ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#5A6B82','#0891B2'];
 
 // ── Permissions per role ──
 //   own = only on tasks the user is Accountable/Responsible for
+// Executives + all managers get the full row (like the old admin/hod);
+// operator (USER) is own-tasks-only. Unknown roles fall back to operator.
+const _FULL = { create: true, editAny: true, deleteAny: true, status: 'any', team: true };
 GF.PERMS = {
-  admin:    { create: true,  editAny: true,  deleteAny: true,  status: 'any', team: true },
-  hod:      { create: true,  editAny: true,  deleteAny: true,  status: 'any', team: true },
-  qp:       { create: true,  editAny: true,  deleteAny: false, status: 'any', team: false },
-  operator: { create: true,  editAny: false, deleteAny: false, status: 'own', team: false },
-  viewer:   { create: false, editAny: false, deleteAny: false, status: 'no',  team: false },
+  admin: _FULL, ceo: _FULL, coo: _FULL,
+  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, sc_mgr: _FULL, cu_mgr: _FULL, qp: _FULL,
+  operator: { create: true, editAny: false, deleteAny: false, status: 'own', team: false },
 };
 GF.curRole = () => (GF.PEOPLE[GF.state.user] || {}).role || 'operator';
 GF.perms = () => GF.PERMS[GF.curRole()] || GF.PERMS.operator;
@@ -88,6 +97,7 @@ GF.depName = (id) => { const d = GF.dep(id); return GF.state.lang === 'mk' ? d.m
 GF.statusLabel = (s) => GF.STATUS[s] ? GF.STATUS[s][GF.state.lang] : s;
 GF.prLabel = (p) => GF.PRIORITY[p] ? GF.PRIORITY[p][GF.state.lang] : p;
 GF.dayLabel = (d) => { const i = GF.DAYS.indexOf(d); return GF.state.lang === 'mk' && i >= 0 ? GF.DAYS_MK[i] : d; };
+GF.taskTypeLabel = (t) => { const l = GF.TASK_TYPE_LABELS && GF.TASK_TYPE_LABELS[t]; return l ? (l[GF.state.lang] || l.en) : t; };
 
 // ── Calendar ──
 GF.calendar = { weeks: [], todayId: 0 };
@@ -185,15 +195,17 @@ GF.toggleDone = (id) => {
 // ── Filters / nav ──
 GF.weekTasks = (weekId) => GF.state.tasks.filter(t => t.weekId === weekId && !t.parentId);
 GF.visibleTasks = (weekId) => {
-  const { selDay, deptFilter, search, user } = GF.state;
+  const { selDay, deptFilter, tagFilter, search, user } = GF.state;
   const q = search.trim().toLowerCase();
   return GF.weekTasks(weekId).filter(t => {
     if (selDay !== 'All' && !(t.days || []).includes(selDay)) return false;
     if (deptFilter && t.dept !== deptFilter) return false;
+    if (tagFilter && !(t.tags || []).includes(tagFilter)) return false;
     if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;
     return true;
   });
 };
+GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(); };
 
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };
 GF.setView = (v) => {

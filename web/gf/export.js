@@ -95,9 +95,9 @@ GF.export = {
       const sc = statusColor[t.status] || '#8A99B0';
       html += `<div style="border-left:4px solid ${sc};padding:8px 14px;margin-bottom:10px;border-radius:0 10px 10px 0;background:#F6F8FC">
         <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;font-size:13px">${GF.esc(t.title)}</span>
-        <span style="font-size:10px;font-weight:700;color:${sc};text-transform:uppercase">${t.status}</span></div>
-        <div style="font-size:10px;color:#566884;margin-top:2px">${[t.id, GF.dep(t.dept).name].filter(Boolean).join(' · ')}</div>
-        ${(t.notes || []).map(n => `<div style="font-size:10px;color:#16233B;margin-top:4px;padding-left:8px;border-left:2px solid #E2E8F1"><b>${n.d}:</b> ${GF.esc(n.n)}</div>`).join('')}
+        <span style="font-size:10px;font-weight:700;color:${sc};text-transform:uppercase">${GF.esc(t.status)}</span></div>
+        <div style="font-size:10px;color:#566884;margin-top:2px">${[t.id, GF.dep(t.dept).name].filter(Boolean).map(GF.esc).join(' · ')}</div>
+        ${(t.notes || []).map(n => `<div style="font-size:10px;color:#16233B;margin-top:4px;padding-left:8px;border-left:2px solid #E2E8F1"><b>${GF.esc(n.d)}:</b> ${GF.esc(n.n)}</div>`).join('')}
       </div>`;
     });
 

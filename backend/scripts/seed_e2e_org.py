@@ -4,7 +4,7 @@ to stdout. This app has no self-signup, so e2e tests need a real bootstrap
 account to log in as before they can drive the UI — same approach as
 tests/conftest.py's `org` fixture, just callable from outside pytest.
 
-Usage: DATABASE_URL=... ADMIN_DATABASE_URL=... python3 seed_e2e_org.py
+Usage: USERS_ADMIN_DATABASE_URL=... TASKS_ADMIN_DATABASE_URL=... python3 seed_e2e_org.py
 """
 import asyncio
 import datetime
@@ -31,17 +31,18 @@ async def main():
     password = "E2ETestPassword123456"
     teammate_name = f"E2E Teammate {suffix[:4]}"
 
-    conn = await asyncpg.connect(os.environ["ADMIN_DATABASE_URL"])
+    uconn = await asyncpg.connect(os.environ["USERS_ADMIN_DATABASE_URL"])
+    conn = await asyncpg.connect(os.environ["TASKS_ADMIN_DATABASE_URL"])
     try:
-        await conn.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
+        await uconn.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
                             org_id, f"E2E Org {suffix}", f"e2e-{suffix}")
-        await conn.execute(
+        await uconn.execute(
             "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
             " VALUES ($1,$2,$3,$4,$5,'ADMIN',false)",
             admin_id, org_id, username, hash_password(password), "E2E Admin")
         # A second, non-admin org member — the assign step needs someone real
         # to assign the created task to.
-        await conn.execute(
+        await uconn.execute(
             "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
             " VALUES ($1,$2,$3,$4,$5,'USER',false)",
             teammate_id, org_id, f"e2e_teammate_{suffix}", hash_password(password), teammate_name)
@@ -65,6 +66,7 @@ async def main():
             org_id, next_iso_year, next_iso_week, next_starts_on, next_ends_on)
     finally:
         await conn.close()
+        await uconn.close()
 
     print(json.dumps({
         "org_id": str(org_id), "username": username, "password": password,

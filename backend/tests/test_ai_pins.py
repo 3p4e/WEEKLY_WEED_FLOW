@@ -5,16 +5,16 @@ with subject_user_id set (an individual's AI weekly report) is visible only
 to its subject and to elevated roles, never to arbitrary org members."""
 import uuid
 
-from app.db import admin_pool
+from app.db import tasks_admin_pool, users_admin_pool
 from app.security import hash_password
 from tests.conftest import create_user, login_and_set_password
 
 
-async def _pin(org_id, function_key, title, body="body", subject_user_id=None):
-    await admin_pool().execute(
-        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id)"
-        " VALUES ($1,$2,$3,$4,$5)",
-        org_id, function_key, title, body, subject_user_id)
+async def _pin(org_id, function_key, title, body="body", subject_user_id=None, prompt_version=None):
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id, prompt_version)"
+        " VALUES ($1,$2,$3,$4,$5,$6)",
+        org_id, function_key, title, body, subject_user_id, prompt_version)
 
 
 async def test_pins_returned_newest_first_and_filterable(client, admin_headers, org):
@@ -46,7 +46,7 @@ async def test_pins_isolated_across_orgs(client, admin_headers, org):
     """A pin written for a second, independent org must never surface here."""
     other_org = uuid.uuid4()
     other_admin = uuid.uuid4()
-    pool = admin_pool()
+    pool = users_admin_pool()
     await pool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
                        other_org, "Other Org", f"other-{other_org.hex[:8]}")
     await pool.execute(
@@ -63,7 +63,8 @@ async def test_pins_isolated_across_orgs(client, admin_headers, org):
         assert "My org report" in titles
         assert "SECRET other-org report" not in titles
     finally:
-        await pool.execute("DELETE FROM organizations WHERE id=$1", other_org)
+        from tests.conftest import purge_org
+        await purge_org(other_org)
 
 
 async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_headers, org):
@@ -95,3 +96,17 @@ async def test_user_pins_visible_only_to_subject_and_elevated(client, admin_head
     r = await client.get("/ai/pins", headers=admin_headers)  # elevated: sees all
     titles = [p["title"] for p in r.json()]
     assert {"Org report — W1", "Report — Alice", "Report — Bob"} <= set(titles)
+
+
+async def test_pins_expose_prompt_version(client, admin_headers, org):
+    """ai_pins.prompt_version (migration 0004) records which
+    planner_prompts.PROMPT_VERSION produced a pin — or NULL for the raw
+    digest, which is never LLM-authored. Must round-trip through the API."""
+    await _pin(org["org_id"], "weekly_report", "AI report", prompt_version="wwf-prompts/v3")
+    await _pin(org["org_id"], "weekly_snapshot", "Raw digest", prompt_version=None)
+
+    r = await client.get("/ai/pins", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    by_title = {p["title"]: p for p in r.json()}
+    assert by_title["AI report"]["prompt_version"] == "wwf-prompts/v3"
+    assert by_title["Raw digest"]["prompt_version"] is None

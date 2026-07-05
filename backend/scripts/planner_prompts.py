@@ -11,7 +11,7 @@ import os
 
 import httpx
 
-PROMPT_VERSION = "wwf-prompts/v3"
+PROMPT_VERSION = "wwf-prompts/v4"
 
 LETTA_BASE_URL = os.environ.get("LETTA_BASE_URL", "http://host.docker.internal:8283")
 LETTA_API_KEY = os.environ.get("LETTA_API_KEY", "")
@@ -26,6 +26,11 @@ Rules that apply to every response:
 - Name blockers with their owner (e.g. "STUCK — owner marko") and surface any DECLINED assignments.
 - Compare hours actual-vs-estimated where present; flag over-run (actual > estimated) and untracked effort.
 - State assignment acceptance status (accepted / pending / declined) when relevant.
+- When the input carries a "Hours by time class" section (regular / overtime / night / weekend from
+  logged work sessions), report each person's overtime, night and weekend totals explicitly — this
+  report is how off-hours commitment gets seen and validated. Never omit non-zero overtime.
+- When the input carries an "Overdue" section, list every overdue item with its due date and owner.
+- Mention the task-type mix (CAPA / SOP / validation / lab / ...) when the input provides it.
 - The REQUEST line states the scope: the whole facility (org rollup) or one named person. Match it.
 - Never invent work, people, or numbers not present in the input. Say "unknown" when data is missing.
 - Output ONLY the single JSON object specified below — no prose, no markdown fences, nothing outside it."""

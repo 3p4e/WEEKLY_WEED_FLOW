@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.db import rls
 from app.deps import require_password_set
+from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -90,7 +91,7 @@ async def list_pins(
     args.append(limit)
     async with rls(user) as c:
         rows = await c.fetch(
-            "SELECT id, function_key, task_id, week_id, title, body, created_at, subject_user_id"
+            "SELECT id, function_key, task_id, week_id, title, body, created_at, subject_user_id, prompt_version"
             f" FROM ai_pins{where} ORDER BY created_at DESC LIMIT ${len(args)}", *args)
     return [
         {"id": str(r["id"]), "function_key": r["function_key"],
@@ -98,7 +99,8 @@ async def list_pins(
          "week_id": str(r["week_id"]) if r["week_id"] else None,
          "title": r["title"], "body": r["body"],
          "created_at": r["created_at"].isoformat(),
-         "subject_user_id": str(r["subject_user_id"]) if r["subject_user_id"] else None}
+         "subject_user_id": str(r["subject_user_id"]) if r["subject_user_id"] else None,
+         "prompt_version": r["prompt_version"]}
         for r in rows
     ]
 
@@ -108,17 +110,19 @@ _DATA_FUNCS = {"weekly_summary", "dependency_advisor", "corpus_qa", "risk_flag",
 
 
 _CTX_COLS = ("t.id, t.title, t.status, t.priority, t.department, t.week_start, t.tags,"
-             " t.estimated_hours, t.actual_hours, t.completed_date, p.username AS owner")
+             " t.estimated_hours, t.actual_hours, t.completed_date, t.user_id")
 
 
-async def _task_context(conn, week_id: str | None = None, limit: int = 200) -> str:
+async def _task_context(conn, names: dict, week_id: str | None = None, limit: int = 200) -> str:
+    """*names* is the app-side roster map (owner usernames live in the users
+    database — no SQL join possible)."""
     if week_id:
         rows = await conn.fetch(
-            f"SELECT {_CTX_COLS} FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+            f"SELECT {_CTX_COLS} FROM tasks t"
             " WHERE t.is_deleted=false AND t.week_id=$1 ORDER BY t.created_at DESC LIMIT $2", week_id, limit)
     else:
         rows = await conn.fetch(
-            f"SELECT {_CTX_COLS} FROM tasks t LEFT JOIN profiles p ON p.id=t.user_id"
+            f"SELECT {_CTX_COLS} FROM tasks t"
             " WHERE t.is_deleted=false ORDER BY t.week_start DESC NULLS LAST, t.created_at DESC LIMIT $1", limit)
     if not rows:
         return ""
@@ -129,9 +133,10 @@ async def _task_context(conn, week_id: str | None = None, limit: int = 200) -> s
     lines = []
     for r in rows:
         done = f", done={r['completed_date']}" if r["completed_date"] else ""
+        owner = (names.get(str(r["user_id"])) or {}).get("username")
         lines.append(
             f"- [task:{str(r['id'])[:8]}] [{r['status']}/{r['priority']}] {r['title']} "
-            f"(dept={r['department']}, owner={r['owner']}, week={r['week_start']}, "
+            f"(dept={r['department']}, owner={owner}, week={r['week_start']}, "
             f"hours={_hrs(r['actual_hours'])}/{_hrs(r['estimated_hours'])}, "
             f"tags={list(r['tags'] or [])}{done})"
         )
@@ -147,7 +152,10 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
         binding = await c.fetchrow(
             "SELECT letta_agent_id FROM ai_agent_bindings"
             " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", function_key)
-        context = await _task_context(c, week_id=week_id) if function_key in _DATA_FUNCS else ""
+        if function_key in _DATA_FUNCS:
+            context = await _task_context(c, await roster(user), week_id=week_id)
+        else:
+            context = ""
     if binding is None:
         return {"available": False, "reason": "not_configured", "function": function_key}
     prompt = f"{context}\n\nREQUEST: {body.input}" if context else body.input

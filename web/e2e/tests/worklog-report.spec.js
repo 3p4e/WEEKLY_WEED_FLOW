@@ -1,0 +1,73 @@
+// @ts-check
+const { test, expect } = require('@playwright/test');
+const { seedOrg } = require('../seed');
+
+/** @type {{username: string, password: string}} */
+let creds;
+
+test.beforeAll(() => {
+  creds = seedOrg();
+});
+
+/** Saturday of the Fri→Thu report window containing today, as YYYY-MM-DD
+ *  (local time — the backend classifies session timestamps as facility
+ *  wall-clock, and /reports/weekly windows on the server's date.today()). */
+function windowSaturday() {
+  const now = new Date();
+  const daysSinceFri = (now.getDay() - 5 + 7) % 7; // JS: Sun=0 … Sat=6
+  const sat = new Date(now);
+  sat.setDate(now.getDate() - daysSinceFri + 1);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${sat.getFullYear()}-${p(sat.getMonth() + 1)}-${p(sat.getDate())}`;
+}
+
+test('due date + type at creation, weekend work session shows up in the report hours table', async ({ page }) => {
+  const taskTitle = `Worklog task ${Date.now()}`;
+  const sat = windowSaturday();
+
+  await page.goto('/');
+  await page.locator('#wwf-u').fill(creds.username);
+  await page.locator('#wwf-p').fill(creds.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('#wwf-login')).toBeHidden({ timeout: 15_000 });
+
+  await test.step('create a task with a due date and a type', async () => {
+    await page.getByRole('button', { name: /new task/i }).click();
+    await page.locator('#add-title').fill(taskTitle);
+    await page.locator('#add-due').fill(sat);
+    await page.locator('#add-type').selectOption('lab');
+    await page.getByRole('button', { name: 'Create task' }).click();
+    await expect(page.locator('.card-title', { hasText: taskTitle })).toBeVisible({ timeout: 10_000 });
+  });
+
+  const card = page.locator('.card', { has: page.locator('.card-title', { hasText: taskTitle }) });
+
+  await test.step('the card carries the new badges', async () => {
+    await expect(card.locator('.due-badge')).toContainText(sat);
+    await expect(card.locator('.type-chip')).toContainText(/lab/i);
+  });
+
+  await test.step('log a Saturday work session — classified as weekend', async () => {
+    await card.locator('.card-title').click();               // expand
+    await card.getByRole('button', { name: /log work/i }).click();
+    const modal = page.locator('#worklog-modal');
+    await expect(modal).toBeVisible();
+    await modal.locator('#wl-date').fill(sat);
+    await modal.locator('#wl-start').fill('10:00');
+    await modal.locator('#wl-hours').fill('2.5');
+    await modal.locator('.modal-body').getByRole('button', { name: /log work/i }).click();
+    // The API's classification is surfaced to the user ("Logged 2.5h — weekend")
+    await expect(page.locator('.toast', { hasText: 'weekend' })).toBeVisible({ timeout: 10_000 });
+    // ...and the session row lists it with its classification chip.
+    await expect(modal.locator('.sess-class.weekend')).toBeVisible({ timeout: 10_000 });
+    await modal.locator('.btn-ghost').click();               // close the modal
+  });
+
+  await test.step('the report view shows the hours in the weekend bucket', async () => {
+    await page.locator('[data-nav="report"]').click();
+    const hours = page.locator('#report-hours');
+    await expect(hours).toBeVisible({ timeout: 15_000 });
+    await expect(hours).toContainText('E2E Admin');          // seeded full_name
+    await expect(hours.locator('td.hb-weekend.nonzero').first()).toContainText('2.5');
+  });
+});

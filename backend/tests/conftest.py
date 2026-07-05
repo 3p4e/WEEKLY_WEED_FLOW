@@ -1,13 +1,15 @@
 """Shared fixtures.
 
-Runs against a real Postgres database (RLS is the app's actual security
-model — it can't be meaningfully exercised against a mock or SQLite). Each
-test that needs data gets its own fresh organization via the `org` fixture;
-deleting that org at teardown cascades to every row it owns, so tests never
-share or leak state despite running against one shared database.
+Runs against two real Postgres databases (RLS is the app's actual security
+model — it can't be meaningfully exercised against a mock or SQLite).
+Identity data (organizations/profiles) lives in the users DB, work data in
+the tasks DB — same split as production's two containers. Each test that
+needs data gets its own fresh organization via the `org` fixture; teardown
+deletes the org from the users DB (cascades profiles there) and explicitly
+purges the org's rows from the tasks DB (no cross-database cascade exists).
 
-Requires DATABASE_URL / ADMIN_DATABASE_URL to point at a real (test-only!)
-Postgres database with schema.sql already loaded — see
+Requires USERS_/TASKS_DATABASE_URL (+ _ADMIN_ variants) to point at real
+(test-only!) databases with the schema loaded — see
 backend/scripts/load_schema.sh and backend/README.md.
 """
 import os
@@ -19,7 +21,7 @@ os.environ.setdefault("SECRET_KEY", "pytest-test-secret-not-for-production")
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.db import admin_pool, close_pools, init_pools
+from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.security import hash_password
 
 
@@ -49,6 +51,20 @@ async def _reset_login_rate_limit():
     auth._failed_attempts.clear()
 
 
+async def purge_org(org_id) -> None:
+    """Remove every row the org owns, in both databases. The users DB
+    cascades from organizations; the tasks DB has no organizations table
+    (and no cross-database FK), so its tables are purged explicitly —
+    children before parents. audit_log rows stay in both (the hash chain
+    must never be edited)."""
+    t = tasks_admin_pool()
+    for table in ("ai_agent_bindings", "ai_pins", "handoffs", "task_comments",
+                  "task_assignees", "task_links", "work_sessions", "task_progress",
+                  "tasks", "calendar_weeks", "departments"):
+        await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
+    await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)
+
+
 @pytest_asyncio.fixture
 async def org():
     """A fresh org + one ADMIN profile with a known password (must_change_password
@@ -60,7 +76,7 @@ async def org():
     username = f"admin_{suffix}"
     email = f"admin_{suffix}@test.invalid"
     password = "TestPassword123456"
-    pool = admin_pool()
+    pool = users_admin_pool()
     await pool.execute(
         "INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
         org_id, f"Test Org {suffix}", f"test-{suffix}")
@@ -72,7 +88,7 @@ async def org():
         "org_id": str(org_id), "admin_id": str(admin_id),
         "username": username, "email": email, "password": password,
     }
-    await pool.execute("DELETE FROM organizations WHERE id=$1", org_id)  # cascades everywhere
+    await purge_org(org_id)
 
 
 @pytest_asyncio.fixture

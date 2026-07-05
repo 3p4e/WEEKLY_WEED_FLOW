@@ -2,7 +2,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.db import admin_pool
+from app.db import users_admin_pool
 from app.security import decode_token
 
 bearer = HTTPBearer(auto_error=False)
@@ -15,7 +15,7 @@ async def get_current_user(cred: HTTPAuthorizationCredentials | None = Depends(b
     if not payload:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
     # Source of truth is the DB, not the JWT claim — a stale claim can't escalate.
-    row = await admin_pool().fetchrow(
+    row = await users_admin_pool().fetchrow(
         "SELECT id, org_id, username, full_name, role, department_id, function_role,"
         "       is_active, must_change_password, password_set_at FROM profiles"
         " WHERE id=$1 AND is_deleted=false",

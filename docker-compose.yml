@@ -1,11 +1,17 @@
 # ════════════════════════════════════════════════════════════════════════
 #  WEEKLY_WEED_FLOW — deployed stack (mirrors what runs on KVM4)
 #
-#    db        Postgres 17  (RLS policies + hash-chained audit trigger)
+#    db-users  Postgres 17 — identity data (organizations, profiles,
+#              password_reset_codes) + its own hash-chained audit trail
+#    db-tasks  Postgres 17 — all work data (tasks, work_sessions, pins, ...)
+#              + its own hash-chained audit trail
 #    backend   FastAPI API (asyncpg, JWT, RLS) on :8000 — internal only
 #    frontend  nginx serving the GrowFlow UI (web/) and reverse-proxying
-#              /auth /departments /weeks /tasks /ai /audit to the backend;
-#              published over HTTPS by Traefik (Let's Encrypt).
+#              /auth /departments /weeks /tasks /sessions /capture /ai /audit
+#              /reports to the backend; published over HTTPS by Traefik.
+#    db-backup rotating local pg_dump backups of BOTH databases — docs/BACKUP.md
+#    capture-mcp remote MCP connector for claude.ai/Cowork auto-delivery of
+#              task captures (secret path, single-purpose token)
 #
 #  The always-on Letta agent layer (AI functions) runs in its own pre-existing
 #  stack and is reached over host.docker.internal — it is intentionally NOT
@@ -13,24 +19,37 @@
 #
 #  NOTE — this file faithfully describes the architecture (images, names,
 #  labels, networks) but is not a turnkey `up`: the app_user / app_admin login
-#  roles (the latter BYPASSRLS) and their table GRANTs are a one-time DB
-#  bootstrap, separate from schema.sql (which carries only structure + RLS +
-#  the audit trigger). See docs/DEPLOY.md. Production was provisioned this way
-#  out-of-band, not via `compose up`.
+#  roles (the latter BYPASSRLS) and their table GRANTs are a one-time bootstrap
+#  in EACH database, separate from the schema files (which carry only structure
+#  + RLS + the audit trigger). See docs/DEPLOY.md. Production was provisioned
+#  this way out-of-band, not via `compose up`.
 # ════════════════════════════════════════════════════════════════════════
 name: weekly_weed_flow
 
 services:
-  db:
+  db-users:
     image: postgres:17-alpine
-    container_name: weekly_weed_flow-db-1
+    container_name: wwf-db-users
     environment:
-      - POSTGRES_DB=weekly_weed_flow
+      - POSTGRES_DB=wwf_users
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     volumes:
-      - weekly_weed_flow_pgdata:/var/lib/postgresql/data
-      - ./backend/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - wwf_users_pgdata:/var/lib/postgresql/data
+      - ./backend/schema.users.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    networks: [internal]
+    restart: unless-stopped
+
+  db-tasks:
+    image: postgres:17-alpine
+    container_name: wwf-db-tasks
+    environment:
+      - POSTGRES_DB=wwf_tasks
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - wwf_tasks_pgdata:/var/lib/postgresql/data
+      - ./backend/schema.tasks.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
     networks: [internal]
     restart: unless-stopped
 
@@ -38,7 +57,7 @@ services:
     build: ./backend
     image: weekly_weed_flow-backend:latest
     container_name: weekly_weed_flow-backend-1
-    depends_on: [db]
+    depends_on: [db-users, db-tasks]
     env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
@@ -50,7 +69,7 @@ services:
     build: ./backend
     image: weekly_weed_flow-backend:latest
     container_name: wwf-scheduler
-    depends_on: [db]
+    depends_on: [db-users, db-tasks]
     env_file: .env
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
@@ -73,6 +92,52 @@ services:
       - "traefik.http.services.wwf.loadbalancer.server.port=80"
     restart: unless-stopped
 
+  # Rotating local pg_dump backups of both databases — see docs/BACKUP.md for
+  # scope, retention, the documented no-offsite-copy risk, non-atomicity
+  # across the two dumps, and the restore procedure.
+  db-backup:
+    image: postgres:17-alpine
+    container_name: wwf-db-backup
+    depends_on: [db-users, db-tasks]
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:?set in .env}   # same superuser pw in both DB containers
+      - PGUSER=postgres
+      - USERS_PGHOST=wwf-db-users
+      - TASKS_PGHOST=wwf-db-tasks
+      - USERS_PGDATABASE=wwf_users
+      - TASKS_PGDATABASE=wwf_tasks
+      - RETENTION_DAYS=14
+    volumes:
+      - ./backend/scripts/db_backup.sh:/usr/local/bin/db_backup.sh:ro
+      - weekly_weed_flow_backups:/backups
+    entrypoint: ["/bin/sh", "/usr/local/bin/db_backup.sh"]
+    networks: [internal]
+    restart: unless-stopped
+
+  # Capture connector — remote MCP server claude.ai/Cowork chats call to
+  # deliver Master-Capture-Prompt output straight into /capture/import.
+  # Reachable only at a secret path behind Traefik TLS; holds a single
+  # narrowly-scoped token (valid only on /capture/import). Deployment of
+  # this public-but-secret-path service was explicitly user-approved.
+  capture-mcp:
+    build: ./connector
+    image: wwf-capture-mcp:latest
+    container_name: wwf-capture-mcp
+    depends_on: [backend]
+    environment:
+      - WWF_IMPORT_URL=http://weekly_weed_flow-backend-1:8000/capture/import
+      - CAPTURE_IMPORT_TOKEN=${CAPTURE_IMPORT_TOKEN:?set in .env}
+      - MCP_PATH=${CAPTURE_MCP_PATH:?set in .env}
+    networks: [internal, traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_network"
+      - "traefik.http.routers.wwfmcp.rule=Host(`${APP_HOST:-wwf.srv1231216.hstgr.cloud}`) && PathPrefix(`${CAPTURE_MCP_PATH:?set in .env}`)"
+      - "traefik.http.routers.wwfmcp.entrypoints=websecure"
+      - "traefik.http.routers.wwfmcp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wwfmcp.loadbalancer.server.port=8000"
+    restart: unless-stopped
+
 networks:
   internal:
     name: weekly_weed_flow_internal
@@ -81,4 +146,6 @@ networks:
     external: true
 
 volumes:
-  weekly_weed_flow_pgdata:
+  wwf_users_pgdata:
+  wwf_tasks_pgdata:
+  weekly_weed_flow_backups:

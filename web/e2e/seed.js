@@ -9,8 +9,10 @@ function seedOrg() {
   const backendDir = path.join(__dirname, '..', '..', 'backend');
   const env = {
     ...process.env,
-    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test',
-    ADMIN_DATABASE_URL: process.env.ADMIN_DATABASE_URL || 'postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test',
+    // Two databases in the v2 split (identity vs work) — defaults must match
+    // backend/scripts/run_e2e_backend.sh.
+    USERS_ADMIN_DATABASE_URL: process.env.USERS_ADMIN_DATABASE_URL || 'postgresql://app_admin:testpw_admin@localhost:5432/wwf_users_test',
+    TASKS_ADMIN_DATABASE_URL: process.env.TASKS_ADMIN_DATABASE_URL || 'postgresql://app_admin:testpw_admin@localhost:5432/wwf_tasks_test',
   };
   const out = execFileSync(
     path.join(backendDir, '.venv', 'bin', 'python'),

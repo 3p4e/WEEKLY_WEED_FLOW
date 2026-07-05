@@ -1,6 +1,7 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
-from app.db import admin_pool
+from app.db import tasks_admin_pool
+from tests.conftest import create_user, login_and_set_password
 
 
 async def test_weekly_report_summary_counts_postponed_tasks(client, admin_headers):
@@ -82,7 +83,7 @@ async def test_report_mode_only_includes_tasks_with_activity_in_the_window(clien
 
 
 async def test_department_filter_excludes_other_departments(client, admin_headers, org):
-    rows = await admin_pool().fetch(
+    rows = await tasks_admin_pool().fetch(
         "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'), ($1,'qc','QC')"
         " RETURNING id, code",
         org["org_id"],
@@ -101,6 +102,39 @@ async def test_department_filter_excludes_other_departments(client, admin_header
     ids = [t["id"] for t in r.json()["tasks"]]
     assert cult_task_id in ids
     assert qc_task_id not in ids
+
+
+async def test_non_elevated_hours_by_person_scoped_to_self(client, admin_headers, org):
+    """work_sessions/task_progress RLS is org-scoped only (no owner/assignee
+    restriction like tasks_read), so without explicit scoping in the query a
+    non-elevated caller would see every colleague's hours and activity here,
+    even though their tasks list is correctly RLS-scoped to their own."""
+    user, otp = await create_user(client, admin_headers)
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post("/tasks", json={"title": "Admin's work", "status": "ongoing"}, headers=admin_headers)
+    admin_task = r.json()["id"]
+    r = await client.post(f"/tasks/{admin_task}/sessions",
+                          json={"started_at": "2026-07-04T10:00:00", "hours": 3}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+    r = await client.post("/tasks", json={"title": "My work", "status": "ongoing"}, headers=headers)
+    user_task = r.json()["id"]
+    r = await client.post(f"/tasks/{user_task}/sessions",
+                          json={"started_at": "2026-07-04T11:00:00", "hours": 2}, headers=headers)
+    assert r.status_code == 201, r.text
+
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=headers)
+    assert r.status_code == 200, r.text
+    hbp = r.json()["hours_by_person"]
+    assert len(hbp) == 1
+    assert hbp[0]["username"] == user["username"]
+    assert hbp[0]["total"] == 2.0
+
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert len(r.json()["hours_by_person"]) == 2
 
 
 async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):

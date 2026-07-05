@@ -18,10 +18,13 @@ _MIN_SECRET_LENGTH = 32
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
-    # Two DSNs → two roles. app_user is NOBYPASSRLS (request handlers);
-    # app_admin is BYPASSRLS (auth lookups + provisioning).
-    database_url: str = "postgresql://app_user:app_user@db:5432/weekly_weed_flow"
-    admin_database_url: str = "postgresql://app_admin:app_admin@db:5432/weekly_weed_flow"
+    # Two databases (identity vs work data — separate Postgres containers),
+    # each reached through two roles: app_user is NOBYPASSRLS (request
+    # handlers), app_admin is BYPASSRLS (auth lookups + provisioning).
+    users_database_url: str = "postgresql://app_user:app_user@db-users:5432/wwf_users"
+    users_admin_database_url: str = "postgresql://app_admin:app_admin@db-users:5432/wwf_users"
+    tasks_database_url: str = "postgresql://app_user:app_user@db-tasks:5432/wwf_tasks"
+    tasks_admin_database_url: str = "postgresql://app_admin:app_admin@db-tasks:5432/wwf_tasks"
 
     # "production" (default, safe) or "development". Gates the insecure-
     # SECRET_KEY guard below — set ENVIRONMENT=development locally to allow

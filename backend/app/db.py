@@ -1,14 +1,21 @@
 """
-asyncpg connection pools + RLS context.
+asyncpg connection pools + RLS context — over TWO databases.
 
-Two pools mirror the two Postgres roles:
-  • user_pool  → app_user  (NOBYPASSRLS) for request-scoped data access
-  • admin_pool → app_admin (BYPASSRLS)  for auth lookups + provisioning
+Identity data (organizations, profiles, password_reset_codes + their audit
+chain) lives in the users database; all work data (tasks, sessions, pins,
+their audit chain, ...) lives in the tasks database. They run as separate
+Postgres containers; nothing joins across them at the SQL level — app-side
+merges go through app/roster.py.
 
-`rls(conn_user)` opens a transaction and stamps the per-request identity GUCs
-(app.user_id / app.org_id / app.role) with set_config(..., is_local=true), so
-RLS policies and the audit trigger see the caller. SET LOCAL is transaction
-scoped → pool-safe (never leaks across requests on a shared connection).
+Each database is reached through two roles:
+  • *_user_pool  → app_user  (NOBYPASSRLS) for request-scoped data access
+  • *_admin_pool → app_admin (BYPASSRLS)  for auth lookups + provisioning
+
+`rls(user)` (tasks DB) / `rls_users(user)` (users DB) open a transaction and
+stamp the per-request identity GUCs (app.user_id / app.org_id / app.role)
+with set_config(..., is_local=true), so RLS policies and the audit trigger
+see the caller. SET LOCAL is transaction scoped → pool-safe (never leaks
+across requests on a shared connection).
 """
 import json
 from contextlib import asynccontextmanager
@@ -22,18 +29,22 @@ _pools: dict[str, asyncpg.Pool] = {}
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
     # asyncpg returns jsonb columns as raw text by default; every jsonb
-    # column (tasks.progress_notes, audit_log.old_values/new_values,
-    # ai_agent_bindings.config) should come back as real JSON to callers,
-    # not a string they then have to know to parse themselves.
+    # column (audit_log.old_values/new_values, ai_agent_bindings.config,
+    # tasks.recurrence) should come back as real JSON to callers, not a
+    # string they then have to know to parse themselves.
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog", format="text")
 
 
 async def init_pools() -> None:
-    _pools["user"] = await asyncpg.create_pool(
-        settings.database_url, min_size=2, max_size=10, init=_init_connection)
-    _pools["admin"] = await asyncpg.create_pool(
-        settings.admin_database_url, min_size=1, max_size=5, init=_init_connection)
+    _pools["users_user"] = await asyncpg.create_pool(
+        settings.users_database_url, min_size=1, max_size=5, init=_init_connection)
+    _pools["users_admin"] = await asyncpg.create_pool(
+        settings.users_admin_database_url, min_size=1, max_size=5, init=_init_connection)
+    _pools["tasks_user"] = await asyncpg.create_pool(
+        settings.tasks_database_url, min_size=2, max_size=10, init=_init_connection)
+    _pools["tasks_admin"] = await asyncpg.create_pool(
+        settings.tasks_admin_database_url, min_size=1, max_size=5, init=_init_connection)
 
 
 async def close_pools() -> None:
@@ -42,23 +53,24 @@ async def close_pools() -> None:
     _pools.clear()
 
 
-def admin_pool() -> asyncpg.Pool:
-    return _pools["admin"]
+def users_user_pool() -> asyncpg.Pool:
+    return _pools["users_user"]
 
 
-def user_pool() -> asyncpg.Pool:
-    return _pools["user"]
+def users_admin_pool() -> asyncpg.Pool:
+    return _pools["users_admin"]
+
+
+def tasks_user_pool() -> asyncpg.Pool:
+    return _pools["tasks_user"]
+
+
+def tasks_admin_pool() -> asyncpg.Pool:
+    return _pools["tasks_admin"]
 
 
 @asynccontextmanager
-async def rls(user, *, admin: bool = False):
-    """Transactional connection with identity GUCs set for RLS + audit.
-
-    `user` is the dict from get_current_user (id, org_id, role). Pass admin=True
-    to use the BYPASSRLS pool (provisioning) while still stamping the actor so
-    the audit trigger attributes the action correctly.
-    """
-    pool = _pools["admin"] if admin else _pools["user"]
+async def _guc_conn(pool: asyncpg.Pool, user):
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute(
@@ -68,3 +80,18 @@ async def rls(user, *, admin: bool = False):
                 str(user["id"]), str(user["org_id"]), user["role"],
             )
             yield conn
+
+
+def rls(user, *, admin: bool = False):
+    """Transactional TASKS-DB connection with identity GUCs set for RLS + audit.
+
+    `user` is the dict from get_current_user (id, org_id, role). Pass admin=True
+    to use the BYPASSRLS pool while still stamping the actor so the audit
+    trigger attributes the action correctly.
+    """
+    return _guc_conn(_pools["tasks_admin"] if admin else _pools["tasks_user"], user)
+
+
+def rls_users(user, *, admin: bool = False):
+    """Same as rls() but against the USERS database (profiles etc.)."""
+    return _guc_conn(_pools["users_admin"] if admin else _pools["users_user"], user)

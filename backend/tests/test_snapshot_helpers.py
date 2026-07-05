@@ -1,8 +1,11 @@
-"""Pure-function unit tests for scripts/weekly_snapshot.py — window math,
-carry-over aging, and the Markdown digest. No DB, no Letta (the script is
-dependency-light and free of app.* imports precisely so this works)."""
+"""Tests for scripts/weekly_snapshot.py — mostly pure-function (window math,
+carry-over aging, the Markdown digest), plus one end-to-end run_all guard that
+drives the real two-DB path (see test_run_all_writes_pins_end_to_end). The
+pure-function tests need no DB/Letta; the guard uses the shared conftest
+fixtures and the skip_letta=True (deterministic, no-Letta) code path."""
 import os
 import sys
+import uuid
 from datetime import date, datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -102,3 +105,33 @@ def test_rollup_task_sample_prioritizes_stuck_and_completed_then_caps():
     ids = [t["id"] for t in sample]
     assert len(sample) == 10
     assert ids[0] == "s1" and ids[1] == "d1"  # stuck + completed always make the cut
+
+
+async def test_run_all_writes_pins_end_to_end(client, admin_headers, org):
+    """Regression guard for the process_org() call-arity bug: run_all invoked
+    process_org with one too few positional args (client omitted), so every
+    per-org call raised TypeError — swallowed by run_all's per-org except —
+    and NO ai_pins were ever written, every week, for every org. The pure
+    helper tests can't see a broken call site; this drives the real two-DB
+    path with skip_letta=True (deterministic, no Letta) and asserts pins land.
+
+    weekly_snapshot reads its admin DSNs from the same env the test suite
+    exports, so run_all's own asyncpg connections hit the test databases."""
+    r = await client.post("/tasks", json={"title": "Snapshot fodder", "status": "ongoing",
+                                          "estimated_hours": 2}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+    from app.db import tasks_admin_pool
+    org_uuid = uuid.UUID(org["org_id"])
+    before = await tasks_admin_pool().fetchval(
+        "SELECT count(*) FROM ai_pins WHERE org_id=$1", org_uuid)
+
+    # Thursday 2026-07-09 -> report window Fri 07-03..Thu 07-09.
+    await w.run_all(date(2026, 7, 9), only_org=org_uuid, skip_letta=True)
+
+    rows = await tasks_admin_pool().fetch(
+        "SELECT function_key FROM ai_pins WHERE org_id=$1", org_uuid)
+    keys = {r["function_key"] for r in rows}
+    assert len(rows) > before, "run_all wrote no ai_pins — process_org never executed"
+    # The three org-level pins are written deterministically even without Letta.
+    assert {"weekly_snapshot", "weekly_report", "next_week_plan"} <= keys, keys

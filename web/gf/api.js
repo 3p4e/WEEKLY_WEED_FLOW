@@ -1,5 +1,6 @@
 /* api.js — WEEKLY_WEED_FLOW backend client for the GrowFlow UI.
-   Same-origin: nginx proxies /auth, /departments, /weeks, /tasks, /ai to the API. */
+   Same-origin: nginx proxies /auth, /departments, /weeks, /tasks, /sessions,
+   /ai, /audit, /reports to the API. */
 window.GF = window.GF || {};
 
 GF.API = {
@@ -83,10 +84,18 @@ GF.API = {
     const p = new URLSearchParams(q).toString();
     return this._req('GET', '/tasks' + (p ? '?' + p : ''));
   },
+  getTask(id)          { return this._req('GET', '/tasks/' + id); },
   createTask(t)        { return this._req('POST', '/tasks', t); },
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
+
+  // Work sessions (the overtime engine) + external task links (v2)
+  sessions(taskId)         { return this._req('GET',    '/tasks/' + taskId + '/sessions'); },
+  addSession(taskId, body) { return this._req('POST',   '/tasks/' + taskId + '/sessions', body); },
+  deleteSession(id)        { return this._req('DELETE', '/sessions/' + id); },
+  addLink(taskId, body)    { return this._req('POST',   '/tasks/' + taskId + '/links', body); },
+  deleteLink(taskId, id)   { return this._req('DELETE', '/tasks/' + taskId + '/links/' + id); },
 
   audit(q = {}) {
     const p = new URLSearchParams(q).toString();

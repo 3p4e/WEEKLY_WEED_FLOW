@@ -30,7 +30,7 @@ app, Qdrant RAG, automated snapshots) is the larger build it grows toward.
     from real `task_progress` timestamps (regular/overtime/weekend coloring);
     AI-generated insights via the Letta `weekly_summary` function; department
     breakdown, summary stats, prev/next week navigation; bilingual UI view.
-- **Schema** — [`backend/schema.sql`](../backend/schema.sql): tables, RLS
+- **Schema** — `backend/schema.users.sql` + `backend/schema.tasks.sql` (two databases): tables, RLS
   policies, and the `app.fn_audit_row` audit trigger.
 - **Docker stack** — [`docker-compose.yml`](../docker-compose.yml): db +
   backend + frontend, mirroring the live KVM4 containers (Traefik HTTPS).

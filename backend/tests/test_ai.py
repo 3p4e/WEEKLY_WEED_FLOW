@@ -5,7 +5,7 @@ here exercises that degradation path for real rather than mocking it away —
 which is also the only way most self-hosted orgs will ever see this
 endpoint behave, since most won't have an ai_agent_bindings row configured
 for every function."""
-from app.db import admin_pool
+from app.db import tasks_admin_pool
 
 
 async def test_unknown_function_key(client, admin_headers):
@@ -40,7 +40,7 @@ async def test_configured_but_unreachable_agent_degrades_gracefully(client, admi
     from app.config import settings
     monkeypatch.setattr(settings, "letta_base_url", "http://127.0.0.1:1")
 
-    await admin_pool().execute(
+    await tasks_admin_pool().execute(
         "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
         " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
 
@@ -67,13 +67,13 @@ async def test_week_scoped_context_filters_task_corpus(client, admin_headers, or
 
     monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
 
-    await admin_pool().execute(
+    await tasks_admin_pool().execute(
         "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
         " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
 
     # A fresh org has no calendar_weeks (org-scoped, not seeded by the `org`
     # fixture) — insert the two this test actually needs.
-    await admin_pool().execute(
+    await tasks_admin_pool().execute(
         "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
         " ($1,2026,1,'2026-01-05','2026-01-11'), ($1,2026,2,'2026-01-12','2026-01-18')", org["org_id"])
     r = await client.get("/weeks", headers=admin_headers)

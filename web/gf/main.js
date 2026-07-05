@@ -19,16 +19,27 @@ GF.deleteTask = (taskId) => {
 };
 
 // ── Add task (form modal) ──
-GF.openAdd = (weekId) => {
+// v2 task typology — mirrors the backend TaskType enum (see backend/app/api/tasks.py).
+GF.TASK_TYPES = ['capa', 'sop', 'validation', 'document', 'lab', 'meeting', 'admin', 'other'];
+
+GF.openAdd = (weekId, parentId) => {
   if (!GF.can('create')) return GF.denyToast();
   GF._addWeek = weekId;
+  GF._addParent = parentId || null;   // "Add subtask" presets the parent
+  GF._editTask = null;                // openEdit (worklog.js) flips this to PATCH mode
   const el = GF.$('add-body');
-  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.depName(d.id)}</option>`).join('');
-  const ownerOpts = Object.entries(GF.PEOPLE).map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
-  const respChips = Object.entries(GF.PEOPLE).map(([k, v]) =>
+  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
+  // Deactivated accounts stay in GF.PEOPLE for historical name/avatar lookups
+  // but must not be offered as Accountable/Responsible for new work.
+  const activePeople = Object.entries(GF.PEOPLE).filter(([, v]) => !v.inactive);
+  const ownerOpts = activePeople.map(([k, v]) => `<option value="${k}" ${k===GF.state.user?'selected':''}>${GF.esc(v.name)}</option>`).join('');
+  const respChips = activePeople.map(([k, v]) =>
     `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
   const prOpts = ['critical','high','medium','low'].map(p => `<option value="${p}" ${p==='medium'?'selected':''}>${GF.prLabel(p)}</option>`).join('');
   const dayChips = GF.DAYS.slice(0, 5).map(d => `<span class="chip-opt" data-day="${d}" onclick="this.classList.toggle('on')">${GF.dayLabel(d)}</span>`).join('');
+  const typeOpts = GF.TASK_TYPES.map(t => `<option value="${t}" ${t==='other'?'selected':''}>${GF.taskTypeLabel(t)}</option>`).join('');
+  const recOpts = ['', 'daily', 'weekly', 'monthly'].map(r =>
+    `<option value="${r}">${r ? GF.t('rec_' + r) : GF.t('rec_none')}</option>`).join('');
   el.innerHTML = `
     <div class="field"><label>${GF.t('new_task')}</label>
       <div class="row" style="gap:8px"><input id="add-title" placeholder="${GF.t('new_task')}…" style="flex:1">
@@ -36,8 +47,18 @@ GF.openAdd = (weekId) => {
     <div class="field"><label>${GF.t('dept_label')}</label><select id="add-dept">${deptOpts}</select></div>
     <div class="field"><label>${GF.t('accountable')} <span class="lbl-hint">${GF.t('accountable_hint')}</span></label><select id="add-owner">${ownerOpts}</select></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
-    <div class="field"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
-    <div class="field"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
+    <div class="row" style="gap:10px">
+      <div class="field" style="flex:1"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
+      <div class="field" style="flex:1"><label>${GF.t('task_type')}</label><select id="add-type">${typeOpts}</select></div>
+    </div>
+    <div class="row" style="gap:10px">
+      <div class="field" style="flex:1"><label>${GF.t('due_date')}</label><input id="add-due" type="date"></div>
+      <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label><select id="add-rec">${recOpts}</select></div>
+    </div>
+    <div class="row" style="gap:10px">
+      <div class="field" style="flex:1"><label>${GF.t('reference_code')}</label><input id="add-ref" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
+      <div class="field" style="flex:1"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
+    </div>
     <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
   GF.openModal('add-modal');
 };
@@ -47,10 +68,13 @@ GF.submitAdd = () => {
   const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
   const owner = GF.$('add-owner').value;
   const helpers = [...GF.$('add-resp').querySelectorAll('.on')].map(el => el.dataset.who).filter(w => w !== owner);
+  const recFreq = GF.$('add-rec')?.value || '';
   const task = {
     id: GF.uid(), title, dept: GF.$('add-dept').value, owner, helpers,
     status: 'pending', pr: GF.$('add-pr').value, days: days.length ? days : [GF.todayDay],
     weekId: GF._addWeek, tags: [], desc: '', notes: [], deps: [], blocker: '',
+    type: GF.$('add-type')?.value || 'other', ref: (GF.$('add-ref')?.value || '').trim(),
+    due: GF.$('add-due')?.value || null, recurrence: recFreq ? { freq: recFreq, interval: 1 } : null,
   };
   GF.state.tasks.push(task); GF.store.save();
   GF.closeModal('add-modal'); GF.render.all();
@@ -77,7 +101,7 @@ GF.openUser = (id) => {
   if (!GF.can('team')) return GF.denyToast();
   GF._editUser = id || null;
   const p = id ? GF.PEOPLE[id] : { name: '', role: 'operator', dept: 'veg', bg: GF.AVATAR_COLORS[0] };
-  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}" ${d.id===p.dept?'selected':''}>${GF.depName(d.id)}</option>`).join('');
+  const deptOpts = GF.DEPTS.map(d => `<option value="${d.id}" ${d.id===p.dept?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
   const roleOpts = Object.keys(GF.ROLES).map(r => `<option value="${r}" ${r===p.role?'selected':''}>${GF.roleLabel(r)}</option>`).join('');
   const swatches = GF.AVATAR_COLORS.map(c => `<span class="swatch ${c===p.bg?'on':''}" data-color="${c}" style="background:${c}" onclick="this.parentNode.querySelectorAll('.swatch').forEach(s=>s.classList.remove('on'));this.classList.add('on')"></span>`).join('');
   GF.$('user-title').textContent = id ? GF.t('edit_user') : GF.t('add_user');

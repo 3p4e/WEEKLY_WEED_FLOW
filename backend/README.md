@@ -19,24 +19,34 @@ API paths below same-origin.
 | File | Role |
 |------|------|
 | `app/main.py`        | App factory, lifespan (pool init), router wiring |
-| `app/config.py`      | Pydantic settings (two DSNs, JWT, Letta, CORS) |
-| `app/db.py`          | Two asyncpg pools (`app_user` RLS / `app_admin` BYPASSRLS) + `rls()` identity GUCs |
+| `app/config.py`      | Pydantic settings (four DSNs — two databases x two roles, JWT, Letta, CORS) |
+| `app/db.py`          | Four asyncpg pools over two databases + `rls()` / `rls_users()` identity GUCs |
+| `app/roster.py`      | App-side name joins across the users-tasks database boundary |
+| `app/worktime.py`    | Work-session regular/overtime/night/weekend classification |
 | `app/security.py`    | bcrypt hashing + JWT (HS256) create/decode |
 | `app/deps.py`        | `get_current_user`, `require_role`, `require_password_set` |
 | `app/api/auth.py`    | Login, change-password, user provisioning (OTP, forced first-login change) |
 | `app/api/tasks.py`   | Departments, calendar weeks, task lifecycle (RLS-scoped) |
 | `app/api/ai.py`      | AI functions proxied to a bound Letta agent |
 | `app/api/audit.py`   | Read-only, tamper-evident audit trail (see below) |
-| `schema.sql`         | Full DB schema: roles, tables, RLS policies, audit trigger |
+| `app/api/reports.py` | Weekly report/plan: per-person time-class hours, overdue, time band |
+| `schema.users.sql` / `schema.tasks.sql` | Generated per-database schema dumps (tables, RLS, audit trigger) |
 
 ## Security model
 
-- **Two roles, two pools.** Request handlers use `app_user` (NOBYPASSRLS); every
-  query runs inside `rls()`, which stamps `app.user_id / app.org_id / app.role`
-  as transaction-local GUCs so RLS policies and the audit trigger see the caller.
+- **Two databases.** Identity (organizations, profiles, reset codes) lives in
+  `wwf_users`; all work data in `wwf_tasks` — separate Postgres containers, no
+  cross-database FKs (bare uuids across the boundary; `app/roster.py` merges
+  names app-side). Each database keeps its own hash-chained audit trail.
+- **Two roles per database, four pools.** Request handlers use `app_user`
+  (NOBYPASSRLS); every query runs inside `rls()` (tasks DB) or `rls_users()`
+  (users DB), which stamps `app.user_id / app.org_id / app.role` as
+  transaction-local GUCs so RLS policies and the audit trigger see the caller.
   Auth lookups and provisioning use `app_admin` (BYPASSRLS).
-- **No self-signup.** `ADMIN` / `DEPT_HEAD` provision accounts; the creator is
-  shown a one-time password once, and the user must set their own on first login
+- **No self-signup.** Accounts are provisioned by an `ADMIN` (any non-admin
+  role, any department) or by a department manager (only `USER` staff, only in
+  their own department — see `app/roles.py`); the creator is shown a one-time
+  password once, and the user must set their own on first login
   (`must_change_password`).
 - **Audit trail.** Every write to audited tables fires `app.fn_audit_row`, which
   appends a hash-chained row to `audit_log`
@@ -47,13 +57,15 @@ API paths below same-origin.
 
 | Method | Path             | Access | Purpose |
 |--------|------------------|--------|---------|
-| GET    | `/audit`         | elevated¹ | Org-scoped trail, filterable by `table_name` / `record_id` / `action`, keyset-paginated via `before_id` |
+| GET    | `/audit`         | elevated¹ | Merged two-chain trail (`source: users/tasks`), filterable by `table_name` / `record_id` / `action` / `source`, keyset-paginated via `before` (created_at) |
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
-| GET    | `/audit/verify`  | `ADMIN`   | Walks the **global** chain and reports the first linkage break, if any |
+| GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains and reports each chain's first linkage break, if any |
 
-¹ elevated = `ADMIN`, `DEPT_HEAD`, `PROJECT_LEAD` — mirrors the DB
-`audit_read` policy (`app.is_elevated()`). Secret columns (e.g. `password_hash`)
-are redacted from the payload server-side.
+¹ elevated = every role except `USER` (`ADMIN`, the `CEO`/`COO` executives, the
+department managers `QA_MGR`/`QC_MGR`/`PR_MGR`/`WH_MGR`/`SC_MGR`/`CU_MGR`, and
+`QP`) — mirrors the DB `audit_read` policy (`app.is_elevated()`), defined once in
+`app/roles.py`. Secret columns (e.g. `password_hash`) are redacted from the
+payload server-side.
 
 ## Run locally (dev)
 
@@ -61,95 +73,102 @@ The full stack (db + backend + frontend) is defined at the repo root:
 
 ```bash
 cp .env.example .env           # repo root: set POSTGRES_PASSWORD / *_DATABASE_URL / SECRET_KEY
-docker compose up -d --build   # db (loads schema.sql) + backend (:8000) + frontend
+docker compose up -d --build   # db-users + db-tasks (load their schema files) + backend (:8000) + frontend
 curl localhost:8000/health     # if you publish the backend port for local testing
 ```
 
-> `schema.sql` carries structure + RLS + the audit trigger only; the
+> The schema files carry structure + RLS + the audit trigger only; the
 > `app_user` / `app_admin` roles and their GRANTs are a one-time bootstrap
-> (see [`../docs/DEPLOY.md`](../docs/DEPLOY.md)).
+> **in each database** (see [`../docs/DEPLOY.md`](../docs/DEPLOY.md)).
 
 ## Tests
 
 `tests/` runs against a real Postgres database — RLS is the app's actual
 security model, so it can't be meaningfully exercised against a mock. Each
 test gets its own fresh organization (`org` fixture in `tests/conftest.py`);
-deleting it at teardown cascades to everything it owns, so tests never share
-or leak state even though they run against one shared database.
+teardown deletes it from the users DB (cascade) and explicitly purges its
+rows from the tasks DB (`purge_org()`), so tests never share or leak state
+even though they run against shared databases.
 
 ```bash
-# one-time: a local test database + the app_user/app_admin roles it needs
+# one-time: the two local test databases + the app_user/app_admin roles
 # (same roles as docs/DEPLOY.md's production bootstrap, test-only passwords)
 sudo -u postgres psql -c "CREATE ROLE app_user  LOGIN PASSWORD 'testpw_user';"
 sudo -u postgres psql -c "CREATE ROLE app_admin LOGIN PASSWORD 'testpw_admin' BYPASSRLS;"
-sudo -u postgres psql -c "CREATE DATABASE weekly_weed_flow_test OWNER postgres;"
-sudo -u postgres backend/scripts/load_schema.sh weekly_weed_flow_test
-sudo -u postgres psql -d weekly_weed_flow_test -c "
-  GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
-  GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
-  GRANT USAGE ON SCHEMA app TO app_user, app_admin;"
+for w in users tasks; do
+  sudo -u postgres psql -c "CREATE DATABASE wwf_${w}_test OWNER postgres;"
+  sudo -u postgres backend/scripts/load_schema.sh $w wwf_${w}_test
+  sudo -u postgres psql -d wwf_${w}_test -c "
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
+    GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
+    GRANT USAGE ON SCHEMA app TO app_user, app_admin;"
+done
 
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 
 ENVIRONMENT=development \
 SECRET_KEY=local-test-secret-not-for-production \
-DATABASE_URL=postgresql://app_user:testpw_user@localhost:5432/weekly_weed_flow_test \
-ADMIN_DATABASE_URL=postgresql://app_admin:testpw_admin@localhost:5432/weekly_weed_flow_test \
+USERS_DATABASE_URL=postgresql://app_user:testpw_user@localhost:5432/wwf_users_test \
+USERS_ADMIN_DATABASE_URL=postgresql://app_admin:testpw_admin@localhost:5432/wwf_users_test \
+TASKS_DATABASE_URL=postgresql://app_user:testpw_user@localhost:5432/wwf_tasks_test \
+TASKS_ADMIN_DATABASE_URL=postgresql://app_admin:testpw_admin@localhost:5432/wwf_tasks_test \
   python -m pytest -v
 ```
 
 CI runs the same steps against a `postgres:16` service container on every PR
-(fresh for every run). `tests/test_audit.py`'s last two tests deliberately
-tamper with / delete rows in the global `audit_log` chain to prove
+(fresh for every run). `tests/test_audit.py`'s last tests deliberately
+tamper with / delete rows in BOTH `audit_log` chains to prove
 `/audit/verify` catches (and doesn't catch) specific things — safe for CI
-since it always starts from an empty database, but running the suite twice
-locally against the *same* test database will fail the chain-intact
-assertions on the second run. Recreate the test database between local runs
-if you've run the full suite (`DROP DATABASE weekly_weed_flow_test;` +
+since it always starts from empty databases, but running the suite twice
+locally against the *same* test databases will fail the chain-intact
+assertions on the second run. Recreate both test databases between local
+runs if you've run the full suite (drop both `wwf_*_test` DBs +
 redo the schema-load step above), or just run everything except
 `test_audit.py` while iterating on something else
 (`.github/workflows/ci.yml`).
 
-## Migrations (Alembic)
+## Migrations (Alembic — two chains)
 
-`schema.sql` is a raw `pg_dump` — useful as a human-readable "current shape
-of the DB" reference, but not a reviewable, incremental change history.
-Schema changes now go through `alembic/versions/`, hand-written (no ORM
-models in this app, so no `--autogenerate`).
+The schema files are raw `pg_dump`s **generated from the alembic-built
+databases** — human-readable references, never hand-edited. Schema changes
+go through the per-database chains `alembic_users/versions/` and
+`alembic_tasks/versions/`, hand-written (no ORM models in this app, so no
+`--autogenerate`), selected via `-n users|tasks` against the shared
+`alembic.ini`.
 
-`alembic/versions/0001_baseline.py` is a frozen snapshot of `schema.sql` as
-of the point Alembic was introduced. Every environment that predates this
-migration (production, any existing dev DB) already has that exact schema
-— point it there with `alembic stamp 0001`, which records the version
-without re-running any DDL. A genuinely empty database (CI, a fresh
-non-Docker environment) needs the DDL to actually run: `alembic upgrade
-head`.
+Each chain's `0001_*_baseline.py` builds that database's full v2 schema. An
+environment initialized from a schema file is pointed at it with
+`alembic -n users|tasks stamp 0001` (records the version without re-running
+DDL); a genuinely empty database (CI) runs `alembic -n ... upgrade head`.
 
 Migrations need DDL privileges the app's own `app_user`/`app_admin` roles
 intentionally don't have (see "One-time DB bootstrap" in
-[`../docs/DEPLOY.md`](../docs/DEPLOY.md)) — they connect with their own
-`MIGRATION_DATABASE_URL` (a `postgres`-superuser-or-equivalent DSN), kept
-separate from `app.config.Settings` on purpose (that module's own startup
-checks — e.g. refusing to run with a placeholder `SECRET_KEY` in
-production — have nothing to do with running a migration).
+[`../docs/DEPLOY.md`](../docs/DEPLOY.md)) — each env.py connects with its
+own `USERS_MIGRATION_DATABASE_URL` / `TASKS_MIGRATION_DATABASE_URL` (a
+`postgres`-superuser-or-equivalent DSN), kept separate from
+`app.config.Settings` on purpose (that module's own startup checks — e.g.
+refusing to run with a placeholder `SECRET_KEY` in production — have
+nothing to do with running a migration).
 
 ```bash
-MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/weekly_weed_flow \
-  alembic upgrade head      # apply pending migrations
-  alembic current            # what's applied now
-  alembic downgrade -1       # revert the most recent migration
+USERS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/wwf_users \
+  alembic -n users upgrade head    # apply pending users-DB migrations
+TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@HOST:5432/wwf_tasks \
+  alembic -n tasks upgrade head    # apply pending tasks-DB migrations
+  alembic -n tasks current         # what's applied now
+  alembic -n tasks downgrade -1    # revert the most recent migration
 ```
 
-Every new migration needs a working `downgrade()` — `0001`'s is not
+Every new migration needs a working `downgrade()` — the baselines don't
 `DROP SCHEMA public CASCADE` despite `upgrade()` being "create everything";
 that would also drop Alembic's own `alembic_version` tracking table (it
 lives in `public` too), breaking Alembic's bookkeeping in the same
-transaction. It drops exactly the tables `upgrade()` created instead.
+transaction. They drop exactly the tables `upgrade()` created instead.
 
 ## Production (KVM4)
 
 Built as `weekly_weed_flow-backend:latest` and run as a standalone container on a
-shared docker network with the Postgres container and the GrowFlow nginx
+shared docker network with the two Postgres containers and the GrowFlow nginx
 frontend; the frontend is published over HTTPS by Traefik (Let's Encrypt). The
 Letta stack is pre-existing and reached via `host.docker.internal`.
