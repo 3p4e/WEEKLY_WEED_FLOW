@@ -126,7 +126,7 @@
 <div class="overlay" id="voice-modal">
   <div class="modal voice-modal" style="max-width:440px">
     <div class="modal-head"><h3 style="color:#fff">Voice task</h3>
-      <button class="btn-ghost" style="color:rgba(255,255,255,.7)" onclick="GF.closeModal('voice-modal')">
+      <button class="btn-ghost" style="color:rgba(255,255,255,.7)" onclick="GF.voice.closeCapture()">
         <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="voice-content" style="padding:0 22px 22px"></div>
   </div>
@@ -157,15 +157,20 @@
 
 <!-- ═══ Add task ═══ -->
 <div class="overlay" id="add-modal">
-  <div class="modal"><div class="modal-head"><h3>New task</h3>
+  <div class="modal"><div class="modal-head"><h3 id="add-modal-title">New task</h3>
     <button class="btn-ghost" onclick="GF.closeModal('add-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="add-body"></div>
     <div class="modal-foot"><button class="btn" onclick="GF.closeModal('add-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="GF.submitAdd()">Create task</button></div></div>
+      <button class="btn btn-primary" id="add-submit-btn" onclick="GF.submitAdd()">Create task</button></div></div>
 </div>
 
-<!-- Live design-tweaks panel mount -->
-<div id="tweaks-root"></div>
+<div class="overlay" id="settings-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head"><h3 id="set-title">Settings</h3>
+      <button class="btn-ghost" onclick="GF.closeModal('settings-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+    <div class="modal-body" id="set-body"></div>
+  </div>
+</div>
 
 <!-- Scripts — load order matters: boot-guard → data → core → render → voice → export → views → leaf-fx → assistant → main
      → api → integrate → audit-view → collab → worklog → report-view → tweaks-vanilla.

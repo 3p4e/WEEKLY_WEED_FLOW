@@ -1,13 +1,14 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
 import secrets
 import time
+import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.config import settings
-from app.db import rls_users, users_admin_pool
+from app.db import rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role
 from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import create_access_token, hash_password, verify_password
@@ -76,6 +77,14 @@ class CreateUserReq(BaseModel):
     function_role: str | None = None
 
 
+class UpdateUserReq(BaseModel):
+    # username is intentionally NOT editable — it's the login identity.
+    full_name: str | None = None
+    role: str | None = None
+    department_id: str | None = None
+    function_role: str | None = None
+
+
 def _public(row) -> dict:
     return {
         "id": str(row["id"]), "username": row["username"], "full_name": row["full_name"],
@@ -139,19 +148,45 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
 
 
 def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
-    # ADMIN is never assignable through the app — it is seeded in the DB only.
-    if role == ADMIN:
-        return False
-    # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any
-    # non-admin account in any department.
+    # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any account
+    # in the org, including other ADMIN accounts — assigning the ADMIN role
+    # itself is blocked separately via CREATABLE_ROLES at each call site
+    # (before _can_manage ever runs), so this can never promote anyone TO
+    # admin; it only lets a real admin edit/delete/reset an existing one.
     if actor["role"] == ADMIN:
         return True
     # A department manager manages only USER staff, and only in their own
-    # department. Managers can't create/deactivate other managers or executives.
+    # department. Managers can't create/deactivate other managers, executives,
+    # or admins.
     if actor["role"] in MANAGER_ROLES:
         return (role == "USER" and department_id is not None
                 and str(department_id) == str(actor["department_id"]))
     return False
+
+
+def _require_uuid(value) -> None:
+    """A malformed (non-uuid) {user_id} path param must be a clean 404, not a
+    500 from asyncpg trying to cast it to uuid inside the lookup query."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(404, "User not found")
+
+
+async def _validate_department(org_id, department_id) -> None:
+    """profiles.department_id is a bare uuid — departments live in the tasks DB
+    with no cross-database FK, so validate app-side that it names a real
+    department in this org (a malformed uuid or a foreign/typo'd id would
+    otherwise be stored silently and dangle when the UI joins /departments)."""
+    if department_id is None:
+        return
+    try:
+        exists = await tasks_admin_pool().fetchval(
+            "SELECT 1 FROM departments WHERE id=$1 AND org_id=$2", department_id, org_id)
+    except Exception:  # malformed (non-uuid) value
+        raise HTTPException(422, "Unknown department")
+    if not exists:
+        raise HTTPException(422, "Unknown department")
 
 
 @router.post("/users", status_code=201)
@@ -163,6 +198,7 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         raise HTTPException(422, f"Role '{body.role}' cannot be assigned")
     if not _can_manage(actor, body.role, body.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
+    await _validate_department(actor["org_id"], body.department_id)
     otp = generate_otp()
     async with rls_users(actor, admin=True) as conn:
         try:
@@ -214,6 +250,7 @@ async def list_users(actor: dict = Depends(require_role(*ELEVATED_ROLES))):
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
     # Admin pool is BYPASSRLS, so authorisation is enforced here: the target
@@ -231,3 +268,84 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             "UPDATE profiles SET is_deleted=true, is_active=false, updated_at=now() WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
     return {"ok": True}
+
+
+@router.post("/users/{user_id}/reset-password", status_code=200)
+async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    """Admin/manager resets an existing account's password to a fresh one-time
+    password (shown once to the caller). The user must set their own on next
+    login — same flow as account creation, so an admin never learns or sets the
+    real password. Same authorisation gate as create/delete: a manager may only
+    reset a USER in their own department; nobody may reset an ADMIN through the
+    app."""
+    _require_uuid(user_id)
+    if str(user_id) == str(actor["id"]):
+        # Self-service password change goes through /auth/change-password (which
+        # proves the current password); the admin reset path is for OTHER users.
+        raise HTTPException(400, "Use change-password for your own account")
+    otp = generate_otp()
+    async with rls_users(actor, admin=True) as conn:
+        target = await conn.fetchrow(
+            "SELECT id, username, full_name, role, department_id, function_role, must_change_password"
+            " FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false", user_id, actor["org_id"])
+        if target is None:
+            raise HTTPException(404, "User not found")
+        if not _can_manage(actor, target["role"], target["department_id"]):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to reset this account")
+        row = await conn.fetchrow(
+            "UPDATE profiles SET password_hash=$1, must_change_password=true,"
+            " password_set_at=now(), updated_at=now() WHERE id=$2 AND org_id=$3 RETURNING *",
+            hash_password(otp), user_id, actor["org_id"])
+    return {"user": _public(row), "otp": otp}
+
+
+@router.patch("/users/{user_id}")
+async def update_user(user_id: str, body: UpdateUserReq,
+                      actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    """Edit an existing account's profile (name, role, department, title). Same
+    authorisation model as create/delete — a manager may only touch a USER in
+    their own department, ADMIN is never assignable, and the caller must be able
+    to manage BOTH the account's current state and its requested new state."""
+    _require_uuid(user_id)
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        return {"ok": True, "noop": True}
+    if "role" in fields and fields["role"] not in CREATABLE_ROLES:
+        raise HTTPException(422, f"Role '{fields['role']}' cannot be assigned")
+    # No self-demotion: an ADMIN passes _can_manage for any target now (incl.
+    # their own ADMIN account), so without this an admin could PATCH their own
+    # role/department and instantly drop their own privileges. Renaming
+    # yourself is fine; changing your own role/department is not — use another
+    # admin for that (mirrors delete_user/reset_password's self-action guards).
+    if str(user_id) == str(actor["id"]) and ("role" in fields or "department_id" in fields):
+        raise HTTPException(400, "Cannot change your own role or department")
+    async with rls_users(actor, admin=True) as conn:
+        target = await conn.fetchrow(
+            "SELECT id, role, department_id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",
+            user_id, actor["org_id"])
+        if target is None:
+            raise HTTPException(404, "User not found")
+        # Manageable both as it stands now AND as it would be after the edit —
+        # so a manager can't move a USER out of their department, or promote one.
+        new_role = fields.get("role", target["role"])
+        new_dept = fields.get("department_id", target["department_id"])
+        if not _can_manage(actor, target["role"], target["department_id"]) or \
+           not _can_manage(actor, new_role, new_dept):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to edit this account")
+        if "department_id" in fields:
+            await _validate_department(actor["org_id"], fields["department_id"])
+        sets, args = [], []
+        for col in ("full_name", "role", "department_id", "function_role"):
+            if col not in fields:
+                continue
+            val = fields[col]
+            if val is None and col in ("full_name", "role"):
+                continue  # NOT NULL columns — an explicit null means "leave as-is"
+            args.append(val); sets.append(f"{col}=${len(args)}")
+        if not sets:
+            return {"ok": True, "noop": True}
+        args.append(user_id); args.append(actor["org_id"])
+        row = await conn.fetchrow(
+            f"UPDATE profiles SET {', '.join(sets)}, updated_at=now()"
+            f" WHERE id=${len(args)-1} AND org_id=${len(args)} RETURNING *", *args)
+    return _public(row)

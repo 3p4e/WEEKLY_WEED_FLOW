@@ -31,6 +31,23 @@ async def test_invalid_ref_date_returns_422(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_normal_priority_sorts_alongside_medium_not_last(client, admin_headers):
+    """The GrowFlow UI stores 'normal' as its medium-priority wire value; the
+    report's ORDER BY must rank it as medium (tier 2), not fall through to the
+    ELSE tier below 'low' — otherwise every default-priority UI task sorts last."""
+    # low sorts after medium/normal; normal must come before low.
+    await client.post("/tasks", json={"title": "Z low task", "status": "pending",
+                                       "priority": "low"}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "A normal task", "status": "pending",
+                                       "priority": "normal"}, headers=admin_headers)
+    r = await client.get("/reports/weekly", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    titles = [t["title"] for t in r.json()["tasks"]]
+    # Despite 'A' < 'Z' alphabetically, ordering is by priority rank first, so
+    # the normal task (rank 2) must appear before the low task (rank 3).
+    assert titles.index("A normal task") < titles.index("Z low task")
+
+
 async def test_report_mode_window_is_the_friday_thursday_containing_ref_date(client, admin_headers):
     # 2026-06-24 is a Wednesday -> the containing Fri-Thu window is
     # 2026-06-19 (Fri) .. 2026-06-25 (Thu).
@@ -135,6 +152,36 @@ async def test_non_elevated_hours_by_person_scoped_to_self(client, admin_headers
     r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert len(r.json()["hours_by_person"]) == 2
+
+
+async def test_department_filter_scopes_hours_by_person(client, admin_headers, org):
+    """Regression: department_id now scopes hours_by_person / the time-band too
+    (work_sessions filtered by their task's department). It used to filter only
+    the tasks list, so a dept-filtered report still mixed in other departments'
+    hours."""
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'),($1,'qc','QC')"
+        " RETURNING id, code", org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+
+    r = await client.post("/tasks", json={"title": "Cult task", "status": "ongoing",
+        "department_id": dept["cult"]}, headers=admin_headers)
+    await client.post(f"/tasks/{r.json()['id']}/sessions",
+        json={"started_at": "2026-07-04T10:00:00", "hours": 3}, headers=admin_headers)
+    r = await client.post("/tasks", json={"title": "QC task", "status": "ongoing",
+        "department_id": dept["qc"]}, headers=admin_headers)
+    await client.post(f"/tasks/{r.json()['id']}/sessions",
+        json={"started_at": "2026-07-04T12:00:00", "hours": 5}, headers=admin_headers)
+
+    # Filtered to Cultivation → only the 3h cult session.
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04", "department_id": dept["cult"]},
+                         headers=admin_headers)
+    assert r.status_code == 200, r.text
+    hbp = r.json()["hours_by_person"]
+    assert sum(p["total"] for p in hbp) == 3.0
+    # Unfiltered → both sessions (8h).
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=admin_headers)
+    assert sum(p["total"] for p in r.json()["hours_by_person"]) == 8.0
 
 
 async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):

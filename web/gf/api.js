@@ -76,6 +76,8 @@ GF.API = {
   directory()      { return this._req('GET', '/auth/directory'); },
   listUsers()      { return this._req('GET', '/auth/users'); },
   createUser(body) { return this._req('POST', '/auth/users', body); },
+  updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
+  resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
 
   departments() { return this._req('GET', '/departments'); },
@@ -89,6 +91,11 @@ GF.API = {
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
+  aiFunctions()        { return this._req('GET', '/ai/functions'); },
+  aiAgents()           { return this._req('GET', '/ai/agents'); },
+  aiBindings()         { return this._req('GET', '/ai/bindings'); },
+  setAiBinding(fn, b)  { return this._req('PUT', '/ai/bindings/' + fn, b); },
+  deleteAiBinding(fn)  { return this._req('DELETE', '/ai/bindings/' + fn); },
 
   // Work sessions (the overtime engine) + external task links (v2)
   sessions(taskId)         { return this._req('GET',    '/tasks/' + taskId + '/sessions'); },

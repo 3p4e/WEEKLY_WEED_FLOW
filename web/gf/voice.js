@@ -7,7 +7,7 @@ GF.voice = {
   /* Inline dictation into an input field (mic toggle) */
   dictate(inputId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { GF.toast('Speech recognition not supported in this browser', 'error'); return; }
+    if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
     if (this._rec) { this._rec.stop(); this._rec = null; this._setMicUI(inputId, false); return; }
 
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
@@ -22,8 +22,11 @@ GF.voice = {
       }
       const el = GF.$(inputId); if (el) el.value = (final + interim).trim();
     };
-    rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast('Mic error: ' + e.error, 'error'); };
-    rec.onend = () => { this._rec = null; this._setMicUI(inputId, false); };
+    rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast(AL('Mic error: ', 'Грешка со микрофон: ') + e.error, 'error'); };
+    // Only clear _rec if it still points at THIS recognizer — a fast
+    // stop-then-start-elsewhere can leave a newer recognizer's reference
+    // wiped by this (older) instance's late-firing 'end' event otherwise.
+    rec.onend = () => { if (this._rec === rec) this._rec = null; this._setMicUI(inputId, false); };
     rec.start(); this._rec = rec;
     this._setMicUI(inputId, true);
     GF.toast(GF.t('listening'), 'info');
@@ -60,15 +63,15 @@ GF.voice = {
         <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.createFromVoice()">${GF.icon('check','icon','#fff')}${GF.t('create_task')}</button>
       </div>` : `
       <div class="row" style="gap:10px">
-        <button class="btn" style="flex:1;justify-content:center" onclick="GF.closeModal('voice-modal')">${GF.t('cancel')}</button>
+        <button class="btn" style="flex:1;justify-content:center" onclick="GF.voice.closeCapture()">${GF.t('cancel')}</button>
         <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','#fff')}${GF.t('create_task')}</button>
       </div>`;
 
     GF.$('voice-content').innerHTML = `
       <div class="mic-stage">
         <div style="display:flex;gap:2px;background:rgba(255,255,255,.1);border-radius:9px;padding:3px;font-size:12px;font-weight:700">
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en')">EN</span>
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk')">МК</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en');GF.voice._renderCapture()">EN</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk');GF.voice._renderCapture()">МК</span>
         </div>
         <div style="font-size:11px;font-weight:700;letter-spacing:.4px;color:rgba(255,255,255,.55);text-transform:uppercase">${live ? GF.t('listening') : GF.t('speak_task')}</div>
         <div class="mic-rings">
@@ -85,7 +88,7 @@ GF.voice = {
 
   toggleCaptureMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { GF.toast('Speech not supported', 'error'); return; }
+    if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
     if (this._modalRec) { this._modalRec.stop(); this._modalRec = null; this._renderCapture(); return; }
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
     const rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = lang;
@@ -100,8 +103,17 @@ GF.voice = {
       this._renderCapture();
     };
     rec.onerror = () => {};
-    rec.onend = () => { this._modalRec = null; this._renderCapture(); };
+    rec.onend = () => { if (this._modalRec === rec) this._modalRec = null; this._renderCapture(); };
     rec.start(); this._modalRec = rec; this._renderCapture();
+  },
+
+  // Stop any in-flight recognition before closing the modal — GF.closeModal
+  // is a plain CSS-class toggle with no cleanup hook, so without this the
+  // recognizer keeps listening (and re-rendering hidden DOM) in the
+  // background until it errors out or the modal is reopened.
+  closeCapture() {
+    if (this._modalRec) { this._modalRec.stop(); this._modalRec = null; }
+    GF.closeModal('voice-modal');
   },
 
   async parseCapture() {

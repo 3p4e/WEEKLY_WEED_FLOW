@@ -32,8 +32,12 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 # app.roles.ELEVATED_ROLES is the single source of truth.
 _ELEVATED = ELEVATED_ROLES
 
+# "normal" is the wire value the GrowFlow UI sends for medium (see tasks.py's
+# Priority literal + integrate.js P_OUT) — it must rank alongside "medium",
+# not fall through to the ELSE tier below every real priority, or every
+# default-priority task created in the UI sorts last in the weekly report.
 _PRIORITY_RANK = ("CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
-                  "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
+                  "WHEN 'medium' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
 
 
 def _fri_thu(ref: date) -> tuple[date, date]:
@@ -106,7 +110,14 @@ async def weekly_report(
 
     async with rls(user) as c:
         if mode == "report":
-            args: list = [fri, thu]
+            # $3 = TZ.key (e.g. "Europe/Skopje"): every timestamptz column is
+            # converted to facility-local wall-clock time BEFORE comparing
+            # against the plain fri/thu dates below — otherwise Postgres
+            # resolves the date casts in the session's (UTC) TimeZone GUC,
+            # miscounting events within ~1-3 hours of local midnight into the
+            # wrong day/week. completed_date is already a plain `date` column
+            # (no timezone involved), so it's compared as-is.
+            args: list = [fri, thu, TZ.key]
             dept_clause = ""
             if department_id:
                 args.append(department_id)
@@ -115,15 +126,15 @@ async def weekly_report(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false{dept_clause} "
                 f"AND ("
-                f"  (t.created_at >= $1::date AND t.created_at < ($2::date + 1))"
-                f"  OR (t.updated_at >= $1::date AND t.updated_at < ($2::date + 1))"
+                f"  ((t.created_at AT TIME ZONE $3) >= $1::date AND (t.created_at AT TIME ZONE $3) < ($2::date + 1))"
+                f"  OR ((t.updated_at AT TIME ZONE $3) >= $1::date AND (t.updated_at AT TIME ZONE $3) < ($2::date + 1))"
                 f"  OR (t.completed_date >= $1 AND t.completed_date <= $2)"
                 f"  OR EXISTS (SELECT 1 FROM task_progress tp "
                 f"             WHERE tp.task_id=t.id "
-                f"             AND tp.created_at >= $1::date AND tp.created_at < ($2::date + 1))"
+                f"             AND (tp.created_at AT TIME ZONE $3) >= $1::date AND (tp.created_at AT TIME ZONE $3) < ($2::date + 1))"
                 f"  OR EXISTS (SELECT 1 FROM work_sessions ws "
                 f"             WHERE ws.task_id=t.id "
-                f"             AND ws.started_at >= $1::date AND ws.started_at < ($2::date + 1))"
+                f"             AND (ws.started_at AT TIME ZONE $3) >= $1::date AND (ws.started_at AT TIME ZONE $3) < ($2::date + 1))"
                 f") "
                 f"ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, "
                 f"{_PRIORITY_RANK}, t.created_at",
@@ -135,24 +146,40 @@ async def weekly_report(
             # owner/assignee-scoped like tasks_read, so without this filter a
             # regular user would get every colleague's hours and activity.
             elevated = user["role"] in _ELEVATED
-            who = "" if elevated else " AND user_id = $3"
-            who_args = [] if elevated else [user["id"]]
+            # Build the shared window/who/department scoping once so the events
+            # feed and the per-person hours agree. department_id filters
+            # task_progress/work_sessions by their task's department (neither
+            # table carries department_id itself) — without it a dept-filtered
+            # report mixed in every department's hours.
+            # $3 = TZ.key: same facility-local-time conversion the main tasks
+            # query above applies — without it these two feeds compare in the
+            # session's (UTC) TimeZone GUC and miscount events within ~1-3h of
+            # local midnight into the wrong day/week, so the report's task list
+            # and its own hours/time-band would disagree near week boundaries.
+            band_args: list = [fri, thu, TZ.key]
+            who = ""
+            if not elevated:
+                band_args.append(user["id"]); who = f" AND user_id = ${len(band_args)}"
+            dept_sub = ""
+            if department_id:
+                band_args.append(department_id)
+                dept_sub = f" AND task_id IN (SELECT id FROM tasks WHERE department_id=${len(band_args)})"
 
             events = await c.fetch(
                 "SELECT created_at AS at FROM task_progress "
-                f"WHERE created_at >= $1::date AND created_at < ($2::date + 1){who} "
+                f"WHERE (created_at AT TIME ZONE $3) >= $1::date AND (created_at AT TIME ZONE $3) < ($2::date + 1){who}{dept_sub} "
                 "UNION ALL "
                 "SELECT started_at AS at FROM work_sessions "
-                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who} "
+                f"WHERE (started_at AT TIME ZONE $3) >= $1::date AND (started_at AT TIME ZONE $3) < ($2::date + 1){who}{dept_sub} "
                 "ORDER BY at",
-                fri, thu, *who_args,
+                *band_args,
             )
 
             # Per-person regular/overtime/night/weekend from work sessions.
             sess = await c.fetch(
                 "SELECT user_id, started_at, ended_at, hours FROM work_sessions "
-                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who}",
-                fri, thu, *who_args,
+                f"WHERE (started_at AT TIME ZONE $3) >= $1::date AND (started_at AT TIME ZONE $3) < ($2::date + 1){who}{dept_sub}",
+                *band_args,
             )
             for s in sess:
                 uid = str(s["user_id"])

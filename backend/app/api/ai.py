@@ -8,12 +8,13 @@ unreachable, the endpoint returns {available:false} instead of erroring, so the
 UI can fall back.
 """
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.config import settings
 from app.db import rls
-from app.deps import require_password_set
+from app.deps import require_password_set, require_role
+from app.roles import ADMIN
 from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -69,6 +70,73 @@ async def functions(user: dict = Depends(require_password_set)):
         "active": sorted(active),
         "letta_base_url": settings.letta_base_url,
     }
+
+
+# ── Admin: which Letta agent backs each AI function ─────────────────────────
+async def _letta_agents() -> list[dict]:
+    headers = {}
+    if settings.letta_api_key:
+        headers["Authorization"] = f"Bearer {settings.letta_api_key}"
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{settings.letta_base_url}/v1/agents/", headers=headers)
+        r.raise_for_status()
+        data = r.json()
+    ags = data if isinstance(data, list) else data.get("agents", [])
+    return [{"id": a.get("id"), "name": a.get("name")} for a in ags if a.get("id")]
+
+
+@router.get("/agents")
+async def list_agents(actor: dict = Depends(require_role(ADMIN))):
+    """The Letta agents available to bind functions to (drives the Settings AI tab)."""
+    try:
+        return {"agents": await _letta_agents()}
+    except Exception as e:
+        raise HTTPException(502, f"Letta unreachable: {type(e).__name__}")
+
+
+class BindingReq(BaseModel):
+    letta_agent_id: str
+    is_active: bool = True
+
+
+@router.get("/bindings")
+async def list_bindings(actor: dict = Depends(require_role(ADMIN))):
+    async with rls(actor) as c:
+        rows = await c.fetch(
+            "SELECT function_key, letta_agent_id, scope, is_active FROM ai_agent_bindings"
+            " WHERE org_id=$1 AND scope='org' ORDER BY function_key", actor["org_id"])
+    return [{"function_key": r["function_key"], "letta_agent_id": r["letta_agent_id"],
+             "is_active": r["is_active"]} for r in rows]
+
+
+@router.put("/bindings/{function_key}")
+async def set_binding(function_key: str, body: BindingReq, actor: dict = Depends(require_role(ADMIN))):
+    """Point an AI function at a Letta agent (org-scoped upsert). Atomic via
+    the partial unique index on (org_id, function_key) WHERE scope='org'
+    (migration 0006) — a plain UNIQUE(...,scope_id) doesn't dedupe org-scoped
+    rows since scope_id is NULL there and Postgres treats NULLs as distinct."""
+    if function_key not in CATALOG:
+        raise HTTPException(422, f"Unknown function '{function_key}'")
+    agent = (body.letta_agent_id or "").strip()
+    if not agent:
+        raise HTTPException(422, "letta_agent_id is required")
+    async with rls(actor) as c:
+        await c.execute(
+            "INSERT INTO ai_agent_bindings(org_id, function_key, letta_agent_id, scope, is_active)"
+            " VALUES ($1,$2,$3,'org',$4)"
+            " ON CONFLICT (org_id, function_key) WHERE scope='org'"
+            " DO UPDATE SET letta_agent_id=EXCLUDED.letta_agent_id, is_active=EXCLUDED.is_active",
+            actor["org_id"], function_key, agent, body.is_active)
+    return {"ok": True, "function_key": function_key, "letta_agent_id": agent, "is_active": body.is_active}
+
+
+@router.delete("/bindings/{function_key}")
+async def delete_binding(function_key: str, actor: dict = Depends(require_role(ADMIN))):
+    async with rls(actor) as c:
+        await c.execute(
+            "DELETE FROM ai_agent_bindings WHERE org_id=$1 AND function_key=$2 AND scope='org'",
+            actor["org_id"], function_key)
+    return {"ok": True}
 
 
 @router.get("/pins")

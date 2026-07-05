@@ -49,7 +49,7 @@ GF.WWF.openWorklog = (taskId) => {
 GF.WWF._renderWorklog = () => {
   const body = GF.$('worklog-modal-body'); if (!body) return;
   const st = GF.WWF._worklog;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = GF.todayISO();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 
@@ -104,8 +104,27 @@ GF.WWF.submitWorklog = async () => {
   }
   // No offset = facility wall-clock (Europe/Skopje) — backend interprets it so.
   const body = { started_at: `${date}T${start}:00`, note, source: 'manual' };
-  if (end) body.ended_at = `${date}T${end}:00`;
-  else body.hours = hoursRaw;
+  if (end) {
+    if (end === start) {
+      GF.toast(AL('End time must differ from the start time', 'Крајниот час мора да се разликува од почетниот'), 'error');
+      return;
+    }
+    // An end time BEFORE the start means the shift crossed midnight — roll
+    // ended_at to the next day so a 22:00→01:00 session logs instead of
+    // 422-ing on "ended_at must be after started_at". An end time equal to
+    // the start is rejected above rather than rolled over, so it doesn't
+    // silently log a full 24-hour session for a zero-duration entry.
+    let endDate = date;
+    if (end < start) {
+      const d = new Date(date + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      // GF.localDateStr (not d.toISOString()): converting a local midnight
+      // through toISOString() lands on the previous UTC day for any
+      // positive UTC offset (e.g. Skopje), silently undoing the +1 day.
+      endDate = GF.localDateStr(d);
+    }
+    body.ended_at = `${endDate}T${end}:00`;
+  } else body.hours = hoursRaw;
   try {
     const s = await GF.API.addSession(st.taskId, body);
     GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
@@ -157,7 +176,7 @@ GF.WWF.saveOutcome = async (taskId) => {
     await GF.API.updateTask(taskId, { outcome: v });
     const t = GF.task(taskId); if (t) t.outcome = v;
     GF.toast(GF.t('outcome') + ' ✓', 'success');
-  } catch (e) { GF.toast('Save failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Blocker prompt (on stuck) ─────────────────────────────────────────── */
@@ -187,7 +206,7 @@ GF.WWF.saveBlocker = async (taskId) => {
     await GF.API.updateTask(taskId, { blocker_reason: v });
     const t = GF.task(taskId); if (t) { t.blocker = v; GF.render.panels(); }
     GF.toast(GF.t('blocker') + ' ✓', 'success');
-  } catch (e) { GF.toast('Save failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Archive (PATCH is_archived — backend list excludes archived by default) ── */
@@ -201,13 +220,14 @@ GF.WWF.archiveTask = async (taskId) => {
     GF.state.expanded.delete(taskId);
     GF.render.all();
     GF.toast(GF.t('archive') + ' ✓', 'success');
-  } catch (e) { GF.toast('Archive failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Archive failed: ', 'Неуспешно архивирање: ') + e.message, 'error'); }
 };
 
 /* ── Edit task — reuses the add modal, submitAdd PATCHes when _editTask set ── */
 GF.WWF.openEdit = (taskId) => {
   const t = GF.task(taskId); if (!t) return;
   if (!GF.can('edit', t)) return GF.denyToast();
+  GF._fromEdit = true;             // openAdd re-checks 'create' otherwise
   GF.openAdd(t.weekId);            // builds the form (resets _editTask/_addParent)
   GF._editTask = taskId;
   GF.$('add-title').value = t.title;
@@ -221,4 +241,26 @@ GF.WWF.openEdit = (taskId) => {
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });
+  // Pre-select the Responsible chips from the task's cached helpers as an
+  // immediate best guess, then refresh from the real assignees endpoint —
+  // t.helpers is a client-side cache that the separate Assignees/collab
+  // panel (collab.js's doAssign/removeAssignee) never updates, so it can be
+  // stale if someone was assigned/removed there without a full reload.
+  // GF._editHelpers becomes the ground truth submitAdd diffs against on save.
+  const applyRespSelection = (ids) => {
+    if (!GF.$('add-resp')) return;
+    [...GF.$('add-resp').querySelectorAll('.chip-opt')].forEach(el => {
+      el.classList.toggle('on', ids.includes(el.dataset.who));
+    });
+  };
+  applyRespSelection(t.helpers || []);
+  GF.API.assignees(taskId).then(list => {
+    if (GF._editTask !== taskId) return;   // modal closed/reused before this resolved
+    const ids = (list || []).map(a => a.user_id);
+    GF._editHelpers = ids;
+    applyRespSelection(ids);
+  }).catch(() => {});
+  // openAdd defaulted the modal to create-mode labels — flip to edit.
+  if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('edit_task');
+  if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('save');
 };

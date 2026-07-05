@@ -14,9 +14,11 @@ Two ways in:
     static CAPTURE_IMPORT_TOKEN and acts as the configured capture user
     (qcm.blani). The token is valid ONLY on this route.
 """
+import hmac
 import os
 from datetime import date, datetime, timedelta
 
+import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -98,7 +100,9 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     honored on this route) acting as the configured capture user."""
     token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
     username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
-    if not token or not authorization or authorization != f"Bearer {token}":
+    # Constant-time compare so the static token can't be recovered byte-by-byte
+    # via response-timing (same reason security.py always pays the bcrypt cost).
+    if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
         return None
     row = await users_admin_pool().fetchrow(
         "SELECT id, org_id, username, full_name, role, department_id, function_role,"
@@ -190,18 +194,42 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                 row = await c.fetchrow(
                     "SELECT * FROM tasks WHERE org_id=$1 AND external_ref=$2 AND is_deleted=false",
                     actor["org_id"], t.external_ref)
-                if row is None:
-                    row = await c.fetchrow(
-                        "INSERT INTO tasks(org_id,user_id,title,description,status,priority,"
-                        " task_type,reference_code,external_ref,blocker_reason,recurrence,"
-                        " department,department_id,week_id,week_start,due_date,completed_date,"
-                        " outcome,tags,estimated_hours,created_by,updated_by)"
-                        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,"
-                        " $19,$20,$21,$21) RETURNING *",
-                        actor["org_id"], owner_id, t.title, t.description, t.status, t.priority,
-                        t.task_type, t.reference_code, t.external_ref, t.blocker_reason, recurrence,
-                        t.department, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
-                        t.outcome, t.tags, t.estimated_hours, actor["id"])
+                is_new = row is None
+                if is_new:
+                    try:
+                        # SAVEPOINT: a UniqueViolationError aborts the whole
+                        # enclosing transaction (rls() runs the loop body in
+                        # one), which would make the recovery SELECT below fail
+                        # with InFailedSQLTransactionError. A nested
+                        # transaction rolls back only this INSERT, leaving the
+                        # outer transaction usable for the re-SELECT + merge.
+                        async with c.transaction():
+                            row = await c.fetchrow(
+                                "INSERT INTO tasks(org_id,user_id,title,description,status,priority,"
+                                " task_type,reference_code,external_ref,blocker_reason,recurrence,"
+                                " department,department_id,week_id,week_start,due_date,completed_date,"
+                                " outcome,tags,estimated_hours,created_by,updated_by)"
+                                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,"
+                                " $19,$20,$21,$21) RETURNING *",
+                                actor["org_id"], owner_id, t.title, t.description, t.status, t.priority,
+                                t.task_type, t.reference_code, t.external_ref, t.blocker_reason, recurrence,
+                                t.department, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
+                                t.outcome, t.tags, t.estimated_hours, actor["id"])
+                    except asyncpg.exceptions.UniqueViolationError:
+                        # Lost a concurrent-import race for this external_ref
+                        # (tasks_org_external_ref_key) — the other request's
+                        # INSERT won between our SELECT and INSERT. The savepoint
+                        # rolled back cleanly, so the outer transaction is still
+                        # live: re-SELECT the winner's row and fall through to
+                        # the update-merge branch instead of a spurious db-error
+                        # skip.
+                        row = await c.fetchrow(
+                            "SELECT * FROM tasks WHERE org_id=$1 AND external_ref=$2 AND is_deleted=false",
+                            actor["org_id"], t.external_ref)
+                        if row is None:
+                            raise
+                        is_new = False
+                if is_new:
                     created += 1
                 else:
                     # Forward-only merge: never regress status; fill blanks;

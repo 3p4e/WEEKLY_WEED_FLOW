@@ -114,7 +114,8 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
             await c.execute(
                 "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
                 "VALUES ($1,$2,$3,$4,$5) "
-                "ON CONFLICT (task_id, user_id) DO UPDATE SET role=EXCLUDED.role",
+                "ON CONFLICT (task_id, user_id) DO UPDATE SET "
+                "role=EXCLUDED.role, accepted=NULL, accepted_at=NULL",
                 task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
         except Exception as e:  # unique violation etc.
             raise HTTPException(400, f"Could not assign: {type(e).__name__}")

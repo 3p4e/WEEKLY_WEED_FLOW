@@ -121,6 +121,17 @@ GF.calendar = { weeks: [], todayId: 0 };
   GF.state.selWeek = GF.calendar.todayId;
 })();
 GF.todayDay = GF.DAYS[(new Date().getDay() + 6) % 7];
+// Format a Date using its LOCAL (browser/facility) calendar day — unlike
+// `d.toISOString()`, which always converts to UTC first: for any positive
+// UTC offset (e.g. Europe/Skopje), converting a local midnight back through
+// toISOString() lands on the PREVIOUS UTC day, silently shifting date-only
+// values by one day. Due-date strings are plain (no offset) local days, so
+// any "what day is this Date" conversion must go through local getters.
+GF.localDateStr = (d) => {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+GF.todayISO = () => GF.localDateStr(new Date());
 
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever
@@ -199,6 +210,20 @@ GF.visibleTasks = (weekId) => {
   const q = search.trim().toLowerCase();
   return GF.weekTasks(weekId).filter(t => {
     if (selDay !== 'All' && !(t.days || []).includes(selDay)) return false;
+    if (deptFilter && t.dept !== deptFilter) return false;
+    if (tagFilter && !(t.tags || []).includes(tagFilter)) return false;
+    if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+};
+// Like visibleTasks but WITHOUT the day filter — for views that present their
+// own day dimension (Timeline) or aggregate the whole week (Coordination,
+// Dashboard). Still applies dept/tag/search so the sidebar filter is honored
+// there too (they previously used unfiltered weekTasks and ignored it).
+GF.scopedTasks = (weekId) => {
+  const { deptFilter, tagFilter, search } = GF.state;
+  const q = search.trim().toLowerCase();
+  return GF.weekTasks(weekId).filter(t => {
     if (deptFilter && t.dept !== deptFilter) return false;
     if (tagFilter && !(t.tags || []).includes(tagFilter)) return false;
     if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;

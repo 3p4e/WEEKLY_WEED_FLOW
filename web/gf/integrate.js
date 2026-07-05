@@ -50,7 +50,7 @@ GF.WWF.transform = (t) => ({
   status: S_IN[t.status] || 'pending', pr: P_IN[t.priority] || 'medium',
   days: Array.isArray(t.days) ? t.days.map(d => d.slice(0,3)) : [],
   weekId: GF.WWF.weekIndex(t),
-  tags: t.tags || [], deps: [],
+  tags: t.tags || [],
   notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n })),
   blocker: t.blocker_reason || '', completed_date: t.completed_date, week_start: t.week_start,
   est: t.estimated_hours != null ? Number(t.estimated_hours) : null,
@@ -76,15 +76,18 @@ GF.WWF.buildCalendar = (weeks) => {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const ws = (weeks || []).slice().sort((a,b)=> new Date(a.starts_on) - new Date(b.starts_on));
   const now = new Date(); let todayId = 0;
-  GF.calendar.weeks = ws.map((w,i) => {
+  // Map into a local first — only replace the calendar once we know we have
+  // real weeks. Assigning the (empty) result before the length check would
+  // wipe core.js's generated fallback and blank week navigation when /weeks
+  // is empty or failed.
+  const mapped = ws.map((w,i) => {
     const s = new Date(w.starts_on), e = new Date(w.ends_on);
     if (now >= s && now <= e) todayId = i;
     return { id:i, realId:w.id, start:s, end:e, weekNum:w.iso_week, monthIndex:s.getMonth(), year:s.getFullYear(),
       label:`${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}`, short:`W${w.iso_week}` };
   });
-  if (!GF.calendar.weeks.length) { // fallback: keep core.js generated weeks
-    return;
-  }
+  if (!mapped.length) return;   // keep core.js's generated fallback weeks
+  GF.calendar.weeks = mapped;
   // ensure "today" lands on the last week if all data is in the past
   if (todayId === 0 && now > GF.calendar.weeks[GF.calendar.weeks.length-1].end) todayId = GF.calendar.weeks.length-1;
   GF.calendar.todayId = todayId; GF.state.selWeek = todayId;
@@ -176,6 +179,7 @@ GF.WWF.loadTeam = async () => {
       name: p.full_name || p.username, username: p.username,
       init: ((p.full_name || p.username || 'U').trim().split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase()) || 'U',
       role: ROLE_IN[p.role] || 'operator', roleLabel: p.function_role || p.role || '',
+      fn: p.function_role || '',
       dept: p.department_id || (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(p.id),
       backendRole: p.role, mcp: p.must_change_password, active: p.is_active };
   });
@@ -192,9 +196,11 @@ GF.WWF.loadAndRender = async () => {
   GF.state.user = GF.WWF.meId;
   // Load each independently so one failure never blanks the UI.
   let depts = [], weeks = [], tasks = [];
-  try { depts = (await GF.API.departments()) || []; } catch (e) { GF.toast('Departments: ' + e.message, 'error'); }
-  try { weeks = (await GF.API.weeks()) || []; } catch (e) {}
-  try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast('Tasks: ' + e.message, 'error'); }
+  try { depts = (await GF.API.departments()) || []; } catch (e) { GF.toast(AL('Departments: ', 'Оддели: ') + e.message, 'error'); }
+  // A /weeks failure is non-fatal — buildCalendar keeps core.js's generated
+  // fallback weeks — but tell the user rather than silently swallowing it.
+  try { weeks = (await GF.API.weeks()) || []; } catch (e) { GF.toast(AL('Weeks: ', 'Недели: ') + e.message, 'error'); }
+  try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
   if (depts.length) {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
       return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
@@ -268,7 +274,7 @@ GF.WWF.install = () => {
 
   GF.submitAdd = async () => {
     const title = (GF.$('add-title')?.value||'').trim();
-    if (!title) { GF.toast('Enter a title','error'); return; }
+    if (!title) { GF.toast(AL('Enter a title','Внесете наслов'),'error'); return; }
     const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
     const deptId = GF.$('add-dept').value;
     const wk = GF.calendar.weeks[GF._addWeek] || GF.calendar.weeks[GF.calendar.todayId];
@@ -287,16 +293,55 @@ GF.WWF.install = () => {
       try {
         const patched = await GF.API.updateTask(id, {
           title, priority: P_OUT[GF.$('add-pr').value]||'normal',
-          department_id: deptId, days: days.length?days:[GF.todayDay],
+          // Send the department text alongside the id (as the create path
+          // does) — reports.py groups the department breakdown by the text
+          // column, so updating only department_id leaves the two out of sync.
+          department_id: deptId, department: (GF.dep(deptId)||{}).name || null,
+          days: days.length?days:[GF.todayDay],
           estimated_hours: estHours, due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
           recurrence,
         });
-        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: t.helpers, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
+        // Persist Responsible changes: diff the selected chips against the
+        // task's current helpers and add/remove via the collab endpoints.
+        // Exclude the task OWNER (not the editing session's user — those
+        // differ whenever a non-owner Responsible helper is the one editing)
+        // since the owner is implicit and never an explicit assignee.
+        const desired = [...GF.$('add-resp').querySelectorAll('.on')]
+          .map(el => el.dataset.who).filter(w => w !== (t && t.owner));
+        // GF._editHelpers (populated by worklog.js's openEdit from the real
+        // assignees endpoint) is the ground truth; t.helpers is only a
+        // fallback for the rare case that fetch hadn't resolved yet.
+        const current = GF._editHelpers || (t && t.helpers) || [];
+        // The backend's assign/unassign endpoints require the task owner or
+        // an elevated role (collab.py's _can_manage_task) — mirror that gate
+        // here (GF.WWF.canManageTask matches it exactly) so a non-owner
+        // helper doesn't get a confusing per-person 403 for every attempted
+        // change; instead, tell them up front that the change won't stick.
+        const respChanged = desired.some(w => !current.includes(w)) || current.some(w => !desired.includes(w));
+        if (respChanged && t && GF.WWF.canManageTask(t)) {
+          for (const who of desired) if (!current.includes(who)) {
+            try { await GF.API.assign(id, who); }
+            catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+          }
+          for (const who of current) if (!desired.includes(who)) {
+            try { await GF.API.unassign(id, who); }
+            catch (e) { GF.toast('Could not unassign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+          }
+        } else if (respChanged) {
+          GF.toast(AL("Only the task owner or a manager can change who's responsible.",
+                      'Само сопственикот на задачата или менаџер може да ја смени одговорноста.'), 'info');
+        }
+        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: desired, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
           Object.assign(t, GF.WWF.transform(patched), keep); }
-        GF._editTask = null;
-        GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
-      } catch(e) { GF.toast('Save failed: '+e.message,'error'); }
+        // Only reset the shared edit-session globals / close the modal if
+        // they still refer to THIS save — if the user has since opened a
+        // different edit session (openEdit reassigns these synchronously),
+        // clobbering them here would discard that other session's state and
+        // force-close its modal out from under the user.
+        if (GF._editTask === id) { GF._editTask = null; GF._editHelpers = null; GF.closeModal('add-modal'); }
+        GF.render.all(); GF.toast(GF.t('save')+' ✓','success');
+      } catch(e) { GF.toast(AL('Save failed: ','Неуспешно зачувување: ')+e.message,'error'); }
       return;
     }
 
@@ -311,7 +356,7 @@ GF.WWF.install = () => {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
-        week_start: wk ? wk.start.toISOString().slice(0,10) : null, days: days.length?days:[GF.todayDay],
+        week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
         estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
         reference_code: refCode, recurrence, parent_id: GF._addParent || null,
@@ -330,7 +375,7 @@ GF.WWF.install = () => {
           GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
       }
       if (helperIds.length) { await GF.WWF.loadCollab(created.id); GF.render.panels(); }
-    } catch(e) { GF.toast('Create failed: '+e.message,'error'); }
+    } catch(e) { GF.toast(AL('Create failed: ','Неуспешно креирање: ')+e.message,'error'); }
   };
 
   // AI features -> real backend Letta functions (/ai/{function_key}, body: {input}).
@@ -432,7 +477,7 @@ GF.WWF.install = () => {
         title: p.title || GF.voice._transcript, description: '', status: 'pending',
         priority: P_OUT[p.priority] || 'normal',
         department_id: deptMatch ? deptMatch.id : null, department: deptMatch ? deptMatch.name : null,
-        week_id: wk && wk.realId, week_start: wk ? wk.start.toISOString().slice(0,10) : null, days,
+        week_id: wk && wk.realId, week_start: wk ? GF.localDateStr(wk.start) : null, days,
       });
       GF.state.tasks.push(GF.WWF.transform(created));
       GF.closeModal('voice-modal'); GF.render.all(); GF.toast(GF.t('create_task') + ' ✓', 'success');
@@ -445,8 +490,103 @@ GF.WWF.install = () => {
     } catch (e) { GF.toast('Create failed: ' + e.message, 'error'); }
   };
 
-  // logout from the user card / settings
-  GF.openSettings = () => { if (confirm('Log out of Weekly Weed Flow?')) { GF.API.logout(); location.reload(); } };
+  // Settings modal — replaces the old logout-only gear. Tabs: Preferences,
+  // Security (change my own password), AI agent bindings (admin), Account.
+  GF._setTab = 'prefs';
+  GF.openSettings = (tab) => { GF._setTab = (typeof tab === 'string') ? tab : 'prefs'; GF.WWF.renderSettings(); GF.openModal('settings-modal'); };
+  GF.WWF.setTab = (t) => { GF._setTab = t; GF.WWF.renderSettings(); };
+  GF.WWF.setLangKeep = (l) => { GF.setLang(l); GF.WWF.renderSettings(); };
+  GF.WWF.settingsLogout = () => { if (confirm(AL('Log out of Weekly Weed Flow?', 'Одјава од Weekly Weed Flow?'))) { GF.API.logout(); location.reload(); } };
+
+  GF.WWF.renderSettings = () => {
+    const body = GF.$('set-body'); if (!body) return;
+    const admin = !!(GF.WWF.isAdmin && GF.WWF.isAdmin());
+    if (GF._setTab === 'ai' && !admin) GF._setTab = 'prefs';
+    if (GF.$('set-title')) GF.$('set-title').textContent = AL('Settings', 'Поставки');
+    const tabs = [['prefs', AL('Preferences', 'Поставки')], ['security', AL('Security', 'Безбедност')]];
+    if (admin) tabs.push(['ai', AL('AI agents', 'AI агенти')]);
+    tabs.push(['account', AL('Account', 'Сметка')]);
+    const bar = tabs.map(([k, l]) => `<button class="set-tab ${GF._setTab === k ? 'on' : ''}" onclick="GF.WWF.setTab('${k}')">${l}</button>`).join('');
+    let pane = '';
+    if (GF._setTab === 'prefs') {
+      const lg = GF.state.lang;
+      pane = `<div class="set-pane"><div class="set-row">
+          <div><div class="set-lab">${AL('Language', 'Јазик')}</div>
+            <div class="set-hint">${AL('Interface language for menus and reports.', 'Јазик на интерфејсот за менијата и извештаите.')}</div></div>
+          <div class="seg">
+            <button class="seg-b ${lg === 'en' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('en')">English</button>
+            <button class="seg-b ${lg === 'mk' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('mk')">Македонски</button>
+          </div></div></div>`;
+    } else if (GF._setTab === 'security') {
+      pane = `<div class="set-pane">
+        <div class="field"><label>${AL('Current password', 'Тековна лозинка')}</label><input id="set-cur" type="password" autocomplete="current-password"></div>
+        <div class="field"><label>${AL('New password', 'Нова лозинка')}</label><input id="set-new" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>${AL('Confirm new password', 'Потврди нова лозинка')}</label><input id="set-conf" type="password" autocomplete="new-password"></div>
+        <div id="set-pw-msg" class="set-msg"></div>
+        <button class="btn btn-primary" onclick="GF.WWF.changeMyPassword()">${AL('Change password', 'Смени лозинка')}</button></div>`;
+    } else if (GF._setTab === 'ai') {
+      pane = `<div class="set-pane"><div class="set-hint" style="margin-bottom:10px">${AL('Point each AI function at a Letta agent. Changes save immediately.', 'Поврзете ја секоја AI функција со Letta агент. Промените се зачувуваат веднаш.')}</div>
+        <div id="set-ai"><div class="ai-loading"><span class="spinner"></span>${GF.t('generate')}…</div></div></div>`;
+      setTimeout(GF.WWF.renderAiTab, 0);
+    } else {
+      const u = GF.API.user || {};
+      pane = `<div class="set-pane">
+        <div class="set-kv"><span>${AL('Name', 'Име')}</span><b>${GF.esc(u.full_name || u.username || '—')}</b></div>
+        <div class="set-kv"><span>${AL('Username', 'Корисник')}</span><b>${GF.esc(u.username || '—')}</b></div>
+        <div class="set-kv"><span>${AL('Role', 'Улога')}</span><b>${GF.esc(GF.roleLabel(u.role ? (ROLE_IN[u.role] || 'operator') : GF.curRole()))}</b></div>
+        <div class="set-kv"><span>${AL('Department', 'Оддел')}</span><b>${GF.esc(u.department_id ? GF.depName(u.department_id) : '—')}</b></div>
+        <button class="btn btn-danger" style="margin-top:16px" onclick="GF.WWF.settingsLogout()">${AL('Log out', 'Одјава')}</button></div>`;
+    }
+    body.innerHTML = `<div class="set-tabs">${bar}</div>${pane}`;
+  };
+
+  GF.WWF.changeMyPassword = async () => {
+    const cur = (GF.$('set-cur') || {}).value || '', nw = (GF.$('set-new') || {}).value || '', cf = (GF.$('set-conf') || {}).value || '';
+    const msg = GF.$('set-pw-msg');
+    const show = (t, ok) => { if (msg) { msg.textContent = t; msg.style.color = ok ? 'var(--green-fg)' : 'var(--red)'; } };
+    if (!nw) return show(AL('Enter a new password.', 'Внесете нова лозинка.'));
+    if (nw !== cf) return show(AL('New passwords do not match.', 'Лозинките не се совпаѓаат.'));
+    try {
+      await GF.API.changePassword(nw, cur || null);
+      ['set-cur', 'set-new', 'set-conf'].forEach(id => { const el = GF.$(id); if (el) el.value = ''; });
+      show(AL('Password changed ✓', 'Лозинката е сменета ✓'), true);
+      GF.toast(AL('Password changed ✓', 'Лозинката е сменета ✓'), 'success');
+    } catch (e) { show(AL('Failed: ', 'Неуспешно: ') + (e.message || e)); }
+  };
+
+  GF.WWF.renderAiTab = async () => {
+    const box = GF.$('set-ai'); if (!box) return;
+    try {
+      const [fns, ag, binds] = await Promise.all([GF.API.aiFunctions(), GF.API.aiAgents(), GF.API.aiBindings()]);
+      const agents = (ag && ag.agents) || [];
+      const bindByFn = {}; (binds || []).forEach(b => { bindByFn[b.function_key] = b; });
+      const catalog = (fns && fns.catalog) || {};
+      const opts = (sel) => ['<option value="">' + AL('— none —', '— ништо —') + '</option>']
+        .concat(agents.map(a => `<option value="${GF.esc(a.id)}" ${a.id === sel ? 'selected' : ''}>${GF.esc(a.name || a.id)}</option>`)).join('');
+      const rows = Object.keys(catalog).map(fn => {
+        const b = bindByFn[fn] || {};
+        return `<div class="ai-bind">
+          <div class="ai-bind-h"><b>${GF.esc(fn)}</b>
+            <label class="ai-bind-on"><input type="checkbox" ${b.is_active ? 'checked' : ''} onchange="GF.WWF.saveBinding('${fn}')"> ${AL('Active', 'Активно')}</label></div>
+          <div class="set-hint">${GF.esc(catalog[fn])}</div>
+          <select id="ai-sel-${fn}" onchange="GF.WWF.saveBinding('${fn}')">${opts(b.letta_agent_id)}</select></div>`;
+      }).join('');
+      box.innerHTML = agents.length ? rows : `<div class="set-msg">${AL('No Letta agents found.', 'Нема пронајдени Letta агенти.')}</div>`;
+    } catch (e) {
+      box.innerHTML = `<div class="set-msg" style="color:var(--red)">${AL('Could not load AI settings: ', 'Не може да се вчитаат AI поставки: ')}${GF.esc(e.message || String(e))}</div>`;
+    }
+  };
+
+  GF.WWF.saveBinding = async (fn) => {
+    const sel = GF.$('ai-sel-' + fn); if (!sel) return;
+    const agentId = sel.value;
+    const cb = sel.closest('.ai-bind').querySelector('input[type=checkbox]');
+    const on = cb ? cb.checked : true;
+    try {
+      if (!agentId) { await GF.API.deleteAiBinding(fn); GF.toast(fn + ': ' + AL('cleared', 'исчистено'), 'info'); }
+      else { await GF.API.setAiBinding(fn, { letta_agent_id: agentId, is_active: on }); GF.toast(fn + ' ✓', 'success'); }
+    } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно: ') + (e.message || e), 'error'); }
+  };
 
   // Roll over incomplete tasks to next week. Persists via the real API —
   // the original local-only version mutated state and called the now-no-op
@@ -463,17 +603,17 @@ GF.WWF.install = () => {
       return;
     }
     const incomplete = GF.weekTasks(weekIdx).filter(t => t.status !== 'done');
-    if (!incomplete.length) { GF.toast('All tasks are done — nothing to roll over', 'info'); return; }
-    const weekStart = nextWeek.start.toISOString().slice(0, 10);
+    if (!incomplete.length) { GF.toast(AL('All tasks are done — nothing to roll over', 'Сите задачи се завршени — нема што да се пренесе'), 'info'); return; }
+    const weekStart = GF.localDateStr(nextWeek.start);
     const results = await Promise.allSettled(incomplete.map(t =>
       GF.API.updateTask(t.id, { week_id: nextWeek.realId, week_start: weekStart })));
     let moved = 0;
     incomplete.forEach((t, i) => { if (results[i].status === 'fulfilled') { t.weekId = nextWeek.id; moved++; } });
     GF.render.all();
     const failed = incomplete.length - moved;
-    if (!moved) GF.toast('Roll over failed', 'error');
-    else if (failed) GF.toast(`${moved} task(s) rolled over, ${failed} failed`, 'info');
-    else GF.toast(`${moved} task(s) rolled to next week`, 'success');
+    if (!moved) GF.toast(AL('Roll over failed', 'Пренесувањето не успеа'), 'error');
+    else if (failed) GF.toast(AL(`${moved} task(s) rolled over, ${failed} failed`, `${moved} задача(и) пренесени, ${failed} неуспешни`), 'info');
+    else GF.toast(AL(`${moved} task(s) rolled to next week`, `${moved} задача(и) пренесени во следната недела`), 'success');
   };
 };
 
@@ -490,63 +630,103 @@ GF.WWF.canProvision = () => {
   return r === 'ADMIN' || MANAGER_ROLES.includes(r);
 };
 
+// Strict ADMIN check — mirrors the AI-bindings endpoints' require_role(ADMIN)
+// (backend/app/api/ai.py). Deliberately narrower than canProvision (which also
+// admits department managers): reusing canProvision here previously showed the
+// Settings "AI agents" tab to managers who then got a raw 403 from every call.
+GF.WWF.isAdmin = () => (GF.API.user || {}).role === 'ADMIN';
+
+// openUser(id) → edit an existing person (name/role/dept/title + reset password);
+// openUser() with no id → create a new account. The Team-card gear icon passes id.
 GF.openUser = (id) => {
   if (!GF.WWF.canProvision()) return GF.denyToast();
-  GF._editUser = null;  // create only (no in-place edit endpoint)
   const me = GF.API.user || {};
   const iAmAdmin = me.role === 'ADMIN';
+  const editing = !!(id && GF.PEOPLE[id]);
+  GF._editUser = editing ? id : null;
+  const p = editing ? GF.PEOPLE[id] : null;
   // Admin offers every role EXCEPT admin (ADMIN is DB-seeded only, never
-  // picked). A manager may create only Operator staff, locked to their own
+  // picked). A manager may only touch Operator staff, locked to their own
   // department. The backend _can_manage enforces both regardless.
   const roleKeys = iAmAdmin ? Object.keys(GF.ROLES).filter(r => r !== 'admin') : ['operator'];
+  const curRole = editing ? (p.role || 'operator') : 'operator';
   const roleOpts = roleKeys.map(r =>
-    `<option value="${r}" ${r==='operator'?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
+    `<option value="${r}" ${r===curRole?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
+  const curDept = editing ? p.dept : me.department_id;
   const deptOpts = GF.DEPTS.map(d =>
-    `<option value="${d.id}" ${(!iAmAdmin && String(d.id)===String(me.department_id))?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
+    `<option value="${d.id}" ${String(d.id)===String(curDept)?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
   const deptLocked = iAmAdmin ? '' : 'disabled';
-  GF.$('user-title').textContent = GF.t('add_user');
+  GF.$('user-title').textContent = editing ? GF.t('edit_user') : GF.t('add_user');
+  const usernameRow = editing
+    ? `<div class="field"><label>Username</label><div style="font:700 15px ui-monospace,monospace;color:var(--ink-2)">${GF.esc(p.username || '')}</div></div>`
+    : `<div class="field"><label>Username</label><input id="u-username" placeholder="e.g. ana" autocapitalize="off" autocomplete="off"></div>`;
+  const footNote = editing
+    ? `<button class="btn btn-danger" style="width:100%;justify-content:center;margin-top:8px" onclick="GF.WWF.resetUserPw('${id}')">${GF.icon('shield','icon')}${AL('Reset password', 'Ресетирај лозинка')}</button>`
+    : `<div style="font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.5">${AL(
+        'A <b>one-time password</b> is generated and shown to you on save. Give the username + one-time password to the person — they set their own on first login.',
+        'На зачувување се генерира <b>еднократна лозинка</b> и ви се прикажува. Дајте им ги корисничкото име и лозинката на лицето — тие поставуваат своја при првото најавување.')}</div>`;
   GF.$('user-body').innerHTML = `
-    <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" placeholder="e.g. Ana Nikolova"></div>
-    <div class="field"><label>Username</label><input id="u-username" placeholder="e.g. ana" autocapitalize="off" autocomplete="off"></div>
+    <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" value="${editing ? GF.esc(p.name || '') : ''}" placeholder="e.g. Ana Nikolova"></div>
+    ${usernameRow}
     <div class="field"><label>${GF.t('role')}</label><select id="u-role" ${iAmAdmin?'':'disabled'}>${roleOpts}</select></div>
     <div class="field"><label>${GF.t('dept_label')}</label><select id="u-dept" ${deptLocked}>${deptOpts}</select></div>
-    <div class="field"><label>Title (optional)</label><input id="u-fn" placeholder="e.g. Head of QC"></div>
-    <div style="font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.5">
-      A <b>one-time password</b> is generated and shown to you on save. Give the username + one-time
-      password to the person — they set their own password on first login.</div>`;
+    <div class="field"><label>${AL('Title (optional)', 'Титула (изборно)')}</label><input id="u-fn" value="${editing ? GF.esc(p.fn || '') : ''}" placeholder="e.g. Head of QC"></div>
+    ${footNote}`;
   GF.openModal('user-modal');
+};
+
+GF.WWF.resetUserPw = async (id) => {
+  const p = GF.PEOPLE[id] || {};
+  if (!confirm(AL('Reset the password for ' + (p.name || id) + '? A new one-time password will be shown.',
+                  'Ресетирај ја лозинката за ' + (p.name || id) + '? Ќе се прикаже нова еднократна лозинка.'))) return;
+  try {
+    const res = await GF.API.resetPassword(id);
+    GF.closeModal('user-modal');
+    GF.WWF.showOtp(res.user || { username: p.username, full_name: p.name }, res.otp);
+  } catch (e) { GF.toast(AL('Reset failed: ', 'Неуспешно ресетирање: ') + (e.message || e), 'error'); }
 };
 
 GF.submitUser = async () => {
   const name = (GF.$('u-name')?.value || '').trim();
-  const username = (GF.$('u-username')?.value || '').trim().toLowerCase();
-  if (!name) { GF.toast('Enter a full name', 'error'); return; }
-  if (!username) { GF.toast('Enter a username', 'error'); return; }
+  if (!name) { GF.toast(AL('Enter a full name', 'Внесете име и презиме'), 'error'); return; }
   const role = ROLE_OUT[GF.$('u-role').value] || 'USER';
   const department_id = GF.$('u-dept').value;
   const function_role = (GF.$('u-fn')?.value || '').trim() || null;
-  GF.toast('Creating account…', 'info');
+  // Edit mode (openUser was given an id) → PATCH the existing account.
+  if (GF._editUser) {
+    try {
+      await GF.API.updateUser(GF._editUser, { full_name: name, role, department_id, function_role });
+      GF._editUser = null;
+      GF.closeModal('user-modal');
+      await GF.WWF.loadAndRender();
+      GF.toast(AL('Saved ✓', 'Зачувано ✓'), 'success');
+    } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + (e.message || e), 'error'); }
+    return;
+  }
+  const username = (GF.$('u-username')?.value || '').trim().toLowerCase();
+  if (!username) { GF.toast(AL('Enter a username', 'Внесете корисничко име'), 'error'); return; }
+  GF.toast(AL('Creating account…', 'Се креира сметка…'), 'info');
   try {
     const res = await GF.API.createUser({ username, full_name: name, role, department_id, function_role });
     GF.closeModal('user-modal');
     GF.WWF.showOtp(res.user || { username, full_name: name }, res.otp);
     await GF.WWF.loadAndRender();
-  } catch (e) { GF.toast('Create failed: ' + (e.message || e), 'error'); }
+  } catch (e) { GF.toast(AL('Create failed: ', 'Неуспешно креирање: ') + (e.message || e), 'error'); }
 };
 
 GF.removeUser = async (id) => {
   if (!GF.WWF.canProvision()) return GF.denyToast();
-  if (id === GF.state.user) { GF.toast('You cannot remove your own account', 'error'); return; }
+  if (id === GF.state.user) { GF.toast(AL('You cannot remove your own account', 'Не можете да ја отстраните сопствената сметка'), 'error'); return; }
   const p = GF.PEOPLE[id] || {};
-  if (!confirm('Deactivate the account for ' + (p.name || id) + '?')) return;
+  if (!confirm(AL('Deactivate the account for ', 'Деактивирај ја сметката за ') + (p.name || id) + '?')) return;
   try {
     await GF.API.deleteUser(id);
     // Deactivate is a soft-delete — keep the entry (flagged inactive) so
     // avatars/names on that person's existing tasks still resolve instead
     // of falling back to a blank '?' until the next full roster reload.
     if (GF.PEOPLE[id]) GF.PEOPLE[id].inactive = true;
-    GF.render.all(); GF.toast('Account removed ✓', 'success');
-  } catch (e) { GF.toast('Remove failed: ' + e.message, 'error'); }
+    GF.render.all(); GF.toast(AL('Account removed ✓', 'Сметката е отстранета ✓'), 'success');
+  } catch (e) { GF.toast(AL('Remove failed: ', 'Неуспешно отстранување: ') + e.message, 'error'); }
 };
 
 // Real auth: no local impersonation — switching accounts means logging in as them.

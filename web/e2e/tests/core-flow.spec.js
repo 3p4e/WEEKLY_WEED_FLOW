@@ -44,12 +44,15 @@ test('login, create a task, cycle its status, assign a teammate, logout', async 
     await expect(card.locator('.dep-chip', { hasText: creds.teammate_name })).toBeVisible({ timeout: 10_000 });
   });
 
-  await test.step('logout', async () => {
-    page.once('dialog', (d) => d.accept());
+  await test.step('logout via settings', async () => {
+    // #user-card now opens the Settings modal (not a bare logout confirm).
+    // Log out lives on the Account tab and still confirms + reloads to login.
     await page.locator('#user-card').click();
-    // GF.openSettings() confirms, then calls location.reload() — wait for
-    // that navigation to fully settle before asserting on the fresh page's
-    // DOM, or the locator can race the reload.
+    await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 10_000 });
+    await page.locator('#settings-modal .set-tab', { hasText: 'Account' }).click();
+    page.once('dialog', (d) => d.accept());
+    await page.locator('#settings-modal').getByRole('button', { name: 'Log out' }).click();
+    // Wait for the reload to fully settle before asserting on the fresh DOM.
     await page.waitForURL('**/');
     await page.waitForLoadState('load');
     await expect(page.locator('#wwf-login')).toBeVisible({ timeout: 10_000 });

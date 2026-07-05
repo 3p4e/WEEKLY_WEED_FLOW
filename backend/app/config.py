@@ -55,7 +55,10 @@ _secret_is_weak = (
     settings.secret_key in _INSECURE_SECRETS or len(settings.secret_key) < _MIN_SECRET_LENGTH
 )
 if _secret_is_weak:
-    if settings.environment == "production":
+    # Case-insensitive: ENVIRONMENT=Production/PRODUCTION must trip the
+    # guard exactly like the lowercase default, not silently fall through
+    # to a log-only warning.
+    if settings.environment.strip().lower() == "production":
         raise RuntimeError(
             f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters. "
             "Set a real SECRET_KEY (e.g. `openssl rand -hex 32`) before running with "

@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,13 @@ router = APIRouter(tags=["tasks"])
 
 Status = Literal["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 TaskType = Literal["capa", "sop", "validation", "document", "lab", "meeting", "admin", "other"]
+# "normal" is the wire value the GrowFlow UI sends for medium (P_OUT in
+# integrate.js); the capture path uses "medium". Both are accepted; anything
+# else is a clean 422 instead of silently sorting last in priority views.
+Priority = Literal["low", "normal", "medium", "high", "critical"]
+
+# FK-bearing columns whose bad/non-existent value should be a 422, not a 500.
+_FK_ERRORS = (asyncpg.ForeignKeyViolationError, asyncpg.DataError, asyncpg.InvalidTextRepresentationError)
 
 
 def _ser(rows):
@@ -104,7 +112,7 @@ class TaskIn(BaseModel):
     title: str
     description: str | None = None
     status: Status = "pending"
-    priority: str = "medium"
+    priority: Priority = "medium"
     task_type: TaskType = "other"
     reference_code: str | None = None
     external_ref: str | None = None
@@ -131,24 +139,36 @@ def _check_recurrence(rec: dict | None) -> None:
         raise HTTPException(422, "recurrence.freq must be daily|weekly|monthly")
     if not isinstance(rec.get("interval", 1), int) or rec.get("interval", 1) < 1:
         raise HTTPException(422, "recurrence.interval must be a positive integer")
+    # `until` is only parsed later, inside the completion transaction — validate
+    # it here so a bad value is a clean 422 at write time, not a 500 that rolls
+    # back (and permanently blocks) the completion that triggers it.
+    until = rec.get("until")
+    if until not in (None, ""):
+        try:
+            date.fromisoformat(str(until))
+        except ValueError:
+            raise HTTPException(422, "recurrence.until must be an ISO date (YYYY-MM-DD)")
 
 
 @router.post("/tasks", status_code=201)
 async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
     async with rls(user) as c:
-        row = await c.fetchrow(
-            "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-            " task_type,reference_code,external_ref,blocker_reason,recurrence,"
-            " department,department_id,week_id,week_start,due_date,days,tags,estimated_hours,"
-            " created_by,updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$2,$2)"
-            " RETURNING *",
-            user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
-            body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
-            body.recurrence, body.department, body.department_id, body.week_id,
-            body.week_start, body.due_date, body.days, body.tags, body.estimated_hours,
-        )
+        try:
+            row = await c.fetchrow(
+                "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
+                " task_type,reference_code,external_ref,blocker_reason,recurrence,"
+                " department,department_id,week_id,week_start,due_date,days,tags,estimated_hours,"
+                " created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$2,$2)"
+                " RETURNING *",
+                user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
+                body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
+                body.recurrence, body.department, body.department_id, body.week_id,
+                body.week_start, body.due_date, body.days, body.tags, body.estimated_hours,
+            )
+        except _FK_ERRORS:
+            raise HTTPException(422, "Unknown department, week, or parent task")
     return dict(row)
 
 
@@ -156,9 +176,11 @@ class TaskPatch(BaseModel):
     title: str | None = None
     description: str | None = None
     status: Status | None = None
-    priority: str | None = None
-    workflow_state: str | None = None
+    priority: Priority | None = None
+    workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
     task_type: TaskType | None = None
+    department: str | None = None
+    department_id: str | None = None
     reference_code: str | None = None
     external_ref: str | None = None
     blocker_reason: str | None = None
@@ -181,7 +203,12 @@ class TaskPatch(BaseModel):
 # NOT NULL column (title, status, ...) is still treated as not-provided.
 _NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours", "actual_hours",
                         "due_date", "completed_date", "reference_code", "external_ref",
-                        "blocker_reason", "recurrence", "outcome"}
+                        "blocker_reason", "recurrence", "outcome",
+                        # department_id is a nullable FK (ON DELETE SET NULL) and
+                        # department is its nullable text label — an explicit
+                        # PATCH {"department_id": null} must clear the assignment,
+                        # not be silently dropped as "field omitted".
+                        "department", "department_id"}
 
 
 def _advance(d: date, rec: dict) -> date:
@@ -210,14 +237,21 @@ async def _materialize_recurrence(c, row) -> dict | None:
     if until and nxt > date.fromisoformat(str(until)):
         return None
     next_week_start = _advance(row["week_start"], rec) if row["week_start"] else None
+    # Resolve the next instance's calendar week so it still shows up in
+    # ?week_id= week views (it lands in a different week than the completed one).
+    next_week_id = None
+    if next_week_start is not None:
+        next_week_id = await c.fetchval(
+            "SELECT id FROM calendar_weeks WHERE org_id=$1 AND starts_on=$2",
+            row["org_id"], next_week_start)
     new = await c.fetchrow(
         "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-        " task_type,reference_code,recurrence,department,department_id,week_start,due_date,"
+        " task_type,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
         " days,tags,estimated_hours,created_by,updated_by)"
         " SELECT org_id,user_id,parent_id,title,description,'pending',priority,"
-        " task_type,reference_code,recurrence,department,department_id,$2,$3,"
-        " days,tags,estimated_hours,$4,$4 FROM tasks WHERE id=$1 RETURNING *",
-        row["id"], next_week_start, nxt if row["due_date"] else None, row["updated_by"])
+        " task_type,reference_code,recurrence,department,department_id,$2,$3,$4,"
+        " days,tags,estimated_hours,$5,$5 FROM tasks WHERE id=$1 RETURNING *",
+        row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None, row["updated_by"])
     return dict(new) if new else None
 
 
@@ -233,20 +267,33 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         args.append(val); fields.append(f"{col}=${len(args)}")
     if not fields:
         return {"ok": True, "noop": True}
-    # Completing a task stamps completed_date unless the caller set one.
+    # Completing a task stamps completed_date unless the caller set one;
+    # reopening it (status moves away from completed) clears the stale stamp
+    # unless the caller is explicitly setting completed_date themselves.
     if patch.get("status") == "completed" and "completed_date" not in patch:
         args.append(date.today()); fields.append(f"completed_date=${len(args)}")
+    elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
+        args.append(None); fields.append(f"completed_date=${len(args)}")
     args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
     args.append(task_id)
     async with rls(user) as c:
-        row = await c.fetchrow(
-            f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
-            f" AND is_deleted=false RETURNING *", *args)
+        # Capture the pre-update status so a repeated/retried PATCH that sets
+        # status='completed' on an ALREADY-completed recurring task doesn't
+        # re-materialize a duplicate next instance (recurrence isn't cleared
+        # on completion, so this check is the only idempotency guard).
+        prev_status = await c.fetchval("SELECT status FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        try:
+            row = await c.fetchrow(
+                f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
+                f" AND is_deleted=false RETURNING *", *args)
+        except _FK_ERRORS:
+            raise HTTPException(422, "Unknown department, week, or parent task")
         if row is None:
             raise HTTPException(404, "Task not found or not permitted")
         out = dict(row)
-        # A recurring task that just completed spawns its next instance.
-        if patch.get("status") == "completed" and row["recurrence"]:
+        # A recurring task that just completed (and wasn't already completed)
+        # spawns its next instance.
+        if patch.get("status") == "completed" and prev_status != "completed" and row["recurrence"]:
             nxt = await _materialize_recurrence(c, row)
             if nxt:
                 out["next_instance"] = nxt
@@ -376,6 +423,13 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
 @router.delete("/tasks/{task_id}/links/{link_id}")
 async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
+        # Look the task up under RLS first — task_links' only policy is
+        # org_isolation, so without this any org member who knows a link id
+        # could delete links on a task they can't see (same guard add_link,
+        # add_session and add_progress all use).
+        task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if task is None:
+            raise HTTPException(404, "Task not found or not permitted")
         res = await c.execute("DELETE FROM task_links WHERE id=$1 AND task_id=$2", link_id, task_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Link not found")

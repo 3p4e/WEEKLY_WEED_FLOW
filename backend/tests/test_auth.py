@@ -247,3 +247,211 @@ async def test_admin_creates_managers_and_executives(client, admin_headers):
         "username": "another_admin", "full_name": "Nope", "role": "ADMIN",
     }, headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_create_user_rejects_unknown_department(client, admin_headers):
+    """department_id is a bare uuid (departments live in the tasks DB, no FK) —
+    create_user now validates it against a real department for the org."""
+    r = await client.post("/auth/users", json={
+        "username": "baddept", "full_name": "X", "role": "USER",
+        "department_id": "00000000-0000-0000-0000-000000000000",
+    }, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_admin_reset_password_flow(client, admin_headers):
+    """The reported gap, now built: an admin resets another account's password
+    to a fresh one-time password. The old password stops working immediately
+    and the OTP forces a change on next login (same as account creation)."""
+    user, otp = await create_user(client, admin_headers, role="USER")
+    await login_and_set_password(client, user["username"], otp)  # sets NewPassword123456
+    r = await client.post("/auth/login", json={"email": user["username"], "password": "NewPassword123456"})
+    assert r.status_code == 200
+
+    r = await client.post(f"/auth/users/{user['id']}/reset-password", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    new_otp = r.json()["otp"]
+    assert new_otp and new_otp != otp
+    assert r.json()["user"]["must_change_password"] is True
+
+    # The account's previous password no longer works...
+    r = await client.post("/auth/login", json={"email": user["username"], "password": "NewPassword123456"})
+    assert r.status_code == 401
+    # ...and the fresh OTP works and forces a change.
+    r = await client.post("/auth/login", json={"email": user["username"], "password": new_otp})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["must_change_password"] is True
+
+
+async def test_reset_password_authorization(client, admin_headers, org):
+    """Same gate as create/delete: a manager may reset only a USER in their own
+    department — never another department's user, a peer manager, or an ADMIN.
+    An admin can't reset its own account (that's change-password's job)."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+
+    r = await client.post("/auth/users", json={"username": "mgr_a", "full_name": "Mgr A",
+        "role": "QC_MGR", "department_id": dept["a"]}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+
+    async def mk(username, role, dept_id):
+        r = await client.post("/auth/users", json={"username": username, "full_name": username,
+            "role": role, "department_id": dept_id}, headers=admin_headers)
+        assert r.status_code == 201, r.text
+        return r.json()["user"]["id"]
+    user_a = await mk("ru_a", "USER", dept["a"])
+    user_b = await mk("ru_b", "USER", dept["b"])
+    peer = await mk("ru_peer", "PR_MGR", dept["a"])
+
+    assert (await client.post(f"/auth/users/{user_a}/reset-password", headers=mgr_h)).status_code == 200
+    assert (await client.post(f"/auth/users/{user_b}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{peer}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{org['admin_id']}/reset-password", headers=mgr_h)).status_code == 403
+    # Admin resetting its own account → 400 (use change-password instead).
+    assert (await client.post(f"/auth/users/{org['admin_id']}/reset-password", headers=admin_headers)).status_code == 400
+
+
+async def test_update_user_edit(client, admin_headers, org):
+    """Full edit-person: admin renames + changes role/department/title. ADMIN is
+    never assignable via edit (422); an unknown department is rejected (422)."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    r = await client.post("/auth/users", json={"username": "editme", "full_name": "Before",
+        "role": "USER", "department_id": dept["a"]}, headers=admin_headers)
+    uid = r.json()["user"]["id"]
+
+    r = await client.patch(f"/auth/users/{uid}", json={"full_name": "After", "role": "QC_MGR",
+        "department_id": dept["b"], "function_role": "QC Lead"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["full_name"] == "After" and body["role"] == "QC_MGR"
+    assert body["department_id"] == dept["b"] and body["function_role"] == "QC Lead"
+
+    assert (await client.patch(f"/auth/users/{uid}", json={"role": "ADMIN"}, headers=admin_headers)).status_code == 422
+    assert (await client.patch(f"/auth/users/{uid}",
+        json={"department_id": "00000000-0000-0000-0000-000000000000"}, headers=admin_headers)).status_code == 422
+
+
+async def test_admin_can_edit_an_existing_admin_account(client, admin_headers, org):
+    """A second ADMIN-role account (e.g. a QC manager who is also an admin, like
+    production's qcm.blani) must still be editable/manageable by the real admin
+    — _can_manage() must not blanket-reject a target whose CURRENT role is
+    ADMIN, only ever block ASSIGNING the ADMIN role (already 422'd separately)."""
+    from app.db import tasks_admin_pool, users_admin_pool
+    import uuid
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id",
+        org["org_id"])
+    other_admin_id = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role,"
+        " department_id, function_role, must_change_password)"
+        " VALUES ($1,$2,'qcm.other','qcm.other@test.invalid','x','QC Manager','ADMIN',$3,'QC Manager',false)",
+        other_admin_id, org["org_id"], dept["id"])
+
+    r = await client.patch(f"/auth/users/{other_admin_id}",
+        json={"full_name": "QC Manager Renamed", "function_role": "Senior QC Manager"},
+        headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["full_name"] == "QC Manager Renamed"
+
+    # Demoting an existing admin to a normal elevated role is allowed too.
+    r = await client.patch(f"/auth/users/{other_admin_id}", json={"role": "QC_MGR"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "QC_MGR"
+
+    # Reset-password and delete on an (still-)admin account also work for the real admin.
+    other_admin_id2 = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role, must_change_password)"
+        " VALUES ($1,$2,'qcm.other2','qcm.other2@test.invalid','x','Other Admin','ADMIN',false)",
+        other_admin_id2, org["org_id"])
+    assert (await client.post(f"/auth/users/{other_admin_id2}/reset-password", headers=admin_headers)).status_code == 200
+    assert (await client.delete(f"/auth/users/{other_admin_id2}", headers=admin_headers)).status_code == 200
+
+
+async def test_admin_cannot_change_own_role_or_department(client, admin_headers, org):
+    """Now that a real ADMIN passes _can_manage for any target (incl. their own
+    ADMIN account), update_user must still refuse a SELF role/department change —
+    otherwise an admin could PATCH their own id and instantly drop their own
+    privileges. Renaming yourself stays allowed."""
+    me = (await client.get("/auth/me", headers=admin_headers)).json()
+    my_id = me["id"]
+    # Self role change → 400.
+    r = await client.patch(f"/auth/users/{my_id}", json={"role": "QC_MGR"}, headers=admin_headers)
+    assert r.status_code == 400, r.text
+    # Self department change → 400.
+    from app.db import tasks_admin_pool
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"])
+    r = await client.patch(f"/auth/users/{my_id}", json={"department_id": str(dept["id"])}, headers=admin_headers)
+    assert r.status_code == 400, r.text
+    # But renaming yourself is fine.
+    r = await client.patch(f"/auth/users/{my_id}", json={"full_name": "Renamed Self"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["full_name"] == "Renamed Self"
+
+
+async def test_manager_still_cannot_touch_an_admin_account(client, admin_headers, org):
+    """A department manager must never be able to edit/delete/reset an ADMIN
+    account, even one parked in their own department."""
+    from app.db import tasks_admin_pool, users_admin_pool
+    import uuid
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id",
+        org["org_id"])
+    r = await client.post("/auth/users", json={"username": "mgr3", "full_name": "Mgr",
+        "role": "QC_MGR", "department_id": str(dept["id"])}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+
+    admin_in_dept_id = str(uuid.uuid4())
+    await users_admin_pool().execute(
+        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role,"
+        " department_id, must_change_password)"
+        " VALUES ($1,$2,'qcm.other3','qcm.other3@test.invalid','x','QC Admin','ADMIN',$3,false)",
+        admin_in_dept_id, org["org_id"], dept["id"])
+
+    assert (await client.patch(f"/auth/users/{admin_in_dept_id}",
+        json={"full_name": "x"}, headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{admin_in_dept_id}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.delete(f"/auth/users/{admin_in_dept_id}", headers=mgr_h)).status_code == 403
+
+
+async def test_account_endpoints_reject_malformed_id_with_404(client, admin_headers):
+    """A non-uuid {user_id} path param must be a clean 404, not a 500 from
+    asyncpg failing to cast it to uuid inside the lookup query."""
+    assert (await client.post("/auth/users/not-a-uuid/reset-password", headers=admin_headers)).status_code == 404
+    assert (await client.patch("/auth/users/not-a-uuid", json={"full_name": "x"}, headers=admin_headers)).status_code == 404
+    assert (await client.delete("/auth/users/not-a-uuid", headers=admin_headers)).status_code == 404
+
+
+async def test_update_user_manager_confined(client, admin_headers, org):
+    """A manager may rename a USER in their own department, but may not move that
+    user to another department or promote them to a manager role."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    r = await client.post("/auth/users", json={"username": "mgr2", "full_name": "Mgr",
+        "role": "QC_MGR", "department_id": dept["a"]}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+    r = await client.post("/auth/users", json={"username": "staff", "full_name": "Staff",
+        "role": "USER", "department_id": dept["a"]}, headers=admin_headers)
+    uid = r.json()["user"]["id"]
+
+    # Rename in own dept → 200.
+    assert (await client.patch(f"/auth/users/{uid}", json={"full_name": "Renamed"}, headers=mgr_h)).status_code == 200
+    # Move to another dept → 403.
+    assert (await client.patch(f"/auth/users/{uid}", json={"department_id": dept["b"]}, headers=mgr_h)).status_code == 403
+    # Promote to a manager role → 403.
+    assert (await client.patch(f"/auth/users/{uid}", json={"role": "PR_MGR"}, headers=mgr_h)).status_code == 403

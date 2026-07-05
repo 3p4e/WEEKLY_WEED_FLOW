@@ -35,7 +35,9 @@ GF.render = {
     GF.$('search-input').placeholder = GF.t('search');
     GF.$('voice-btn-label').textContent = GF.t('voice_task');
     const nl = GF.$('newtask-label'); if (nl) nl.textContent = GF.t('new_task_btn');
-    const nb = GF.$('newtask-btn'); if (nb && window.APP && APP.mode === 'prod') nb.style.display = GF.can('create') ? '' : 'none';
+    // Gate the header New-task button on the real create permission. (Was
+    // guarded by a never-defined `window.APP`, so it never ran — inert dead code.)
+    const nb = GF.$('newtask-btn'); if (nb) nb.style.display = GF.can('create') ? '' : 'none';
     GF.$('header-avatar').outerHTML = `<div id="header-avatar">${GF.avatar(GF.state.user, 38, true)}</div>`;
   },
 
@@ -147,7 +149,7 @@ GF.render = {
           ${cur.length ? cur.map(t => this.card(t)).join('') : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
         </div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus')}<span>${GF.t('add_task')}</span>
-          <div class="spacer"></div>${GF.icon('mic','icon','var(--orange)')}</div>` : ''}
+          <div class="spacer"></div><span title="${GF.t('voice_task')}" style="cursor:pointer;display:inline-flex" onclick="event.stopPropagation();GF.voice.openCapture(${GF.state.selWeek})">${GF.icon('mic','icon','var(--orange)')}</span></div>` : ''}
       </div>
       <div class="panel collapsed" id="next-panel">
         <div class="panel-head" onclick="GF.$('next-panel').classList.toggle('collapsed')" style="cursor:pointer">
@@ -169,7 +171,7 @@ GF.render = {
     const meta = [t.id].filter(Boolean);
     // v2 badges: due date (danger when overdue + not done), type chip,
     // reference code, subtask progress, logged session hours, tags.
-    const overdue = t.due && t.status !== 'done' && t.due < new Date().toISOString().slice(0, 10);
+    const overdue = t.due && t.status !== 'done' && t.due < GF.todayISO();
     const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
@@ -197,8 +199,6 @@ GF.render = {
 
     const noteId = 'note-' + t.id;
     const notes = (t.notes || []).map(n => `<div class="note"><span class="nd">${GF.dayLabel(n.d)}</span><span>${GF.esc(n.n)}</span></div>`).join('');
-    const deps = (t.deps || []).map(id => { const dt = GF.task(id); if (!dt) return ''; const met = dt.status === 'done';
-      return `<span class="dep-chip ${met ? 'met' : 'unmet'}">${GF.icon('link','icon')}${GF.esc(dt.title.slice(0, 28))}</span>`; }).join('');
     const toDept = GF.HANDOFF[t.dept];
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>
@@ -206,8 +206,6 @@ GF.render = {
         <span class="hbadge"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
         ${GF.icon('arrowR','icon','var(--ink-3)')}
         <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depName(toDept))}</span>
-        <div class="spacer"></div>
-        <button class="btn btn-orange btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.esc(GF.depName(toDept))}','success')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
       </div>` : '';
 
     const body = `
@@ -222,7 +220,6 @@ GF.render = {
           <button class="mini-btn ai" title="${GF.t('paraphrase')}" onclick="GF.ai.paraphraseInput('${noteId}')">${GF.icon('sparkle')}</button>
           <button class="mini-btn" style="color:var(--blue)" onclick="GF.addNote('${t.id}')">${GF.icon('plus')}</button>
         </div>
-        ${deps ? `<div class="sec-label">${GF.icon('link','icon')}${GF.t('deps')}</div><div class="deps">${deps}</div>` : ''}
         ${handoff}
         <div class="card-actions">
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">${GF.icon('clock','icon','var(--blue)')}${GF.t('log_work')}</button>
@@ -233,7 +230,6 @@ GF.render = {
           <span class="mono" style="font-size:12px;color:var(--ink-2);font-weight:600">${prog}%</span>
           <div class="spacer"></div>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
-          <button class="btn btn-sm btn-danger" onclick="GF.deleteTask('${t.id}')">${GF.icon('trash','icon')}${GF.t('delete')}</button>
         </div>
       </div>`;
     return `<div class="card s-${t.status} expanded">${head}${body}</div>`;

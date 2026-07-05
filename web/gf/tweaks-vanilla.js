@@ -2,6 +2,16 @@
    Three expressive axes: Character · Palette · Density.
    Persists to localStorage as gf_tweaks_v1. */
 (function () {
+  // The live design-tweaks EDITOR is a design-time tool, not a shipped user
+  // feature — its floating panel/toggle only mount when explicitly opted in
+  // (localStorage gf_design='1' or ?design=1) so normal users never see it.
+  // Applying a PREVIOUSLY saved gf_tweaks_v1 customization is a separate
+  // concern that must always run (see the unconditional applyAll() call
+  // below) — gating that too would silently stop honoring a customization
+  // someone saved before this opt-in was added.
+  var _designMode = false;
+  try { _designMode = localStorage.getItem('gf_design') === '1' || /[?&]design=1(&|$)/.test(location.search); } catch (e) {}
+
   /* ── Presets ───────────────────────────────────────────────────────── */
   const CHAR = {
     Clinical: {
@@ -87,6 +97,8 @@
       ${S.character==='Bold' ? '.btn{border-radius:14px!important}' : ''}
     `;
   }
+  applyAll();   // reapply any previously saved customization for every visitor
+  if (!_designMode) return;   // everything below builds/mounts the editor UI
 
   /* ── Panel HTML ── */
   function buildPanel() {
@@ -230,9 +242,5 @@
   document.body.appendChild(panel);
   document.body.appendChild(toggle);
 
-  applyAll();
-  render();
-
-  // Now tackle the OOS deep-link: when viewOOS is called, scroll/jump to current phase
-  // (see separate OOS enhancement below)
+  render();   // sync the panel's active-option highlighting to the state applyAll() already applied
 })();
