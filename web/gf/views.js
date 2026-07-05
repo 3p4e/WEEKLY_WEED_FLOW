@@ -12,8 +12,10 @@ GF.views = {
   /* ── Board: kanban by status ───────────────────────────── */
   board() {
     const tasks = GF.visibleTasks(GF.state.selWeek);
-    const cols = GF.STATUS_ORDER.filter(s => s !== 'postponed');
-    const colColor = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)', stuck:'var(--red)', done:'var(--green)' };
+    // Include postponed as its own column — filtering it out silently dropped
+    // every postponed task from the board while it still counted elsewhere.
+    const cols = GF.STATUS_ORDER.slice();
+    const colColor = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)', stuck:'var(--red)', postponed:'var(--amber)', done:'var(--green)' };
     const body = cols.map(s => {
       const items = tasks.filter(t => t.status === s);
       return `<div class="kcol">
@@ -42,7 +44,7 @@ GF.views = {
 
   /* ── Timeline: day columns across the week ─────────────── */
   timeline() {
-    const tasks = GF.weekTasks(GF.state.selWeek);
+    const tasks = GF.scopedTasks(GF.state.selWeek);
     const days = GF.DAYS.slice(0, 5);
     const cols = days.map(day => {
       const items = tasks.filter(t => (t.days||[]).includes(day));
@@ -63,11 +65,10 @@ GF.views = {
 
   /* ── Coordination: cross-department handoffs ───────────── */
   coord() {
-    const tasks = GF.weekTasks(GF.state.selWeek);
+    const tasks = GF.scopedTasks(GF.state.selWeek);
     const rows = tasks.filter(t => GF.HANDOFF[t.dept]).map(t => {
       const from = GF.dep(t.dept), toId = GF.HANDOFF[t.dept], to = GF.dep(toId);
       const ready = t.status === 'done';
-      const blockedDeps = (t.deps||[]).map(id=>GF.task(id)).filter(x=>x && x.status!=='done');
       return `<div class="coord-row ${ready?'ready':''}">
         <div class="coord-task">
           <div class="coord-title">${GF.esc(t.title)}</div>
@@ -79,10 +80,9 @@ GF.views = {
           <span class="hbadge"><span class="chip-dept">${GF.icon(to.icon,'icon',to.color)}</span>${GF.esc(GF.depName(toId))}</span>
         </div>
         <div class="coord-status">
-          ${ready ? `<span class="coord-tag ok">${GF.icon('check','icon','#fff')}Ready</span>`
-            : blockedDeps.length ? `<span class="coord-tag wait">${GF.icon('clock','icon')}Waiting on ${blockedDeps.length}</span>`
+          ${ready ? `<span class="coord-tag ok">${GF.icon('check','icon','#fff')}${AL('Ready','Подготвено')}</span>`
             : `<span class="coord-tag prog">${GF.icon('clock','icon')}${GF.statusLabel(t.status)}</span>`}
-          <button class="btn btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.esc(GF.depName(toId))}','success')">${GF.t('request_handoff')}</button>
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.requestHandoff&&GF.WWF.requestHandoff('${toId}')">${GF.t('request_handoff')}</button>
         </div>
       </div>`;
     }).join('');
@@ -92,7 +92,7 @@ GF.views = {
 
   /* ── Dashboard: production overview ────────────────────── */
   dash() {
-    const all = GF.weekTasks(GF.state.selWeek);
+    const all = GF.scopedTasks(GF.state.selWeek);
     const n = all.length;
     const by = s => all.filter(t => t.status === s).length;
     const rate = n ? Math.round(by('done')/n*100) : 0;
@@ -146,10 +146,11 @@ GF.views = {
     // existing task cards still resolve a name/avatar, but they must not
     // reappear in the active roster list itself.
     const ids = Object.keys(GF.PEOPLE).filter(id => !GF.PEOPLE[id].inactive);
-    // Team VIEW is reachable by any elevated role (nav gate = GF.can('team')),
-    // but the add/edit/remove controls are provisioning — admin or a department
-    // manager only (executives see the roster read-only). integrate.js defines
-    // canProvision; fall back to the perms gate if it hasn't loaded yet.
+    // The Team nav item renders for everyone (render.sidebar has no per-role
+    // filter); the add/edit/remove controls are the real gate — provisioning is
+    // admin or a department manager only (executives see the roster read-only).
+    // integrate.js defines canProvision; fall back to the perms gate if it
+    // hasn't loaded yet.
     const canManage = GF.WWF && GF.WWF.canProvision ? GF.WWF.canProvision() : GF.can('team');
     const cards = ids.map(id => {
       const p = GF.PEOPLE[id];

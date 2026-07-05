@@ -7,7 +7,7 @@ GF.voice = {
   /* Inline dictation into an input field (mic toggle) */
   dictate(inputId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { GF.toast('Speech recognition not supported in this browser', 'error'); return; }
+    if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
     if (this._rec) { this._rec.stop(); this._rec = null; this._setMicUI(inputId, false); return; }
 
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
@@ -22,7 +22,7 @@ GF.voice = {
       }
       const el = GF.$(inputId); if (el) el.value = (final + interim).trim();
     };
-    rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast('Mic error: ' + e.error, 'error'); };
+    rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast(AL('Mic error: ', 'Грешка со микрофон: ') + e.error, 'error'); };
     rec.onend = () => { this._rec = null; this._setMicUI(inputId, false); };
     rec.start(); this._rec = rec;
     this._setMicUI(inputId, true);
@@ -67,8 +67,8 @@ GF.voice = {
     GF.$('voice-content').innerHTML = `
       <div class="mic-stage">
         <div style="display:flex;gap:2px;background:rgba(255,255,255,.1);border-radius:9px;padding:3px;font-size:12px;font-weight:700">
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en')">EN</span>
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk')">МК</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en');GF.voice._renderCapture()">EN</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk');GF.voice._renderCapture()">МК</span>
         </div>
         <div style="font-size:11px;font-weight:700;letter-spacing:.4px;color:rgba(255,255,255,.55);text-transform:uppercase">${live ? GF.t('listening') : GF.t('speak_task')}</div>
         <div class="mic-rings">
@@ -85,7 +85,7 @@ GF.voice = {
 
   toggleCaptureMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { GF.toast('Speech not supported', 'error'); return; }
+    if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
     if (this._modalRec) { this._modalRec.stop(); this._modalRec = null; this._renderCapture(); return; }
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
     const rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = lang;

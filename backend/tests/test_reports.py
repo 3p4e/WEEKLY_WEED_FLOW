@@ -137,6 +137,36 @@ async def test_non_elevated_hours_by_person_scoped_to_self(client, admin_headers
     assert len(r.json()["hours_by_person"]) == 2
 
 
+async def test_department_filter_scopes_hours_by_person(client, admin_headers, org):
+    """Regression: department_id now scopes hours_by_person / the time-band too
+    (work_sessions filtered by their task's department). It used to filter only
+    the tasks list, so a dept-filtered report still mixed in other departments'
+    hours."""
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'),($1,'qc','QC')"
+        " RETURNING id, code", org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+
+    r = await client.post("/tasks", json={"title": "Cult task", "status": "ongoing",
+        "department_id": dept["cult"]}, headers=admin_headers)
+    await client.post(f"/tasks/{r.json()['id']}/sessions",
+        json={"started_at": "2026-07-04T10:00:00", "hours": 3}, headers=admin_headers)
+    r = await client.post("/tasks", json={"title": "QC task", "status": "ongoing",
+        "department_id": dept["qc"]}, headers=admin_headers)
+    await client.post(f"/tasks/{r.json()['id']}/sessions",
+        json={"started_at": "2026-07-04T12:00:00", "hours": 5}, headers=admin_headers)
+
+    # Filtered to Cultivation → only the 3h cult session.
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04", "department_id": dept["cult"]},
+                         headers=admin_headers)
+    assert r.status_code == 200, r.text
+    hbp = r.json()["hours_by_person"]
+    assert sum(p["total"] for p in hbp) == 3.0
+    # Unfiltered → both sessions (8h).
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=admin_headers)
+    assert sum(p["total"] for p in r.json()["hours_by_person"]) == 8.0
+
+
 async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):
     """Effort capture flows through to the report: hours entered on tasks sum
     into summary.estimated_hours / actual_hours (drives the Hours stat card)."""

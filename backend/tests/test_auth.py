@@ -247,3 +247,117 @@ async def test_admin_creates_managers_and_executives(client, admin_headers):
         "username": "another_admin", "full_name": "Nope", "role": "ADMIN",
     }, headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_create_user_rejects_unknown_department(client, admin_headers):
+    """department_id is a bare uuid (departments live in the tasks DB, no FK) —
+    create_user now validates it against a real department for the org."""
+    r = await client.post("/auth/users", json={
+        "username": "baddept", "full_name": "X", "role": "USER",
+        "department_id": "00000000-0000-0000-0000-000000000000",
+    }, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_admin_reset_password_flow(client, admin_headers):
+    """The reported gap, now built: an admin resets another account's password
+    to a fresh one-time password. The old password stops working immediately
+    and the OTP forces a change on next login (same as account creation)."""
+    user, otp = await create_user(client, admin_headers, role="USER")
+    await login_and_set_password(client, user["username"], otp)  # sets NewPassword123456
+    r = await client.post("/auth/login", json={"email": user["username"], "password": "NewPassword123456"})
+    assert r.status_code == 200
+
+    r = await client.post(f"/auth/users/{user['id']}/reset-password", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    new_otp = r.json()["otp"]
+    assert new_otp and new_otp != otp
+    assert r.json()["user"]["must_change_password"] is True
+
+    # The account's previous password no longer works...
+    r = await client.post("/auth/login", json={"email": user["username"], "password": "NewPassword123456"})
+    assert r.status_code == 401
+    # ...and the fresh OTP works and forces a change.
+    r = await client.post("/auth/login", json={"email": user["username"], "password": new_otp})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["must_change_password"] is True
+
+
+async def test_reset_password_authorization(client, admin_headers, org):
+    """Same gate as create/delete: a manager may reset only a USER in their own
+    department — never another department's user, a peer manager, or an ADMIN.
+    An admin can't reset its own account (that's change-password's job)."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+
+    r = await client.post("/auth/users", json={"username": "mgr_a", "full_name": "Mgr A",
+        "role": "QC_MGR", "department_id": dept["a"]}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+
+    async def mk(username, role, dept_id):
+        r = await client.post("/auth/users", json={"username": username, "full_name": username,
+            "role": role, "department_id": dept_id}, headers=admin_headers)
+        assert r.status_code == 201, r.text
+        return r.json()["user"]["id"]
+    user_a = await mk("ru_a", "USER", dept["a"])
+    user_b = await mk("ru_b", "USER", dept["b"])
+    peer = await mk("ru_peer", "PR_MGR", dept["a"])
+
+    assert (await client.post(f"/auth/users/{user_a}/reset-password", headers=mgr_h)).status_code == 200
+    assert (await client.post(f"/auth/users/{user_b}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{peer}/reset-password", headers=mgr_h)).status_code == 403
+    assert (await client.post(f"/auth/users/{org['admin_id']}/reset-password", headers=mgr_h)).status_code == 403
+    # Admin resetting its own account → 400 (use change-password instead).
+    assert (await client.post(f"/auth/users/{org['admin_id']}/reset-password", headers=admin_headers)).status_code == 400
+
+
+async def test_update_user_edit(client, admin_headers, org):
+    """Full edit-person: admin renames + changes role/department/title. ADMIN is
+    never assignable via edit (422); an unknown department is rejected (422)."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    r = await client.post("/auth/users", json={"username": "editme", "full_name": "Before",
+        "role": "USER", "department_id": dept["a"]}, headers=admin_headers)
+    uid = r.json()["user"]["id"]
+
+    r = await client.patch(f"/auth/users/{uid}", json={"full_name": "After", "role": "QC_MGR",
+        "department_id": dept["b"], "function_role": "QC Lead"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["full_name"] == "After" and body["role"] == "QC_MGR"
+    assert body["department_id"] == dept["b"] and body["function_role"] == "QC Lead"
+
+    assert (await client.patch(f"/auth/users/{uid}", json={"role": "ADMIN"}, headers=admin_headers)).status_code == 422
+    assert (await client.patch(f"/auth/users/{uid}",
+        json={"department_id": "00000000-0000-0000-0000-000000000000"}, headers=admin_headers)).status_code == 422
+
+
+async def test_update_user_manager_confined(client, admin_headers, org):
+    """A manager may rename a USER in their own department, but may not move that
+    user to another department or promote them to a manager role."""
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'a','A'),($1,'b','B') RETURNING id, code",
+        org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    r = await client.post("/auth/users", json={"username": "mgr2", "full_name": "Mgr",
+        "role": "QC_MGR", "department_id": dept["a"]}, headers=admin_headers)
+    mgr, motp = r.json()["user"], r.json()["otp"]
+    mgr_h = {"Authorization": f"Bearer {await login_and_set_password(client, mgr['username'], motp)}"}
+    r = await client.post("/auth/users", json={"username": "staff", "full_name": "Staff",
+        "role": "USER", "department_id": dept["a"]}, headers=admin_headers)
+    uid = r.json()["user"]["id"]
+
+    # Rename in own dept → 200.
+    assert (await client.patch(f"/auth/users/{uid}", json={"full_name": "Renamed"}, headers=mgr_h)).status_code == 200
+    # Move to another dept → 403.
+    assert (await client.patch(f"/auth/users/{uid}", json={"department_id": dept["b"]}, headers=mgr_h)).status_code == 403
+    # Promote to a manager role → 403.
+    assert (await client.patch(f"/auth/users/{uid}", json={"role": "PR_MGR"}, headers=mgr_h)).status_code == 403

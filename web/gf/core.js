@@ -205,6 +205,20 @@ GF.visibleTasks = (weekId) => {
     return true;
   });
 };
+// Like visibleTasks but WITHOUT the day filter — for views that present their
+// own day dimension (Timeline) or aggregate the whole week (Coordination,
+// Dashboard). Still applies dept/tag/search so the sidebar filter is honored
+// there too (they previously used unfiltered weekTasks and ignored it).
+GF.scopedTasks = (weekId) => {
+  const { deptFilter, tagFilter, search } = GF.state;
+  const q = search.trim().toLowerCase();
+  return GF.weekTasks(weekId).filter(t => {
+    if (deptFilter && t.dept !== deptFilter) return false;
+    if (tagFilter && !(t.tags || []).includes(tagFilter)) return false;
+    if (q && !(`${t.title} ${t.id}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+};
 GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(); };
 
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };

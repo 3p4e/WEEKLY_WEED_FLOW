@@ -35,7 +35,9 @@ GF.render = {
     GF.$('search-input').placeholder = GF.t('search');
     GF.$('voice-btn-label').textContent = GF.t('voice_task');
     const nl = GF.$('newtask-label'); if (nl) nl.textContent = GF.t('new_task_btn');
-    const nb = GF.$('newtask-btn'); if (nb && window.APP && APP.mode === 'prod') nb.style.display = GF.can('create') ? '' : 'none';
+    // Gate the header New-task button on the real create permission. (Was
+    // guarded by a never-defined `window.APP`, so it never ran — inert dead code.)
+    const nb = GF.$('newtask-btn'); if (nb) nb.style.display = GF.can('create') ? '' : 'none';
     GF.$('header-avatar').outerHTML = `<div id="header-avatar">${GF.avatar(GF.state.user, 38, true)}</div>`;
   },
 
@@ -197,8 +199,6 @@ GF.render = {
 
     const noteId = 'note-' + t.id;
     const notes = (t.notes || []).map(n => `<div class="note"><span class="nd">${GF.dayLabel(n.d)}</span><span>${GF.esc(n.n)}</span></div>`).join('');
-    const deps = (t.deps || []).map(id => { const dt = GF.task(id); if (!dt) return ''; const met = dt.status === 'done';
-      return `<span class="dep-chip ${met ? 'met' : 'unmet'}">${GF.icon('link','icon')}${GF.esc(dt.title.slice(0, 28))}</span>`; }).join('');
     const toDept = GF.HANDOFF[t.dept];
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>
@@ -207,7 +207,7 @@ GF.render = {
         ${GF.icon('arrowR','icon','var(--ink-3)')}
         <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depName(toDept))}</span>
         <div class="spacer"></div>
-        <button class="btn btn-orange btn-sm" onclick="GF.toast('${GF.t('request_handoff')} → ${GF.esc(GF.depName(toDept))}','success')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
+        <button class="btn btn-orange btn-sm" onclick="GF.WWF&&GF.WWF.requestHandoff&&GF.WWF.requestHandoff('${toDept}')">${GF.icon('arrowR','icon','#fff')}${GF.t('request_handoff')}</button>
       </div>` : '';
 
     const body = `
@@ -222,7 +222,6 @@ GF.render = {
           <button class="mini-btn ai" title="${GF.t('paraphrase')}" onclick="GF.ai.paraphraseInput('${noteId}')">${GF.icon('sparkle')}</button>
           <button class="mini-btn" style="color:var(--blue)" onclick="GF.addNote('${t.id}')">${GF.icon('plus')}</button>
         </div>
-        ${deps ? `<div class="sec-label">${GF.icon('link','icon')}${GF.t('deps')}</div><div class="deps">${deps}</div>` : ''}
         ${handoff}
         <div class="card-actions">
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">${GF.icon('clock','icon','var(--blue)')}${GF.t('log_work')}</button>

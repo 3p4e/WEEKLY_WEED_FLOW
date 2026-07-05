@@ -76,6 +76,8 @@ GF.API = {
   directory()      { return this._req('GET', '/auth/directory'); },
   listUsers()      { return this._req('GET', '/auth/users'); },
   createUser(body) { return this._req('POST', '/auth/users', body); },
+  updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
+  resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
 
   departments() { return this._req('GET', '/departments'); },

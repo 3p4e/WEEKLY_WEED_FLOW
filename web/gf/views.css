@@ -16,7 +16,7 @@
 .kempty{color:var(--ink-3);font-size:13px;padding:14px 6px;text-align:center}
 
 /* ── Board (kanban) ── */
-.kboard{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+.kboard{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:start}
 .kcol{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:10px;min-height:120px}
 .kcol-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;color:var(--ink-2);padding:4px 4px 10px}
 .kcol-head .dot{width:8px;height:8px;border-radius:999px}

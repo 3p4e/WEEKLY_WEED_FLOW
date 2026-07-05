@@ -104,8 +104,18 @@ GF.WWF.submitWorklog = async () => {
   }
   // No offset = facility wall-clock (Europe/Skopje) — backend interprets it so.
   const body = { started_at: `${date}T${start}:00`, note, source: 'manual' };
-  if (end) body.ended_at = `${date}T${end}:00`;
-  else body.hours = hoursRaw;
+  if (end) {
+    // An end time at or before the start means the shift crossed midnight —
+    // roll ended_at to the next day so a 22:00→01:00 session logs instead of
+    // 422-ing on "ended_at must be after started_at".
+    let endDate = date;
+    if (end <= start) {
+      const d = new Date(date + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      endDate = d.toISOString().slice(0, 10);
+    }
+    body.ended_at = `${endDate}T${end}:00`;
+  } else body.hours = hoursRaw;
   try {
     const s = await GF.API.addSession(st.taskId, body);
     GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
@@ -157,7 +167,7 @@ GF.WWF.saveOutcome = async (taskId) => {
     await GF.API.updateTask(taskId, { outcome: v });
     const t = GF.task(taskId); if (t) t.outcome = v;
     GF.toast(GF.t('outcome') + ' ✓', 'success');
-  } catch (e) { GF.toast('Save failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Blocker prompt (on stuck) ─────────────────────────────────────────── */
@@ -187,7 +197,7 @@ GF.WWF.saveBlocker = async (taskId) => {
     await GF.API.updateTask(taskId, { blocker_reason: v });
     const t = GF.task(taskId); if (t) { t.blocker = v; GF.render.panels(); }
     GF.toast(GF.t('blocker') + ' ✓', 'success');
-  } catch (e) { GF.toast('Save failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Archive (PATCH is_archived — backend list excludes archived by default) ── */
@@ -201,13 +211,14 @@ GF.WWF.archiveTask = async (taskId) => {
     GF.state.expanded.delete(taskId);
     GF.render.all();
     GF.toast(GF.t('archive') + ' ✓', 'success');
-  } catch (e) { GF.toast('Archive failed: ' + e.message, 'error'); }
+  } catch (e) { GF.toast(AL('Archive failed: ', 'Неуспешно архивирање: ') + e.message, 'error'); }
 };
 
 /* ── Edit task — reuses the add modal, submitAdd PATCHes when _editTask set ── */
 GF.WWF.openEdit = (taskId) => {
   const t = GF.task(taskId); if (!t) return;
   if (!GF.can('edit', t)) return GF.denyToast();
+  GF._fromEdit = true;             // openAdd re-checks 'create' otherwise
   GF.openAdd(t.weekId);            // builds the form (resets _editTask/_addParent)
   GF._editTask = taskId;
   GF.$('add-title').value = t.title;
@@ -221,4 +232,7 @@ GF.WWF.openEdit = (taskId) => {
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });
+  // openAdd defaulted the modal to create-mode labels — flip to edit.
+  if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('edit_task');
+  if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('save');
 };

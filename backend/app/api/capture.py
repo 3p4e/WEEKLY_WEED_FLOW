@@ -14,6 +14,7 @@ Two ways in:
     static CAPTURE_IMPORT_TOKEN and acts as the configured capture user
     (qcm.blani). The token is valid ONLY on this route.
 """
+import hmac
 import os
 from datetime import date, datetime, timedelta
 
@@ -98,7 +99,9 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     honored on this route) acting as the configured capture user."""
     token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
     username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
-    if not token or not authorization or authorization != f"Bearer {token}":
+    # Constant-time compare so the static token can't be recovered byte-by-byte
+    # via response-timing (same reason security.py always pays the bcrypt cost).
+    if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
         return None
     row = await users_admin_pool().fetchrow(
         "SELECT id, org_id, username, full_name, role, department_id, function_role,"

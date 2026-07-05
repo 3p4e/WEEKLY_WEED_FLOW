@@ -135,24 +135,35 @@ async def weekly_report(
             # owner/assignee-scoped like tasks_read, so without this filter a
             # regular user would get every colleague's hours and activity.
             elevated = user["role"] in _ELEVATED
-            who = "" if elevated else " AND user_id = $3"
-            who_args = [] if elevated else [user["id"]]
+            # Build the shared window/who/department scoping once so the events
+            # feed and the per-person hours agree. department_id filters
+            # task_progress/work_sessions by their task's department (neither
+            # table carries department_id itself) — without it a dept-filtered
+            # report mixed in every department's hours.
+            band_args: list = [fri, thu]
+            who = ""
+            if not elevated:
+                band_args.append(user["id"]); who = f" AND user_id = ${len(band_args)}"
+            dept_sub = ""
+            if department_id:
+                band_args.append(department_id)
+                dept_sub = f" AND task_id IN (SELECT id FROM tasks WHERE department_id=${len(band_args)})"
 
             events = await c.fetch(
                 "SELECT created_at AS at FROM task_progress "
-                f"WHERE created_at >= $1::date AND created_at < ($2::date + 1){who} "
+                f"WHERE created_at >= $1::date AND created_at < ($2::date + 1){who}{dept_sub} "
                 "UNION ALL "
                 "SELECT started_at AS at FROM work_sessions "
-                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who} "
+                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who}{dept_sub} "
                 "ORDER BY at",
-                fri, thu, *who_args,
+                *band_args,
             )
 
             # Per-person regular/overtime/night/weekend from work sessions.
             sess = await c.fetch(
                 "SELECT user_id, started_at, ended_at, hours FROM work_sessions "
-                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who}",
-                fri, thu, *who_args,
+                f"WHERE started_at >= $1::date AND started_at < ($2::date + 1){who}{dept_sub}",
+                *band_args,
             )
             for s in sess:
                 uid = str(s["user_id"])

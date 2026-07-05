@@ -232,6 +232,95 @@ async def test_invalid_status_rejected_with_422(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_bad_priority_rejected_with_422(client, admin_headers):
+    """priority gained API-layer validation (the wire set low/normal/medium/
+    high/critical). Garbage would otherwise store silently and sort last in
+    every priority-ordered view with no indication anything was wrong."""
+    r = await client.post("/tasks", json={"title": "x", "priority": "URGENT!!"}, headers=admin_headers)
+    assert r.status_code == 422
+    # The value the GrowFlow UI actually sends for medium must stay accepted.
+    r = await client.post("/tasks", json={"title": "ok", "priority": "normal"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_unknown_fk_fields_return_422_not_500(client, admin_headers):
+    """A well-formed but non-existent week_id/department_id/parent_id must be a
+    clean 422, not a raw 500 from an uncaught ForeignKeyViolation."""
+    ghost = "00000000-0000-0000-0000-000000000000"
+    for field in ("week_id", "department_id", "parent_id"):
+        r = await client.post("/tasks", json={"title": "fk probe", field: ghost}, headers=admin_headers)
+        assert r.status_code == 422, f"{field}: {r.status_code} {r.text}"
+    # PATCH path too.
+    r = await client.post("/tasks", json={"title": "real"}, headers=admin_headers)
+    tid = r.json()["id"]
+    r = await client.patch(f"/tasks/{tid}", json={"week_id": ghost}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_recurrence_until_bad_date_rejected_at_create(client, admin_headers):
+    """A malformed recurrence.until is validated up front (422) — otherwise it
+    only blows up later, inside the completion transaction, permanently 500-ing
+    (and rolling back) every attempt to complete that task."""
+    r = await client.post("/tasks", json={
+        "title": "bad recurrence", "recurrence": {"freq": "weekly", "interval": 1, "until": "not-a-date"}},
+        headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_recurring_next_instance_carries_week_id(client, admin_headers, org):
+    """When a weekly-recurring task completes, its spawned next instance must
+    resolve the next calendar week's id (not just week_start), or it vanishes
+    from ?week_id= week views."""
+    await tasks_admin_pool().execute(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
+        " ($1,2026,10,'2026-03-02','2026-03-08'), ($1,2026,11,'2026-03-09','2026-03-15')", org["org_id"])
+    weeks = {w["iso_week"]: w for w in (await client.get("/weeks", headers=admin_headers)).json()}
+    wk_a, wk_b = weeks[10], weeks[11]
+
+    r = await client.post("/tasks", json={
+        "title": "Weekly line check", "status": "ongoing",
+        "recurrence": {"freq": "weekly", "interval": 1},
+        "week_id": wk_a["id"], "week_start": "2026-03-02", "due_date": "2026-03-06"},
+        headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+
+    r = await client.patch(f"/tasks/{task_id}", json={"status": "completed"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    nxt = r.json().get("next_instance")
+    assert nxt is not None, "completing a recurring task should spawn the next instance"
+    assert nxt["week_id"] == wk_b["id"]
+    assert str(nxt["week_start"]) == "2026-03-09"
+
+    # And it actually shows up when listing next week.
+    r = await client.get(f"/tasks?week_id={wk_b['id']}", headers=admin_headers)
+    assert any(t["id"] == nxt["id"] for t in r.json())
+
+
+async def test_delete_link_requires_task_visibility(client, admin_headers):
+    """Regression (IDOR): task_links' only RLS policy is org_isolation, so
+    delete_link must look the task up under RLS first — otherwise any org
+    member who knows a link id could delete links on a task they can't see."""
+    from tests.conftest import create_user, login_and_set_password
+    # Admin creates a task and a link on it.
+    r = await client.post("/tasks", json={"title": "Admin task with link"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    r = await client.post(f"/tasks/{task_id}/links", json={"url": "https://example.com/sop"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    link_id = r.json()["id"]
+
+    # A plain USER who is not owner/assignee/elevated can't see the task...
+    user, otp = await create_user(client, admin_headers, role="USER")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    r = await client.delete(f"/tasks/{task_id}/links/{link_id}", headers=headers)
+    assert r.status_code == 404, r.text
+
+    # ...and the link is still there for the admin.
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert any(l["id"] == link_id for l in r.json()["links"])
+
+
 async def test_negative_hours_rejected_with_422(client, admin_headers):
     r = await client.post("/tasks", json={"title": "Bad estimate", "estimated_hours": -1}, headers=admin_headers)
     assert r.status_code == 422

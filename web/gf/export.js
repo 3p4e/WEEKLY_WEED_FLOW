@@ -20,7 +20,7 @@ GF.export = {
     if (fmt === 'csv') this._csv(base, w, tasks, u);
     if (fmt === 'json') this._json(base, w, tasks, u);
     if (fmt === 'pdf') this._pdf(base, w, tasks, u, kind);
-    GF.toast(`${fmt.toUpperCase()} exported`, 'success');
+    GF.toast(fmt.toUpperCase() + AL(' exported', ' е извезен'), 'success');
   },
 
   _download(content, name, mime) {

@@ -23,7 +23,10 @@ GF.deleteTask = (taskId) => {
 GF.TASK_TYPES = ['capa', 'sop', 'validation', 'document', 'lab', 'meeting', 'admin', 'other'];
 
 GF.openAdd = (weekId, parentId) => {
-  if (!GF.can('create')) return GF.denyToast();
+  // openEdit (worklog.js) already checked GF.can('edit', t) — don't re-deny on
+  // 'create', which could wrongly block an allowed edit if the two perms ever diverge.
+  if (!GF._fromEdit && !GF.can('create')) return GF.denyToast();
+  GF._fromEdit = false;
   GF._addWeek = weekId;
   GF._addParent = parentId || null;   // "Add subtask" presets the parent
   GF._editTask = null;                // openEdit (worklog.js) flips this to PATCH mode
@@ -60,6 +63,10 @@ GF.openAdd = (weekId, parentId) => {
       <div class="field" style="flex:1"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
     </div>
     <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
+  // Default to create-mode labels; worklog.js's openEdit flips these to
+  // "Edit task" / "Save" after it sets GF._editTask.
+  if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('new_task');
+  if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('create_task');
   GF.openModal('add-modal');
 };
 GF.submitAdd = () => {
