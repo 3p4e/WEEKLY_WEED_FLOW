@@ -38,7 +38,13 @@ GF.render = {
     // Gate the header New-task button on the real create permission. (Was
     // guarded by a never-defined `window.APP`, so it never ran — inert dead code.)
     const nb = GF.$('newtask-btn'); if (nb) nb.style.display = GF.can('create') ? '' : 'none';
-    GF.$('header-avatar').outerHTML = `<div id="header-avatar">${GF.avatar(GF.state.user, 38, true)}</div>`;
+    // The header avatar is YOU (the logged-in user) — make it open Settings on
+    // the Account tab, like the gear beside it and the sidebar user-card. It
+    // looked like a button but had no handler, so tapping it did nothing.
+    const meName = (GF.PEOPLE[GF.state.user] || {}).name || '';
+    GF.$('header-avatar').outerHTML = `<div id="header-avatar" onclick="GF.openSettings('account')"`
+      + ` style="cursor:pointer" title="${GF.esc(meName)} — ${AL('Account & settings', 'Сметка и поставки')}">`
+      + `${GF.avatar(GF.state.user, 38, true)}</div>`;
   },
 
   sidebar() {
@@ -79,7 +85,9 @@ GF.render = {
       <div class="week-dates">${w.label}, ${w.year}</div>
       ${isNow ? `<span class="badge-now">${GF.t('this_week_badge')}</span>` : ''}
       <div class="spacer"></div>
-      ${GF.avatars(active, 30)}`;
+      ${active.length ? `<div onclick="GF.setView('team')" style="cursor:pointer"`
+        + ` title="${AL('People active this week — open Team', 'Активни оваа недела — отвори Тим')}">`
+        + `${GF.avatars(active, 30)}</div>` : ''}`;
   },
 
   dayPills() {
