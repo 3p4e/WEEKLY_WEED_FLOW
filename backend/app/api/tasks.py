@@ -177,8 +177,10 @@ class TaskPatch(BaseModel):
     description: str | None = None
     status: Status | None = None
     priority: Priority | None = None
-    workflow_state: str | None = None
+    workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
     task_type: TaskType | None = None
+    department: str | None = None
+    department_id: str | None = None
     reference_code: str | None = None
     external_ref: str | None = None
     blocker_reason: str | None = None
@@ -260,12 +262,21 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         args.append(val); fields.append(f"{col}=${len(args)}")
     if not fields:
         return {"ok": True, "noop": True}
-    # Completing a task stamps completed_date unless the caller set one.
+    # Completing a task stamps completed_date unless the caller set one;
+    # reopening it (status moves away from completed) clears the stale stamp
+    # unless the caller is explicitly setting completed_date themselves.
     if patch.get("status") == "completed" and "completed_date" not in patch:
         args.append(date.today()); fields.append(f"completed_date=${len(args)}")
+    elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
+        args.append(None); fields.append(f"completed_date=${len(args)}")
     args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
     args.append(task_id)
     async with rls(user) as c:
+        # Capture the pre-update status so a repeated/retried PATCH that sets
+        # status='completed' on an ALREADY-completed recurring task doesn't
+        # re-materialize a duplicate next instance (recurrence isn't cleared
+        # on completion, so this check is the only idempotency guard).
+        prev_status = await c.fetchval("SELECT status FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         try:
             row = await c.fetchrow(
                 f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
@@ -275,8 +286,9 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         if row is None:
             raise HTTPException(404, "Task not found or not permitted")
         out = dict(row)
-        # A recurring task that just completed spawns its next instance.
-        if patch.get("status") == "completed" and row["recurrence"]:
+        # A recurring task that just completed (and wasn't already completed)
+        # spawns its next instance.
+        if patch.get("status") == "completed" and prev_status != "completed" and row["recurrence"]:
             nxt = await _materialize_recurrence(c, row)
             if nxt:
                 out["next_instance"] = nxt

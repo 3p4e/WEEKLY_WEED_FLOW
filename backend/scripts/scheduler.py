@@ -63,8 +63,10 @@ def last_fire(now: datetime, tz) -> datetime:
     return next_fire(now, tz) - timedelta(days=7)
 
 
-async def _already_ran(since: datetime) -> bool:
-    """True if any org already has a weekly_report pin created at/after *since*."""
+async def _already_ran(since: datetime, org_id) -> bool:
+    """True if THIS org already has a weekly_report pin created at/after
+    *since* — checked per-org so one organization's success can't mask a
+    different organization's failure and skip its missed-run recovery."""
     dsn = os.environ.get("TASKS_ADMIN_DATABASE_URL", "")  # ai_pins live in the tasks DB
     if not dsn:
         return False
@@ -74,14 +76,31 @@ async def _already_ran(since: datetime) -> bool:
         # pass it as-is (converting wall-clock and relabelling the tzinfo
         # would silently shift the boundary by the UTC offset).
         n = await conn.fetchval(
-            "SELECT count(*) FROM ai_pins WHERE function_key='weekly_report' AND created_at >= $1",
-            since)
+            "SELECT count(*) FROM ai_pins WHERE function_key='weekly_report' "
+            "AND org_id=$1 AND created_at >= $2",
+            org_id, since)
         return (n or 0) > 0
     except Exception as e:
         snap.log(f"missed-run check failed: {type(e).__name__} — assuming not run")
         return False
     finally:
         await conn.close()
+
+
+async def _orgs_needing_recovery(since: datetime) -> list:
+    """Org ids/names that don't yet have a weekly_report pin at/after *since*."""
+    dsn = os.environ.get("USERS_ADMIN_DATABASE_URL", "")
+    if not dsn:
+        return []
+    uconn = await asyncpg.connect(dsn)
+    try:
+        orgs = await uconn.fetch("SELECT id, name FROM organizations")
+    except Exception as e:
+        snap.log(f"org list fetch failed: {type(e).__name__} — skipping recovery")
+        return []
+    finally:
+        await uconn.close()
+    return [o for o in orgs if not await _already_ran(since, o["id"])]
 
 
 async def _startup_selfheal():
@@ -108,14 +127,16 @@ async def main():
 
     await _startup_selfheal()
 
-    # Missed-run recovery.
+    # Missed-run recovery — per-org, so one org's success doesn't mask a
+    # different org's failure and skip its retry.
     lf = last_fire(now, tz)
-    if (now - lf).total_seconds() <= GRACE_HOURS * 3600 and not await _already_ran(lf):
-        snap.log(f"missed-run recovery: running now for {lf.date().isoformat()}")
-        try:
-            await snap.run_all(lf.date())
-        except Exception as e:
-            snap.log(f"recovery run failed: {type(e).__name__}: {e}")
+    if (now - lf).total_seconds() <= GRACE_HOURS * 3600:
+        for o in await _orgs_needing_recovery(lf):
+            snap.log(f"missed-run recovery: running now for org {o['name']} {lf.date().isoformat()}")
+            try:
+                await snap.run_all(lf.date(), only_org=o["id"])
+            except Exception as e:
+                snap.log(f"recovery run failed for org {o['name']}: {type(e).__name__}: {e}")
 
     while True:
         # Pick the fire target ONCE, then sleep toward it in chunks. The

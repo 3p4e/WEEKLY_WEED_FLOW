@@ -106,7 +106,14 @@ async def weekly_report(
 
     async with rls(user) as c:
         if mode == "report":
-            args: list = [fri, thu]
+            # $3 = TZ.key (e.g. "Europe/Skopje"): every timestamptz column is
+            # converted to facility-local wall-clock time BEFORE comparing
+            # against the plain fri/thu dates below — otherwise Postgres
+            # resolves the date casts in the session's (UTC) TimeZone GUC,
+            # miscounting events within ~1-3 hours of local midnight into the
+            # wrong day/week. completed_date is already a plain `date` column
+            # (no timezone involved), so it's compared as-is.
+            args: list = [fri, thu, TZ.key]
             dept_clause = ""
             if department_id:
                 args.append(department_id)
@@ -115,15 +122,15 @@ async def weekly_report(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false{dept_clause} "
                 f"AND ("
-                f"  (t.created_at >= $1::date AND t.created_at < ($2::date + 1))"
-                f"  OR (t.updated_at >= $1::date AND t.updated_at < ($2::date + 1))"
+                f"  ((t.created_at AT TIME ZONE $3) >= $1::date AND (t.created_at AT TIME ZONE $3) < ($2::date + 1))"
+                f"  OR ((t.updated_at AT TIME ZONE $3) >= $1::date AND (t.updated_at AT TIME ZONE $3) < ($2::date + 1))"
                 f"  OR (t.completed_date >= $1 AND t.completed_date <= $2)"
                 f"  OR EXISTS (SELECT 1 FROM task_progress tp "
                 f"             WHERE tp.task_id=t.id "
-                f"             AND tp.created_at >= $1::date AND tp.created_at < ($2::date + 1))"
+                f"             AND (tp.created_at AT TIME ZONE $3) >= $1::date AND (tp.created_at AT TIME ZONE $3) < ($2::date + 1))"
                 f"  OR EXISTS (SELECT 1 FROM work_sessions ws "
                 f"             WHERE ws.task_id=t.id "
-                f"             AND ws.started_at >= $1::date AND ws.started_at < ($2::date + 1))"
+                f"             AND (ws.started_at AT TIME ZONE $3) >= $1::date AND (ws.started_at AT TIME ZONE $3) < ($2::date + 1))"
                 f") "
                 f"ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, "
                 f"{_PRIORITY_RANK}, t.created_at",

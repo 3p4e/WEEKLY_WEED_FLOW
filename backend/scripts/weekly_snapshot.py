@@ -642,7 +642,11 @@ async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:
     if not USERS_ADMIN_DSN or not TASKS_ADMIN_DSN:
         raise SystemExit("USERS_ADMIN_DATABASE_URL / TASKS_ADMIN_DATABASE_URL not set")
     uconn = await asyncpg.connect(USERS_ADMIN_DSN)
-    conn = await asyncpg.connect(TASKS_ADMIN_DSN)
+    try:
+        conn = await asyncpg.connect(TASKS_ADMIN_DSN)
+    except Exception:
+        await uconn.close()
+        raise
     client = None if skip_letta else httpx.AsyncClient(timeout=60)
     try:
         orgs = await uconn.fetch("SELECT id, name FROM organizations"
