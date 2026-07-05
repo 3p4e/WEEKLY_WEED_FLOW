@@ -203,7 +203,12 @@ class TaskPatch(BaseModel):
 # NOT NULL column (title, status, ...) is still treated as not-provided.
 _NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours", "actual_hours",
                         "due_date", "completed_date", "reference_code", "external_ref",
-                        "blocker_reason", "recurrence", "outcome"}
+                        "blocker_reason", "recurrence", "outcome",
+                        # department_id is a nullable FK (ON DELETE SET NULL) and
+                        # department is its nullable text label — an explicit
+                        # PATCH {"department_id": null} must clear the assignment,
+                        # not be silently dropped as "field omitted".
+                        "department", "department_id"}
 
 
 def _advance(d: date, rec: dict) -> date:

@@ -293,7 +293,11 @@ GF.WWF.install = () => {
       try {
         const patched = await GF.API.updateTask(id, {
           title, priority: P_OUT[GF.$('add-pr').value]||'normal',
-          department_id: deptId, days: days.length?days:[GF.todayDay],
+          // Send the department text alongside the id (as the create path
+          // does) — reports.py groups the department breakdown by the text
+          // column, so updating only department_id leaves the two out of sync.
+          department_id: deptId, department: (GF.dep(deptId)||{}).name || null,
+          days: days.length?days:[GF.todayDay],
           estimated_hours: estHours, due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
           recurrence,
@@ -352,7 +356,7 @@ GF.WWF.install = () => {
       const created = await GF.API.createTask({
         title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
-        week_start: wk ? wk.start.toISOString().slice(0,10) : null, days: days.length?days:[GF.todayDay],
+        week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
         estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
         reference_code: refCode, recurrence, parent_id: GF._addParent || null,
@@ -473,7 +477,7 @@ GF.WWF.install = () => {
         title: p.title || GF.voice._transcript, description: '', status: 'pending',
         priority: P_OUT[p.priority] || 'normal',
         department_id: deptMatch ? deptMatch.id : null, department: deptMatch ? deptMatch.name : null,
-        week_id: wk && wk.realId, week_start: wk ? wk.start.toISOString().slice(0,10) : null, days,
+        week_id: wk && wk.realId, week_start: wk ? GF.localDateStr(wk.start) : null, days,
       });
       GF.state.tasks.push(GF.WWF.transform(created));
       GF.closeModal('voice-modal'); GF.render.all(); GF.toast(GF.t('create_task') + ' ✓', 'success');
@@ -600,7 +604,7 @@ GF.WWF.install = () => {
     }
     const incomplete = GF.weekTasks(weekIdx).filter(t => t.status !== 'done');
     if (!incomplete.length) { GF.toast(AL('All tasks are done — nothing to roll over', 'Сите задачи се завршени — нема што да се пренесе'), 'info'); return; }
-    const weekStart = nextWeek.start.toISOString().slice(0, 10);
+    const weekStart = GF.localDateStr(nextWeek.start);
     const results = await Promise.allSettled(incomplete.map(t =>
       GF.API.updateTask(t.id, { week_id: nextWeek.realId, week_start: weekStart })));
     let moved = 0;

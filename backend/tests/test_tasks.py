@@ -211,6 +211,27 @@ async def test_patch_null_on_not_null_column_is_ignored_not_500(client, admin_he
     assert r.json()["task"]["status"] == "ongoing"
 
 
+async def test_patch_null_clears_department(client, admin_headers, org):
+    """department_id is a nullable FK (ON DELETE SET NULL); an explicit
+    {"department_id": null} PATCH must clear the assignment, not be silently
+    dropped as 'field omitted' (department_id was missing from
+    _NULLABLE_PATCH_COLS)."""
+    from app.db import tasks_admin_pool
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id",
+        org["org_id"])
+    r = await client.post("/tasks", json={"title": "Dept task", "status": "pending",
+                                          "department_id": str(dept["id"])}, headers=admin_headers)
+    task_id = r.json()["id"]
+    assert r.json()["department_id"] == str(dept["id"])
+
+    r = await client.patch(f"/tasks/{task_id}", json={"department_id": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["department_id"] is None
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["department_id"] is None
+
+
 async def test_zero_estimate_is_a_value_not_missing(client, admin_headers):
     r = await client.post("/tasks", json={"title": "Trivial task", "estimated_hours": 0},
                            headers=admin_headers)

@@ -133,7 +133,10 @@ GF.WWF.shiftReportWeek = (delta) => {
   else {
     const ref = st.data ? new Date(st.data.period.start) : new Date();
     ref.setDate(ref.getDate() + delta * 7);
-    st.refDate = ref.toISOString().slice(0, 10);
+    // localDateStr (local getters) not toISOString (UTC): a positive-offset
+    // facility would otherwise shift the ref date back a day and select the
+    // wrong Fri→Thu window in _fri_thu().
+    st.refDate = GF.localDateStr(ref);
   }
   GF.WWF.loadReport();
 };

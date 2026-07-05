@@ -31,6 +31,23 @@ async def test_invalid_ref_date_returns_422(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_normal_priority_sorts_alongside_medium_not_last(client, admin_headers):
+    """The GrowFlow UI stores 'normal' as its medium-priority wire value; the
+    report's ORDER BY must rank it as medium (tier 2), not fall through to the
+    ELSE tier below 'low' — otherwise every default-priority UI task sorts last."""
+    # low sorts after medium/normal; normal must come before low.
+    await client.post("/tasks", json={"title": "Z low task", "status": "pending",
+                                       "priority": "low"}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "A normal task", "status": "pending",
+                                       "priority": "normal"}, headers=admin_headers)
+    r = await client.get("/reports/weekly", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    titles = [t["title"] for t in r.json()["tasks"]]
+    # Despite 'A' < 'Z' alphabetically, ordering is by priority rank first, so
+    # the normal task (rank 2) must appear before the low task (rank 3).
+    assert titles.index("A normal task") < titles.index("Z low task")
+
+
 async def test_report_mode_window_is_the_friday_thursday_containing_ref_date(client, admin_headers):
     # 2026-06-24 is a Wednesday -> the containing Fri-Thu window is
     # 2026-06-19 (Fri) .. 2026-06-25 (Thu).

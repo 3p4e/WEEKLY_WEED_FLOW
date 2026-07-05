@@ -312,6 +312,13 @@ async def update_user(user_id: str, body: UpdateUserReq,
         return {"ok": True, "noop": True}
     if "role" in fields and fields["role"] not in CREATABLE_ROLES:
         raise HTTPException(422, f"Role '{fields['role']}' cannot be assigned")
+    # No self-demotion: an ADMIN passes _can_manage for any target now (incl.
+    # their own ADMIN account), so without this an admin could PATCH their own
+    # role/department and instantly drop their own privileges. Renaming
+    # yourself is fine; changing your own role/department is not — use another
+    # admin for that (mirrors delete_user/reset_password's self-action guards).
+    if str(user_id) == str(actor["id"]) and ("role" in fields or "department_id" in fields):
+        raise HTTPException(400, "Cannot change your own role or department")
     async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(
             "SELECT id, role, department_id FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false",

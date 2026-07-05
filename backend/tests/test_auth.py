@@ -377,6 +377,28 @@ async def test_admin_can_edit_an_existing_admin_account(client, admin_headers, o
     assert (await client.delete(f"/auth/users/{other_admin_id2}", headers=admin_headers)).status_code == 200
 
 
+async def test_admin_cannot_change_own_role_or_department(client, admin_headers, org):
+    """Now that a real ADMIN passes _can_manage for any target (incl. their own
+    ADMIN account), update_user must still refuse a SELF role/department change —
+    otherwise an admin could PATCH their own id and instantly drop their own
+    privileges. Renaming yourself stays allowed."""
+    me = (await client.get("/auth/me", headers=admin_headers)).json()
+    my_id = me["id"]
+    # Self role change → 400.
+    r = await client.patch(f"/auth/users/{my_id}", json={"role": "QC_MGR"}, headers=admin_headers)
+    assert r.status_code == 400, r.text
+    # Self department change → 400.
+    from app.db import tasks_admin_pool
+    dept = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"])
+    r = await client.patch(f"/auth/users/{my_id}", json={"department_id": str(dept["id"])}, headers=admin_headers)
+    assert r.status_code == 400, r.text
+    # But renaming yourself is fine.
+    r = await client.patch(f"/auth/users/{my_id}", json={"full_name": "Renamed Self"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["full_name"] == "Renamed Self"
+
+
 async def test_manager_still_cannot_touch_an_admin_account(client, admin_headers, org):
     """A department manager must never be able to edit/delete/reset an ADMIN
     account, even one parked in their own department."""
