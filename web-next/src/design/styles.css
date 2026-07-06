@@ -1,0 +1,7 @@
+/* GrowFlow Design System — global entry point.
+   Consumers link this one file. Import order only. */
+@import url("tokens/colors.css");
+@import url("tokens/typography.css");
+@import url("tokens/layout.css");
+@import url("tokens/base.css");
+@import url("brand.css");

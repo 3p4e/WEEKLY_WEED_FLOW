@@ -1,0 +1,76 @@
+/* ─────────────────────────────────────────────────────────────
+   GrowFlow — Typography tokens · TAL SHIAR reskin
+   Brand: Comfortaa (the app's real shipped webfont, self-hosted).
+   Display/titles: Orbitron · Metadata: Rajdhani · Body/UI: Saira ·
+   Mono: Geist Mono. Orbitron + Rajdhani carry the angular sci-fi voice.
+   ───────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700;800&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+/* Real brand font shipped by the app (web/gf/fonts/) — self-hosted */
+@font-face {
+  font-family: 'Comfortaa';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/comfortaa-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Comfortaa';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/comfortaa-600-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Comfortaa';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/comfortaa-600-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+:root {
+  /* Families */
+  --font-app:     'Saira', -apple-system, system-ui, sans-serif;      /* body / UI */
+  --font-display: 'Orbitron', 'Saira', system-ui, sans-serif;        /* big display + titles */
+  --font-label:   'Rajdhani', 'Saira', system-ui, sans-serif;        /* small all-caps metadata */
+  --font-brand:   'Comfortaa', 'Saira', system-ui, sans-serif;       /* the real GrowFlow / Purely Plant wordmark */
+  --font-mono:    'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Weights */
+  --w-regular: 400; /* @kind other */
+  --w-medium:  500; /* @kind other */
+  --w-semi:    600; /* @kind other */
+  --w-bold:    700; /* @kind other */
+  --w-heavy:   800; /* @kind other */
+
+  /* Type scale (rem, base 15px). Normalized ladder. */
+  --fs-10:  0.667rem;  /* 10px  — micro labels */
+  --fs-11:  0.733rem;  /* 11px  — uppercase labels, badges */
+  --fs-12:  0.80rem;   /* 12px  — meta, pills */
+  --fs-13:  0.867rem;  /* 13px  — dense body, chips */
+  --fs-14:  0.933rem;  /* 14px  — card titles, nav */
+  --fs-15:  1.00rem;   /* 15px  — base body */
+  --fs-17:  1.133rem;  /* 17px  — modal titles */
+  --fs-19:  1.267rem;  /* 19px  — section / brand name */
+  --fs-22:  1.467rem;  /* 22px  — week title, H3 */
+  --fs-28:  1.867rem;  /* 28px  — page / KPI hero */
+  --fs-36:  2.40rem;   /* 36px  — display */
+  --fs-48:  3.20rem;   /* 48px  — hero display */
+
+  /* Line-heights */
+  --lh-tight:  1.1; /* @kind other */
+  --lh-snug:   1.3; /* @kind other */
+  --lh-normal: 1.5; /* @kind other */
+  --lh-relaxed:1.6; /* @kind other */
+
+  /* Tracking — Tal Shiar labels run wide and uppercase */
+  --ls-display: 0.02em;    /* @kind other */
+  --ls-tight:   -0.01em;   /* @kind other */
+  --ls-normal:  0;         /* @kind other */
+  --ls-label:   0.10em;    /* @kind other */
+  --ls-caps:    0.22em;    /* @kind other */
+}
