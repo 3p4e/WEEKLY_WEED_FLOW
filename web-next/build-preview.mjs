@@ -21,6 +21,9 @@ for (const d of ['', 'vendor', 'design', 'design/tokens', 'kit', 'fonts', 'asset
 cpSync(join(NM, 'react/umd/react.production.min.js'), O('vendor/react.js'));
 cpSync(join(NM, 'react-dom/umd/react-dom.production.min.js'), O('vendor/react-dom.js'));
 cpSync(join(NM, 'lucide/dist/umd/lucide.min.js'), O('vendor/lucide.js'));
+// three.js UMD — enables the real WebGL 3D leaf (LeafMark parses the OBJ itself,
+// no loader needed). Without it the splash falls back to the flat CSS leaf.
+cpSync(join(NM, 'three/build/three.min.js'), O('vendor/three.js'));
 
 // 2) Assets (brand bitmaps + svg + comfortaa woff2 live under public/assets)
 cpSync(R('public/assets'), O('assets'), { recursive: true });
@@ -109,6 +112,7 @@ writeFileSync(O('index.html'), `<!DOCTYPE html><html lang="en"><head><meta chars
 <script src="/vendor/react.js"></script>
 <script src="/vendor/react-dom.js"></script>
 <script src="/vendor/lucide.js"></script>
+<script src="/vendor/three.js"></script>
 <script src="/kit/data.js"></script>
 <script src="/kit/ds_bundle.js"></script>
 <script src="/kit/tweaks-panel.js"></script>
