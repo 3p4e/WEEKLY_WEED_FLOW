@@ -1404,6 +1404,7 @@ function App() {
       if (!canStatus(x)) { denyToast(); return x; }
       const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(x.status) + 1) % STATUS_CYCLE.length];
       pushToast(next === 'done' ? 'success' : next === 'stuck' ? 'error' : 'info', `${x.title} → ${STATUS_LABEL(lang, next)}`, next === 'done' ? 'CheckCheck' : next === 'stuck' ? 'OctagonAlert' : 'Loader');
+      window.GF_REAL.persistStatus(id, next).catch((e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert'));
       const updated = { ...x, status: next, overdue: next === 'done' ? false : x.overdue };
       setDetailTask((d) => (d && d.id === id ? updated : d));
       return updated;
@@ -1416,6 +1417,7 @@ function App() {
       if (!canStatus(x)) { denyToast(); return x; }
       const done = x.status !== 'done';
       if (done) pushToast('success', `${x.title} marked done`, 'CheckCheck');
+      window.GF_REAL.persistStatus(id, done ? 'done' : 'pending').catch((e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert'));
       const updated = { ...x, status: done ? 'done' : 'pending' };
       setDetailTask((d) => (d && d.id === id ? updated : d));
       return updated;
@@ -1433,19 +1435,36 @@ function App() {
   const createTask = React.useCallback(({ id, title, priority, dept, type, owner, helpers, days, sessionHours, recurrence, due, ref, desc, tags }) => {
     const color = (GF_DEPARTMENTS.find((d) => d.id === dept) || {}).color;
     const hp = helpers || [];
+    const uiVals = { title, priority, dept, type, helpers: hp, days, recurrence, due, ref, desc, tags };
+    const saveErr = (e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert');
     if (id) {
-      setTasks((ts) => ts.map((x) => x.id === id ? { ...x, title, priority, pr: priority, dept, type, owner, helpers: hp, days: days || x.days, day: (days && days[0]) || x.day, sessionHours, recurrence, due, ref, refCode: ref, desc, description: desc, tags, color,
-        people: [owner, ...hp].map((pid) => { const p = GF_PERSON(pid); return { name: p.name, color: p.color }; }) } : x));
+      window.GF_REAL.persistEdit(id, uiVals).catch(saveErr);
+      setTasks((ts) => ts.map((x) => {
+        if (x.id !== id) return x;
+        // Persist Responsible changes: diff new helpers against the previous
+        // set (only known here, inside the updater) → assign/unassign calls.
+        const prev = x.helpers || [];
+        hp.filter((w) => !prev.includes(w)).forEach((w) => window.GF_API.assign(id, w).catch(saveErr));
+        prev.filter((w) => !hp.includes(w)).forEach((w) => window.GF_API.unassign(id, w).catch(saveErr));
+        return { ...x, title, priority, pr: priority, dept, type, owner, helpers: hp, days: days || x.days, day: (days && days[0]) || x.day, sessionHours, recurrence, due, ref, refCode: ref, desc, description: desc, tags, color,
+          people: [owner, ...hp].map((pid) => { const p = GF_PERSON(pid); return { name: p.name, color: p.color }; }) };
+      }));
       pushToast('success', `"${title}" updated`, 'Check');
       return;
     }
+    // Optimistic local card now; swap in the real (server-id'd) row when the
+    // POST lands so later status changes PATCH a real task id.
     taskSeq += 1;
-    const newTask = { id: `T-${taskSeq}`, title, status: 'pending', priority, pr: priority, dept, type, owner, helpers: hp, due, ref, refCode: ref, desc, description: desc,
+    const tempId = `T-${taskSeq}`;
+    const newTask = { id: tempId, title, status: 'pending', priority, pr: priority, dept, type, owner, helpers: hp, due, ref, refCode: ref, desc, description: desc,
       sessionHours, recurrence, tags: tags || [], day: (days && days[0]) || 'Mon', days: days && days.length ? days : ['Mon'], weekIdx, color,
       people: [owner, ...hp].map((pid) => { const p = GF_PERSON(pid); return { name: p.name, color: p.color }; }) };
     setTasks((ts) => [newTask, ...ts]);
     pushToast('success', `"${title}" created`, 'Plus');
-  }, [pushToast, weekIdx]);
+    window.GF_REAL.persistCreate(uiVals)
+      .then((real) => setTasks((ts) => ts.map((x) => x.id === tempId ? { ...x, ...real, weekIdx: x.weekIdx } : x)))
+      .catch((e) => { saveErr(e); setTasks((ts) => ts.filter((x) => x.id !== tempId)); });
+  }, [pushToast, weekIdx, lang]);
 
   const saveUser = React.useCallback(({ id, name, role, dept, color }) => {
     if (id) {
@@ -1477,8 +1496,10 @@ function App() {
 
   const deleteTask = React.useCallback((id) => {
     if (!myPerms.deleteAny) { denyToast(); return; }
+    // Soft-delete: the backend archives (is_archived) rather than hard-deleting.
+    window.GF_REAL.persistArchive(id).catch((e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert'));
     setTasks((ts) => ts.filter((x) => x.id !== id));
-    pushToast('info', lang === 'mk' ? 'Задачата е избришана' : 'Task deleted', 'Trash2');
+    pushToast('info', lang === 'mk' ? 'Задачата е архивирана' : 'Task archived', 'Trash2');
   }, [myPerms, denyToast, pushToast, lang]);
 
   const advanceHandoff = React.useCallback((i) => {

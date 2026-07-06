@@ -10,6 +10,8 @@
   // and the kit's mock data already speaks it.
   const STATUS_IN = { ongoing: 'working', completed: 'done', pending: 'pending', stuck: 'stuck', review: 'review', postponed: 'postponed' };
   const PRIORITY_IN = { normal: 'medium', medium: 'medium', high: 'high', critical: 'critical', low: 'low' };
+  const STATUS_OUT = { working: 'ongoing', done: 'completed', pending: 'pending', stuck: 'stuck', review: 'review', postponed: 'postponed' };
+  const PRIORITY_OUT = { medium: 'normal', high: 'high', critical: 'critical', low: 'low' };
   const ROLE_IN = (role) => (role === 'USER' ? 'operator' : String(role || 'operator').toLowerCase());
 
   // GF_DEPARTMENTS ships icon/color per department CODE (the real org's 11
@@ -70,12 +72,21 @@
     };
   }
 
+  // Live lookup tables refreshed by loadRealData(), consumed by the persist
+  // helpers below (UI speaks department CODES; the API wants uuids + names).
+  const LIVE = { deptUuidByCode: {}, deptNameByCode: {}, deptCodeById: {}, personById: {}, todayIdx: 1 };
+
   async function loadRealData() {
     const api = window.GF_API;
     const [depts, people, tasksRaw] = await Promise.all([api.departments(), api.directory(), api.tasks()]);
 
     const deptCodeById = {};
-    depts.forEach((d) => { deptCodeById[d.id] = d.code; });
+    depts.forEach((d) => {
+      deptCodeById[d.id] = d.code;
+      LIVE.deptUuidByCode[d.code] = d.id;
+      LIVE.deptNameByCode[d.code] = d.name;
+    });
+    LIVE.deptCodeById = deptCodeById;
     // Refresh GF_DEPARTMENTS in place: keep the static icon/color per code,
     // pull live name/name_mk, keyed by the real department id (a real uuid)
     // so task.dept (mapped to the department's CODE below) still resolves
@@ -93,6 +104,7 @@
     const newPeople = people.map((p) => personFromApi(p, tasks, deptCodeById));
     window.GF_PEOPLE.splice(0, window.GF_PEOPLE.length, ...newPeople);
     const personById = {}; newPeople.forEach((p) => { personById[p.id] = p; });
+    LIVE.personById = personById;
 
     // Second pass: color (dept) + people (avatar-stack shape) need the
     // department/people tables built above — same derivation createTask()
@@ -109,5 +121,52 @@
     return { meId: (api.user && api.user.id) || (newPeople[0] && newPeople[0].id) };
   }
 
-  window.GF_REAL = { loadRealData, ROLE_IN };
+  // ── Persistence: UI mutations → real API calls (optimistic UI keeps the
+  // kit's local state; these write behind it and surface failures) ──
+  function persistStatus(id, uiStatus) {
+    return window.GF_API.updateTask(id, { status: STATUS_OUT[uiStatus] || 'pending' });
+  }
+  function persistArchive(id) {
+    return window.GF_API.updateTask(id, { is_archived: true });
+  }
+  // Build the API body from the kit's Add/Edit-modal values (UI vocabulary).
+  function taskBodyFromUi(v) {
+    const body = {
+      title: v.title,
+      priority: PRIORITY_OUT[v.priority] || 'normal',
+      task_type: (v.type || 'other').toLowerCase(),
+      description: v.desc || '',
+      reference_code: v.ref || null,
+      due_date: v.due || null,
+      days: v.days && v.days.length ? v.days : undefined,
+      tags: v.tags && v.tags.length ? v.tags : undefined,
+      recurrence: v.recurrence || null,
+    };
+    if (v.dept && LIVE.deptUuidByCode[v.dept]) {
+      body.department_id = LIVE.deptUuidByCode[v.dept];
+      body.department = LIVE.deptNameByCode[v.dept];
+    }
+    return body;
+  }
+  async function persistCreate(v) {
+    const row = await window.GF_API.createTask(taskBodyFromUi(v));
+    // Assign Responsible helpers (owner is implicit — the creator).
+    for (const who of (v.helpers || [])) {
+      try { await window.GF_API.assign(row.id, who); } catch (e) { /* per-person failure is non-fatal */ }
+    }
+    const t = taskFromApi(row, LIVE.deptCodeById, LIVE.todayIdx);
+    t.helpers = (v.helpers || []).slice();
+    const deptColor = {}; window.GF_DEPARTMENTS.forEach((d) => { deptColor[d.id] = d.color; });
+    t.color = deptColor[t.dept];
+    t.people = [t.owner, ...t.helpers].filter(Boolean).map((pid) => {
+      const p = LIVE.personById[pid]; return { name: (p && p.name) || '?', color: (p && p.color) || '#8A99B0' };
+    });
+    return t;
+  }
+  function persistEdit(id, v) {
+    return window.GF_API.updateTask(id, taskBodyFromUi(v));
+  }
+
+  window.GF_REAL = { loadRealData, ROLE_IN, STATUS_OUT, PRIORITY_OUT, LIVE,
+    persistStatus, persistArchive, persistCreate, persistEdit };
 })();
