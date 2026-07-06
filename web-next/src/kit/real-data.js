@@ -124,9 +124,11 @@
   // ── Persistence: UI mutations → real API calls (optimistic UI keeps the
   // kit's local state; these write behind it and surface failures) ──
   function persistStatus(id, uiStatus) {
+    if (window.GF_MOCK) return Promise.resolve({});
     return window.GF_API.updateTask(id, { status: STATUS_OUT[uiStatus] || 'pending' });
   }
   function persistArchive(id) {
+    if (window.GF_MOCK) return Promise.resolve({});
     return window.GF_API.updateTask(id, { is_archived: true });
   }
   // Build the API body from the kit's Add/Edit-modal values (UI vocabulary).
@@ -149,6 +151,7 @@
     return body;
   }
   async function persistCreate(v) {
+    if (window.GF_MOCK) return null; // demo build: keep the optimistic local card
     const row = await window.GF_API.createTask(taskBodyFromUi(v));
     // Assign Responsible helpers (owner is implicit — the creator).
     for (const who of (v.helpers || [])) {

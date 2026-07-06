@@ -351,6 +351,9 @@ function Login({ onSignIn, lang, logo }) {
     e && e.preventDefault();
     if (!user.trim() || !pass.trim()) { setError(lang === 'mk' ? 'Внесете корисничко име и лозинка.' : 'Enter a username and password.'); return; }
     setError(null); setBusy(true);
+    // Mock/demo build (public design review): no backend behind this URL —
+    // accept any credentials and enter on the kit's seed dataset.
+    if (window.GF_MOCK) { setTimeout(() => { setBusy(false); onSignIn(); }, 380); return; }
     try {
       await window.GF_API.login(user.trim(), pass);
       const { meId } = await window.GF_REAL.loadRealData();
@@ -1444,8 +1447,10 @@ function App() {
         // Persist Responsible changes: diff new helpers against the previous
         // set (only known here, inside the updater) → assign/unassign calls.
         const prev = x.helpers || [];
-        hp.filter((w) => !prev.includes(w)).forEach((w) => window.GF_API.assign(id, w).catch(saveErr));
-        prev.filter((w) => !hp.includes(w)).forEach((w) => window.GF_API.unassign(id, w).catch(saveErr));
+        if (!window.GF_MOCK) {
+          hp.filter((w) => !prev.includes(w)).forEach((w) => window.GF_API.assign(id, w).catch(saveErr));
+          prev.filter((w) => !hp.includes(w)).forEach((w) => window.GF_API.unassign(id, w).catch(saveErr));
+        }
         return { ...x, title, priority, pr: priority, dept, type, owner, helpers: hp, days: days || x.days, day: (days && days[0]) || x.day, sessionHours, recurrence, due, ref, refCode: ref, desc, description: desc, tags, color,
           people: [owner, ...hp].map((pid) => { const p = GF_PERSON(pid); return { name: p.name, color: p.color }; }) };
       }));
@@ -1462,7 +1467,7 @@ function App() {
     setTasks((ts) => [newTask, ...ts]);
     pushToast('success', `"${title}" created`, 'Plus');
     window.GF_REAL.persistCreate(uiVals)
-      .then((real) => setTasks((ts) => ts.map((x) => x.id === tempId ? { ...x, ...real, weekIdx: x.weekIdx } : x)))
+      .then((real) => real && setTasks((ts) => ts.map((x) => x.id === tempId ? { ...x, ...real, weekIdx: x.weekIdx } : x)))
       .catch((e) => { saveErr(e); setTasks((ts) => ts.filter((x) => x.id !== tempId)); });
   }, [pushToast, weekIdx, lang]);
 

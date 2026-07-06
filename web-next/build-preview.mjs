@@ -109,13 +109,17 @@ writeFileSync(O('splash.css'), splashCss);
 // backend (e.g. http://127.0.0.1:8000 while developing); unset = same-origin
 // (the real preview/production deploy, proxied by nginx like the live app).
 const apiBase = process.env.PREVIEW_API_BASE || '';
+// PREVIEW_MOCK=1 builds a data-safe demo: sign-in skips the real API and the
+// kit's seed dataset stays in place. Used for the public design-review URL so
+// it needs no route into the production backend network at all.
+const mockMode = process.env.PREVIEW_MOCK === '1';
 writeFileSync(O('index.html'), `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GrowFlow — Weekly Weed Flow</title>
 <link rel="icon" href="/assets/wwf-icon-192.png">
 <link rel="stylesheet" href="/design/styles.css">
 <link rel="stylesheet" href="/splash.css">
-<script>window.GF_API_BASE = ${JSON.stringify(apiBase)};</script>
+<script>window.GF_API_BASE = ${JSON.stringify(apiBase)}; window.GF_MOCK = ${mockMode};</script>
 </head><body>
 <div id="root"></div>
 <script src="/vendor/react.js"></script>
