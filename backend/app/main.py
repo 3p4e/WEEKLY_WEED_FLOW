@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, audit, auth, capture, collab, reports, tasks
+from app.api import ai, audit, auth, capture, collab, documents, reports, tasks
 from app.config import settings
 from app.db import close_pools, init_pools
 from app.logging_config import configure_logging
@@ -68,6 +68,7 @@ app.include_router(ai.router)
 app.include_router(audit.router)
 app.include_router(collab.router)
 app.include_router(reports.router)
+app.include_router(documents.router)
 app.include_router(capture.router)
 
 
