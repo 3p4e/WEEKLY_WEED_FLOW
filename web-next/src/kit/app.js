@@ -347,11 +347,20 @@ function Login({ onSignIn, lang, logo }) {
   const [busy, setBusy] = React.useState(false);
   const t = GF_T[lang];
 
-  function submitSignIn(e) {
+  async function submitSignIn(e) {
     e && e.preventDefault();
     if (!user.trim() || !pass.trim()) { setError(lang === 'mk' ? 'Внесете корисничко име и лозинка.' : 'Enter a username and password.'); return; }
     setError(null); setBusy(true);
-    setTimeout(() => { setBusy(false); onSignIn(); }, 380);
+    try {
+      await window.GF_API.login(user.trim(), pass);
+      const { meId } = await window.GF_REAL.loadRealData();
+      setBusy(false); onSignIn(meId);
+    } catch (err) {
+      setBusy(false);
+      setError(err.message === 'unauthorized' || /invalid/i.test(err.message || '')
+        ? (lang === 'mk' ? 'Погрешно корисничко име или лозинка.' : 'Incorrect username or password.')
+        : (err.message || (lang === 'mk' ? 'Најавувањето не успеа.' : 'Sign-in failed.')));
+    }
   }
   function submitForgot(e) {
     e && e.preventDefault();
@@ -1498,7 +1507,18 @@ function App() {
   }, [stage]);
 
   if (stage === 'splash') return <React.Fragment><Splash onDone={() => setStage('login')} lang={lang} logo={tw.logo} />{panel}</React.Fragment>;
-  if (!authed) return <React.Fragment><Login onSignIn={() => { setAuthed(true); pushToast('success', 'Signed in as Blagoj Nikolov'); }} lang={lang} logo={tw.logo} />{panel}</React.Fragment>;
+  if (!authed) return <React.Fragment><Login onSignIn={(meId) => {
+    // loadRealData() (awaited in submitSignIn before this fires) mutated
+    // GF_TASKS/GF_PEOPLE/GF_DEPARTMENTS in place — re-derive `tasks` state
+    // from them now (the useState lazy initializer above only ran once, at
+    // first mount, against the mock seed) and adopt the real signed-in user.
+    setTasks(GF_TASKS.map((t) => ({ ...t, color: (GF_DEPARTMENTS.find((d) => d.id === t.dept) || {}).color })));
+    setPeopleVer((v) => v + 1);
+    if (meId) setCurrentUser(meId);
+    setAuthed(true);
+    const me2 = GF_PEOPLE.find((p) => p.id === meId) || GF_PEOPLE[0];
+    pushToast('success', (lang === 'mk' ? 'Најавен како ' : 'Signed in as ') + (me2 ? me2.name : ''));
+  }} lang={lang} logo={tw.logo} />{panel}</React.Fragment>;
 
   const weekTasks = tasks.filter((x) => x.weekIdx === weekIdx);
   const scoped = deptFilter ? weekTasks.filter((x) => x.dept === deptFilter) : weekTasks;

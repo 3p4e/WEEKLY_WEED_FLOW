@@ -90,6 +90,10 @@ writeFileSync(O('fonts.css'), fontCss);
     '/* auto-mount stripped: app.js mounts the wired app */');
   writeFileSync(O('kit/ds_bundle.js'), dsb);
 }
+// Plain JS (no JSX) — the real-backend client + data-mapping bridge. Loaded
+// right after data.js so GF_TASKS/GF_PEOPLE/GF_DEPARTMENTS exist to mutate.
+cpSync(R('src/kit/api.js'), O('kit/api.js'));
+cpSync(R('src/kit/real-data.js'), O('kit/real-data.js'));
 for (const f of ['data.js', 'screens.js', 'app.js', 'tweaks-panel.js']) {
   const src = readFileSync(R('src/kit', f), 'utf8').replace(/\.\.\/\.\.\/assets\//g, '/assets/');
   const { code } = esbuild.transformSync(src, { loader: 'jsx', jsx: 'transform', format: 'iife', target: 'es2019' });
@@ -101,12 +105,17 @@ const splashCss = readFileSync(R('src/kit/splash.css'), 'utf8');
 writeFileSync(O('splash.css'), splashCss);
 
 // 7) index.html — local CSS + vendor UMD + kit classic scripts; no CDN/babel/three.
+// PREVIEW_API_BASE lets a local/dev build point at a different-origin
+// backend (e.g. http://127.0.0.1:8000 while developing); unset = same-origin
+// (the real preview/production deploy, proxied by nginx like the live app).
+const apiBase = process.env.PREVIEW_API_BASE || '';
 writeFileSync(O('index.html'), `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GrowFlow — Weekly Weed Flow</title>
 <link rel="icon" href="/assets/wwf-icon-192.png">
 <link rel="stylesheet" href="/design/styles.css">
 <link rel="stylesheet" href="/splash.css">
+<script>window.GF_API_BASE = ${JSON.stringify(apiBase)};</script>
 </head><body>
 <div id="root"></div>
 <script src="/vendor/react.js"></script>
@@ -114,6 +123,8 @@ writeFileSync(O('index.html'), `<!DOCTYPE html><html lang="en"><head><meta chars
 <script src="/vendor/lucide.js"></script>
 <script src="/vendor/three.js"></script>
 <script src="/kit/data.js"></script>
+<script src="/kit/api.js"></script>
+<script src="/kit/real-data.js"></script>
 <script src="/kit/ds_bundle.js"></script>
 <script src="/kit/tweaks-panel.js"></script>
 <script src="/kit/screens.js"></script>
