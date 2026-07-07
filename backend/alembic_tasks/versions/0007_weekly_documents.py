@@ -60,6 +60,25 @@ def upgrade() -> None:
         "CREATE INDEX weekly_documents_org_week_idx ON public.weekly_documents"
         " USING btree (org_id, week_start)"
     )
+    # The app_user/app_admin GRANTs are otherwise a one-time bootstrap step
+    # (see backend/README.md) that predates this table — without this, every
+    # request against a freshly-migrated (not freshly schema.sql-loaded)
+    # database hits "permission denied for table weekly_documents". Guarded
+    # because those roles don't exist in the CI job that diffs a pure
+    # `alembic upgrade head` against schema.tasks.sql.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+            GRANT SELECT, INSERT, UPDATE, DELETE ON public.weekly_documents TO app_user;
+          END IF;
+          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_admin') THEN
+            GRANT SELECT, INSERT, UPDATE, DELETE ON public.weekly_documents TO app_admin;
+          END IF;
+        END $$;
+        """
+    )
 
 
 def downgrade() -> None:
