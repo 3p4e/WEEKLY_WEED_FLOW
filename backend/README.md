@@ -101,7 +101,9 @@ for w in users tasks; do
   sudo -u postgres psql -d wwf_${w}_test -c "
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
     GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
-    GRANT USAGE ON SCHEMA app TO app_user, app_admin;"
+    GRANT USAGE ON SCHEMA app TO app_user, app_admin;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user, app_admin;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_user, app_admin;"
 done
 
 python -m venv .venv && source .venv/bin/activate

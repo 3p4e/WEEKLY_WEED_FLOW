@@ -45,9 +45,21 @@ CREATE ROLE app_admin LOGIN PASSWORD '...' BYPASSRLS;       -- provisioning + au
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO app_user, app_admin;
 GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO app_user, app_admin;
 GRANT USAGE ON SCHEMA app TO app_user, app_admin;           -- helper fns (is_elevated, current_org_id)
+
+-- ...and make it self-maintaining: every table a FUTURE migration creates
+-- (migrations connect as `postgres`) auto-grants to the app roles. Without
+-- this, each new CREATE TABLE migration is born permission-less and every
+-- request against it 500s with "permission denied for table ..." until a
+-- manual GRANT — the class of bug that hit weekly_documents.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user, app_admin;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO app_user, app_admin;
 ```
 
-(RLS still constrains `app_user`; `app_admin` bypasses it for auth/provisioning.)
+(RLS still constrains `app_user`; `app_admin` bypasses it for auth/provisioning.
+Default privileges are keyed to the role that CREATEs the object — `postgres`,
+which is what both migration DSNs connect as.)
 
 ## Schema changes (Alembic — two chains)
 

@@ -128,6 +128,28 @@ async def test_documents_malformed_id_is_404_not_500(client, admin_headers, org)
         assert r.status_code == 404, f"{method} {suffix}: {r.status_code}"
 
 
+async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
+    """A locked document must be immutable at the DB layer, not just via the
+    app's WHERE status='draft' guard: a raw UPDATE/DELETE through an app_user
+    RLS connection must affect 0 rows (the command-scoped policies only expose
+    DRAFT rows to UPDATE/DELETE)."""
+    from app.db import rls
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    doc_id = r.json()["id"]
+    r = await client.post(f"/reports/documents/{doc_id}/lock", headers=admin_headers)
+    assert r.json()["status"] == "locked"
+
+    user = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"}
+    async with rls(user) as c:  # app_user pool — RLS-enforced, no status guard in the SQL
+        upd = await c.execute("UPDATE weekly_documents SET content='{}'::jsonb WHERE id=$1", doc_id)
+        dele = await c.execute("DELETE FROM weekly_documents WHERE id=$1", doc_id)
+    assert upd == "UPDATE 0", upd
+    assert dele == "DELETE 0", dele
+    # untouched + still locked
+    r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "locked"
+
+
 def test_pdf_html_escapes_days_field():
     """The `days` field is unvalidated user input — it must be HTML-escaped in
     the PDF like every other field, or a crafted task injects markup / makes
