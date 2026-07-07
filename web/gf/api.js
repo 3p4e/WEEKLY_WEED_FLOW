@@ -125,6 +125,7 @@ GF.API = {
   },
   compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
   patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },
+  patchDocumentSection(id, key, patch) { return this._req('PATCH', '/reports/documents/' + id + '/sections/' + encodeURIComponent(key), patch); },
   lockDocument(id)          { return this._req('POST', '/reports/documents/' + id + '/lock'); },
 
   weeklyReport(q = {}) {

@@ -33,7 +33,6 @@ cpSync(R('public/assets'), O('assets'), { recursive: true });
 const fixCss = (s) => s
   .replace(/@import\s+url\(['"]https:\/\/fonts\.googleapis[^)]*\);?/g, '')
   .replace(/\.\.\/assets\//g, '/assets/')
-  .replace(/\.\.\/fonts\//g, '/fonts/')
   // brand.css uses bare `url('assets/...')` (no ../) — flatten those too, or
   // they resolve under /design/assets and 404.
   .replace(/url\((['"]?)assets\//g, 'url($1/assets/');
@@ -41,9 +40,11 @@ for (const f of readdirSync(R('src/design/tokens'))) {
   writeFileSync(O('design/tokens', f), fixCss(readFileSync(R('src/design/tokens', f), 'utf8')));
 }
 writeFileSync(O('design/brand.css'), fixCss(readFileSync(R('src/design/brand.css'), 'utf8')));
-// styles.css entry: import tokens + brand + our self-hosted fonts
+// styles.css entry: transform the real src/design/styles.css (single source of
+// the @import order) and append our self-hosted fonts — so adding a token file
+// there just works, no parallel literal to keep in sync.
 writeFileSync(O('design/styles.css'),
-  `@import url("tokens/colors.css");\n@import url("tokens/typography.css");\n@import url("tokens/layout.css");\n@import url("tokens/base.css");\n@import url("brand.css");\n@import url("/fonts.css");\n`);
+  fixCss(readFileSync(R('src/design/styles.css'), 'utf8')) + '@import url("/fonts.css");\n');
 
 // 4) Self-host fonts. latin + latin-ext + cyrillic (where @fontsource ships it).
 const URANGE = {
@@ -70,15 +71,13 @@ for (const { pkg, family, weights } of FAMILIES) {
     }
   }
 }
-// Comfortaa (brand) is shipped as woff2 in assets already — reference those.
-for (const [sub, file] of [['latin', 'comfortaa-600-latin.woff2'], ['latin-ext', 'comfortaa-600-latin-ext.woff2'], ['cyrillic', 'comfortaa-600-cyrillic.woff2']]) {
-  fontCss += `@font-face{font-family:'Comfortaa';font-style:normal;font-weight:600;font-display:swap;`
-    + `src:url('/assets/${file}') format('woff2');unicode-range:${URANGE[sub]};}\n`;
-}
+// Comfortaa (the brand webfont) is already self-hosted by src/design/tokens/
+// typography.css (its @font-face rules point at ../assets/comfortaa-*.woff2,
+// flattened to /assets by fixCss) — no second declaration here.
 writeFileSync(O('fonts.css'), fontCss);
 
 // 5) Kit JS. ds_bundle is already plain JS (React.createElement). data/screens/
-//    app/tweaks are JSX — transpile with esbuild (no bundle: keep classic-script
+//    app are JSX — transpile with esbuild (no bundle: keep classic-script
 //    globals intact), and flatten ../../assets -> /assets in string literals.
 // The DS compiler swept a full copy of the demo app into ds_bundle AND left an
 // auto-mount at the tail (createRoot(#root).render(<App/>)). We only want the
@@ -94,7 +93,7 @@ writeFileSync(O('fonts.css'), fontCss);
 // right after data.js so GF_TASKS/GF_PEOPLE/GF_DEPARTMENTS exist to mutate.
 cpSync(R('src/kit/api.js'), O('kit/api.js'));
 cpSync(R('src/kit/real-data.js'), O('kit/real-data.js'));
-for (const f of ['data.js', 'screens.js', 'app.js', 'tweaks-panel.js']) {
+for (const f of ['data.js', 'screens.js', 'app.js']) {
   const src = readFileSync(R('src/kit', f), 'utf8').replace(/\.\.\/\.\.\/assets\//g, '/assets/');
   const { code } = esbuild.transformSync(src, { loader: 'jsx', jsx: 'transform', format: 'iife', target: 'es2019' });
   writeFileSync(O('kit', f), code);
@@ -130,7 +129,6 @@ writeFileSync(O('index.html'), `<!DOCTYPE html><html lang="en"><head><meta chars
 <script src="/kit/api.js"></script>
 <script src="/kit/real-data.js"></script>
 <script src="/kit/ds_bundle.js"></script>
-<script src="/kit/tweaks-panel.js"></script>
 <script src="/kit/screens.js"></script>
 <script src="/kit/app.js"></script>
 </body></html>\n`);

@@ -13,10 +13,11 @@ progress notes / work sessions) during the Fri→Thu window. Includes:
 Plan mode: active/incomplete tasks that carry forward into the next week.
 """
 from datetime import date, timedelta
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.weekwindow import TASK_COLS as _COLS
+from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
 from app.deps import require_password_set
 from app.roles import ELEVATED_ROLES
@@ -38,51 +39,6 @@ _ELEVATED = ELEVATED_ROLES
 # default-priority task created in the UI sorts last in the weekly report.
 _PRIORITY_RANK = ("CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
                   "WHEN 'medium' THEN 2 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
-
-
-def _fri_thu(ref: date) -> tuple[date, date]:
-    """Return the Friday→Thursday window containing *ref*."""
-    days_since_fri = (ref.weekday() - 4) % 7
-    fri = ref - timedelta(days=days_since_fri)
-    return fri, fri + timedelta(days=6)
-
-
-def _num(v) -> float:
-    if v is None:
-        return 0.0
-    return float(v) if isinstance(v, Decimal) else float(v)
-
-
-def _task_row(r) -> dict:
-    return {
-        "id": str(r["id"]),
-        "title": r["title"],
-        "description": r["description"] or "",
-        "status": r["status"],
-        "priority": r["priority"],
-        "task_type": r["task_type"],
-        "reference_code": r["reference_code"],
-        "blocker_reason": r["blocker_reason"],
-        "department": r["department"],
-        "department_id": str(r["department_id"]) if r["department_id"] else None,
-        "due_date": r["due_date"].isoformat() if r["due_date"] else None,
-        "completed_date": r["completed_date"].isoformat() if r["completed_date"] else None,
-        "estimated_hours": _num(r["estimated_hours"]),
-        "actual_hours": _num(r["actual_hours"]),
-        "days": list(r["days"] or []),
-        "tags": list(r["tags"] or []),
-        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
-        "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-    }
-
-
-_COLS = (
-    "t.id, t.title, t.description, t.status, t.priority, t.task_type, "
-    "t.reference_code, t.blocker_reason, t.department, t.department_id, "
-    "t.week_start, t.due_date, t.completed_date, "
-    "t.estimated_hours, t.actual_hours, t.days, t.tags, "
-    "t.created_at, t.updated_at"
-)
 
 
 @router.get("/weekly")
@@ -125,17 +81,7 @@ async def weekly_report(
             rows = await c.fetch(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false{dept_clause} "
-                f"AND ("
-                f"  ((t.created_at AT TIME ZONE $3) >= $1::date AND (t.created_at AT TIME ZONE $3) < ($2::date + 1))"
-                f"  OR ((t.updated_at AT TIME ZONE $3) >= $1::date AND (t.updated_at AT TIME ZONE $3) < ($2::date + 1))"
-                f"  OR (t.completed_date >= $1 AND t.completed_date <= $2)"
-                f"  OR EXISTS (SELECT 1 FROM task_progress tp "
-                f"             WHERE tp.task_id=t.id "
-                f"             AND (tp.created_at AT TIME ZONE $3) >= $1::date AND (tp.created_at AT TIME ZONE $3) < ($2::date + 1))"
-                f"  OR EXISTS (SELECT 1 FROM work_sessions ws "
-                f"             WHERE ws.task_id=t.id "
-                f"             AND (ws.started_at AT TIME ZONE $3) >= $1::date AND (ws.started_at AT TIME ZONE $3) < ($2::date + 1))"
-                f") "
+                f"AND {activity_window_sql('$1', '$2', '$3')} "
                 f"ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, "
                 f"{_PRIORITY_RANK}, t.created_at",
                 *args,
