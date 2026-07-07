@@ -1,7 +1,6 @@
 """Weekly Plan & Report documents — compile → review → lock → PDF export."""
 from datetime import datetime, timedelta, timezone
 
-from app.db import tasks_admin_pool
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -100,16 +99,85 @@ async def test_plan_document_compiles_without_sessions(client, admin_headers, or
     assert any(t["title"] == "Carries into next week" for t in c["tasks"])
 
 
-async def test_documents_operator_cannot_compile_or_lock(client, admin_headers, org):
+async def test_documents_operator_denied_all_access(client, admin_headers, org):
+    """A base USER must not compile, read, or export a document — it is an
+    org-wide snapshot (all tasks' notes + every user's session times) that
+    tasks_read RLS and reports.py's per-user filtering deliberately withhold."""
     user, otp = await create_user(client, admin_headers, role="USER")
     tok = await login_and_set_password(client, user["username"], otp)
     h = {"Authorization": f"Bearer {tok}"}
     r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=h)
     assert r.status_code == 403
-    # but reading the week's document (once compiled by a manager) is allowed
-    await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    # Manager compiles it; the USER still cannot READ or EXPORT it.
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    doc_id = r.json()["id"]
     r = await client.get("/reports/documents", params={"kind": "report"}, headers=h)
-    assert r.status_code == 200
+    assert r.status_code == 403
+    r = await client.get(f"/reports/documents/{doc_id}/export.pdf", headers=h)
+    assert r.status_code == 403
+    r = await client.patch(f"/reports/documents/{doc_id}", json={"content": {}}, headers=h)
+    assert r.status_code == 403
+
+
+async def test_documents_malformed_id_is_404_not_500(client, admin_headers, org):
+    """A non-uuid path param is a clean 404, not a 500 from asyncpg casting."""
+    for method, suffix in (("patch", ""), ("post", "/lock"), ("get", "/export.pdf")):
+        call = getattr(client, method)
+        kw = {"json": {"content": {}}} if method == "patch" else {}
+        r = await call(f"/reports/documents/not-a-uuid{suffix}", headers=admin_headers, **kw)
+        assert r.status_code == 404, f"{method} {suffix}: {r.status_code}"
+
+
+async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
+    """A locked document must be immutable at the DB layer, not just via the
+    app's WHERE status='draft' guard: a raw UPDATE/DELETE through an app_user
+    RLS connection must affect 0 rows (the command-scoped policies only expose
+    DRAFT rows to UPDATE/DELETE)."""
+    from app.db import rls
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    doc_id = r.json()["id"]
+    r = await client.post(f"/reports/documents/{doc_id}/lock", headers=admin_headers)
+    assert r.json()["status"] == "locked"
+
+    user = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"}
+    async with rls(user) as c:  # app_user pool — RLS-enforced, no status guard in the SQL
+        upd = await c.execute("UPDATE weekly_documents SET content='{}'::jsonb WHERE id=$1", doc_id)
+        dele = await c.execute("DELETE FROM weekly_documents WHERE id=$1", doc_id)
+    assert upd == "UPDATE 0", upd
+    assert dele == "DELETE 0", dele
+    # untouched + still locked
+    r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "locked"
+
+
+def test_pdf_html_escapes_days_field():
+    """The `days` field is unvalidated user input — it must be HTML-escaped in
+    the PDF like every other field, or a crafted task injects markup / makes
+    WeasyPrint fetch an attacker URL server-side."""
+    from app.api.documents import _pdf_html
+    doc = {
+        "status": "draft", "kind": "report", "locked_by": None, "locked_at": None,
+        "content": {
+            "kind": "report", "period": {"label": "W1", "start": "2026-01-02"},
+            "tasks": [{"title": "T", "status": "completed", "priority": "high",
+                       "days": ["<img src=x onerror=alert(1)>"], "notes": []}],
+            "ribbon": [], "metrics": {}, "ai_sections": [],
+        },
+    }
+    out = _pdf_html(doc, {})
+    assert "<img src=x" not in out
+    assert "&lt;img src=x" in out
+
+
+async def test_on_time_excludes_no_deadline_completions(client, admin_headers, org):
+    """A completed task without a due date is neither on-time nor late — it must
+    not inflate the on-time rate (it counts toward 'completed' but not 'measured')."""
+    # one completed task with NO deadline
+    r = await client.post("/tasks", json={"title": "Ad-hoc done", "status": "completed"}, headers=admin_headers)
+    assert r.status_code == 201
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    ot = r.json()["content"]["metrics"]["on_time"]
+    assert ot["completed"] >= 1 and ot["measured"] == 0 and ot["rate"] is None
 
 
 async def test_documents_rls_org_isolation(client, admin_headers, org):
@@ -118,17 +186,19 @@ async def test_documents_rls_org_isolation(client, admin_headers, org):
     import uuid
     from app.db import users_admin_pool
     from app.security import hash_password
-    org2, admin2 = str(uuid.uuid4()), str(uuid.uuid4())
-    await users_admin_pool().execute(
-        "INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
-        org2, "Other Org", f"other-{org2[:8]}")
-    await users_admin_pool().execute(
-        "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role, must_change_password)"
-        " VALUES ($1,$2,$3,$4,$5,'Other Admin','ADMIN',false)",
-        admin2, org2, f"admin2_{org2[:8]}", f"a2_{org2[:8]}@test.invalid", hash_password("OtherPass123456"))
-    r = await client.post("/auth/login", json={"email": f"admin2_{org2[:8]}", "password": "OtherPass123456"})
-    h2 = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    r = await client.get("/reports/documents", params={"kind": "report"}, headers=h2)
-    assert r.status_code == 404
-    await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org2)
-    await tasks_admin_pool().execute("DELETE FROM weekly_documents WHERE org_id=$1", org2)
+    from tests.conftest import purge_org
+    org2, admin2 = uuid.uuid4(), uuid.uuid4()
+    try:
+        await users_admin_pool().execute(
+            "INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
+            org2, "Other Org", f"other-{str(org2)[:8]}")
+        await users_admin_pool().execute(
+            "INSERT INTO profiles(id, org_id, username, email, password_hash, full_name, role, must_change_password)"
+            " VALUES ($1,$2,$3,$4,$5,'Other Admin','ADMIN',false)",
+            admin2, org2, f"admin2_{str(org2)[:8]}", f"a2_{str(org2)[:8]}@test.invalid", hash_password("OtherPass123456"))
+        r = await client.post("/auth/login", json={"email": f"admin2_{str(org2)[:8]}", "password": "OtherPass123456"})
+        h2 = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        r = await client.get("/reports/documents", params={"kind": "report"}, headers=h2)
+        assert r.status_code == 404
+    finally:
+        await purge_org(org2)

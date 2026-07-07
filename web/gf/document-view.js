@@ -5,17 +5,22 @@
    report-view.js (extends the same GF.WWF namespace). */
 window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
-GF.WWF._doc = { data: null, loading: false };
+GF.WWF._doc = { data: null, loading: false, error: null, _seq: 0 };
 
 GF.WWF.loadDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
-  ds.loading = true; GF.WWF._renderDocPanel();
+  const seq = ++ds._seq;   // only the newest load may write state (no last-response-wins races)
+  ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const q = { kind: st.mode };
     if (st.refDate) q.ref_date = st.refDate;
-    ds.data = await GF.API.getDocument(q);
+    const data = await GF.API.getDocument(q);
+    if (seq !== ds._seq) return;            // a newer load/compile/lock superseded this one
+    ds.data = data; ds.error = null;
   } catch (e) {
-    ds.data = null; // 404 = nothing compiled yet — that's a normal state
+    if (seq !== ds._seq) return;
+    if (e && e.status === 404) { ds.data = null; ds.error = null; }  // 404 = nothing compiled yet (normal)
+    else { ds.error = e.message || String(e); }  // 500/network/403: surface it — do NOT offer to recompile over an existing draft
   }
   ds.loading = false;
   GF.WWF._renderDocPanel();
@@ -23,9 +28,10 @@ GF.WWF.loadDocument = async () => {
 
 GF.WWF.compileDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
-  ds.loading = true; GF.WWF._renderDocPanel();
+  ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
-    ds.data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined });
+    const data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined });
+    ds._seq++; ds.data = data; ds.error = null;   // authoritative new state; bail any in-flight load
     GF.toast(AL('Document compiled', 'Документот е составен'), 'success');
   } catch (e) {
     GF.toast(AL('Compile failed: ', 'Неуспешно составување: ') + e.message, 'error');
@@ -38,10 +44,17 @@ GF.WWF.toggleDocSection = async (idx) => {
   const ds = GF.WWF._doc;
   if (!ds.data || ds.data.status !== 'draft') return;
   const content = ds.data.content;
-  content.ai_sections[idx].approved = !content.ai_sections[idx].approved;
+  const sec = content.ai_sections[idx];
+  const prev = sec.approved;
+  sec.approved = !prev;
+  GF.WWF._renderDocPanel();               // optimistic
   try {
-    ds.data = await GF.API.patchDocument(ds.data.id, content);
-  } catch (e) { GF.toast(AL('Not saved: ', 'Не се зачува: ') + e.message, 'error'); }
+    const data = await GF.API.patchDocument(ds.data.id, content);
+    ds._seq++; ds.data = data;            // adopt the server's canonical copy
+  } catch (e) {
+    sec.approved = prev;                  // roll back the optimistic flip — the server rejected it
+    GF.toast(AL('Not saved: ', 'Не се зачува: ') + e.message, 'error');
+  }
   GF.WWF._renderDocPanel();
 };
 
@@ -52,7 +65,8 @@ GF.WWF.lockDocument = async () => {
     'Lock this document as the submitted record for the week? It becomes immutable.',
     'Да се заклучи документот како поднесен запис за неделата? Станува непроменлив.'))) return;
   try {
-    ds.data = await GF.API.lockDocument(ds.data.id);
+    const data = await GF.API.lockDocument(ds.data.id);
+    ds._seq++; ds.data = data;
     GF.toast(AL('Document locked', 'Документот е заклучен'), 'success');
   } catch (e) { GF.toast(AL('Lock failed: ', 'Неуспешно заклучување: ') + e.message, 'error'); }
   GF.WWF._renderDocPanel();
@@ -64,6 +78,13 @@ GF.WWF.exportDocumentPdf = async () => {
   try {
     const res = await fetch(GF.API.base + '/reports/documents/' + ds.data.id + '/export.pdf',
       { headers: { Authorization: 'Bearer ' + GF.API.token } });
+    if (res.status === 401) {
+      // Route an expired token back to the login overlay, same as GF.API._req —
+      // a raw fetch here would otherwise strand the user behind a toast.
+      GF.API.logout();
+      if (GF.WWF.showLogin) GF.WWF.showLogin();
+      throw new Error(AL('Session expired', 'Сесијата истече'));
+    }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const blob = await res.blob();
     const a = document.createElement('a');
@@ -131,7 +152,7 @@ GF.WWF._docMetricsHtml = (m) => {
         <th style="text-align:right;padding:4px 6px">${AL('Tasks', 'Задачи')}</th>
         <th style="text-align:right;padding:4px 6px">${AL('Off-hours', 'Вон работно')}</th>
       </tr>${rows}</table></div>
-    ${ot.completed ? `<div style="font-size:12px;color:var(--ink-2);margin-top:6px">${AL('On-time completion', 'Навремено завршени')}: <b>${ot.on_time}/${ot.completed}</b>${ot.rate != null ? ' (' + Math.round(ot.rate * 100) + '%)' : ''}</div>` : ''}
+    ${ot.completed ? `<div style="font-size:12px;color:var(--ink-2);margin-top:6px">${AL('On-time completion', 'Навремено завршени')}: <b>${ot.on_time}/${ot.measured != null ? ot.measured : ot.completed}</b> ${AL('with deadlines', 'со рокови')}${ot.rate != null ? ' (' + Math.round(ot.rate * 100) + '%)' : ''} · ${ot.completed} ${AL('completed', 'завршени')}</div>` : ''}
   </div>`;
 };
 
@@ -147,7 +168,14 @@ GF.WWF._renderDocPanel = () => {
   }
   const d = ds.data;
   let body;
-  if (!d) {
+  if (ds.error) {
+    // A real failure (500/network/permission) — NOT the empty state. Offer a
+    // retry, never a Compile button that could overwrite an existing draft.
+    body = `<div style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="color:#B45309;font-size:13px">${AL('Couldn’t load the document: ', 'Не може да се вчита документот: ')}${GF.esc(ds.error)}</span>
+      <button class="btn btn-sm" onclick="GF.WWF.loadDocument()">${AL('Retry', 'Обиди се повторно')}</button>
+    </div>`;
+  } else if (!d) {
     body = `<div style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="color:var(--ink-3);font-size:13px">${AL('No document compiled for this week yet.', 'Сè уште нема составен документ за оваа недела.')}</span>
       ${elevated ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.compileDocument()">${AL('Compile document', 'Состави документ')}</button>` : ''}

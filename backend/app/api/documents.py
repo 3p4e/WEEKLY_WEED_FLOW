@@ -15,8 +15,10 @@ Evidence rule: the report ribbon only ever shows REAL logged work sessions —
 nothing is fabricated from schedules. The plan document carries the task
 listing and AI plan sections; a scheduled-projection ribbon is future work.
 """
+import asyncio
 import html
 import json
+import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -25,14 +27,28 @@ from pydantic import BaseModel
 from app.api.ai import _letta_message
 from app.api.reports import _COLS, _fri_thu, _task_row
 from app.db import rls
-from app.deps import require_password_set, require_role
-from app.roles import ADMIN, ELEVATED_ROLES
+from app.deps import require_role
+from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
 
-_ELEVATED = ELEVATED_ROLES
+
+def _today() -> date:
+    """Facility-local 'today' — never the container's naive UTC clock, which
+    resolves to the previous day (and thus the previous Fri→Thu week) for the
+    hour or two after local midnight."""
+    return datetime.now(TZ).date()
+
+
+def _require_uuid(value) -> None:
+    """A malformed (non-uuid) doc_id path param must be a clean 404, not a 500
+    from asyncpg trying to cast it to uuid inside the lookup query."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(404, "Document not found")
 
 # Stable SOP color palette (hash-assigned, mirrors the frontend's) — the color
 # coding IS the metric key: everything per-SOP hangs off reference_code.
@@ -123,7 +139,8 @@ def _ribbon_segments(sessions) -> list[dict]:
             day_end = datetime.combine(start.date() + timedelta(days=1), datetime.min.time(), tzinfo=start.tzinfo)
             segs.append(_seg(s, sop, start, day_end))
             start = day_end
-        segs.append(_seg(s, sop, start, end))
+        if end > start:  # a session ending exactly at midnight leaves start==end — no phantom
+            segs.append(_seg(s, sop, start, end))
     return segs
 
 
@@ -173,13 +190,17 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
         d["sessions"] += 1
 
     completed = [t for t in tasks if t["status"] == "completed"]
-    on_time = [t for t in completed
-               if not t["due_date"] or (t["completed_date"] and t["completed_date"] <= t["due_date"])]
+    # On-time is only meaningful for tasks that HAD a deadline: a no-due-date
+    # completion is neither on-time nor late, so it's excluded from both sides
+    # (counting it as on-time inflated the rate on the submitted record).
+    with_due = [t for t in completed if t["due_date"]]
+    on_time = [t for t in with_due if t["completed_date"] and t["completed_date"] <= t["due_date"]]
+    today = _today()
     overdue_open = [
         {"id": t["id"], "title": t["title"], "due_date": t["due_date"],
-         "age_days": (date.today() - date.fromisoformat(t["due_date"])).days}
+         "age_days": (today - date.fromisoformat(t["due_date"])).days}
         for t in tasks
-        if t["due_date"] and t["status"] != "completed" and date.fromisoformat(t["due_date"]) < date.today()
+        if t["due_date"] and t["status"] != "completed" and date.fromisoformat(t["due_date"]) < today
     ]
 
     complexity = []
@@ -199,13 +220,22 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
     return {
         "per_sop": sorted(per_sop.values(), key=lambda b: -b["hours"]),
         "per_dept": sorted(per_dept.values(), key=lambda d: -d["hours"]),
-        "on_time": {"completed": len(completed), "on_time": len(on_time),
-                    "rate": round(len(on_time) / len(completed), 2) if completed else None},
+        "on_time": {"completed": len(completed), "measured": len(with_due), "on_time": len(on_time),
+                    "rate": round(len(on_time) / len(with_due), 2) if with_due else None},
         "overdue_open": sorted(overdue_open, key=lambda o: -o["age_days"]),
         "complexity": complexity[:15],
     }
 
 
+_ASK = {
+    "weekly_summary": "Write the executive narrative for this document: what happened, what stands out, what deserves leadership attention. Be concrete and reference tasks/SOPs by name. 2-4 paragraphs.",
+    "risk_flag": "Identify concrete risks, blockers and deviations visible in this data. For each: what, why it matters, suggested action. Bullet list.",
+    "progress_digest": "Write per-SOP observations: for each SOP with meaningful hours, what was done, any anomalies in effort (vs the 4-week average), off-hours concentration. Short sections per SOP.",
+    "dependency_advisor": "Given these carried-over tasks, lay out sequencing and dependency advice for next week: what must precede what, conflicts to watch. Bullet list.",
+}
+
+# (function_key, section title) per document kind. The prompt is looked up in
+# _ASK by key so weekly_summary can carry a kind-specific title.
 _AI_SECTIONS = {
     "report": [("weekly_summary", "Executive summary"),
                ("risk_flag", "Risks & blockers"),
@@ -230,30 +260,32 @@ def _ai_context(kind: str, period: dict, tasks: list[dict], metrics: dict) -> st
     return "\n".join(lines)
 
 
-async def _ai_sections(c, kind: str, context: str) -> list[dict]:
-    out = []
-    for key, title in _AI_SECTIONS[kind]:
-        binding = await c.fetchrow(
-            "SELECT letta_agent_id FROM ai_agent_bindings"
-            " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", key)
-        if binding is None:
-            out.append({"key": key, "title": title, "body": "", "approved": False,
-                        "status": "not_configured"})
-            continue
-        ask = {
-            "weekly_summary": "Write the executive narrative for this document: what happened, what stands out, what deserves leadership attention. Be concrete and reference tasks/SOPs by name. 2-4 paragraphs.",
-            "risk_flag": "Identify concrete risks, blockers and deviations visible in this data. For each: what, why it matters, suggested action. Bullet list.",
-            "progress_digest": "Write per-SOP observations: for each SOP with meaningful hours, what was done, any anomalies in effort (vs the 4-week average), off-hours concentration. Short sections per SOP.",
-            "dependency_advisor": "Given these carried-over tasks, lay out sequencing and dependency advice for next week: what must precede what, conflicts to watch. Bullet list.",
-        }[key]
-        reply = await _letta_message(binding["letta_agent_id"], f"{context}\n\nREQUEST: {ask}")
+async def _ai_bindings(c, kind: str) -> dict:
+    """One query for all of this kind's bindings (was N+1 fetchrow per section).
+    Deterministic scope tie-break, mirroring the old ORDER BY scope LIMIT 1."""
+    keys = [key for key, _title in _AI_SECTIONS[kind]]
+    rows = await c.fetch(
+        "SELECT DISTINCT ON (function_key) function_key, letta_agent_id"
+        " FROM ai_agent_bindings WHERE function_key = ANY($1::text[]) AND is_active=true"
+        " ORDER BY function_key, scope", keys)
+    return {r["function_key"]: r["letta_agent_id"] for r in rows}
+
+
+async def _ai_sections(kind: str, context: str, bindings: dict) -> list[dict]:
+    """Draft the AI sections. Runs the Letta calls CONCURRENTLY and — critically
+    — the caller invokes this OUTSIDE the rls() DB connection, so a slow/hung
+    agent can't pin an asyncpg pool connection (and its open transaction) for
+    the ~30s-per-call it would otherwise hold, exhausting the pool."""
+    async def one(key: str, title: str) -> dict:
+        agent = bindings.get(key)
+        if agent is None:
+            return {"key": key, "title": title, "body": "", "approved": False, "status": "not_configured"}
+        reply = await _letta_message(agent, f"{context}\n\nREQUEST: {_ASK[key]}")
         if reply is None:
-            out.append({"key": key, "title": title, "body": "", "approved": False,
-                        "status": "unavailable"})
-        else:
-            out.append({"key": key, "title": title, "body": reply, "approved": False,
-                        "status": "draft"})
-    return out
+            return {"key": key, "title": title, "body": "", "approved": False, "status": "unavailable"}
+        return {"key": key, "title": title, "body": reply, "approved": False, "status": "draft"}
+
+    return list(await asyncio.gather(*(one(key, title) for key, title in _AI_SECTIONS[kind])))
 
 
 class CompileReq(BaseModel):
@@ -281,29 +313,34 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
     if body.kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     try:
-        ref = date.fromisoformat(body.ref_date) if body.ref_date else date.today()
+        ref = date.fromisoformat(body.ref_date) if body.ref_date else _today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, thu = _fri_thu(ref)
     if body.kind == "plan":
         fri, thu = fri + timedelta(days=7), thu + timedelta(days=7)
 
+    # Gather everything from the DB, then RELEASE the connection before the
+    # (slow, external) Letta calls, then reopen only for the INSERT.
     async with rls(user) as c:
         tasks = await _fetch_window_tasks(c, fri, thu, body.kind)
         await _attach_notes(c, tasks)
         sessions = await _fetch_sessions(c, fri, thu) if body.kind == "report" else []
         prior = await _fetch_sessions(c, fri - timedelta(days=28), fri - timedelta(days=1)) if body.kind == "report" else []
-        metrics = _metrics(tasks, sessions, prior) if body.kind == "report" else {}
-        iso_week = fri.isocalendar()[1]
-        period = {"start": fri.isoformat(), "end": thu.isoformat(), "iso_week": iso_week,
-                  "label": f"W{iso_week} {fri.year} ({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"}
-        content = {
-            "kind": body.kind, "period": period,
-            "tasks": tasks,
-            "ribbon": _ribbon_segments(sessions) if body.kind == "report" else [],
-            "metrics": metrics,
-            "ai_sections": await _ai_sections(c, body.kind, _ai_context(body.kind, period, tasks, metrics)),
-        }
+        bindings = await _ai_bindings(c, body.kind)
+
+    metrics = _metrics(tasks, sessions, prior) if body.kind == "report" else {}
+    iso_week = fri.isocalendar()[1]
+    period = {"start": fri.isoformat(), "end": thu.isoformat(), "iso_week": iso_week,
+              "label": f"W{iso_week} {fri.year} ({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"}
+    content = {
+        "kind": body.kind, "period": period,
+        "tasks": tasks,
+        "ribbon": _ribbon_segments(sessions) if body.kind == "report" else [],
+        "metrics": metrics,
+        "ai_sections": await _ai_sections(body.kind, _ai_context(body.kind, period, tasks, metrics), bindings),
+    }
+    async with rls(user) as c:
         row = await c.fetchrow(
             "INSERT INTO weekly_documents(org_id, kind, week_start, week_end, content, created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6)"
@@ -319,9 +356,13 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
 
 @router.get("")
 async def get_document(kind: str = "report", ref_date: str | None = None,
-                       user: dict = Depends(require_password_set)):
+                       user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    # Elevated-only: the compiled document is an org-wide snapshot (every task's
+    # description + notes, and every user's session times). A base USER must not
+    # read it — tasks_read RLS and reports.py's per-user filtering both hide that
+    # data from them, and this pre-compiled blob would otherwise bypass both.
     try:
-        ref = date.fromisoformat(ref_date) if ref_date else date.today()
+        ref = date.fromisoformat(ref_date) if ref_date else _today()
     except ValueError:
         raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
     fri, _thu = _fri_thu(ref)
@@ -342,6 +383,7 @@ class PatchReq(BaseModel):
 @router.patch("/{doc_id}")
 async def patch_document(doc_id: str, body: PatchReq,
                          user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _require_uuid(doc_id)
     async with rls(user) as c:
         row = await c.fetchrow(
             "UPDATE weekly_documents SET content=$2, updated_at=now()"
@@ -356,6 +398,7 @@ async def patch_document(doc_id: str, body: PatchReq,
 
 @router.post("/{doc_id}/lock")
 async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _require_uuid(doc_id)
     async with rls(user) as c:
         row = await c.fetchrow(
             "UPDATE weekly_documents SET status='locked', locked_by=$2, locked_at=now(), updated_at=now()"
@@ -438,7 +481,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
             f'Dept: {_e(t["department"])}' if t.get("department") else None,
             f'Due: {_e(t["due_date"])}' if t.get("due_date") else None,
             f'Completed: {_e(t["completed_date"])}' if t.get("completed_date") else None,
-            f'Days: {"/".join(t.get("days") or [])}' if t.get("days") else None,
+            f'Days: {"/".join(_e(d) for d in (t.get("days") or []))}' if t.get("days") else None,
             f'Est: {t["estimated_hours"]}h' if t.get("estimated_hours") else None,
             f'Actual: {t["actual_hours"]}h' if t.get("actual_hours") else None,
         ]))
@@ -448,7 +491,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
                       + (f'<ul class="notes">{notes}</ul>' if notes else "")
                       + "</div>")
 
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", date.today().isoformat())) if c.get("ribbon") else ""
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat())) if c.get("ribbon") else ""
     legend = "".join(f'<span class="lg"><span class="dot" style="background:{b["color"]}"></span>{_e(b["sop"])}</span>'
                      for b in c.get("metrics", {}).get("per_sop", [])[:12])
     ot = c.get("metrics", {}).get("on_time") or {}
@@ -478,7 +521,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
     {f'<h2>Week ribbon — logged work by SOP</h2>{ribbon}<div>{legend}</div>' if ribbon else ''}
     {f'''<h2>Metrics</h2>
     <table><tr><th>SOP / area</th><th>Hours</th><th>4-wk avg</th><th>Tasks</th><th>Sessions</th><th>Night</th><th>Weekend</th><th>Overtime</th></tr>{sop_rows}</table>
-    <p class="sub">On-time completion: {ot.get("on_time", "—")}/{ot.get("completed", "—")}{f" ({round(100 * (ot.get('rate') or 0))}%)" if ot.get("rate") is not None else ""}</p>''' if kind == "report" else ''}
+    <p class="sub">On-time completion: {ot.get("on_time", "—")}/{ot.get("measured", "—")} with deadlines{f" ({round(100 * (ot.get('rate') or 0))}%)" if ot.get("rate") is not None else ""} · {ot.get("completed", "—")} completed total</p>''' if kind == "report" else ''}
     {f'<h2>AI analysis</h2>{ai_html}' if ai_html else ''}
     <h2>Tasks ({len(c.get("tasks", []))})</h2>
     {task_html}
@@ -486,7 +529,8 @@ def _pdf_html(doc: dict, people: dict) -> str:
 
 
 @router.get("/{doc_id}/export.pdf")
-async def export_pdf(doc_id: str, user: dict = Depends(require_password_set)):
+async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _require_uuid(doc_id)
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
     if row is None:

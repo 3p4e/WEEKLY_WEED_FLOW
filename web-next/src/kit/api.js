@@ -2,10 +2,20 @@
 // (this exact client has been validated all session against the live
 // FastAPI backend). window.GF_API_BASE lets index.html point at a
 // different origin for local/dev verification; empty string = same-origin.
+function _safeParse(raw) {
+  // A truncated or 'undefined' value in sessionStorage must not throw at
+  // script-eval time (this is a classic script — a top-level throw would leave
+  // GF_API undefined and dead-lock the whole app).
+  try { return JSON.parse(raw || 'null'); } catch (e) { return null; }
+}
+
 window.GF_API = {
   base: window.GF_API_BASE || '',
   token: sessionStorage.getItem('gfnext_token') || '',
-  user: JSON.parse(sessionStorage.getItem('gfnext_user') || 'null'),
+  user: _safeParse(sessionStorage.getItem('gfnext_user')),
+  // Registered by app.js: called when a request 401s mid-session so the UI can
+  // return to the login screen instead of stranding the user behind toasts.
+  onAuthLost: null,
 
   _headers() {
     const h = { 'Content-Type': 'application/json' };
@@ -19,6 +29,7 @@ window.GF_API = {
     });
     if (res.status === 401) {
       this.logout();
+      if (typeof this.onAuthLost === 'function') { try { this.onAuthLost(); } catch (e) {} }
       throw new Error('unauthorized');
     }
     if (!res.ok) {
@@ -39,8 +50,10 @@ window.GF_API = {
 
   async login(username, password) {
     const data = await this._req('POST', '/auth/login', { email: username, password });
-    this.token = data.access_token; this.user = data.user;
-    sessionStorage.setItem('gfnext_token', this.token);
+    this.token = data.access_token; this.user = data.user || null;
+    sessionStorage.setItem('gfnext_token', this.token || '');
+    // Never write the string "undefined" — a missing user would poison the
+    // next load's JSON.parse (guarded above, but keep storage clean).
     sessionStorage.setItem('gfnext_user', JSON.stringify(this.user));
     return data;
   },

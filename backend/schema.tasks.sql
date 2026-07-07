@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict L9JAyJhIhIXIdZeYJUk9nbMHmKbuV0ihIfzIeM6ZhllBkPuzOkF5qGVueXInBHf
+\restrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -908,13 +908,6 @@ CREATE POLICY org_isolation ON public.task_links USING ((org_id = app.current_or
 
 
 --
--- Name: weekly_documents org_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY org_isolation ON public.weekly_documents USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
-
-
---
 -- Name: work_sessions org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -977,6 +970,34 @@ CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()
 
 
 --
+-- Name: weekly_documents wd_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY wd_delete ON public.weekly_documents FOR DELETE USING (((org_id = app.current_org_id()) AND (status = 'draft'::text)));
+
+
+--
+-- Name: weekly_documents wd_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY wd_insert ON public.weekly_documents FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: weekly_documents wd_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY wd_select ON public.weekly_documents FOR SELECT USING ((org_id = app.current_org_id()));
+
+
+--
+-- Name: weekly_documents wd_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY wd_update ON public.weekly_documents FOR UPDATE USING (((org_id = app.current_org_id()) AND (status = 'draft'::text))) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: weekly_documents; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -992,5 +1013,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict L9JAyJhIhIXIdZeYJUk9nbMHmKbuV0ihIfzIeM6ZhllBkPuzOkF5qGVueXInBHf
+\unrestrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
 
