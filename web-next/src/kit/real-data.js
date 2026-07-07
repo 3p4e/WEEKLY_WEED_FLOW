@@ -33,12 +33,18 @@
     return todayIdx;
   }
 
+  const _todayISO = () => new Date().toISOString().slice(0, 10);
+
   function taskFromApi(t, deptCodeById, todayIdx) {
     const deptCode = (t.department_id && deptCodeById[t.department_id]) || t.department || 'prod';
     const days = Array.isArray(t.days) ? t.days.map((d) => d.slice(0, 3)) : [];
     const pr = PRIORITY_IN[t.priority] || 'medium';
     const desc = t.description || '';
     const ref = t.reference_code || '';
+    // recurrence comes back as {freq, interval} | null — the kit UI speaks a
+    // bare frequency string; map it in so the Edit modal round-trips it (else
+    // save sends recurrence:null and silently strips the rule).
+    const rec = (t.recurrence && t.recurrence.freq) ? t.recurrence.freq : '';
     return {
       id: t.id, title: t.title, status: STATUS_IN[t.status] || 'pending',
       // Dual-keyed, matching createTask()'s newTask shape below — different
@@ -51,7 +57,12 @@
       weekIdx: weekIdxFor(t.week_start || t.due_date, todayIdx),
       owner: t.user_id, helpers: (t.assignee_ids || []).filter((id) => id !== t.user_id),
       due: t.due_date || null, type: t.task_type || 'other',
-      sessionHours: 0, subDone: 0, subCount: 0,
+      recurrence: rec,
+      // Derived flag the kit's badges/dashboard read; the mock-mode data.js
+      // augmentation never runs on real rows, so compute it here.
+      overdue: !!(t.due_date && t.status !== 'completed' && t.due_date < _todayISO()),
+      sessionHours: t.session_hours != null ? Number(t.session_hours) : 0,
+      subDone: t.subtask_done_count || 0, subCount: t.subtask_count || 0,
       tags: t.tags || [], days, day: days[0] || 'Mon',
       dept: deptCode, notes: [], deps: [],
       blocker: t.blocker_reason || '',
@@ -142,8 +153,11 @@
       due_date: v.due || null,
       days: v.days && v.days.length ? v.days : undefined,
       tags: v.tags && v.tags.length ? v.tags : undefined,
-      recurrence: v.recurrence || null,
+      // Backend wants a {freq, interval} dict (or null), NOT a bare string —
+      // sending 'weekly' 422s the whole create/edit.
+      recurrence: v.recurrence ? { freq: v.recurrence, interval: 1 } : null,
     };
+    if (v.sessionHours != null && v.sessionHours !== '') body.estimated_hours = Number(v.sessionHours);
     if (v.dept && LIVE.deptUuidByCode[v.dept]) {
       body.department_id = LIVE.deptUuidByCode[v.dept];
       body.department = LIVE.deptNameByCode[v.dept];

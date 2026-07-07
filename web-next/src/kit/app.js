@@ -360,9 +360,17 @@ function Login({ onSignIn, lang, logo }) {
       setBusy(false); onSignIn(meId);
     } catch (err) {
       setBusy(false);
-      setError(err.message === 'unauthorized' || /invalid/i.test(err.message || '')
-        ? (lang === 'mk' ? 'Погрешно корисничко име или лозинка.' : 'Incorrect username or password.')
-        : (err.message || (lang === 'mk' ? 'Најавувањето не успеа.' : 'Sign-in failed.')));
+      const msg = err.message || '';
+      if (/password change required/i.test(msg)) {
+        // web-next has no change-password screen yet — send them to the main app.
+        setError(lang === 'mk'
+          ? 'Мора да ја промените лозинката. Најавете се во главната апликација за да поставите нова лозинка.'
+          : 'You must change your password first. Sign in to the main app to set a new one.');
+      } else {
+        setError(msg === 'unauthorized' || /invalid/i.test(msg)
+          ? (lang === 'mk' ? 'Погрешно корисничко име или лозинка.' : 'Incorrect username or password.')
+          : (msg || (lang === 'mk' ? 'Најавувањето не успеа.' : 'Sign-in failed.')));
+      }
     }
   }
   function submitForgot(e) {
@@ -1430,15 +1438,21 @@ function App() {
   const dropOnColumn = React.useCallback((id, status) => {
     setTasks((ts) => ts.map((x) => {
       if (x.id !== id || x.status === status) return x;
+      if (!canStatus(x)) { denyToast(); return x; }
       pushToast('info', `${x.title} moved to ${STATUS_LABEL(lang, status)}`, 'Move');
-      return { ...x, status };
+      // Persist the drag exactly like cycleStatus/toggleDone — without this the
+      // board move was optimistic-only and vanished on the next reload.
+      window.GF_REAL.persistStatus(id, status).catch((e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert'));
+      const updated = { ...x, status, overdue: status === 'done' ? false : x.overdue };
+      setDetailTask((d) => (d && d.id === id ? updated : d));
+      return updated;
     }));
-  }, [lang, pushToast]);
+  }, [lang, pushToast, canStatus, denyToast]);
 
   const createTask = React.useCallback(({ id, title, priority, dept, type, owner, helpers, days, sessionHours, recurrence, due, ref, desc, tags }) => {
     const color = (GF_DEPARTMENTS.find((d) => d.id === dept) || {}).color;
     const hp = helpers || [];
-    const uiVals = { title, priority, dept, type, helpers: hp, days, recurrence, due, ref, desc, tags };
+    const uiVals = { title, priority, dept, type, helpers: hp, days, sessionHours, recurrence, due, ref, desc, tags };
     const saveErr = (e) => pushToast('error', (lang === 'mk' ? 'Не се зачува: ' : 'Not saved: ') + e.message, 'CircleAlert');
     if (id) {
       window.GF_REAL.persistEdit(id, uiVals).catch(saveErr);
@@ -1521,16 +1535,24 @@ function App() {
 
   React.useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
 
+  // A mid-session 401 (expired/invalidated token) returns the UI to the login
+  // screen instead of leaving it interactive with every save failing.
+  React.useEffect(() => {
+    if (window.GF_MOCK) return;
+    window.GF_API.onAuthLost = () => { setAuthed(false); pushToast('error', lang === 'mk' ? 'Сесијата истече — најавете се повторно.' : 'Session expired — please sign in again.', 'CircleAlert'); };
+    return () => { if (window.GF_API) window.GF_API.onAuthLost = null; };
+  }, [lang, pushToast]);
+
   React.useEffect(() => {
     const onKey = (e) => {
       const tag = (e.target.tagName || '').toUpperCase();
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); const el = document.getElementById('gf-search'); if (el) el.focus(); return; }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) { if (e.key === 'Escape') e.target.blur(); return; }
-      if (e.key === 'n' && stage === 'app') { e.preventDefault(); setModal('add'); }
+      if (e.key === 'n' && authed) { e.preventDefault(); setModal('add'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [stage]);
+  }, [authed]);
 
   if (stage === 'splash') return <React.Fragment><Splash onDone={() => setStage('login')} lang={lang} logo={tw.logo} />{panel}</React.Fragment>;
   if (!authed) return <React.Fragment><Login onSignIn={(meId) => {
