@@ -1,0 +1,54 @@
+html,body{height:100%}
+  body{margin:0;overflow:hidden}
+  #root{position:relative;height:100vh;width:100vw}
+  @keyframes gfRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes gfSpin3D{
+    0%{transform:rotateY(16deg)}
+    50%{transform:rotateY(52deg)}
+    100%{transform:rotateY(16deg)}
+  }
+  @keyframes gfSpinBurst{
+    from{transform:rotateY(16deg)}
+    to{transform:rotateY(1096deg)}
+  }
+  @keyframes gfSpinSettle{
+    from{transform:rotateY(16deg)}
+    to{transform:rotateY(0deg)}
+  }
+  @keyframes gfWobble{
+    0%,100%{transform:rotateX(9deg) rotateZ(0deg)}
+    50%{transform:rotateX(4deg) rotateZ(2.4deg)}
+  }
+  @keyframes gfWobbleBig{
+    0%,100%{transform:rotateX(13deg) rotateZ(-2deg)}
+    50%{transform:rotateX(0deg) rotateZ(7deg)}
+  }
+  @keyframes gfSplashShadow{
+    0%,100%{transform:translateX(-50%) scaleX(1);opacity:.5}
+    50%{transform:translateX(-50%) scaleX(.62);opacity:.28}
+  }
+  @keyframes gfSplashFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes gfSlideIn{from{transform:translateX(100%)}to{transform:none}}
+  @keyframes gfFade{from{opacity:0}to{opacity:1}}
+  @keyframes gfBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+  .gf-splash{position:absolute;inset:0;overflow:hidden;background:radial-gradient(120% 80% at 20% 0%,#0c2419 0%,var(--navy-900) 55%);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .gf-splash::after{content:'';position:absolute;inset:0;pointer-events:none;background:var(--scanlines),var(--plasma-grid);opacity:.5;mix-blend-mode:overlay}
+  .gf-splash-stage{perspective:1300px;width:210px;height:245px;position:relative}
+  .gf-splash-stage::before{
+    content:'';position:absolute;inset:-34%;z-index:-1;
+    background:radial-gradient(circle at 50% 46%,rgba(43,232,160,.6) 0%,rgba(47,217,217,.26) 42%,transparent 70%);
+    filter:blur(16px);animation:pp-aura 4s ease-in-out infinite;
+  }
+  .gf-splash-wobble{width:100%;height:100%;position:relative;transform-style:preserve-3d;animation:gfWobble 3.4s ease-in-out infinite}
+  .gf-splash-wobble.burst,.gf-splash-wobble.settle{animation:gfWobbleBig 1s ease-in-out infinite}
+  .gf-splash-spin{width:100%;height:100%;position:relative;transform-style:preserve-3d;animation:gfSpin3D 4.6s ease-in-out infinite;filter:drop-shadow(0 0 34px rgba(43,232,160,.6)) drop-shadow(0 0 15px rgba(47,217,217,.45)) drop-shadow(0 8px 12px rgba(2,7,5,.5)) saturate(1.35) brightness(1.08) contrast(1.05)}
+  .gf-splash-spin.burst{animation:gfSpinBurst 1s linear 1}
+  .gf-splash-spin.settle{animation:gfSpinSettle 1s cubic-bezier(.16,.84,.44,1) 1 forwards}
+  .gf-splash-layer{position:absolute;inset:0;background:url('/assets/pp-leaf.png') center/contain no-repeat}
+  .gf-leaf-side{position:absolute;inset:0;-webkit-mask:url('/assets/pp-leaf.png') center/contain no-repeat;mask:url('/assets/pp-leaf.png') center/contain no-repeat}
+  .gf-leaf-face{position:absolute;inset:0;background:url('/assets/pp-leaf.png') center/contain no-repeat;filter:saturate(1.5) brightness(1.12) contrast(1.04)}
+  .gf-splash-shadow{position:absolute;left:50%;bottom:-16px;width:148px;height:26px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent 72%);animation:gfSplashShadow 4.6s ease-in-out infinite}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+  }  @keyframes gfSpin{to{transform:rotate(360deg)}}
+  .gf-mw-card:hover button[title]{opacity:1!important}

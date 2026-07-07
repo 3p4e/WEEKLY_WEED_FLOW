@@ -1,0 +1,4 @@
+node_modules/
+preview_dist/
+dist/
+*.log

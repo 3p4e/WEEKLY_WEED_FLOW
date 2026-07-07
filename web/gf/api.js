@@ -118,6 +118,15 @@ GF.API = {
   unassign(taskId, userId)  { return this._req('DELETE', '/tasks/' + taskId + '/assignees/' + userId); },
   ack(taskId, accepted, reason) { return this._req('POST', '/tasks/' + taskId + '/ack', { accepted: accepted, reason: reason || null }); },
 
+  // Weekly Plan/Report DOCUMENTS: compile -> review -> lock -> PDF
+  getDocument(q = {}) {
+    const p = new URLSearchParams(q).toString();
+    return this._req('GET', '/reports/documents' + (p ? '?' + p : ''));
+  },
+  compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
+  patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },
+  lockDocument(id)          { return this._req('POST', '/reports/documents/' + id + '/lock'); },
+
   weeklyReport(q = {}) {
     const p = new URLSearchParams(q).toString();
     return this._req('GET', '/reports/weekly' + (p ? '?' + p : ''));

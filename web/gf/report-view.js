@@ -327,7 +327,10 @@ GF.WWF.renderReport = () => {
     </div>` : '';
 
   const pinsPanel = GF.WWF._renderPinsPanel();
-  v.innerHTML = toolbar + period + cards + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+  // Document panel (document-view.js) renders into #report-doc after load.
+  const docPanel = '<div id="report-doc"></div>';
+  v.innerHTML = toolbar + period + cards + docPanel + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+  if (GF.WWF.loadDocument) GF.WWF.loadDocument();
 };
 
 /* nav item for the report/plan view, above Audit Trail */

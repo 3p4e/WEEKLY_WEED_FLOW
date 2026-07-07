@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict bnnrXzCUtz6lQzwJezPTDQ0bxqHpGVH73LrfZDabgu7xQXUe5gD2HDztRdtvAIj
+\restrict L9JAyJhIhIXIdZeYJUk9nbMHmKbuV0ihIfzIeM6ZhllBkPuzOkF5qGVueXInBHf
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -360,6 +360,30 @@ ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: weekly_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.weekly_documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    kind text NOT NULL,
+    week_start date NOT NULL,
+    week_end date NOT NULL,
+    content jsonb DEFAULT '{}'::jsonb NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    created_by uuid,
+    locked_by uuid,
+    locked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT weekly_documents_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'report'::text]))),
+    CONSTRAINT weekly_documents_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text])))
+);
+
+ALTER TABLE ONLY public.weekly_documents FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: work_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -495,6 +519,22 @@ ALTER TABLE ONLY public.tasks
 
 
 --
+-- Name: weekly_documents weekly_documents_org_kind_week_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.weekly_documents
+    ADD CONSTRAINT weekly_documents_org_kind_week_key UNIQUE (org_id, kind, week_start);
+
+
+--
+-- Name: weekly_documents weekly_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.weekly_documents
+    ADD CONSTRAINT weekly_documents_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: work_sessions work_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -587,6 +627,13 @@ CREATE INDEX tasks_week_idx ON public.tasks USING btree (week_id);
 
 
 --
+-- Name: weekly_documents_org_week_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX weekly_documents_org_week_idx ON public.weekly_documents USING btree (org_id, week_start);
+
+
+--
 -- Name: work_sessions_org_started_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -626,6 +673,13 @@ CREATE TRIGGER audit_task_prog AFTER INSERT OR DELETE OR UPDATE ON public.task_p
 --
 
 CREATE TRIGGER audit_tasks AFTER INSERT OR DELETE OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: weekly_documents audit_weekly_documents; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_weekly_documents AFTER INSERT OR DELETE OR UPDATE ON public.weekly_documents FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -854,6 +908,13 @@ CREATE POLICY org_isolation ON public.task_links USING ((org_id = app.current_or
 
 
 --
+-- Name: weekly_documents org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.weekly_documents USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: work_sessions org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -916,6 +977,12 @@ CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()
 
 
 --
+-- Name: weekly_documents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.weekly_documents ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: work_sessions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -925,5 +992,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict bnnrXzCUtz6lQzwJezPTDQ0bxqHpGVH73LrfZDabgu7xQXUe5gD2HDztRdtvAIj
+\unrestrict L9JAyJhIhIXIdZeYJUk9nbMHmKbuV0ihIfzIeM6ZhllBkPuzOkF5qGVueXInBHf
 

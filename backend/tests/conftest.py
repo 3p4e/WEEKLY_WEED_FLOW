@@ -58,7 +58,7 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
-    for table in ("ai_agent_bindings", "ai_pins", "handoffs", "task_comments",
+    for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs", "task_comments",
                   "task_assignees", "task_links", "work_sessions", "task_progress",
                   "tasks", "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
