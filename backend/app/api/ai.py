@@ -37,12 +37,15 @@ class InvokeReq(BaseModel):
     context: dict | None = None
 
 
-async def _letta_message(agent_id: str, text: str) -> str | None:
+async def _letta_message(agent_id: str, text: str, timeout: float = 30) -> str | None:
+    # timeout defaults to 30s for the quick interactive calls; heavier jobs
+    # (e.g. multi-task document extraction) pass a longer one so the reasoning
+    # agent isn't cut off mid-answer.
     headers = {}
     if settings.letta_api_key:
         headers["Authorization"] = f"Bearer {settings.letta_api_key}"
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.post(
                 f"{settings.letta_base_url}/v1/agents/{agent_id}/messages",
                 headers=headers,

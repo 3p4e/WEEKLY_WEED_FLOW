@@ -157,7 +157,9 @@ async def extract_tasks(body: ExtractReq, user: dict = Depends(require_password_
         dept_by_key[r["code"].lower()] = r["code"]
         dept_by_key[r["name"].lower()] = r["code"]
 
-    reply = await _letta_message(binding["letta_agent_id"], _prompt(text, depts))
+    # Multi-task extraction over a long document is a heavy reasoning job — give
+    # the agent more room than the 30s default or it gets cut off mid-answer.
+    reply = await _letta_message(binding["letta_agent_id"], _prompt(text, depts), timeout=150)
     if reply is None:
         return {"available": False, "reason": "letta_unreachable"}
     candidates = _parse_candidates(reply, dept_by_key)
