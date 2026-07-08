@@ -127,6 +127,15 @@ GF.WWF.switchReportMode = (mode) => {
   GF.WWF.loadReport();
 };
 
+// Pick any week directly (not just ±1 from here): the backend snaps the chosen
+// date to its Fri→Thu window, so a report/plan can be compiled or drafted for
+// any past or future week ahead of the scheduled submission day.
+GF.WWF.jumpReportWeek = (dateStr) => {
+  if (!dateStr) return;
+  GF.WWF._report.refDate = dateStr;
+  GF.WWF.loadReport();
+};
+
 GF.WWF.shiftReportWeek = (delta) => {
   const st = GF.WWF._report;
   if (delta === 0) { st.refDate = null; }
@@ -199,10 +208,13 @@ GF.WWF.renderReport = () => {
         <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:#fff' : ''}">${AL('Report', 'Извештај')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:#fff' : ''}">${AL('Plan', 'План')}</button>
       </div>
-      <div style="display:flex;gap:4px">
+      <div style="display:flex;gap:4px;align-items:center">
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(0)" title="${AL('Current week', 'Тековна недела')}">${AL('Today', 'Денес')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(1)" title="${AL('Next week', 'Следна недела')}">▶</button>
+        <input type="date" value="${(d.period && d.period.start) || ''}" title="${AL('Jump to any week', 'Скокни на било која недела')}"
+          onchange="GF.WWF.jumpReportWeek(this.value)"
+          style="font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)">
       </div>
     </div>`;
 

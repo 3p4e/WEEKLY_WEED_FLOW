@@ -287,12 +287,23 @@ GF.WWF.install = () => {
     const recFreq = GF.$('add-rec')?.value || '';
     const recurrence = recFreq ? { freq: recFreq, interval: 1 } : null;
 
+    // Bilingual on Save: every task the app creates/edits is stored bilingual
+    // "Македонски | English" regardless of the language it was typed in. A brief
+    // spinner runs on the Save button while the AI translates; it falls back to
+    // the typed text if the AI is unavailable, so the save is never blocked.
+    const btn = GF.$('add-submit-btn');
+    const btnLabel = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${AL('Translating…','Преведување…')}`; }
+    let biTitle = title, biDesc = '';
+    try { const bi = await GF.ai.bilingual(title, ''); biTitle = bi.title; biDesc = bi.description || ''; }
+    finally { if (btn) { btn.disabled = false; btn.textContent = btnLabel; } }
+
     // Edit mode (openEdit in worklog.js sets GF._editTask) → PATCH instead of POST.
     if (GF._editTask) {
       const id = GF._editTask, t = GF.task(id);
       try {
         const patched = await GF.API.updateTask(id, {
-          title, priority: P_OUT[GF.$('add-pr').value]||'normal',
+          title: biTitle, priority: P_OUT[GF.$('add-pr').value]||'normal',
           // Send the department text alongside the id (as the create path
           // does) — reports.py groups the department breakdown by the text
           // column, so updating only department_id leaves the two out of sync.
@@ -354,7 +365,7 @@ GF.WWF.install = () => {
 
     try {
       const created = await GF.API.createTask({
-        title, description:'', status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
+        title: biTitle, description: biDesc, status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
         week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
         estimated_hours: estHours,
@@ -423,6 +434,20 @@ GF.WWF.install = () => {
       t.desc = rewritten;
       GF.render.panels(); GF.toast('Rewritten ✓', 'success');
     } catch (e) { GF.toast('AI error: ' + e.message, 'error'); }
+  };
+
+  // Translate a task into the bilingual "Македонски | English" format the
+  // platform stores everything in. Short-circuits when the title is already
+  // bilingual, and falls back to the raw text if the AI is unavailable — the
+  // caller (GF.submitAdd) must never be blocked from saving.
+  GF.ai.bilingual = async (title, description) => {
+    const desc = description || '';
+    if ((title || '').includes(' | ')) return { title, description: desc };  // already МК | EN
+    try {
+      const r = await GF.API.bilingual({ title, description: desc || null });
+      if (r && r.available && r.title) return { title: r.title, description: (r.description != null ? r.description : desc) };
+    } catch (e) {}
+    return { title, description: desc };
   };
 
   GF.ai.parseVoice = async (transcript) => {

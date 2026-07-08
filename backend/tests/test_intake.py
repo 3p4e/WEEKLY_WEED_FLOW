@@ -89,6 +89,71 @@ def test_prompt_demands_bilingual_output():
     assert "Македонски наслов> | <English title" in p
 
 
+async def test_bilingual_not_configured_without_binding(client, admin_headers, org):
+    r = await client.post("/intake/bilingual", json={"title": "Validate the HPLC method"},
+                          headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == {"available": False, "reason": "not_configured"}
+
+
+async def test_bilingual_translates_title_and_description(client, admin_headers, org, monkeypatch):
+    """A manually-typed task is translated to МК | English on Save. The fake
+    agent stands in for Letta; a code-fence-wrapped reply is still parsed."""
+    import app.api.intake as intake
+    await _bind(org["org_id"], "translate_bilingual")
+
+    async def fake(agent_id, text, timeout=30):
+        return ('```json\n{"title": "Валидирај го HPLC методот | Validate the HPLC method",'
+                ' "description": "Системска подобност\\nSystem suitability"}\n```')
+    monkeypatch.setattr(intake, "_letta_message", fake)
+
+    r = await client.post("/intake/bilingual",
+                          json={"title": "Validate the HPLC method", "description": "System suitability"},
+                          headers=admin_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["title"] == "Валидирај го HPLC методот | Validate the HPLC method"
+    assert body["description"] == "Системска подобност\nSystem suitability"
+
+
+async def test_bilingual_title_only_never_fabricates_description(client, admin_headers, org, monkeypatch):
+    """A title-only task keeps description null even if the model returns one."""
+    import app.api.intake as intake
+    await _bind(org["org_id"], "voice_capture")  # falls back to the voice binding
+
+    async def fake(agent_id, text, timeout=30):
+        return '{"title": "Пушти ја серијата | Release the batch", "description": "unsolicited"}'
+    monkeypatch.setattr(intake, "_letta_message", fake)
+
+    r = await client.post("/intake/bilingual", json={"title": "Release the batch"}, headers=admin_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["title"] == "Пушти ја серијата | Release the batch"
+    assert body["description"] is None
+
+
+async def test_bilingual_short_circuits_unparseable_reply(client, admin_headers, org, monkeypatch):
+    import app.api.intake as intake
+    await _bind(org["org_id"], "translate_bilingual")
+
+    async def fake(agent_id, text, timeout=30):
+        return "I could not translate that."
+    monkeypatch.setattr(intake, "_letta_message", fake)
+
+    r = await client.post("/intake/bilingual", json={"title": "Some task"}, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == {"available": False, "reason": "unparseable"}
+
+
+def test_bilingual_prompt_demands_both_languages():
+    from app.api.intake import _bilingual_prompt
+    p = _bilingual_prompt("Release the batch", None)
+    assert "Македонски наслов> | <English title" in p
+    assert "Release the batch" in p
+
+
 async def test_adopt_extracted_tasks_via_capture(client, admin_headers, org):
     """The adopt step: post intake-shaped candidates to /capture/import — tasks
     land in the caller's account, subtasks (with descriptions) become child

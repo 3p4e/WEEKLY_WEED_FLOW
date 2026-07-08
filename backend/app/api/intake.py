@@ -136,6 +136,84 @@ def _prompt(text: str, depts: list[dict]) -> str:
     )
 
 
+# ── Bilingual translation (used when creating any manual/voice task) ──────────
+# Every task the app creates must be bilingual "Македонски | English" regardless
+# of the language it was typed/spoken in. The frontend calls this on Save with a
+# short spinner and falls back to the raw text if the AI is unavailable.
+
+class BilingualReq(BaseModel):
+    title: str
+    description: str | None = None
+
+
+def _bilingual_prompt(title: str, description: str | None) -> str:
+    return (
+        "You normalize one task into the platform's bilingual Macedonian/English format.\n"
+        "Return the SAME task with BOTH languages. If a field is in only one language, "
+        "translate the missing half; if it is already bilingual, keep it as-is. Do not "
+        "invent new content, only translate what is given.\n"
+        'Title format:        "<Македонски наслов> | <English title>"\n'
+        'Description format:  "<Македонски опис>\\n<English description>"\n\n'
+        "Return ONLY a JSON object, no prose, no code fence:\n"
+        '{"title": str, "description": str|null}\n\n'
+        f"TASK TITLE: {title}\n"
+        + (f"TASK DESCRIPTION: {description}\n" if description else "")
+    )
+
+
+def _parse_bilingual(reply: str) -> dict | None:
+    """Pull the first JSON object out of the model reply. Tolerates prose /
+    code-fence wrappers the same way _parse_candidates does for the array."""
+    if not reply:
+        return None
+    m = re.search(r"\{[\s\S]*\}", reply)
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    title = str(obj.get("title") or "").strip() or None
+    if not title:
+        return None
+    desc = obj.get("description")
+    desc = (str(desc).strip() or None) if desc else None
+    return {"title": title, "description": desc}
+
+
+@router.post("/bilingual")
+async def bilingualize(body: BilingualReq, user: dict = Depends(require_password_set)):
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(422, "title is required")
+    desc = (body.description or "").strip() or None
+
+    async with rls(user) as c:
+        # translate_bilingual is the purpose-built binding; fall back to
+        # voice_capture (already bound in prod, same text-shaping agent) so the
+        # feature works before an explicit binding is configured.
+        binding = await c.fetchrow(
+            "SELECT letta_agent_id FROM ai_agent_bindings"
+            " WHERE function_key = ANY($1::text[]) AND is_active=true"
+            " ORDER BY CASE function_key WHEN 'translate_bilingual' THEN 0 ELSE 1 END LIMIT 1",
+            ["translate_bilingual", "voice_capture"])
+    if binding is None:
+        return {"available": False, "reason": "not_configured"}
+
+    reply = await _letta_message(binding["letta_agent_id"], _bilingual_prompt(title, desc), timeout=60)
+    if reply is None:
+        return {"available": False, "reason": "letta_unreachable"}
+    out = _parse_bilingual(reply)
+    if out is None:
+        return {"available": False, "reason": "unparseable"}
+    # Only surface a translated description when the caller sent one; never
+    # fabricate a description for a title-only task.
+    return {"available": True, "title": out["title"],
+            "description": (out["description"] or desc) if desc else None}
+
+
 @router.post("/extract")
 async def extract_tasks(body: ExtractReq, user: dict = Depends(require_password_set)):
     text = (body.text or "").strip()

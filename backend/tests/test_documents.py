@@ -203,6 +203,69 @@ async def test_on_time_excludes_no_deadline_completions(client, admin_headers, o
     assert ot["completed"] >= 1 and ot["measured"] == 0 and ot["rate"] is None
 
 
+async def test_preview_custom_range_not_persisted(client, admin_headers, org):
+    """A custom-range preview returns compiled content WITHOUT writing a row —
+    the stored/lockable record stays the scheduled Fri→Thu week only. The
+    period carries the day-span the ribbon renderers use."""
+    task = await _seed_task_with_session(client, admin_headers, org)
+    today = datetime.now(timezone.utc).date()
+    start = (today - timedelta(days=1)).isoformat()
+    end = (today + timedelta(days=1)).isoformat()
+    r = await client.post("/reports/documents/preview",
+                          json={"kind": "report", "start": start, "end": end}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert doc["status"] == "preview" and doc["id"] is None
+    c = doc["content"]
+    assert c["period"]["days"] == 3
+    assert c["period"]["start"] == start and c["period"]["end"] == end
+    assert any(t["title"] == task["title"] for t in c["tasks"])
+    # non-persistence: no compiled document exists for that week
+    r = await client.get("/reports/documents", params={"kind": "report", "ref_date": start}, headers=admin_headers)
+    assert r.status_code == 404
+
+
+async def test_preview_validation_errors(client, admin_headers, org):
+    bad = [
+        {"kind": "report", "start": "2026-02-10", "end": "2026-02-01"},   # end < start
+        {"kind": "report", "start": "2026-01-01", "end": "2026-12-31"},   # > 92 days
+        {"kind": "report", "start": "nope", "end": "2026-01-02"},         # malformed date
+        {"kind": "invoice", "start": "2026-01-01", "end": "2026-01-07"},  # bad kind
+    ]
+    for payload in bad:
+        r = await client.post("/reports/documents/preview", json=payload, headers=admin_headers)
+        assert r.status_code == 422, (payload, r.status_code)
+
+
+async def test_export_range_pdf(client, admin_headers, org):
+    """The non-persisted preview exports to PDF by posting its content back."""
+    await _seed_task_with_session(client, admin_headers, org)
+    today = datetime.now(timezone.utc).date()
+    r = await client.post("/reports/documents/preview", json={
+        "kind": "report", "start": (today - timedelta(days=1)).isoformat(),
+        "end": (today + timedelta(days=1)).isoformat()}, headers=admin_headers)
+    content = r.json()["content"]
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "report", "content": content}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:5] == b"%PDF-"
+    assert "PREVIEW" in r.headers.get("content-disposition", "")
+
+
+async def test_preview_and_range_export_operator_denied(client, admin_headers, org):
+    """Custom-range preview/export is an org-wide snapshot — base USER denied."""
+    user, otp = await create_user(client, admin_headers, role="USER")
+    tok = await login_and_set_password(client, user["username"], otp)
+    h = {"Authorization": f"Bearer {tok}"}
+    r = await client.post("/reports/documents/preview",
+                          json={"kind": "report", "start": "2026-01-02", "end": "2026-01-08"}, headers=h)
+    assert r.status_code == 403
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "report", "content": {}}, headers=h)
+    assert r.status_code == 403
+
+
 async def test_documents_rls_org_isolation(client, admin_headers, org):
     await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
     # a second org cannot see this org's document

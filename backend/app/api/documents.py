@@ -305,6 +305,46 @@ def _doc_row(r) -> dict:
     }
 
 
+def _period(start: date, end: date, custom: bool) -> dict:
+    """Period header for the compiled content. A scheduled week keeps its
+    ISO-week label; a custom range reads as an explicit date interval. `days`
+    is the row count the ribbon renderers use (7 for a week)."""
+    span = (end - start).days + 1
+    iso_week = start.isocalendar()[1]
+    if custom:
+        label = f"{start.strftime('%a %b %d')} → {end.strftime('%a %b %d, %Y')} ({span} days)"
+    else:
+        label = f"W{iso_week} {start.year} ({start.strftime('%a %b %d')} → {end.strftime('%a %b %d')})"
+    return {"start": start.isoformat(), "end": end.isoformat(), "iso_week": iso_week,
+            "days": span, "label": label}
+
+
+async def _compile_content(user: dict, kind: str, start: date, end: date, custom: bool) -> dict:
+    """Assemble the full document content for [start, end]. Shared by the
+    persisted week compile and the non-persisted custom-range preview: gathers
+    from the DB, RELEASES the connection before the (slow, external) Letta
+    calls, then computes metrics + AI sections. The prior-window baseline scales
+    with the span (4 equal-length windows before `start`) so the per-SOP trend
+    stays meaningful for a range as well as a 7-day week."""
+    span = (end - start).days + 1
+    async with rls(user) as c:
+        tasks = await _fetch_window_tasks(c, start, end, kind)
+        await _attach_notes(c, tasks)
+        sessions = await _fetch_sessions(c, start, end) if kind == "report" else []
+        prior = await _fetch_sessions(c, start - timedelta(days=4 * span), start - timedelta(days=1)) if kind == "report" else []
+        bindings = await _ai_bindings(c, kind)
+
+    metrics = _metrics(tasks, sessions, prior) if kind == "report" else {}
+    period = _period(start, end, custom)
+    return {
+        "kind": kind, "period": period,
+        "tasks": tasks,
+        "ribbon": _ribbon_segments(sessions) if kind == "report" else [],
+        "metrics": metrics,
+        "ai_sections": await _ai_sections(kind, _ai_context(kind, period, tasks, metrics), bindings),
+    }
+
+
 @router.post("/compile")
 async def compile_document(body: CompileReq, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     if body.kind not in ("report", "plan"):
@@ -317,26 +357,7 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
     if body.kind == "plan":
         fri, thu = fri + timedelta(days=7), thu + timedelta(days=7)
 
-    # Gather everything from the DB, then RELEASE the connection before the
-    # (slow, external) Letta calls, then reopen only for the INSERT.
-    async with rls(user) as c:
-        tasks = await _fetch_window_tasks(c, fri, thu, body.kind)
-        await _attach_notes(c, tasks)
-        sessions = await _fetch_sessions(c, fri, thu) if body.kind == "report" else []
-        prior = await _fetch_sessions(c, fri - timedelta(days=28), fri - timedelta(days=1)) if body.kind == "report" else []
-        bindings = await _ai_bindings(c, body.kind)
-
-    metrics = _metrics(tasks, sessions, prior) if body.kind == "report" else {}
-    iso_week = fri.isocalendar()[1]
-    period = {"start": fri.isoformat(), "end": thu.isoformat(), "iso_week": iso_week,
-              "label": f"W{iso_week} {fri.year} ({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"}
-    content = {
-        "kind": body.kind, "period": period,
-        "tasks": tasks,
-        "ribbon": _ribbon_segments(sessions) if body.kind == "report" else [],
-        "metrics": metrics,
-        "ai_sections": await _ai_sections(body.kind, _ai_context(body.kind, period, tasks, metrics), bindings),
-    }
+    content = await _compile_content(user, body.kind, fri, thu, custom=False)
     async with rls(user) as c:
         row = await c.fetchrow(
             "INSERT INTO weekly_documents(org_id, kind, week_start, week_end, content, created_by)"
@@ -349,6 +370,46 @@ async def compile_document(body: CompileReq, user: dict = Depends(require_role(*
         if row is None:
             raise HTTPException(409, "Document for this week is locked — it is the submitted record")
     return _doc_row(row)
+
+
+class PreviewReq(BaseModel):
+    kind: str = "report"  # report | plan
+    start: str            # YYYY-MM-DD
+    end: str              # YYYY-MM-DD
+
+
+_MAX_RANGE_DAYS = 92  # bound the ribbon (one row per day) + the compile cost
+
+
+@router.post("/preview")
+async def preview_document(body: PreviewReq, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Draft a report/plan for an ARBITRARY date interval WITHOUT persisting it —
+    for looking ahead / back before the scheduled submission day. Deliberately
+    not written to weekly_documents: the stored record is keyed one row per
+    Fri→Thu week (UNIQUE org_id,kind,week_start) and only the scheduled week is
+    the submitted record. This returns the same content shape as a compiled doc
+    (so the panel renders it identically) with a synthetic 'preview' envelope;
+    export it via POST /export-range.pdf. Locking is intentionally unavailable."""
+    if body.kind not in ("report", "plan"):
+        raise HTTPException(422, "kind must be 'report' or 'plan'")
+    try:
+        start = date.fromisoformat(body.start)
+        end = date.fromisoformat(body.end)
+    except ValueError:
+        raise HTTPException(422, "start and end must be ISO format YYYY-MM-DD")
+    if end < start:
+        raise HTTPException(422, "end must be on or after start")
+    if (end - start).days + 1 > _MAX_RANGE_DAYS:
+        raise HTTPException(422, f"range too long (max {_MAX_RANGE_DAYS} days)")
+
+    content = await _compile_content(user, body.kind, start, end, custom=True)
+    return {
+        "id": None, "kind": body.kind, "status": "preview",
+        "week_start": start.isoformat(), "week_end": end.isoformat(),
+        "content": content,
+        "created_by": str(user["id"]), "locked_by": None, "locked_at": None,
+        "created_at": None, "updated_at": None,
+    }
 
 
 @router.get("")
@@ -452,26 +513,28 @@ def _e(v) -> str:
     return html.escape(str(v if v is not None else ""))
 
 
-def _ribbon_svg(segments: list[dict], week_start: str) -> str:
-    """Server-rendered 7×24h ribbon for the PDF (light, static, WeasyPrint-safe
-    concrete colors). The live panel has a SECOND, theme-adaptive renderer
+def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
+    """Server-rendered N×24h ribbon for the PDF (light, static, WeasyPrint-safe
+    concrete colors). N is 7 for the scheduled Fri→Thu week and the span of a
+    custom range otherwise. The live panel has a SECOND, theme-adaptive renderer
     (GF.WWF._ribbonSvg in web/gf/document-view.js) — two renderers on purpose:
     one static print target, one interactive themed DOM. They must stay aligned
     on the RECORD-critical geometry only (which day-row, x = start_h·hour_w,
     width = max(2, (end_h−start_h)·hour_w), SOP color), and both derive that
     purely from the shared `content.ribbon` segments, so the submitted record
     cannot drift from the reviewed one — only cosmetic chrome differs."""
+    n = max(1, min(int(days or 7), 92))  # cap rows defensively for oversized input
     W, ROW, LEFT, TOP = 780, 34, 64, 22
-    H = TOP + 7 * ROW + 14
+    H = TOP + n * ROW + 14
     hour_w = (W - LEFT - 10) / 24
     start = date.fromisoformat(week_start)
-    days = [(start + timedelta(days=i)) for i in range(7)]
+    day_dates = [(start + timedelta(days=i)) for i in range(n)]
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" font-family="DejaVu Sans, sans-serif">']
     for h in range(0, 25, 3):
         x = LEFT + h * hour_w
         parts.append(f'<line x1="{x:.1f}" y1="{TOP - 4}" x2="{x:.1f}" y2="{H - 12}" stroke="#DCE3EC" stroke-width="1"/>')
         parts.append(f'<text x="{x:.1f}" y="{TOP - 8}" font-size="8" fill="#8A99B0" text-anchor="middle">{h:02d}</text>')
-    for i, d in enumerate(days):
+    for i, d in enumerate(day_dates):
         y = TOP + i * ROW
         parts.append(f'<text x="4" y="{y + ROW / 2 + 3:.1f}" font-size="9" fill="#16233B">{d.strftime("%a %d.%m")}</text>')
         parts.append(f'<rect x="{LEFT}" y="{y + 4}" width="{W - LEFT - 10}" height="{ROW - 8}" rx="4" fill="#F3F6FA"/>')
@@ -532,7 +595,8 @@ def _pdf_html(doc: dict, people: dict) -> str:
                       + (f'<ul class="notes">{notes}</ul>' if notes else "")
                       + "</div>")
 
-    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat())) if c.get("ribbon") else ""
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+                         period.get("days", 7)) if c.get("ribbon") else ""
     legend = "".join(f'<span class="lg"><span class="dot" style="background:{b["color"]}"></span>{_e(b["sop"])}</span>'
                      for b in c.get("metrics", {}).get("per_sop", [])[:12])
     ot = c.get("metrics", {}).get("on_time") or {}
@@ -586,5 +650,34 @@ async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_RO
         raise HTTPException(501, "PDF engine not available on this server")
     pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
     name = f"wwf-{doc['kind']}-{doc['week_start']}{'' if doc['status'] == 'locked' else '-DRAFT'}.pdf"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+class RangeExportReq(BaseModel):
+    content: dict
+    kind: str = "report"
+
+
+@router.post("/export-range.pdf")
+async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """PDF for a non-persisted custom-range preview. The reviewed content is
+    posted back (there is no stored row to read) and rendered through the same
+    _pdf_html — every field is HTML-escaped there, so client-supplied content
+    cannot inject markup or a server-side fetch. Always a DRAFT (a preview is
+    never a locked submitted record)."""
+    content = body.content or {}
+    kind = content.get("kind") or body.kind or "report"
+    period = content.get("period") or {}
+    doc = {"content": content, "status": "preview", "kind": kind,
+           "week_start": period.get("start") or _today().isoformat(),
+           "locked_by": None, "locked_at": None}
+    people = await roster(user)
+    try:
+        from weasyprint import HTML
+    except Exception:
+        raise HTTPException(501, "PDF engine not available on this server")
+    pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
+    name = f"wwf-{kind}-{doc['week_start']}-PREVIEW.pdf"
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
