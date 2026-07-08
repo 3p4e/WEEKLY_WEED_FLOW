@@ -12,14 +12,21 @@ const P_OUT = { medium:'normal', high:'high', critical:'critical', low:'low' };
 const DEPT_STYLE = {
   cultivation:{icon:'leaf',color:'#15A86B'}, vegetation:{icon:'leaf',color:'#3FA34D'},
   production:{icon:'box',color:'#2F6BFF'}, qc:{icon:'flask',color:'#7A5BE0'},
-  quality_control:{icon:'flask',color:'#7A5BE0'}, quality_assurance:{icon:'shield',color:'#C2410C'},
+  quality_assurance:{icon:'shield',color:'#C2410C'},
   logistics:{icon:'box',color:'#0891B2'}, tooling:{icon:'wrench',color:'#5A6B82'},
+  security:{icon:'shield',color:'#566884'},
+};
+// Short, language-neutral department abbreviations (QC, QA, WH…), shown on the
+// compact task cards / chips; the full bilingual name shows in lists + dropdowns.
+const DEPT_ABBR = {
+  qc:'QC', quality_assurance:'QA', production:'PR', cultivation:'CU',
+  tooling:'MU', logistics:'WH', security:'SE',
 };
 // Cross-department handoff pipeline, keyed by the backend's department `code`
 // (resolved to real ids once /departments loads — see loadAndRender).
 const CODE_HANDOFF = {
-  cultivation:'production', production:'qc', qc:'quality_control',
-  quality_control:'quality_assurance', quality_assurance:'logistics',
+  cultivation:'production', production:'qc', qc:'quality_assurance',
+  quality_assurance:'logistics',
 };
 
 GF.WWF.meId = 'me';
@@ -203,7 +210,9 @@ GF.WWF.loadAndRender = async () => {
   try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
   if (depts.length) {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
-      return { id:d.id, name:d.name, mk:d.name_mk || d.name, icon:st.icon, color:st.color }; });
+      return { id:d.id, name:d.name, mk:d.name_mk || d.name,
+               abbr: DEPT_ABBR[d.code] || (d.code || '').toUpperCase().slice(0, 3),
+               icon:st.icon, color:st.color }; });
     // Resolve the code-keyed handoff pipeline to the real backend ids.
     const byCode = {}; depts.forEach(d => { byCode[d.code] = d.id; });
     GF.HANDOFF = {};

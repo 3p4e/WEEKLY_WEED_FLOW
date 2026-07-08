@@ -26,7 +26,7 @@ GF.views = {
             const d = GF.dep(t.dept);
             const drag = GF.can('status', t);
             return `<div class="kcard${drag?' drag':''}" ${drag?`draggable="true" ondragstart="GF.dndStart(event,'${t.id}')" ondragend="GF.dndEnd(event)"`:''} onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
-              <div class="kcard-dept" style="color:${d.color}">${GF.esc(GF.depName(t.dept))}</div>
+              <div class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</div>
               <div class="kcard-title">${GF.esc(t.title)}</div>
               <div class="kcard-foot">
                 ${GF.avatars([t.owner, ...(t.helpers||[])], 22)}
@@ -75,9 +75,9 @@ GF.views = {
           <div class="coord-id">${GF.esc(t.id)}</div>
         </div>
         <div class="coord-flow">
-          <span class="hbadge"><span class="chip-dept">${GF.icon(from.icon,'icon',from.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
+          <span class="hbadge" title="${GF.esc(GF.depName(t.dept))}"><span class="chip-dept">${GF.icon(from.icon,'icon',from.color)}</span>${GF.esc(GF.depAbbr(t.dept))}</span>
           ${GF.icon('arrowR','icon','var(--ink-3)')}
-          <span class="hbadge"><span class="chip-dept">${GF.icon(to.icon,'icon',to.color)}</span>${GF.esc(GF.depName(toId))}</span>
+          <span class="hbadge" title="${GF.esc(GF.depName(toId))}"><span class="chip-dept">${GF.icon(to.icon,'icon',to.color)}</span>${GF.esc(GF.depAbbr(toId))}</span>
         </div>
         <div class="coord-status">
           ${ready ? `<span class="coord-tag ok">${GF.icon('check','icon','#fff')}${AL('Ready','Подготвено')}</span>`

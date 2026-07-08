@@ -94,6 +94,9 @@ GF.denyToast = () => GF.toast(GF.state.lang === 'mk'
 GF.t = (k) => (GF.I18N[GF.state.lang] && GF.I18N[GF.state.lang][k]) || GF.I18N.en[k] || k;
 GF.dep = (id) => GF.DEPTS.find(d => d.id === id) || GF.DEPTS[0];
 GF.depName = (id) => { const d = GF.dep(id); return GF.state.lang === 'mk' ? d.mk : d.name; };
+// Compact, language-neutral abbreviation (QC, QA, WH…) for cards/chips; falls
+// back to the full name if a department has none.
+GF.depAbbr = (id) => { const d = GF.dep(id); return (d && d.abbr) || (d ? d.name : ''); };
 GF.statusLabel = (s) => GF.STATUS[s] ? GF.STATUS[s][GF.state.lang] : s;
 GF.prLabel = (p) => GF.PRIORITY[p] ? GF.PRIORITY[p][GF.state.lang] : p;
 GF.dayLabel = (d) => { const i = GF.DAYS.indexOf(d); return GF.state.lang === 'mk' && i >= 0 ? GF.DAYS_MK[i] : d; };

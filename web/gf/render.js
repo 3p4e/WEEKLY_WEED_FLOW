@@ -193,7 +193,7 @@ GF.render = {
           ${t.status === 'done' ? GF.icon('check', 'icon', '#fff') : ''}</button>
         <div style="flex:1;min-width:0">
           <div class="card-title">${GF.esc(t.title)}</div>
-          <div class="card-meta"><span class="dn" style="color:${d.color}">${GF.esc(GF.depName(t.dept))}</span>
+          <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
             ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${tagChips}</div>
         </div>
@@ -211,9 +211,9 @@ GF.render = {
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>
       <div class="handoff">
-        <span class="hbadge"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.esc(GF.depName(t.dept))}</span>
+        <span class="hbadge" title="${GF.esc(GF.depName(t.dept))}"><span class="chip-dept">${GF.icon(d.icon,'icon',d.color)}</span>${GF.esc(GF.depAbbr(t.dept))}</span>
         ${GF.icon('arrowR','icon','var(--ink-3)')}
-        <span class="hbadge"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depName(toDept))}</span>
+        <span class="hbadge" title="${GF.esc(GF.depName(toDept))}"><span class="chip-dept">${GF.icon(GF.dep(toDept).icon,'icon',GF.dep(toDept).color)}</span>${GF.esc(GF.depAbbr(toDept))}</span>
       </div>` : '';
 
     const body = `
