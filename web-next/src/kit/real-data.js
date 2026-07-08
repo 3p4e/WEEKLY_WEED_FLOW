@@ -184,6 +184,7 @@
     return window.GF_API.updateTask(id, taskBodyFromUi(v));
   }
 
-  window.GF_REAL = { loadRealData, ROLE_IN, STATUS_OUT, PRIORITY_OUT, LIVE,
-    persistStatus, persistArchive, persistCreate, persistEdit };
+  // Public surface only — the enum maps and LIVE lookup tables stay
+  // module-private (the persist* helpers close over them internally).
+  window.GF_REAL = { loadRealData, persistStatus, persistArchive, persistCreate, persistEdit };
 })();

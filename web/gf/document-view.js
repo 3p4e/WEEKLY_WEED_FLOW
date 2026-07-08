@@ -43,13 +43,13 @@ GF.WWF.compileDocument = async () => {
 GF.WWF.toggleDocSection = async (idx) => {
   const ds = GF.WWF._doc;
   if (!ds.data || ds.data.status !== 'draft') return;
-  const content = ds.data.content;
-  const sec = content.ai_sections[idx];
+  const sec = ds.data.content.ai_sections[idx];
   const prev = sec.approved;
   sec.approved = !prev;
   GF.WWF._renderDocPanel();               // optimistic
   try {
-    const data = await GF.API.patchDocument(ds.data.id, content);
+    // Section-scoped PATCH: sends {approved} only, not the whole document.
+    const data = await GF.API.patchDocumentSection(ds.data.id, sec.key, { approved: sec.approved });
     ds._seq++; ds.data = data;            // adopt the server's canonical copy
   } catch (e) {
     sec.approved = prev;                  // roll back the optimistic flip — the server rejected it
@@ -87,16 +87,27 @@ GF.WWF.exportDocumentPdf = async () => {
     }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const blob = await res.blob();
+    // Take the filename from the server's Content-Disposition (single owner of
+    // the naming + DRAFT-suffix policy); fall back only if the header is absent.
+    const cd = res.headers.get('content-disposition') || '';
+    const m = /filename="?([^"]+)"?/.exec(cd);
+    const name = (m && m[1]) || ('wwf-' + ds.data.kind + '-' + ds.data.week_start
+      + (ds.data.status === 'locked' ? '' : '-DRAFT') + '.pdf');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'wwf-' + ds.data.kind + '-' + ds.data.week_start
-      + (ds.data.status === 'locked' ? '' : '-DRAFT') + '.pdf';
+    a.download = name;
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
   } catch (e) { GF.toast(AL('Export failed: ', 'Неуспешен извоз: ') + e.message, 'error'); }
 };
 
-/* ── ribbon: 7 day-rows × 24h, sessions as SOP-colored bars ── */
+/* ── ribbon: 7 day-rows × 24h, sessions as SOP-colored bars ──
+   Theme-adaptive live-panel renderer (uses --line/--surface CSS vars so it
+   follows light/dark). The PDF has a second, static renderer (_ribbon_svg in
+   backend/app/api/documents.py) — deliberately two, for two output targets.
+   RECORD-critical geometry MUST match the backend: day-row by date, x =
+   start_h*hw, width = max(2, (end_h-start_h)*hw), fill = seg.color. Both draw
+   from the same content.ribbon segments, so the record can't drift. */
 GF.WWF._ribbonSvg = (segments, weekStart) => {
   if (!segments || !segments.length) return '';
   const W = 860, ROW = 36, LEFT = 70, TOP = 22, H = TOP + 7 * ROW + 14;
@@ -159,7 +170,10 @@ GF.WWF._docMetricsHtml = (m) => {
 GF.WWF._renderDocPanel = () => {
   const el = GF.$('report-doc'); if (!el) return;
   const ds = GF.WWF._doc, st = GF.WWF._report;
-  const elevated = GF.API.user && GF.API.user.role !== 'USER';
+  // Reuse integrate.js's shared ELEVATED_ROLES (same classic-script scope) so a
+  // new non-elevated role can't slip past a hand-rolled `!== 'USER'` check and
+  // show Compile/Lock buttons that then 403 on the backend's require_role gate.
+  const elevated = ELEVATED_ROLES.includes((GF.API.user || {}).role);
   const kindLbl = st.mode === 'plan' ? AL('Plan document', 'Документ План') : AL('Report document', 'Документ Извештај');
 
   if (ds.loading) {

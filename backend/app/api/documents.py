@@ -25,7 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.api.ai import _letta_message
-from app.api.reports import _COLS, _fri_thu, _task_row
+from app.api.weekwindow import TASK_COLS as _COLS
+from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
@@ -72,15 +73,8 @@ async def _fetch_window_tasks(c, fri: date, thu: date, kind: str) -> list[dict]:
         rows = await c.fetch(
             f"SELECT {_COLS} FROM tasks t "
             f"WHERE t.is_deleted=false "
-            f"AND ("
-            f"  ((t.created_at AT TIME ZONE $3) >= $1::date AND (t.created_at AT TIME ZONE $3) < ($2::date + 1))"
-            f"  OR ((t.updated_at AT TIME ZONE $3) >= $1::date AND (t.updated_at AT TIME ZONE $3) < ($2::date + 1))"
-            f"  OR (t.completed_date >= $1 AND t.completed_date <= $2)"
-            f"  OR EXISTS (SELECT 1 FROM task_progress tp WHERE tp.task_id=t.id "
-            f"             AND (tp.created_at AT TIME ZONE $3) >= $1::date AND (tp.created_at AT TIME ZONE $3) < ($2::date + 1))"
-            f"  OR EXISTS (SELECT 1 FROM work_sessions ws WHERE ws.task_id=t.id "
-            f"             AND (ws.started_at AT TIME ZONE $3) >= $1::date AND (ws.started_at AT TIME ZONE $3) < ($2::date + 1))"
-            f") ORDER BY t.department, t.created_at",
+            f"AND {activity_window_sql('$1', '$2', '$3')} "
+            f"ORDER BY t.department, t.created_at",
             fri, thu, TZ.key)
     else:  # plan: everything active/incomplete carrying into the week
         rows = await c.fetch(
@@ -158,20 +152,28 @@ def _seg(s, sop: str, start, end) -> dict:
 
 
 def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
+    # Single pass over sessions accumulates BOTH the per-SOP and per-department
+    # buckets (session_hours computed once each), rounding once at the end so
+    # totals don't drift from compounding per-iteration round().
     per_sop: dict[str, dict] = {}
+    per_dept: dict[str, dict] = {}
     for s in sessions:
+        h = session_hours(s)
+        cls = classify(s["started_at"])
         sop = s["reference_code"] or (s["department"] or "—")
         b = per_sop.setdefault(sop, {"sop": sop, "color": _sop_color(sop), "hours": 0.0,
                                      "sessions": 0, "tasks": set(),
                                      "night": 0.0, "weekend": 0.0, "overtime": 0.0,
                                      "prev4_avg_hours": 0.0})
-        h = session_hours(s)
         b["hours"] += h
         b["sessions"] += 1
         b["tasks"].add(str(s["task_id"]))
-        cls = classify(s["started_at"])
         if cls in ("night", "weekend", "overtime"):
             b[cls] += h
+        dn = s["department"] or "—"
+        d = per_dept.setdefault(dn, {"name": dn, "hours": 0.0, "sessions": 0})
+        d["hours"] += h
+        d["sessions"] += 1
     prior: dict[str, float] = {}
     for s in prior_sessions:
         sop = s["reference_code"] or (s["department"] or "—")
@@ -181,13 +183,8 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
         b["prev4_avg_hours"] = round(prior.get(sop, 0.0) / 4, 2)
         for k in ("hours", "night", "weekend", "overtime"):
             b[k] = round(b[k], 2)
-
-    per_dept: dict[str, dict] = {}
-    for s in sessions:
-        dn = s["department"] or "—"
-        d = per_dept.setdefault(dn, {"name": dn, "hours": 0.0, "sessions": 0})
-        d["hours"] = round(d["hours"] + session_hours(s), 2)
-        d["sessions"] += 1
+    for d in per_dept.values():
+        d["hours"] = round(d["hours"], 2)
 
     completed = [t for t in tasks if t["status"] == "completed"]
     # On-time is only meaningful for tasks that HAD a deadline: a no-due-date
@@ -396,6 +393,44 @@ async def patch_document(doc_id: str, body: PatchReq,
     return _doc_row(row)
 
 
+class SectionReq(BaseModel):
+    approved: bool | None = None
+    body: str | None = None
+
+
+@router.patch("/{doc_id}/sections/{key}")
+async def patch_section(doc_id: str, key: str, body: SectionReq,
+                        user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Approve/edit a single AI section. The reviewer's per-checkbox action now
+    sends a few bytes instead of round-tripping the whole compiled document
+    (tasks + ribbon + metrics + every AI body) — and the server mutates the
+    CURRENT stored content, so a concurrent edit can't be clobbered by a stale
+    full-document upload."""
+    _require_uuid(doc_id)
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "SELECT * FROM weekly_documents WHERE id=$1 AND status='draft'", doc_id)
+        if row is None:
+            exists = await c.fetchval("SELECT status FROM weekly_documents WHERE id=$1", doc_id)
+            if exists == "locked":
+                raise HTTPException(409, "Locked documents are immutable")
+            raise HTTPException(404, "Document not found")
+        content = row["content"]
+        if isinstance(content, str):
+            content = json.loads(content)
+        target = next((s for s in content.get("ai_sections", []) if s.get("key") == key), None)
+        if target is None:
+            raise HTTPException(404, "Section not found")
+        if body.approved is not None:
+            target["approved"] = body.approved
+        if body.body is not None:
+            target["body"] = body.body
+        upd = await c.fetchrow(
+            "UPDATE weekly_documents SET content=$2, updated_at=now()"
+            " WHERE id=$1 AND status='draft' RETURNING *", doc_id, content)
+    return _doc_row(upd)
+
+
 @router.post("/{doc_id}/lock")
 async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     _require_uuid(doc_id)
@@ -418,8 +453,14 @@ def _e(v) -> str:
 
 
 def _ribbon_svg(segments: list[dict], week_start: str) -> str:
-    """Server-rendered 7×24h ribbon (also embedded in the PDF): one row per
-    day, hour ticks, sessions as SOP-colored bars over their real extents."""
+    """Server-rendered 7×24h ribbon for the PDF (light, static, WeasyPrint-safe
+    concrete colors). The live panel has a SECOND, theme-adaptive renderer
+    (GF.WWF._ribbonSvg in web/gf/document-view.js) — two renderers on purpose:
+    one static print target, one interactive themed DOM. They must stay aligned
+    on the RECORD-critical geometry only (which day-row, x = start_h·hour_w,
+    width = max(2, (end_h−start_h)·hour_w), SOP color), and both derive that
+    purely from the shared `content.ribbon` segments, so the submitted record
+    cannot drift from the reviewed one — only cosmetic chrome differs."""
     W, ROW, LEFT, TOP = 780, 34, 64, 22
     H = TOP + 7 * ROW + 14
     hour_w = (W - LEFT - 10) / 24

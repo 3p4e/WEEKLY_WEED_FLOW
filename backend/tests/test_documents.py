@@ -128,6 +128,29 @@ async def test_documents_malformed_id_is_404_not_500(client, admin_headers, org)
         assert r.status_code == 404, f"{method} {suffix}: {r.status_code}"
 
 
+async def test_section_approve_endpoint(client, admin_headers, org):
+    """The section-scoped PATCH flips one AI section's approval without sending
+    the whole document, and refuses malformed ids / unknown keys / locked docs."""
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    doc = r.json()
+    doc_id = doc["id"]
+    key = doc["content"]["ai_sections"][0]["key"]
+    # malformed id -> 404, unknown section -> 404
+    r = await client.patch("/reports/documents/not-a-uuid/sections/x", json={"approved": True}, headers=admin_headers)
+    assert r.status_code == 404
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/nope", json={"approved": True}, headers=admin_headers)
+    assert r.status_code == 404
+    # approve just that section
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{key}", json={"approved": True}, headers=admin_headers)
+    assert r.status_code == 200
+    secs = {s["key"]: s for s in r.json()["content"]["ai_sections"]}
+    assert secs[key]["approved"] is True
+    # locked doc -> 409
+    await client.post(f"/reports/documents/{doc_id}/lock", headers=admin_headers)
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{key}", json={"approved": False}, headers=admin_headers)
+    assert r.status_code == 409
+
+
 async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
     """A locked document must be immutable at the DB layer, not just via the
     app's WHERE status='draft' guard: a raw UPDATE/DELETE through an app_user
