@@ -40,6 +40,8 @@ const ROLE_IN  = { ADMIN:'admin', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
 const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
+// Roles with no department affiliation — hide the dept picker for these.
+const NO_DEPT_ROLES = new Set(['ceo', 'coo', 'qp']);
 // The 7 department-manager roles (create only USER staff in their own dept).
 const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
@@ -704,11 +706,20 @@ GF.openUser = (id) => {
   GF.$('user-body').innerHTML = `
     <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" value="${editing ? GF.esc(p.name || '') : ''}" placeholder="e.g. Ana Nikolova"></div>
     ${usernameRow}
-    <div class="field"><label>${GF.t('role')}</label><select id="u-role" ${iAmAdmin?'':'disabled'}>${roleOpts}</select></div>
-    <div class="field"><label>${GF.t('dept_label')}</label><select id="u-dept" ${deptLocked}>${deptOpts}</select></div>
+    <div class="field"><label>${GF.t('role')}</label><select id="u-role" ${iAmAdmin?'':'disabled'} onchange="GF._userRoleChange(this.value)">${roleOpts}</select></div>
+    <div class="field" id="u-dept-row"><label>${GF.t('dept_label')}</label><select id="u-dept" ${deptLocked}>${deptOpts}</select></div>
+    <div id="u-nodept-note" style="display:none;font-size:12px;color:var(--ink-3);padding:2px 0 8px">${AL('Cross-org role — no department assignment', 'Меѓусекторска улога — без оддел')}</div>
     <div class="field"><label>${AL('Title (optional)', 'Титула (изборно)')}</label><input id="u-fn" value="${editing ? GF.esc(p.fn || '') : ''}" placeholder="e.g. Head of QC"></div>
     ${footNote}`;
+  GF._userRoleChange(curRole);
   GF.openModal('user-modal');
+};
+
+GF._userRoleChange = (roleKey) => {
+  const deptRow = GF.$('u-dept-row'), note = GF.$('u-nodept-note');
+  const hide = NO_DEPT_ROLES.has(roleKey);
+  if (deptRow) deptRow.style.display = hide ? 'none' : '';
+  if (note) note.style.display = hide ? '' : 'none';
 };
 
 GF.WWF.resetUserPw = async (id) => {
@@ -725,8 +736,9 @@ GF.WWF.resetUserPw = async (id) => {
 GF.submitUser = async () => {
   const name = (GF.$('u-name')?.value || '').trim();
   if (!name) { GF.toast(AL('Enter a full name', 'Внесете име и презиме'), 'error'); return; }
-  const role = ROLE_OUT[GF.$('u-role').value] || 'USER';
-  const department_id = GF.$('u-dept').value;
+  const roleKey = GF.$('u-role').value;
+  const role = ROLE_OUT[roleKey] || 'USER';
+  const department_id = NO_DEPT_ROLES.has(roleKey) ? null : (GF.$('u-dept')?.value || null);
   const function_role = (GF.$('u-fn')?.value || '').trim() || null;
   // Edit mode (openUser was given an id) → PATCH the existing account.
   if (GF._editUser) {
