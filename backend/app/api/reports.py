@@ -65,6 +65,10 @@ async def weekly_report(
     overdue: list[dict] = []
 
     async with rls(user) as c:
+        # Resolve the department breakdown by the canonical department_id → name,
+        # not the denormalized free-text `department` column (which historically
+        # stored codes and could split one department across code/name variants).
+        dept_names = {str(r["id"]): r["name"] for r in await c.fetch("SELECT id, name FROM departments")}
         if mode == "report":
             # $3 = TZ.key (e.g. "Europe/Skopje"): every timestamptz column is
             # converted to facility-local wall-clock time BEFORE comparing
@@ -212,7 +216,7 @@ async def weekly_report(
 
     dept_map: dict[str, dict] = {}
     for t in tasks_out:
-        dn = t["department"] or "Unassigned"
+        dn = dept_names.get(str(t.get("department_id"))) or t["department"] or "Unassigned"
         if dn not in dept_map:
             dept_map[dn] = {"name": dn, "total": 0, "completed": 0}
         dept_map[dn]["total"] += 1
