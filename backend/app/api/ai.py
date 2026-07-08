@@ -23,6 +23,7 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 CATALOG = {
     "weekly_summary":    "Summarize the week, flag blocked/overdue/at-risk tasks.",
     "voice_capture":     "Turn natural-language/voice into structured tasks + subtasks.",
+    "task_extract":      "Extract many tasks + subtasks from a pasted document (email, plan).",
     "dependency_advisor":"Suggest task dependencies and cross-department handoffs.",
     "corpus_qa":         "Answer questions over the task corpus (RAG).",
     "draft_description": "Expand a task title into a full description + subtasks.",
