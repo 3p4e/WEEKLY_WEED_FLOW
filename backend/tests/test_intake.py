@@ -41,7 +41,7 @@ async def test_extract_normalizes_candidates(client, admin_headers, org, monkeyp
 ]
 ```'''
 
-    async def fake(agent_id, text):
+    async def fake(agent_id, text, timeout=30):
         return reply
     monkeypatch.setattr(intake, "_letta_message", fake)
 
@@ -65,7 +65,7 @@ async def test_extract_falls_back_to_voice_capture(client, admin_headers, org, m
     import app.api.intake as intake
     await _bind(org["org_id"], "voice_capture")  # only the fallback binding exists
 
-    async def fake(agent_id, text):
+    async def fake(agent_id, text, timeout=30):
         return '[{"title": "Ship the EU GMP dossier"}]'
     monkeypatch.setattr(intake, "_letta_message", fake)
 
