@@ -431,6 +431,8 @@ GF.WWF.install = () => {
     try {
       const r = await GF.API.ai('voice_capture', { input:
         `Parse this spoken task into JSON {title,department,priority,assignee,due,days}. ` +
+        `The platform is bilingual: title MUST contain both languages as ` +
+        `"<Македонски наслов> | <English title>" — translate whichever half is missing. ` +
         `Valid depts: ${depts.join(', ')}. Valid people: ${people.join(', ')}. ` +
         `priority: critical|high|medium|low. Return ONLY JSON.\n\n"${transcript}"` });
       if (r && r.available && r.output) {

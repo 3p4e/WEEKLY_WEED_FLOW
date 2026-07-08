@@ -119,6 +119,11 @@ def _prompt(text: str, depts: list[dict]) -> str:
         "departments, not just one. For each task give a short imperative title, a 1-3 sentence "
         "description, the most likely department, a priority, a type, and any concrete sub-steps "
         "as subtasks (each with its own short description).\n\n"
+        "BILINGUAL OUTPUT — MANDATORY: the platform is bilingual Macedonian/English. Every title "
+        "and every description (tasks AND subtasks) must contain BOTH languages, regardless of the "
+        "document's language — translate whichever half is missing.\n"
+        'Title format:        "<Македонски наслов> | <English title>"\n'
+        'Description format:  "<Македонски опис>\\n<English description>"\n\n'
         f"Valid departments (use the CODE): {dept_list}\n"
         "priority: one of critical|high|medium|low\n"
         "task_type: one of capa|sop|validation|document|lab|meeting|admin|other\n\n"

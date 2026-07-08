@@ -80,6 +80,15 @@ async def test_extract_short_text_rejected(client, admin_headers, org):
     assert r.status_code == 422
 
 
+def test_prompt_demands_bilingual_output():
+    """Every extracted task must be bilingual МК | EN regardless of the source
+    document's language — the requirement lives in the extraction prompt."""
+    from app.api.intake import _prompt
+    p = _prompt("some document", [{"code": "qc", "name": "QC"}])
+    assert "BILINGUAL" in p
+    assert "Македонски наслов> | <English title" in p
+
+
 async def test_adopt_extracted_tasks_via_capture(client, admin_headers, org):
     """The adopt step: post intake-shaped candidates to /capture/import — tasks
     land in the caller's account, subtasks (with descriptions) become child
