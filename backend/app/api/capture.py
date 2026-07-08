@@ -48,6 +48,7 @@ class CaptureSession(BaseModel):
 class CaptureSubtask(BaseModel):
     title: str
     status: str = "pending"
+    description: str | None = None
 
 
 class CaptureLink(BaseModel):
@@ -291,10 +292,10 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                         continue
                     st_status = st.status if st.status in _STATUSES else "pending"
                     await c.execute(
-                        "INSERT INTO tasks(org_id,user_id,parent_id,title,status,priority,task_type,"
+                        "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,task_type,"
                         " department,department_id,week_id,week_start,created_by,updated_by)"
-                        " VALUES ($1,$2,$3,$4,$5,'medium',$6,$7,$8,$9,$10,$11,$11)",
-                        actor["org_id"], owner_id, task_id, st.title, st_status, t.task_type,
+                        " VALUES ($1,$2,$3,$4,$5,$6,'medium',$7,$8,$9,$10,$11,$12,$12)",
+                        actor["org_id"], owner_id, task_id, st.title, st.description, st_status, t.task_type,
                         t.department, dept_id, week_id, t.week_start, actor["id"])
                     have_titles.add(st.title)
         except Exception as e:

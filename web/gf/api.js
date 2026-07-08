@@ -91,6 +91,7 @@ GF.API = {
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
+  bilingual(body)      { return this._req('POST', '/intake/bilingual', body); },
   aiFunctions()        { return this._req('GET', '/ai/functions'); },
   aiAgents()           { return this._req('GET', '/ai/agents'); },
   aiBindings()         { return this._req('GET', '/ai/bindings'); },
@@ -124,6 +125,7 @@ GF.API = {
     return this._req('GET', '/reports/documents' + (p ? '?' + p : ''));
   },
   compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
+  previewDocument(body)     { return this._req('POST', '/reports/documents/preview', body); },
   patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },
   patchDocumentSection(id, key, patch) { return this._req('PATCH', '/reports/documents/' + id + '/sections/' + encodeURIComponent(key), patch); },
   lockDocument(id)          { return this._req('POST', '/reports/documents/' + id + '/lock'); },

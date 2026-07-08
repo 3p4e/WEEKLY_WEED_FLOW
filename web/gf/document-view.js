@@ -5,7 +5,7 @@
    report-view.js (extends the same GF.WWF namespace). */
 window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
-GF.WWF._doc = { data: null, loading: false, error: null, _seq: 0 };
+GF.WWF._doc = { data: null, loading: false, error: null, _seq: 0, rangeStart: '', rangeEnd: '' };
 
 GF.WWF.loadDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
@@ -35,6 +35,27 @@ GF.WWF.compileDocument = async () => {
     GF.toast(AL('Document compiled', 'Документот е составен'), 'success');
   } catch (e) {
     GF.toast(AL('Compile failed: ', 'Неуспешно составување: ') + e.message, 'error');
+  }
+  ds.loading = false;
+  GF.WWF._renderDocPanel();
+};
+
+// Custom-range preview: draft a report/plan for an arbitrary start→end interval
+// WITHOUT persisting it (for looking ahead before the scheduled submission day).
+// The scheduled Fri→Thu week stays the only stored/lockable record — this is a
+// throwaway draft the user can review + export to PDF.
+GF.WWF.previewDocument = async () => {
+  const st = GF.WWF._report, ds = GF.WWF._doc;
+  const start = (ds.rangeStart || '').trim(), end = (ds.rangeEnd || '').trim();
+  if (!start || !end) { GF.toast(AL('Pick a start and end date', 'Изберете почетен и краен датум'), 'error'); return; }
+  if (end < start) { GF.toast(AL('End date is before start date', 'Крајниот датум е пред почетниот'), 'error'); return; }
+  ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
+  try {
+    const data = await GF.API.previewDocument({ kind: st.mode, start, end });
+    ds._seq++; ds.data = data; ds.error = null;   // authoritative; bail any in-flight load
+    GF.toast(AL('Preview generated', 'Прегледот е генериран'), 'success');
+  } catch (e) {
+    GF.toast(AL('Preview failed: ', 'Неуспешен преглед: ') + e.message, 'error');
   }
   ds.loading = false;
   GF.WWF._renderDocPanel();
@@ -75,9 +96,16 @@ GF.WWF.lockDocument = async () => {
 GF.WWF.exportDocumentPdf = async () => {
   const ds = GF.WWF._doc;
   if (!ds.data) return;
+  // A custom-range preview has no stored row (id === null) — POST the reviewed
+  // content back to the range-export endpoint; a saved week doc exports by id.
+  const isPreview = ds.data.status === 'preview' || !ds.data.id;
   try {
-    const res = await fetch(GF.API.base + '/reports/documents/' + ds.data.id + '/export.pdf',
-      { headers: { Authorization: 'Bearer ' + GF.API.token } });
+    const res = isPreview
+      ? await fetch(GF.API.base + '/reports/documents/export-range.pdf',
+        { method: 'POST', headers: { Authorization: 'Bearer ' + GF.API.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: ds.data.kind, content: ds.data.content }) })
+      : await fetch(GF.API.base + '/reports/documents/' + ds.data.id + '/export.pdf',
+        { headers: { Authorization: 'Bearer ' + GF.API.token } });
     if (res.status === 401) {
       // Route an expired token back to the login overlay, same as GF.API._req —
       // a raw fetch here would otherwise strand the user behind a toast.
@@ -108,9 +136,10 @@ GF.WWF.exportDocumentPdf = async () => {
    RECORD-critical geometry MUST match the backend: day-row by date, x =
    start_h*hw, width = max(2, (end_h-start_h)*hw), fill = seg.color. Both draw
    from the same content.ribbon segments, so the record can't drift. */
-GF.WWF._ribbonSvg = (segments, weekStart) => {
+GF.WWF._ribbonSvg = (segments, weekStart, days) => {
   if (!segments || !segments.length) return '';
-  const W = 860, ROW = 36, LEFT = 70, TOP = 22, H = TOP + 7 * ROW + 14;
+  const n = Math.max(1, Math.min(days || 7, 92));   // one row per day (7 for a week)
+  const W = 860, ROW = 36, LEFT = 70, TOP = 22, H = TOP + n * ROW + 14;
   const hw = (W - LEFT - 10) / 24;
   const d0 = new Date(weekStart + 'T00:00:00');
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">`;
@@ -119,7 +148,7 @@ GF.WWF._ribbonSvg = (segments, weekStart) => {
     s += `<line x1="${x}" y1="${TOP - 4}" x2="${x}" y2="${H - 12}" stroke="var(--line,#E2E8F0)" stroke-width="1"/>`
       + `<text x="${x}" y="${TOP - 8}" font-size="9" fill="var(--ink-3,#8A99B0)" text-anchor="middle">${String(h).padStart(2, '0')}</text>`;
   }
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < n; i++) {
     const d = new Date(d0); d.setDate(d0.getDate() + i);
     const iso = GF.localDateStr(d);
     const y = TOP + i * ROW;
@@ -176,58 +205,81 @@ GF.WWF._renderDocPanel = () => {
   const elevated = ELEVATED_ROLES.includes((GF.API.user || {}).role);
   const kindLbl = st.mode === 'plan' ? AL('Plan document', 'Документ План') : AL('Report document', 'Документ Извештај');
 
-  if (ds.loading) {
-    el.innerHTML = `<div style="padding:16px;color:var(--ink-3)">${AL('Working…', 'Се работи…')}</div>`;
-    return;
-  }
-  const d = ds.data;
+  // Custom-range control (elevated only): draft a report/plan for ANY interval
+  // ahead of the scheduled submission day. Produces a non-persisted preview the
+  // user can review + export; the scheduled Fri→Thu week stays the only stored,
+  // lockable record. Values live in GF.WWF._doc so they survive re-render.
+  const inStyle = 'font:inherit;padding:5px 8px;border:1px solid var(--line,#E2E8F0);border-radius:7px;background:var(--surface,#fff);color:var(--ink,#16233B)';
+  const rangeControls = elevated ? `
+    <div style="padding:10px 14px;border-bottom:1px solid var(--line,#E2E8F0);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px">
+      <span style="color:var(--ink-3);font-weight:600">${AL('Custom range', 'Прилагоден опсег')}</span>
+      <input type="date" value="${GF.esc(ds.rangeStart || '')}" onchange="GF.WWF._doc.rangeStart=this.value" style="${inStyle}">
+      <span style="color:var(--ink-3)">→</span>
+      <input type="date" value="${GF.esc(ds.rangeEnd || '')}" onchange="GF.WWF._doc.rangeEnd=this.value" style="${inStyle}">
+      <button class="btn btn-sm btn-primary" onclick="GF.WWF.previewDocument()">${AL('Generate preview', 'Генерирај преглед')}</button>
+      <span style="color:var(--ink-3);font-size:11px">${AL('unsaved draft for any interval', 'незачуван нацрт за секој интервал')}</span>
+    </div>` : '';
+
   let body;
-  if (ds.error) {
+  if (ds.loading) {
+    body = `<div style="padding:16px;color:var(--ink-3)">${AL('Working…', 'Се работи…')}</div>`;
+  } else if (ds.error) {
     // A real failure (500/network/permission) — NOT the empty state. Offer a
     // retry, never a Compile button that could overwrite an existing draft.
     body = `<div style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="color:#B45309;font-size:13px">${AL('Couldn’t load the document: ', 'Не може да се вчита документот: ')}${GF.esc(ds.error)}</span>
       <button class="btn btn-sm" onclick="GF.WWF.loadDocument()">${AL('Retry', 'Обиди се повторно')}</button>
     </div>`;
-  } else if (!d) {
+  } else if (!ds.data) {
     body = `<div style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="color:var(--ink-3);font-size:13px">${AL('No document compiled for this week yet.', 'Сè уште нема составен документ за оваа недела.')}</span>
       ${elevated ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.compileDocument()">${AL('Compile document', 'Состави документ')}</button>` : ''}
     </div>`;
   } else {
+    const d = ds.data;
     const c = d.content || {};
+    const isPreview = d.status === 'preview';   // non-persisted custom-range draft
     const locked = d.status === 'locked';
-    const chip = locked
+    const chip = isPreview
+      ? `<span style="background:#EEF2FF;color:#3538CD;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('PREVIEW — not saved', 'ПРЕГЛЕД — незачуван')}${c.period && c.period.label ? ' · ' + GF.esc(c.period.label) : ''}</span>`
+      : locked
       ? `<span style="background:#E7F7EF;color:#0E6E4A;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
       : `<span style="background:#FFF4E5;color:#B45309;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('DRAFT', 'НАЦРТ')}</span>`;
     const sections = (c.ai_sections || []).map((s, i) => {
       if (s.status === 'not_configured') return '';
       const ok = !!s.approved;
+      // Preview sections are read-only — there is no stored row to persist an
+      // approval to (the section-PATCH needs a real doc id).
+      const control = isPreview ? ''
+        : (!locked ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.toggleDocSection(${i})">
+            ${AL('Approve for document', 'Одобри за документот')}</label>`
+          : (ok ? `<span style="font-size:11px;color:#0E6E4A;font-weight:700">${AL('Approved', 'Одобрено')}</span>` : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
       return `<div style="border:1px solid var(--line,#E2E8F0);border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? '#F4FBF7' : 'var(--surface,#fff)'}">
         <div style="display:flex;align-items:center;gap:10px">
           <b style="font-size:13px">${GF.esc(s.title)}</b>
           <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable', 'агентот е недостапен') : ''}</span>
           <div style="flex:1"></div>
-          ${!locked ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.toggleDocSection(${i})">
-            ${AL('Approve for document', 'Одобри за документот')}</label>`
-          : (ok ? `<span style="font-size:11px;color:#0E6E4A;font-weight:700">${AL('Approved', 'Одобрено')}</span>` : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`)}
+          ${control}
         </div>
         ${s.body ? `<div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-wrap;color:var(--ink)">${GF.esc(s.body)}</div>` : ''}
       </div>`;
     }).join('');
+    const ribbonLbl = isPreview ? AL('Activity ribbon — logged work by SOP', 'Лента на активност — работа по СОП')
+                                : AL('Week ribbon — logged work by SOP', 'Неделна лента — работа по СОП');
     body = `<div style="padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
         ${chip}
         <span style="font-size:12px;color:var(--ink-3)">${(c.tasks || []).length} ${AL('tasks', 'задачи')} · ${(c.ribbon || []).length} ${AL('logged sessions', 'сесии')}</span>
         <div style="flex:1"></div>
-        ${!locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.compileDocument()">${AL('Recompile', 'Состави повторно')}</button>` : ''}
+        ${isPreview && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.previewDocument()">${AL('Regenerate', 'Регенерирај')}</button>` : ''}
+        ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.compileDocument()">${AL('Recompile', 'Состави повторно')}</button>` : ''}
         <button class="btn btn-sm" onclick="GF.WWF.exportDocumentPdf()">${AL('Export PDF', 'Извези PDF')}</button>
-        ${!locked && elevated ? `<button class="btn btn-sm" style="background:#0E6E4A;color:#fff" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}
+        ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" style="background:#0E6E4A;color:#fff" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}
       </div>
       ${c.ribbon && c.ribbon.length ? `
-        <div style="font-weight:700;font-size:14px;margin:10px 0 6px">${AL('Week ribbon — logged work by SOP', 'Неделна лента — работа по СОП')}</div>
-        ${GF.WWF._ribbonSvg(c.ribbon, c.period && c.period.start)}
+        <div style="font-weight:700;font-size:14px;margin:10px 0 6px">${ribbonLbl}</div>
+        ${GF.WWF._ribbonSvg(c.ribbon, c.period && c.period.start, c.period && c.period.days)}
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;font-size:11px;color:var(--ink-2)">
           ${(c.metrics && c.metrics.per_sop || []).slice(0, 12).map(b =>
             `<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${b.color};margin-right:4px;vertical-align:middle"></span>${GF.esc(b.sop)}</span>`).join('')}
@@ -239,5 +291,5 @@ GF.WWF._renderDocPanel = () => {
   el.innerHTML = `<div style="margin:18px 0;background:var(--surface,#fff);border:1px solid var(--line,#E2E8F0);border-radius:11px;overflow:hidden">
     <div style="padding:12px 14px;border-bottom:1px solid var(--line,#E2E8F0);font-weight:700;font-size:14px;color:#0E6E4A">
       ${GF.icon('calendar')} ${kindLbl}
-    </div>${body}</div>`;
+    </div>${rangeControls}${body}</div>`;
 };

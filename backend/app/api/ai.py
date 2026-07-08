@@ -23,6 +23,8 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 CATALOG = {
     "weekly_summary":    "Summarize the week, flag blocked/overdue/at-risk tasks.",
     "voice_capture":     "Turn natural-language/voice into structured tasks + subtasks.",
+    "task_extract":      "Extract many tasks + subtasks from a pasted document (email, plan).",
+    "translate_bilingual":"Translate a task title/description into bilingual Macedonian | English.",
     "dependency_advisor":"Suggest task dependencies and cross-department handoffs.",
     "corpus_qa":         "Answer questions over the task corpus (RAG).",
     "draft_description": "Expand a task title into a full description + subtasks.",
@@ -36,12 +38,15 @@ class InvokeReq(BaseModel):
     context: dict | None = None
 
 
-async def _letta_message(agent_id: str, text: str) -> str | None:
+async def _letta_message(agent_id: str, text: str, timeout: float = 30) -> str | None:
+    # timeout defaults to 30s for the quick interactive calls; heavier jobs
+    # (e.g. multi-task document extraction) pass a longer one so the reasoning
+    # agent isn't cut off mid-answer.
     headers = {}
     if settings.letta_api_key:
         headers["Authorization"] = f"Bearer {settings.letta_api_key}"
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.post(
                 f"{settings.letta_base_url}/v1/agents/{agent_id}/messages",
                 headers=headers,
