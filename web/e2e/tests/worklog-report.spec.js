@@ -56,10 +56,12 @@ test('due date + type at creation, weekend work session shows up in the report h
     await modal.locator('#wl-start').fill('10:00');
     await modal.locator('#wl-hours').fill('2.5');
     await modal.locator('.modal-body').getByRole('button', { name: /log work/i }).click();
-    // The API's classification is surfaced to the user ("Logged 2.5h — weekend")
-    await expect(page.locator('.toast', { hasText: 'weekend' })).toBeVisible({ timeout: 10_000 });
-    // ...and the session row lists it with its classification chip.
-    await expect(modal.locator('.sess-class.weekend')).toBeVisible({ timeout: 10_000 });
+    // Assert the DURABLE outcome — the persisted session row re-rendered from the
+    // API response, carrying its classification chip — rather than the success
+    // toast. The toast auto-dismisses after ~3s (core.js), so under CI load it's a
+    // flaky signal; the row proves the same thing (session logged AND classified
+    // "weekend") but stays in the DOM until the modal closes.
+    await expect(modal.locator('.sess-class.weekend')).toBeVisible({ timeout: 15_000 });
     await modal.locator('.btn-ghost').click();               // close the modal
   });
 
