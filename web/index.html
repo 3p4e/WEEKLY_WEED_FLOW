@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="gf/mobile.css">
   <link rel="stylesheet" href="gf/views.css">
   <link rel="stylesheet" href="gf/leaf-fx.css">
+  <link rel="stylesheet" href="gf/entry.css">
 </head>
 <body>
 <div id="app">
@@ -199,6 +200,11 @@
 <script src="gf/import-view.js"></script>
 <script src="gf/intake-view.js"></script>
 <script src="gf/tweaks-vanilla.js"></script>
+<!-- 3D-leaf splash + login entry (self-hosted three.js r160). leaf3d needs THREE;
+     entry.js overrides GF.WWF.showLogin so it MUST load after integrate.js. -->
+<script src="gf/vendor/three.min.js"></script>
+<script src="gf/leaf3d.js"></script>
+<script src="gf/entry.js"></script>
 <script>
 // PWA: register the version-keyed service worker (sw.js) — app shell works offline.
 if ('serviceWorker' in navigator) {
