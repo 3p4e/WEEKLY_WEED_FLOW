@@ -1,4 +1,6 @@
-/* leaf-fx.css v2 — 8 modes, enhanced hover+float, GrowFlow wordmark FX
+/* leaf-fx.css v3 — 8 modes, dark plasma-green theme.
+   Colors: plasma green #2BE8A0 / rgba(43,232,160,…)
+           plasma teal  #2FD9D9 / rgba(47,217,217,…)
    Modes: calm | drift | pulse | shake | spin | bounce | storm | rave */
 
 /* ── Stage + 3D ── */
@@ -8,24 +10,24 @@
 }
 .leaf-3d{
   position:relative;width:100%;height:100%;transform-style:preserve-3d;
-  transition:transform .15s cubic-bezier(.22,1,.36,1);   /* snappier than before */
+  transition:transform .15s cubic-bezier(.22,1,.36,1);
   will-change:transform;
 }
 .leaf-float{
   position:relative;width:100%;height:100%;transform-origin:50% 82%;
-  animation:lf-float 2.5s ease-in-out infinite;   /* ↑ faster: was 6s */
+  animation:lf-float 2.5s ease-in-out infinite;
 }
 .leaf-stage .pp-leaf-anim{
   position:relative;width:100%!important;height:100%!important;transform-style:preserve-3d;
-  animation:pp-leaf-breathe 3.2s ease-in-out infinite;  /* ↑ faster: was 4.5s */
+  animation:pp-leaf-breathe 3.2s ease-in-out infinite;
 }
-.leaf-stage:focus-visible{box-shadow:0 0 0 3px rgba(91,186,71,.5);border-radius:14px}
+.leaf-stage:focus-visible{box-shadow:0 0 0 3px rgba(43,232,160,.5);border-radius:14px}
 
-/* Login leaf — even faster + more intense */
+/* Login leaf — faster + more intense */
 .leaf-stage[data-login] .leaf-float{animation-duration:1.8s!important}
 .leaf-stage[data-login] .pp-leaf-anim{animation-duration:2.4s!important}
 
-/* ── BASE float (calm) — enhanced amplitude ── */
+/* ── BASE float (calm) ── */
 @keyframes lf-float{
   0%,100%{transform:translateY(0) rotate(0deg)}
   35%{transform:translateY(-15px) rotate(-4deg)}
@@ -48,12 +50,11 @@
 }
 @keyframes lf-pulse{
   0%,34%,100%{transform:scale(1);filter:brightness(1)}
-  5%{transform:scale(1.28);filter:brightness(1.45) drop-shadow(0 0 20px rgba(91,186,71,.95))}
+  5%{transform:scale(1.28);filter:brightness(1.45) drop-shadow(0 0 20px rgba(43,232,160,.95))}
   12%{transform:scale(0.82);filter:brightness(0.88)}
-  19%{transform:scale(1.16);filter:brightness(1.22) drop-shadow(0 0 12px rgba(91,186,71,.65))}
+  19%{transform:scale(1.16);filter:brightness(1.22) drop-shadow(0 0 12px rgba(43,232,160,.65))}
   27%{transform:scale(0.96)}
   34%{transform:scale(1)}
-  /* ─── LONG REST 34%→100% ─── */
 }
 
 /* ── MODE shake: rattlesnake tremor then freeze ── */
@@ -70,7 +71,6 @@
   27%{transform:translateX(-2.5px) rotate(-1.2deg)}
   31%{transform:translateX(2.5px) rotate(1.2deg)}
   36%{transform:translateX(0) rotate(0deg)}
-  /* ─── FREEZE 42%→100% ─── */
 }
 
 /* ── MODE spin: 3D coin flip ── */
@@ -96,7 +96,6 @@
   25%{transform:rotateX(-26deg) rotateY(268deg) rotateZ(14deg)}
   38%{transform:rotateX(18deg) rotateY(360deg) rotateZ(-8deg)}
   50%{transform:rotateX(0deg) rotateY(360deg) rotateZ(0deg)}
-  /* ─── SETTLE 55%→100% ─── */
 }
 
 /* ── MODE rave: rainbow + fast spin + rapid bounce ── */
@@ -104,14 +103,14 @@
 .leaf-stage[data-mode="rave"] .leaf-float{animation:lf-bounce .48s ease-in-out infinite}
 .leaf-stage[data-mode="rave"] .pp-leaf-anim::before{animation:pp-aura-pulse .75s ease-in-out infinite}
 @keyframes lf-rave{
-  0%{filter:hue-rotate(0deg) saturate(2) brightness(1.2) drop-shadow(0 0 26px rgba(91,186,71,.95))}
-  100%{filter:hue-rotate(360deg) saturate(2) brightness(1.2) drop-shadow(0 0 26px rgba(91,186,71,.95))}
+  0%{filter:hue-rotate(0deg) saturate(2) brightness(1.2) drop-shadow(0 0 26px rgba(43,232,160,.95))}
+  100%{filter:hue-rotate(360deg) saturate(2) brightness(1.2) drop-shadow(0 0 26px rgba(43,232,160,.95))}
 }
 
-/* ── Click FX: sparks + ripple ── */
+/* ── Click FX: plasma sparks + ripple ── */
 .leaf-spark{
   position:absolute;left:50%;top:46%;border-radius:50%;pointer-events:none;z-index:3;
-  transform:translate(-50%,-50%);background:radial-gradient(circle,#c9f7b3,#15A86B);
+  transform:translate(-50%,-50%);background:radial-gradient(circle,#7CF5C4,#2BE8A0);
   animation:lf-spark .72s cubic-bezier(.22,.7,.3,1) forwards;
 }
 @keyframes lf-spark{
@@ -120,7 +119,7 @@
 }
 .leaf-ripple{
   position:absolute;left:50%;top:48%;width:100%;height:100%;border-radius:50%;
-  pointer-events:none;z-index:2;border:2.5px solid rgba(91,186,71,.6);
+  pointer-events:none;z-index:2;border:2.5px solid rgba(43,232,160,.6);
   animation:lf-ripple .65s ease-out forwards;transform:translate(-50%,-50%) scale(.3);
 }
 @keyframes lf-ripple{
@@ -128,13 +127,13 @@
   100%{opacity:0;transform:translate(-50%,-50%) scale(2.5)}
 }
 
-/* ── Mode tag — appears ABOVE the leaf, not below into nav ── */
+/* ── Mode tag — plasma dark style ── */
 .leaf-mode-tag{
   position:absolute;left:50%;bottom:calc(100% + 5px);transform:translateX(-50%);
-  font:700 10px/1 'Outfit',system-ui,sans-serif;letter-spacing:.02em;color:#15723f;
-  background:rgba(255,255,255,.94);border:1px solid rgba(91,186,71,.4);border-radius:999px;
+  font:700 10px/1 'Saira',system-ui,sans-serif;letter-spacing:.02em;color:var(--primary,#2BE8A0);
+  background:rgba(11,25,19,.92);border:1px solid rgba(43,232,160,.35);border-radius:999px;
   padding:3px 8px;white-space:nowrap;pointer-events:none;opacity:0;z-index:200;
-  box-shadow:0 4px 14px rgba(21,168,107,.18);cursor:default;
+  box-shadow:0 4px 14px rgba(43,232,160,.18);cursor:default;
 }
 .leaf-mode-tag.show{animation:lf-tag 1.5s ease forwards}
 @keyframes lf-tag{
@@ -144,18 +143,15 @@
   100%{opacity:0;transform:translateX(-50%) translateY(-3px)}
 }
 
-/* ── GrowFlow wordmark FX — NO individual letter wrapping ──
-   "Grow" = one static <span class="gf-grow-word"> in the HTML
-   "Flow" = the <b> element — animated via CSS gradient shift only        */
-
-/* Fix cursor: leaf-stage is pointer, but surrounding mark text is default */
+/* ── GrowFlow wordmark FX ──
+   "Grow" = static span · "Flow" = <b> with animated plasma gradient  */
 .gf-mark{cursor:default}
 .gf-name{cursor:default;user-select:none}
 .gf-name b{user-select:none}
 
-/* "Flow" <b> — animated gradient wave: green → teal → green */
+/* "Flow" — plasma green → teal wave */
 .gf-name b{
-  background:linear-gradient(90deg,#5BBA47 0%,#15A86B 33%,#0EA5A5 66%,#5BBA47 100%);
+  background:linear-gradient(90deg,#2BE8A0 0%,#2BE8A0 33%,#2FD9D9 66%,#2BE8A0 100%);
   background-size:300% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;
   animation:gf-flow 4s ease-in-out infinite;
