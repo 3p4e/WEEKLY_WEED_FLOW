@@ -112,7 +112,7 @@ GF.WWF.showLogin = (msg) => {
     el.innerHTML = `
       <div style="background:rgba(11,25,19,.92);border:1px solid rgba(43,232,160,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:18px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-          <span class="pp-leaf-anim" style="width:42px;height:50px;flex-shrink:0"></span>
+          <span class="leaf-stage" data-mode="calm" style="width:42px;height:50px;flex-shrink:0"><span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span></span>
           <div><div style="font-size:22px;font-weight:800;color:#DDF3E9">Grow<span style="color:#2BE8A0">Flow</span></div>
           <div style="font-size:9px;font-weight:800;letter-spacing:.16em;color:#8FB6A6">PURELY<i>PLANT</i></div></div>
         </div>
@@ -149,7 +149,7 @@ GF.WWF.showChangePw = (currentPw) => {
   el.innerHTML = `
     <div style="background:rgba(11,25,19,.92);border:1px solid rgba(43,232,160,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:18px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-        <span class="pp-leaf-anim" style="width:42px;height:50px;flex-shrink:0"></span>
+        <span class="leaf-stage" data-mode="calm" style="width:42px;height:50px;flex-shrink:0"><span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span></span>
         <div><div style="font-size:22px;font-weight:800;color:#DDF3E9">Grow<span style="color:#2BE8A0">Flow</span></div></div>
       </div>
       <div style="font-size:15px;font-weight:700;color:#DDF3E9;margin:8px 0 2px">Set a new password</div>

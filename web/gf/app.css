@@ -91,6 +91,14 @@
   /* ── Layout ── */
   --r-sm: 8px; --r-md: 12px; --r-lg: 14px; --r-xl: 18px;
   --header-h: 64px; --sidebar-w: 252px;
+
+  /* ── Spacing scale ── */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+
+  /* ── Type scale ── */
+  --fs-xs: 10px; --fs-sm: 12px; --fs-base: 14px; --fs-md: 15px;
+  --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 24px;  --fs-3xl: 32px;
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
