@@ -7,7 +7,7 @@ Qualified Person, and base staff.
   ADMIN                                    — system administrator (DB-seeded only)
   CEO, COO                                 — executives
   QA_MGR, QC_MGR, PR_MGR, WH_MGR,          — department managers (one rank)
-  SC_MGR, CU_MGR, QP                         (QP = Qualified Person)
+  SE_MGR, CU_MGR, MU_MGR, QP                (QP = Qualified Person)
   USER                                     — department staff / operators
 
 Everything except USER is "elevated" (org-wide task read via RLS + audit
@@ -23,7 +23,7 @@ EXECUTIVE_ROLES = ("CEO", "COO")
 
 # Department managers + the Qualified Person, all at manager rank. A manager may
 # create only USER staff, and only in their own department.
-MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SC_MGR", "CU_MGR", "QP")
+MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SE_MGR", "CU_MGR", "MU_MGR", "QP")
 
 USER = "USER"
 

@@ -53,8 +53,9 @@ GF.ROLES = {
   qc_mgr:  { en: 'QC Manager',             mk: 'Менаџер за КК' },
   pr_mgr:  { en: 'Production Manager',     mk: 'Менаџер за производство' },
   wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
-  sc_mgr:  { en: 'Supply Chain Manager',   mk: 'Менаџер за снабдување' },
+  se_mgr:  { en: 'Security Manager',       mk: 'Менаџер за обезбедување' },
   cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  mu_mgr:  { en: 'Maintenance Manager',    mk: 'Менаџер за одржување' },
   qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
   operator:{ en: 'Operator',               mk: 'Оператор' },
 };

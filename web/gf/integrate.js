@@ -34,16 +34,16 @@ GF.WWF.meId = 'me';
 // GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
 // (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
 const ROLE_OUT = { admin:'ADMIN', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
-  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', sc_mgr:'SC_MGR', cu_mgr:'CU_MGR', qp:'QP', operator:'USER' };
+  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
 const ROLE_IN  = { ADMIN:'admin', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
-  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SC_MGR:'sc_mgr', CU_MGR:'cu_mgr', QP:'qp', USER:'operator' };
+  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
-const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
+const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
 // Roles with no department affiliation — hide the dept picker for these.
 const NO_DEPT_ROLES = new Set(['ceo', 'coo', 'qp']);
-// The 7 department-manager roles (create only USER staff in their own dept).
-const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP'];
+// The 9 department-manager roles (create only USER staff in their own dept).
+const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C'];
