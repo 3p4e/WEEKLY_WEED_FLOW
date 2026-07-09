@@ -12,21 +12,21 @@ const P_OUT = { medium:'normal', high:'high', critical:'critical', low:'low' };
 const DEPT_STYLE = {
   cultivation:{icon:'leaf',color:'#15A86B'}, vegetation:{icon:'leaf',color:'#3FA34D'},
   production:{icon:'box',color:'#2F6BFF'}, qc:{icon:'flask',color:'#7A5BE0'},
-  quality_assurance:{icon:'shield',color:'#C2410C'},
+  quality_control:{icon:'flask',color:'#7A5BE0'}, quality_assurance:{icon:'shield',color:'#C2410C'},
   logistics:{icon:'box',color:'#0891B2'}, tooling:{icon:'wrench',color:'#5A6B82'},
   security:{icon:'shield',color:'#566884'},
 };
 // Short, language-neutral department abbreviations (QC, QA, WH…), shown on the
 // compact task cards / chips; the full bilingual name shows in lists + dropdowns.
 const DEPT_ABBR = {
-  qc:'QC', quality_assurance:'QA', production:'PR', cultivation:'CU',
+  qc:'QC', quality_control:'QC', quality_assurance:'QA', production:'PR', cultivation:'CU',
   tooling:'MU', logistics:'WH', security:'SE',
 };
 // Cross-department handoff pipeline, keyed by the backend's department `code`
 // (resolved to real ids once /departments loads — see loadAndRender).
 const CODE_HANDOFF = {
   cultivation:'production', production:'qc', qc:'quality_assurance',
-  quality_assurance:'logistics',
+  quality_control:'quality_assurance', quality_assurance:'logistics',
 };
 
 GF.WWF.meId = 'me';
@@ -739,6 +739,9 @@ GF.submitUser = async () => {
   const roleKey = GF.$('u-role').value;
   const role = ROLE_OUT[roleKey] || 'USER';
   const department_id = NO_DEPT_ROLES.has(roleKey) ? null : (GF.$('u-dept')?.value || null);
+  if (!NO_DEPT_ROLES.has(roleKey) && !department_id) {
+    GF.toast(AL('Select a department', 'Изберете оддел'), 'error'); return;
+  }
   const function_role = (GF.$('u-fn')?.value || '').trim() || null;
   // Edit mode (openUser was given an id) → PATCH the existing account.
   if (GF._editUser) {
