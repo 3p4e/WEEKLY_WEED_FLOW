@@ -26,6 +26,8 @@ test('due date + type at creation, weekend work session shows up in the report h
   const sat = windowSaturday();
 
   await page.goto('/');
+  // 3D-leaf splash: tap the leaf to reveal the sign-in card before filling it.
+  await page.locator('#gf-leaf-stage').click();
   await page.locator('#wwf-u').fill(creds.username);
   await page.locator('#wwf-p').fill(creds.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
