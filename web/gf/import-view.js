@@ -17,7 +17,7 @@ GF.views.import = function () {
            'Залепете го JSON блокот од capture сесија. Двоен увоз е безбеден — задачите се спојуваат по external_ref.')}
     </div>
     <textarea id="import-json" spellcheck="false" placeholder='{"session_meta": {…}, "tasks": […]}'
-      style="width:100%;min-height:260px;font:12px ui-monospace,monospace;background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
+      style="width:100%;min-height:260px;font:12px ui-monospace,monospace;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
     <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
       <button class="btn btn-primary" onclick="GF.WWF.runImport()">${AL('Import', 'Увези')}</button>
       <span id="import-busy" style="display:none;color:var(--ink-3);font-size:13px">${AL('Importing…', 'Се увезува…')}</span>
@@ -49,7 +49,7 @@ GF.WWF.runImport = async () => {
     const skipped = (r.skipped || []).map(s =>
       `<li><code>${GF.esc(s.external_ref || '—')}</code> — ${GF.esc(s.reason)}</li>`).join('');
     out.innerHTML = `
-      <div style="background:#fff;border:1px solid var(--line);border-radius:11px;padding:14px 16px;font-size:13px;color:var(--ink)">
+      <div style="background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:14px 16px;font-size:13px;color:var(--ink)">
         <b>${AL('Imported', 'Увезено')}:</b>
         ${r.created} ${AL('created', 'нови')}, ${r.updated} ${AL('updated', 'ажурирани')},
         ${r.sessions_added} ${AL('work sessions added', 'работни сесии додадени')}.

@@ -1,16 +1,8 @@
-/* brand.css — Purely Plant logo assets
-   ─────────────────────────────────────
-   Source PNGs (assets/):
-     pp-leaf.png        433×502   — leaf only, transparent
-     pp-logo.png       1799×906   — full lockup (leaf + PURELY PLANT + tagline)
-     pp-logo-white.png 1799×906   — full lockup, white variant for dark BG
-     pp-wordmark.png   1719×281   — PURELY PLANT + tagline only
-
-   The wordmark uses the brand typography (heavy + italic + tagline thin)
-   so we treat it as a single bitmap rather than re-rendering in webfont.
-   The leaf carries the brand color (green gradient #5BBA47 → #8DC73F). */
-
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+/* brand.css — Purely Plant logo assets + GrowFlow brand treatments
+   Dark glass-morphism / TAL SHIAR reskin.
+   Plasma green (#2BE8A0) replaces old lime (#5BBA47).
+   Plasma teal (#2FD9D9) replaces old teal (#0EA5A5).
+   Poppins replaces Outfit for brand text. */
 
 /* ── Wordmark (lockup-style: PURELYPLANT + tagline) ───────────────── */
 .pp-wordmark {
@@ -19,38 +11,34 @@
   background-size: contain;
   background-repeat: no-repeat;
   background-position: left center;
-  width: 144px;             /* aspect 1719/281 ≈ 6.12 → 144 × ~24 */
+  width: 144px;
   height: 24px;
   transition: opacity .15s;
+  filter: brightness(0) invert(1) opacity(.75);  /* white variant on dark bg */
 }
 .pp-wordmark:hover { opacity: .85; }
 .pp-wordmark--sm { width: 110px; height: 18px; }
 .pp-wordmark--md { width: 168px; height: 28px; }
 .pp-wordmark--lg { width: 240px; height: 40px; }
 .pp-wordmark--xl { width: 320px; height: 53px; }
+.pp-wordmark--white { filter: brightness(0) invert(1); }
 
-/* Variant for dark backgrounds — wordmark needs to be inverted.
-   Apply via filter since the PNG is pure black text on transparent. */
-.pp-wordmark--white { filter: invert(1) brightness(2); }
-
-/* ── Leaf only — for headers, FABs, badges, favicons ────────────── */
+/* ── Leaf only ────────────────────────────────────────────────────── */
 .pp-leaf {
   display: inline-block;
   background-image: url('../assets/pp-leaf.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  width: 36px; height: 42px;    /* aspect 433/502 */
+  width: 36px; height: 42px;
 }
 .pp-leaf--sm { width: 24px; height: 28px; }
 .pp-leaf--md { width: 36px; height: 42px; }
 .pp-leaf--lg { width: 64px; height: 74px; }
 .pp-leaf--xl { width: 96px; height: 112px; }
 
-/* ── Animated leaf — glowing aura + float + shimmer sweep ───────────
-   Usage: <span class="pp-leaf-anim pp-leaf-anim--xl"></span>
-   The leaf PNG is the base; ::before = pulsing aura behind it,
-   ::after = a light-sweep masked to the leaf's exact silhouette.     */
+/* ── Animated leaf — plasma aura + float + shimmer ─────────────────
+   Aura: plasma green (#2BE8A0) + plasma teal (#2FD9D9).             */
 .pp-leaf-anim {
   position: relative;
   display: inline-block;
@@ -60,8 +48,8 @@
   background-repeat: no-repeat;
   background-position: center;
   filter:
-    drop-shadow(0 0 40px rgba(91,186,71,0.50))
-    drop-shadow(0 0 14px rgba(14,165,165,0.32))
+    drop-shadow(0 0 40px rgba(43,232,160,0.55))
+    drop-shadow(0 0 14px rgba(47,217,217,0.32))
     saturate(1.12) brightness(1.05);
   animation: pp-leaf-float 6s ease-in-out infinite,
              pp-leaf-breathe 4.5s ease-in-out infinite;
@@ -72,12 +60,12 @@
   content: '';
   position: absolute; inset: -28%;
   background: radial-gradient(circle at 50% 46%,
-    rgba(91,186,71,0.55) 0%, rgba(14,165,165,0.20) 42%, transparent 68%);
+    rgba(43,232,160,0.55) 0%, rgba(47,217,217,0.20) 42%, transparent 68%);
   filter: blur(12px);
   z-index: -1;
   animation: pp-aura-pulse 4s ease-in-out infinite;
 }
-/* light shimmer that sweeps across the leaf silhouette */
+/* light shimmer across leaf silhouette */
 .pp-leaf-anim::after {
   content: '';
   position: absolute; inset: 0;
@@ -99,8 +87,8 @@
   50%      { transform: translateY(-8px) rotate(-1.4deg); }
 }
 @keyframes pp-leaf-breathe {
-  0%, 100% { filter: drop-shadow(0 0 36px rgba(91,186,71,0.42)) drop-shadow(0 0 12px rgba(14,165,165,0.28)) saturate(1.1) brightness(1.03); }
-  50%      { filter: drop-shadow(0 0 60px rgba(91,186,71,0.62)) drop-shadow(0 0 20px rgba(14,165,165,0.42)) saturate(1.2) brightness(1.10); }
+  0%, 100% { filter: drop-shadow(0 0 36px rgba(43,232,160,0.42)) drop-shadow(0 0 12px rgba(47,217,217,0.28)) saturate(1.1) brightness(1.03); }
+  50%      { filter: drop-shadow(0 0 60px rgba(43,232,160,0.68)) drop-shadow(0 0 20px rgba(47,217,217,0.44)) saturate(1.2) brightness(1.10); }
 }
 @keyframes pp-aura-pulse {
   0%, 100% { transform: scale(1);    opacity: 0.65; }
@@ -116,14 +104,14 @@
   .pp-leaf-anim, .pp-leaf-anim::before, .pp-leaf-anim::after { animation: none; }
 }
 
-/* ── Full lockup — for splash, login, printables ────────────────── */
+/* ── Full lockup ─────────────────────────────────────────────────── */
 .pp-logo {
   display: inline-block;
-  background-image: url('../assets/pp-logo.png');
+  background-image: url('../assets/pp-logo-white.png');  /* white variant for dark bg */
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  width: 200px; height: 100px;   /* aspect 1799/906 ≈ 1.985 */
+  width: 200px; height: 100px;
 }
 .pp-logo--sm { width: 140px; height: 70px; }
 .pp-logo--md { width: 200px; height: 100px; }
@@ -131,7 +119,7 @@
 .pp-logo--xl { width: 480px; height: 240px; }
 .pp-logo--white { background-image: url('../assets/pp-logo-white.png'); }
 
-/* ── Backwards-compat (older calls used pp-mark / pp-footmark) ──── */
+/* ── Backwards-compat ────────────────────────────────────────────── */
 .pp-mark {
   display: inline-block;
   background-image: url('../assets/pp-leaf.png');
@@ -141,21 +129,22 @@
 .pp-mark--sm { width: 24px; height: 28px; }
 .pp-mark--lg { width: 64px; height: 74px; }
 .pp-footmark {
-  display: inline-block; vertical-align: middle; opacity: .7;
+  display: inline-block; vertical-align: middle; opacity: .6;
   background-image: url('../assets/pp-wordmark.png');
   background-size: contain; background-repeat: no-repeat; background-position: left center;
   width: 80px; height: 14px;
+  filter: brightness(0) invert(1);
 }
 
-/* ── GrowFlow gradient text (kept from v4 brand treatment) ───────── */
+/* ── GrowFlow gradient text (plasma green → teal → bronze) ──────── */
 .pp-brand-text {
-  font-family: 'Outfit', -apple-system, system-ui, sans-serif;
+  font-family: 'Poppins', 'Comfortaa', system-ui, sans-serif;
   font-weight: 800;
   letter-spacing: -0.015em;
   background: linear-gradient(135deg,
-    #2F6BFF 0%,
-    #15A86B 50%,
-    #FF7A1A 100%);
+    #2BE8A0 0%,
+    #2FD9D9 50%,
+    #E0A73E 100%);
   background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -168,41 +157,37 @@
   50%      { background-position: 100% 50%; }
 }
 
-/* ── Hero lockup — splash / login / printables ──────────────────── */
+/* ── Hero lockup — splash / login ───────────────────────────────── */
 .pp-brand-hero {
   display: flex; flex-direction: column; align-items: center;
   text-align: center; padding: 0.5rem 1rem;
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: 'Poppins', system-ui, sans-serif;
 }
 .pp-brand-hero .pp-leaf {
   width: 90px; height: 104px;
-  filter: drop-shadow(0 4px 18px rgba(91, 186, 71, 0.35));
+  filter: drop-shadow(0 4px 18px rgba(43,232,160,0.40));
   animation: pp-leaf-float 6s ease-in-out infinite;
   margin-bottom: 0.4rem;
-}
-@keyframes pp-leaf-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50%      { transform: translateY(-6px) rotate(-1.2deg); }
 }
 .pp-brand-hero .pp-wordmark { width: 220px; height: 36px; }
 .pp-brand-hero h1 { margin: 0; font-size: 1.9rem; line-height: 1.05; }
 .pp-brand-hero .pp-brand-sub {
-  font-size: 0.72rem; color: var(--ink-2, #566884);
+  font-size: 0.72rem; color: var(--ink-2);
   text-transform: uppercase; letter-spacing: 0.22em;
   font-weight: 500; margin-top: 0.55rem;
 }
 
-/* Glowing separator (used in v4 between leaf & wordmark) */
+/* Plasma separator */
 .pp-brand-sep {
   width: 170px; height: 1px;
   margin: 1.2rem auto 0.9rem;
-  background: linear-gradient(90deg, transparent, rgba(91,186,71,0.55) 50%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(43,232,160,0.55) 50%, transparent);
   position: relative;
 }
 .pp-brand-sep::before {
   content: ''; position: absolute; left: 50%; top: 50%;
   width: 6px; height: 6px; border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: #5BBA47;
-  box-shadow: 0 0 10px #5BBA47;
+  background: #2BE8A0;
+  box-shadow: 0 0 10px #2BE8A0;
 }

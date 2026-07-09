@@ -53,13 +53,14 @@ GF.ROLES = {
   qc_mgr:  { en: 'QC Manager',             mk: 'Менаџер за КК' },
   pr_mgr:  { en: 'Production Manager',     mk: 'Менаџер за производство' },
   wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
-  sc_mgr:  { en: 'Supply Chain Manager',   mk: 'Менаџер за снабдување' },
+  se_mgr:  { en: 'Security Manager',       mk: 'Менаџер за обезбедување' },
   cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  mu_mgr:  { en: 'Maintenance Manager',    mk: 'Менаџер за одржување' },
   qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
   operator:{ en: 'Operator',               mk: 'Оператор' },
 };
 GF.roleLabel = (r) => (GF.ROLES[r] ? GF.ROLES[r][GF.state.lang] || GF.ROLES[r].en : r);
-GF.AVATAR_COLORS = ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#5A6B82','#0891B2'];
+GF.AVATAR_COLORS = ['#2FD9D9','#2BE8A0','#E0A73E','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#8FB6A6','#0891B2'];
 
 // ── Permissions per role ──
 //   own = only on tasks the user is Accountable/Responsible for

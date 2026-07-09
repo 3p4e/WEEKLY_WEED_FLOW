@@ -21,7 +21,7 @@ GF.views.intake = function () {
     </div>
     <textarea id="intake-text" spellcheck="false"
       placeholder="${AL('Paste the CEO email / plan text here…', 'Залепете го текстот тука…')}"
-      style="width:100%;min-height:200px;font:13px/1.5 var(--font-ui,system-ui);background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
+      style="width:100%;min-height:200px;font:13px/1.5 var(--font-ui,system-ui);background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
     <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
       <button class="btn btn-primary" onclick="GF.WWF.runExtract()">${GF.icon('sparkle')} ${AL('Analyze with AI', 'Анализирај со АИ')}</button>
       <span id="intake-busy" style="display:none;color:var(--ink-3);font-size:13px">${AL('Analyzing…', 'Се анализира…')}</span>
@@ -77,7 +77,7 @@ GF.WWF._renderCandidates = () => {
     if (st.filter && c.department !== st.filter) return '';
     const subs = (c.subtasks || []).map((s) =>
       `<li style="margin:2px 0"><b>${GF.esc(s.title)}</b>${s.description ? ' — ' + GF.esc(s.description) : ''}</li>`).join('');
-    return `<div style="border:1px solid var(--line);border-left:3px solid ${c._include ? 'var(--primary,#15A86B)' : 'var(--line)'};border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--surface,#fff)">
+    return `<div style="border:1px solid var(--line);border-left:3px solid ${c._include ? 'var(--primary,#2BE8A0)' : 'var(--line)'};border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--surface,#0B1913)">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <input type="checkbox" ${c._include ? 'checked' : ''} onchange="GF.WWF._intakeSet(${i},'_include',this.checked);GF.WWF._renderCandidates()" style="margin-top:5px">
         <div style="flex:1">
@@ -86,7 +86,7 @@ GF.WWF._renderCandidates = () => {
             onfocus="this.style.borderColor='var(--line)'" onblur="this.style.borderColor='transparent'">
           <textarea oninput="GF.WWF._intakeSet(${i},'description',this.value)" rows="2"
             placeholder="${AL('description', 'опис')}"
-            style="width:100%;font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:5px;margin-top:4px;background:#fff;color:var(--ink);resize:vertical">${GF.esc(c.description || '')}</textarea>
+            style="width:100%;font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:5px;margin-top:4px;background:var(--surface-2);color:var(--ink);resize:vertical">${GF.esc(c.description || '')}</textarea>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12px">
             <select onchange="GF.WWF._intakeSet(${i},'department',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px">${deptOpts(c.department)}</select>
             <select onchange="GF.WWF._intakeSet(${i},'priority',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px">
@@ -139,7 +139,7 @@ GF.WWF.adoptSelected = async () => {
   try {
     const r = await GF.API._req('POST', '/capture/import', { session_meta: { source: 'ai_intake' }, tasks });
     const skipped = (r.skipped || []).length;
-    if (out) out.innerHTML = `<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--ink)">
+    if (out) out.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--ink)">
       <b>${AL('Adopted', 'Внесени')}:</b> ${r.created} ${AL('created', 'нови')}, ${r.updated} ${AL('updated', 'ажурирани')}${skipped ? `, ${skipped} ${AL('skipped', 'прескокнати')}` : ''}.
     </div>`;
     // Drop the adopted ones from the candidate list so they can't be double-added.

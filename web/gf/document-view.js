@@ -145,16 +145,16 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">`;
   for (let h = 0; h <= 24; h += 3) {
     const x = LEFT + h * hw;
-    s += `<line x1="${x}" y1="${TOP - 4}" x2="${x}" y2="${H - 12}" stroke="var(--line,#E2E8F0)" stroke-width="1"/>`
-      + `<text x="${x}" y="${TOP - 8}" font-size="9" fill="var(--ink-3,#8A99B0)" text-anchor="middle">${String(h).padStart(2, '0')}</text>`;
+    s += `<line x1="${x}" y1="${TOP - 4}" x2="${x}" y2="${H - 12}" stroke="var(--line,rgba(43,232,160,.12))" stroke-width="1"/>`
+      + `<text x="${x}" y="${TOP - 8}" font-size="9" fill="var(--ink-3,#5F8575)" text-anchor="middle">${String(h).padStart(2, '0')}</text>`;
   }
   for (let i = 0; i < n; i++) {
     const d = new Date(d0); d.setDate(d0.getDate() + i);
     const iso = GF.localDateStr(d);
     const y = TOP + i * ROW;
     const lbl = d.toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-GB', { weekday: 'short', day: '2-digit', month: '2-digit' });
-    s += `<text x="4" y="${y + ROW / 2 + 3}" font-size="10" fill="var(--ink,#16233B)">${GF.esc(lbl)}</text>`
-      + `<rect x="${LEFT}" y="${y + 4}" width="${W - LEFT - 10}" height="${ROW - 8}" rx="4" fill="var(--surface-2,#F3F6FA)"/>`;
+    s += `<text x="4" y="${y + ROW / 2 + 3}" font-size="10" fill="var(--ink,#DDF3E9)">${GF.esc(lbl)}</text>`
+      + `<rect x="${LEFT}" y="${y + 4}" width="${W - LEFT - 10}" height="${ROW - 8}" rx="4" fill="var(--surface-2,#102219)"/>`;
     segments.forEach(seg => {
       if (seg.date !== iso) return;
       const x = LEFT + seg.start_h * hw, w = Math.max(2, (seg.end_h - seg.start_h) * hw);
@@ -177,7 +177,7 @@ GF.WWF._docMetricsHtml = (m) => {
       <td style="text-align:right;color:var(--ink-3)">${b.prev4_avg_hours}h</td>
       <td style="text-align:right;color:${delta > 25 ? '#E5484D' : 'var(--ink-2)'}">${trend}</td>
       <td style="text-align:right">${b.tasks}</td>
-      <td style="text-align:right;color:${(b.night + b.weekend) > 0 ? '#FF7A1A' : 'var(--ink-3)'}">${(b.night + b.weekend + b.overtime).toFixed(1)}h</td>
+      <td style="text-align:right;color:${(b.night + b.weekend) > 0 ? '#E0A73E' : 'var(--ink-3)'}">${(b.night + b.weekend + b.overtime).toFixed(1)}h</td>
     </tr>`;
   }).join('');
   const ot = m.on_time || {};
@@ -209,7 +209,7 @@ GF.WWF._renderDocPanel = () => {
   // ahead of the scheduled submission day. Produces a non-persisted preview the
   // user can review + export; the scheduled Fri→Thu week stays the only stored,
   // lockable record. Values live in GF.WWF._doc so they survive re-render.
-  const inStyle = 'font:inherit;padding:5px 8px;border:1px solid var(--line,#E2E8F0);border-radius:7px;background:var(--surface,#fff);color:var(--ink,#16233B)';
+  const inStyle = 'font:inherit;padding:5px 8px;border:1px solid var(--line,rgba(43,232,160,.12));border-radius:7px;background:var(--surface,#0B1913);color:var(--ink,#DDF3E9)';
   const rangeControls = elevated ? `
     <div style="padding:10px 14px;border-bottom:1px solid var(--line,#E2E8F0);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px">
       <span style="color:var(--ink-3);font-weight:600">${AL('Custom range', 'Прилагоден опсег')}</span>
@@ -241,10 +241,10 @@ GF.WWF._renderDocPanel = () => {
     const isPreview = d.status === 'preview';   // non-persisted custom-range draft
     const locked = d.status === 'locked';
     const chip = isPreview
-      ? `<span style="background:#EEF2FF;color:#3538CD;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('PREVIEW — not saved', 'ПРЕГЛЕД — незачуван')}${c.period && c.period.label ? ' · ' + GF.esc(c.period.label) : ''}</span>`
+      ? `<span style="background:rgba(47,217,217,.12);color:#2FD9D9;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(47,217,217,.25)">${AL('PREVIEW — not saved', 'ПРЕГЛЕД — незачуван')}${c.period && c.period.label ? ' · ' + GF.esc(c.period.label) : ''}</span>`
       : locked
-      ? `<span style="background:#E7F7EF;color:#0E6E4A;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
-      : `<span style="background:#FFF4E5;color:#B45309;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">${AL('DRAFT', 'НАЦРТ')}</span>`;
+      ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
+      : `<span style="background:rgba(224,167,62,.12);color:#E0A73E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(224,167,62,.25)">${AL('DRAFT', 'НАЦРТ')}</span>`;
     const sections = (c.ai_sections || []).map((s, i) => {
       if (s.status === 'not_configured') return '';
       const ok = !!s.approved;
@@ -254,8 +254,8 @@ GF.WWF._renderDocPanel = () => {
         : (!locked ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
             <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.toggleDocSection(${i})">
             ${AL('Approve for document', 'Одобри за документот')}</label>`
-          : (ok ? `<span style="font-size:11px;color:#0E6E4A;font-weight:700">${AL('Approved', 'Одобрено')}</span>` : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
-      return `<div style="border:1px solid var(--line,#E2E8F0);border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? '#F4FBF7' : 'var(--surface,#fff)'}">
+          : (ok ? `<span style="font-size:11px;color:#2BE8A0;font-weight:700">${AL('Approved', 'Одобрено')}</span>` : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
+      return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
         <div style="display:flex;align-items:center;gap:10px">
           <b style="font-size:13px">${GF.esc(s.title)}</b>
           <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable', 'агентот е недостапен') : ''}</span>
@@ -275,7 +275,7 @@ GF.WWF._renderDocPanel = () => {
         ${isPreview && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.previewDocument()">${AL('Regenerate', 'Регенерирај')}</button>` : ''}
         ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.compileDocument()">${AL('Recompile', 'Состави повторно')}</button>` : ''}
         <button class="btn btn-sm" onclick="GF.WWF.exportDocumentPdf()">${AL('Export PDF', 'Извези PDF')}</button>
-        ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" style="background:#0E6E4A;color:#fff" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}
+        ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" style="background:var(--primary);color:#03130C;font-weight:700" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}
       </div>
       ${c.ribbon && c.ribbon.length ? `
         <div style="font-weight:700;font-size:14px;margin:10px 0 6px">${ribbonLbl}</div>
@@ -288,8 +288,8 @@ GF.WWF._renderDocPanel = () => {
       ${sections ? `<div style="font-weight:700;font-size:14px;margin:14px 0 4px">${AL('AI sections', 'АИ секции')}</div>${sections}` : ''}
     </div>`;
   }
-  el.innerHTML = `<div style="margin:18px 0;background:var(--surface,#fff);border:1px solid var(--line,#E2E8F0);border-radius:11px;overflow:hidden">
-    <div style="padding:12px 14px;border-bottom:1px solid var(--line,#E2E8F0);font-weight:700;font-size:14px;color:#0E6E4A">
+  el.innerHTML = `<div style="margin:18px 0;background:var(--surface,#0B1913);border:1px solid var(--line,rgba(43,232,160,.12));border-radius:11px;overflow:hidden">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--line,rgba(43,232,160,.12));font-weight:700;font-size:14px;color:var(--primary,#2BE8A0)">
       ${GF.icon('calendar')} ${kindLbl}
     </div>${rangeControls}${body}</div>`;
 };

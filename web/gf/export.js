@@ -67,27 +67,27 @@ GF.export = {
 
   _pdf(base, w, tasks, u, kind) {
     const isR = kind === 'report';
-    const accent = isR ? '#2F6BFF' : '#FF7A1A';
+    const accent = isR ? '#2FD9D9' : '#E0A73E';
     const done = tasks.filter(t => t.status === 'done').length;
     const rate = tasks.length ? Math.round(done / tasks.length * 100) : 0;
     const stuck = tasks.filter(t => t.status === 'stuck').length;
-    const statusColor = { done: '#15A86B', working: '#FF7A1A', review: '#2F6BFF', stuck: '#E5484D', postponed: '#F6A609', pending: '#8A99B0' };
+    const statusColor = { done: '#1A9B6E', working: '#E0A73E', review: '#1AA3A3', stuck: '#E5484D', postponed: '#C08030', pending: '#8FB6A6' };
 
     let html = `<!doctype html><html><head><meta charset="utf-8"><title>${base}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
-    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Manrope',sans-serif;padding:28px 36px;font-size:12px;color:#16233B;line-height:1.5}@media print{body{padding:14px}@page{margin:14mm}}</style>
+    <link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Saira',system-ui,sans-serif;padding:28px 36px;font-size:12px;color:#16233B;line-height:1.5}@media print{body{padding:14px}@page{margin:14mm}}</style>
     </head><body>
-    <div style="background:linear-gradient(135deg,${accent},${isR?'#1E4FD6':'#E2640A'});color:#fff;padding:20px 24px;border-radius:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+    <div style="background:linear-gradient(135deg,${accent},${isR?'#1AA3A3':'#B88A30'});color:#03130C;padding:20px 24px;border-radius:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:22px;font-weight:800;letter-spacing:-.5px">GrowFlow ${isR ? 'Weekly Report' : 'Weekly Plan'}</div>
-      <div style="font-size:12px;opacity:.8;margin-top:3px">Week ${w.weekNum} — ${w.label}</div></div>
-      <div style="text-align:right;font-size:11px;opacity:.85"><div style="font-weight:700">${GF.esc(u.name)}</div><div>${GF.esc(u.roleLabel)}</div></div>
+      <div style="font-size:12px;opacity:.7;margin-top:3px">Week ${w.weekNum} — ${w.label}</div></div>
+      <div style="text-align:right;font-size:11px;opacity:.8"><div style="font-weight:700">${GF.esc(u.name)}</div><div>${GF.esc(u.roleLabel)}</div></div>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:20px">
-      <div style="flex:1;background:#F0F5FF;border:1px solid #E2E8F1;border-radius:12px;padding:14px;text-align:center">
+      <div style="flex:1;background:#E8FFF8;border:1px solid #C0EED8;border-radius:12px;padding:14px;text-align:center">
         <div style="font-size:28px;font-weight:800;color:${accent}">${tasks.length}</div><div style="font-size:10px;font-weight:700;color:#566884">TOTAL</div></div>
-      <div style="flex:1;background:#DDF4EA;border:1px solid #E2E8F1;border-radius:12px;padding:14px;text-align:center">
-        <div style="font-size:28px;font-weight:800;color:#15A86B">${rate}%</div><div style="font-size:10px;font-weight:700;color:#566884">DONE</div></div>
-      <div style="flex:1;background:#FBE3E4;border:1px solid #E2E8F1;border-radius:12px;padding:14px;text-align:center">
+      <div style="flex:1;background:#D6F5E8;border:1px solid #A8DEC0;border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:28px;font-weight:800;color:#1A9B6E">${rate}%</div><div style="font-size:10px;font-weight:700;color:#566884">DONE</div></div>
+      <div style="flex:1;background:#FBE3E4;border:1px solid #F0C0C2;border-radius:12px;padding:14px;text-align:center">
         <div style="font-size:28px;font-weight:800;color:#E5484D">${stuck}</div><div style="font-size:10px;font-weight:700;color:#566884">STUCK</div></div>
     </div>`;
 
@@ -97,11 +97,11 @@ GF.export = {
         <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;font-size:13px">${GF.esc(t.title)}</span>
         <span style="font-size:10px;font-weight:700;color:${sc};text-transform:uppercase">${GF.esc(t.status)}</span></div>
         <div style="font-size:10px;color:#566884;margin-top:2px">${[t.id, GF.dep(t.dept).name].filter(Boolean).map(GF.esc).join(' · ')}</div>
-        ${(t.notes || []).map(n => `<div style="font-size:10px;color:#16233B;margin-top:4px;padding-left:8px;border-left:2px solid #E2E8F1"><b>${GF.esc(n.d)}:</b> ${GF.esc(n.n)}</div>`).join('')}
+        ${(t.notes || []).map(n => `<div style="font-size:10px;color:#16233B;margin-top:4px;padding-left:8px;border-left:2px solid #C0DDD0"><b>${GF.esc(n.d)}:</b> ${GF.esc(n.n)}</div>`).join('')}
       </div>`;
     });
 
-    html += `<div style="margin-top:24px;padding-top:8px;border-top:1px solid #E2E8F1;font-size:9px;color:#8A99B0;display:flex;justify-content:space-between">
+    html += `<div style="margin-top:24px;padding-top:8px;border-top:1px solid #C0DDD0;font-size:9px;color:#8FB6A6;display:flex;justify-content:space-between">
       <span>GrowFlow · Medical Cannabis Production</span><span>${new Date().toLocaleDateString()}</span></div></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html); win.document.close();
