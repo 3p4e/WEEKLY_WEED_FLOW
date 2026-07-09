@@ -15,8 +15,16 @@ GF.leafFX = {
   },
 
   init() {
-    document.querySelectorAll('.leaf-stage').forEach(st => this.bind(st));
     this.initMark();
+    // Use the real 3D WebGL leaf (leaf3d.js) for EVERY leaf logo in the app —
+    // sidebar, header, assistant, and any future ones — so the whole app matches
+    // the splash's animated leaf. The flat CSS/PNG leaf + its click-FX below is
+    // kept only as the graceful fallback when three.js/WebGL isn't available.
+    if (window.GF && GF.leaf3d && GF.leaf3d.supported()) {
+      this.mount3dAll();
+      return;
+    }
+    document.querySelectorAll('.leaf-stage').forEach(st => this.bind(st));
     // Auto-idle for sidebar + header leaves (start after page warm-up)
     setTimeout(() => {
       const sidebar = document.getElementById('brand-leaf');
@@ -24,6 +32,25 @@ GF.leafFX = {
       const header  = document.getElementById('header-leaf');
       if (header)  this.startAutoIdle(header,  {restMin:7000, restMax:16000, holdMin:700, holdMax:1500});
     }, 3500);
+  },
+
+  // ── 3D leaf logos: mount the WebGL leaf into every .leaf-stage ──
+  mount3dAll() {
+    document.querySelectorAll('.leaf-stage').forEach(st => this.mount3d(st));
+  },
+  mount3d(stage) {
+    if (!stage || stage._leaf3d) return;
+    // entry.js owns the splash/login leaf (#wwf-login subtree) — don't touch it.
+    if (stage.closest && stage.closest('#wwf-login')) return;
+    const w = parseInt(stage.style.width, 10) || Math.round(stage.getBoundingClientRect().width) || 40;
+    const inst = GF.leaf3d.mount(stage, { size: Math.max(22, w) });
+    if (inst) {
+      stage._leaf3d = inst;
+      // Keep the CSS leaf in the DOM as a hidden fallback; the WebGL canvas is
+      // now the visible logo.
+      const css = stage.querySelector('.leaf-3d');
+      if (css) css.style.display = 'none';
+    }
   },
 
   bind(stage) {

@@ -45,6 +45,16 @@ GF.leaf3d = (function () {
     } catch (e) { return false; }
   }
 
+  // Fetch the ~348 KB mesh ONCE and share the text across every leaf on the page
+  // (splash + sidebar + header + assistant …). Each mount still parses its own
+  // BufferGeometry — geometry can't cross WebGL contexts — but the network hit
+  // and the service-worker read happen a single time.
+  let _objText = null;
+  function loadObjText(url) {
+    if (!_objText) _objText = fetch(url).then(r => { if (!r.ok) throw new Error('leaf mesh ' + r.status); return r.text(); });
+    return _objText;
+  }
+
   // Mount the leaf into `stageEl`. opts: { size, shadowEl, objUrl, onEnter, onError }.
   // Returns { canvas, destroy() } or null if unavailable.
   function mount(stageEl, opts) {
@@ -55,6 +65,14 @@ GF.leaf3d = (function () {
     let disposed = false;
     const size = opts.size || 280;
     const height = Math.round(size * 1.166);
+    // Glow scales with the leaf so a 30 px header logo isn't swallowed by the
+    // same 26 px aura the 280 px splash uses.
+    const gb = Math.max(5, Math.round(size * 0.093));
+    // Small leaves are LOGOS (sidebar/header/assistant): keep their idle sway
+    // gentle and mostly face-on so a 30 px leaf never rotates edge-on into an
+    // unreadable sliver. The big splash leaf keeps its full dramatic motion, and
+    // click-spin / wormhole stay full-range for every leaf.
+    const logo = size < 120;
     stageEl.style.width = size + 'px';
     stageEl.style.height = height + 'px';
     stageEl.style.position = 'relative';
@@ -70,7 +88,7 @@ GF.leaf3d = (function () {
     renderer.setSize(size, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.filter = 'drop-shadow(0 0 26px rgba(43,232,160,.55)) drop-shadow(0 0 12px rgba(47,217,217,.4))';
+    renderer.domElement.style.filter = `drop-shadow(0 0 ${gb}px rgba(43,232,160,.55)) drop-shadow(0 0 ${Math.round(gb * 0.46)}px rgba(47,217,217,.4))`;
     renderer.domElement.style.display = 'block';
     stageEl.appendChild(renderer.domElement);
 
@@ -84,8 +102,7 @@ GF.leaf3d = (function () {
     scene.add(group);
     let geo = null;
 
-    fetch(opts.objUrl || 'assets/pp-leaf-3d.obj')
-      .then(r => { if (!r.ok) throw new Error('leaf mesh ' + r.status); return r.text(); })
+    loadObjText(opts.objUrl || 'assets/pp-leaf-3d.obj')
       .then(text => {
         if (disposed) return;
         geo = parseOBJToGeometry(text, THREE);
@@ -150,7 +167,7 @@ GF.leaf3d = (function () {
         const shrink = Math.max(0, 1 - elapsed / 1.6);
         scl = shrink * shrink;
         if (scl < 0.01) scl = 0;
-        stageEl.style.filter = 'drop-shadow(0 0 60px rgba(43,232,160,.9)) drop-shadow(0 0 30px rgba(47,217,217,.7))';
+        stageEl.style.filter = `drop-shadow(0 0 ${Math.round(gb * 2.3)}px rgba(43,232,160,.9)) drop-shadow(0 0 ${Math.round(gb * 1.15)}px rgba(47,217,217,.7))`;
       } else if (mode === 'emerge') {
         const grow = Math.min(1, elapsed / 1.0);
         scl = grow < 0.5 ? 2 * grow * grow : 1 - Math.pow(-2 * grow + 2, 2) / 2;
@@ -165,6 +182,7 @@ GF.leaf3d = (function () {
         }
         const r = IDLE_MOVES[cs.idleIdx](t, D);
         ry = r.ry; rx = r.rx; rz = r.rz;
+        if (logo) { ry = 0.1 + (ry - 0.28) * 0.32; rx *= 0.5; rz *= 0.5; }  // stay near face-on
         cs.lastRy = ry;
         stageEl.style.filter = '';
       }
