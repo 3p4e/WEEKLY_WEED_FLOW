@@ -147,6 +147,23 @@ GF.leaf3d = (function () {
     };
     stageEl.addEventListener('click', onClick);
 
+    // Hover-follow (mouse/pen): the leaf tilts toward the cursor — the left/right
+    // + up/down parallax the flat leaf logos used to have. Touch relies on the
+    // idle float + tap-to-spin instead (no hover state to get stuck in).
+    let hover = false, htx = 0, hty = 0, hx = 0, hy = 0;
+    const onPEnter = (e) => { if (e.pointerType === 'touch') return; hover = true; };
+    const onPLeave = () => { hover = false; htx = 0; hty = 0; };
+    const onPMove = (e) => {
+      if (e.pointerType === 'touch') return;
+      const r = stageEl.getBoundingClientRect();
+      if (!r.width) return;
+      htx = ((e.clientX - r.left) / r.width - 0.5) * 1.2;   // yaw  (left/right)
+      hty = -((e.clientY - r.top) / r.height - 0.5) * 0.9;  // pitch (up/down)
+    };
+    stageEl.addEventListener('pointerenter', onPEnter);
+    stageEl.addEventListener('pointerleave', onPLeave);
+    stageEl.addEventListener('pointermove', onPMove);
+
     let raf = 0;
     function frame(now) {
       if (disposed) return;
@@ -175,7 +192,16 @@ GF.leaf3d = (function () {
         rx = D(8 * (1 - grow));
         rz = D(4 * (1 - grow));
         stageEl.style.filter = '';
+      } else if (hover) {
+        // Ease toward the cursor-driven tilt (yaw = left/right, pitch = up/down)
+        // and zoom a touch — the hover parallax the flat leaf logos had.
+        hx += (htx - hx) * 0.12;
+        hy += (hty - hy) * 0.12;
+        ry = 0.28 + hx; rx = hy; rz = 0; scl = 1.05;
+        cs.lastRy = ry;
+        stageEl.style.filter = '';
       } else {
+        hx += (0 - hx) * 0.12; hy += (0 - hy) * 0.12;   // ease back to rest after hover
         if (now > cs.nextIdleAt) {
           cs.idleIdx = (cs.idleIdx + 1 + Math.floor(Math.random() * (IDLE_MOVES.length - 1))) % IDLE_MOVES.length;
           cs.nextIdleAt = now + (8 + Math.random() * 6) * 1000;
@@ -203,6 +229,9 @@ GF.leaf3d = (function () {
         cancelAnimationFrame(raf);
         clearTimeout(cs._settleTimer); clearTimeout(cs._resetTimer);
         stageEl.removeEventListener('click', onClick);
+        stageEl.removeEventListener('pointerenter', onPEnter);
+        stageEl.removeEventListener('pointerleave', onPLeave);
+        stageEl.removeEventListener('pointermove', onPMove);
         try { if (geo) geo.dispose(); mat.dispose(); renderer.dispose(); } catch (e) {}
         try { const c = renderer.domElement; if (c && c.parentNode) c.parentNode.removeChild(c); } catch (e) {}
       },
