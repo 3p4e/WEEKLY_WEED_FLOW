@@ -1,56 +1,83 @@
-name: Deploy WWF to KVM4
+name: Deploy WWF frontend to KVM4
 
-# Optional, MANUAL-ONLY deploy path. It rsyncs the repo to /opt/wwf and runs
-# `docker compose up -d --build` against docker-compose.yml.
+# Manual, dispatch-only deploy of the GrowFlow frontend to the live stack on
+# KVM4 (/opt/stacks/wwf_app). It runs entirely through the kvm4-runner HTTP API,
+# which is the only channel that reaches the box from CI — GitHub-hosted runners
+# cannot open an SSH connection to KVM4 (port 22 is firewalled; only 443 is
+# reachable), so the previous rsync-over-SSH deploy could never authenticate.
 #
-# ⚠️  Production on KVM4 is currently provisioned out-of-band (the live
-#     containers were created directly, not by this compose). Running this
-#     would converge /opt/wwf onto docker-compose.yml — recreating the live
-#     db/backend/frontend containers. That is intentional only when you mean
-#     it, so this workflow is dispatch-only (no auto-run on push) to avoid
-#     surprising the live site on merge.
+# What it does:
+#   1. Builds a fresh, uniquely-tagged frontend image straight from this repo's
+#      web/ directory via a Docker git build-context. The daemon clones the repo
+#      itself using the ephemeral GITHUB_TOKEN, so no long-lived PAT is stored.
+#   2. Backs up the live compose.yaml (timestamped) and bumps the frontend image
+#      tag to the freshly-built one.
+#   3. Recreates ONLY the frontend container (`--no-deps`), so the two Postgres
+#      databases, the backend and the scheduler are never stopped or touched.
+#
+# This never converges the whole stack and never recreates the databases — the
+# frontend has no persistent state, so a redeploy is always safe and idempotent.
 #
 # Required repository secrets:
-#   KVM4_HOST     -> 72.60.35.12 (or srv1231216.hstgr.cloud)
-#   KVM4_USER     -> root
-#   KVM4_SSH_KEY  -> a PRIVATE deploy key whose public half is in the VPS authorized_keys
+#   KVM4_RUNNER_URL    -> base URL of the kvm4-runner API (e.g. https://runner.srv1231216.hstgr.cloud)
+#   KVM4_RUNNER_TOKEN  -> bearer token for the kvm4-runner /shell endpoint
 #
-# One-time on the server: create /opt/wwf/.env from .env.example (this workflow
-# preserves it — it is excluded from the sync).
+# Rollback: on the box, set the frontend `image:` back to the previous tag in
+# /opt/stacks/wwf_app/compose.yaml (a compose.yaml.bak.<timestamp> is written on
+# every run) and `docker compose up -d --no-deps frontend`.
 
 on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-kvm4
-  cancel-in-progress: true
+  group: deploy-kvm4-frontend
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure SSH
+      - name: Build & deploy frontend via kvm4-runner
+        env:
+          RUNNER_URL:   ${{ secrets.KVM4_RUNNER_URL }}
+          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+          GH_TOKEN:     ${{ github.token }}
+          REPO:         ${{ github.repository }}
+          REF:          ${{ github.ref_name }}
+          TAG:          gh-${{ github.run_number }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.KVM4_SSH_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ secrets.KVM4_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          set -euo pipefail
+          if [ -z "${RUNNER_URL:-}" ] || [ -z "${RUNNER_TOKEN:-}" ]; then
+            echo "::error::KVM4_RUNNER_URL / KVM4_RUNNER_TOKEN secrets are not set."
+            exit 1
+          fi
 
-      - name: Sync repository to KVM4
-        run: |
-          rsync -az --delete \
-            --exclude '.git' --exclude '.venv' --exclude 'node_modules' \
-            --exclude '.env' --exclude '__pycache__' \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new" \
-            ./ "${{ secrets.KVM4_USER }}@${{ secrets.KVM4_HOST }}:/opt/wwf/"
+          # Remote script: build tagged image from this ref, bump the live
+          # compose tag, recreate ONLY the frontend. $() runs on the runner.
+          REMOTE=$(cat <<REMOTE_EOF
+          set -e
+          docker build -t wwf-growflow:${TAG} "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git#${REF}:web"
+          NEW=\$(docker run --rm wwf-growflow:${TAG} grep -o "wwf-shell-v[0-9.]*" /usr/share/nginx/html/sw.js | head -1)
+          echo "built wwf-growflow:${TAG} serving \$NEW"
+          cd /opt/stacks/wwf_app
+          cp compose.yaml compose.yaml.bak.\$(date +%Y%m%d%H%M%S)
+          sed -i -E "s#image: wwf-growflow:[^[:space:]]+#image: wwf-growflow:${TAG}#" compose.yaml
+          docker compose up -d --no-deps frontend
+          docker ps --filter name=wwf-gf-frontend --format "{{.Image}} {{.Status}}"
+          REMOTE_EOF
+          )
 
-      - name: Build & start the WWF stack
-        run: |
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
-            "${{ secrets.KVM4_USER }}@${{ secrets.KVM4_HOST }}" \
-            'set -e; cd /opt/wwf; \
-             test -f .env || { echo "::error::/opt/wwf/.env missing — create it from .env.example"; exit 1; }; \
-             docker compose up -d --build; \
-             docker compose ps'
+          jq -nc --arg cmd "$REMOTE" '{cmd: $cmd, timeout: 320}' > payload.json
+          curl -sS --fail --max-time 340 -X POST "$RUNNER_URL/shell" \
+            -H "Authorization: Bearer $RUNNER_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @payload.json > resp.json
+
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open("resp.json"))
+          print(r.get("output", ""))
+          rc = r.get("exit_code", 1)
+          print(f"::notice::kvm4-runner exit_code={rc}")
+          sys.exit(0 if rc == 0 else 1)
+          PY
