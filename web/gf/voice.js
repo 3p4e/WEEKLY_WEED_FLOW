@@ -70,8 +70,8 @@ GF.voice = {
     GF.$('voice-content').innerHTML = `
       <div class="mic-stage">
         <div style="display:flex;gap:2px;background:rgba(255,255,255,.1);border-radius:9px;padding:3px;font-size:12px;font-weight:700">
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en');GF.voice._renderCapture()">EN</span>
-          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#fff':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk');GF.voice._renderCapture()">МК</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='en'?'background:var(--blue);color:#03130C':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('en');GF.voice._renderCapture()">EN</span>
+          <span style="padding:5px 11px;border-radius:7px;${GF.state.lang==='mk'?'background:var(--blue);color:#03130C':'color:rgba(255,255,255,.6)'};cursor:pointer" onclick="GF.setLang('mk');GF.voice._renderCapture()">МК</span>
         </div>
         <div style="font-size:11px;font-weight:700;letter-spacing:.4px;color:rgba(255,255,255,.55);text-transform:uppercase">${live ? GF.t('listening') : GF.t('speak_task')}</div>
         <div class="mic-rings">

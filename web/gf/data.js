@@ -2,11 +2,11 @@
 window.GF = window.GF || {};
 
 GF.DEPTS = [
-  { id: 'clone',  name: 'Cloning & Nursery', mk: 'Клонирање и расадник', icon: 'leaf',   color: '#15A86B' },
+  { id: 'clone',  name: 'Cloning & Nursery', mk: 'Клонирање и расадник', icon: 'leaf',   color: '#2BE8A0' },
   { id: 'veg',    name: 'Vegetation',        mk: 'Вегетација',           icon: 'leaf',   color: '#3FA34D' },
-  { id: 'flower', name: 'Flowering',         mk: 'Цветање',              icon: 'sun',    color: '#FF7A1A' },
+  { id: 'flower', name: 'Flowering',         mk: 'Цветање',              icon: 'sun',    color: '#E0A73E' },
   { id: 'irr',    name: 'Irrigation',        mk: 'Наводнување',          icon: 'drop',   color: '#0EA5A5' },
-  { id: 'prod',   name: 'Production',        mk: 'Производство',         icon: 'box',    color: '#2F6BFF' },
+  { id: 'prod',   name: 'Production',        mk: 'Производство',         icon: 'box',    color: '#2FD9D9' },
   { id: 'qc',     name: 'Quality Control',   mk: 'Контрола на квалитет', icon: 'flask',  color: '#7A5BE0' },
   { id: 'qa',     name: 'QA / QP',           mk: 'ОК / КвЛ',             icon: 'shield', color: '#C2410C' },
   { id: 'whin',   name: 'Warehouse In',      mk: 'Магацин (влез)',       icon: 'box',    color: '#0891B2' },

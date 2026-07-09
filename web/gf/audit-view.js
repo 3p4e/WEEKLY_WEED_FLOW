@@ -14,8 +14,8 @@ const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
 // first) so the elevated set has one definition on the frontend.
 const AUDIT_ROLES = ELEVATED_ROLES;
 const ACT = {
-  INSERT: { c: '#15A86B', en: 'Created', mk: 'Создадено' },
-  UPDATE: { c: '#2F6BFF', en: 'Updated', mk: 'Изменето' },
+  INSERT: { c: '#2BE8A0', en: 'Created', mk: 'Создадено' },
+  UPDATE: { c: '#2FD9D9', en: 'Updated', mk: 'Изменето' },
   DELETE: { c: '#E5484D', en: 'Deleted', mk: 'Избришано' },
 };
 const AUDIT_HIDE = ['password_hash'];   // never surface secrets in the trail
@@ -27,7 +27,7 @@ GF.WWF._auditFilter = { table_name: '', action: '', source: '' };
 // one it came from (identity events vs work events).
 const AUDIT_SOURCES = {
   users: { c: '#C2410C', en: 'users', mk: 'корисници' },
-  tasks: { c: '#2F6BFF', en: 'tasks', mk: 'задачи' },
+  tasks: { c: '#2FD9D9', en: 'tasks', mk: 'задачи' },
 };
 
 GF.WWF._auditActor = (e) => {
@@ -112,10 +112,10 @@ GF.WWF.renderAudit = () => {
     badge = ['users', 'tasks'].map(src => {
       const v = st.verify[src]; if (!v) return '';
       return v.ok
-        ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#E6F7EF;color:#0F7A4D;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px">
-             ${GF.icon('shield', 'icon', '#0F7A4D')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('verified', 'потврден')} · ${v.total} ${AL('entries', 'записи')}</span>`
-        : `<span style="display:inline-flex;align-items:center;gap:6px;background:#FDECEC;color:#C42121;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px">
-             ${GF.icon('flag', 'icon', '#C42121')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('chain broken at', 'прекин кај')} #${v.first_break_id}</span>`;
+        ? `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(43,232,160,.12);color:#2BE8A0;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid rgba(43,232,160,.25)">
+             ${GF.icon('shield', 'icon', '#2BE8A0')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('verified', 'потврден')} · ${v.total} ${AL('entries', 'записи')}</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,77,94,.12);color:#FF4D5E;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid rgba(255,77,94,.25)">
+             ${GF.icon('flag', 'icon', '#FF4D5E')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('chain broken at', 'прекин кај')} #${v.first_break_id}</span>`;
     }).join('');
   }
 
@@ -134,9 +134,9 @@ GF.WWF.renderAudit = () => {
         ${badge}
       </div>
       <div style="flex:1"></div>
-      <select id="audit-f-source" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:13px">${srcOpts}</select>
-      <select id="audit-f-table" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:13px">${tableOpts}</select>
-      <select id="audit-f-action" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:13px">${actOpts}</select>
+      <select id="audit-f-source" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${srcOpts}</select>
+      <select id="audit-f-table" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${tableOpts}</select>
+      <select id="audit-f-action" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${actOpts}</select>
       <button class="btn btn-sm" onclick="GF.WWF.loadAudit({reset:true})">${GF.icon('clock')}${AL('Refresh', 'Освежи')}</button>
     </div>`;
 
@@ -154,13 +154,13 @@ GF.WWF.renderAudit = () => {
         <div style="display:grid;grid-template-columns:170px 1fr;gap:8px;padding:4px 0;border-top:1px dashed var(--line);font-size:12.5px">
           <div style="font-weight:600;color:var(--ink-2);font-family:ui-monospace,monospace">${GF.esc(k)}</div>
           <div style="min-width:0">
-            ${e.action !== 'INSERT' ? `<span style="color:#C42121;text-decoration:${e.action === 'DELETE' ? 'none' : 'line-through'}">${GF.esc(GF.WWF._auditTrunc(ov))}</span>` : ''}
+            ${e.action !== 'INSERT' ? `<span style="color:#FF4D5E;text-decoration:${e.action === 'DELETE' ? 'none' : 'line-through'}">${GF.esc(GF.WWF._auditTrunc(ov))}</span>` : ''}
             ${e.action === 'UPDATE' ? '<span style="color:var(--ink-3);margin:0 6px">→</span>' : ''}
-            ${e.action !== 'DELETE' ? `<span style="color:#0F7A4D">${GF.esc(GF.WWF._auditTrunc(nv))}</span>` : ''}
+            ${e.action !== 'DELETE' ? `<span style="color:#2BE8A0">${GF.esc(GF.WWF._auditTrunc(nv))}</span>` : ''}
           </div>
         </div>`).join('') : `<div style="font-size:12.5px;color:var(--ink-3);padding:4px 0">${AL('No field-level changes recorded.', 'Нема промени на полиња.')}</div>`;
       return `
-      <details class="audit-entry" style="background:#fff;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;overflow:hidden">
+      <details class="audit-entry" style="background:var(--surface-2);border:1px solid var(--line);border-radius:11px;margin-bottom:8px;overflow:hidden">
         <summary style="display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;list-style:none">
           <span style="font-size:11.5px;color:var(--ink-3);white-space:nowrap;min-width:148px">${GF.esc(when)}</span>
           ${srcBadge}
@@ -170,7 +170,7 @@ GF.WWF.renderAudit = () => {
           <span style="flex:1"></span>
           <span style="font-size:12.5px;color:var(--ink-2)">${GF.icon('user')}&nbsp;${GF.esc(GF.WWF._auditActor(e))}</span>
         </summary>
-        <div style="padding:8px 14px 14px;background:#FAFBFC">
+        <div style="padding:8px 14px 14px;background:var(--surface-3)">
           ${diffHtml}
           <div style="margin-top:9px;font-size:10.5px;color:var(--ink-3);font-family:ui-monospace,monospace;word-break:break-all">
             entry_hash: ${GF.esc((e.entry_hash || '').slice(0, 24))}… · prev: ${GF.esc((e.prev_hash || '∅').slice(0, 16))}…</div>

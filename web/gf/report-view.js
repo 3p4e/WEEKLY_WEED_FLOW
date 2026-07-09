@@ -9,7 +9,7 @@
 GF.WWF._report = { data: null, mode: 'report', refDate: null, loading: false, aiInsights: null, aiLoading: false, pins: null, pinsUser: null };
 
 GF.WWF._sc = (label, value, color) =>
-  `<div style="background:#fff;border:1px solid var(--line);border-radius:11px;padding:14px 16px;text-align:center">
+  `<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:14px 16px;text-align:center">
     <div style="font-size:24px;font-weight:800;color:${color}">${value}</div>
     <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${label}</div>
   </div>`;
@@ -96,9 +96,9 @@ GF.WWF._aiDisclaimer = () =>
 GF.WWF._renderPinsPanel = () => {
   const st = GF.WWF._report;
   const title = st.mode === 'plan' ? GF.t('ai_next_week_plan') : GF.t('ai_weekly_report');
-  const accent = st.mode === 'plan' ? '#FF7A1A' : '#2F6BFF';
-  const soft = st.mode === 'plan' ? '#FFF4EC' : '#F8F9FF';
-  const line = st.mode === 'plan' ? '#FFE0C7' : '#D6E0FF';
+  const accent = st.mode === 'plan' ? 'var(--orange)' : 'var(--blue)';
+  const soft = st.mode === 'plan' ? 'var(--orange-soft)' : 'var(--blue-soft)';
+  const line = st.mode === 'plan' ? 'rgba(224,167,62,.25)' : 'rgba(47,217,217,.25)';
   let inner;
   if (st.pins) {
     const when = GF.WWF._when(st.pins.created_at);
@@ -165,14 +165,14 @@ GF.WWF._renderTimeBand = (band) => {
 
     html += `<div style="flex:1;min-width:58px;text-align:center">
       <div style="font-size:11px;font-weight:600;color:${isWe ? '#E5484D' : 'var(--ink-2)'};margin-bottom:6px;line-height:1.3">${lbl}</div>
-      <div style="display:flex;flex-direction:column;gap:1px;background:#f4f4f5;border-radius:4px;padding:2px;overflow:hidden">`;
+      <div style="display:flex;flex-direction:column;gap:1px;background:var(--surface-3);border-radius:4px;padding:2px;overflow:hidden">`;
 
     for (let h = 0; h < 24; h++) {
       const count = day.hours[h];
       let color;
       if (isWe) color = '#E5484D';
-      else if (h >= 8 && h < 17) color = '#15A86B';
-      else color = '#FF7A1A';
+      else if (h >= 8 && h < 17) color = '#2BE8A0';
+      else color = '#E0A73E';
       const opacity = count > 0 ? Math.min(0.3 + (count / maxCount) * 0.7, 1) : 0.05;
       const tip = day.day_name + ' ' + String(h).padStart(2, '0') + ':00 — ' + count + ' event' + (count !== 1 ? 's' : '');
       html += `<div title="${GF.esc(tip)}" style="height:3px;background:${color};opacity:${opacity.toFixed(2)};border-radius:1px"></div>`;
@@ -185,8 +185,8 @@ GF.WWF._renderTimeBand = (band) => {
 
   html += '</div>';
   html += `<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--ink-3)">
-    <span><span style="display:inline-block;width:10px;height:10px;background:#15A86B;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#FF7A1A;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#2BE8A0;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#E0A73E;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
     <span><span style="display:inline-block;width:10px;height:10px;background:#E5484D;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Weekend', 'Викенд')}</span>
   </div></div>`;
   return html;
@@ -205,8 +205,8 @@ GF.WWF.renderReport = () => {
       </h2>
       <div style="flex:1"></div>
       <div style="display:flex;gap:4px">
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:#fff' : ''}">${AL('Report', 'Извештај')}</button>
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:#fff' : ''}">${AL('Plan', 'План')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Report', 'Извештај')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Plan', 'План')}</button>
       </div>
       <div style="display:flex;gap:4px;align-items:center">
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
@@ -222,9 +222,9 @@ GF.WWF.renderReport = () => {
 
   const cards = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:18px">
-      ${GF.WWF._sc(AL('Total', 'Вкупно'), s.total, '#2F6BFF')}
-      ${GF.WWF._sc(AL('Completed', 'Завршени'), s.completed, '#15A86B')}
-      ${GF.WWF._sc(AL('In Progress', 'Во тек'), s.in_progress, '#FF7A1A')}
+      ${GF.WWF._sc(AL('Total', 'Вкупно'), s.total, 'var(--blue)')}
+      ${GF.WWF._sc(AL('Completed', 'Завршени'), s.completed, 'var(--primary)')}
+      ${GF.WWF._sc(AL('In Progress', 'Во тек'), s.in_progress, 'var(--orange)')}
       ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, '#E5484D')}
       ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, '#5A6B82')}
       ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, '#7A5BE0') : ''}
@@ -235,7 +235,7 @@ GF.WWF.renderReport = () => {
   const band = isR ? GF.WWF._renderTimeBand(d.time_band) : '';
 
   // ── Hours by time class (per person, from work_sessions) ──
-  const HB_COLORS = { regular: '#15A86B', overtime: '#FF7A1A', night: '#7A5BE0', weekend: '#E5484D' };
+  const HB_COLORS = { regular: '#2BE8A0', overtime: '#E0A73E', night: '#7A5BE0', weekend: '#E5484D' };
   let hoursByPerson = '';
   if (isR && d.hours_by_person && d.hours_by_person.length) {
     const cell = (v, cls) => {
@@ -244,7 +244,7 @@ GF.WWF.renderReport = () => {
     };
     hoursByPerson = `<div style="margin:18px 0" id="report-hours">
       <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Hours by time class', 'Часови по временска класа')}</div>
-      <div class="report-scroll" style="overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:11px">
+      <div class="report-scroll" style="overflow-x:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:11px">
         <table style="width:100%;border-collapse:collapse;min-width:520px">
           <thead><tr style="border-bottom:1px solid var(--line)">
             <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px">${AL('Person', 'Лице')}</th>
@@ -274,7 +274,7 @@ GF.WWF.renderReport = () => {
       <div style="font-weight:700;font-size:14px;color:#E5484D;margin-bottom:8px">${GF.icon('flag', 'icon', '#E5484D')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {
         const daysLate = Math.max(1, Math.floor((today - new Date(t.due_date)) / 86400000));
-        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
           <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>
           <span style="font-size:11px;font-weight:800;color:#E5484D;white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
@@ -299,18 +299,18 @@ GF.WWF.renderReport = () => {
       <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Departments', 'Оддели')}</div>
       ${d.departments.map(dp => {
         const pct = dp.total ? Math.round(dp.completed / dp.total * 100) : 0;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#fff;border:1px solid var(--line);border-radius:9px;margin-bottom:6px">
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;margin-bottom:6px">
           <span style="font-weight:600;font-size:13px;flex:1">${GF.esc(dp.name)}</span>
           <span style="font-size:12px;color:var(--ink-3)">${dp.completed}/${dp.total} ${AL('done', 'завршени')}</span>
-          <div style="width:80px;height:6px;background:#eee;border-radius:3px;overflow:hidden">
-            <div style="width:${pct}%;height:100%;background:#15A86B;border-radius:3px"></div>
+          <div style="width:80px;height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:var(--primary);border-radius:3px"></div>
           </div>
         </div>`;
       }).join('')}
     </div>`;
   }
 
-  const SC = { completed: '#15A86B', done: '#15A86B', ongoing: '#FF7A1A', in_progress: '#FF7A1A',
+  const SC = { completed: '#2BE8A0', done: '#2BE8A0', ongoing: '#E0A73E', in_progress: '#E0A73E',
                stuck: '#E5484D', pending: '#5A6B82', review: '#7A5BE0', postponed: '#F6A609' };
   let taskList;
   if (d.tasks.length) {
@@ -318,7 +318,7 @@ GF.WWF.renderReport = () => {
       <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Tasks', 'Задачи')} (${d.tasks.length})</div>
       ${d.tasks.map(t => {
         const col = SC[t.status] || '#5A6B82';
-        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:9px;margin-bottom:5px">
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;margin-bottom:5px">
           <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span>
           <span style="flex:1;font-size:13px;font-weight:500;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${GF.esc(t.department || '')}</span>
@@ -331,8 +331,8 @@ GF.WWF.renderReport = () => {
   }
 
   const ai = isR ? `
-    <div style="margin:18px 0;background:#F8F9FF;border:1px solid #D6E0FF;border-radius:11px;overflow:hidden">
-      <div style="padding:12px 14px;border-bottom:1px solid #D6E0FF;font-weight:700;font-size:14px;color:#2F6BFF">
+    <div style="margin:18px 0;background:var(--blue-soft);border:1px solid rgba(47,217,217,.25);border-radius:11px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:1px solid rgba(47,217,217,.25);font-weight:700;font-size:14px;color:var(--blue)">
         ${GF.icon('sparkle')} ${AL('AI Insights', 'AI Увиди')}
       </div>
       <div id="report-ai">${GF.WWF._renderAiBox()}</div>

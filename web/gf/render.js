@@ -2,9 +2,9 @@
 window.GF = window.GF || {};
 
 GF.avatar = (id, size = 28, ring) => {
-  const p = GF.PEOPLE[id] || { init: '?', bg: '#8A99B0', name: '' };
+  const p = GF.PEOPLE[id] || { init: '?', bg: '#5F8575', name: '' };
   return `<div class="avatar" title="${GF.esc(p.name)}" style="width:${size}px;height:${size}px;background:${p.bg};
-    font-size:${size * 0.38}px${ring ? `;box-shadow:0 0 0 2px #fff,0 0 0 4px ${p.bg}40` : ''}">${GF.esc(p.init)}</div>`;
+    font-size:${size * 0.38}px${ring ? `;box-shadow:0 0 0 2px #060F0B,0 0 0 4px ${p.bg}40` : ''}">${GF.esc(p.init)}</div>`;
 };
 GF.avatars = (ids, size = 26) => `<div class="avatars">${ids.map(i => GF.avatar(i, size)).join('')}</div>`;
 GF.progress = (t) => ({ done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0);
@@ -190,7 +190,7 @@ GF.render = {
     const head = `
       <div class="card-head" onclick="GF.toggleExpand('${t.id}')">
         <button class="check ${t.status === 'done' ? 'done' : ''}" onclick="event.stopPropagation();GF.toggleDone('${t.id}')">
-          ${t.status === 'done' ? GF.icon('check', 'icon', '#fff') : ''}</button>
+          ${t.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
         <div style="flex:1;min-width:0">
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>

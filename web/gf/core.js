@@ -60,7 +60,7 @@ GF.ROLES = {
   operator:{ en: 'Operator',               mk: 'Оператор' },
 };
 GF.roleLabel = (r) => (GF.ROLES[r] ? GF.ROLES[r][GF.state.lang] || GF.ROLES[r].en : r);
-GF.AVATAR_COLORS = ['#2F6BFF','#15A86B','#FF7A1A','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#5A6B82','#0891B2'];
+GF.AVATAR_COLORS = ['#2FD9D9','#2BE8A0','#E0A73E','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#8FB6A6','#0891B2'];
 
 // ── Permissions per role ──
 //   own = only on tasks the user is Accountable/Responsible for

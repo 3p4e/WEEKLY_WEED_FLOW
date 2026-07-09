@@ -88,7 +88,7 @@ GF.leafFX = {
         const h = Math.floor(Math.random() * 360);
         s.style.background = `radial-gradient(circle,hsl(${h},92%,74%),hsl(${h},92%,52%))`;
       } else if (mode === 'storm') {
-        s.style.background = 'radial-gradient(circle,#b3e0ff,#2F6BFF)';
+        s.style.background = 'radial-gradient(circle,#b3fff0,#2FD9D9)';
       } else if (mode === 'pulse') {
         s.style.background = 'radial-gradient(circle,#d4f7bc,#5BBA47)';
       } else if (mode === 'shake') {
