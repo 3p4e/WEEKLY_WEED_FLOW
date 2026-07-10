@@ -28,8 +28,7 @@ GF.WWF = GF.WWF || {};
       <div id="wwf-login-msg" class="gf-msg"></div>
       <div class="gf-demo-sep">or / или</div>
       <button class="gf-btn-demo" onclick="GF.DEMO.enter()">🌿 Try the demo · Пробај демо</button>
-      <div class="gf-demo-hint">Sample data only — nothing you do here touches the real system.<br>
-        Само примерни податоци — ништо овде не ја допира вистинската база.</div>`;
+      <div class="gf-demo-hint">Sample data — separate from the real system · Примерни податоци</div>`;
   }
 
   function changePwCardHTML() {

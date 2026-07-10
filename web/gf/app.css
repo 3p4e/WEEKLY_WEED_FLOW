@@ -195,7 +195,10 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:15px}
+/* overflow-x:hidden clips phantom horizontal scroll from the off-canvas mobile
+   sidebar (position:fixed;translateX(-100%)); the app's real scrollers (.main,
+   .report-scroll, .gf-entry) have their own overflow contexts and are unaffected. */
+html{font-size:15px;overflow-x:hidden}
 body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;overflow:hidden}
 ::-webkit-scrollbar{width:8px;height:8px}
