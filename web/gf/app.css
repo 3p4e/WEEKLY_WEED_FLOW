@@ -646,3 +646,99 @@ body.demo-on .main{padding-bottom:56px}
   #gf-demo-banner>span:not(.gfdb-dot){white-space:normal;max-height:2.6em;line-height:1.3}
   body.demo-on .main{padding-bottom:112px}
 }
+
+/* ════════════ EXECUTIVE OVERVIEW (views.js: GF.views.exec) ════════════ */
+/* "Active this week" caption in the week strip (labels the avatar cluster
+   that used to be a mysterious circle of initials). */
+.week-active{display:flex;align-items:center;gap:8px;cursor:pointer}
+.week-active-lbl{font-size:10.5px;font-weight:700;letter-spacing:.3px;color:var(--ink-3);white-space:nowrap}
+@media (max-width:600px){.week-active-lbl{display:none}}
+
+/* North-star KPI tiles — the 10-second read */
+.exec-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:14px 0}
+.ekpi{background:var(--surface);border:1px solid var(--glass-border);border-radius:12px;padding:12px 12px 11px;
+  min-width:0;display:flex;flex-direction:column;gap:2px}
+.ekpi-v{font-size:26px;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.ekpi-l{font-size:11px;font-weight:600;color:var(--ink-2)}
+.ekpi-sub{font-size:10px;color:var(--ink-3);min-height:12px}
+@media (max-width:900px){.exec-kpis{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:480px){.exec-kpis{grid-template-columns:repeat(2,1fr)}.ekpi-v{font-size:22px}}
+
+/* Two-column layout; collapses to one on narrow screens */
+.exec-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;align-items:start}
+@media (max-width:900px){.exec-grid{grid-template-columns:1fr}}
+.exec-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.exec-card{padding:14px 16px}
+.exec-card-ttl{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink);
+  margin-bottom:12px}
+.exec-card-ttl .icon{width:16px;height:16px}
+.exec-chip{margin-left:auto;font-size:11px;font-weight:800;background:var(--surface-2);color:var(--ink-2);
+  padding:1px 9px;border-radius:999px}
+.exec-reset{margin-left:auto;font-size:11px;font-weight:700;color:var(--primary);background:var(--green-soft);
+  border:1px solid var(--glass-border);border-radius:999px;padding:3px 10px;cursor:pointer;font-family:var(--font)}
+.exec-reset:hover{filter:brightness(1.1)}
+
+/* Department matrix rows with visibility toggle */
+.exec-drow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--glass-border)}
+.exec-drow:last-child{border-bottom:none}
+.exec-drow.off{opacity:.42}
+.exec-eye{flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--glass-border);border-radius:8px;background:var(--surface-2);cursor:pointer;color:var(--ink-3)}
+.exec-eye:hover{color:var(--ink);border-color:var(--primary)}
+.exec-eye .icon{width:16px;height:16px}
+.exec-dname{flex:0 0 34%;min-width:0;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+  color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.exec-dbar{flex:1;min-width:40px;height:8px;border-radius:999px;overflow:hidden;display:flex;background:var(--surface-3)}
+.exec-dbar>span{display:block}
+.exec-dstat{flex-shrink:0;width:38px;text-align:right;font-size:12px;font-weight:700;color:var(--ink-2)}
+.exec-dcount{flex-shrink:0;width:26px;text-align:right;font-size:12px;font-weight:800;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+
+/* Batch-flow / dependency pipeline — scrolls horizontally instead of overflowing */
+.exec-pipe{display:flex;align-items:stretch;gap:2px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.pipe-node{flex:0 0 auto;min-width:92px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 10px 9px;border:1px solid var(--glass-border);border-radius:11px;background:var(--surface-2)}
+.pipe-node.ready{border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green-soft)}
+.pipe-node.bottleneck{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red-soft)}
+.pipe-dept{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;letter-spacing:.3px}
+.pipe-dept .icon{width:15px;height:15px}
+.pipe-counts{display:flex;gap:4px}
+.pipe-counts .pc{font-size:11px;font-weight:800;min-width:20px;text-align:center;padding:2px 5px;border-radius:6px;
+  font-variant-numeric:tabular-nums}
+.pc.done{background:var(--green-soft);color:var(--green-fg)}
+.pc.wip{background:var(--orange-soft);color:var(--orange-700)}
+.pc.stuck{background:var(--red-soft);color:var(--red-fg)}
+.pipe-tag{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:999px}
+.pipe-tag.ready{background:var(--green-soft);color:var(--green-fg)}
+.pipe-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
+.pipe-arrow{flex:0 0 auto;display:flex;align-items:center;color:var(--ink-3)}
+.pipe-arrow .icon{width:18px;height:18px}
+.pipe-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:10.5px;color:var(--ink-3)}
+.pipe-legend span{display:flex;align-items:center;gap:5px}
+.pipe-legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.pipe-legend .pl.done{background:var(--green)}
+.pipe-legend .pl.wip{background:var(--orange)}
+.pipe-legend .pl.stuck{background:var(--red)}
+
+/* Needs-attention risk zone */
+.attn-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--glass-border);cursor:pointer}
+.attn-row:last-child{border-bottom:none}
+.attn-row:hover{background:var(--surface-2)}
+.attn-body{flex:1;min-width:0}
+.attn-title{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attn-sub{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.attn-tag{flex-shrink:0;font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 8px;border-radius:999px}
+.attn-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
+.attn-tag.overdue{background:var(--amber-soft);color:var(--amber-fg)}
+
+/* AI executive brief panel */
+.exec-brief{margin:0 0 14px;border:1px solid var(--glass-border);border-radius:12px;background:var(--surface);padding:14px 16px}
+.exec-brief-load,.exec-brief-off{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+.exec-brief-load .icon{width:16px;height:16px;color:var(--primary)}
+.exec-brief-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px}
+.exec-brief-head .icon{width:15px;height:15px}
+.exec-brief-x{margin-left:auto;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+  border:none;background:none;cursor:pointer;color:var(--ink-3)}
+.exec-brief-x:hover{color:var(--ink)}
+.exec-brief-x .icon{width:15px;height:15px}
+.exec-brief-txt{font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap}

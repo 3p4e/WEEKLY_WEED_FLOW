@@ -13,6 +13,9 @@ GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:
 GF.render = {
   all() {
     this.sidebar(); this.header();
+    // The exec view is executive-only; if a stale gf_view lands a non-exec here
+    // (e.g. a shared browser), fall back to My Week.
+    if (GF.state.view === 'exec' && !(GF.isExec && GF.isExec())) GF.state.view = 'mywork';
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
@@ -49,10 +52,14 @@ GF.render = {
   },
 
   sidebar() {
-    const nav = [
+    const nav = [];
+    // Executives get an exec-only Overview at the top of the nav; everyone keeps
+    // the standard views below it.
+    if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
+    nav.push(
       ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
       ['coord', 'coordination', 'at', 3], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
-    ];
+    );
     GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
         ${GF.icon(ic)}<span>${GF.t(key)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}
@@ -86,9 +93,10 @@ GF.render = {
       <div class="week-dates">${w.label}, ${w.year}</div>
       ${isNow ? `<span class="badge-now">${GF.t('this_week_badge')}</span>` : ''}
       <div class="spacer"></div>
-      ${active.length ? `<div onclick="GF.setView('team')" style="cursor:pointer"`
+      ${active.length ? `<div class="week-active" onclick="GF.setView('team')"`
         + ` title="${AL('People active this week — open Team', 'Активни оваа недела — отвори Тим')}">`
-        + `${GF.avatars(active, 30)}</div>` : ''}`;
+        + `<span class="week-active-lbl">${AL('Active this week', 'Активни оваа недела')}</span>`
+        + `${GF.avatars(active, 28)}</div>` : ''}`;
   },
 
   dayPills() {
