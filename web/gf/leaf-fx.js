@@ -38,6 +38,18 @@ GF.leafFX = {
   mount3dAll() {
     document.querySelectorAll('.leaf-stage').forEach(st => this.mount3d(st));
   },
+  // Re-tint every mounted 3D leaf to the current (or given) theme's palette,
+  // in place — called by GF.toggleTheme so live leaves change skin instantly
+  // without tearing down + rebuilding their WebGL contexts. Splash/login leaves
+  // (owned by entry.js, pinned to dark) are skipped.
+  retintAll(theme) {
+    document.querySelectorAll('.leaf-stage').forEach(st => {
+      if (st._leaf3d && st._leaf3d.applyTheme && !(st.closest && st.closest('#wwf-login'))) {
+        try { st._leaf3d.applyTheme(theme); } catch (e) {}
+      }
+    });
+  },
+
   mount3d(stage) {
     if (!stage || stage._leaf3d) return;
     // entry.js owns the splash/login leaf (#wwf-login subtree) — don't touch it.

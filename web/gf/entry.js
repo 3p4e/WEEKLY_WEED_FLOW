@@ -73,6 +73,10 @@ GF.WWF = GF.WWF || {};
       size: leafSize(),
       shadowEl: $('gf-leaf-shadow'),
       objUrl: 'assets/pp-leaf-3d.obj',
+      // The splash/login backdrop is always dark (entry.css) regardless of the
+      // app's chosen skin, so pin the hero leaf to the dark palette — a
+      // light-skin leaf here would glow wrong against the dark stage.
+      theme: 'dark',
       onEnter: reveal,
       onError: cssFallbackLeaf,
     });

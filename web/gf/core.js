@@ -261,6 +261,8 @@ GF.toggleTheme = () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('gf_theme', next); } catch (e) {}
   GF.syncThemeBtn();
+  // Re-tint the 3D leaf logos (material/glow) to match the new skin, in place.
+  if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(next);
 };
 GF.setView = (v) => {
   GF.state.view = v;

@@ -37,6 +37,37 @@ GF.leaf3d = (function () {
     (t, D) => ({ ry: 0.35 + 0.15 * Math.sin(t * 2 * Math.PI / 2.8), rx: D(4 + 6 * Math.sin(t * 2 * Math.PI / 1.8)), rz: D(2 * Math.cos(t * 2 * Math.PI / 2.4)) }),
   ];
 
+  // ── Per-theme leaf appearance ──────────────────────────────────────────
+  // The mesh is the same; only its material, light rig and glow change per
+  // skin so the 3D leaf belongs to whichever theme is active (a neon plasma
+  // glow that pops on the dark shell would read as a harsh halo on the light
+  // one). Each future skin adds a key here. baseGlow/wormholeGlow are
+  // functions of the glow-blur px so a 30px header logo and the 280px splash
+  // both scale correctly. Colors are three.js hex ints (0xRRGGBB).
+  const THEMES = {
+    dark: {
+      mat: { color: 0x2ad98f, emissive: 0x139d68, emissiveIntensity: 0.72, metalness: 0.28, roughness: 0.34 },
+      ambient: [0x2c5a4c, 1.45], key: [0xc9ffe8, 3.4], rim: [0x5fecec, 2.15], fill: [0x46f2b4, 1.2],
+      baseGlow: (g) => `drop-shadow(0 0 ${g}px rgba(43,232,160,.72)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(47,217,217,.52))`,
+      wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 2.3)}px rgba(43,232,160,.9)) drop-shadow(0 0 ${Math.round(g * 1.15)}px rgba(47,217,217,.7))`,
+    },
+    light: {
+      // Deeper emerald body (reads as a rich object on white, not washed out),
+      // gentler emissive (no dark backdrop to glow against), and a soft
+      // green/teal DROP shadow instead of a neon aura. Brighter near-white
+      // key + neutral ambient so the leaf isn't lit only in green on a pale bg.
+      mat: { color: 0x17A866, emissive: 0x0B7A46, emissiveIntensity: 0.40, metalness: 0.18, roughness: 0.42 },
+      ambient: [0x9ec8b6, 1.55], key: [0xffffff, 3.1], rim: [0x2f9aa0, 1.65], fill: [0x2fa877, 1.05],
+      baseGlow: (g) => `drop-shadow(0 ${Math.max(2, Math.round(g * 0.4))}px ${Math.round(g * 0.9)}px rgba(6,121,63,.30)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(15,111,118,.20))`,
+      wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 1.8)}px rgba(6,121,63,.55)) drop-shadow(0 0 ${Math.round(g * 0.9)}px rgba(15,111,118,.4))`,
+    },
+  };
+  function resolveTheme(name) {
+    if (name === 'light' || name === 'dark') return name;
+    try { const t = document.documentElement.dataset.theme; if (t === 'light') return 'light'; } catch (e) {}
+    return 'dark';
+  }
+
   function supported() {
     if (!window.THREE) return false;
     try {
@@ -88,21 +119,42 @@ GF.leaf3d = (function () {
     renderer.setSize(size, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.filter = `drop-shadow(0 0 ${gb}px rgba(43,232,160,.72)) drop-shadow(0 0 ${Math.round(gb * 0.5)}px rgba(47,217,217,.52))`;
     renderer.domElement.style.display = 'block';
     stageEl.appendChild(renderer.domElement);
 
-    // Brighter, higher-contrast rig so the leaf pops off the surface instead of
-    // sinking into shadow: lifted ambient, a strong near-white key, a punchy
-    // teal rim for edge separation, and a brighter fill from below.
-    scene.add(new THREE.AmbientLight(0x2c5a4c, 1.45));
-    const key = new THREE.DirectionalLight(0xc9ffe8, 3.4); key.position.set(-0.7, 1.1, 1.3); scene.add(key);
-    const rim = new THREE.DirectionalLight(0x5fecec, 2.15); rim.position.set(1.1, 0.4, -0.9); scene.add(rim);
-    const fill = new THREE.DirectionalLight(0x46f2b4, 1.2); fill.position.set(0.2, -1, 0.6); scene.add(fill);
+    // Theme-driven look (see THEMES). opts.theme pins it (the splash keeps
+    // 'dark' regardless of app theme since its backdrop is always dark);
+    // otherwise it follows <html data-theme>. applyTheme() re-tints live.
+    let pal = THEMES[resolveTheme(opts.theme)] || THEMES.dark;
 
-    // Brighter emissive base + lower metalness (metal reads dark without an env
-    // map) so more of the surface is diffusely lit and vivid green.
-    const mat = new THREE.MeshStandardMaterial({ color: 0x2ad98f, emissive: 0x139d68, emissiveIntensity: 0.72, metalness: 0.28, roughness: 0.34 });
+    // Brighter, higher-contrast rig so the leaf pops off the surface instead of
+    // sinking into shadow: lifted ambient, a strong key, a punchy rim for edge
+    // separation, and a brighter fill from below. Colors/intensities per theme.
+    const ambient = new THREE.AmbientLight(pal.ambient[0], pal.ambient[1]); scene.add(ambient);
+    const key = new THREE.DirectionalLight(pal.key[0], pal.key[1]); key.position.set(-0.7, 1.1, 1.3); scene.add(key);
+    const rim = new THREE.DirectionalLight(pal.rim[0], pal.rim[1]); rim.position.set(1.1, 0.4, -0.9); scene.add(rim);
+    const fill = new THREE.DirectionalLight(pal.fill[0], pal.fill[1]); fill.position.set(0.2, -1, 0.6); scene.add(fill);
+
+    // Emissive base + low metalness (metal reads dark without an env map) so
+    // more of the surface is diffusely lit and vividly coloured.
+    const mat = new THREE.MeshStandardMaterial(pal.mat);
+    renderer.domElement.style.filter = pal.baseGlow(gb);
+
+    // Re-tint every material/light/glow to another skin's palette in place —
+    // called by GF.leafFX.retintAll() when the user flips the theme, so live
+    // leaves change skin without a remount (and without a GL-context churn).
+    function applyTheme(name) {
+      const p = THEMES[resolveTheme(name)]; if (!p) return;
+      pal = p;
+      mat.color.setHex(p.mat.color); mat.emissive.setHex(p.mat.emissive);
+      mat.emissiveIntensity = p.mat.emissiveIntensity; mat.metalness = p.mat.metalness; mat.roughness = p.mat.roughness;
+      mat.needsUpdate = true;
+      ambient.color.setHex(p.ambient[0]); ambient.intensity = p.ambient[1];
+      key.color.setHex(p.key[0]); key.intensity = p.key[1];
+      rim.color.setHex(p.rim[0]); rim.intensity = p.rim[1];
+      fill.color.setHex(p.fill[0]); fill.intensity = p.fill[1];
+      if (cs.mode !== 'wormhole') renderer.domElement.style.filter = p.baseGlow(gb);
+    }
     const group = new THREE.Group();
     scene.add(group);
     let geo = null;
@@ -189,7 +241,7 @@ GF.leaf3d = (function () {
         const shrink = Math.max(0, 1 - elapsed / 1.6);
         scl = shrink * shrink;
         if (scl < 0.01) scl = 0;
-        stageEl.style.filter = `drop-shadow(0 0 ${Math.round(gb * 2.3)}px rgba(43,232,160,.9)) drop-shadow(0 0 ${Math.round(gb * 1.15)}px rgba(47,217,217,.7))`;
+        stageEl.style.filter = pal.wormholeGlow(gb);
       } else if (mode === 'emerge') {
         const grow = Math.min(1, elapsed / 1.0);
         scl = grow < 0.5 ? 2 * grow * grow : 1 - Math.pow(-2 * grow + 2, 2) / 2;
@@ -225,6 +277,7 @@ GF.leaf3d = (function () {
 
     return {
       canvas: renderer.domElement,
+      applyTheme,   // re-tint to another skin without a remount
       // Cancel the RAF, drop listeners, and free the WebGL context — a PWA
       // reuses the tab across login/logout, so leaking a GL context each time
       // would eventually hit the browser's context limit and blank the leaf.
