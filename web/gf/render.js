@@ -30,6 +30,7 @@ GF.render = {
 
   header() {
     const u = GF.PEOPLE[GF.state.user];
+    GF.syncThemeBtn();
     GF.$('lang-en').classList.toggle('on', GF.state.lang === 'en');
     GF.$('lang-mk').classList.toggle('on', GF.state.lang === 'mk');
     GF.$('search-input').placeholder = GF.t('search');

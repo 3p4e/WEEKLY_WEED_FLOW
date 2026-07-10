@@ -18,6 +18,7 @@ GF.ICONS = {
   link:'M8 12l4-4M7.5 7.5L6 9a3 3 0 004.2 4.2l1.3-1.3M12.5 12.5L14 11a3 3 0 00-4.2-4.2L8.5 8',
   settings:'M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1',
   sun:'M10 13a3 3 0 100-6 3 3 0 000 6zM10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4',
+  moon:'M15.5 12.5A6.5 6.5 0 117.5 4.5a5 5 0 108 8z',
   drop:'M10 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z', box:'M10 3l6 3v8l-6 3-6-3V6l6-3zM4 6l6 3 6-3M10 9v8',
   shield:'M10 3l6 2v5c0 4-3 6-6 7-3-1-6-3-6-7V5l6-2z',
   wrench:'M12.5 4a3.5 3.5 0 00-4.7 4.2l-4 4a1.5 1.5 0 002.1 2.1l4-4A3.5 3.5 0 0016 7l-2 2-1.5-1.5 2-2A3.5 3.5 0 0012.5 4z',
@@ -238,6 +239,29 @@ GF.scopedTasks = (weekId) => {
 GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(); };
 
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };
+
+// ── Theme (dark/light) ──
+// The <html data-theme> attribute is the single source of truth (an inline
+// script in index.html's <head> sets it from localStorage before any CSS
+// paints, so there's no flash-of-wrong-theme); this just flips it, persists
+// the choice, and keeps the toggle button + mobile theme-color in sync.
+GF.syncThemeBtn = () => {
+  const btn = GF.$('theme-btn');
+  if (!btn) return;
+  const dark = document.documentElement.dataset.theme !== 'light';
+  btn.innerHTML = GF.icon(dark ? 'sun' : 'moon');
+  btn.title = dark
+    ? (GF.state.lang === 'mk' ? 'Светла тема' : 'Light theme')
+    : (GF.state.lang === 'mk' ? 'Темна тема' : 'Dark theme');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || (dark ? '#060F0B' : '#FFFFFF');
+};
+GF.toggleTheme = () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('gf_theme', next); } catch (e) {}
+  GF.syncThemeBtn();
+};
 GF.setView = (v) => {
   GF.state.view = v;
   try { localStorage.setItem('gf_view', v); } catch (e) {}
