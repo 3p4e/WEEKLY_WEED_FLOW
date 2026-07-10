@@ -400,19 +400,22 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .overlay{position:fixed;inset:0;z-index:500;background:var(--overlay);backdrop-filter:blur(6px);
   display:none;align-items:center;justify-content:center;padding:20px}
 .overlay.open{display:flex}
+/* Flex column so the header + footer stay pinned and ONLY the body scrolls.
+   (The previous rule set overflow-y:auto then immediately overflow:hidden on
+   the same selector, which clipped tall modals with no way to scroll to Save.) */
 .modal{background:var(--glass-bg);backdrop-filter:var(--glass-blur);
   border:1px solid var(--glass-border);border-radius:16px;box-shadow:var(--sh-3);
-  width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:modalIn .2s ease;
-  position:relative;overflow:hidden}
+  width:100%;max-width:480px;max-height:90vh;animation:modalIn .2s ease;
+  position:relative;overflow:hidden;display:flex;flex-direction:column}
 .modal::before{content:'';position:absolute;inset:0;background:var(--scanlines);pointer-events:none;opacity:.3;z-index:0}
 .modal>*{position:relative;z-index:1}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;
-  border-bottom:1px solid var(--line);position:relative}
+  border-bottom:1px solid var(--line);position:relative;flex-shrink:0}
 .modal-head::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(43,232,160,.3) 50%,transparent)}
 .modal-head h3{font-size:17px;font-weight:800;color:var(--ink)}
-.modal-body{padding:20px 22px}
-.modal-foot{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+.modal-body{padding:20px 22px;overflow-y:auto;flex:1 1 auto;min-height:0}
+.modal-foot{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;flex-shrink:0}
 
 /* ── Form fields ── */
 .field{margin-bottom:14px}
