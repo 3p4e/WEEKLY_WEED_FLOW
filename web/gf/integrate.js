@@ -691,7 +691,10 @@ GF.openUser = (id) => {
   const roleOpts = roleKeys.map(r =>
     `<option value="${r}" ${r===curRole?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
   const curDept = editing ? p.dept : me.department_id;
-  const deptOpts = GF.DEPTS.map(d =>
+  // Explicit "None" so cross-org roles (Owner / CEO / COO / QP) can be assigned
+  // no department right from the picker, instead of the row silently vanishing.
+  const deptOpts = `<option value="" ${curDept ? '' : 'selected'}>${AL('None — no department', '— Без оддел —')}</option>`
+    + GF.DEPTS.map(d =>
     `<option value="${d.id}" ${String(d.id)===String(curDept)?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
   const deptLocked = iAmAdmin ? '' : 'disabled';
   GF.$('user-title').textContent = editing ? GF.t('edit_user') : GF.t('add_user');
@@ -716,10 +719,12 @@ GF.openUser = (id) => {
 };
 
 GF._userRoleChange = (roleKey) => {
-  const deptRow = GF.$('u-dept-row'), note = GF.$('u-nodept-note');
-  const hide = NO_DEPT_ROLES.has(roleKey);
-  if (deptRow) deptRow.style.display = hide ? 'none' : '';
-  if (note) note.style.display = hide ? '' : 'none';
+  const note = GF.$('u-nodept-note'), sel = GF.$('u-dept');
+  const cross = NO_DEPT_ROLES.has(roleKey);
+  // Keep the department picker visible for every role now that "None" is a real
+  // option; for cross-org roles just default it to None and show the hint.
+  if (note) note.style.display = cross ? '' : 'none';
+  if (cross && sel) sel.value = '';
 };
 
 GF.WWF.resetUserPw = async (id) => {
@@ -738,10 +743,8 @@ GF.submitUser = async () => {
   if (!name) { GF.toast(AL('Enter a full name', 'Внесете име и презиме'), 'error'); return; }
   const roleKey = GF.$('u-role').value;
   const role = ROLE_OUT[roleKey] || 'USER';
-  const department_id = NO_DEPT_ROLES.has(roleKey) ? null : (GF.$('u-dept')?.value || null);
-  if (!NO_DEPT_ROLES.has(roleKey) && !department_id) {
-    GF.toast(AL('Select a department', 'Изберете оддел'), 'error'); return;
-  }
+  // "None" (empty value) → no department; allowed for any role now.
+  const department_id = GF.$('u-dept')?.value || null;
   const function_role = (GF.$('u-fn')?.value || '').trim() || null;
   // Edit mode (openUser was given an id) → PATCH the existing account.
   if (GF._editUser) {
