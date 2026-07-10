@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict VBadcbjDobamjHBtlUF64ocUQJFhqkBuKebG7lHkAClLGviOIaWxTfC8cpwxgkt
+\restrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -103,7 +103,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP') $$;
 
 
 SET default_tablespace = '';
@@ -200,7 +200,7 @@ CREATE TABLE public.profiles (
     is_deleted boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'CEO'::text, 'COO'::text, 'QA_MGR'::text, 'QC_MGR'::text, 'PR_MGR'::text, 'WH_MGR'::text, 'SE_MGR'::text, 'CU_MGR'::text, 'MU_MGR'::text, 'QP'::text, 'USER'::text])))
+    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'OWNER'::text, 'CEO'::text, 'COO'::text, 'QA_MGR'::text, 'QC_MGR'::text, 'PR_MGR'::text, 'WH_MGR'::text, 'SE_MGR'::text, 'CU_MGR'::text, 'MU_MGR'::text, 'QP'::text, 'USER'::text])))
 );
 
 ALTER TABLE ONLY public.profiles FORCE ROW LEVEL SECURITY;
@@ -369,5 +369,5 @@ CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.c
 -- PostgreSQL database dump complete
 --
 
-\unrestrict VBadcbjDobamjHBtlUF64ocUQJFhqkBuKebG7lHkAClLGviOIaWxTfC8cpwxgkt
+\unrestrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
 

@@ -47,6 +47,7 @@ GF.state = {
 // integrate.js). ADMIN is a system role and is never offered in a role picker.
 GF.ROLES = {
   admin:   { en: 'Administrator',          mk: 'Администратор' },
+  owner:   { en: 'Owner',                  mk: 'Сопственик' },
   ceo:     { en: 'CEO',                    mk: 'Извршен директор' },
   coo:     { en: 'COO',                    mk: 'Оперативен директор' },
   qa_mgr:  { en: 'QA Manager',             mk: 'Менаџер за КО' },
@@ -68,8 +69,8 @@ GF.AVATAR_COLORS = ['#2FD9D9','#2BE8A0','#E0A73E','#7A5BE0','#E5484D','#0EA5A5',
 // operator (USER) is own-tasks-only. Unknown roles fall back to operator.
 const _FULL = { create: true, editAny: true, deleteAny: true, status: 'any', team: true };
 GF.PERMS = {
-  admin: _FULL, ceo: _FULL, coo: _FULL,
-  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, sc_mgr: _FULL, cu_mgr: _FULL, qp: _FULL,
+  admin: _FULL, owner: _FULL, ceo: _FULL, coo: _FULL,
+  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
   operator: { create: true, editAny: false, deleteAny: false, status: 'own', team: false },
 };
 GF.curRole = () => (GF.PEOPLE[GF.state.user] || {}).role || 'operator';

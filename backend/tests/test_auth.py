@@ -234,9 +234,9 @@ async def test_manager_confined_to_own_department(client, admin_headers, org):
 
 async def test_admin_creates_managers_and_executives(client, admin_headers):
     """The create matrix's top row: an admin may provision any non-admin role —
-    department managers, the QP, and executives (CEO/COO) alike — but ADMIN
-    itself is never assignable, even by an admin (DB-seeded only → 422)."""
-    for role in ("QC_MGR", "QP", "CEO", "COO"):
+    department managers, the QP, and executives (OWNER/CEO/COO) alike — but
+    ADMIN itself is never assignable, even by an admin (DB-seeded only → 422)."""
+    for role in ("QC_MGR", "QP", "OWNER", "CEO", "COO"):
         r = await client.post("/auth/users", json={
             "username": f"role_{role.lower()}", "full_name": role, "role": role,
         }, headers=admin_headers)

@@ -4,6 +4,7 @@ import time
 import uuid
 from collections import defaultdict
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -209,7 +210,9 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
                 actor["org_id"], body.username, body.email, hash_password(otp), body.full_name,
                 body.role, body.department_id, body.function_role, actor["id"],
             )
-        except Exception as e:  # unique violation etc.
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409, f"Username '{body.username}' is already taken")
+        except Exception as e:
             raise HTTPException(409, f"Could not create account: {type(e).__name__}")
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}

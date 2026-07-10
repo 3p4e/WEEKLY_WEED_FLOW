@@ -33,15 +33,15 @@ GF.WWF.meId = 'me';
 
 // GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
 // (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
-const ROLE_OUT = { admin:'ADMIN', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
+const ROLE_OUT = { admin:'ADMIN', owner:'OWNER', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
   pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
-const ROLE_IN  = { ADMIN:'admin', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
+const ROLE_IN  = { ADMIN:'admin', OWNER:'owner', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
   PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
-const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
-// Roles with no department affiliation — hide the dept picker for these.
-const NO_DEPT_ROLES = new Set(['ceo', 'coo', 'qp']);
+const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+// Roles with no department affiliation — default the dept picker to "None" for these.
+const NO_DEPT_ROLES = new Set(['owner', 'ceo', 'coo', 'qp']);
 // The 9 department-manager roles (create only USER staff in their own dept).
 const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
@@ -189,14 +189,18 @@ GF.WWF.loadTeam = async () => {
       init: ((p.full_name || p.username || 'U').trim().split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase()) || 'U',
       role: ROLE_IN[p.role] || 'operator', roleLabel: p.function_role || p.role || '',
       fn: p.function_role || '',
-      dept: p.department_id || (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(p.id),
+      // Keep null as null — don't invent a department for cross-org roles
+      // (Owner/CEO/COO/QP) that were explicitly assigned "None". A prior
+      // version defaulted this to GF.DEPTS[0], silently reassigning every
+      // no-department account to whatever the first real department was.
+      dept: p.department_id || null, bg: GF.WWF.colorFor(p.id),
       backendRole: p.role, mcp: p.must_change_password, active: p.is_active };
   });
   const me = GF.API.user;
   if (me && me.id && !GF.PEOPLE[me.id]) GF.PEOPLE[me.id] = {
     name: me.full_name || me.username, username: me.username, init: 'ME',
     role: ROLE_IN[me.role] || 'operator', roleLabel: me.function_role || '',
-    dept: (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
+    dept: me.department_id || null, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
 };
 
 GF.WWF.loadAndRender = async () => {
