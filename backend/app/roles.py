@@ -29,6 +29,15 @@ EXECUTIVE_ROLES = ("OWNER", "CEO", "COO")
 # create only USER staff, and only in their own department.
 MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SE_MGR", "CU_MGR", "MU_MGR", "QP")
 
+# Department managers whose LIVE task visibility is scoped to their own
+# department (plus tasks they personally own or are assigned): GET /tasks and
+# /reports/weekly force department_id = the manager's department. QP is manager
+# rank but certifies batches across every department, so it stays org-wide;
+# executives and ADMIN are org-wide by definition. This is workflow scoping at
+# the API layer, not an RLS boundary — RLS still grants elevated org-wide read
+# (audit, documents, collaboration need it).
+DEPT_SCOPED_ROLES = tuple(r for r in MANAGER_ROLES if r != "QP")
+
 USER = "USER"
 
 # Every valid role, in tier order (matches the DB CHECK's ARRAY order).

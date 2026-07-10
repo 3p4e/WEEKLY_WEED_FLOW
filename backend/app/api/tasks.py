@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.db import rls
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
@@ -72,6 +72,22 @@ async def list_tasks(
         args.append(department_id); clauses.append(f"t.department_id=${len(args)}")
     if parents_only:
         clauses.append("t.parent_id IS NULL")
+    # Department managers see their own department's tasks plus anything they
+    # personally own or are assigned (so cross-department handoffs they're on
+    # never vanish). Executives / QP / ADMIN stay org-wide (scope is None).
+    # Multi-departmental families stay visible IN FULL to every side involved:
+    # a parent task whose subtask is delegated to my department, and a subtask
+    # whose parent lives in my department, both match.
+    scope = dept_scope(user)
+    if scope:
+        args.append(scope); d = len(args)
+        args.append(str(user["id"])); u = len(args)
+        clauses.append(
+            f"(t.department_id=${d} OR t.user_id=${u}"
+            f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
+            f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id"
+            f"            AND ch.department_id=${d} AND ch.is_deleted=false)"
+            f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
     where = " AND ".join(clauses)
     async with rls(user) as c:
         return _ser(await c.fetch(
@@ -155,7 +171,32 @@ def _check_recurrence(rec: dict | None) -> None:
 @router.post("/tasks", status_code=201)
 async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
+    # A dept-scoped manager creates TOP-LEVEL tasks in their own department
+    # only; an omitted department defaults to theirs instead of landing
+    # unassigned (which their scoped list could then never show them again).
+    # SUBTASKS may target ANY department when the parent is the manager's own
+    # (or personally theirs) — that delegation is exactly how a task becomes
+    # multi-departmental, visible in full to every side involved.
+    scope = dept_scope(user)
+    if scope and not body.parent_id:
+        if body.department_id and str(body.department_id) != scope:
+            raise HTTPException(403, "Managers may create tasks only in their own department")
+        if not body.department_id:
+            body.department_id = scope
     async with rls(user) as c:
+        if scope and body.parent_id:
+            parent = await c.fetchrow(
+                "SELECT department_id, user_id FROM tasks WHERE id=$1 AND is_deleted=false",
+                body.parent_id)
+            if parent is None:
+                raise HTTPException(422, "Unknown department, week, or parent task")
+            mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
+                or str(parent["user_id"]) == str(user["id"])
+            if not mine and body.department_id and str(body.department_id) != scope:
+                raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
+            if not body.department_id:
+                # inherit the parent's department so the child never lands unscoped
+                body.department_id = str(parent["department_id"]) if parent["department_id"] else scope
         try:
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
@@ -262,6 +303,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
     patch = body.model_dump(exclude_unset=True)
     if "recurrence" in patch:
         _check_recurrence(patch["recurrence"])
+    scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():
         if val is None and col not in _NULLABLE_PATCH_COLS:
@@ -279,6 +321,20 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
     args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
     args.append(task_id)
     async with rls(user) as c:
+        # A dept-scoped manager can't move a task into another department (or
+        # unassign it into the no-department pool their scoped list can't
+        # see) — EXCEPT re-targeting a subtask whose parent is in their own
+        # department (or personally theirs): that's the delegation move that
+        # makes a task multi-departmental.
+        if scope and "department_id" in patch and str(patch["department_id"] or "") != scope:
+            fam = await c.fetchrow(
+                "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
+                " JOIN tasks p ON p.id=t.parent_id"
+                " WHERE t.id=$1 AND t.is_deleted=false", task_id)
+            delegable = fam is not None and (
+                (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
+            if not delegable:
+                raise HTTPException(403, "Managers may not move tasks outside their own department")
         # Capture the pre-update status so a repeated/retried PATCH that sets
         # status='completed' on an ALREADY-completed recurring task doesn't
         # re-materialize a duplicate next instance (recurrence isn't cleared

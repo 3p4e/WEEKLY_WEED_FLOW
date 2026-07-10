@@ -5,7 +5,7 @@
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
    Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.8.2';
+const VERSION = 'wwf-shell-v3.8.3';
 
 const SHELL = [
   '/',

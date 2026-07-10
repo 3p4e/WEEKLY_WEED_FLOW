@@ -103,12 +103,14 @@ async def admin_headers(admin_token):
     return {"Authorization": f"Bearer {admin_token}"}
 
 
-async def create_user(client, admin_headers, *, role="USER", full_name="Test User"):
+async def create_user(client, admin_headers, *, role="USER", full_name="Test User",
+                      department_id=None):
     """Provision a user via the real API (as an admin would) and return
     (profile, otp) — the OTP is a real one-time password from a real
     /auth/users call, not a shortcut."""
     r = await client.post("/auth/users", json={
         "username": f"user_{uuid.uuid4().hex[:8]}", "full_name": full_name, "role": role,
+        "department_id": department_id,
     }, headers=admin_headers)
     assert r.status_code == 201, r.text
     body = r.json()

@@ -68,7 +68,12 @@ GF.render = {
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};
     GF.weekTasks(GF.state.selWeek).forEach(t => { counts[t.dept] = (counts[t.dept] || 0) + 1; });
-    GF.$('dept-list').innerHTML = GF.DEPTS.map(d => `
+    // A dept-scoped manager's sidebar shows only departments they can actually
+    // have tasks in this week: their own, plus any department that appears via
+    // a multi-departmental family (delegated subtask both sides see in full).
+    const scope = GF.WWF && GF.WWF.deptScope ? GF.WWF.deptScope() : null;
+    const sideDepts = scope ? GF.DEPTS.filter(d => d.id === scope || counts[d.id]) : GF.DEPTS;
+    GF.$('dept-list').innerHTML = sideDepts.map(d => `
       <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}

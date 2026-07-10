@@ -672,6 +672,16 @@ GF.WWF.canProvision = () => {
   return r === 'ADMIN' || MANAGER_ROLES.includes(r);
 };
 
+// Frontend mirror of the backend dept_scope (app/deps.py): department managers
+// (not QP — org-wide batch certification) are scoped to their own department.
+// This drives UI affordances only (sidebar, locked dept picker) — the API
+// enforces the actual visibility on GET /tasks and /reports/weekly.
+const DEPT_SCOPED_ROLES = new Set(['QA_MGR', 'QC_MGR', 'PR_MGR', 'WH_MGR', 'SE_MGR', 'CU_MGR', 'MU_MGR']);
+GF.WWF.deptScope = () => {
+  const u = GF.API.user || {};
+  return (DEPT_SCOPED_ROLES.has(u.role) && u.department_id) ? u.department_id : null;
+};
+
 // Strict ADMIN check — mirrors the AI-bindings endpoints' require_role(ADMIN)
 // (backend/app/api/ai.py). Deliberately narrower than canProvision (which also
 // admits department managers): reusing canProvision here previously showed the
