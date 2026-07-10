@@ -71,10 +71,52 @@ GF.leaf3d = (function () {
       wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 2.3)}px rgba(46,230,255,.9)) drop-shadow(0 0 ${Math.round(g * 1.15)}px rgba(255,207,107,.7))`,
     },
   };
-  function resolveTheme(name) {
-    if (name === 'light' || name === 'dark') return name;
-    try { const t = document.documentElement.dataset.theme; if (t === 'light') return 'light'; } catch (e) {}
-    return 'dark';
+  function resolveThemeName(name) {
+    if (name) return name;
+    try { return document.documentElement.dataset.theme || 'dark'; } catch (e) { return 'dark'; }
+  }
+  // Parse "#rrggbb" or "r,g,b" or "rgb(...)" into an 0xRRGGBB int (null on fail).
+  function toHexInt(s) {
+    if (!s) return null;
+    s = s.trim();
+    let m = s.match(/^#?([0-9a-f]{6})$/i);
+    if (m) return parseInt(m[1], 16);
+    m = s.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m) return (+m[1] << 16) | (+m[2] << 8) | (+m[3]);
+    return null;
+  }
+  function relLum(hex) {  // rough perceptual lightness 0..1 of an 0xRRGGBB int
+    const r = (hex >> 16 & 255) / 255, g = (hex >> 8 & 255) / 255, b = (hex & 255) / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  // Build a leaf palette from the ACTIVE skin's CSS tokens — so every Carbon
+  // skin (and any future one) gets a matching leaf with no per-skin config:
+  // material = --primary, secondary glow = --blue, light-vs-dark glow style
+  // chosen from --bg lightness.
+  function deriveFromCSS() {
+    const cs = getComputedStyle(document.documentElement);
+    const primary = toHexInt(cs.getPropertyValue('--primary')) ?? 0x2ad98f;
+    const blue = toHexInt(cs.getPropertyValue('--blue')) ?? primary;
+    const bg = toHexInt(cs.getPropertyValue('--bg')) ?? 0x0e1f17;
+    const pr = primary >> 16 & 255, pg = primary >> 8 & 255, pb = primary & 255;
+    const br = blue >> 16 & 255, bg2 = blue >> 8 & 255, bb = blue & 255;
+    const darker = (h, f) => ((Math.round((h >> 16 & 255) * f) << 16) | (Math.round((h >> 8 & 255) * f) << 8) | Math.round((h & 255) * f));
+    const lightBg = relLum(bg) > 0.5;
+    return {
+      mat: { color: primary, emissive: darker(primary, lightBg ? 0.62 : 0.72),
+             emissiveIntensity: lightBg ? 0.42 : 0.66, metalness: 0.26, roughness: lightBg ? 0.4 : 0.34 },
+      ambient: lightBg ? [0x9aa8b0, 1.5] : [darker(primary, 0.22), 1.4],
+      key: [lightBg ? 0xffffff : 0xd8ffee, lightBg ? 3.1 : 3.3],
+      rim: [blue, lightBg ? 1.7 : 2.2], fill: [primary, 1.1],
+      baseGlow: lightBg
+        ? (g) => `drop-shadow(0 ${Math.max(2, Math.round(g * 0.4))}px ${Math.round(g * 0.9)}px rgba(${pr},${pg},${pb},.3)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(${br},${bg2},${bb},.2))`
+        : (g) => `drop-shadow(0 0 ${g}px rgba(${pr},${pg},${pb},.62)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(${br},${bg2},${bb},.45))`,
+      wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 2.3)}px rgba(${pr},${pg},${pb},.9)) drop-shadow(0 0 ${Math.round(g * 1.15)}px rgba(${br},${bg2},${bb},.65))`,
+    };
+  }
+  // A hand-tuned THEMES entry wins; every other skin derives from CSS.
+  function paletteFor(name) {
+    return THEMES[resolveThemeName(name)] || deriveFromCSS();
   }
 
   function supported() {
@@ -131,10 +173,10 @@ GF.leaf3d = (function () {
     renderer.domElement.style.display = 'block';
     stageEl.appendChild(renderer.domElement);
 
-    // Theme-driven look (see THEMES). opts.theme pins it (the splash keeps
-    // 'dark' regardless of app theme since its backdrop is always dark);
-    // otherwise it follows <html data-theme>. applyTheme() re-tints live.
-    let pal = THEMES[resolveTheme(opts.theme)] || THEMES.dark;
+    // Theme-driven look. A hand-tuned THEMES entry (dark/light/suma) wins;
+    // every other skin derives its leaf from the active CSS tokens. opts.theme
+    // pins it (the splash keeps 'dark'); otherwise it follows <html data-theme>.
+    let pal = paletteFor(opts.theme);
 
     // Brighter, higher-contrast rig so the leaf pops off the surface instead of
     // sinking into shadow: lifted ambient, a strong key, a punchy rim for edge
@@ -153,7 +195,7 @@ GF.leaf3d = (function () {
     // called by GF.leafFX.retintAll() when the user flips the theme, so live
     // leaves change skin without a remount (and without a GL-context churn).
     function applyTheme(name) {
-      const p = THEMES[resolveTheme(name)]; if (!p) return;
+      const p = paletteFor(name); if (!p) return;
       pal = p;
       mat.color.setHex(p.mat.color); mat.emissive.setHex(p.mat.emissive);
       mat.emissiveIntensity = p.mat.emissiveIntensity; mat.metalness = p.mat.metalness; mat.roughness = p.mat.roughness;

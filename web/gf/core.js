@@ -20,6 +20,7 @@ GF.ICONS = {
   sun:'M10 13a3 3 0 100-6 3 3 0 000 6zM10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4',
   moon:'M15.5 12.5A6.5 6.5 0 117.5 4.5a5 5 0 108 8z',
   hexagon:'M10 2.5l6.5 3.75v7.5L10 17.5 3.5 13.75v-7.5z',
+  palette:'M10 2.5a7.5 7.5 0 000 15c1 0 1.5-.7 1.5-1.5 0-.4-.2-.7-.4-1-.2-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H14a3.5 3.5 0 003.5-3.5C17.5 5.6 14.1 2.5 10 2.5zM5.5 10.5a1 1 0 110-2 1 1 0 010 2zm3-3.5a1 1 0 110-2 1 1 0 010 2zm4 0a1 1 0 110-2 1 1 0 010 2z',
   drop:'M10 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z', box:'M10 3l6 3v8l-6 3-6-3V6l6-3zM4 6l6 3 6-3M10 9v8',
   shield:'M10 3l6 2v5c0 4-3 6-6 7-3-1-6-3-6-7V5l6-2z',
   wrench:'M12.5 4a3.5 3.5 0 00-4.7 4.2l-4 4a1.5 1.5 0 002.1 2.1l4-4A3.5 3.5 0 0016 7l-2 2-1.5-1.5 2-2A3.5 3.5 0 0012.5 4z',
@@ -242,48 +243,126 @@ GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };
 
 // ── Themes / skins (data-driven, extensible) ──
-// The <html data-theme> attribute is the single source of truth (an inline
-// script in index.html's <head> sets it from localStorage before any CSS
-// paints, so there's no flash-of-wrong-theme). Each skin is: one
-// :root[data-theme=".."] block in app.css, one entry here, and one leaf3d
-// THEMES entry — the header button cycles through THEME_LIST in order.
-GF.THEME_LIST = ['dark', 'light', 'suma'];
-GF.THEME_META = {
-  dark: { icon: 'moon',    en: 'Dark',           mk: 'Темна' },
-  light:{ icon: 'sun',     en: 'Light',          mk: 'Светла' },
-  suma: { icon: 'hexagon', en: 'SUMA · Protoss', mk: 'СУМА · Протос' },
-};
+// <html data-theme> is the single source of truth (an inline <head> script in
+// index.html sets it from localStorage before any CSS paints — no flash).
+// The 3 CORE skins live in app.css; the 30 CARBON skins in skins.css, which
+// also carry a data-skin-carbon marker (set by setTheme + the boot script) so
+// their shared derived-token block applies. Adding a skin = one CSS block +
+// one row here; the 3D leaf auto-derives its colour from the active tokens.
+GF.THEME_CORE = { dark: 1, light: 1, suma: 1 };   // the 3 non-Carbon skins
+GF.THEMES = [
+  // Core
+  { id: 'dark',  name: 'Plasma (default)', group: 'dark' },
+  { id: 'suma',  name: 'SUMA · Protoss',   group: 'dark' },
+  { id: 'light', name: 'Cool Mist',        group: 'light' },
+  // Carbon — dark
+  { id: 'blurple-chat',      name: 'Blurple Chat',      group: 'dark' },
+  { id: 'blush-slate-dark',  name: 'Blush Slate',       group: 'dark' },
+  { id: 'code-forge',        name: 'Code Forge',        group: 'dark' },
+  { id: 'digital-rain',      name: 'Digital Rain',      group: 'dark' },
+  { id: 'ebony-amber',       name: 'Ebony Amber',       group: 'dark' },
+  { id: 'forest',            name: 'Forest',            group: 'dark' },
+  { id: 'heart-of-darkness', name: 'Heart of Darkness', group: 'dark' },
+  { id: 'indigo-turquoise',  name: 'Indigo Turquoise',  group: 'dark' },
+  { id: 'lambda-core',       name: 'Lambda Core',       group: 'dark' },
+  { id: 'mocha-paws',        name: 'Mocha (Catppuccin)',group: 'dark' },
+  { id: 'nightfang',         name: 'Nightfang (Dracula)',group: 'dark' },
+  { id: 'nord',              name: 'Nord',              group: 'dark' },
+  { id: 'nordic',            name: 'Nordic',            group: 'dark' },
+  { id: 'solo-night',        name: 'Solo Night',        group: 'dark' },
+  { id: 'tropical-midnight', name: 'Tropical Midnight', group: 'dark' },
+  { id: 'vapor-classic',     name: 'Vapor Classic',     group: 'dark' },
+  { id: 'vapor-deck',        name: 'Vapor Deck',        group: 'dark' },
+  // Carbon — light
+  { id: 'amber-glow-light',     name: 'Amber Glow',      group: 'light' },
+  { id: 'aurora-light',         name: 'Aurora',          group: 'light' },
+  { id: 'azure-silence-light',  name: 'Azure Silence',   group: 'light' },
+  { id: 'blush-slate-light',    name: 'Blush Slate',     group: 'light' },
+  { id: 'console-horizon-light',name: 'Console Horizon', group: 'light' },
+  { id: 'jade-matrix-light',    name: 'Jade Matrix',     group: 'light' },
+  { id: 'jade-mint-light',      name: 'Jade Mint',       group: 'light' },
+  { id: 'kawaii',               name: 'Kawaii',          group: 'light' },
+  { id: 'miami-neon-light',     name: 'Miami Neon',      group: 'light' },
+  { id: 'playlist-mint-light',  name: 'Playlist Mint',   group: 'light' },
+  { id: 'retro-98',             name: 'Retro 98',        group: 'light' },
+  { id: 'steel-mist-light',     name: 'Steel Mist',      group: 'light' },
+  { id: 'winter-blush-light',   name: 'Winter Blush',    group: 'light' },
+];
+GF.themeById = (id) => GF.THEMES.find(t => t.id === id);
 GF.curTheme = () => {
   const t = document.documentElement.dataset.theme;
-  return GF.THEME_LIST.indexOf(t) >= 0 ? t : 'dark';
+  return GF.themeById(t) ? t : 'dark';
 };
 GF.syncThemeBtn = () => {
   const btn = GF.$('theme-btn');
-  if (!btn) return;
-  const cur = GF.curTheme();
-  const m = GF.THEME_META[cur] || GF.THEME_META.dark;
-  const name = m[GF.state.lang] || m.en;
-  btn.innerHTML = GF.icon(m.icon);
-  btn.title = (GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + name +
-    (GF.state.lang === 'mk' ? ' — кликни за следна' : ' — click to switch');
+  if (btn) {
+    btn.innerHTML = GF.icon('palette');
+    const cur = GF.themeById(GF.curTheme());
+    btn.title = (GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + (cur ? cur.name : 'Dark') +
+      (GF.state.lang === 'mk' ? ' — кликни за избор' : ' — click to choose');
+  }
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060F0B';
 };
-GF.setTheme = (name) => {
-  if (GF.THEME_LIST.indexOf(name) < 0) name = 'dark';
-  document.documentElement.dataset.theme = name;
+GF.setTheme = (name, opts) => {
+  if (!GF.themeById(name)) name = 'dark';
+  const root = document.documentElement;
+  root.dataset.theme = name;
+  // Carbon skins need the marker so skins.css's derived-token block applies;
+  // the 3 core skins must NOT have it (they define their own derived tokens).
+  if (GF.THEME_CORE[name]) root.removeAttribute('data-skin-carbon');
+  else root.setAttribute('data-skin-carbon', '');
   try { localStorage.setItem('gf_theme', name); } catch (e) {}
   GF.syncThemeBtn();
-  // Re-tint the 3D leaf logos (material/glow) to match the new skin, in place.
+  // Re-tint the 3D leaf logos to the new skin's tokens, in place.
   if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(name);
-  const m = GF.THEME_META[name] || {};
-  if (GF.toast) GF.toast((GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + (m[GF.state.lang] || m.en || name), 'info');
+  if (!(opts && opts.silent) && GF.toast) {
+    const t = GF.themeById(name);
+    GF.toast((GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + (t ? t.name : name), 'info');
+  }
 };
-// Header button: cycle to the next skin in THEME_LIST.
-GF.toggleTheme = () => {
-  const i = GF.THEME_LIST.indexOf(GF.curTheme());
-  GF.setTheme(GF.THEME_LIST[(i + 1) % GF.THEME_LIST.length]);
+// Read every theme's (--primary,--bg) swatch by briefly probing data-theme on
+// <html> and restoring it — all synchronous, so no intermediate paint/flash.
+GF._themeSwatches = () => {
+  const root = document.documentElement;
+  const prevTheme = root.dataset.theme, prevCarbon = root.hasAttribute('data-skin-carbon');
+  const cs = getComputedStyle(root), out = {};
+  GF.THEMES.forEach(t => {
+    root.dataset.theme = t.id;
+    if (GF.THEME_CORE[t.id]) root.removeAttribute('data-skin-carbon'); else root.setAttribute('data-skin-carbon', '');
+    out[t.id] = { primary: cs.getPropertyValue('--primary').trim() || '#2BE8A0', bg: cs.getPropertyValue('--bg').trim() || '#0E1F17' };
+  });
+  root.dataset.theme = prevTheme;
+  if (prevCarbon) root.setAttribute('data-skin-carbon', ''); else root.removeAttribute('data-skin-carbon');
+  return out;
 };
+// Grouped theme PICKER (33 skins don't cycle). One swatch chip per theme.
+GF.openThemePicker = () => {
+  let el = GF.$('gf-theme-modal');
+  if (!el) { el = document.createElement('div'); el.id = 'gf-theme-modal'; el.className = 'overlay'; document.body.appendChild(el); }
+  const sw = GF._themeSwatches();
+  const cur = GF.curTheme();
+  const chip = (t) => `
+    <button class="theme-chip ${t.id === cur ? 'on' : ''}" onclick="GF.pickTheme('${t.id}')" title="${GF.esc(t.name)}">
+      <span class="theme-sw" style="background:${sw[t.id].bg}"><span style="background:${sw[t.id].primary}"></span></span>
+      <span class="theme-nm">${GF.esc(t.name)}</span>
+      ${t.id === cur ? GF.icon('check', 'icon theme-ck') : ''}
+    </button>`;
+  const grid = (group) => `<div class="theme-grid">${GF.THEMES.filter(t => t.group === group).map(chip).join('')}</div>`;
+  el.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h3>${GF.state.lang === 'mk' ? 'Тема / изглед' : 'Theme / skin'}</h3>
+        <button class="btn-ghost" onclick="GF.closeModal('gf-theme-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+      <div class="modal-body">
+        <div class="theme-group-lbl">${GF.state.lang === 'mk' ? 'Темни' : 'Dark'}</div>${grid('dark')}
+        <div class="theme-group-lbl" style="margin-top:14px">${GF.state.lang === 'mk' ? 'Светли' : 'Light'}</div>${grid('light')}
+      </div>
+    </div>`;
+  GF.openModal('gf-theme-modal');
+};
+GF.pickTheme = (id) => { GF.setTheme(id); GF.openThemePicker(); };   // re-render to move the check
+// Back-compat: the header button previously "toggled"; now it opens the picker.
+GF.toggleTheme = () => GF.openThemePicker();
 GF.setView = (v) => {
   GF.state.view = v;
   try { localStorage.setItem('gf_view', v); } catch (e) {}

@@ -5,13 +5,13 @@
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
    Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.6.0';
+const VERSION = 'wwf-shell-v3.7.0';
 
 const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/gf/app.css', '/gf/brand.css', '/gf/mobile.css', '/gf/views.css', '/gf/leaf-fx.css', '/gf/entry.css',
+  '/gf/app.css', '/gf/skins.css', '/gf/brand.css', '/gf/mobile.css', '/gf/views.css', '/gf/leaf-fx.css', '/gf/entry.css',
   '/gf/boot-guard.js', '/gf/data.js', '/gf/core.js', '/gf/render.js', '/gf/voice.js',
   '/gf/export.js', '/gf/views.js', '/gf/leaf-fx.js', '/gf/assistant.js', '/gf/main.js',
   '/gf/api.js', '/gf/integrate.js', '/gf/audit-view.js', '/gf/collab.js', '/gf/worklog.js',
