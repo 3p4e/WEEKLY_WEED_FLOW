@@ -102,6 +102,42 @@
   --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 24px;  --fs-3xl: 32px;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHT THEME — "Cool Mist Glass"
+   Selectable at runtime via <html data-theme="light"> (GF.toggleTheme),
+   set synchronously in index.html's <head> so there's no flash. This is a
+   pure token override — every rule below the :root block reads these
+   variables, so nothing else needs to change per-theme. A pale mint-teal
+   frosted-glass palette that keeps the dark theme's exact brand hue angles
+   (green ~150°, teal ~184°, bronze ~35°), only deepened for legibility on
+   light surfaces; contrast-checked for WCAG AA on ink/surface + fg-on-soft
+   chip pairs. The dark theme remains the default (bare :root above).
+   ══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="dark"]  { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #EAF4EF; --surface: #F7FCFA; --surface-2: #F0F8F4; --surface-3: #ECF5F0;
+  --overlay: rgba(10,30,22,.42);
+  --ink: #0E241B; --ink-2: #3E5C4E; --ink-3: #55705F; --ink-4: #93AA9E;
+  --line: rgba(14,70,42,.14); --line-2: rgba(14,70,42,.08); --border-strong: #5F9B7D;
+  --primary: #06793F; --primary-hover: #04602F; --primary-soft: rgba(6,121,63,.12);
+  --primary-fg: #076B45; --text-on-primary: #F1FFF8;
+  --green: #06793F; --green-soft: rgba(6,121,63,.12); --green-fg: #076B45;
+  --blue: #0F6F76; --blue-700: #095A63; --blue-soft: rgba(15,111,118,.12); --blue-soft-2: rgba(15,111,118,.06);
+  --orange: #8A5A15; --orange-700: #6E4710; --orange-soft: rgba(138,90,21,.13); --orange-soft-2: rgba(138,90,21,.07);
+  --red: #C22A3B; --red-700: #8F1D2C; --red-soft: rgba(194,42,59,.13); --red-fg: #A32335;
+  --amber: #8A6423; --amber-fg: #6B4E1A; --amber-soft: rgba(138,100,35,.14);
+  --violet: #6B4FCB; --violet-soft: rgba(107,79,203,.13);
+  --teal: #0F6F76; --teal-soft: rgba(15,111,118,.14);
+  --glass-bg: rgba(236,248,242,.60); --glass-border: rgba(14,70,42,.14); --glass-blur: blur(20px);
+  --sh-1: 0 1px 2px rgba(16,40,30,.05), inset 0 0 0 1px rgba(255,255,255,.6);
+  --sh-2: 0 8px 20px rgba(16,42,32,.08), inset 0 1px 0 rgba(255,255,255,.7);
+  --sh-3: 0 20px 48px rgba(16,42,32,.12), 0 0 0 1px rgba(16,42,32,.05);
+  --sh-brand: 0 6px 20px rgba(6,121,63,.22), 0 2px 6px rgba(16,42,32,.08);
+  --focus-ring: rgba(6,121,63,.35);
+  --scanlines: repeating-linear-gradient(0deg,rgba(14,36,27,.035) 0 1px,transparent 1px 3px);
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px}
 body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
@@ -162,7 +198,7 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .nav-item .icon{stroke:var(--ink-3)}
 .nav-item:hover .icon{stroke:var(--ink-2)}
 .nav-item.active .icon{stroke:var(--primary)}
-.nav-badge{margin-left:auto;background:var(--primary);color:#03130C;font-size:11px;font-weight:700;
+.nav-badge{margin-left:auto;background:var(--primary);color:var(--text-on-primary);font-size:11px;font-weight:700;
   padding:2px 7px;border-radius:999px}
 .nav-badge-dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0}
 
@@ -212,9 +248,9 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .btn:hover{background:rgba(43,232,160,.11);color:var(--ink)}
 .btn:active{transform:scale(.97)}
 .btn .icon{width:16px;height:16px}
-.btn-primary{background:var(--primary);color:#03130C;border-color:transparent;
+.btn-primary{background:var(--primary);color:var(--text-on-primary);border-color:transparent;
   box-shadow:0 0 16px rgba(43,232,160,.35),0 2px 6px rgba(0,0,0,.4);font-weight:700}
-.btn-primary:hover{background:var(--primary-hover);color:#03130C;box-shadow:0 0 24px rgba(43,232,160,.5)}
+.btn-primary:hover{background:var(--primary-hover);color:var(--text-on-primary);box-shadow:0 0 24px rgba(43,232,160,.5)}
 .btn-orange{background:var(--orange);color:#fff;border-color:transparent;
   box-shadow:0 2px 8px rgba(224,167,62,.3)}
 .btn-orange:hover{background:var(--orange-700)}
@@ -330,7 +366,7 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .prtag{font-weight:700;font-size:11px;padding:4px 9px;border-radius:999px;color:#fff}
 .prtag.critical{background:var(--red);box-shadow:0 0 8px rgba(255,77,94,.35)}
 .prtag.high{background:var(--orange);box-shadow:0 0 8px rgba(224,167,62,.25)}
-.prtag.medium{background:var(--blue);color:#03130C;box-shadow:0 0 8px rgba(47,217,217,.25)}
+.prtag.medium{background:var(--blue);color:var(--text-on-primary);box-shadow:0 0 8px rgba(47,217,217,.25)}
 .prtag.low{background:var(--surface-3);color:var(--ink-3)}
 .chev-card{stroke:var(--ink-3);transition:transform .2s}
 .card.expanded .chev-card{transform:rotate(180deg)}
