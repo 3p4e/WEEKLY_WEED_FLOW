@@ -137,6 +137,25 @@ async def test_deleted_user_cannot_log_in(client, admin_headers):
     assert r.status_code == 401
 
 
+async def test_deleting_a_user_frees_their_username_for_reuse(client, admin_headers):
+    """profiles_username_key is a plain UNIQUE constraint with no is_deleted
+    scoping — a bare soft delete (is_deleted=true only, username untouched)
+    would permanently squat the username, so "delete this account, then
+    recreate it the same way" would 409 forever. delete_user mangles the
+    username on delete specifically to prevent that."""
+    r = await client.post("/auth/users", json={
+        "username": "reusable_name", "full_name": "First Account", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    user = r.json()["user"]
+    r = await client.delete(f"/auth/users/{user['id']}", headers=admin_headers)
+    assert r.status_code == 200
+    r = await client.post("/auth/users", json={
+        "username": "reusable_name", "full_name": "Second Account", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 async def test_role_gated_endpoints_blocked_before_forced_password_change(client, admin_headers):
     """A leaked/intercepted OTP for a freshly-provisioned QC_MGR must not
     grant role-gated actions (user management, audit) before the real user

@@ -267,8 +267,17 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             raise HTTPException(404, "User not found")
         if not _can_manage(actor, target["role"], target["department_id"]):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to delete this account")
+        # Mangle the username so it's released for reuse — profiles_username_key
+        # is a plain UNIQUE constraint with no is_deleted scoping, so a bare soft
+        # delete (is_deleted=true only) permanently squats the username, making
+        # "delete this account, then recreate it the same way" impossible. The
+        # suffixed id keeps the row unique and still traceable; login/directory/
+        # list_users all already filter is_deleted=false so this is invisible
+        # anywhere the username is looked up going forward.
         await conn.execute(
-            "UPDATE profiles SET is_deleted=true, is_active=false, updated_at=now() WHERE id=$1 AND org_id=$2",
+            "UPDATE profiles SET is_deleted=true, is_active=false,"
+            " username=username || '__deleted_' || replace(id::text,'-',''), updated_at=now()"
+            " WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
     return {"ok": True}
 
