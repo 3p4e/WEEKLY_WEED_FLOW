@@ -61,6 +61,15 @@ GF.leaf3d = (function () {
       baseGlow: (g) => `drop-shadow(0 ${Math.max(2, Math.round(g * 0.4))}px ${Math.round(g * 0.9)}px rgba(6,121,63,.30)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(15,111,118,.20))`,
       wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 1.8)}px rgba(6,121,63,.55)) drop-shadow(0 0 ${Math.round(g * 0.9)}px rgba(15,111,118,.4))`,
     },
+    suma: {
+      // Protoss psi-crystal leaf: the plant-green brand body, but haloed in
+      // psi-cyan + Khaydarin gold (the SUMA signature) instead of pure green —
+      // teal rim + gold fill make it read as an energized crystal on the void.
+      mat: { color: 0x22C98C, emissive: 0x10B981, emissiveIntensity: 0.66, metalness: 0.30, roughness: 0.32 },
+      ambient: [0x1b3a4c, 1.4], key: [0xc9f7ff, 3.3], rim: [0x2ee6ff, 2.4], fill: [0xffcf6b, 1.1],
+      baseGlow: (g) => `drop-shadow(0 0 ${g}px rgba(46,230,255,.6)) drop-shadow(0 0 ${Math.round(g * 0.5)}px rgba(255,207,107,.4))`,
+      wormholeGlow: (g) => `drop-shadow(0 0 ${Math.round(g * 2.3)}px rgba(46,230,255,.9)) drop-shadow(0 0 ${Math.round(g * 1.15)}px rgba(255,207,107,.7))`,
+    },
   };
   function resolveTheme(name) {
     if (name === 'light' || name === 'dark') return name;

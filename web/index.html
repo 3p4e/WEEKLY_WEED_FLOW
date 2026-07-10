@@ -3,7 +3,7 @@
 <head>
   <!-- Set the real theme before any CSS paints — reading it later (after
        stylesheets load) would flash the wrong theme for a light-mode user. -->
-  <script>try{var t=localStorage.getItem('gf_theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
+  <script>try{var t=localStorage.getItem('gf_theme');if(['light','dark','suma'].indexOf(t)>=0)document.documentElement.dataset.theme=t;}catch(e){}</script>
   <meta charset="utf-8">
   <!-- no maximum-scale: pinch-zoom must stay available (a11y) -->
   <meta name="viewport" content="width=device-width, initial-scale=1">

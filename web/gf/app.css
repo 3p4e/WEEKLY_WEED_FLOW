@@ -138,6 +138,56 @@
   --scanlines: repeating-linear-gradient(0deg,rgba(14,36,27,.035) 0 1px,transparent 1px 3px);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   SUMA THEME — "Protoss" (Purely Plant SUMA Design System)
+   The team's StarCraft-II control-room skin mapped into GrowFlow's tokens: a
+   deep-navy void with a faint cyan HUD grid, psi-cyan + Khaydarin-gold accents,
+   plant-green kept as the brand/hero (so "done"/active stay green, matching the
+   green glass tints baked through the shell), psionic violet for AI. Source
+   palette: Purely Plant / SUMA tokens/colors.css (Protoss scope). Adding a
+   further skin is one more :root[data-theme=".."] block + one GF.THEME_LIST
+   entry + one leaf3d THEMES entry — nothing else changes.
+   ══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="suma"] {
+  color-scheme: dark;
+  --bg: #0B1322; --surface: #16233C; --surface-2: #1B2E4E; --surface-3: #284163;
+  --overlay: rgba(4,9,20,.74);
+  --ink: #EAF4FF; --ink-2: #C3D4EA; --ink-3: #9FB4CF; --ink-4: #6F86A6;
+  --line: rgba(120,165,215,.16); --line-2: rgba(120,165,215,.09); --border-strong: #314C73;
+  /* Primary = plant green (hero / done / active) */
+  --primary: #34D399; --primary-hover: #6EE7B7; --primary-soft: rgba(52,211,153,.14);
+  --primary-fg: #6EE7B7; --text-on-primary: #04121D;
+  --green: #34D399; --green-soft: rgba(52,211,153,.15); --green-fg: #6EE7B7;
+  /* Blue/teal → psi-cyan (the SUMA signature interactive glow) */
+  --blue: #2EE6FF; --blue-700: #1BB6E0; --blue-soft: rgba(46,230,255,.15); --blue-soft-2: rgba(46,230,255,.08);
+  --teal: #2EE6FF; --teal-soft: rgba(46,230,255,.16);
+  /* Orange → Khaydarin gold (highlight tier) */
+  --orange: #FFCF6B; --orange-700: #FFAF3A; --orange-soft: rgba(255,207,107,.15); --orange-soft-2: rgba(255,207,107,.08);
+  /* Signal hues */
+  --red: #FF6B6B; --red-700: #EF4444; --red-soft: rgba(239,68,68,.18); --red-fg: #FF9A9A;
+  --amber: #FFAF3A; --amber-fg: #FFCF6B; --amber-soft: rgba(255,175,58,.16);
+  --violet: #A78BFA; --violet-soft: rgba(167,139,250,.18);
+  /* Glass with a cyan-tinted edge (very Protoss) */
+  --glass-bg: rgba(18,39,66,.62); --glass-border: rgba(46,230,255,.14); --glass-blur: blur(16px) saturate(1.2);
+  /* Depth-in-the-void shadows + a cyan bloom */
+  --sh-1: 0 2px 8px rgba(2,6,16,.5), inset 0 0 0 1px rgba(46,230,255,.05);
+  --sh-2: 0 8px 28px rgba(2,6,16,.6), inset 0 1px 0 rgba(46,230,255,.07);
+  --sh-3: 0 18px 56px rgba(2,6,16,.66), 0 0 0 1px rgba(46,230,255,.08);
+  --sh-brand: 0 0 26px rgba(46,230,255,.45), 0 2px 8px rgba(2,6,16,.6);
+  --focus-ring: rgba(46,230,255,.42);
+  --scanlines: repeating-linear-gradient(0deg,rgba(46,230,255,.025) 0 1px,transparent 1px 3px);
+}
+/* The SUMA signature backdrop: a faint cyan HUD grid over a radial navy void,
+   pinned behind the whole app (only in this skin). */
+:root[data-theme="suma"] body {
+  background-image:
+    linear-gradient(rgba(46,230,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46,230,255,.035) 1px, transparent 1px),
+    radial-gradient(130% 70% at 50% -10%, #1B2E4E 0%, #101A2E 42%, #0B1322 85%);
+  background-size: 46px 46px, 46px 46px, cover;
+  background-attachment: fixed;
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px}
 body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;

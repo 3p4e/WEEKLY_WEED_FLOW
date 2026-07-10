@@ -19,6 +19,7 @@ GF.ICONS = {
   settings:'M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1',
   sun:'M10 13a3 3 0 100-6 3 3 0 000 6zM10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4',
   moon:'M15.5 12.5A6.5 6.5 0 117.5 4.5a5 5 0 108 8z',
+  hexagon:'M10 2.5l6.5 3.75v7.5L10 17.5 3.5 13.75v-7.5z',
   drop:'M10 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z', box:'M10 3l6 3v8l-6 3-6-3V6l6-3zM4 6l6 3 6-3M10 9v8',
   shield:'M10 3l6 2v5c0 4-3 6-6 7-3-1-6-3-6-7V5l6-2z',
   wrench:'M12.5 4a3.5 3.5 0 00-4.7 4.2l-4 4a1.5 1.5 0 002.1 2.1l4-4A3.5 3.5 0 0016 7l-2 2-1.5-1.5 2-2A3.5 3.5 0 0012.5 4z',
@@ -240,29 +241,48 @@ GF.setTagFilter = (tag) => { GF.state.tagFilter = tag || null; GF.render.panels(
 
 GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.render.all(); };
 
-// ── Theme (dark/light) ──
+// ── Themes / skins (data-driven, extensible) ──
 // The <html data-theme> attribute is the single source of truth (an inline
 // script in index.html's <head> sets it from localStorage before any CSS
-// paints, so there's no flash-of-wrong-theme); this just flips it, persists
-// the choice, and keeps the toggle button + mobile theme-color in sync.
+// paints, so there's no flash-of-wrong-theme). Each skin is: one
+// :root[data-theme=".."] block in app.css, one entry here, and one leaf3d
+// THEMES entry — the header button cycles through THEME_LIST in order.
+GF.THEME_LIST = ['dark', 'light', 'suma'];
+GF.THEME_META = {
+  dark: { icon: 'moon',    en: 'Dark',           mk: 'Темна' },
+  light:{ icon: 'sun',     en: 'Light',          mk: 'Светла' },
+  suma: { icon: 'hexagon', en: 'SUMA · Protoss', mk: 'СУМА · Протос' },
+};
+GF.curTheme = () => {
+  const t = document.documentElement.dataset.theme;
+  return GF.THEME_LIST.indexOf(t) >= 0 ? t : 'dark';
+};
 GF.syncThemeBtn = () => {
   const btn = GF.$('theme-btn');
   if (!btn) return;
-  const dark = document.documentElement.dataset.theme !== 'light';
-  btn.innerHTML = GF.icon(dark ? 'sun' : 'moon');
-  btn.title = dark
-    ? (GF.state.lang === 'mk' ? 'Светла тема' : 'Light theme')
-    : (GF.state.lang === 'mk' ? 'Темна тема' : 'Dark theme');
+  const cur = GF.curTheme();
+  const m = GF.THEME_META[cur] || GF.THEME_META.dark;
+  const name = m[GF.state.lang] || m.en;
+  btn.innerHTML = GF.icon(m.icon);
+  btn.title = (GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + name +
+    (GF.state.lang === 'mk' ? ' — кликни за следна' : ' — click to switch');
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || (dark ? '#060F0B' : '#FFFFFF');
+  if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060F0B';
 };
-GF.toggleTheme = () => {
-  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('gf_theme', next); } catch (e) {}
+GF.setTheme = (name) => {
+  if (GF.THEME_LIST.indexOf(name) < 0) name = 'dark';
+  document.documentElement.dataset.theme = name;
+  try { localStorage.setItem('gf_theme', name); } catch (e) {}
   GF.syncThemeBtn();
   // Re-tint the 3D leaf logos (material/glow) to match the new skin, in place.
-  if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(next);
+  if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(name);
+  const m = GF.THEME_META[name] || {};
+  if (GF.toast) GF.toast((GF.state.lang === 'mk' ? 'Тема: ' : 'Theme: ') + (m[GF.state.lang] || m.en || name), 'info');
+};
+// Header button: cycle to the next skin in THEME_LIST.
+GF.toggleTheme = () => {
+  const i = GF.THEME_LIST.indexOf(GF.curTheme());
+  GF.setTheme(GF.THEME_LIST[(i + 1) % GF.THEME_LIST.length]);
 };
 GF.setView = (v) => {
   GF.state.view = v;
