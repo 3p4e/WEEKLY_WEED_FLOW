@@ -30,6 +30,7 @@ GF.render = {
 
   header() {
     const u = GF.PEOPLE[GF.state.user];
+    GF.syncThemeBtn();
     GF.$('lang-en').classList.toggle('on', GF.state.lang === 'en');
     GF.$('lang-mk').classList.toggle('on', GF.state.lang === 'mk');
     GF.$('search-input').placeholder = GF.t('search');
@@ -191,16 +192,18 @@ GF.render = {
       <div class="card-head" onclick="GF.toggleExpand('${t.id}')">
         <button class="check ${t.status === 'done' ? 'done' : ''}" onclick="event.stopPropagation();GF.toggleDone('${t.id}')">
           ${t.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
-        <div style="flex:1;min-width:0">
+        <div class="card-main">
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
             ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${tagChips}</div>
         </div>
-        <div class="daytags">${daytags}</div>
-        ${GF.avatars([t.owner, ...(t.helpers || [])], 26)}
-        <span class="pill s-${t.status}" onclick="event.stopPropagation();GF.cycleStatus('${t.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(t.status)}</span>
-        <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
+        <div class="card-side">
+          <div class="daytags">${daytags}</div>
+          ${GF.avatars([t.owner, ...(t.helpers || [])], 26)}
+          <span class="pill s-${t.status}" onclick="event.stopPropagation();GF.cycleStatus('${t.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(t.status)}</span>
+          <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
+        </div>
         ${GF.icon('chevD', 'icon chev-card')}
       </div>`;
     if (!exp) return `<div class="card s-${t.status}">${head}</div>`;

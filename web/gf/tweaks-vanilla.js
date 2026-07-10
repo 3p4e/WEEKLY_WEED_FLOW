@@ -78,12 +78,24 @@
 
   function applyAll() {
     applyVars(CHAR[S.character] || CHAR.Natural);
-    const p = PALETTES[S.paletteIdx] || PALETTES[0];
-    applyVars({
-      '--blue': p.blue, '--blue-700': p.blue700, '--blue-soft': p.blueSoft,
-      '--blue-soft-2': p.blueSoft, '--orange': p.orange,
-      '--orange-700': p.orange700, '--orange-soft': p.orangeSoft,
-    });
+    // The accent-palette axis writes --blue/--orange as INLINE styles on <html>,
+    // which beat any :root[data-theme="…"] rule. Only do that when the user has
+    // EXPLICITLY chosen a non-default palette (design mode). paletteIdx 0 means
+    // "use the active theme's own accents", so leave them alone — otherwise
+    // these inline vars clobber the light/suma skins' cyan/gold with the dark
+    // theme's teal/bronze. Also clear any previously-pinned inline values so
+    // switching back to palette 0 releases the theme's tokens.
+    if (S.paletteIdx !== 0) {
+      const p = PALETTES[S.paletteIdx] || PALETTES[0];
+      applyVars({
+        '--blue': p.blue, '--blue-700': p.blue700, '--blue-soft': p.blueSoft,
+        '--blue-soft-2': p.blueSoft, '--orange': p.orange,
+        '--orange-700': p.orange700, '--orange-soft': p.orangeSoft,
+      });
+    } else {
+      ['--blue', '--blue-700', '--blue-soft', '--blue-soft-2', '--orange', '--orange-700', '--orange-soft']
+        .forEach(k => root.style.removeProperty(k));
+    }
     const d = DENSITY[S.density] || DENSITY.Regular;
     applyVars(d);
     root.style.fontSize = d.fontSize;

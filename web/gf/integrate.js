@@ -33,15 +33,15 @@ GF.WWF.meId = 'me';
 
 // GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
 // (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
-const ROLE_OUT = { admin:'ADMIN', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
+const ROLE_OUT = { admin:'ADMIN', owner:'OWNER', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
   pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
-const ROLE_IN  = { ADMIN:'admin', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
+const ROLE_IN  = { ADMIN:'admin', OWNER:'owner', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
   PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
-const ELEVATED_ROLES = ['ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
-// Roles with no department affiliation — hide the dept picker for these.
-const NO_DEPT_ROLES = new Set(['ceo', 'coo', 'qp']);
+const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+// Roles with no department affiliation — default the dept picker to "None" for these.
+const NO_DEPT_ROLES = new Set(['owner', 'ceo', 'coo', 'qp']);
 // The 9 department-manager roles (create only USER staff in their own dept).
 const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
@@ -189,14 +189,18 @@ GF.WWF.loadTeam = async () => {
       init: ((p.full_name || p.username || 'U').trim().split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase()) || 'U',
       role: ROLE_IN[p.role] || 'operator', roleLabel: p.function_role || p.role || '',
       fn: p.function_role || '',
-      dept: p.department_id || (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(p.id),
+      // Keep null as null — don't invent a department for cross-org roles
+      // (Owner/CEO/COO/QP) that were explicitly assigned "None". A prior
+      // version defaulted this to GF.DEPTS[0], silently reassigning every
+      // no-department account to whatever the first real department was.
+      dept: p.department_id || null, bg: GF.WWF.colorFor(p.id),
       backendRole: p.role, mcp: p.must_change_password, active: p.is_active };
   });
   const me = GF.API.user;
   if (me && me.id && !GF.PEOPLE[me.id]) GF.PEOPLE[me.id] = {
     name: me.full_name || me.username, username: me.username, init: 'ME',
     role: ROLE_IN[me.role] || 'operator', roleLabel: me.function_role || '',
-    dept: (GF.DEPTS[0] || {}).id, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
+    dept: me.department_id || null, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
 };
 
 GF.WWF.loadAndRender = async () => {
@@ -691,7 +695,10 @@ GF.openUser = (id) => {
   const roleOpts = roleKeys.map(r =>
     `<option value="${r}" ${r===curRole?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
   const curDept = editing ? p.dept : me.department_id;
-  const deptOpts = GF.DEPTS.map(d =>
+  // Explicit "None" so cross-org roles (Owner / CEO / COO / QP) can be assigned
+  // no department right from the picker, instead of the row silently vanishing.
+  const deptOpts = `<option value="" ${curDept ? '' : 'selected'}>${AL('None — no department', '— Без оддел —')}</option>`
+    + GF.DEPTS.map(d =>
     `<option value="${d.id}" ${String(d.id)===String(curDept)?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
   const deptLocked = iAmAdmin ? '' : 'disabled';
   GF.$('user-title').textContent = editing ? GF.t('edit_user') : GF.t('add_user');
@@ -716,10 +723,12 @@ GF.openUser = (id) => {
 };
 
 GF._userRoleChange = (roleKey) => {
-  const deptRow = GF.$('u-dept-row'), note = GF.$('u-nodept-note');
-  const hide = NO_DEPT_ROLES.has(roleKey);
-  if (deptRow) deptRow.style.display = hide ? 'none' : '';
-  if (note) note.style.display = hide ? '' : 'none';
+  const note = GF.$('u-nodept-note'), sel = GF.$('u-dept');
+  const cross = NO_DEPT_ROLES.has(roleKey);
+  // Keep the department picker visible for every role now that "None" is a real
+  // option; for cross-org roles just default it to None and show the hint.
+  if (note) note.style.display = cross ? '' : 'none';
+  if (cross && sel) sel.value = '';
 };
 
 GF.WWF.resetUserPw = async (id) => {
@@ -738,10 +747,8 @@ GF.submitUser = async () => {
   if (!name) { GF.toast(AL('Enter a full name', 'Внесете име и презиме'), 'error'); return; }
   const roleKey = GF.$('u-role').value;
   const role = ROLE_OUT[roleKey] || 'USER';
-  const department_id = NO_DEPT_ROLES.has(roleKey) ? null : (GF.$('u-dept')?.value || null);
-  if (!NO_DEPT_ROLES.has(roleKey) && !department_id) {
-    GF.toast(AL('Select a department', 'Изберете оддел'), 'error'); return;
-  }
+  // "None" (empty value) → no department; allowed for any role now.
+  const department_id = GF.$('u-dept')?.value || null;
   const function_role = (GF.$('u-fn')?.value || '').trim() || null;
   // Edit mode (openUser was given an id) → PATCH the existing account.
   if (GF._editUser) {
@@ -778,6 +785,58 @@ GF.removeUser = async (id) => {
     if (GF.PEOPLE[id]) GF.PEOPLE[id].inactive = true;
     GF.render.all(); GF.toast(AL('Account removed ✓', 'Сметката е отстранета ✓'), 'success');
   } catch (e) { GF.toast(AL('Remove failed: ', 'Неуспешно отстранување: ') + e.message, 'error'); }
+};
+
+// Removing an account only soft-deletes it (is_deleted=true) — the row (and
+// its audit history) stays, and its username is freed for reuse. This modal
+// is how an admin/manager finds those soft-deleted rows again: to confirm a
+// username really is free before retrying, or to purge one for good.
+GF.WWF.openDeletedUsers = async () => {
+  if (!GF.WWF.canProvision()) return GF.denyToast();
+  let el = GF.$('wwf-deleted');
+  if (!el) { el = document.createElement('div'); el.id = 'wwf-deleted'; el.className = 'overlay'; document.body.appendChild(el); }
+  el.innerHTML = `
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h3>${AL('Removed accounts', 'Отстранети сметки')}</h3>
+        <button class="btn-ghost" onclick="GF.closeModal('wwf-deleted')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+      <div class="modal-body" id="wwf-deleted-body">${AL('Loading…', 'Вчитување…')}</div>
+    </div>`;
+  GF.openModal('wwf-deleted');
+  try {
+    GF.WWF._renderDeletedUsers(await GF.API.listDeletedUsers());
+  } catch (e) {
+    const b = GF.$('wwf-deleted-body');
+    if (b) b.innerHTML = `<div style="color:var(--red-fg);font-size:13px">${GF.esc(e.message)}</div>`;
+  }
+};
+
+GF.WWF._renderDeletedUsers = (rows) => {
+  const body = GF.$('wwf-deleted-body');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = `<div style="color:var(--ink-3);font-size:13px">${AL('No removed accounts.', 'Нема отстранети сметки.')}</div>`;
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13.5px;color:var(--ink)">${GF.esc(r.full_name)}</div>
+        <div style="font-size:12px;color:var(--ink-3);font-family:var(--mono)">${GF.esc(r.username)} · ${GF.esc(GF.roleLabel(ROLE_IN[r.role] || 'operator'))}</div>
+      </div>
+      <button class="btn btn-sm" style="color:var(--red-fg)" onclick="GF.WWF.purgeDeletedUser('${r.id}',${JSON.stringify(r.username)})">${GF.icon('trash', 'icon')}${AL('Delete permanently', 'Трајно бриши')}</button>
+    </div>`).join('');
+};
+
+GF.WWF.purgeDeletedUser = async (id, username) => {
+  const msg = AL(
+    `Permanently delete this account? This cannot be undone — username "${username}" is already free to reuse, so this is only needed to clean up the roster.`,
+    `Трајно бришење на оваа сметка? Ова не може да се врати — корисничкото име „${username}“ е веќе слободно за повторна употреба, ова е само за чистење на списокот.`);
+  if (!confirm(msg)) return;
+  try {
+    await GF.API.purgeUser(id);
+    GF.toast(AL('Account permanently deleted ✓', 'Сметката е трајно избришана ✓'), 'success');
+    GF.WWF._renderDeletedUsers(await GF.API.listDeletedUsers());
+  } catch (e) { GF.toast(AL('Delete failed: ', 'Неуспешно бришење: ') + e.message, 'error'); }
 };
 
 // Real auth: no local impersonation — switching accounts means logging in as them.

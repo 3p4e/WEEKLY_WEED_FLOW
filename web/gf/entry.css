@@ -1,0 +1,259 @@
+/* entry.css — splash + sign-in for the 3D-leaf entry flow (see entry.js).
+   Full-screen dark-glass splash: the interactive three.js leaf (leaf3d.js) is
+   the hero; tapping it shrinks + lifts the leaf and slides a glass sign-in card
+   in beneath it. Brand palette: plasma green #2BE8A0 / teal #2FD9D9 / bronze
+   #E0A73E on deep green-black #060F0B (matches gf/brand.css + the leaf hues). */
+
+.gf-entry-root {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+}
+
+.gf-entry {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 20px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 20% 0%, #17402f 0%, #0e2519 48%, #0a1b13 100%);
+  font-family: 'Poppins', 'Saira', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ambient plasma glows behind the leaf — pure CSS, no assets. */
+.gf-atmos {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 30% at 50% 40%, rgba(43,232,160,.18), transparent 70%),
+    radial-gradient(46% 40% at 78% 84%, rgba(47,217,217,.10), transparent 72%),
+    radial-gradient(40% 34% at 16% 88%, rgba(224,167,62,.06), transparent 72%);
+  animation: gf-atmos-drift 14s ease-in-out infinite;
+}
+@keyframes gf-atmos-drift {
+  0%, 100% { opacity: .85; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.06); }
+}
+
+/* Leaf mount — leaf3d.js sizes it and appends the canvas. The reveal shrinks
+   and lifts it so the sign-in card can sit beneath it, still in view. */
+.gf-stage {
+  position: relative;
+  z-index: 2;
+  transform-origin: center top;
+  transition: transform .7s cubic-bezier(.2, .8, .2, 1), margin .7s cubic-bezier(.2, .8, .2, 1);
+  will-change: transform;
+}
+/* Entered: shrink the leaf AND reclaim the layout space it frees (scale is only
+   visual), so the sign-in card sits right below it and leaf+card+back center as
+   one compact group that always fits the viewport — no scrolling. */
+.gf-entry.entered .gf-stage {
+  transform: scale(.5);
+  margin: 2px -70px -150px;
+}
+/* CSS-leaf fallback keeps the same footprint so the layout doesn't jump. */
+.gf-stage.gf-stage--css {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 234px;
+}
+
+.gf-shadow {
+  position: relative;
+  z-index: 1;
+  margin: 2px auto 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(43,232,160,.32), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+.gf-entry.entered .gf-shadow { opacity: 0; height: 0 !important; margin: 0 !important; }
+
+/* Brand lockup — fades out on enter. */
+.gf-lockup {
+  position: relative;
+  z-index: 2;
+  margin-top: 14px;
+  text-align: center;
+  max-height: 260px;
+  overflow: hidden;
+  transition: opacity .4s ease, max-height .5s ease, margin .5s ease, transform .5s ease;
+}
+.gf-entry.entered .gf-lockup {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+}
+.gf-name {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: -.01em;
+  color: #DDF3E9;
+  line-height: 1;
+}
+.gf-name .gf-flow {
+  background: linear-gradient(135deg, #2BE8A0 0%, #2FD9D9 55%, #E0A73E 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.gf-wordmark {
+  width: 150px;
+  height: 22px;
+  margin: 10px auto 0;
+  background: url('../assets/pp-wordmark.png') center / contain no-repeat;
+  filter: brightness(0) invert(1) opacity(.72);
+}
+.gf-tagline {
+  margin-top: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: #8FB6A6;
+}
+.gf-enter {
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: #8FB6A6;
+  opacity: .9;
+  animation: gf-enter-pulse 2.6s ease-in-out infinite;
+}
+.gf-enter b { color: rgba(43,232,160,.85); }
+@keyframes gf-enter-pulse {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+
+/* Sign-in area — lower half, no dim backdrop so the shrunk leaf stays visible.
+   Hidden until .show (added ~540 ms after the leaf is tapped). */
+/* Sign-in card — IN FLOW (not absolute) so it sits directly under the shrunk
+   leaf and the whole group stays centered; collapsed until .show. */
+.gf-lw {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity .5s ease, max-height .55s ease;
+}
+.gf-lw.show {
+  opacity: 1;
+  max-height: 480px;
+  pointer-events: auto;
+}
+.gf-card {
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+  padding: 26px 26px 22px;
+  border-radius: 18px;
+  background: rgba(22, 48, 37, .9);
+  border: 1px solid rgba(43, 232, 160, .22);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .62), inset 0 1px 0 rgba(43, 232, 160, .10);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transform: translateY(22px);
+  transition: transform .55s cubic-bezier(.2, .8, .2, 1);
+}
+.gf-lw.show .gf-card { transform: none; }
+
+.gf-card-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #DDF3E9;
+}
+.gf-card-sub {
+  font-size: 12.5px;
+  color: #8FB6A6;
+  margin: 4px 0 16px;
+}
+.gf-in {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(43, 232, 160, .22);
+  border-radius: 10px;
+  background: rgba(14, 31, 23, .55);
+  color: #E9F6EF;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.gf-in::placeholder { color: #5f8574; }
+.gf-in:focus {
+  border-color: rgba(43, 232, 160, .55);
+  box-shadow: 0 0 0 3px rgba(43, 232, 160, .14);
+}
+.gf-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2BE8A0, #24cf9a);
+  color: #03130C;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: filter .15s, transform .05s;
+}
+.gf-btn:hover { filter: brightness(1.06); }
+.gf-btn:active { transform: translateY(1px); }
+.gf-msg {
+  color: #FF6B78;
+  font-size: 12px;
+  margin-top: 10px;
+  min-height: 16px;
+}
+
+/* Back link — in flow BELOW the card (no more overlapping the Sign-in button). */
+.gf-back {
+  position: relative;
+  z-index: 4;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: #8FB6A6;
+  cursor: pointer;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity .4s ease, max-height .4s ease;
+}
+.gf-back:hover { color: #DDF3E9; }
+.gf-entry.entered .gf-back {
+  opacity: .75;
+  max-height: 36px;
+  pointer-events: auto;
+}
+
+@media (max-width: 480px) {
+  .gf-name { font-size: 28px; }
+  .gf-entry.entered .gf-stage { transform: scale(.46); margin: 2px -76px -152px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gf-atmos, .gf-enter { animation: none; }
+  .gf-stage, .gf-lockup, .gf-shadow, .gf-lw, .gf-card, .gf-back { transition-duration: .01ms; }
+}

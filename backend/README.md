@@ -61,9 +61,9 @@ API paths below same-origin.
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
 | GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains and reports each chain's first linkage break, if any |
 
-¹ elevated = every role except `USER` (`ADMIN`, the `CEO`/`COO` executives, the
-department managers `QA_MGR`/`QC_MGR`/`PR_MGR`/`WH_MGR`/`SC_MGR`/`CU_MGR`, and
-`QP`) — mirrors the DB `audit_read` policy (`app.is_elevated()`), defined once in
+¹ elevated = every role except `USER` (`ADMIN`, the `OWNER`/`CEO`/`COO` executives,
+the department managers `QA_MGR`/`QC_MGR`/`PR_MGR`/`WH_MGR`/`SE_MGR`/`CU_MGR`/`MU_MGR`,
+and `QP`) — mirrors the DB `audit_read` policy (`app.is_elevated()`), defined once in
 `app/roles.py`. Secret columns (e.g. `password_hash`) are redacted from the
 payload server-side.
 

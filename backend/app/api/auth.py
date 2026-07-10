@@ -1,9 +1,11 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
+import re
 import secrets
 import time
 import uuid
 from collections import defaultdict
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -209,7 +211,9 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
                 actor["org_id"], body.username, body.email, hash_password(otp), body.full_name,
                 body.role, body.department_id, body.function_role, actor["id"],
             )
-        except Exception as e:  # unique violation etc.
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409, f"Username '{body.username}' is already taken")
+        except Exception as e:
             raise HTTPException(409, f"Could not create account: {type(e).__name__}")
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
@@ -231,6 +235,52 @@ async def directory(user: dict = Depends(require_password_set)):
     return [{"id": str(r["id"]), "username": r["username"], "full_name": r["full_name"],
              "role": r["role"], "department_id": str(r["department_id"]) if r["department_id"] else None,
              "function_role": r["function_role"]} for r in rows]
+
+
+_DELETED_SUFFIX_RE = re.compile(r"__deleted_[0-9a-f]{32}$")
+
+
+@router.get("/users/deleted")
+async def list_deleted_users(actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    """Soft-deleted accounts in the org — the only way to discover a username
+    is stuck (delete_user mangles it on the way out so it's free for reuse,
+    but the mangled form isn't something anyone would guess) or to purge one
+    for good. Same authorisation as create/delete/reset: admin sees everyone,
+    a manager sees only their own department's former staff."""
+    async with rls_users(actor, admin=True) as conn:
+        rows = await conn.fetch(
+            "SELECT id,username,full_name,role,department_id,updated_at FROM profiles"
+            " WHERE is_deleted=true AND org_id=$1 ORDER BY updated_at DESC", actor["org_id"])
+    out = []
+    for r in rows:
+        if not _can_manage(actor, r["role"], r["department_id"]):
+            continue
+        out.append({
+            "id": str(r["id"]), "username": _DELETED_SUFFIX_RE.sub("", r["username"]),
+            "full_name": r["full_name"], "role": r["role"],
+            "department_id": str(r["department_id"]) if r["department_id"] else None,
+            "deleted_at": r["updated_at"].isoformat(),
+        })
+    return out
+
+
+@router.delete("/users/{user_id}/purge", status_code=200)
+async def purge_user(user_id: str, actor: dict = Depends(require_role(ADMIN))):
+    """Permanently remove a soft-deleted account. ADMIN-only (unlike the
+    ordinary soft delete, this is unrecoverable and drops the name/avatar
+    the tasks DB's bare-uuid roster join would otherwise still resolve for
+    that person's historical tasks/reports — the audit trail is unaffected,
+    since audit_log rows are never deleted). Only ever targets a row that
+    is ALREADY soft-deleted, so this can't be used to skip the normal
+    delete flow (and its _can_manage authorisation) in one step."""
+    _require_uuid(user_id)
+    async with rls_users(actor, admin=True) as conn:
+        row = await conn.fetchrow(
+            "DELETE FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=true RETURNING id",
+            user_id, actor["org_id"])
+    if row is None:
+        raise HTTPException(404, "Deleted account not found")
+    return {"ok": True}
 
 
 @router.get("/users")
@@ -264,8 +314,17 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             raise HTTPException(404, "User not found")
         if not _can_manage(actor, target["role"], target["department_id"]):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to delete this account")
+        # Mangle the username so it's released for reuse — profiles_username_key
+        # is a plain UNIQUE constraint with no is_deleted scoping, so a bare soft
+        # delete (is_deleted=true only) permanently squats the username, making
+        # "delete this account, then recreate it the same way" impossible. The
+        # suffixed id keeps the row unique and still traceable; login/directory/
+        # list_users all already filter is_deleted=false so this is invisible
+        # anywhere the username is looked up going forward.
         await conn.execute(
-            "UPDATE profiles SET is_deleted=true, is_active=false, updated_at=now() WHERE id=$1 AND org_id=$2",
+            "UPDATE profiles SET is_deleted=true, is_active=false,"
+            " username=username || '__deleted_' || replace(id::text,'-',''), updated_at=now()"
+            " WHERE id=$1 AND org_id=$2",
             user_id, actor["org_id"])
     return {"ok": True}
 

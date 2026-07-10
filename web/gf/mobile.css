@@ -28,6 +28,20 @@
   [style*="grid-template-columns"] { font-size: 12px !important; }
 }
 
+/* ════════════ TASK CARDS → stacked rows (≤ 760px) ════════════
+   On narrow screens the one-line task row (title + meta + days + people +
+   status + priority) squeezes every field into an unreadable narrow column.
+   Break it into full-width rows instead: row 1 = checkbox + title + meta +
+   chevron; row 2 = the whole badge cluster (days · people · status · priority)
+   left-aligned on its own line. */
+@media (max-width: 760px) {
+  .card-head { flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; padding: 12px 14px; }
+  .check { margin-top: 2px; }
+  .card-main { flex: 1 1 auto; min-width: 0; }
+  .card-head .chev-card { margin-top: 3px; }
+  .card-side { flex-basis: 100%; order: 10; justify-content: flex-start; margin-top: 4px; gap: 8px; }
+}
+
 /* ════════════ PHONE (≤ 600px) ════════════ */
 @media (max-width: 600px) {
   /* ── Header collapses to brand + ham + search ── */
@@ -76,10 +90,8 @@
   .mic-rings { width: 140px !important; height: 140px !important; }
   .mic-core { width: 96px !important; height: 96px !important; }
 
-  /* ── Task card head stacks: title row + meta row ── */
-  .card-head { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+  /* ── Task card badges shrink a touch more on phones ── */
   .card-head .pill, .card-head .prtag { font-size: 11px; padding: 3px 8px; }
-  .daytags { order: 99; flex-basis: 100%; }
   .card-meta { font-size: 10.5px; }
 
   /* ── Buttons full-width inline rows ── */

@@ -137,6 +137,91 @@ async def test_deleted_user_cannot_log_in(client, admin_headers):
     assert r.status_code == 401
 
 
+async def test_deleting_a_user_frees_their_username_for_reuse(client, admin_headers):
+    """profiles_username_key is a plain UNIQUE constraint with no is_deleted
+    scoping — a bare soft delete (is_deleted=true only, username untouched)
+    would permanently squat the username, so "delete this account, then
+    recreate it the same way" would 409 forever. delete_user mangles the
+    username on delete specifically to prevent that."""
+    r = await client.post("/auth/users", json={
+        "username": "reusable_name", "full_name": "First Account", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    user = r.json()["user"]
+    r = await client.delete(f"/auth/users/{user['id']}", headers=admin_headers)
+    assert r.status_code == 200
+    r = await client.post("/auth/users", json={
+        "username": "reusable_name", "full_name": "Second Account", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_deleted_users_list_shows_the_original_username(client, admin_headers):
+    """GET /auth/users/deleted is how an admin discovers a mangled username
+    without having to guess it — it should report the pre-delete username,
+    not the mangled row, and never include an active account."""
+    r = await client.post("/auth/users", json={
+        "username": "will_be_removed", "full_name": "Removed Person", "role": "USER",
+    }, headers=admin_headers)
+    user = r.json()["user"]
+    await client.delete(f"/auth/users/{user['id']}", headers=admin_headers)
+
+    r = await client.get("/auth/users/deleted", headers=admin_headers)
+    assert r.status_code == 200
+    entries = {e["id"]: e for e in r.json()}
+    assert user["id"] in entries
+    assert entries[user["id"]]["username"] == "will_be_removed"
+    assert all("__deleted_" not in e["username"] for e in entries.values())
+
+
+async def test_purge_removes_a_deleted_account_permanently(client, admin_headers):
+    r = await client.post("/auth/users", json={
+        "username": "to_be_purged", "full_name": "Purge Me", "role": "USER",
+    }, headers=admin_headers)
+    user = r.json()["user"]
+    await client.delete(f"/auth/users/{user['id']}", headers=admin_headers)
+
+    r = await client.delete(f"/auth/users/{user['id']}/purge", headers=admin_headers)
+    assert r.status_code == 200
+
+    r = await client.get("/auth/users/deleted", headers=admin_headers)
+    assert user["id"] not in {e["id"] for e in r.json()}
+    # Purge is idempotent-safe against double-calling — the row is gone, 404 not 500.
+    r = await client.delete(f"/auth/users/{user['id']}/purge", headers=admin_headers)
+    assert r.status_code == 404
+
+
+async def test_purge_rejects_an_account_that_was_never_deleted(client, admin_headers, org):
+    """Purge only ever targets an already soft-deleted row — it can't be used
+    to skip the ordinary delete flow (and its _can_manage authorisation) in
+    one step."""
+    r = await client.delete(f"/auth/users/{org['admin_id']}/purge", headers=admin_headers)
+    assert r.status_code == 404
+
+
+async def test_purge_is_admin_only(client, admin_headers):
+    """A department manager can soft-delete their own staff, but purging is
+    ADMIN-only — permanently dropping the roster-join name/avatar for that
+    person's historical tasks/reports is a heavier call than a manager
+    should get to make alone."""
+    r = await client.post("/auth/users", json={
+        "username": "mgr_for_purge_test", "full_name": "Mgr", "role": "QC_MGR",
+    }, headers=admin_headers)
+    mgr, otp = r.json()["user"], r.json()["otp"]
+    mgr_token = await login_and_set_password(client, mgr["username"], otp)
+    mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+
+    r = await client.post("/auth/users", json={
+        "username": "staff_for_purge_test", "full_name": "Staff", "role": "USER",
+        "department_id": None,
+    }, headers=admin_headers)
+    staff = r.json()["user"]
+    await client.delete(f"/auth/users/{staff['id']}", headers=admin_headers)
+
+    r = await client.delete(f"/auth/users/{staff['id']}/purge", headers=mgr_headers)
+    assert r.status_code == 403
+
+
 async def test_role_gated_endpoints_blocked_before_forced_password_change(client, admin_headers):
     """A leaked/intercepted OTP for a freshly-provisioned QC_MGR must not
     grant role-gated actions (user management, audit) before the real user
@@ -234,9 +319,9 @@ async def test_manager_confined_to_own_department(client, admin_headers, org):
 
 async def test_admin_creates_managers_and_executives(client, admin_headers):
     """The create matrix's top row: an admin may provision any non-admin role —
-    department managers, the QP, and executives (CEO/COO) alike — but ADMIN
-    itself is never assignable, even by an admin (DB-seeded only → 422)."""
-    for role in ("QC_MGR", "QP", "CEO", "COO"):
+    department managers, the QP, and executives (OWNER/CEO/COO) alike — but
+    ADMIN itself is never assignable, even by an admin (DB-seeded only → 422)."""
+    for role in ("QC_MGR", "QP", "OWNER", "CEO", "COO"):
         r = await client.post("/auth/users", json={
             "username": f"role_{role.lower()}", "full_name": role, "role": role,
         }, headers=admin_headers)

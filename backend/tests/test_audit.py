@@ -64,11 +64,11 @@ async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin
 
 
 async def test_executives_and_qp_are_elevated(client, admin_headers):
-    """CEO, COO and QP all sit above USER in the reshaped role model — each is
-    recognized by app.is_elevated(), so each may read the audit trail and its
-    table list, but /verify stays ADMIN-only for all of them."""
+    """OWNER, CEO, COO and QP all sit above USER in the reshaped role model —
+    each is recognized by app.is_elevated(), so each may read the audit trail
+    and its table list, but /verify stays ADMIN-only for all of them."""
     from tests.conftest import login_and_set_password
-    for role in ("CEO", "COO", "QP"):
+    for role in ("OWNER", "CEO", "COO", "QP"):
         user, otp = await create_user(client, admin_headers, role=role)
         token = await login_and_set_password(client, user["username"], otp)
         headers = {"Authorization": f"Bearer {token}"}

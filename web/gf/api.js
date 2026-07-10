@@ -79,6 +79,8 @@ GF.API = {
   updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
   resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
+  listDeletedUsers() { return this._req('GET', '/auth/users/deleted'); },
+  purgeUser(id)    { return this._req('DELETE', '/auth/users/' + id + '/purge'); },
 
   departments() { return this._req('GET', '/departments'); },
   weeks()       { return this._req('GET', '/weeks'); },
