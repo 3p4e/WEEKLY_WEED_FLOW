@@ -787,6 +787,58 @@ GF.removeUser = async (id) => {
   } catch (e) { GF.toast(AL('Remove failed: ', 'Неуспешно отстранување: ') + e.message, 'error'); }
 };
 
+// Removing an account only soft-deletes it (is_deleted=true) — the row (and
+// its audit history) stays, and its username is freed for reuse. This modal
+// is how an admin/manager finds those soft-deleted rows again: to confirm a
+// username really is free before retrying, or to purge one for good.
+GF.WWF.openDeletedUsers = async () => {
+  if (!GF.WWF.canProvision()) return GF.denyToast();
+  let el = GF.$('wwf-deleted');
+  if (!el) { el = document.createElement('div'); el.id = 'wwf-deleted'; el.className = 'overlay'; document.body.appendChild(el); }
+  el.innerHTML = `
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h3>${AL('Removed accounts', 'Отстранети сметки')}</h3>
+        <button class="btn-ghost" onclick="GF.closeModal('wwf-deleted')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
+      <div class="modal-body" id="wwf-deleted-body">${AL('Loading…', 'Вчитување…')}</div>
+    </div>`;
+  GF.openModal('wwf-deleted');
+  try {
+    GF.WWF._renderDeletedUsers(await GF.API.listDeletedUsers());
+  } catch (e) {
+    const b = GF.$('wwf-deleted-body');
+    if (b) b.innerHTML = `<div style="color:var(--red-fg);font-size:13px">${GF.esc(e.message)}</div>`;
+  }
+};
+
+GF.WWF._renderDeletedUsers = (rows) => {
+  const body = GF.$('wwf-deleted-body');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = `<div style="color:var(--ink-3);font-size:13px">${AL('No removed accounts.', 'Нема отстранети сметки.')}</div>`;
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13.5px;color:var(--ink)">${GF.esc(r.full_name)}</div>
+        <div style="font-size:12px;color:var(--ink-3);font-family:var(--mono)">${GF.esc(r.username)} · ${GF.esc(GF.roleLabel(ROLE_IN[r.role] || 'operator'))}</div>
+      </div>
+      <button class="btn btn-sm" style="color:var(--red-fg)" onclick="GF.WWF.purgeDeletedUser('${r.id}',${JSON.stringify(r.username)})">${GF.icon('trash', 'icon')}${AL('Delete permanently', 'Трајно бриши')}</button>
+    </div>`).join('');
+};
+
+GF.WWF.purgeDeletedUser = async (id, username) => {
+  const msg = AL(
+    `Permanently delete this account? This cannot be undone — username "${username}" is already free to reuse, so this is only needed to clean up the roster.`,
+    `Трајно бришење на оваа сметка? Ова не може да се врати — корисничкото име „${username}“ е веќе слободно за повторна употреба, ова е само за чистење на списокот.`);
+  if (!confirm(msg)) return;
+  try {
+    await GF.API.purgeUser(id);
+    GF.toast(AL('Account permanently deleted ✓', 'Сметката е трајно избришана ✓'), 'success');
+    GF.WWF._renderDeletedUsers(await GF.API.listDeletedUsers());
+  } catch (e) { GF.toast(AL('Delete failed: ', 'Неуспешно бришење: ') + e.message, 'error'); }
+};
+
 // Real auth: no local impersonation — switching accounts means logging in as them.
 GF.setActiveUser = () => GF.toast(GF.state.lang === 'mk'
   ? 'За друга сметка, одјавете се и најавете се како тој корисник.'

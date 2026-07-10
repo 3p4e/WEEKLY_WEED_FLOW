@@ -1,4 +1,5 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
+import re
 import secrets
 import time
 import uuid
@@ -234,6 +235,52 @@ async def directory(user: dict = Depends(require_password_set)):
     return [{"id": str(r["id"]), "username": r["username"], "full_name": r["full_name"],
              "role": r["role"], "department_id": str(r["department_id"]) if r["department_id"] else None,
              "function_role": r["function_role"]} for r in rows]
+
+
+_DELETED_SUFFIX_RE = re.compile(r"__deleted_[0-9a-f]{32}$")
+
+
+@router.get("/users/deleted")
+async def list_deleted_users(actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    """Soft-deleted accounts in the org — the only way to discover a username
+    is stuck (delete_user mangles it on the way out so it's free for reuse,
+    but the mangled form isn't something anyone would guess) or to purge one
+    for good. Same authorisation as create/delete/reset: admin sees everyone,
+    a manager sees only their own department's former staff."""
+    async with rls_users(actor, admin=True) as conn:
+        rows = await conn.fetch(
+            "SELECT id,username,full_name,role,department_id,updated_at FROM profiles"
+            " WHERE is_deleted=true AND org_id=$1 ORDER BY updated_at DESC", actor["org_id"])
+    out = []
+    for r in rows:
+        if not _can_manage(actor, r["role"], r["department_id"]):
+            continue
+        out.append({
+            "id": str(r["id"]), "username": _DELETED_SUFFIX_RE.sub("", r["username"]),
+            "full_name": r["full_name"], "role": r["role"],
+            "department_id": str(r["department_id"]) if r["department_id"] else None,
+            "deleted_at": r["updated_at"].isoformat(),
+        })
+    return out
+
+
+@router.delete("/users/{user_id}/purge", status_code=200)
+async def purge_user(user_id: str, actor: dict = Depends(require_role(ADMIN))):
+    """Permanently remove a soft-deleted account. ADMIN-only (unlike the
+    ordinary soft delete, this is unrecoverable and drops the name/avatar
+    the tasks DB's bare-uuid roster join would otherwise still resolve for
+    that person's historical tasks/reports — the audit trail is unaffected,
+    since audit_log rows are never deleted). Only ever targets a row that
+    is ALREADY soft-deleted, so this can't be used to skip the normal
+    delete flow (and its _can_manage authorisation) in one step."""
+    _require_uuid(user_id)
+    async with rls_users(actor, admin=True) as conn:
+        row = await conn.fetchrow(
+            "DELETE FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=true RETURNING id",
+            user_id, actor["org_id"])
+    if row is None:
+        raise HTTPException(404, "Deleted account not found")
+    return {"ok": True}
 
 
 @router.get("/users")
