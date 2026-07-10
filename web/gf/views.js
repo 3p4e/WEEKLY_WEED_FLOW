@@ -18,7 +18,7 @@ GF.views = {
     const colColor = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)', stuck:'var(--red)', postponed:'var(--amber)', done:'var(--green)' };
     const body = cols.map(s => {
       const items = tasks.filter(t => t.status === s);
-      return `<div class="kcol">
+      return `<div class="kcol${items.length ? '' : ' empty'}">
         <div class="kcol-head"><span class="dot" style="background:${colColor[s]}"></span>${GF.statusLabel(s)}
           <span class="kcount">${items.length}</span></div>
         <div class="kcol-body" data-status="${s}" ondragover="GF.dndOver(event)" ondragleave="GF.dndLeave(event)" ondrop="GF.dndDrop(event,'${s}')">
@@ -27,7 +27,7 @@ GF.views = {
             const drag = GF.can('status', t);
             return `<div class="kcard${drag?' drag':''}" ${drag?`draggable="true" ondragstart="GF.dndStart(event,'${t.id}')" ondragend="GF.dndEnd(event)"`:''} onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
               <div class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</div>
-              <div class="kcard-title">${GF.esc(t.title)}</div>
+              <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
               <div class="kcard-foot">
                 ${GF.avatars([t.owner, ...(t.helpers||[])], 22)}
                 <div class="spacer"></div>
