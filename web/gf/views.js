@@ -182,7 +182,7 @@ GF.views = {
           </div></div>
         <div class="tc-dept">${p.dept
           ? `<span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.esc(GF.depName(p.dept))}`
-          : `<span class="dept-dot" style="background:var(--ink-3)"></span>${AL('No department — cross-org role', 'Без оддел — меѓу-одделска улога')}`}</div>
+          : `<span class="dept-dot" style="background:var(--ink-3)"></span>${GF.esc(GF.roleLabel(p.role))}`}</div>
         <div class="tc-actions">
           ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`:''}
           <div class="spacer"></div>
