@@ -80,8 +80,10 @@ async def list_tasks(
             # write path (POST /tasks/{id}/progress), so this reads live from it
             # instead of trusting a denormalized copy that could go stale.
             f"COALESCE((SELECT jsonb_agg(jsonb_build_object("
-            f"  'day_label', tp.day_label, 'note', tp.note, 'created_at', tp.created_at"
-            f") ORDER BY tp.created_at DESC) FROM (SELECT day_label, note, created_at FROM task_progress"
+            # user_id rides along so the UI can attribute notes — executive
+            # (OWNER/CEO/COO) input is visually highlighted on the cards.
+            f"  'day_label', tp.day_label, 'note', tp.note, 'created_at', tp.created_at, 'user_id', tp.user_id"
+            f") ORDER BY tp.created_at DESC) FROM (SELECT day_label, note, created_at, user_id FROM task_progress"
             f" WHERE task_id=t.id ORDER BY created_at DESC LIMIT 20) tp), '[]'::jsonb) AS progress_notes,"
             # Logged session hours, so cards can show real effort without N+1 calls.
             f"COALESCE((SELECT sum(COALESCE(ws.hours, EXTRACT(EPOCH FROM ws.ended_at-ws.started_at)/3600))"
@@ -101,7 +103,7 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
         subs = await c.fetch("SELECT * FROM tasks WHERE parent_id=$1 AND is_deleted=false ORDER BY created_at", task_id)
-        prog = await c.fetch("SELECT day_label,note,created_at FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
+        prog = await c.fetch("SELECT day_label,note,created_at,user_id FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
         sessions = await c.fetch("SELECT * FROM work_sessions WHERE task_id=$1 ORDER BY started_at", task_id)
         links = await c.fetch("SELECT * FROM task_links WHERE task_id=$1 ORDER BY created_at", task_id)
         return {"task": dict(task), "subtasks": _ser(subs), "progress": _ser(prog),

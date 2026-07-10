@@ -60,7 +60,7 @@ GF.WWF.transform = (t) => ({
   days: Array.isArray(t.days) ? t.days.map(d => d.slice(0,3)) : [],
   weekId: GF.WWF.weekIndex(t),
   tags: t.tags || [],
-  notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n })),
+  notes: (t.progress_notes || []).map(n => ({ d:(n.day_label||'').slice(0,3), n:n.note||n, by:n.user_id||null })),
   blocker: t.blocker_reason || '', completed_date: t.completed_date, week_start: t.week_start,
   est: t.estimated_hours != null ? Number(t.estimated_hours) : null,
   act: t.actual_hours != null ? Number(t.actual_hours) : null,

@@ -540,3 +540,28 @@ async def test_update_user_manager_confined(client, admin_headers, org):
     assert (await client.patch(f"/auth/users/{uid}", json={"department_id": dept["b"]}, headers=mgr_h)).status_code == 403
     # Promote to a manager role → 403.
     assert (await client.patch(f"/auth/users/{uid}", json={"role": "PR_MGR"}, headers=mgr_h)).status_code == 403
+
+
+async def test_owner_sees_org_wide_tasks_and_departments(client, admin_headers):
+    """Regression for the empty-app OWNER bug: the tasks DB carries its own
+    app.is_elevated() used by every RLS policy there, and it fell out of sync
+    with the users DB when OWNER (and SE_MGR/MU_MGR) were added — so an OWNER
+    passed the app-side role gates but RLS filtered every row, and the owner
+    logged in to a blank application. Pins that an OWNER (who owns no tasks)
+    reads the org's tasks and departments through RLS."""
+    r = await client.post("/tasks", json={"title": "Visible to the owner", "status": "pending"},
+                          headers=admin_headers)
+    assert r.status_code == 201
+
+    owner, otp = await create_user(client, admin_headers, role="OWNER")
+    token = await login_and_set_password(client, owner["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = await client.get("/tasks", headers=headers)
+    assert r.status_code == 200
+    assert any(t["title"] == "Visible to the owner" for t in r.json()), \
+        "OWNER must have org-wide task visibility (tasks-DB is_elevated regressed)"
+
+    # And the same for the other RLS-gated reads the app boots with.
+    assert (await client.get("/departments", headers=headers)).status_code == 200
+    assert (await client.get("/audit", headers=headers)).status_code == 200

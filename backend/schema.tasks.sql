@@ -103,7 +103,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SC_MGR','CU_MGR','QP') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP') $$;
 
 
 SET default_tablespace = '';

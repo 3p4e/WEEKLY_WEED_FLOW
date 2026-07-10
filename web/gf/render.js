@@ -209,7 +209,18 @@ GF.render = {
     if (!exp) return `<div class="card s-${t.status}">${head}</div>`;
 
     const noteId = 'note-' + t.id;
-    const notes = (t.notes || []).map(n => `<div class="note"><span class="nd">${GF.dayLabel(n.d)}</span><span>${GF.esc(n.n)}</span></div>`).join('');
+    // Executive input stands out: notes written by the OWNER get the strongest
+    // (gold) treatment, CEO/COO a lighter one — so directives from above are
+    // never lost in the scroll of ordinary progress notes.
+    const notes = (t.notes || []).map(n => {
+      const p = n.by && GF.PEOPLE[n.by];
+      const br = p && p.backendRole;
+      const owner = br === 'OWNER';
+      const exec = owner || br === 'CEO' || br === 'COO';
+      const chip = exec ? `<span class="note-role-chip ${owner ? 'owner' : ''}" title="${GF.esc(p.name)}">${GF.esc(GF.roleLabel(p.role))}</span>` : '';
+      return `<div class="note ${exec ? 'note-exec' : ''} ${owner ? 'note-owner' : ''}">
+        <span class="nd">${GF.dayLabel(n.d)}</span><span style="flex:1">${GF.esc(n.n)}</span>${chip}</div>`;
+    }).join('');
     const toDept = GF.HANDOFF[t.dept];
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>
