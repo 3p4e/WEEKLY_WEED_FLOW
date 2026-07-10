@@ -624,3 +624,22 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sess-class.overtime{background:var(--orange-soft);color:var(--orange-700)}
 .sess-class.night{background:var(--violet-soft);color:var(--violet)}
 .sess-class.weekend{background:var(--red-soft);color:var(--red-fg)}
+
+/* ── DEMO MODE banner (demo.js) — fixed strip; sits above the phone bottom nav ── */
+#gf-demo-banner{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:center;gap:10px;
+  padding:7px 14px calc(7px + env(safe-area-inset-bottom));font-size:12px;color:var(--ink);
+  background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border-top:2px solid var(--orange);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
+#gf-demo-banner b{color:var(--orange);font-size:11px;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap}
+#gf-demo-banner>span:not(.gfdb-dot){flex:1;min-width:0;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#gf-demo-banner button{flex-shrink:0;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange-700);
+  font-weight:800;font-size:11.5px;font-family:var(--font);padding:5px 12px;border-radius:999px;cursor:pointer}
+#gf-demo-banner button:hover{background:var(--orange);color:#fff}
+.gfdb-dot{flex-shrink:0;width:9px;height:9px;border-radius:50%;background:var(--orange);animation:gfdb-pulse 1.6s ease-in-out infinite}
+@keyframes gfdb-pulse{0%,100%{box-shadow:0 0 0 0 var(--orange-soft)}50%{box-shadow:0 0 0 6px transparent}}
+body.demo-on .main{padding-bottom:56px}
+@media (max-width:600px){
+  #gf-demo-banner{bottom:calc(64px + env(safe-area-inset-bottom));padding:6px 10px;font-size:11px}
+  #gf-demo-banner>span:not(.gfdb-dot){white-space:normal;max-height:2.6em;line-height:1.3}
+  body.demo-on .main{padding-bottom:112px}
+}

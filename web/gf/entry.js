@@ -25,7 +25,11 @@ GF.WWF = GF.WWF || {};
       <input id="wwf-p" class="gf-in" type="password" placeholder="Password" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
       <button class="gf-btn" onclick="GF.WWF.doLogin()">Sign in</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>`;
+      <div id="wwf-login-msg" class="gf-msg"></div>
+      <div class="gf-demo-sep">or / или</div>
+      <button class="gf-btn-demo" onclick="GF.DEMO.enter()">🌿 Try the demo · Пробај демо</button>
+      <div class="gf-demo-hint">Sample data only — nothing you do here touches the real system.<br>
+        Само примерни податоци — ништо овде не ја допира вистинската база.</div>`;
   }
 
   function changePwCardHTML() {

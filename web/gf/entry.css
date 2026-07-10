@@ -257,3 +257,25 @@
   .gf-atmos, .gf-enter { animation: none; }
   .gf-stage, .gf-lockup, .gf-shadow, .gf-lw, .gf-card, .gf-back { transition-duration: .01ms; }
 }
+
+/* "Try the demo" — ghost button under Sign in (entry screen is always dark) */
+.gf-demo-sep {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 10px; color: rgba(233, 246, 239, .45);
+  font-size: 11px; letter-spacing: .4px; text-transform: uppercase;
+}
+.gf-demo-sep::before, .gf-demo-sep::after {
+  content: ''; flex: 1; height: 1px; background: rgba(43, 232, 160, .18);
+}
+.gf-btn-demo {
+  width: 100%; padding: 11px; border-radius: 10px; cursor: pointer;
+  border: 1px dashed rgba(224, 167, 62, .55);
+  background: rgba(224, 167, 62, .10); color: #E0A73E;
+  font-weight: 700; font-size: 13.5px; font-family: inherit;
+}
+.gf-btn-demo:hover { background: rgba(224, 167, 62, .20); }
+.gf-btn-demo:active { transform: translateY(1px); }
+.gf-demo-hint {
+  margin-top: 7px; font-size: 11px; line-height: 1.45;
+  color: rgba(233, 246, 239, .5);
+}
