@@ -16,13 +16,16 @@
 .lbl-hint{font-weight:500;color:var(--ink-3);font-size:11px;margin-left:6px}
 .kempty{color:var(--ink-3);font-size:13px;padding:14px 6px;text-align:center}
 
-/* ── Board: horizontal status swimlanes ──
-   Each status is a full-width lane whose cards flow into a responsive grid
-   (wrap left→right) instead of one narrow vertical column, so a busy status
-   uses the whole width and long bilingual titles stay readable. Empty
-   statuses collapse to a thin header bar so they don't waste the canvas. */
+/* ── Board: horizontal day swimlanes ──
+   One full-width lane per weekday (Mon→Fri); the day's cards flow into a
+   responsive grid (wrap left→right) ordered chronologically, NOT by completion
+   state. Today's lane is accented. Days with no tasks collapse to a thin
+   header bar so they don't waste the canvas. A compact status chip on each
+   card still surfaces progress at a glance. */
 .kboard{display:flex;flex-direction:column;gap:12px}
 .kcol{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.kcol.today{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset,0 0 14px rgba(43,232,160,.16)}
+.kcol.today .kcol-head{background:linear-gradient(0deg,var(--primary-soft),var(--primary-soft)),var(--surface-3);color:var(--ink)}
 .kcol-head{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13px;color:var(--ink);
   padding:11px 15px;background:var(--surface-3);border-bottom:1px solid var(--line)}
 .kcol-head .dot{width:9px;height:9px;border-radius:999px;flex-shrink:0}
@@ -32,18 +35,18 @@
 .kcard{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px;cursor:pointer;
   box-shadow:var(--sh-1);transition:transform .12s,box-shadow .12s}
 .kcard:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
-.kcard.drag{cursor:grab}
-.kcard.drag:active{cursor:grabbing}
-.kcard.dragging{opacity:.4;box-shadow:none}
-.kcol-body.drop-hot{outline:2px dashed var(--blue);outline-offset:-4px;border-radius:12px;background:var(--blue-soft)}
-/* Empty status → header bar + a slim drop strip (still a drop target). */
+/* Empty day → header bar only, no wasted grid padding. */
 .kcol.empty .kcol-head{color:var(--ink-3)}
 .kcol.empty .kcol-head .dot{opacity:.6}
 .kcol.empty .kcol-body{display:block;padding:7px 15px}
 .kcol.empty .kempty{padding:2px;text-align:left;font-size:12px;opacity:.55}
 .role-lock{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-3);
   background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px}
-.kcard-dept{font-size:11px;font-weight:700;margin-bottom:5px;letter-spacing:.02em}
+.kcard-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.kcard-dept{font-size:11px;font-weight:700;letter-spacing:.02em}
+.kcard-top .kstatus{margin-left:auto}
+.kstatus{font-size:10px;font-weight:700;padding:3px 8px;cursor:inherit;backdrop-filter:none}
+.kstatus .dot{width:6px;height:6px;border-radius:999px;flex-shrink:0}
 .kcard-title{font-size:13px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:10px;
   display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .kcard-foot{display:flex;align-items:center;gap:6px}

@@ -88,16 +88,21 @@ GF.leaf3d = (function () {
     renderer.setSize(size, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.filter = `drop-shadow(0 0 ${gb}px rgba(43,232,160,.55)) drop-shadow(0 0 ${Math.round(gb * 0.46)}px rgba(47,217,217,.4))`;
+    renderer.domElement.style.filter = `drop-shadow(0 0 ${gb}px rgba(43,232,160,.72)) drop-shadow(0 0 ${Math.round(gb * 0.5)}px rgba(47,217,217,.52))`;
     renderer.domElement.style.display = 'block';
     stageEl.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0x22403a, 1.15));
-    const key = new THREE.DirectionalLight(0xa9ffdb, 2.3); key.position.set(-0.7, 1.1, 1.3); scene.add(key);
-    const rim = new THREE.DirectionalLight(0x2fd9d9, 1.7); rim.position.set(1.1, 0.4, -0.9); scene.add(rim);
-    const fill = new THREE.DirectionalLight(0x2be8a0, 0.85); fill.position.set(0.2, -1, 0.6); scene.add(fill);
+    // Brighter, higher-contrast rig so the leaf pops off the surface instead of
+    // sinking into shadow: lifted ambient, a strong near-white key, a punchy
+    // teal rim for edge separation, and a brighter fill from below.
+    scene.add(new THREE.AmbientLight(0x2c5a4c, 1.45));
+    const key = new THREE.DirectionalLight(0xc9ffe8, 3.4); key.position.set(-0.7, 1.1, 1.3); scene.add(key);
+    const rim = new THREE.DirectionalLight(0x5fecec, 2.15); rim.position.set(1.1, 0.4, -0.9); scene.add(rim);
+    const fill = new THREE.DirectionalLight(0x46f2b4, 1.2); fill.position.set(0.2, -1, 0.6); scene.add(fill);
 
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1fb877, emissive: 0x0b6b45, emissiveIntensity: 0.5, metalness: 0.4, roughness: 0.32 });
+    // Brighter emissive base + lower metalness (metal reads dark without an env
+    // map) so more of the surface is diffusely lit and vivid green.
+    const mat = new THREE.MeshStandardMaterial({ color: 0x2ad98f, emissive: 0x139d68, emissiveIntensity: 0.72, metalness: 0.28, roughness: 0.34 });
     const group = new THREE.Group();
     scene.add(group);
     let geo = null;

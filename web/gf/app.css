@@ -14,23 +14,24 @@
   unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
 
 :root {
-  /* ── Surfaces (obsidian gunmetal) ── */
-  --bg: #060F0B;
-  --surface: #0B1913;
-  --surface-2: #102219;
-  --surface-3: #163021;
-  --overlay: rgba(2,7,5,.78);
+  /* ── Surfaces (lifted green-charcoal — brighter than the old near-black
+     obsidian so surfaces read as elevated glass, not a black hole) ── */
+  --bg: #0E1F17;
+  --surface: #163025;
+  --surface-2: #1E3B2D;
+  --surface-3: #274A38;
+  --overlay: rgba(7,18,13,.74);
 
   /* ── Ink / Text ── */
-  --ink: #DDF3E9;
-  --ink-2: #8FB6A6;
-  --ink-3: #5F8575;
-  --ink-4: #47645A;
+  --ink: #E9F6EF;
+  --ink-2: #A2C4B5;
+  --ink-3: #6E9384;
+  --ink-4: #557568;
 
-  /* ── Borders ── */
-  --line: rgba(43,232,160,.12);
-  --line-2: rgba(43,232,160,.07);
-  --border-strong: #234835;
+  /* ── Borders (a touch stronger so edges show on the lighter surfaces) ── */
+  --line: rgba(43,232,160,.16);
+  --line-2: rgba(43,232,160,.09);
+  --border-strong: #2F5A44;
 
   /* ── Primary: plasma green ── */
   --primary: #2BE8A0;

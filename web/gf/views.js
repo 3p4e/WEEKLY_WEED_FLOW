@@ -9,33 +9,53 @@ GF.viewHead = (titleKey, subKey, right = '') => `
   </div>`;
 
 GF.views = {
-  /* ── Board: kanban by status ───────────────────────────── */
+  /* ── Board: horizontal day swimlanes ───────────────────────
+     One full-width lane per weekday (Mon→Fri); inside each lane the day's
+     tasks flow chronologically (by due date, then insertion order) into a
+     responsive grid — NOT grouped by completion state. Tasks not pinned to a
+     weekday collapse into an "Anytime" lane. A small status chip on each card
+     still surfaces progress at a glance without organising the board by it. */
   board() {
-    const tasks = GF.visibleTasks(GF.state.selWeek);
-    // Include postponed as its own column — filtering it out silently dropped
-    // every postponed task from the board while it still counted elsewhere.
-    const cols = GF.STATUS_ORDER.slice();
-    const colColor = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)', stuck:'var(--red)', postponed:'var(--amber)', done:'var(--green)' };
-    const body = cols.map(s => {
-      const items = tasks.filter(t => t.status === s);
-      return `<div class="kcol${items.length ? '' : ' empty'}">
-        <div class="kcol-head"><span class="dot" style="background:${colColor[s]}"></span>${GF.statusLabel(s)}
-          <span class="kcount">${items.length}</span></div>
-        <div class="kcol-body" data-status="${s}" ondragover="GF.dndOver(event)" ondragleave="GF.dndLeave(event)" ondrop="GF.dndDrop(event,'${s}')">
-          ${items.map(t => {
-            const d = GF.dep(t.dept);
-            const drag = GF.can('status', t);
-            return `<div class="kcard${drag?' drag':''}" ${drag?`draggable="true" ondragstart="GF.dndStart(event,'${t.id}')" ondragend="GF.dndEnd(event)"`:''} onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
-              <div class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</div>
-              <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
-              <div class="kcard-foot">
-                ${GF.avatars([t.owner, ...(t.helpers||[])], 22)}
-                <div class="spacer"></div>
-                <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
-              </div></div>`;
-          }).join('') || `<div class="kempty">—</div>`}
+    const tasks = GF.scopedTasks(GF.state.selWeek);
+    const days = GF.DAYS.slice(0, 5);                       // Mon–Fri
+    // Chronological within a lane: earliest due first, undated keep their
+    // natural (creation) order via a stable sort.
+    const due = t => (t.due ? Date.parse(t.due) : Infinity);
+    const chrono = (a, b) => due(a) - due(b);
+    const dayColor = { Mon:'var(--green)', Tue:'var(--blue)', Wed:'var(--orange)', Thu:'var(--violet)', Fri:'var(--teal)' };
+
+    const lanes = days.map(day => ({
+      label: GF.dayLabel(day),
+      color: dayColor[day] || 'var(--primary)',
+      today: day === GF.todayDay,
+      items: tasks.filter(t => (t.days || []).includes(day)).slice().sort(chrono),
+    }));
+    const anytime = tasks.filter(t => !(t.days || []).some(d => days.includes(d))).slice().sort(chrono);
+    if (anytime.length) lanes.push({ label: AL('Anytime', 'Во секое време'), color: 'var(--ink-3)', today: false, items: anytime });
+
+    const card = t => {
+      const d = GF.dep(t.dept);
+      return `<div class="kcard" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+        <div class="kcard-top">
+          <span class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
+          <span class="kstatus pill s-${t.status}" title="${GF.esc(GF.statusLabel(t.status))}"><span class="dot" style="background:currentColor;opacity:.75"></span>${GF.statusLabel(t.status)}</span>
+        </div>
+        <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
+        <div class="kcard-foot">
+          ${GF.avatars([t.owner, ...(t.helpers||[])], 22)}
+          <div class="spacer"></div>
+          <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
         </div></div>`;
-    }).join('');
+    };
+
+    const body = lanes.map(l => `
+      <div class="kcol${l.items.length ? '' : ' empty'}${l.today ? ' today' : ''}">
+        <div class="kcol-head"><span class="dot" style="background:${l.color}"></span>${l.label}
+          <span class="kcount">${l.items.length}</span></div>
+        <div class="kcol-body">
+          ${l.items.map(card).join('') || `<div class="kempty">—</div>`}
+        </div></div>`).join('');
+
     const addBtn = GF.can('create')
       ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus','icon','#fff')}${GF.t('new_task_btn')}</button>` : '';
     return GF.viewHead('board','board_sub', addBtn)
@@ -176,27 +196,4 @@ GF.views = {
       + `<div class="team-count">${ids.length} ${GF.t('members')} · ${GF.t('your_role')}: <b>${GF.roleLabel(GF.curRole())}</b></div>`
       + `<div class="team-grid">${cards}</div>`;
   },
-};
-
-/* ── Board drag-and-drop ── */
-GF._dragId = null;
-GF.dndStart = (e, id) => {
-  GF._dragId = id;
-  try { e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; } catch (x) {}
-  e.currentTarget.classList.add('dragging');
-};
-GF.dndEnd = (e) => {
-  e.currentTarget.classList.remove('dragging');
-  document.querySelectorAll('.kcol-body.drop-hot').forEach(x => x.classList.remove('drop-hot'));
-  GF._dragId = null;
-};
-GF.dndOver = (e) => { e.preventDefault(); try { e.dataTransfer.dropEffect = 'move'; } catch (x) {} e.currentTarget.classList.add('drop-hot'); };
-GF.dndLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop-hot'); };
-GF.dndDrop = (e, status) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drop-hot');
-  let id = ''; try { id = e.dataTransfer.getData('text/plain'); } catch (x) {}
-  id = id || GF._dragId; GF._dragId = null;
-  if (!id) return;
-  if (GF.setStatus(id, status)) { GF.render.all(); GF.toast(GF.statusLabel(status) + ' ✓', 'success'); }
 };
