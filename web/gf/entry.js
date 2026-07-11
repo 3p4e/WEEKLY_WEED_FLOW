@@ -43,10 +43,7 @@ GF.WWF = GF.WWF || {};
       <input id="wwf-p" class="gf-in" type="password" placeholder="Password" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
       <button class="gf-btn" onclick="GF.WWF.doLogin()">Sign in</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>
-      <div class="gf-demo-sep">or / или</div>
-      <button class="gf-btn-demo" onclick="GF.DEMO.enter()">🌿 Try the demo · Пробај демо</button>
-      <div class="gf-demo-hint">Sample data — separate from the real system · Примерни податоци</div>`;
+      <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
   function changePwCardHTML() {
@@ -60,10 +57,18 @@ GF.WWF = GF.WWF || {};
       <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
-  function buildEntry(el, cardHTML) {
+  function buildEntry(el, cardHTML, withDemo) {
     el.className = 'gf-entry-root';
+    // The demo entry lives OUTSIDE the sign-in card — a fixed pill pinned to the
+    // top-right corner, always visible from the very first splash frame and
+    // never affected by the card/leaf layout (which is what buried it before).
+    const demoBtn = withDemo ? `
+        <button class="gf-demo-float" onclick="GF.DEMO.enter()"
+                title="Sample data — separate from the real system · Примерни податоци"
+                aria-label="Try the demo">🌿 <span>Try the demo · Демо</span></button>` : '';
     el.innerHTML = `
       <div class="gf-entry" id="gf-entry">
+        ${demoBtn}
         <div class="gf-atmos"></div>
         <div class="gf-stage" id="gf-leaf-stage" role="button" tabindex="0" aria-label="GrowFlow leaf — tap to enter"></div>
         <div class="gf-shadow" id="gf-leaf-shadow"></div>
@@ -182,7 +187,7 @@ GF.WWF = GF.WWF || {};
   GF.WWF.showLogin = (msg) => {
     const el = ensureRoot();
     el.style.display = 'block';
-    buildEntry(el, loginCardHTML());   // rebuild fresh so re-login starts at the splash
+    buildEntry(el, loginCardHTML(), true);   // rebuild fresh so re-login starts at the splash; floating demo button
     opened = false;
     pickEntrySkin();                   // a fresh random skin every time the splash appears
     mountLeaf();
