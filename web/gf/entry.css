@@ -23,6 +23,11 @@
   justify-content: safe center;
   gap: 0;
   padding: 20px 16px;
+  /* When the leaf+card group is taller than the viewport (e.g. a browser that
+     doesn't shrink the WebGL canvas on reveal), centering would split the
+     overflow top+bottom and the bottom (the demo button) becomes unreachable by
+     scroll. entry.js's ensureCardInView() adds .gf-overflow to top-align the
+     group so ALL overflow falls below and can be scrolled into view. */
   box-sizing: border-box;
   overflow-y: auto;
   overflow-x: hidden;
@@ -36,6 +41,35 @@
   font-family: 'Poppins', 'Saira', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
+/* Set by ensureCardInView() only when the group overflows the viewport: top-
+   align so the full card (incl. the demo button) is reachable by scrolling. */
+.gf-entry.gf-overflow { justify-content: flex-start; }
+/* The normal reveal shrinks the leaf with transform: scale() + a -150px bottom
+   margin — a visual trick whose layout box stays full-size, so the flex
+   container's scrollHeight never grows and the overflow can't be scrolled to.
+   When the group genuinely overflows a short viewport we instead reformat the
+   leaf into a REAL compact box (layout == paint): the whole leaf is fitted into
+   a small square and the card flows directly beneath it, so scrollHeight is
+   honest and the demo button is always reachable. */
+.gf-entry.gf-overflow .gf-stage {
+  transform: none !important;
+  margin: 0 auto 4px !important;
+  height: 132px !important;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.gf-entry.gf-overflow .gf-stage canvas,
+.gf-entry.gf-overflow .gf-stage .leaf-stage,
+.gf-entry.gf-overflow .gf-stage > * {
+  max-height: 132px !important;
+  max-width: 132px !important;
+  height: auto !important;
+  width: auto !important;
+}
+.gf-entry.gf-overflow .gf-shadow { display: none !important; }
 
 /* Ambient glows behind the leaf — tinted to the skin's accent (--accent-rgb). */
 .gf-atmos {

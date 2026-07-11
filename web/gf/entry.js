@@ -115,6 +115,32 @@ GF.WWF = GF.WWF || {};
     if (GF.leafFX && GF.leafFX.bind) { const s = stage.querySelector('.leaf-stage'); if (s) GF.leafFX.bind(s); }
   }
 
+  // After the card slides in, guarantee the WHOLE card — including the "Try the
+  // demo" button at its foot — is inside the viewport. The reveal shrinks the
+  // 3D leaf via a CSS transform (.gf-entry.entered .gf-stage), but in some
+  // browsers (notably Firefox) the WebGL canvas does not give back its layout
+  // box the same way, so the leaf+card group can be taller than the viewport
+  // and push the demo button below the fold. `.gf-entry` is the overflow-y:auto
+  // scroll container, so nudging its scrollTop brings the clipped card fully
+  // into view — a browser-agnostic safety net independent of the leaf shrink.
+  function ensureCardInView() {
+    const entry = $('gf-entry');
+    const card = $('gf-entry-card');
+    if (!entry || !card) return;
+    try {
+      let overshoot = card.getBoundingClientRect().bottom - window.innerHeight + 14; // 14px breathing room
+      if (overshoot <= 0) { entry.classList.remove('gf-overflow'); return; }
+      // The group is taller than the viewport. Centering (default) leaves the
+      // top overflow unreachable and caps scrollTop, so the card's foot stays
+      // clipped. Top-align first (all overflow moves below), then scroll the
+      // whole card — including the demo button — into view.
+      entry.classList.add('gf-overflow');
+      // Recompute after reflow so we scroll by the right amount.
+      overshoot = card.getBoundingClientRect().bottom - window.innerHeight + 14;
+      if (overshoot > 0) entry.scrollTop += overshoot;
+    } catch (e) {}
+  }
+
   function reveal() {
     if (opened) return;
     opened = true;
@@ -122,12 +148,14 @@ GF.WWF = GF.WWF || {};
     setTimeout(() => {
       const lw = $('gf-lw'); if (lw) lw.classList.add('show');
       const u = $('wwf-u') || $('wwf-np'); if (u) setTimeout(() => { try { u.focus(); } catch (e) {} }, 260);
+      // Card animates in over ~.55s; run the guard after it settles.
+      setTimeout(ensureCardInView, 620);
     }, 540);
   }
 
   function backToLeaf() {
     opened = false;
-    const entry = $('gf-entry'); if (entry) entry.classList.remove('entered');
+    const entry = $('gf-entry'); if (entry) { entry.classList.remove('entered'); entry.classList.remove('gf-overflow'); entry.scrollTop = 0; }
     const lw = $('gf-lw'); if (lw) lw.classList.remove('show');
   }
 
@@ -137,7 +165,12 @@ GF.WWF = GF.WWF || {};
     opened = true;
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+    setTimeout(ensureCardInView, 60);
   }
+
+  // Re-assert the guard on resize/orientation change while the card is open —
+  // e.g. rotating a phone or opening the keyboard changes the fold.
+  window.addEventListener('resize', () => { if (opened) ensureCardInView(); });
 
   function ensureRoot() {
     let el = $('wwf-login');
