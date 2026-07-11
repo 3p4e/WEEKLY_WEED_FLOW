@@ -119,6 +119,25 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
         subs = await c.fetch("SELECT * FROM tasks WHERE parent_id=$1 AND is_deleted=false ORDER BY created_at", task_id)
+        # By-id reads must honour the same department scoping as the task LIST —
+        # otherwise a dept-scoped manager could read any task in the org by id
+        # (full description, sessions, links). In-scope = own dept, personally
+        # owned, assigned, a subtask delegated INTO their dept, or a child whose
+        # parent lives in their dept. (A department-less manager has scope None →
+        # org-wide read, same as their board — intentional.)
+        scope = dept_scope(user)
+        if scope:
+            in_scope = (
+                str(task["department_id"] or "") == scope
+                or str(task["user_id"]) == str(user["id"])
+                or any(str(s["department_id"] or "") == scope for s in subs))
+            if not in_scope:
+                in_scope = await c.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM task_assignees WHERE task_id=$1 AND user_id=$2)"
+                    " OR EXISTS(SELECT 1 FROM tasks pa WHERE pa.id=$3 AND pa.department_id=$4)",
+                    task_id, user["id"], task["parent_id"], scope)
+            if not in_scope:
+                raise HTTPException(404, "Task not found or not permitted")
         prog = await c.fetch("SELECT day_label,note,created_at,user_id FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
         sessions = await c.fetch("SELECT * FROM work_sessions WHERE task_id=$1 ORDER BY started_at", task_id)
         links = await c.fetch("SELECT * FROM task_links WHERE task_id=$1 ORDER BY created_at", task_id)
@@ -195,8 +214,11 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             if not mine and body.department_id and str(body.department_id) != scope:
                 raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
             if not body.department_id:
-                # inherit the parent's department so the child never lands unscoped
-                body.department_id = str(parent["department_id"]) if parent["department_id"] else scope
+                # Inherit the parent's department ONLY when the parent is the
+                # manager's own — otherwise an omitted department_id under a
+                # FOREIGN parent would silently plant the child in that other
+                # department. Default to the manager's own scope in that case.
+                body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
         try:
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"

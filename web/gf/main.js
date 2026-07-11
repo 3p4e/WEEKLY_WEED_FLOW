@@ -108,7 +108,14 @@ window.addEventListener('DOMContentLoaded', () => {
   GF.render.all();
 
   GF.$('search-input')?.addEventListener('input', (e) => {
-    GF.state.search = e.target.value; GF.render.panels();
+    GF.state.search = e.target.value;
+    // The search box filters the My-Week task panels only. render.panels()
+    // rebuilds the My-Week panel unconditionally, so calling it while another
+    // full-page view is active used to OVERWRITE that view with the My-Week
+    // list (nav still highlighting the old view). Re-render whatever view is
+    // actually active instead — My Week filters, other views just re-render.
+    if (GF.state.view === 'mywork') GF.render.panels();
+    else GF.setView(GF.state.view);
   });
 
   // sidebar toggle (mobile)

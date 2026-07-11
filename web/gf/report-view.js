@@ -136,11 +136,28 @@ GF.WWF.jumpReportWeek = (dateStr) => {
   GF.WWF.loadReport();
 };
 
+// The reference week the backend snaps to. In PLAN mode the returned
+// period.start is already shifted +7 (reports.py adds a week for plans), so
+// navigating/anchoring from period.start would move TWO weeks per click and the
+// date picker would show the wrong week. Undo that +7 to recover the reference.
+GF.WWF._refWeekStart = () => {
+  const st = GF.WWF._report;
+  if (!st.data || !st.data.period || !st.data.period.start) return '';
+  if (st.mode !== 'plan') return st.data.period.start;
+  const r = new Date(st.data.period.start);
+  r.setDate(r.getDate() - 7);
+  return GF.localDateStr(r);
+};
+
 GF.WWF.shiftReportWeek = (delta) => {
   const st = GF.WWF._report;
   if (delta === 0) { st.refDate = null; }
   else {
-    const ref = st.data ? new Date(st.data.period.start) : new Date();
+    // Anchor on the REFERENCE week (refDate if set, else derived from the data
+    // with the plan shift undone) — never on the raw, possibly-shifted
+    // period.start.
+    const base = st.refDate || GF.WWF._refWeekStart();
+    const ref = base ? new Date(base) : new Date();
     ref.setDate(ref.getDate() + delta * 7);
     // localDateStr (local getters) not toISOString (UTC): a positive-offset
     // facility would otherwise shift the ref date back a day and select the
@@ -212,10 +229,13 @@ GF.WWF.renderReport = () => {
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(0)" title="${AL('Current week', 'Тековна недела')}">${AL('Today', 'Денес')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(1)" title="${AL('Next week', 'Следна недела')}">▶</button>
-        <input type="date" value="${(d.period && d.period.start) || ''}" title="${AL('Jump to any week', 'Скокни на било која недела')}"
+        <input type="date" value="${GF.WWF._refWeekStart()}" title="${AL('Jump to any week', 'Скокни на било која недела')}"
           onchange="GF.WWF.jumpReportWeek(this.value)"
           style="font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)">
       </div>
+      <button class="btn btn-sm" onclick="GF.export.open('${isR ? 'report' : 'plan'}')"
+        title="${AL('Export raw task data as CSV / JSON', 'Извези сурови податоци како CSV / JSON')}">
+        ${GF.icon('forward','icon')}${AL('Export CSV / JSON', 'Извези CSV / JSON')}</button>
     </div>`;
 
   const period = `<div style="font-size:14px;font-weight:600;color:var(--ink-2);margin:0 4px 16px">${GF.icon('calendar')} ${GF.esc(d.period.label)}</div>`;

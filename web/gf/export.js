@@ -11,6 +11,10 @@ GF.export = {
     const hint = GF.$('export-pdf-hint');
     if (hint) hint.textContent = AL('PDF reports live in Report → Documents',
                                     'PDF извештаите се во Извештај → Документи');
+    const csvL = GF.$('export-csv-label');
+    if (csvL) csvL.textContent = AL('Export CSV', 'Извези CSV');
+    const jsonL = GF.$('export-json-label');
+    if (jsonL) jsonL.textContent = AL('Export JSON', 'Извези JSON');
   },
 
   // Jump from the export modal to the real PDF (Document Engine in the Report view).
@@ -82,8 +86,8 @@ GF.rollover = () => {
   const weekId = GF.state.selWeek;
   const nextId = weekId + 1;
   const incomplete = GF.weekTasks(weekId).filter(t => t.status !== 'done');
-  if (!incomplete.length) { GF.toast('All tasks are done — nothing to roll over', 'info'); return; }
+  if (!incomplete.length) { GF.toast(AL('All tasks are done — nothing to roll over', 'Сите задачи се завршени — нема што да се пренесе'), 'info'); return; }
   incomplete.forEach(t => { t.weekId = nextId; });
   GF.store.save(); GF.render.all();
-  GF.toast(`${incomplete.length} task(s) rolled to next week`, 'success');
+  GF.toast(AL(`${incomplete.length} task(s) rolled to next week`, `${incomplete.length} задача(и) пренесени во следната недела`), 'success');
 };

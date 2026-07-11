@@ -266,11 +266,12 @@ GF.views = {
         <span class="exec-chip">${attn.length}</span></div>
       ${attnRows || `<div class="kempty" style="padding:22px 8px;text-align:center">${AL('All clear 🎉', 'Сè е чисто 🎉')}</div>`}</div>`;
 
-    // ── Role-specific strips: the COO reads operations, the CEO reads
-    // direction. OWNER (and admin, for preview) see both.
+    // ── Role-specific strips: every executive reads BOTH operations and
+    // direction, so a CEO also sees Operations and a COO also sees Direction.
     const role = GF.curRole();
-    const showOps = role === 'coo' || role === 'owner' || role === 'admin';
-    const showStrategy = role === 'ceo' || role === 'owner' || role === 'admin';
+    const isExec = role === 'owner' || role === 'ceo' || role === 'coo' || role === 'admin';
+    const showOps = isExec;
+    const showStrategy = isExec;
 
     let opsStrip = '';
     if (showOps) {

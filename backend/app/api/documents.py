@@ -18,6 +18,7 @@ listing and AI plan sections; a scheduled-projection ribbon is future work.
 import asyncio
 import html
 import json
+import re
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -28,7 +29,7 @@ from app.api.ai import _letta_message
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
-from app.deps import dept_scope, require_role
+from app.deps import dept_scope, is_dept_scoped_role, require_role
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.worktime import TZ, classify, session_hours
@@ -60,6 +61,10 @@ def _effective_dept_id(user: dict, requested: str | None) -> str | None:
     scope = dept_scope(user)
     if scope:
         return scope
+    # A scoped manager with no department assigned must NOT inherit org-wide
+    # authority over the submitted GMP record — refuse until a dept is set.
+    if is_dept_scoped_role(user):
+        raise HTTPException(403, "No department assigned — ask an admin to set your department")
     if requested:
         try:
             uuid.UUID(str(requested))
@@ -73,9 +78,12 @@ def _scope_guard(user: dict, row) -> None:
     """By-id access guard: a dept-scoped manager may only touch their own
     department's documents — the org-wide record and other departments' docs
     are 403 (they are compiled/locked by executives)."""
-    scope = dept_scope(user)
-    if scope and str(row["department_id"] or "") != scope:
-        raise HTTPException(403, "Document is outside your department scope")
+    if is_dept_scoped_role(user):
+        scope = dept_scope(user)
+        # No department assigned, or the row belongs to another dept / the
+        # org-wide record → outside this manager's scope.
+        if not scope or str(row["department_id"] or "") != scope:
+            raise HTTPException(403, "Document is outside your department scope")
 
 
 async def _resolve_department(c, dept_id: str | None) -> dict | None:
@@ -118,12 +126,20 @@ async def _fetch_window_tasks(c, fri: date, thu: date, kind: str,
             f"AND {activity_window_sql('$1', '$2', '$3')}"
             f"{dept_clause}"
             f"ORDER BY t.department, t.created_at", *args)
-    else:  # plan: everything active/incomplete carrying into the week
-        plan_clause = " AND t.department_id=$1 " if dept_id else " "
-        args = [dept_id] if dept_id else []
+    else:  # plan: the target week's still-open work PLUS carryover.
+        # A Plan for a given week shows every open (non-completed) task that is
+        # due/scheduled on or before the END of that week (thu) — i.e. this
+        # week's planned tasks AND all still-open earlier tasks that carried
+        # over — plus undated backlog (no week_start and no due_date). Tasks
+        # explicitly scheduled for a LATER week are excluded, so different weeks
+        # now produce different Plans instead of one identical all-open dump.
+        plan_clause = " AND t.department_id=$2 " if dept_id else " "
+        args = [thu] + ([dept_id] if dept_id else [])
         rows = await c.fetch(
             f"SELECT {_COLS} FROM tasks t "
-            f"WHERE t.is_deleted=false AND t.is_archived=false AND t.status <> 'completed'"
+            f"WHERE t.is_deleted=false AND t.is_archived=false AND t.status <> 'completed' "
+            f"AND (COALESCE(t.week_start, t.due_date) <= $1"
+            f"     OR (t.week_start IS NULL AND t.due_date IS NULL))"
             f"{plan_clause}"
             f"ORDER BY t.department, t.created_at", *args)
     return [_task_row(r) for r in rows]
@@ -847,6 +863,34 @@ def _e(v) -> str:
     return html.escape(str(v if v is not None else ""))
 
 
+_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{3,8}$|^[A-Za-z]{1,20}$|^rgba?\([\d.,%\s]{1,40}\)$")
+
+
+def _color(v, fallback: str = "#8A99B0") -> str:
+    """Sanitise a client-supplied CSS color before it lands in PDF markup —
+    content.ribbon[].color / per_sop[].color come from a PATCH body and would
+    otherwise inject SVG/CSS. Only a hex, a bare color name, or rgb()/rgba() is
+    allowed; anything else falls back to a neutral grey."""
+    s = str(v or "").strip()
+    return s if _COLOR_RE.match(s) else fallback
+
+
+def _numf(v, nd: int = 1) -> str:
+    """Format a client-supplied number for PDF interpolation without a 500 on a
+    non-numeric value (a hostile/legacy field never crashes the export)."""
+    try:
+        return f"{float(v):.{nd}f}"
+    except (TypeError, ValueError):
+        return "0" if nd == 0 else "0." + "0" * nd
+
+
+def _numi(v) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
     """Server-rendered N×24h ribbon for the PDF (light, static, WeasyPrint-safe
     concrete colors). N is 7 for the scheduled Fri→Thu week and the span of a
@@ -873,14 +917,18 @@ def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
         parts.append(f'<text x="4" y="{y + ROW / 2 + 3:.1f}" font-size="9" fill="#16233B">{d.strftime("%a %d.%m")}</text>')
         parts.append(f'<rect x="{LEFT}" y="{y + 4}" width="{W - LEFT - 10}" height="{ROW - 8}" rx="4" fill="#F3F6FA"/>')
         for s in segments:
-            if s["date"] != d.isoformat():
+            if str(s.get("date") or "") != d.isoformat():
                 continue
-            x = LEFT + s["start_h"] * hour_w
-            w = max(2.0, (s["end_h"] - s["start_h"]) * hour_w)
+            try:
+                sh, eh = float(s.get("start_h") or 0), float(s.get("end_h") or 0)
+            except (TypeError, ValueError):
+                continue  # a non-numeric segment never crashes the export
+            x = LEFT + sh * hour_w
+            w = max(2.0, (eh - sh) * hour_w)
             parts.append(
                 f'<rect x="{x:.1f}" y="{y + 6}" width="{w:.1f}" height="{ROW - 12}" rx="3"'
-                f' fill="{s["color"]}" fill-opacity="0.9"><title>{_e(s["title"])} · {_e(s["sop"])}'
-                f' · {s["hours"]}h</title></rect>')
+                f' fill="{_color(s.get("color"))}" fill-opacity="0.9"><title>{_e(s.get("title"))} · {_e(s.get("sop"))}'
+                f' · {_e(s.get("hours"))}h</title></rect>')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -1049,10 +1097,12 @@ def _pdf_task_tables(c: dict, who) -> str:
 
 
 def _pdf_metrics(c: dict) -> str:
+    # .get() defaults + sanitised color: a v1-shape / hostile metrics bucket
+    # missing a key (or carrying an injected color) must never 500 the export.
     sop_rows = "".join(
-        f'<tr><td><span class="dot" style="background:{b["color"]}"></span>{_e(b["sop"])}</td>'
-        f'<td>{b["hours"]}</td><td>{b["prev4_avg_hours"]}</td><td>{b["tasks"]}</td>'
-        f'<td>{b["sessions"]}</td><td>{b["night"]}</td><td>{b["weekend"]}</td><td>{b["overtime"]}</td></tr>'
+        f'<tr><td><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</td>'
+        f'<td>{_e(b.get("hours", 0))}</td><td>{_e(b.get("prev4_avg_hours", 0))}</td><td>{_e(b.get("tasks", 0))}</td>'
+        f'<td>{_e(b.get("sessions", 0))}</td><td>{_e(b.get("night", 0))}</td><td>{_e(b.get("weekend", 0))}</td><td>{_e(b.get("overtime", 0))}</td></tr>'
         for b in c.get("metrics", {}).get("per_sop", []))
     if not sop_rows:
         return ""
@@ -1086,7 +1136,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
 
     ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
                          period.get("days", 7)) if c.get("ribbon") else ""
-    legend = "".join(f'<span class="lg"><span class="dot" style="background:{b["color"]}"></span>{_e(b["sop"])}</span>'
+    legend = "".join(f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
                      for b in c.get("metrics", {}).get("per_sop", [])[:12])
     watermark = "" if is_locked else '<div class="wm">DRAFT · НАЦРТ</div>'
     doctag = f'{"Weekly Report" if kind == "report" else "Weekly Plan"} · {period.get("label", "")}'
