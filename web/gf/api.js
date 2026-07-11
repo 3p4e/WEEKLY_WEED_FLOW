@@ -19,11 +19,23 @@ GF.API = {
       body: body == null ? undefined : JSON.stringify(body),
     });
     if (res.status === 401) {
-      GF.API.logout();
-      // Re-show the login overlay from every call site, not just the 3 that
-      // happened to check for it — otherwise an expired/invalidated token
-      // mid-session leaves a half-rendered app behind a toast.
-      if (GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
+      // A failed /auth/login must NOT tear down and rebuild the login card the
+      // user is already looking at — showLogin() re-renders the entry splash,
+      // detaching the #wwf-login-msg node doLogin captured, so the "Invalid
+      // username or password" message was written into a dead element and the
+      // user got silently bounced back to the leaf splash with no feedback.
+      // doLogin's own catch renders the error on the live card instead.
+      const hadSession = !!GF.API.token;
+      if (path !== '/auth/login') {
+        GF.API.logout();
+        // Re-show the login overlay from every call site, not just the 3 that
+        // happened to check for it — otherwise an expired/invalidated token
+        // mid-session leaves a half-rendered app behind a toast. BUT only when
+        // a session actually existed: a stray boot-time 401 with no token
+        // means the user is ALREADY at the splash — rebuilding it out from
+        // under them resets the reveal and eats whatever they were typing.
+        if (hadSession && GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
+      }
       throw new Error('unauthorized');
     }
     if (!res.ok) {

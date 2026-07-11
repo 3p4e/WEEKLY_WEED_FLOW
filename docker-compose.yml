@@ -114,6 +114,26 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  # Nightly OFFSITE copy of the local dumps — rclone `copy` (never `sync`, so
+  # a local wipe cannot propagate) to an encrypted (rclone crypt) folder on
+  # Google Drive. rclone.conf lives on the host at ./rclone/ (mode 0600,
+  # git-ignored) holding the Drive OAuth token + crypt password pair. Remote
+  # retention 60 days, independent of the local 14. Setup, restore drill and
+  # crypt-key custody: docs/BACKUP.md "Offsite copy".
+  backup-offsite:
+    image: rclone/rclone:1
+    container_name: wwf-backup-offsite
+    depends_on: [db-backup]
+    environment:
+      - OFFSITE_RETENTION_DAYS=60
+    volumes:
+      - ./backend/scripts/offsite_backup.sh:/usr/local/bin/offsite_backup.sh:ro
+      - ./rclone:/config/rclone
+      - weekly_weed_flow_backups:/backups:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/offsite_backup.sh"]
+    networks: [internal]
+    restart: unless-stopped
+
   # Capture connector — remote MCP server claude.ai/Cowork chats call to
   # deliver Master-Capture-Prompt output straight into /capture/import.
   # Reachable only at a secret path behind Traefik TLS; holds a single

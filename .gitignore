@@ -27,3 +27,7 @@ Thumbs.db
 # Logs / local
 *.log
 .cache/
+
+# rclone config for the offsite-backup service — holds the Google Drive OAuth
+# token + crypt password pair; lives only on the deploy host, never in git.
+rclone/

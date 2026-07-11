@@ -2,7 +2,7 @@
 window.GF = window.GF || {};
 
 GF.$ = (id) => document.getElementById(id);
-GF.esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+GF.esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 GF.uid = () => 'T-' + Math.random().toString(36).slice(2, 7).toUpperCase();
 
 // ── Icons (stroke paths, 20x20 viewBox) ──

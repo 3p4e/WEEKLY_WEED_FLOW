@@ -833,7 +833,7 @@ GF.WWF._renderDeletedUsers = (rows) => {
         <div style="font-weight:700;font-size:13.5px;color:var(--ink)">${GF.esc(r.full_name)}</div>
         <div style="font-size:12px;color:var(--ink-3);font-family:var(--mono)">${GF.esc(r.username)} · ${GF.esc(GF.roleLabel(ROLE_IN[r.role] || 'operator'))}</div>
       </div>
-      <button class="btn btn-sm" style="color:var(--red-fg)" onclick="GF.WWF.purgeDeletedUser('${r.id}',${JSON.stringify(r.username)})">${GF.icon('trash', 'icon')}${AL('Delete permanently', 'Трајно бриши')}</button>
+      <button class="btn btn-sm" style="color:var(--red-fg)" onclick="GF.WWF.purgeDeletedUser('${r.id}',${GF.esc(JSON.stringify(r.username))})">${GF.icon('trash', 'icon')}${AL('Delete permanently', 'Трајно бриши')}</button>
     </div>`).join('');
 };
 

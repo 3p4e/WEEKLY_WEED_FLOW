@@ -28,6 +28,15 @@ from app.security import hash_password
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _pools():
     await init_pools()
+    # test_audit.py's tamper tests deliberately break the hash chain (delete/
+    # rewrite audit rows) and per-test purges never touch audit_log — so on a
+    # REUSED local database the next session starts with a poisoned chain and
+    # the intact-chain tests fail for reasons that have nothing to do with the
+    # code under test. Start every session from an empty chain instead. (CI is
+    # unaffected — its databases are always fresh.)
+    for pool in (users_admin_pool(), tasks_admin_pool()):
+        # DELETE, not TRUNCATE — app_admin's grants are S/I/U/D only.
+        await pool.execute("DELETE FROM audit_log")
     yield
     await close_pools()
 

@@ -146,16 +146,18 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
 
 
 class TaskIn(BaseModel):
-    title: str
-    description: str | None = None
+    # max_length bounds are DoS hygiene, not business rules — no field here has
+    # a legitimate form anywhere near these caps.
+    title: str = Field(max_length=300)
+    description: str | None = Field(default=None, max_length=10000)
     status: Status = "pending"
     priority: Priority = "medium"
     task_type: TaskType = "other"
-    reference_code: str | None = None
-    external_ref: str | None = None
-    blocker_reason: str | None = None
+    reference_code: str | None = Field(default=None, max_length=80)
+    external_ref: str | None = Field(default=None, max_length=200)
+    blocker_reason: str | None = Field(default=None, max_length=2000)
     recurrence: dict | None = None
-    department: str | None = None
+    department: str | None = Field(default=None, max_length=120)
     department_id: str | None = None
     week_id: str | None = None
     week_start: date | None = None
@@ -167,6 +169,19 @@ class TaskIn(BaseModel):
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
+
+# The UI writes 3-letter capitalized tokens (GF.DAYS in web/gf/data.js);
+# anything else in days text[] is a typo or an API caller inventing values
+# every consumer (board columns, per-day chips) would silently fail to show.
+_DAY_TOKENS = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+
+
+def _check_days(days: list[str] | None) -> None:
+    if not days:
+        return
+    bad = [d for d in days if d not in _DAY_TOKENS]
+    if bad:
+        raise HTTPException(422, f"days must be Mon..Sun tokens, got: {', '.join(map(str, bad[:3]))}")
 
 
 def _check_recurrence(rec: dict | None) -> None:
@@ -190,6 +205,7 @@ def _check_recurrence(rec: dict | None) -> None:
 @router.post("/tasks", status_code=201)
 async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
+    _check_days(body.days)
     # A dept-scoped manager creates TOP-LEVEL tasks in their own department
     # only; an omitted department defaults to theirs instead of landing
     # unassigned (which their scoped list could then never show them again).
@@ -238,19 +254,19 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
 
 
 class TaskPatch(BaseModel):
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(default=None, max_length=300)
+    description: str | None = Field(default=None, max_length=10000)
     status: Status | None = None
     priority: Priority | None = None
     workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
     task_type: TaskType | None = None
-    department: str | None = None
+    department: str | None = Field(default=None, max_length=120)
     department_id: str | None = None
-    reference_code: str | None = None
-    external_ref: str | None = None
-    blocker_reason: str | None = None
+    reference_code: str | None = Field(default=None, max_length=80)
+    external_ref: str | None = Field(default=None, max_length=200)
+    blocker_reason: str | None = Field(default=None, max_length=2000)
     recurrence: dict | None = None
-    outcome: str | None = None
+    outcome: str | None = Field(default=None, max_length=2000)
     is_archived: bool | None = None
     days: list[str] | None = None
     tags: list[str] | None = None
@@ -325,6 +341,8 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
     patch = body.model_dump(exclude_unset=True)
     if "recurrence" in patch:
         _check_recurrence(patch["recurrence"])
+    if "days" in patch:
+        _check_days(patch["days"])
     scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():

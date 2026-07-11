@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { seedOrg } = require('../seed');
+const { seedOrg, revealLoginCard } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -26,9 +26,7 @@ test('reloading mid forced-password-change goes back to the change-password scre
 
   // Log in with the OTP through the real UI — this persists a token while
   // must_change_password is still true, same as a real first login.
-  await page.goto('/');
-  // 3D-leaf splash: tap the leaf to reveal the sign-in card before filling it.
-  await page.locator('#gf-leaf-stage').click();
+  await revealLoginCard(page);
   await page.locator('#wwf-u').fill(newUsername);
   await page.locator('#wwf-p').fill(otp);
   await page.getByRole('button', { name: 'Sign in' }).click();

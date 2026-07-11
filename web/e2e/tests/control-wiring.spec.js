@@ -17,13 +17,20 @@ const HANDLER_ATTRS = ['onclick', 'onchange', 'onkeydown', 'oninput', 'onsubmit'
 async function enterDemo(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // Hermetic: abort the decorative Google Fonts fetch — in sandboxed
+  // environments it can stall and hold up 'load' (see seed.js).
+  await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/, (r) => r.abort());
   await page.goto('/');
   await page.waitForFunction(() => window['GF'] && window['GF'].WWF && typeof window['GF'].WWF.showLogin === 'function');
   // Splash → reveal → enter demo (routes all API in-memory).
   await page.locator('#gf-leaf-stage').click().catch(() => {});
   await page.waitForTimeout(300);
   await page.evaluate(() => window['GF'].DEMO.enter());
-  await page.waitForFunction(() => window['GF'].API && window['GF'].API._demoWrapped && window['GF'].DEMO.active());
+  // DEMO.enter() calls location.reload() — this predicate can run mid-reload
+  // when window.GF doesn't exist yet, and a THROWING predicate rejects
+  // waitForFunction immediately instead of polling again. Guard every step.
+  await page.waitForFunction(() => window['GF'] && window['GF'].API
+    && window['GF'].API._demoWrapped && window['GF'].DEMO && window['GF'].DEMO.active());
   await page.waitForTimeout(1500);
   return errors;
 }

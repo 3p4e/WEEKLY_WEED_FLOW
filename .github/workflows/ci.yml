@@ -41,6 +41,27 @@ jobs:
             assert any(p.startswith('/reports') for p in paths), 'reports router not wired'; \
             assert any('/sessions' in p for p in paths), 'work-session routes not wired'"
 
+  security:
+    name: Security scan (pip-audit + bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install scanners
+        run: pip install pip-audit bandit
+      - name: pip-audit (known CVEs in pinned deps — blocking)
+        # Scans the requirement pins WITHOUT installing them. If a pinned dep
+        # grows an unfixable advisory, add a targeted `--ignore-vuln GHSA-...`
+        # here with a comment explaining why — never un-block wholesale.
+        run: pip-audit --no-deps -r backend/requirements.txt
+      - name: bandit (static analysis, medium+ severity AND confidence)
+        # -ii too: without it bandit's 17 low-confidence B608 hits (f-string
+        # SQL that is actually parametrized asyncpg with code-controlled
+        # column lists — this codebase's established pattern) fail the job.
+        run: bandit -r backend/app -ll -ii
+
   tests:
     name: Backend test suite
     runs-on: ubuntu-latest
