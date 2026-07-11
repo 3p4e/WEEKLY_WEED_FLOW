@@ -14,8 +14,26 @@ GF.WWF = GF.WWF || {};
 
   let leaf = null;      // live leaf3d instance (destroyed on login / re-show)
   let opened = false;   // reveal guard — true once the card is shown
+  let entrySkin = 'dark'; // the random skin showcased on the current splash
 
   const $ = (id) => (window.GF && GF.$ ? GF.$(id) : document.getElementById(id));
+
+  // The splash/login screen showcases a RANDOM skin each time it's shown — the
+  // leaf, glows and accents take that skin's palette. Restricted to the dark
+  // skin group so the splash's dark stage always reads well (a light skin would
+  // wash out the glowing leaf). Applied to the DOM only — never persisted, so a
+  // real user's saved skin is untouched and is re-applied the moment they log in
+  // (see the loadAndRender override below).
+  function pickEntrySkin() {
+    try {
+      if (!(GF.THEMES && GF.setTheme)) return 'dark';
+      const pool = GF.THEMES.filter(t => t.group === 'dark');
+      const pick = (pool.length ? pool : GF.THEMES)[Math.floor(Math.random() * (pool.length || GF.THEMES.length))];
+      entrySkin = (pick && pick.id) || 'dark';
+      GF.setTheme(entrySkin, { silent: true, noPersist: true });
+    } catch (e) { entrySkin = 'dark'; }
+    return entrySkin;
+  }
 
   function loginCardHTML() {
     return `
@@ -76,10 +94,10 @@ GF.WWF = GF.WWF || {};
       size: leafSize(),
       shadowEl: $('gf-leaf-shadow'),
       objUrl: 'assets/pp-leaf-3d.obj',
-      // The splash/login backdrop is always dark (entry.css) regardless of the
-      // app's chosen skin, so pin the hero leaf to the dark palette — a
-      // light-skin leaf here would glow wrong against the dark stage.
-      theme: 'dark',
+      // The splash showcases a random DARK skin (pickEntrySkin) — the hero leaf
+      // takes that skin's palette. Confined to dark skins so it always glows
+      // right against the dark stage.
+      theme: entrySkin,
       onEnter: reveal,
       onError: cssFallbackLeaf,
     });
@@ -133,6 +151,7 @@ GF.WWF = GF.WWF || {};
     el.style.display = 'block';
     buildEntry(el, loginCardHTML());   // rebuild fresh so re-login starts at the splash
     opened = false;
+    pickEntrySkin();                   // a fresh random skin every time the splash appears
     mountLeaf();
     const m = $('wwf-login-msg'); if (m) m.textContent = msg || '';
     // If we're here because of an error (bad token / session expiry), skip the
@@ -144,7 +163,7 @@ GF.WWF = GF.WWF || {};
   GF.WWF.showChangePw = (currentPw) => {
     GF.WWF._curPw = currentPw || '';
     let el = $('wwf-login');
-    if (!el || !$('gf-entry-card')) { el = ensureRoot(); el.style.display = 'block'; buildEntry(el, changePwCardHTML()); mountLeaf(); }
+    if (!el || !$('gf-entry-card')) { el = ensureRoot(); el.style.display = 'block'; buildEntry(el, changePwCardHTML()); pickEntrySkin(); mountLeaf(); }
     else { const card = $('gf-entry-card'); if (card) card.innerHTML = changePwCardHTML(); }
     revealNow();
     setTimeout(() => { const n = $('wwf-np'); if (n) try { n.focus(); } catch (e) {} }, 80);
@@ -156,6 +175,17 @@ GF.WWF = GF.WWF || {};
     const _origLoadAndRender = GF.WWF.loadAndRender;
     GF.WWF.loadAndRender = function () {
       if (leaf && leaf.destroy) { try { leaf.destroy(); } catch (e) {} leaf = null; }
+      // Entering the app: drop the splash's showcase skin and apply the user's
+      // OWN saved skin (gf_theme). For the demo, gf_theme already holds the
+      // demo's per-start random skin, so this restores that instead — either
+      // way the logged-in app reflects the remembered choice, not the splash's
+      // random one.
+      try {
+        const saved = localStorage.getItem('gf_theme') || 'dark';
+        if (GF.setTheme && document.documentElement.dataset.theme !== saved) {
+          GF.setTheme(saved, { silent: true, noPersist: true });
+        }
+      } catch (e) {}
       return _origLoadAndRender.apply(this, arguments);
     };
   }
