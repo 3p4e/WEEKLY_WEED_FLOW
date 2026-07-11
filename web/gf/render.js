@@ -13,6 +13,9 @@ GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:
 GF.render = {
   all() {
     this.sidebar(); this.header();
+    // The exec view is executive-only; if a stale gf_view lands a non-exec here
+    // (e.g. a shared browser), fall back to My Week.
+    if (GF.state.view === 'exec' && !(GF.isExec && GF.isExec())) GF.state.view = 'mywork';
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
@@ -49,10 +52,14 @@ GF.render = {
   },
 
   sidebar() {
-    const nav = [
+    const nav = [];
+    // Executives get an exec-only Overview at the top of the nav; everyone keeps
+    // the standard views below it.
+    if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
+    nav.push(
       ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
       ['coord', 'coordination', 'at', 3], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
-    ];
+    );
     GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
         ${GF.icon(ic)}<span>${GF.t(key)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}
@@ -61,7 +68,12 @@ GF.render = {
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};
     GF.weekTasks(GF.state.selWeek).forEach(t => { counts[t.dept] = (counts[t.dept] || 0) + 1; });
-    GF.$('dept-list').innerHTML = GF.DEPTS.map(d => `
+    // A dept-scoped manager's sidebar shows only departments they can actually
+    // have tasks in this week: their own, plus any department that appears via
+    // a multi-departmental family (delegated subtask both sides see in full).
+    const scope = GF.WWF && GF.WWF.deptScope ? GF.WWF.deptScope() : null;
+    const sideDepts = scope ? GF.DEPTS.filter(d => d.id === scope || counts[d.id]) : GF.DEPTS;
+    GF.$('dept-list').innerHTML = sideDepts.map(d => `
       <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
@@ -86,9 +98,10 @@ GF.render = {
       <div class="week-dates">${w.label}, ${w.year}</div>
       ${isNow ? `<span class="badge-now">${GF.t('this_week_badge')}</span>` : ''}
       <div class="spacer"></div>
-      ${active.length ? `<div onclick="GF.setView('team')" style="cursor:pointer"`
+      ${active.length ? `<div class="week-active" onclick="GF.setView('team')"`
         + ` title="${AL('People active this week — open Team', 'Активни оваа недела — отвори Тим')}">`
-        + `${GF.avatars(active, 30)}</div>` : ''}`;
+        + `<span class="week-active-lbl">${AL('Active this week', 'Активни оваа недела')}</span>`
+        + `${GF.avatars(active, 28)}</div>` : ''}`;
   },
 
   dayPills() {
@@ -209,7 +222,18 @@ GF.render = {
     if (!exp) return `<div class="card s-${t.status}">${head}</div>`;
 
     const noteId = 'note-' + t.id;
-    const notes = (t.notes || []).map(n => `<div class="note"><span class="nd">${GF.dayLabel(n.d)}</span><span>${GF.esc(n.n)}</span></div>`).join('');
+    // Executive input stands out: notes written by the OWNER get the strongest
+    // (gold) treatment, CEO/COO a lighter one — so directives from above are
+    // never lost in the scroll of ordinary progress notes.
+    const notes = (t.notes || []).map(n => {
+      const p = n.by && GF.PEOPLE[n.by];
+      const br = p && p.backendRole;
+      const owner = br === 'OWNER';
+      const exec = owner || br === 'CEO' || br === 'COO';
+      const chip = exec ? `<span class="note-role-chip ${owner ? 'owner' : ''}" title="${GF.esc(p.name)}">${GF.esc(GF.roleLabel(p.role))}</span>` : '';
+      return `<div class="note ${exec ? 'note-exec' : ''} ${owner ? 'note-owner' : ''}">
+        <span class="nd">${GF.dayLabel(n.d)}</span><span style="flex:1">${GF.esc(n.n)}</span>${chip}</div>`;
+    }).join('');
     const toDept = GF.HANDOFF[t.dept];
     const handoff = toDept ? `
       <div class="sec-label">${GF.icon('arrowR','icon')}${GF.t('handoff')}</div>

@@ -288,3 +288,249 @@ async def test_documents_rls_org_isolation(client, admin_headers, org):
         assert r.status_code == 404
     finally:
         await purge_org(org2)
+
+
+# ═══ Per-department documents (migration 0010 + content v2) ═══════════════════
+
+async def _dept_pair(org):
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name, name_mk)"
+        " VALUES ($1,'cultivation','Cultivation','Одгледување'),($1,'qc','Quality Control','Контрола')"
+        " RETURNING id, code", org["org_id"])
+    return {r["code"]: str(r["id"]) for r in rows}
+
+
+async def _dept_manager(client, admin_headers, dept_id, role="CU_MGR"):
+    prof, otp = await create_user(client, admin_headers, role=role,
+                                  full_name="Doc Manager", department_id=dept_id)
+    token = await login_and_set_password(client, prof["username"], otp)
+    return prof, {"Authorization": f"Bearer {token}"}
+
+
+async def _task_in(client, headers, title, dept_id):
+    r = await client.post("/tasks", json={"title": title, "department_id": dept_id,
+                                          "department": "x"}, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_manager_compile_is_forced_to_their_department(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    await _task_in(client, admin_headers, "cu doc task", depts["cultivation"])
+    await _task_in(client, admin_headers, "qc doc task", depts["qc"])
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+
+    # even explicitly requesting the OTHER department is overridden
+    r = await client.post("/reports/documents/compile",
+                          json={"kind": "report", "department_id": depts["qc"]}, headers=mgr)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert doc["department_id"] == depts["cultivation"]
+    assert doc["content"]["department"]["code"] == "cultivation"
+    titles = [t["title"] for t in doc["content"]["tasks"]]
+    assert "cu doc task" in titles and "qc doc task" not in titles
+
+
+async def test_orgwide_and_department_documents_coexist(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    await _task_in(client, admin_headers, "coexist task", depts["cultivation"])
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+
+    org_doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                                 headers=admin_headers)).json()
+    exec_dept_doc = (await client.post("/reports/documents/compile",
+                                       json={"kind": "report", "department_id": depts["qc"]},
+                                       headers=admin_headers)).json()
+    mgr_doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                                 headers=mgr)).json()
+    ids = {org_doc["id"], exec_dept_doc["id"], mgr_doc["id"]}
+    assert len(ids) == 3, "three documents (org-wide + 2 departments) must coexist for the same week"
+    assert org_doc["department_id"] is None
+    assert exec_dept_doc["department_id"] == depts["qc"]
+    assert mgr_doc["department_id"] == depts["cultivation"]
+
+    # GET picks the right one per scope
+    r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
+    assert r.json()["id"] == org_doc["id"]
+    r = await client.get("/reports/documents",
+                         params={"kind": "report", "department_id": depts["qc"]}, headers=admin_headers)
+    assert r.json()["id"] == exec_dept_doc["id"]
+    r = await client.get("/reports/documents", params={"kind": "report"}, headers=mgr)
+    assert r.json()["id"] == mgr_doc["id"], "manager GET lands on their department document"
+
+    # recompile per scope keeps the row identity (UPSERT hits the partial index)
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    assert r.json()["id"] == org_doc["id"]
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=mgr)
+    assert r.json()["id"] == mgr_doc["id"]
+
+
+async def test_manager_denied_orgwide_document_by_id(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+    org_doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                                 headers=admin_headers)).json()
+
+    for method, path, body in [
+        ("patch", f"/reports/documents/{org_doc['id']}", {"content": {}}),
+        ("patch", f"/reports/documents/{org_doc['id']}/sections/weekly_summary", {"approved": True}),
+        ("post", f"/reports/documents/{org_doc['id']}/lock", None),
+    ]:
+        r = await getattr(client, method)(path, json=body, headers=mgr) if body is not None \
+            else await client.post(path, headers=mgr)
+        assert r.status_code == 403, f"{path} → {r.status_code}"
+    r = await client.get(f"/reports/documents/{org_doc['id']}/export.pdf", headers=mgr)
+    assert r.status_code == 403
+
+    # an executive CAN lock a department document
+    dept_doc = (await client.post("/reports/documents/compile",
+                                  json={"kind": "report", "department_id": depts["qc"]},
+                                  headers=admin_headers)).json()
+    r = await client.post(f"/reports/documents/{dept_doc['id']}/lock", headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "locked"
+
+
+async def test_template_sections_shape(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    await _task_in(client, admin_headers, "shape task", depts["cultivation"])
+
+    # per-department doc: exactly the department's template
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+    doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                             headers=mgr)).json()
+    keys = [s["key"] for s in doc["content"]["template_sections"]]
+    assert keys == ["cultivation_status"]
+    sec = doc["content"]["template_sections"][0]
+    assert sec["title_mk"] and sec["approved"] is False
+    assert all(f["value"] == "" for f in sec["fields"]), "physical metrics start empty (manual entry)"
+    assert sec["narrative"] == {"en": "", "mk": ""}
+    assert doc["content"]["content_version"] == 2
+
+    # org-wide doc: per-active-department sections + the org-wide two
+    org_doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                                 headers=admin_headers)).json()
+    org_keys = [s["key"] for s in org_doc["content"]["template_sections"]]
+    assert "cultivation_status" in org_keys and "quality_gmp" in org_keys
+    assert org_keys[-2:] == ["transition_plan", "production_forecast"]
+
+
+async def test_section_editing_bilingual_fields_and_narrative(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    await _task_in(client, admin_headers, "edit task", depts["cultivation"])
+    doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                             headers=admin_headers)).json()
+
+    # AI section: bilingual bodies + legacy mirror
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/weekly_summary",
+                           json={"body_en": "EN text", "body_mk": "МК текст"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    sec = next(s for s in r.json()["content"]["ai_sections"] if s["key"] == "weekly_summary")
+    assert sec["body_en"] == "EN text" and sec["body_mk"] == "МК текст" and sec["body"] == "EN text"
+
+    # legacy {body} alias still works and mirrors
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/weekly_summary",
+                           json={"body": "legacy"}, headers=admin_headers)
+    sec = next(s for s in r.json()["content"]["ai_sections"] if s["key"] == "weekly_summary")
+    assert sec["body_en"] == "legacy" and sec["body"] == "legacy"
+
+    # template section: fields + bilingual narrative
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/cultivation_status",
+                           json={"fields": {"mother_plants": "12 GC"},
+                                 "narrative_en": "Good week", "narrative_mk": "Добра недела",
+                                 "approved": True}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    t = next(s for s in r.json()["content"]["template_sections"] if s["key"] == "cultivation_status")
+    assert next(f for f in t["fields"] if f["key"] == "mother_plants")["value"] == "12 GC"
+    assert t["narrative"] == {"en": "Good week", "mk": "Добра недела"} and t["approved"] is True
+
+    # unknown field key → 422
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/cultivation_status",
+                           json={"fields": {"nonexistent_metric": "x"}}, headers=admin_headers)
+    assert r.status_code == 422
+
+    # locked → 409
+    await client.post(f"/reports/documents/{doc['id']}/lock", headers=admin_headers)
+    r = await client.patch(f"/reports/documents/{doc['id']}/sections/cultivation_status",
+                           json={"fields": {"mother_plants": "13"}}, headers=admin_headers)
+    assert r.status_code == 409
+
+
+async def test_department_locked_document_immutable_at_db_layer(client, admin_headers, org):
+    from app.db import rls
+    depts = await _dept_pair(org)
+    doc = (await client.post("/reports/documents/compile",
+                             json={"kind": "report", "department_id": depts["qc"]},
+                             headers=admin_headers)).json()
+    await client.post(f"/reports/documents/{doc['id']}/lock", headers=admin_headers)
+    admin = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"} \
+        if "admin_id" in org else None
+    # reuse the app-user RLS path: UPDATE/DELETE must match nothing on a locked row
+    user = {"id": doc["created_by"], "org_id": org["org_id"], "role": "ADMIN",
+            "username": "admin", "department_id": None}
+    async with rls(user) as c:
+        upd = await c.execute("UPDATE weekly_documents SET content='{}'::jsonb WHERE id=$1", doc["id"])
+        dele = await c.execute("DELETE FROM weekly_documents WHERE id=$1", doc["id"])
+    assert upd == "UPDATE 0" and dele == "DELETE 0"
+
+
+async def test_v1_content_document_renders_without_500(client, admin_headers, org):
+    """A pre-v2 document (no content_version / template_sections / department,
+    ai body only) must GET and export cleanly — locked v1 docs are the record."""
+    await _seed_task_with_session(client, admin_headers, org, title="v1 compat task")
+    doc = (await client.post("/reports/documents/compile", json={"kind": "report"},
+                             headers=admin_headers)).json()
+    v1_content = {
+        "kind": "report",
+        "period": doc["content"]["period"],
+        "tasks": doc["content"]["tasks"],
+        "ribbon": doc["content"]["ribbon"],
+        "metrics": doc["content"]["metrics"],
+        "ai_sections": [{"key": "weekly_summary", "title": "Executive summary",
+                         "body": "v1 legacy body", "approved": True, "status": "draft"}],
+    }
+    r = await client.patch(f"/reports/documents/{doc['id']}", json={"content": v1_content},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.get("/reports/documents", params={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200 and "content_version" not in r.json()["content"]
+    r = await client.get(f"/reports/documents/{doc['id']}/export.pdf", headers=admin_headers)
+    assert r.status_code in (200, 501), r.text   # 501 only if WeasyPrint missing
+    if r.status_code == 200:
+        assert r.content[:5] == b"%PDF-"
+
+
+async def test_pdf_html_bilingual_and_locked_rules(client, admin_headers, org):
+    from app.api.documents import _pdf_html
+    content = {
+        "content_version": 2, "kind": "report",
+        "period": {"label": "W28 2026", "start": "2026-07-10", "days": 7},
+        "department": {"id": "x", "code": "qc", "name": "Quality Control", "name_mk": "Контрола на квалитет"},
+        "tasks": [{"title": "Esc <img src=x>", "department": "QC", "status": "completed",
+                   "priority": "high", "reference_code": "PP-QC-1", "estimated_hours": 1,
+                   "actual_hours": 1, "due_date": None, "description": "", "notes": []}],
+        "ribbon": [], "metrics": {"per_sop": [], "on_time": {}},
+        "template_sections": [{"key": "quality_gmp", "title_en": "Quality & GMP",
+            "title_mk": "Квалитет и GMP",
+            "fields": [{"key": "capas_open", "label_en": "Open CAPAs", "label_mk": "Отворени CAPA",
+                        "value": "<svg onload=x>", "unit": ""}],
+            "narrative": {"en": "Narr EN", "mk": "Нар МК"}, "approved": False}],
+        "ai_sections": [{"key": "weekly_summary", "title": "Executive summary",
+                         "body_en": "Sum EN", "body_mk": "Сум МК", "body": "Sum EN",
+                         "approved": False, "status": "draft"}],
+    }
+    draft = {"content": content, "status": "draft", "kind": "report", "week_start": "2026-07-10",
+             "created_by": None, "locked_by": None, "locked_at": None}
+    h = _pdf_html(draft, {})
+    assert "Неделен извештај" in h                      # bilingual title
+    assert "Контрола на квалитет" in h                  # department name_mk
+    assert "counter(pages)" in h                        # page counters
+    assert "DRAFT · НАЦРТ" in h                         # watermark on drafts
+    assert "Отворени CAPA" in h and "Нар МК" in h and "Сум МК" in h
+    assert "<img" not in h and "<svg onload" not in h   # escaping holds
+    locked = dict(draft, status="locked")
+    h2 = _pdf_html(locked, {})
+    assert "DRAFT · НАЦРТ" not in h2                    # no watermark when locked
+    assert "Narr EN" not in h2, "unapproved narrative dropped from locked export"
+    assert "Отворени CAPA" in h2, "metric grid always kept in the record"
+    assert "Sum EN" not in h2, "unapproved AI section dropped from locked export"

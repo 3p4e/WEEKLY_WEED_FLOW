@@ -3,6 +3,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.db import users_admin_pool
+from app.roles import DEPT_SCOPED_ROLES
 from app.security import decode_token
 
 bearer = HTTPBearer(auto_error=False)
@@ -40,6 +41,17 @@ async def require_password_set(user: dict = Depends(get_current_user)) -> dict:
     if user["must_change_password"]:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Password change required")
     return user
+
+
+def dept_scope(user: dict) -> str | None:
+    """The department a DEPT_SCOPED role is confined to, else None (org-wide).
+
+    A scoped manager with no department assigned falls back to org-wide rather
+    than an empty app — visibility scoping must never reproduce the
+    OWNER-sees-nothing failure mode."""
+    if user["role"] in DEPT_SCOPED_ROLES and user["department_id"]:
+        return str(user["department_id"])
+    return None
 
 
 def require_role(*roles: str):

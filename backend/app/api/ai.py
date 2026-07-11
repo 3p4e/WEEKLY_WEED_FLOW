@@ -30,6 +30,7 @@ CATALOG = {
     "draft_description": "Expand a task title into a full description + subtasks.",
     "progress_digest":   "Daily standup digest from progress notes.",
     "risk_flag":         "Flag at-risk tasks needing attention.",
+    "template_narrative":"Prefill per-department document template narratives (bilingual EN/MK).",
 }
 
 

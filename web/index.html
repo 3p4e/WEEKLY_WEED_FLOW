@@ -155,8 +155,9 @@
         <svg class="icon" viewBox="0 0 20 20"><path d="M4 6h12v11H4zM4 6V4m12 2V4M7 3v3m6-3v3M4 9h12"/></svg>Export CSV</button>
       <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('json')">
         <svg class="icon" viewBox="0 0 20 20"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/></svg>Export JSON</button>
-      <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('pdf')">
-        <svg class="icon" viewBox="0 0 20 20"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>Export PDF</button>
+      <button class="btn" style="width:100%;justify-content:center;flex-direction:column;gap:2px" onclick="GF.export.goToDocuments()">
+        <span style="display:flex;align-items:center;gap:8px"><svg class="icon" viewBox="0 0 20 20"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>PDF</span>
+        <span id="export-pdf-hint" style="font-size:10.5px;color:var(--ink-3);font-weight:400">PDF reports live in Report → Documents</span></button>
     </div>
   </div>
 </div>
@@ -196,6 +197,7 @@
 <script src="gf/assistant.js"></script>
 <script src="gf/main.js"></script>
 <script src="gf/api.js"></script>
+<script src="gf/demo.js"></script>
 <script src="gf/integrate.js"></script>
 <script src="gf/audit-view.js"></script>
 <script src="gf/collab.js"></script>

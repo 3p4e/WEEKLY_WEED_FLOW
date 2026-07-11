@@ -31,6 +31,9 @@ GF.ICONS = {
   at:'M10 10m-3 0a3 3 0 106 0 3 3 0 00-6 0M13 10v1.5a2 2 0 004 0V10a7 7 0 10-3 5.7',
   forward:'M4 5l6 5-6 5V5zM11 5l6 5-6 5V5z', x:'M5 5l10 10M15 5L5 15', play:'M6 4l9 6-9 6V4z',
   info:'M10 9v5M10 6.5h.01M10 3a7 7 0 100 14 7 7 0 000-14z',
+  eye:'M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10zM10 12.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z',
+  eyeOff:'M4 4l12 12M8.3 8.4a2.2 2.2 0 002.9 2.9M6.6 5.8A9 9 0 0110 4.5c5 0 8 5.5 8 5.5a15 15 0 01-2.3 2.8M4.2 7.4A14 14 0 002 10s3 5.5 8 5.5c.9 0 1.7-.1 2.5-.35',
+  layers:'M10 3l7 4-7 4-7-4 7-4zM3 11l7 4 7-4M3 14l7 4 7-4',
 };
 GF.icon = (n, cls = 'icon', stroke) => `<svg class="${cls}" viewBox="0 0 20 20"${stroke ? ` style="stroke:${stroke}"` : ''}><path d="${GF.ICONS[n] || ''}"/></svg>`;
 
@@ -96,6 +99,34 @@ GF.can = (action, t) => {
 GF.denyToast = () => GF.toast(GF.state.lang === 'mk'
   ? 'Немате дозвола за ова (улога: ' + GF.roleLabel(GF.curRole()) + ')'
   : 'Not permitted for your role (' + GF.roleLabel(GF.curRole()) + ')', 'error');
+
+// ── Executive scope ──
+// Managers already have full task perms; executives (Owner/CEO/COO) get the
+// SAME task capabilities PLUS an exec-only Executive Overview with cross-
+// department metrics, department-visibility toggles, and dependency/batch-flow
+// observation — things lower roles never see. Admin is included so it can
+// preview the executive experience.
+GF.EXEC_ROLES = new Set(['owner', 'ceo', 'coo', 'admin']);
+GF.isExec = () => GF.EXEC_ROLES.has(GF.curRole());
+// Departments an executive has hidden from their overview (persisted per browser).
+GF.state.execHidden = (() => {
+  try { const s = JSON.parse(localStorage.getItem('gf_exec_hidden') || '[]'); return new Set(Array.isArray(s) ? s : []); }
+  catch (e) { return new Set(); }
+})();
+GF.execDeptShown = (id) => !GF.state.execHidden.has(id);
+GF.toggleExecDept = (id) => {
+  const s = GF.state.execHidden; s.has(id) ? s.delete(id) : s.add(id);
+  try { localStorage.setItem('gf_exec_hidden', JSON.stringify([...s])); } catch (e) {}
+  if (GF.render && GF.render.all) GF.render.all();
+};
+GF.resetExecDepts = () => {
+  GF.state.execHidden.clear();
+  try { localStorage.setItem('gf_exec_hidden', '[]'); } catch (e) {}
+  if (GF.render && GF.render.all) GF.render.all();
+};
+// Whole-week tasks minus hidden departments — the executive overview is a
+// full-week read and deliberately ignores the sidebar day/tag/search filters.
+GF.execTasks = (weekId) => GF.weekTasks(weekId).filter(t => !GF.state.execHidden.has(t.dept));
 GF.t = (k) => (GF.I18N[GF.state.lang] && GF.I18N[GF.state.lang][k]) || GF.I18N.en[k] || k;
 GF.dep = (id) => GF.DEPTS.find(d => d.id === id) || GF.DEPTS[0];
 GF.depName = (id) => { const d = GF.dep(id); return GF.state.lang === 'mk' ? d.mk : d.name; };

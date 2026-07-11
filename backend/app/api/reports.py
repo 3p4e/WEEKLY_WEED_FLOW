@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.worktime import TZ, classify, session_hours
@@ -60,6 +60,14 @@ async def weekly_report(
     if mode == "plan":
         fri = fri + timedelta(days=7)
         thu = thu + timedelta(days=7)
+
+    # A dept-scoped manager's report/plan covers ONLY their department — the
+    # existing department_id filter is forced to theirs regardless of what the
+    # caller passed. Executives / QP / ADMIN keep free choice (org-wide or any
+    # single department).
+    scope = dept_scope(user)
+    if scope:
+        department_id = scope
 
     hours_by_person: dict[str, dict] = {}
     overdue: list[dict] = []

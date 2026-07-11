@@ -195,7 +195,10 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:15px}
+/* overflow-x:hidden clips phantom horizontal scroll from the off-canvas mobile
+   sidebar (position:fixed;translateX(-100%)); the app's real scrollers (.main,
+   .report-scroll, .gf-entry) have their own overflow contexts and are unaffected. */
+html{font-size:15px;overflow-x:hidden}
 body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;overflow:hidden}
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -444,6 +447,17 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .notes{display:flex;flex-direction:column;gap:0;margin-bottom:10px}
 .note{display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px;color:var(--ink)}
 .note:last-child{border:none}
+/* Executive input highlight: OWNER notes get the strongest (gold) frame,
+   CEO/COO a lighter accent — directives from above must not read like
+   ordinary progress notes. */
+.note.note-exec{background:var(--blue-soft-2);border:1px solid var(--blue-soft);
+  border-radius:8px;padding:8px 10px;margin:4px 0}
+.note.note-owner{background:var(--orange-soft-2);border:1px solid rgba(224,167,62,.35);
+  box-shadow:0 0 10px var(--orange-soft);border-left:3px solid var(--orange)}
+.note-role-chip{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;flex-shrink:0;align-self:center;
+  color:var(--blue);background:var(--blue-soft);border:1px solid var(--blue-soft)}
+.note-role-chip.owner{color:var(--orange);background:var(--orange-soft);border-color:rgba(224,167,62,.4)}
 .note .nd{font-weight:700;color:var(--primary);font-family:var(--mono);font-size:11px;flex-shrink:0;width:34px}
 .note-input{display:flex;gap:8px;align-items:center;margin-bottom:16px}
 .note-input input{flex:1;border:1px solid var(--glass-border);border-radius:9px;padding:9px 12px;
@@ -613,3 +627,140 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sess-class.overtime{background:var(--orange-soft);color:var(--orange-700)}
 .sess-class.night{background:var(--violet-soft);color:var(--violet)}
 .sess-class.weekend{background:var(--red-soft);color:var(--red-fg)}
+
+/* ── DEMO MODE banner (demo.js) — fixed strip; sits above the phone bottom nav ── */
+#gf-demo-banner{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:center;gap:10px;
+  padding:7px 14px calc(7px + env(safe-area-inset-bottom));font-size:12px;color:var(--ink);
+  background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border-top:2px solid var(--orange);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
+#gf-demo-banner b{color:var(--orange);font-size:11px;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap}
+#gf-demo-banner>span:not(.gfdb-dot){flex:1;min-width:0;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#gf-demo-banner button{flex-shrink:0;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange-700);
+  font-weight:800;font-size:11.5px;font-family:var(--font);padding:5px 12px;border-radius:999px;cursor:pointer}
+#gf-demo-banner button:hover{background:var(--orange);color:#fff}
+.gfdb-dot{flex-shrink:0;width:9px;height:9px;border-radius:50%;background:var(--orange);animation:gfdb-pulse 1.6s ease-in-out infinite}
+@keyframes gfdb-pulse{0%,100%{box-shadow:0 0 0 0 var(--orange-soft)}50%{box-shadow:0 0 0 6px transparent}}
+body.demo-on .main{padding-bottom:56px}
+@media (max-width:600px){
+  #gf-demo-banner{bottom:calc(64px + env(safe-area-inset-bottom));padding:6px 10px;font-size:11px}
+  #gf-demo-banner>span:not(.gfdb-dot){white-space:normal;max-height:2.6em;line-height:1.3}
+  body.demo-on .main{padding-bottom:112px}
+}
+
+/* ════════════ EXECUTIVE OVERVIEW (views.js: GF.views.exec) ════════════ */
+/* "Active this week" caption in the week strip (labels the avatar cluster
+   that used to be a mysterious circle of initials). */
+.week-active{display:flex;align-items:center;gap:8px;cursor:pointer}
+.week-active-lbl{font-size:10.5px;font-weight:700;letter-spacing:.3px;color:var(--ink-3);white-space:nowrap}
+@media (max-width:600px){.week-active-lbl{display:none}}
+
+/* North-star KPI tiles — the 10-second read */
+.exec-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:14px 0}
+.ekpi{background:var(--surface);border:1px solid var(--glass-border);border-radius:12px;padding:12px 12px 11px;
+  min-width:0;display:flex;flex-direction:column;gap:2px}
+.ekpi-v{font-size:26px;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.ekpi-l{font-size:11px;font-weight:600;color:var(--ink-2)}
+.ekpi-sub{font-size:10px;color:var(--ink-3);min-height:12px}
+@media (max-width:900px){.exec-kpis{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:480px){.exec-kpis{grid-template-columns:repeat(2,1fr)}.ekpi-v{font-size:22px}}
+
+/* Two-column layout; collapses to one on narrow screens */
+.exec-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;align-items:start}
+@media (max-width:900px){.exec-grid{grid-template-columns:1fr}}
+.exec-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.exec-card{padding:14px 16px}
+.exec-card-ttl{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink);
+  margin-bottom:12px}
+.exec-card-ttl .icon{width:16px;height:16px}
+.exec-chip{margin-left:auto;font-size:11px;font-weight:800;background:var(--surface-2);color:var(--ink-2);
+  padding:1px 9px;border-radius:999px}
+.exec-reset{margin-left:auto;font-size:11px;font-weight:700;color:var(--primary);background:var(--green-soft);
+  border:1px solid var(--glass-border);border-radius:999px;padding:3px 10px;cursor:pointer;font-family:var(--font)}
+.exec-reset:hover{filter:brightness(1.1)}
+
+/* Department matrix rows with visibility toggle */
+.exec-drow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--glass-border)}
+.exec-drow:last-child{border-bottom:none}
+.exec-drow.off{opacity:.42}
+.exec-eye{flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--glass-border);border-radius:8px;background:var(--surface-2);cursor:pointer;color:var(--ink-3)}
+.exec-eye:hover{color:var(--ink);border-color:var(--primary)}
+.exec-eye .icon{width:16px;height:16px}
+.exec-dname{flex:0 0 34%;min-width:0;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+  color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.exec-dbar{flex:1;min-width:40px;height:8px;border-radius:999px;overflow:hidden;display:flex;background:var(--surface-3)}
+.exec-dbar>span{display:block}
+.exec-dstat{flex-shrink:0;width:38px;text-align:right;font-size:12px;font-weight:700;color:var(--ink-2)}
+.exec-dcount{flex-shrink:0;width:26px;text-align:right;font-size:12px;font-weight:800;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+
+/* Batch-flow / dependency pipeline — scrolls horizontally instead of overflowing */
+.exec-pipe{display:flex;align-items:stretch;gap:2px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.pipe-node{flex:0 0 auto;min-width:92px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 10px 9px;border:1px solid var(--glass-border);border-radius:11px;background:var(--surface-2)}
+.pipe-node.ready{border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green-soft)}
+.pipe-node.bottleneck{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red-soft)}
+.pipe-dept{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;letter-spacing:.3px}
+.pipe-dept .icon{width:15px;height:15px}
+.pipe-counts{display:flex;gap:4px}
+.pipe-counts .pc{font-size:11px;font-weight:800;min-width:20px;text-align:center;padding:2px 5px;border-radius:6px;
+  font-variant-numeric:tabular-nums}
+.pc.done{background:var(--green-soft);color:var(--green-fg)}
+.pc.wip{background:var(--orange-soft);color:var(--orange-700)}
+.pc.stuck{background:var(--red-soft);color:var(--red-fg)}
+.pipe-tag{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:999px}
+.pipe-tag.ready{background:var(--green-soft);color:var(--green-fg)}
+.pipe-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
+.pipe-arrow{flex:0 0 auto;display:flex;align-items:center;color:var(--ink-3)}
+.pipe-arrow .icon{width:18px;height:18px}
+.pipe-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:10.5px;color:var(--ink-3)}
+.pipe-legend span{display:flex;align-items:center;gap:5px}
+.pipe-legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.pipe-legend .pl.done{background:var(--green)}
+.pipe-legend .pl.wip{background:var(--orange)}
+.pipe-legend .pl.stuck{background:var(--red)}
+
+/* Needs-attention risk zone */
+.attn-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--glass-border);cursor:pointer}
+.attn-row:last-child{border-bottom:none}
+.attn-row:hover{background:var(--surface-2)}
+.attn-body{flex:1;min-width:0}
+.attn-title{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attn-sub{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.attn-tag{flex-shrink:0;font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 8px;border-radius:999px}
+.attn-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
+.attn-tag.overdue{background:var(--amber-soft);color:var(--amber-fg)}
+
+/* AI executive brief panel */
+.exec-brief{margin:0 0 14px;border:1px solid var(--glass-border);border-radius:12px;background:var(--surface);padding:14px 16px}
+.exec-brief-load,.exec-brief-off{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+.exec-brief-load .icon{width:16px;height:16px;color:var(--primary)}
+.exec-brief-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px}
+.exec-brief-head .icon{width:15px;height:15px}
+.exec-brief-x{margin-left:auto;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+  border:none;background:none;cursor:pointer;color:var(--ink-3)}
+.exec-brief-x:hover{color:var(--ink)}
+.exec-brief-x .icon{width:15px;height:15px}
+.exec-brief-txt{font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap}
+
+/* Executive role strips: Operations (COO lens) + Direction (CEO lens) */
+.exec-strips{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media (max-width:900px){.exec-strips{grid-template-columns:1fr}}
+.exec-strip{min-width:0}
+.strip-kpis{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px}
+.skpi{display:flex;flex-direction:column;gap:2px;min-width:90px}
+.skpi .v{font-size:22px;font-weight:800;line-height:1.05}
+.skpi .l{font-size:10.5px;color:var(--ink-3);font-weight:600}
+.wow{font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:4px}
+.wow.up{color:var(--green);background:var(--green-soft)}
+.wow.down{color:var(--red);background:var(--red-soft)}
+.spark-wrap{flex:1;min-width:180px}
+.spark{width:100%;max-width:260px;height:auto;display:block}
+.spark-lbl{font-size:9.5px;color:var(--ink-3);margin-top:2px}
+.strip-sub{font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--ink-3);margin:6px 0 2px}
+.ops-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--glass-border);font-size:12.5px}
+.ops-row:last-child{border-bottom:none}
+.ops-name{font-weight:600;color:var(--ink);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-tag{flex-shrink:0;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:999px}
+.ops-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
+.ops-tag.overdue{background:var(--amber-soft);color:var(--amber-fg)}
