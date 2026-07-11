@@ -5,7 +5,17 @@
    report-view.js (extends the same GF.WWF namespace). */
 window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
-GF.WWF._doc = { data: null, loading: false, error: null, _seq: 0, rangeStart: '', rangeEnd: '' };
+// deptId: '' = org-wide document. Executives/ADMIN/QP pick via the panel's
+// department selector; dept-scoped managers never send it (the server forces
+// their department regardless — GF.WWF.deptScope() drives the fixed chip UI).
+GF.WWF._doc = { data: null, loading: false, error: null, _seq: 0, rangeStart: '', rangeEnd: '', deptId: '' };
+
+GF.WWF._docDeptParam = () => {
+  if (GF.WWF.deptScope && GF.WWF.deptScope()) return undefined;  // server forces it
+  return GF.WWF._doc.deptId || undefined;
+};
+
+GF.WWF.setDocDept = (v) => { GF.WWF._doc.deptId = v || ''; GF.WWF.loadDocument(); };
 
 GF.WWF.loadDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
@@ -14,9 +24,13 @@ GF.WWF.loadDocument = async () => {
   try {
     const q = { kind: st.mode };
     if (st.refDate) q.ref_date = st.refDate;
+    const dept = GF.WWF._docDeptParam(); if (dept) q.department_id = dept;
     const data = await GF.API.getDocument(q);
     if (seq !== ds._seq) return;            // a newer load/compile/lock superseded this one
-    ds.data = data; ds.error = null;
+    // Demo mode (and any stub) answers {found:false} — that's the empty state,
+    // not a document; rendering it produced a phantom empty DRAFT panel.
+    ds.data = (data && data.found === false) ? null : data;
+    ds.error = null;
   } catch (e) {
     if (seq !== ds._seq) return;
     if (e && e.status === 404) { ds.data = null; ds.error = null; }  // 404 = nothing compiled yet (normal)
@@ -30,7 +44,8 @@ GF.WWF.compileDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
-    const data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined });
+    const data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined,
+                                                department_id: GF.WWF._docDeptParam() });
     ds._seq++; ds.data = data; ds.error = null;   // authoritative new state; bail any in-flight load
     GF.toast(AL('Document compiled', 'Документот е составен'), 'success');
   } catch (e) {
@@ -51,7 +66,8 @@ GF.WWF.previewDocument = async () => {
   if (end < start) { GF.toast(AL('End date is before start date', 'Крајниот датум е пред почетниот'), 'error'); return; }
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
-    const data = await GF.API.previewDocument({ kind: st.mode, start, end });
+    const data = await GF.API.previewDocument({ kind: st.mode, start, end,
+                                                department_id: GF.WWF._docDeptParam() });
     ds._seq++; ds.data = data; ds.error = null;   // authoritative; bail any in-flight load
     GF.toast(AL('Preview generated', 'Прегледот е генериран'), 'success');
   } catch (e) {
@@ -61,19 +77,60 @@ GF.WWF.previewDocument = async () => {
   GF.WWF._renderDocPanel();
 };
 
-GF.WWF.toggleDocSection = async (idx) => {
+/* ── section editing ─────────────────────────────────────────────────────
+   Every AI narrative (EN + MK) and every template-section field/narrative is
+   editable while the document is a DRAFT. Values are read from the DOM at
+   save time (data-sec / data-f / data-field attributes) — the panel is an
+   innerHTML rebuild, so re-rendering on keystroke would eat input. Approving
+   a section SAVES its current inputs in the same PATCH, and unsaved edits in
+   OTHER sections are collected and re-applied after the server copy is
+   adopted, so nothing typed is ever lost to a re-render. */
+
+GF.WWF._collectDocInputs = () => {
+  const root = GF.$('report-doc'); const out = {};
+  if (!root) return out;
+  root.querySelectorAll('[data-sec]').forEach(el => {
+    const key = el.dataset.sec, p = out[key] = out[key] || {};
+    if (el.dataset.field) { (p.fields = p.fields || {})[el.dataset.field] = el.value; }
+    else if (el.dataset.f) { p[el.dataset.f] = el.value; }
+  });
+  return out;
+};
+
+GF.WWF._applyDocInputs = (content, inputs, skipKey) => {
+  const apply = (sec, p) => {
+    if (p.body_en !== undefined) { sec.body_en = p.body_en; sec.body = p.body_en; }
+    if (p.body_mk !== undefined) sec.body_mk = p.body_mk;
+    if (p.narrative_en !== undefined || p.narrative_mk !== undefined) {
+      sec.narrative = sec.narrative || { en: '', mk: '' };
+      if (p.narrative_en !== undefined) sec.narrative.en = p.narrative_en;
+      if (p.narrative_mk !== undefined) sec.narrative.mk = p.narrative_mk;
+    }
+    if (p.fields) (sec.fields || []).forEach(f => {
+      if (p.fields[f.key] !== undefined) f.value = p.fields[f.key];
+    });
+  };
+  Object.entries(inputs).forEach(([key, p]) => {
+    if (key === skipKey) return;   // the just-saved section: server copy is canonical
+    const sec = (content.ai_sections || []).find(s => s.key === key)
+             || (content.template_sections || []).find(s => s.key === key);
+    if (sec) apply(sec, p);
+  });
+};
+
+// Save one section's inputs; optionally flip `approved` in the same PATCH.
+GF.WWF.saveDocSection = async (key, approved) => {
   const ds = GF.WWF._doc;
   if (!ds.data || ds.data.status !== 'draft') return;
-  const sec = ds.data.content.ai_sections[idx];
-  const prev = sec.approved;
-  sec.approved = !prev;
-  GF.WWF._renderDocPanel();               // optimistic
+  const inputs = GF.WWF._collectDocInputs();
+  const patch = Object.assign({}, inputs[key] || {});
+  if (approved !== undefined) patch.approved = approved;
   try {
-    // Section-scoped PATCH: sends {approved} only, not the whole document.
-    const data = await GF.API.patchDocumentSection(ds.data.id, sec.key, { approved: sec.approved });
-    ds._seq++; ds.data = data;            // adopt the server's canonical copy
+    const data = await GF.API.patchDocumentSection(ds.data.id, key, patch);
+    ds._seq++; ds.data = data;                       // adopt the server's canonical copy
+    GF.WWF._applyDocInputs(ds.data.content || {}, inputs, key);  // keep other sections' unsaved edits
+    if (approved === undefined) GF.toast(AL('Section saved', 'Секцијата е зачувана'), 'success');
   } catch (e) {
-    sec.approved = prev;                  // roll back the optimistic flip — the server rejected it
     GF.toast(AL('Not saved: ', 'Не се зачува: ') + e.message, 'error');
   }
   GF.WWF._renderDocPanel();
@@ -96,6 +153,13 @@ GF.WWF.lockDocument = async () => {
 GF.WWF.exportDocumentPdf = async () => {
   const ds = GF.WWF._doc;
   if (!ds.data) return;
+  // PDF rendering is server-side (WeasyPrint) and this exporter uses a raw
+  // fetch — in demo mode it must neither hit the real API nor pretend.
+  if (GF.DEMO && GF.DEMO.active && GF.DEMO.active()) {
+    GF.toast(AL('PDF export is not available in demo mode — on the live system this downloads the A4 bilingual PDF.',
+                'PDF извозот не е достапен во демо режим — во живата апликација се презема A4 двојазичен PDF.'), 'info');
+    return;
+  }
   // A custom-range preview has no stored row (id === null) — POST the reviewed
   // content back to the range-export endpoint; a saved week doc exports by id.
   const isPreview = ds.data.status === 'preview' || !ds.data.id;
@@ -245,24 +309,75 @@ GF.WWF._renderDocPanel = () => {
       : locked
       ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
       : `<span style="background:rgba(224,167,62,.12);color:#E0A73E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(224,167,62,.25)">${AL('DRAFT', 'НАЦРТ')}</span>`;
-    const sections = (c.ai_sections || []).map((s, i) => {
+    // A section is editable only on a stored draft (preview has no row to
+    // PATCH; locked is immutable). Read rule: body_en falls back to legacy
+    // `body` so pre-v2 drafts/locked docs render.
+    const editable = !isPreview && !locked;
+    const ta = (key, f, val, ph) => `<textarea data-sec="${GF.esc(key)}" data-f="${f}" placeholder="${ph}"
+        style="width:100%;box-sizing:border-box;min-height:64px;margin-top:5px;font:inherit;font-size:12.5px;line-height:1.55;
+        padding:7px 9px;border:1px solid var(--line,rgba(43,232,160,.12));border-radius:8px;
+        background:var(--surface-2,#102219);color:var(--ink,#DDF3E9);resize:vertical">${GF.esc(val || '')}</textarea>`;
+    const langLbl = (t) => `<div style="font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--ink-3);margin-top:7px">${t}</div>`;
+    const approveCtl = (key, ok) => editable
+      ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.saveDocSection('${GF.esc(key)}', this.checked)">
+          ${AL('Approve for document', 'Одобри за документот')}</label>`
+      : (isPreview ? ''
+        : (ok ? `<span style="font-size:11px;color:#2BE8A0;font-weight:700">${AL('Approved', 'Одобрено')}</span>`
+              : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
+    const saveBtn = (key) => editable
+      ? `<button class="btn btn-sm" onclick="GF.WWF.saveDocSection('${GF.esc(key)}')">${AL('Save section', 'Зачувај секција')}</button>` : '';
+
+    const sections = (c.ai_sections || []).map((s) => {
       if (s.status === 'not_configured') return '';
       const ok = !!s.approved;
-      // Preview sections are read-only — there is no stored row to persist an
-      // approval to (the section-PATCH needs a real doc id).
-      const control = isPreview ? ''
-        : (!locked ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.toggleDocSection(${i})">
-            ${AL('Approve for document', 'Одобри за документот')}</label>`
-          : (ok ? `<span style="font-size:11px;color:#2BE8A0;font-weight:700">${AL('Approved', 'Одобрено')}</span>` : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
+      const bodyEn = s.body_en || s.body || '', bodyMk = s.body_mk || '';
+      const bodyHtml = editable
+        ? langLbl('EN') + ta(s.key, 'body_en', bodyEn, AL('English narrative…', 'Наратив на англиски…'))
+          + langLbl('МК') + ta(s.key, 'body_mk', bodyMk, AL('Macedonian narrative…', 'Наратив на македонски…'))
+        : (bodyEn ? `${langLbl('EN')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.esc(bodyEn)}</div>` : '')
+          + (bodyMk ? `${langLbl('МК')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.esc(bodyMk)}</div>` : '');
       return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <b style="font-size:13px">${GF.esc(s.title)}</b>
-          <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable', 'агентот е недостапен') : ''}</span>
+          <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable — write it by hand', 'агентот е недостапен — напишете рачно') : ''}</span>
           <div style="flex:1"></div>
-          ${control}
+          ${saveBtn(s.key)}
+          ${approveCtl(s.key, ok)}
         </div>
-        ${s.body ? `<div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-wrap;color:var(--ink)">${GF.esc(s.body)}</div>` : ''}
+        ${bodyHtml}
+      </div>`;
+    }).join('');
+
+    // Per-department GMP template sections (content v2): metric grid + bilingual
+    // narrative, all editable in draft. v1 documents have none → block hidden.
+    const inSt = 'font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line,rgba(43,232,160,.12));border-radius:7px;background:var(--surface-2,#102219);color:var(--ink,#DDF3E9);width:100%;box-sizing:border-box';
+    const tsections = (c.template_sections || []).map((s) => {
+      const ok = !!s.approved;
+      const nar = s.narrative || {};
+      const rows = (s.fields || []).map(f => `
+        <div style="display:flex;align-items:center;gap:10px;padding:3px 0">
+          <span style="flex:0 0 46%;min-width:0;font-size:12px;color:var(--ink-2)">${GF.esc(AL(f.label_en, f.label_mk))}</span>
+          ${editable
+            ? `<input data-sec="${GF.esc(s.key)}" data-field="${GF.esc(f.key)}" value="${GF.esc(f.value || '')}" style="${inSt};flex:1">`
+            : `<span style="flex:1;font-size:12.5px;color:var(--ink)">${GF.esc(f.value || '—')}</span>`}
+          ${f.unit ? `<span style="flex-shrink:0;font-size:11px;color:var(--ink-3)">${GF.esc(f.unit)}</span>` : ''}
+        </div>`).join('');
+      const narHtml = editable
+        ? langLbl('EN') + ta(s.key, 'narrative_en', nar.en, AL('Narrative (English)…', 'Наратив (англиски)…'))
+          + langLbl('МК') + ta(s.key, 'narrative_mk', nar.mk, AL('Narrative (Macedonian)…', 'Наратив (македонски)…'))
+        : (nar.en ? `${langLbl('EN')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.esc(nar.en)}</div>` : '')
+          + (nar.mk ? `${langLbl('МК')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.esc(nar.mk)}</div>` : '');
+      return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <b style="font-size:13px">${GF.esc(s.title_en || '')}</b>
+          <span style="font-size:11px;color:var(--ink-3)">${GF.esc(s.title_mk || '')}</span>
+          <div style="flex:1"></div>
+          ${saveBtn(s.key)}
+          ${approveCtl(s.key, ok)}
+        </div>
+        ${rows}
+        ${narHtml}
       </div>`;
     }).join('');
     const ribbonLbl = isPreview ? AL('Activity ribbon — logged work by SOP', 'Лента на активност — работа по СОП')
@@ -285,11 +400,32 @@ GF.WWF._renderDocPanel = () => {
             `<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${b.color};margin-right:4px;vertical-align:middle"></span>${GF.esc(b.sop)}</span>`).join('')}
         </div>` : ''}
       ${GF.WWF._docMetricsHtml(c.metrics)}
-      ${sections ? `<div style="font-weight:700;font-size:14px;margin:14px 0 4px">${AL('AI sections', 'АИ секции')}</div>${sections}` : ''}
+      ${tsections ? `<div style="font-weight:700;font-size:14px;margin:14px 0 4px">${AL('Department status', 'Статус по оддели')}
+        <span style="font-size:11px;color:var(--ink-3);font-weight:400;margin-left:6px">${AL('metric grids are manual entry — edit, save, approve', 'метриките се рачен внес — уредете, зачувајте, одобрете')}</span></div>${tsections}` : ''}
+      ${sections ? `<div style="font-weight:700;font-size:14px;margin:14px 0 4px">${AL('AI sections', 'АИ секции')}
+        ${editable ? `<span style="font-size:11px;color:var(--ink-3);font-weight:400;margin-left:6px">${AL('every text is editable before submission', 'секој текст е уредлив пред поднесување')}</span>` : ''}</div>${sections}` : ''}
     </div>`;
   }
+  // Document scope control: executives/ADMIN/QP pick org-wide or a specific
+  // department (each is its own stored document per week); a dept-scoped
+  // manager sees a fixed chip — the server forces their department anyway.
+  const scoped = GF.WWF.deptScope ? GF.WWF.deptScope() : null;
+  let deptCtl = '';
+  if (scoped) {
+    const d = (GF.DEPTS || []).find(x => x.id === scoped);
+    deptCtl = `<span style="font-size:11px;font-weight:700;color:var(--ink-2);background:var(--surface-2,#102219);
+      border:1px solid var(--line,rgba(43,232,160,.12));border-radius:99px;padding:3px 10px">
+      ${d ? `<span class="dept-dot" style="background:${d.color};margin-right:5px"></span>${GF.esc(GF.depName(d.id))}` : AL('Your department', 'Вашиот оддел')}</span>`;
+  } else if (elevated) {
+    const opts = [`<option value="">${AL('Org-wide', 'Цела организација')}</option>`]
+      .concat((GF.DEPTS || []).map(d =>
+        `<option value="${d.id}" ${ds.deptId === d.id ? 'selected' : ''}>${GF.esc(GF.depName(d.id))}</option>`)).join('');
+    deptCtl = `<select onchange="GF.WWF.setDocDept(this.value)" title="${AL('Document scope', 'Опсег на документот')}"
+      style="font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line,rgba(43,232,160,.12));
+      border-radius:7px;background:var(--surface-2,#102219);color:var(--ink,#DDF3E9)">${opts}</select>`;
+  }
   el.innerHTML = `<div style="margin:18px 0;background:var(--surface,#0B1913);border:1px solid var(--line,rgba(43,232,160,.12));border-radius:11px;overflow:hidden">
-    <div style="padding:12px 14px;border-bottom:1px solid var(--line,rgba(43,232,160,.12));font-weight:700;font-size:14px;color:var(--primary,#2BE8A0)">
-      ${GF.icon('calendar')} ${kindLbl}
+    <div style="padding:12px 14px;border-bottom:1px solid var(--line,rgba(43,232,160,.12));font-weight:700;font-size:14px;color:var(--primary,#2BE8A0);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      ${GF.icon('calendar')} ${kindLbl}<div style="flex:1"></div>${deptCtl}
     </div>${rangeControls}${body}</div>`;
 };

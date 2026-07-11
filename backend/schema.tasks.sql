@@ -376,6 +376,7 @@ CREATE TABLE public.weekly_documents (
     locked_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    department_id uuid,
     CONSTRAINT weekly_documents_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'report'::text]))),
     CONSTRAINT weekly_documents_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text])))
 );
@@ -519,14 +520,6 @@ ALTER TABLE ONLY public.tasks
 
 
 --
--- Name: weekly_documents weekly_documents_org_kind_week_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_documents
-    ADD CONSTRAINT weekly_documents_org_kind_week_key UNIQUE (org_id, kind, week_start);
-
-
---
 -- Name: weekly_documents weekly_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -624,6 +617,20 @@ CREATE INDEX tasks_parent_idx ON public.tasks USING btree (parent_id);
 --
 
 CREATE INDEX tasks_week_idx ON public.tasks USING btree (week_id);
+
+
+--
+-- Name: weekly_documents_org_kind_week_dept_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX weekly_documents_org_kind_week_dept_key ON public.weekly_documents USING btree (org_id, kind, week_start, department_id) WHERE (department_id IS NOT NULL);
+
+
+--
+-- Name: weekly_documents_org_kind_week_orgwide_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX weekly_documents_org_kind_week_orgwide_key ON public.weekly_documents USING btree (org_id, kind, week_start) WHERE (department_id IS NULL);
 
 
 --

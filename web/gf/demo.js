@@ -404,6 +404,175 @@ GF.DEMO = (function () {
     };
   }
 
+  /* ── documents: canned Plan/Report with the v2 template sections ───
+     Showcases the Document Engine: the org-wide REPORT arrives LOCKED with
+     filled bilingual metric grids + narratives (what a submitted week looks
+     like); the org-wide PLAN is a DRAFT whose every section is editable
+     in-memory; per-department documents compile on demand. PDF export is
+     server-side and therefore politely unavailable in demo. */
+  const DOCS = {};      // (kind + '|' + deptId) → doc
+  let _docSeq = 0;
+
+  const tf = (key, en, mk, value, unit) =>
+    ({ key, label_en: en, label_mk: mk, value: value || '', unit: unit || '' });
+
+  function docTemplateSections(dept, filled) {
+    const v = (x) => filled ? x : '';
+    const all = [
+      { key:'cultivation_status', codes:['cultivation'], title_en:'Cultivation Status', title_mk:'Статус на одгледување',
+        fields: [ tf('mother_plants','Mother plants (by genetics)','Мајки растенија (по генетика)', v('12 GC · 8 NL')),
+                  tf('clones_started','Clones started / rooted','Започнати / вкоренети резници', v('240 / 228')),
+                  tf('plants_per_room','Plants per room','Растенија по просторија', v('V1: 240 · F2: 180 · F3: harvested')),
+                  tf('flowering_week_by_room','Flowering week per room','Недела на цветање по просторија', v('F2: week 6')),
+                  tf('expected_harvest','Expected harvest date(s) & yield','Очекувана берба и принос', v('F2 in ~3 weeks, est. 40 kg wet')),
+                  tf('room_utilization','Room / facility utilization','Искористеност на простории', v('78'), '%') ],
+        narrative: filled ? { en:'Harvest of batch 042 completed at 42.5 kg wet; room F3 cleared for turnaround. Transplanting into V1 on schedule.',
+                              mk:'Бербата на серија 042 заврши со 42,5 kg свежа маса; просторијата F3 е испразнета. Пресадувањето во V1 е по план.' }
+                          : { en:'', mk:'' } },
+      { key:'production_overview', codes:['production'], title_en:'Production Overview', title_mk:'Преглед на производство',
+        fields: [ tf('harvest_kg','Harvested this week','Собрано оваа недела', v('42.5'), 'kg'),
+                  tf('drying_kg','In drying','Во сушење', v('38.0'), 'kg'),
+                  tf('curing_kg','In curing','Во зреење', v('24.5'), 'kg'),
+                  tf('awaiting_qc_kg','Awaiting QC release','Чека QC ослободување', v('9.8'), 'kg'),
+                  tf('released_kg','Released','Ослободено', v('12.2'), 'kg'),
+                  tf('inventory_by_batch','Inventory by batch','Залиха по серија', v('041: 12.2 kg released · 042: drying')) ],
+        narrative: filled ? { en:'Trim of batch 042 is mid-week; drying loss tracking at 11% — within spec.',
+                              mk:'Тримувањето на серија 042 е во тек; загубата при сушење е 11% — во рамки.' }
+                          : { en:'', mk:'' } },
+      { key:'quality_gmp', codes:['qc','quality_assurance'], title_en:'Quality & GMP', title_mk:'Квалитет и GMP',
+        fields: [ tf('visual_inspections','Visual inspections','Визуелни инспекции', v('Daily, no findings')),
+                  tf('lab_testing','Lab testing status','Статус на лабораториски тестови', v('042 sampled; micro + potency pending')),
+                  tf('em_excursions','Environmental monitoring excursions','Отстапувања од мониторинг', v('1 RH spike, corrected')),
+                  tf('deviations_open','Open deviations','Отворени отстапувања', v('1 (DEV-089)')),
+                  tf('capas_open','Open CAPAs','Отворени CAPA', v('1 drafted')),
+                  tf('batches_released','Batches released / on hold','Ослободени / задржани серии', v('041 released · none on hold')),
+                  tf('sops_validation','SOPs & validation activities','SOP и валидациски активности', v('SOP-PR-007 in review')) ],
+        narrative: filled ? { en:'One temperature deviation under CAPA; batch 041 certified and released. EM re-qualification scheduled.',
+                              mk:'Едно температурно отстапување под CAPA; серијата 041 е сертифицирана и ослободена. Закажана е реквалификација на EM.' }
+                          : { en:'', mk:'' } },
+      { key:'technical_status', codes:['tooling'], title_en:'Technical Status', title_mk:'Технички статус',
+        fields: [ tf('hvac_status','HVAC & compressors','HVAC и компресори', v('Nominal; compressor cycling fixed')),
+                  tf('drying_room_controls','Drying room controls','Контроли на сушара', v('OK')),
+                  tf('dehumidifiers','Dehumidifiers','Одвлажнувачи', v('#2 restarted Sat, stable')),
+                  tf('filters_valves','Filters & valves','Филтри и вентили', v('HEPA pre-filters replaced; 1 valve in customs')),
+                  tf('calibrations_due','Calibrations due','Претстојни калибрации', v('Scale #2 (drift)')),
+                  tf('maintenance_backlog','Maintenance backlog','Заостанати одржувања', v('2 items')) ],
+        narrative: filled ? { en:'Irrigation valve replacement blocked in customs (ETA Thu); manual watering meanwhile.',
+                              mk:'Замената на вентилот е блокирана на царина (пристигнува четврток); во меѓувреме рачно наводнување.' }
+                          : { en:'', mk:'' } },
+      { key:'inventory_logistics', codes:['logistics'], title_en:'Inventory & Logistics', title_mk:'Залихи и логистика',
+        fields: [ tf('finished_stock','Finished goods stock','Залиха на готов производ', v('12.2'), 'kg'),
+                  tf('packaging_stock','Packaging materials','Пакувачки материјали', v('Low — order placed')),
+                  tf('shipments_out','Shipments out','Испораки', v('1 scheduled next week')),
+                  tf('deliveries_in','Deliveries in','Приеми', v('2 received')),
+                  tf('storage_capacity','Storage capacity used','Искористеност на складиште', v('54'), '%') ],
+        narrative: { en:'', mk:'' } },
+      { key:'site_security', codes:['security'], title_en:'Site & Security', title_mk:'Локација и обезбедување',
+        fields: [ tf('incidents','Incidents','Инциденти', v('None')),
+                  tf('alarm_events','Alarm events','Алармни настани', v('1 false alarm (sensor)')),
+                  tf('access_changes','Access changes','Промени на пристап', v('None')),
+                  tf('visitors','Visitors on site','Посетители', v('2 (escorted)')) ],
+        narrative: { en:'', mk:'' } },
+    ];
+    if (dept) {
+      const code = dept.code === 'qc' || dept.code === 'quality_assurance' ? dept.code : dept.code;
+      const hit = all.find(t => t.codes.includes(code));
+      return hit ? [hit] : [{ key:'dept_status_'+dept.code, codes:[dept.code],
+        title_en: dept.name + ' Status', title_mk: 'Статус — ' + (dept.name_mk || dept.name),
+        fields: [ tf('highlights','Highlights','Клучни моменти'), tf('issues','Issues / needs','Проблеми / потреби') ],
+        narrative: { en:'', mk:'' } }];
+    }
+    return all.concat([
+      { key:'transition_plan', codes:[], title_en:'Transition Plan', title_mk:'План за транзиција',
+        fields: [ tf('rooms_transitioning','Rooms transitioning','Простории во транзиција', v('F3 → turnaround/clean')),
+                  tf('next_harvest_eta','Next harvest ETA','Следна берба (проценка)', v('~3 weeks (F2)')),
+                  tf('headcount_changes','Headcount / staffing changes','Промени во персонал', v('None')) ],
+        narrative: { en:'', mk:'' } },
+      { key:'production_forecast', codes:[], title_en:'Production Forecast (rolling)', title_mk:'Прогноза на производство',
+        fields: [ tf('next_week_kg','Next week forecast','Прогноза за следна недела', v('0 (drying)'), 'kg'),
+                  tf('month_kg','4-week forecast','Прогноза за 4 недели', v('~38'), 'kg'),
+                  tf('confidence_note','Confidence / assumptions','Сигурност / претпоставки', v('High — batch mid-drying')) ],
+        narrative: { en:'', mk:'' } },
+    ]);
+  }
+
+  function makeDoc(kind, deptId, status) {
+    const dept = deptId ? DEPTS.find(d => d.id === deptId) || null : null;
+    const win = kind === 'plan' ? W.next : W.cur;
+    const rows = TASKS.filter(t => (kind === 'plan'
+        ? (t.status !== 'completed' && !t.is_archived)
+        : t.week_id === 'dw-cur')
+      && (!deptId || t.department_id === deptId));
+    const tasks = rows.map(t => ({
+      id: t.id, title: t.title, description: t.description || '', status: t.status,
+      priority: t.priority, task_type: t.task_type, reference_code: t.reference_code || '',
+      blocker_reason: t.blocker_reason || null,
+      department: (DEPTS.find(d => d.id === t.department_id) || {}).name || '',
+      department_id: t.department_id, due_date: t.due_date || null, completed_date: null,
+      estimated_hours: t.estimated_hours, actual_hours: null, days: t.days || [], tags: t.tags || [],
+      notes: (t.progress_notes || []).map(n => ({ day: n.day_label, note: n.note, user_id: n.user_id, at: n.created_at })),
+    }));
+    const locked = status === 'locked';
+    const aiTxt = kind === 'plan'
+      ? { en: 'Next week: package and ship the released batch, transplant completion in V1, and close the open CAPA. The customs-blocked valve is the main dependency.',
+          mk: 'Следна недела: пакување и испорака на ослободената серија, довршување на пресадувањето во V1 и затворање на отворената CAPA. Вентилот на царина е главната зависност.' }
+      : { en: 'The batch moved from harvest into drying on schedule; one blocker (customs) and one deviation (temperature) are being managed. Weekend environmental coverage held.',
+          mk: 'Серијата премина од берба во сушење според планот; еден блокатор (царина) и едно отстапување (температура) се менаџираат. Викенд-покриеноста на мониторингот е одржана.' };
+    _docSeq++;
+    return {
+      id: status === 'preview' ? null : 'ddoc-' + _docSeq,
+      kind, status,
+      week_start: iso(win.s), week_end: iso(win.e),
+      department_id: deptId || null,
+      created_by: ME.id, locked_by: locked ? PEOPLE[2].id : null,
+      locked_at: locked ? new Date().toISOString() : null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      content: {
+        content_version: 2, kind,
+        period: { start: iso(win.s), end: iso(win.e), iso_week: isoWeek(win.s), days: 7,
+                  label: 'W' + isoWeek(win.s) + ' ' + win.s.getFullYear() + ' (demo)' },
+        department: dept ? { id: dept.id, code: dept.code, name: dept.name, name_mk: dept.name_mk } : null,
+        tasks,
+        ribbon: [],
+        metrics: kind === 'report' ? {
+          per_sop: [
+            { sop: 'SOP-PR-009', color: '#15A86B', hours: 11, prev4_avg_hours: 8.5, tasks: 1, sessions: 2, night: 0, weekend: 0, overtime: 3 },
+            { sop: 'SOP-CU-014', color: '#2F6BFF', hours: 14, prev4_avg_hours: 12, tasks: 1, sessions: 2, night: 0, weekend: 0, overtime: 0 },
+            { sop: 'Security',   color: '#7A5BE0', hours: 9,  prev4_avg_hours: 9,  tasks: 1, sessions: 2, night: 4.5, weekend: 4.5, overtime: 0 },
+          ],
+          per_dept: [], on_time: { completed: 4, measured: 3, on_time: 3, rate: 1 }, overdue_open: [], complexity: [],
+        } : {},
+        template_sections: docTemplateSections(dept, locked),
+        ai_sections: [
+          { key: 'weekly_summary', title: kind === 'plan' ? 'Plan narrative' : 'Executive summary',
+            body: aiTxt.en, body_en: aiTxt.en, body_mk: aiTxt.mk, approved: locked, status: 'draft' },
+          { key: kind === 'plan' ? 'dependency_advisor' : 'risk_flag',
+            title: kind === 'plan' ? 'Dependencies & sequencing' : 'Risks & blockers',
+            body: '', body_en: kind === 'plan'
+              ? '- Valve arrival precedes irrigation repair\n- QC release precedes packaging'
+              : '- Customs-blocked valve delays irrigation repair\n- Open temperature deviation (CAPA drafted)',
+            body_mk: kind === 'plan'
+              ? '- Пристигнувањето на вентилот претходи на поправката\n- QC ослободувањето претходи на пакувањето'
+              : '- Вентилот на царина ја одложува поправката\n- Отворено температурно отстапување (CAPA нацрт)',
+            approved: locked, status: 'draft' },
+        ],
+      },
+    };
+  }
+
+  function demoDoc(kind, deptId) {
+    const key = kind + '|' + (deptId || '');
+    if (!DOCS[key]) {
+      if (!deptId) DOCS[key] = makeDoc(kind, '', kind === 'report' ? 'locked' : 'draft');
+      else return null;   // per-department docs exist only after Compile
+    }
+    return DOCS[key];
+  }
+
+  function findDocById(id) {
+    return Object.values(DOCS).find(d => d.id === id) || null;
+  }
+
   /* ── the router: every GF.API call lands here in demo mode ──────── */
   async function handle(method, path, body) {
     const p = path.split('?')[0];
@@ -481,12 +650,57 @@ GF.DEMO = (function () {
 
     /* reports + documents */
     if (p === '/reports/weekly') return weeklyReport(q.mode || 'report', q.ref_date);
-    if (p === '/reports/documents' && method === 'GET') return { found: false };
-    if (p.startsWith('/reports/documents')) {
-      const e = new Error(GF.state && GF.state.lang === 'mk'
-        ? 'Составувањето документи не е достапно во демо режим.'
-        : 'Document compilation is not available in demo mode.');
-      e.status = 400; throw e;
+    if (p === '/reports/documents' && method === 'GET') {
+      const d = demoDoc(q.kind || 'report', q.department_id || '');
+      if (!d) { const e = new Error('No document compiled for this week'); e.status = 404; throw e; }
+      return clone(d);
+    }
+    if (p === '/reports/documents/compile' && method === 'POST') {
+      const kind = (body && body.kind) || 'report', deptId = (body && body.department_id) || '';
+      const key = kind + '|' + deptId;
+      const existing = DOCS[key];
+      if (existing && existing.status === 'locked') {
+        const e = new Error('Document for this week is locked — it is the submitted record');
+        e.status = 409; throw e;
+      }
+      DOCS[key] = makeDoc(kind, deptId, 'draft');
+      if (existing) DOCS[key].id = existing.id;   // recompile keeps the row identity
+      return clone(DOCS[key]);
+    }
+    if (p === '/reports/documents/preview' && method === 'POST') {
+      return clone(makeDoc((body && body.kind) || 'report', (body && body.department_id) || '', 'preview'));
+    }
+    if (seg[0] === 'reports' && seg[1] === 'documents' && seg.length >= 3) {
+      const d = findDocById(seg[2]);
+      if (!d) { const e = new Error('Document not found'); e.status = 404; throw e; }
+      if (seg[3] === 'sections' && method === 'PATCH') {
+        if (d.status !== 'draft') { const e = new Error('Locked documents are immutable'); e.status = 409; throw e; }
+        const key = decodeURIComponent(seg[4] || '');
+        const sec = (d.content.ai_sections || []).find(s => s.key === key)
+                 || (d.content.template_sections || []).find(s => s.key === key);
+        if (!sec) { const e = new Error('Section not found'); e.status = 404; throw e; }
+        if (body.approved !== undefined && body.approved !== null) sec.approved = body.approved;
+        if (body.body_en !== undefined || body.body !== undefined) {
+          sec.body_en = body.body_en !== undefined ? body.body_en : body.body; sec.body = sec.body_en;
+        }
+        if (body.body_mk !== undefined) sec.body_mk = body.body_mk;
+        if (body.fields) (sec.fields || []).forEach(f => {
+          if (body.fields[f.key] !== undefined) f.value = String(body.fields[f.key]);
+        });
+        if (body.narrative_en !== undefined || body.narrative_mk !== undefined) {
+          sec.narrative = sec.narrative || { en: '', mk: '' };
+          if (body.narrative_en !== undefined) sec.narrative.en = body.narrative_en;
+          if (body.narrative_mk !== undefined) sec.narrative.mk = body.narrative_mk;
+        }
+        d.updated_at = new Date().toISOString();
+        return clone(d);
+      }
+      if (seg[3] === 'lock' && method === 'POST') {
+        if (d.status !== 'draft') { const e = new Error('Already locked'); e.status = 409; throw e; }
+        d.status = 'locked'; d.locked_by = ME.id; d.locked_at = new Date().toISOString();
+        return clone(d);
+      }
+      if (method === 'PATCH') { d.content = (body && body.content) || d.content; return clone(d); }
     }
 
     /* AI — canned, so every sparkle button demonstrably works */

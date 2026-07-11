@@ -266,10 +266,107 @@ GF.views = {
         <span class="exec-chip">${attn.length}</span></div>
       ${attnRows || `<div class="kempty" style="padding:22px 8px;text-align:center">${AL('All clear 🎉', 'Сè е чисто 🎉')}</div>`}</div>`;
 
+    // ── Role-specific strips: the COO reads operations, the CEO reads
+    // direction. OWNER (and admin, for preview) see both.
+    const role = GF.curRole();
+    const showOps = role === 'coo' || role === 'owner' || role === 'admin';
+    const showStrategy = role === 'ceo' || role === 'owner' || role === 'admin';
+
+    let opsStrip = '';
+    if (showOps) {
+      // On-time %: completed-this-week with a due date, done on/before it —
+      // no-deadline completions are excluded (same rule as the backend report).
+      const doneDue = shown.filter(t => isDone(t) && t.due);
+      const onTime = doneDue.filter(t => !t.completed_date || t.completed_date <= t.due);
+      const otPct = doneDue.length ? Math.round(onTime.length / doneDue.length * 100) + '%' : '—';
+      const estSum = shown.reduce((a, t) => a + (+t.est || 0), 0);
+      const util = estSum ? Math.round(hours / estSum * 100) + '%' : '—';
+      const rowsHtml = GF.DEPTS.filter(d => GF.execDeptShown(d.id)).map(d => {
+        const dt = allWeek.filter(t => t.dept === d.id);
+        const stuckN = dt.filter(t => t.status === 'stuck').length;
+        const overN = dt.filter(t => t.due && t.due < todayStr && !isDone(t)).length;
+        if (!stuckN && !overN) return '';
+        return `<div class="ops-row"><span class="dept-dot" style="background:${d.color}"></span>
+          <span class="ops-name">${GF.esc(GF.depName(d.id))}</span>
+          ${stuckN ? `<span class="ops-tag stuck">${stuckN} ${AL('blocked', 'блокирани')}</span>` : ''}
+          ${overN ? `<span class="ops-tag overdue">${overN} ${AL('overdue', 'задоцнети')}</span>` : ''}</div>`;
+      }).join('');
+      opsStrip = `<div class="dash-card exec-card exec-strip">
+        <div class="exec-card-ttl">${GF.icon('wrench', 'icon', 'var(--ink-3)')}${AL('Operations', 'Операции')}
+          <span class="exec-chip">${AL('COO lens', 'COO поглед')}</span></div>
+        <div class="strip-kpis">
+          <div class="skpi"><span class="v" style="color:var(--green)">${otPct}</span><span class="l">${AL('On-time (with deadlines)', 'Навремено (со рокови)')}</span></div>
+          <div class="skpi"><span class="v" style="color:var(--blue)">${util}</span><span class="l">${AL('Hours vs estimate', 'Часови наспроти проценка')}</span></div>
+          <div class="skpi"><span class="v" style="color:var(--red)">${blocked.length}</span><span class="l">${AL('Bottlenecks', 'Тесни грла')}</span></div>
+        </div>
+        ${rowsHtml || `<div class="kempty" style="padding:10px 4px">${AL('No bottlenecks this week 🎉', 'Нема тесни грла оваа недела 🎉')}</div>`}
+      </div>`;
+    }
+
+    let strategyStrip = '';
+    if (showStrategy) {
+      // 6-week completion trend from client data — all loaded weeks live in
+      // GF.state.tasks, so no extra API round-trip is needed.
+      const from = Math.max(0, GF.state.selWeek - 5);
+      const pts = [];
+      for (let i = from; i <= GF.state.selWeek; i++) {
+        const wt = GF.weekTasks(i);
+        pts.push({ i, label: 'W' + (GF.calendar.weeks[i] ? GF.calendar.weeks[i].weekNum : i),
+                   rate: wt.length ? Math.round(wt.filter(isDone).length / wt.length * 100) : null,
+                   total: wt.length });
+      }
+      const val = pts.filter(x => x.rate !== null);
+      const W = 240, H = 52, PAD = 6;
+      let spark = '';
+      if (val.length >= 2) {
+        const xs = (idx) => PAD + idx * ((W - 2 * PAD) / (pts.length - 1));
+        const ys = (r) => H - PAD - (r / 100) * (H - 2 * PAD);
+        const poly = pts.map((x, idx) => x.rate === null ? null : `${xs(idx).toFixed(1)},${ys(x.rate).toFixed(1)}`)
+          .filter(Boolean).join(' ');
+        const last = val[val.length - 1];
+        const lastIdx = pts.indexOf(last);
+        spark = `<svg viewBox="0 0 ${W} ${H}" class="spark" role="img">
+          <polyline points="${poly}" fill="none" stroke="var(--green)" stroke-width="2" stroke-linejoin="round"/>
+          ${pts.map((x, idx) => x.rate === null ? '' :
+            `<circle cx="${xs(idx).toFixed(1)}" cy="${ys(x.rate).toFixed(1)}" r="${idx === lastIdx ? 3.5 : 2}"
+              fill="var(--green)"><title>${GF.esc(x.label)}: ${x.rate}% (${x.total} ${AL('tasks', 'задачи')})</title></circle>`).join('')}
+        </svg>`;
+      }
+      const cur = pts[pts.length - 1], prev = pts.length > 1 ? pts[pts.length - 2] : null;
+      let delta = '';
+      if (cur && prev && cur.rate !== null && prev.rate !== null) {
+        const d = cur.rate - prev.rate;
+        delta = `<span class="wow ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d)} ${AL('pp WoW', 'пп сп. мин. нед.')}</span>`;
+      }
+      const exceptions = attn.slice(0, 5).map(({ t, k }) => {
+        const d = GF.dep(t.dept);
+        return `<div class="attn-row" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+          <span class="dept-dot" style="background:${d.color}"></span>
+          <div class="attn-body"><div class="attn-title">${GF.esc(t.title)}</div></div>
+          <span class="attn-tag ${k === 'stuck' ? 'stuck' : 'overdue'}">${k === 'stuck' ? AL('Blocked', 'Блокирано') : AL('Overdue', 'Задоцнето')}</span></div>`;
+      }).join('');
+      strategyStrip = `<div class="dash-card exec-card exec-strip">
+        <div class="exec-card-ttl">${GF.icon('trend', 'icon', 'var(--ink-3)')}${AL('Direction', 'Насока')}
+          <span class="exec-chip">${AL('CEO lens', 'CEO поглед')}</span></div>
+        <div class="strip-kpis">
+          <div class="skpi"><span class="v" style="color:var(--green)">${cur && cur.rate !== null ? cur.rate + '%' : '—'}</span>
+            <span class="l">${AL('Completion this week', 'Завршеност оваа недела')} ${delta}</span></div>
+          <div class="spark-wrap">${spark || `<span class="kempty">${AL('Not enough weeks yet', 'Сè уште нема доволно недели')}</span>`}
+            <div class="spark-lbl">${AL('6-week completion trend', 'Тренд на завршеност — 6 недели')}</div></div>
+        </div>
+        ${exceptions ? `<div class="strip-sub">${AL('Exceptions only', 'Само исклучоци')}</div>${exceptions}`
+                     : `<div class="kempty" style="padding:10px 4px">${AL('No exceptions 🎉', 'Нема исклучоци 🎉')}</div>`}
+      </div>`;
+    }
+
+    const strips = (opsStrip || strategyStrip)
+      ? `<div class="exec-strips">${opsStrip}${strategyStrip}</div>` : '';
+
     const briefBtn = `<button class="btn btn-sm" onclick="GF.execBrief()">${GF.icon('sparkle', 'icon')}${AL('AI brief', 'АИ резиме')}</button>`;
     return GF.viewHead('exec_overview', 'exec_sub', briefBtn)
       + kpis
       + `<div id="exec-brief" class="exec-brief" style="display:none"></div>`
+      + strips
       + `<div class="exec-grid"><div class="exec-col">${matrix}${pipeline}</div><div class="exec-col">${risk}</div></div>`;
   },
 
