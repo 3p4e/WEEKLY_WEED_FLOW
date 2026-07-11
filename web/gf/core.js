@@ -343,7 +343,10 @@ GF.setTheme = (name, opts) => {
   // the 3 core skins must NOT have it (they define their own derived tokens).
   if (GF.THEME_CORE[name]) root.removeAttribute('data-skin-carbon');
   else root.setAttribute('data-skin-carbon', '');
-  try { localStorage.setItem('gf_theme', name); } catch (e) {}
+  // noPersist: apply the skin to the DOM WITHOUT recording it as the user's
+  // saved preference — the splash/login screen showcases a random skin each
+  // load but must never overwrite the real skin the user picked in the app.
+  if (!(opts && opts.noPersist)) { try { localStorage.setItem('gf_theme', name); } catch (e) {} }
   GF.syncThemeBtn();
   // Re-tint the 3D leaf logos to the new skin's tokens, in place.
   if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(name);

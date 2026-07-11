@@ -14,8 +14,26 @@ GF.WWF = GF.WWF || {};
 
   let leaf = null;      // live leaf3d instance (destroyed on login / re-show)
   let opened = false;   // reveal guard — true once the card is shown
+  let entrySkin = 'dark'; // the random skin showcased on the current splash
 
   const $ = (id) => (window.GF && GF.$ ? GF.$(id) : document.getElementById(id));
+
+  // The splash/login screen showcases a RANDOM skin each time it's shown — the
+  // leaf, glows and accents take that skin's palette. Restricted to the dark
+  // skin group so the splash's dark stage always reads well (a light skin would
+  // wash out the glowing leaf). Applied to the DOM only — never persisted, so a
+  // real user's saved skin is untouched and is re-applied the moment they log in
+  // (see the loadAndRender override below).
+  function pickEntrySkin() {
+    try {
+      if (!(GF.THEMES && GF.setTheme)) return 'dark';
+      const pool = GF.THEMES.filter(t => t.group === 'dark');
+      const pick = (pool.length ? pool : GF.THEMES)[Math.floor(Math.random() * (pool.length || GF.THEMES.length))];
+      entrySkin = (pick && pick.id) || 'dark';
+      GF.setTheme(entrySkin, { silent: true, noPersist: true });
+    } catch (e) { entrySkin = 'dark'; }
+    return entrySkin;
+  }
 
   function loginCardHTML() {
     return `
@@ -25,10 +43,7 @@ GF.WWF = GF.WWF || {};
       <input id="wwf-p" class="gf-in" type="password" placeholder="Password" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
       <button class="gf-btn" onclick="GF.WWF.doLogin()">Sign in</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>
-      <div class="gf-demo-sep">or / или</div>
-      <button class="gf-btn-demo" onclick="GF.DEMO.enter()">🌿 Try the demo · Пробај демо</button>
-      <div class="gf-demo-hint">Sample data — separate from the real system · Примерни податоци</div>`;
+      <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
   function changePwCardHTML() {
@@ -42,10 +57,18 @@ GF.WWF = GF.WWF || {};
       <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
-  function buildEntry(el, cardHTML) {
+  function buildEntry(el, cardHTML, withDemo) {
     el.className = 'gf-entry-root';
+    // The demo entry lives OUTSIDE the sign-in card — a fixed pill pinned to the
+    // top-right corner, always visible from the very first splash frame and
+    // never affected by the card/leaf layout (which is what buried it before).
+    const demoBtn = withDemo ? `
+        <button class="gf-demo-float" onclick="GF.DEMO.enter()"
+                title="Sample data — separate from the real system · Примерни податоци"
+                aria-label="Try the demo">🌿 <span>Try the demo · Демо</span></button>` : '';
     el.innerHTML = `
       <div class="gf-entry" id="gf-entry">
+        ${demoBtn}
         <div class="gf-atmos"></div>
         <div class="gf-stage" id="gf-leaf-stage" role="button" tabindex="0" aria-label="GrowFlow leaf — tap to enter"></div>
         <div class="gf-shadow" id="gf-leaf-shadow"></div>
@@ -76,10 +99,10 @@ GF.WWF = GF.WWF || {};
       size: leafSize(),
       shadowEl: $('gf-leaf-shadow'),
       objUrl: 'assets/pp-leaf-3d.obj',
-      // The splash/login backdrop is always dark (entry.css) regardless of the
-      // app's chosen skin, so pin the hero leaf to the dark palette — a
-      // light-skin leaf here would glow wrong against the dark stage.
-      theme: 'dark',
+      // The splash showcases a random DARK skin (pickEntrySkin) — the hero leaf
+      // takes that skin's palette. Confined to dark skins so it always glows
+      // right against the dark stage.
+      theme: entrySkin,
       onEnter: reveal,
       onError: cssFallbackLeaf,
     });
@@ -97,6 +120,32 @@ GF.WWF = GF.WWF || {};
     if (GF.leafFX && GF.leafFX.bind) { const s = stage.querySelector('.leaf-stage'); if (s) GF.leafFX.bind(s); }
   }
 
+  // After the card slides in, guarantee the WHOLE card — including the "Try the
+  // demo" button at its foot — is inside the viewport. The reveal shrinks the
+  // 3D leaf via a CSS transform (.gf-entry.entered .gf-stage), but in some
+  // browsers (notably Firefox) the WebGL canvas does not give back its layout
+  // box the same way, so the leaf+card group can be taller than the viewport
+  // and push the demo button below the fold. `.gf-entry` is the overflow-y:auto
+  // scroll container, so nudging its scrollTop brings the clipped card fully
+  // into view — a browser-agnostic safety net independent of the leaf shrink.
+  function ensureCardInView() {
+    const entry = $('gf-entry');
+    const card = $('gf-entry-card');
+    if (!entry || !card) return;
+    try {
+      let overshoot = card.getBoundingClientRect().bottom - window.innerHeight + 14; // 14px breathing room
+      if (overshoot <= 0) { entry.classList.remove('gf-overflow'); return; }
+      // The group is taller than the viewport. Centering (default) leaves the
+      // top overflow unreachable and caps scrollTop, so the card's foot stays
+      // clipped. Top-align first (all overflow moves below), then scroll the
+      // whole card — including the demo button — into view.
+      entry.classList.add('gf-overflow');
+      // Recompute after reflow so we scroll by the right amount.
+      overshoot = card.getBoundingClientRect().bottom - window.innerHeight + 14;
+      if (overshoot > 0) entry.scrollTop += overshoot;
+    } catch (e) {}
+  }
+
   function reveal() {
     if (opened) return;
     opened = true;
@@ -104,12 +153,14 @@ GF.WWF = GF.WWF || {};
     setTimeout(() => {
       const lw = $('gf-lw'); if (lw) lw.classList.add('show');
       const u = $('wwf-u') || $('wwf-np'); if (u) setTimeout(() => { try { u.focus(); } catch (e) {} }, 260);
+      // Card animates in over ~.55s; run the guard after it settles.
+      setTimeout(ensureCardInView, 620);
     }, 540);
   }
 
   function backToLeaf() {
     opened = false;
-    const entry = $('gf-entry'); if (entry) entry.classList.remove('entered');
+    const entry = $('gf-entry'); if (entry) { entry.classList.remove('entered'); entry.classList.remove('gf-overflow'); entry.scrollTop = 0; }
     const lw = $('gf-lw'); if (lw) lw.classList.remove('show');
   }
 
@@ -119,7 +170,12 @@ GF.WWF = GF.WWF || {};
     opened = true;
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+    setTimeout(ensureCardInView, 60);
   }
+
+  // Re-assert the guard on resize/orientation change while the card is open —
+  // e.g. rotating a phone or opening the keyboard changes the fold.
+  window.addEventListener('resize', () => { if (opened) ensureCardInView(); });
 
   function ensureRoot() {
     let el = $('wwf-login');
@@ -131,8 +187,9 @@ GF.WWF = GF.WWF || {};
   GF.WWF.showLogin = (msg) => {
     const el = ensureRoot();
     el.style.display = 'block';
-    buildEntry(el, loginCardHTML());   // rebuild fresh so re-login starts at the splash
+    buildEntry(el, loginCardHTML(), true);   // rebuild fresh so re-login starts at the splash; floating demo button
     opened = false;
+    pickEntrySkin();                   // a fresh random skin every time the splash appears
     mountLeaf();
     const m = $('wwf-login-msg'); if (m) m.textContent = msg || '';
     // If we're here because of an error (bad token / session expiry), skip the
@@ -144,7 +201,7 @@ GF.WWF = GF.WWF || {};
   GF.WWF.showChangePw = (currentPw) => {
     GF.WWF._curPw = currentPw || '';
     let el = $('wwf-login');
-    if (!el || !$('gf-entry-card')) { el = ensureRoot(); el.style.display = 'block'; buildEntry(el, changePwCardHTML()); mountLeaf(); }
+    if (!el || !$('gf-entry-card')) { el = ensureRoot(); el.style.display = 'block'; buildEntry(el, changePwCardHTML()); pickEntrySkin(); mountLeaf(); }
     else { const card = $('gf-entry-card'); if (card) card.innerHTML = changePwCardHTML(); }
     revealNow();
     setTimeout(() => { const n = $('wwf-np'); if (n) try { n.focus(); } catch (e) {} }, 80);
@@ -156,6 +213,17 @@ GF.WWF = GF.WWF || {};
     const _origLoadAndRender = GF.WWF.loadAndRender;
     GF.WWF.loadAndRender = function () {
       if (leaf && leaf.destroy) { try { leaf.destroy(); } catch (e) {} leaf = null; }
+      // Entering the app: drop the splash's showcase skin and apply the user's
+      // OWN saved skin (gf_theme). For the demo, gf_theme already holds the
+      // demo's per-start random skin, so this restores that instead — either
+      // way the logged-in app reflects the remembered choice, not the splash's
+      // random one.
+      try {
+        const saved = localStorage.getItem('gf_theme') || 'dark';
+        if (GF.setTheme && document.documentElement.dataset.theme !== saved) {
+          GF.setTheme(saved, { silent: true, noPersist: true });
+        }
+      } catch (e) {}
       return _origLoadAndRender.apply(this, arguments);
     };
   }
