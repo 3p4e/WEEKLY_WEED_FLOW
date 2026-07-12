@@ -185,6 +185,59 @@ async def test_manager_cannot_write_subresources_on_foreign_task(client, admin_h
 
 
 @pytest.mark.asyncio
+async def test_manager_cannot_read_or_delete_foreign_task_sessions(client, admin_headers, org):
+    """list_sessions (GET) and delete_session (DELETE /sessions/{id}) both
+    reached org-wide for managers: list_sessions only checked task existence,
+    and delete_session gated on 'author OR elevated' — and every manager role
+    IS elevated, so a manager could read or destroy work-session evidence on
+    any task in the org. Both now go through the shared scope guard."""
+    d1, d2 = await _two_departments(org)
+    _, mgr = await _manager(client, admin_headers, d1)
+    foreign = await _mk_task(client, admin_headers, "foreign with a session", d2)
+    r = await client.post(f"/tasks/{foreign['id']}/sessions",
+                          json={"started_at": "2026-01-05T09:00:00", "hours": 2}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    foreign_sid = r.json()["id"]
+
+    # read leak closed
+    r = await client.get(f"/tasks/{foreign['id']}/sessions", headers=mgr)
+    assert r.status_code == 404, r.text
+    # destructive write closed (session must still exist afterwards)
+    r = await client.delete(f"/sessions/{foreign_sid}", headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.get(f"/tasks/{foreign['id']}/sessions", headers=admin_headers)
+    assert any(s["id"] == foreign_sid for s in r.json()), "manager's blocked DELETE must not have removed it"
+
+    # sanity: the manager CAN list + delete sessions on their own task
+    mine = await _mk_task(client, mgr, "own with a session")
+    r = await client.post(f"/tasks/{mine['id']}/sessions",
+                          json={"started_at": "2026-01-05T09:00:00", "hours": 1}, headers=mgr)
+    assert r.status_code == 201, r.text
+    mine_sid = r.json()["id"]
+    r = await client.get(f"/tasks/{mine['id']}/sessions", headers=mgr)
+    assert r.status_code == 200 and any(s["id"] == mine_sid for s in r.json())
+    r = await client.delete(f"/sessions/{mine_sid}", headers=mgr)
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_noop_patch_on_foreign_task_is_404_not_success(client, admin_headers, org):
+    """An empty PATCH used to short-circuit to {ok,noop} before the scope
+    guard ran, returning success for a task the manager can't touch. The guard
+    now runs even on a no-op, so an out-of-scope task is a clean 404."""
+    d1, d2 = await _two_departments(org)
+    _, mgr = await _manager(client, admin_headers, d1)
+    foreign = await _mk_task(client, admin_headers, "foreign noop", d2)
+
+    r = await client.patch(f"/tasks/{foreign['id']}", json={}, headers=mgr)
+    assert r.status_code == 404, r.text
+    # own-dept no-op still returns the noop marker
+    mine = await _mk_task(client, mgr, "own noop")
+    r = await client.patch(f"/tasks/{mine['id']}", json={}, headers=mgr)
+    assert r.status_code == 200 and r.json().get("noop") is True, r.text
+
+
+@pytest.mark.asyncio
 async def test_manager_cannot_assign_or_comment_on_foreign_task(client, admin_headers, org):
     """assign/unassign/comments only checked _can_manage_task (elevated OR
     owner) — since every manager role IS elevated, that check alone granted

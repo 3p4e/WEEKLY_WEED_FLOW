@@ -34,15 +34,23 @@ def _ser(rows):
     return [dict(r) for r in rows]
 
 
-async def _assert_scope_visible(c, task_id: str, scope: str | None, user_id: str) -> None:
-    """Additional in-scope guard for department-scoped managers on ANY task
-    mutation or sub-resource write (progress notes, sessions, links,
-    comments, assignment) — mirrors get_task's read-side rule (own dept,
-    personally owned, assigned, a subtask delegated into my dept, or a child
-    whose parent lives in my dept) so writes can never reach further than
-    reads already do. Org-wide roles (scope is None) are unaffected. Raises
-    404 rather than 403 to avoid confirming a foreign task's existence, the
-    same choice get_task already makes."""
+async def _assert_scope_visible(c, task_id: str, user: dict) -> None:
+    """THE single in-scope guard for department-scoped managers. RLS alone is
+    NOT a department boundary — app.is_elevated() grants every manager role
+    org-wide row access (department scoping is an app-layer concept, see
+    app/roles.DEPT_SCOPED_ROLES), so every task read/mutation and sub-resource
+    endpoint whose access could otherwise reach org-wide must call this.
+
+    In-scope = own dept, personally owned, assigned, a subtask delegated into
+    my dept, or a child whose parent lives in my dept. Org-wide roles
+    (dept_scope is None) are unaffected. Raises 404 rather than 403 to avoid
+    confirming a foreign task's existence.
+
+    get_task and every guarded write path call THIS function (not a re-derived
+    copy of the rule) so read-scope and write-scope can never drift apart —
+    the drift that silently reopens this exact bypass class. When adding a new
+    endpoint that touches a task (or its sub-resources) by id, call this."""
+    scope = dept_scope(user)
     if not scope:
         return
     visible = await c.fetchval(
@@ -52,7 +60,7 @@ async def _assert_scope_visible(c, task_id: str, scope: str | None, user_id: str
         " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=$2 AND ch.is_deleted=false)"
         " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=$2)"
         "))",
-        task_id, scope, user_id)
+        task_id, scope, str(user["id"]))
     if not visible:
         raise HTTPException(404, "Task not found or not permitted")
 
@@ -141,26 +149,12 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         task = await c.fetchrow("SELECT * FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        subs = await c.fetch("SELECT * FROM tasks WHERE parent_id=$1 AND is_deleted=false ORDER BY created_at", task_id)
-        # By-id reads must honour the same department scoping as the task LIST —
-        # otherwise a dept-scoped manager could read any task in the org by id
-        # (full description, sessions, links). In-scope = own dept, personally
-        # owned, assigned, a subtask delegated INTO their dept, or a child whose
-        # parent lives in their dept. (A department-less manager has scope None →
+        # By-id reads honour the same department scoping as every write path —
+        # ONE shared rule (_assert_scope_visible) so read-scope and write-scope
+        # can never drift apart. (A department-less manager has scope None →
         # org-wide read, same as their board — intentional.)
-        scope = dept_scope(user)
-        if scope:
-            in_scope = (
-                str(task["department_id"] or "") == scope
-                or str(task["user_id"]) == str(user["id"])
-                or any(str(s["department_id"] or "") == scope for s in subs))
-            if not in_scope:
-                in_scope = await c.fetchval(
-                    "SELECT EXISTS(SELECT 1 FROM task_assignees WHERE task_id=$1 AND user_id=$2)"
-                    " OR EXISTS(SELECT 1 FROM tasks pa WHERE pa.id=$3 AND pa.department_id=$4)",
-                    task_id, user["id"], task["parent_id"], scope)
-            if not in_scope:
-                raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        subs = await c.fetch("SELECT * FROM tasks WHERE parent_id=$1 AND is_deleted=false ORDER BY created_at", task_id)
         prog = await c.fetch("SELECT day_label,note,created_at,user_id FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
         sessions = await c.fetch("SELECT * FROM work_sessions WHERE task_id=$1 ORDER BY started_at", task_id)
         links = await c.fetch("SELECT * FROM task_links WHERE task_id=$1 ORDER BY created_at", task_id)
@@ -372,8 +366,6 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         if val is None and col not in _NULLABLE_PATCH_COLS:
             continue
         args.append(val); fields.append(f"{col}=${len(args)}")
-    if not fields:
-        return {"ok": True, "noop": True}
     # Completing a task stamps completed_date unless the caller set one;
     # reopening it (status moves away from completed) clears the stale stamp
     # unless the caller is explicitly setting completed_date themselves.
@@ -381,14 +373,19 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         args.append(date.today()); fields.append(f"completed_date=${len(args)}")
     elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
-    args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
-    args.append(task_id)
+    noop = not fields  # nothing to apply once null-drops are accounted for
+    if not noop:
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(task_id)
     async with rls(user) as c:
         # A dept-scoped manager may only mutate a task already in their scope
         # (own dept, personally owned, assigned, or a linked family member) —
-        # this must run for EVERY patch, not just ones touching department_id,
-        # otherwise scope is enforced on reads but not writes.
-        await _assert_scope_visible(c, task_id, scope, user["id"])
+        # this runs for EVERY patch (including a no-op) so an out-of-scope or
+        # nonexistent task returns 404, never a misleading noop-success; scope
+        # must be enforced on writes exactly as it already is on reads.
+        await _assert_scope_visible(c, task_id, user)
+        if noop:
+            return {"ok": True, "noop": True}
         # A dept-scoped manager can't move a task into another department (or
         # unassign it into the no-department pool their scoped list can't
         # see) — EXCEPT re-targeting a subtask whose parent is in their own
@@ -433,12 +430,11 @@ class ProgressIn(BaseModel):
 
 @router.post("/tasks/{task_id}/progress", status_code=201)
 async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(require_password_set)):
-    scope = dept_scope(user)
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, scope, user["id"])
+        await _assert_scope_visible(c, task_id, user)
         row = await c.fetchrow(
             "INSERT INTO task_progress(org_id,task_id,user_id,day_label,note)"
             " VALUES ($1,$2,$3,$4,$5) RETURNING day_label,note,created_at",
@@ -485,12 +481,11 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
         raise HTTPException(422, "Provide ended_at or hours")
     if body.ended_at is not None and body.ended_at <= body.started_at:
         raise HTTPException(422, "ended_at must be after started_at")
-    scope = dept_scope(user)
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, scope, user["id"])
+        await _assert_scope_visible(c, task_id, user)
         row = await c.fetchrow(
             "INSERT INTO work_sessions(org_id,task_id,user_id,started_at,ended_at,hours,note,source)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
@@ -505,6 +500,10 @@ async def list_sessions(task_id: str, user: dict = Depends(require_password_set)
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
+        # A dept-scoped manager must not read a foreign task's sessions by id —
+        # RLS grants elevated roles org-wide SELECT, so scope is app-enforced
+        # here exactly as on the write sibling add_session.
+        await _assert_scope_visible(c, task_id, user)
         rows = await c.fetch("SELECT * FROM work_sessions WHERE task_id=$1 ORDER BY started_at", task_id)
     return [_session_out(r) for r in rows]
 
@@ -518,9 +517,15 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
     it — sessions are the overtime evidence, so deletion stays narrow (and is
     audit-trailed by the row trigger either way)."""
     async with rls(user) as c:
-        row = await c.fetchrow("SELECT user_id FROM work_sessions WHERE id=$1", session_id)
+        row = await c.fetchrow("SELECT user_id, task_id FROM work_sessions WHERE id=$1", session_id)
         if row is None:
             raise HTTPException(404, "Session not found")
+        # 'elevated' includes every dept-scoped manager role, so the role check
+        # below alone would let a manager delete session evidence org-wide (this
+        # endpoint takes only a session_id — no task in the path). Resolve the
+        # session's task and enforce department scope on it first, so a manager
+        # can only delete sessions on tasks they can actually see.
+        await _assert_scope_visible(c, str(row["task_id"]), user)
         if str(row["user_id"]) != str(user["id"]) and user["role"] not in _ELEVATED:
             raise HTTPException(403, "Only the session's author or an elevated role can delete it")
         await c.execute("DELETE FROM work_sessions WHERE id=$1", session_id)
@@ -539,12 +544,11 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
     url = (body.url or "").strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(422, "url must be http(s)")
-    scope = dept_scope(user)
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, scope, user["id"])
+        await _assert_scope_visible(c, task_id, user)
         row = await c.fetchrow(
             "INSERT INTO task_links(org_id,task_id,url,label,kind,created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -554,7 +558,6 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
 async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_password_set)):
-    scope = dept_scope(user)
     async with rls(user) as c:
         # Look the task up under RLS first — task_links' only policy is
         # org_isolation, so without this any org member who knows a link id
@@ -563,7 +566,7 @@ async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_p
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
             raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, scope, user["id"])
+        await _assert_scope_visible(c, task_id, user)
         res = await c.execute("DELETE FROM task_links WHERE id=$1 AND task_id=$2", link_id, task_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Link not found")
