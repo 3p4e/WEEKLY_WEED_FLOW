@@ -5,6 +5,7 @@ Pins: PyJWT migration behaviour (garbage/expired tokens still map to clean
 token validation, and the new max_length input bounds.
 """
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import jwt
 import pytest
@@ -76,3 +77,16 @@ async def test_string_inputs_are_bounded(client, admin_headers, org):
     assert r.status_code == 422
     r = await client.post("/auth/login", json={"email": "whoever", "password": "p" * 257})
     assert r.status_code == 422
+
+
+def test_uvicorn_trusts_the_frontend_proxy_for_client_ip():
+    """Without --forwarded-allow-ips, uvicorn's --proxy-headers defaults to
+    trusting only 127.0.0.1 — but the backend is only ever reached through
+    the frontend nginx container, never localhost, so request.client.host
+    (the login rate-limiter's IP bucket, and the failed-login forensic log)
+    silently became the SAME docker-internal address for every real user,
+    turning the per-IP limiter into one shared facility-wide bucket. Pins the
+    flag against a silent regression; the actual proxy chain can't be
+    exercised from a plain TestClient."""
+    dockerfile = (Path(__file__).parent.parent / "Dockerfile").read_text()
+    assert "--forwarded-allow-ips" in dockerfile

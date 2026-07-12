@@ -28,4 +28,14 @@ COPY alembic_tasks ./alembic_tasks
 # the uvicorn app.
 COPY scripts ./scripts
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# --forwarded-allow-ips=* : trust X-Forwarded-For from the immediate peer.
+# Safe here because this container is NEVER reached directly from the
+# internet — only the frontend nginx (which sets X-Forwarded-For from the
+# real client via Traefik) and same-network sibling containers (scheduler,
+# capture-mcp) can reach :8000 at all. Without this, uvicorn's default
+# (trust only 127.0.0.1) means the immediate peer is always the frontend
+# container's own docker-bridge IP, so request.client.host — the login
+# rate-limiter's IP bucket and the failed-login forensic log — is the SAME
+# value for every real user, turning the per-IP limiter into one shared
+# facility-wide bucket instead of one per actual client.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]

@@ -11,8 +11,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.roster import display_name, roster
 
@@ -54,6 +55,7 @@ def _can_manage_task(user: dict, task: dict) -> bool:
 async def list_comments(task_id: str, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         await _task_or_404(c, task_id)
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         rows = await c.fetch(
             "SELECT id, user_id, content, created_at "
             "FROM task_comments WHERE task_id=$1 ORDER BY created_at", task_id)
@@ -71,6 +73,7 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
         raise HTTPException(422, "Comment cannot be empty")
     async with rls(user) as c:
         await _task_or_404(c, task_id)
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         r = await c.fetchrow(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) "
             "VALUES ($1,$2,$3,$4) RETURNING id, created_at",
@@ -85,6 +88,7 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
 async def list_assignees(task_id: str, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         await _task_or_404(c, task_id)
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         rows = await c.fetch(
             "SELECT user_id, role, accepted, accepted_at, assigned_at "
             "FROM task_assignees WHERE task_id=$1 ORDER BY assigned_at", task_id)
@@ -100,6 +104,10 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can assign")
+        # An elevated role is any manager, not just an org-wide one — without
+        # this, a dept-scoped manager's "elevated" status above would let them
+        # assign/unassign on ANY task in the org, not just their own scope.
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         # task_assignees.user_id has NO foreign key (profiles live in the
         # users database), so this org-membership check is the ONLY integrity
         # guard on assignee ids: it stops both a dangling uuid and a cross-org
@@ -128,6 +136,7 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can unassign")
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         await c.execute("DELETE FROM task_assignees WHERE task_id=$1 AND user_id=$2", task_id, assignee_id)
     return {"ok": True}
 
@@ -137,6 +146,7 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
     """The assignee accepts or declines their own assignment (decline records a reason)."""
     async with rls(user) as c:
         await _task_or_404(c, task_id)
+        await _assert_scope_visible(c, task_id, dept_scope(user), user["id"])
         res = await c.execute(
             "UPDATE task_assignees SET accepted=$1, accepted_at=now() WHERE task_id=$2 AND user_id=$3",
             body.accepted, task_id, user["id"])

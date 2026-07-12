@@ -135,6 +135,87 @@ async def test_qp_and_executive_stay_org_wide(client, admin_headers, org):
 
 
 @pytest.mark.asyncio
+async def test_manager_cannot_patch_foreign_task_via_non_department_field(client, admin_headers, org):
+    """A manager's PATCH scope guard used to fire ONLY when department_id was
+    being changed — any other field (status, priority, ...) on a task outside
+    their scope sailed through unchecked, relying on RLS's is_elevated() clause
+    which grants every manager role org-wide write. This pins the fix: the
+    scope guard now runs for every PATCH, not just department moves."""
+    d1, d2 = await _two_departments(org)
+    _, mgr = await _manager(client, admin_headers, d1)
+    foreign = await _mk_task(client, admin_headers, "foreign task", d2)
+
+    r = await client.patch(f"/tasks/{foreign['id']}", json={"status": "completed"}, headers=mgr)
+    assert r.status_code == 404, r.text
+
+    # sanity: the same manager CAN patch a task in their own department
+    mine = await _mk_task(client, mgr, "own task")
+    r = await client.patch(f"/tasks/{mine['id']}", json={"status": "completed"}, headers=mgr)
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_manager_cannot_write_subresources_on_foreign_task(client, admin_headers, org):
+    """add_progress / add_session / add_link only checked the task EXISTS, not
+    that it's in the manager's scope — same unguarded-write bug as the PATCH
+    case, on the sub-resource endpoints."""
+    d1, d2 = await _two_departments(org)
+    _, mgr = await _manager(client, admin_headers, d1)
+    foreign = await _mk_task(client, admin_headers, "foreign for subresources", d2)
+    fid = foreign["id"]
+
+    r = await client.post(f"/tasks/{fid}/progress", json={"day_label": "Mon", "note": "x"}, headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.post(f"/tasks/{fid}/sessions",
+                          json={"started_at": "2026-01-05T09:00:00", "hours": 1}, headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.post(f"/tasks/{fid}/links", json={"url": "https://example.com/x"}, headers=mgr)
+    assert r.status_code == 404, r.text
+
+    # sanity: all three succeed on a task in the manager's own department
+    mine = await _mk_task(client, mgr, "own for subresources")
+    mid = mine["id"]
+    r = await client.post(f"/tasks/{mid}/progress", json={"day_label": "Mon", "note": "x"}, headers=mgr)
+    assert r.status_code == 201, r.text
+    r = await client.post(f"/tasks/{mid}/sessions",
+                          json={"started_at": "2026-01-05T09:00:00", "hours": 1}, headers=mgr)
+    assert r.status_code == 201, r.text
+    r = await client.post(f"/tasks/{mid}/links", json={"url": "https://example.com/x"}, headers=mgr)
+    assert r.status_code == 201, r.text
+
+
+@pytest.mark.asyncio
+async def test_manager_cannot_assign_or_comment_on_foreign_task(client, admin_headers, org):
+    """assign/unassign/comments only checked _can_manage_task (elevated OR
+    owner) — since every manager role IS elevated, that check alone granted
+    org-wide access. The scope guard must narrow it back to their department.
+    Uses a bystander (not the manager) as the assignment target, since being
+    assigned to a task is itself a legitimate in-scope condition — assigning
+    the manager under test would defeat the negative case being tested."""
+    d1, d2 = await _two_departments(org)
+    _, mgr = await _manager(client, admin_headers, d1)
+    bystander, _ = await create_user(client, admin_headers, role="USER", full_name="Bystander")
+    foreign = await _mk_task(client, admin_headers, "foreign for collab", d2)
+    fid = foreign["id"]
+
+    r = await client.get(f"/tasks/{fid}/comments", headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.post(f"/tasks/{fid}/comments", json={"content": "hi"}, headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.get(f"/tasks/{fid}/assignees", headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.post(f"/tasks/{fid}/assignees", json={"user_id": bystander["id"]}, headers=mgr)
+    assert r.status_code == 404, r.text
+    r = await client.delete(f"/tasks/{fid}/assignees/{bystander['id']}", headers=mgr)
+    assert r.status_code == 404, r.text
+
+    # sanity: the same manager CAN comment/assign on a task in their own department
+    mine = await _mk_task(client, mgr, "own for collab")
+    r = await client.post(f"/tasks/{mine['id']}/comments", json={"content": "hi"}, headers=mgr)
+    assert r.status_code == 201, r.text
+
+
+@pytest.mark.asyncio
 async def test_manager_weekly_report_forced_to_own_department(client, admin_headers, org):
     d1, d2 = await _two_departments(org)
     await _mk_task(client, admin_headers, "report mine", d1)
