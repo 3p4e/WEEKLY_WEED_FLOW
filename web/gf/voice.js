@@ -64,7 +64,7 @@ GF.voice = {
       </div>` : `
       <div class="row" style="gap:10px">
         <button class="btn" style="flex:1;justify-content:center" onclick="GF.voice.closeCapture()">${GF.t('cancel')}</button>
-        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','#fff')}${GF.t('create_task')}</button>
+        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','#fff')}${AL('Analyze', 'Анализирај')}</button>
       </div>`;
 
     GF.$('voice-content').innerHTML = `

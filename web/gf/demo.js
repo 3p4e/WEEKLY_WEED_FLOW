@@ -644,7 +644,7 @@ GF.DEMO = (function () {
         }
         return clone(list);
       }
-      if (seg[2] === 'links') return method === 'POST' ? { ok:true } : [];
+      if (seg[2] === 'links') return method === 'GET' ? [] : { ok:true };
     }
     if (seg[0] === 'sessions' && method === 'DELETE') return { ok: true };
 
@@ -718,10 +718,26 @@ GF.DEMO = (function () {
       return { available: true, output: 'DEMO AI response.' };
     }
     if (p === '/intake/bilingual') return { en: (body && (body.en || body.text)) || '', mk: (body && (body.mk || body.text)) || '' };
-    if (seg[0] === 'intake') return { tasks: [
-      { title: 'Demo: order 400 g primary packaging bags', description: 'From pasted meeting notes', department: 'Warehouse', priority: 'high' },
-      { title: 'Demo: schedule HVAC compressor service',   description: 'From pasted meeting notes', department: 'Maintenance', priority: 'critical' },
-    ] };
+    if (p === '/intake/extract') return {
+      available: true,
+      count: 3,
+      candidates: [
+        { title: 'Demo: order 400 g primary packaging bags', description: 'From pasted meeting notes',
+          department: 'logistics', priority: 'high', task_type: 'other', subtasks: [] },
+        { title: 'Demo: schedule HVAC compressor service', description: 'From pasted meeting notes',
+          department: 'tooling', priority: 'critical', task_type: 'maintenance',
+          subtasks: [{ title: 'Confirm service window', description: 'With the vendor' }] },
+        { title: 'Demo: log QC deviation from batch review', description: 'From pasted meeting notes',
+          department: 'qc', priority: 'medium', task_type: 'other', subtasks: [] },
+      ],
+      departments: DEPTS.map(d => ({ code: d.code, name: d.name })),
+    };
+    if (seg[0] === 'intake') return { available: true, count: 0, candidates: [],
+      departments: DEPTS.map(d => ({ code: d.code, name: d.name })) };
+    if (p === '/capture/import') {
+      const tasks = (body && Array.isArray(body.tasks)) ? body.tasks : [];
+      return { created: tasks.length, updated: 0, sessions_added: 0, skipped: [] };
+    }
 
     /* audit */
     if (p === '/audit') return clone(audit());

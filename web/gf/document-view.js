@@ -27,9 +27,7 @@ GF.WWF.loadDocument = async () => {
     const dept = GF.WWF._docDeptParam(); if (dept) q.department_id = dept;
     const data = await GF.API.getDocument(q);
     if (seq !== ds._seq) return;            // a newer load/compile/lock superseded this one
-    // Demo mode (and any stub) answers {found:false} — that's the empty state,
-    // not a document; rendering it produced a phantom empty DRAFT panel.
-    ds.data = (data && data.found === false) ? null : data;
+    ds.data = data;
     ds.error = null;
   } catch (e) {
     if (seq !== ds._seq) return;
@@ -42,6 +40,12 @@ GF.WWF.loadDocument = async () => {
 
 GF.WWF.compileDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
+  // Recompiling an existing draft overwrites stored content and discards any
+  // saved manual edits — confirm first. The initial compile (no stored row) is
+  // safe and never prompts.
+  if (ds.data && ds.data.id && ds.data.status === 'draft'
+      && !confirm(AL('Recompiling rebuilds this draft and discards your saved manual edits. Continue?',
+                     'Повторното составување го обновува овој нацрт и ги отфрла вашите зачувани рачни измени. Продолжи?'))) return;
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined,
@@ -318,10 +322,10 @@ GF.WWF._renderDocPanel = () => {
         padding:7px 9px;border:1px solid var(--line,rgba(43,232,160,.12));border-radius:8px;
         background:var(--surface-2,#102219);color:var(--ink,#DDF3E9);resize:vertical">${GF.esc(val || '')}</textarea>`;
     const langLbl = (t) => `<div style="font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--ink-3);margin-top:7px">${t}</div>`;
-    const approveCtl = (key, ok) => editable
+    const approveCtl = (key, ok, label) => editable
       ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
           <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.saveDocSection('${GF.esc(key)}', this.checked)">
-          ${AL('Approve for document', 'Одобри за документот')}</label>`
+          ${label || AL('Approve for document', 'Одобри за документот')}</label>`
       : (isPreview ? ''
         : (ok ? `<span style="font-size:11px;color:#2BE8A0;font-weight:700">${AL('Approved', 'Одобрено')}</span>`
               : `<span style="font-size:11px;color:var(--ink-3)">${AL('Not included', 'Не е вклучено')}</span>`));
@@ -329,7 +333,10 @@ GF.WWF._renderDocPanel = () => {
       ? `<button class="btn btn-sm" onclick="GF.WWF.saveDocSection('${GF.esc(key)}')">${AL('Save section', 'Зачувај секција')}</button>` : '';
 
     const sections = (c.ai_sections || []).map((s) => {
-      if (s.status === 'not_configured') return '';
+      // not_configured = no AI agent bound. In a draft it's a normal editable
+      // section the user fills in by hand; when locked/preview with no content
+      // written there is nothing to show, so keep it hidden.
+      if (s.status === 'not_configured' && !editable && !(s.body_en || s.body || s.body_mk)) return '';
       const ok = !!s.approved;
       const bodyEn = s.body_en || s.body || '', bodyMk = s.body_mk || '';
       const bodyHtml = editable
@@ -340,7 +347,7 @@ GF.WWF._renderDocPanel = () => {
       return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <b style="font-size:13px">${GF.esc(s.title)}</b>
-          <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable — write it by hand', 'агентот е недостапен — напишете рачно') : ''}</span>
+          <span style="font-size:10.5px;color:var(--ink-3)">${s.status === 'unavailable' ? AL('agent unavailable — write it by hand', 'агентот е недостапен — напишете рачно') : (s.status === 'not_configured' ? AL('No AI agent bound — write this section manually', 'Нема поврзан AI агент — пополнете рачно') : '')}</span>
           <div style="flex:1"></div>
           ${saveBtn(s.key)}
           ${approveCtl(s.key, ok)}
@@ -374,7 +381,7 @@ GF.WWF._renderDocPanel = () => {
           <span style="font-size:11px;color:var(--ink-3)">${GF.esc(s.title_mk || '')}</span>
           <div style="flex:1"></div>
           ${saveBtn(s.key)}
-          ${approveCtl(s.key, ok)}
+          ${approveCtl(s.key, ok, AL('Approve narrative', 'Одобри наратив'))}
         </div>
         ${rows}
         ${narHtml}

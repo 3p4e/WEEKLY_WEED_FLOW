@@ -1,4 +1,5 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
+import logging
 import re
 import secrets
 import time
@@ -7,7 +8,7 @@ from collections import defaultdict
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db import rls_users, tasks_admin_pool, users_admin_pool
@@ -16,6 +17,12 @@ from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Failed logins leave no audit_log row (those tables are populated by
+# hash-chained DB triggers on data writes, and a login attempt writes
+# nothing) — this structured log line is the forensic trail for brute-force
+# investigation. JSON-formatted by logging_config.JsonFormatter.
+log = logging.getLogger("app.auth")
 
 _OTP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
 
@@ -35,17 +42,50 @@ def generate_otp() -> str:
 _LOGIN_WINDOW_S = 300
 _LOGIN_MAX_ATTEMPTS_PER_ID = 8
 _LOGIN_MAX_ATTEMPTS_PER_IP = 30
+# Authenticated mutation endpoints (change/reset password, create user) share
+# the same window with per-actor keys — generous for real staff, tight enough
+# that a stolen session can't grind passwords or spray accounts unthrottled.
+_ACTION_MAX_PER_ACTOR = 20
 _failed_attempts: dict[str, list[float]] = defaultdict(list)
+
+# Windowed pruning above only trims lists that get re-checked; keys that stop
+# being hit would otherwise sit in the dict forever (unbounded growth under a
+# username/IP spray). Sweep the whole dict whenever it gets large.
+_GC_THRESHOLD = 512
+
+
+def _rate_limit_gc(now: float) -> None:
+    if len(_failed_attempts) < _GC_THRESHOLD:
+        return
+    for key in [k for k, v in _failed_attempts.items() if not v or now - v[-1] > _LOGIN_WINDOW_S]:
+        _failed_attempts.pop(key, None)
 
 
 def _rate_limit_check(id_key: str, ip_key: str) -> None:
     now = time.monotonic()
+    _rate_limit_gc(now)
     for key, limit in ((id_key, _LOGIN_MAX_ATTEMPTS_PER_ID), (ip_key, _LOGIN_MAX_ATTEMPTS_PER_IP)):
         attempts = _failed_attempts[key]
         while attempts and now - attempts[0] > _LOGIN_WINDOW_S:
             attempts.pop(0)
         if len(attempts) >= limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many login attempts — try again later")
+
+
+def _throttle_action(key: str, limit: int = _ACTION_MAX_PER_ACTOR) -> None:
+    """Count-every-call throttle for authenticated auth mutations. Unlike the
+    login limiter (which counts only FAILURES so real users are never locked
+    out by their own successes), these endpoints are abuse-relevant on every
+    call — 20 password changes / account creations per 5 minutes is far above
+    any legitimate use."""
+    now = time.monotonic()
+    _rate_limit_gc(now)
+    attempts = _failed_attempts[key]
+    while attempts and now - attempts[0] > _LOGIN_WINDOW_S:
+        attempts.pop(0)
+    if len(attempts) >= limit:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many attempts — try again later")
+    attempts.append(now)
 
 
 def _rate_limit_record_failure(*keys: str) -> None:
@@ -59,32 +99,35 @@ def _rate_limit_clear(*keys: str) -> None:
         _failed_attempts.pop(key, None)
 
 
+# max_length bounds: none of these fields have any legitimate long form, and
+# unbounded strings are a free memory/bcrypt-CPU lever (bcrypt reads only the
+# first 72 bytes anyway, so a 1 MB "password" is pure cost, zero entropy).
 class LoginReq(BaseModel):
-    email: str            # accepts username or email
-    password: str
+    email: str = Field(max_length=254)            # accepts username or email
+    password: str = Field(max_length=256)
     remember_device: bool = False
 
 
 class ChangePwReq(BaseModel):
-    current_password: str | None = None
-    new_password: str
+    current_password: str | None = Field(default=None, max_length=256)
+    new_password: str = Field(max_length=256)
 
 
 class CreateUserReq(BaseModel):
-    username: str
-    full_name: str
-    email: str | None = None
-    role: str = "USER"
-    department_id: str | None = None
-    function_role: str | None = None
+    username: str = Field(min_length=1, max_length=64)
+    full_name: str = Field(min_length=1, max_length=120)
+    email: str | None = Field(default=None, max_length=254)
+    role: str = Field(default="USER", max_length=32)
+    department_id: str | None = Field(default=None, max_length=64)
+    function_role: str | None = Field(default=None, max_length=80)
 
 
 class UpdateUserReq(BaseModel):
     # username is intentionally NOT editable — it's the login identity.
-    full_name: str | None = None
-    role: str | None = None
-    department_id: str | None = None
-    function_role: str | None = None
+    full_name: str | None = Field(default=None, max_length=120)
+    role: str | None = Field(default=None, max_length=32)
+    department_id: str | None = Field(default=None, max_length=64)
+    function_role: str | None = Field(default=None, max_length=80)
 
 
 def _public(row) -> dict:
@@ -113,6 +156,12 @@ async def login(body: LoginReq, request: Request):
     ok = verify_password(body.password, row["password_hash"] if active else None)
     if not active or not ok:
         _rate_limit_record_failure(f"ip:{ip}", f"id:{identifier}")
+        # Forensic trail — audit_log is trigger-driven and never sees a failed
+        # login. Identifier is what the client TYPED (may or may not exist);
+        # never log the password.
+        log.warning("login_failed", extra={"fields": {
+            "event": "login_failed", "identifier": identifier, "ip": ip,
+            "reason": "inactive_or_unknown" if not active else "bad_password"}})
         raise invalid
     _rate_limit_clear(f"ip:{ip}", f"id:{identifier}")
     days = settings.remember_device_expire_days if body.remember_device else None
@@ -128,6 +177,7 @@ async def me(user: dict = Depends(get_current_user)):
 
 @router.post("/change-password")
 async def change_password(body: ChangePwReq, user: dict = Depends(get_current_user)):
+    _throttle_action(f"pwch:{user['id']}")
     if len(body.new_password) < settings.password_min_length:
         raise HTTPException(422, f"Password must be at least {settings.password_min_length} characters")
     # Voluntary change (flag already cleared) must prove the current password.
@@ -194,6 +244,7 @@ async def _validate_department(org_id, department_id) -> None:
 @router.post("/users", status_code=201)
 async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
     """Provision an account with a one-time password (always returned to the creator)."""
+    _throttle_action(f"usercreate:{actor['id']}")
     # Reject unknown / non-assignable roles (esp. ADMIN) up front with a clean
     # 422, rather than letting a bad value reach the DB CHECK as a 409.
     if body.role not in CREATABLE_ROLES:
@@ -337,6 +388,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
     real password. Same authorisation gate as create/delete: a manager may only
     reset a USER in their own department; nobody may reset an ADMIN through the
     app."""
+    _throttle_action(f"pwreset:{actor['id']}")
     _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         # Self-service password change goes through /auth/change-password (which

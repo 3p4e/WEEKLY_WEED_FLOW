@@ -54,6 +54,21 @@ def dept_scope(user: dict) -> str | None:
     return None
 
 
+def is_dept_scoped_role(user: dict) -> bool:
+    """True if the user's ROLE confines them to a single department (managers
+    except QP), regardless of whether a department is actually assigned.
+
+    dept_scope() returns None both for genuinely org-wide roles (execs/QP/ADMIN)
+    AND for a scoped manager who simply has no department set yet — the two are
+    indistinguishable to callers. For the live board/My-Week that conflation is
+    fine (a department-less manager falling back to org-wide is the intended
+    anti-'OWNER-sees-nothing' behaviour). But sensitive surfaces — the weekly
+    GMP document (compile / lock / export the org-wide submitted record) — must
+    NOT hand a department-less manager org-wide authority. They use this to tell
+    the two apart and refuse instead."""
+    return user["role"] in DEPT_SCOPED_ROLES
+
+
 def require_role(*roles: str):
     # Depends on require_password_set (not get_current_user directly) so a
     # leaked/intercepted one-time password can't be used for role-gated

@@ -56,9 +56,13 @@ GF.render = {
     // Executives get an exec-only Overview at the top of the nav; everyone keeps
     // the standard views below it.
     if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
+    // Coordination badge = pending cross-department handoffs (handoff tasks
+    // not yet ready) in the selected week. 0 → no badge renders.
+    const coordPending = GF.scopedTasks(GF.state.selWeek)
+      .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
     nav.push(
       ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
-      ['coord', 'coordination', 'at', 3], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
+      ['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
     );
     GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
@@ -163,7 +167,6 @@ GF.render = {
           <span class="cnt">${cur.length}</span>
           <div class="spacer"></div>
           ${tagFilter}
-          <button class="btn btn-sm" onclick="GF.export.open('report')">${GF.icon('forward','icon')}${GF.t('report')}</button>
           <button class="btn btn-sm" onclick="GF.ai.summary('report')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_summary')}</button>
           <button class="btn btn-sm" onclick="GF.rollover()">${GF.icon('forward','icon')}${GF.t('rollover')}</button>
         </div>

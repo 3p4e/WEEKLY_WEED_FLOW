@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { seedOrg } = require('../seed');
+const { seedOrg, login } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -12,13 +12,7 @@ test.beforeAll(() => {
 test('roll over persists across a reload instead of silently reverting', async ({ page }) => {
   const taskTitle = `Rollover test ${Date.now()}`;
 
-  await page.goto('/');
-  // 3D-leaf splash: tap the leaf to reveal the sign-in card before filling it.
-  await page.locator('#gf-leaf-stage').click();
-  await page.locator('#wwf-u').fill(creds.username);
-  await page.locator('#wwf-p').fill(creds.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.locator('#wwf-login')).toBeHidden({ timeout: 15_000 });
+  await login(page, creds.username, creds.password);
 
   await page.getByRole('button', { name: /new task/i }).click();
   await page.locator('#add-title').fill(taskTitle);

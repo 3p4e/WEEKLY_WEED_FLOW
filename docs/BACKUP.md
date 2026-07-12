@@ -41,17 +41,50 @@ Run a backup on demand (e.g. before a risky migration) with:
 docker exec wwf-db-backup sh /usr/local/bin/db_backup.sh --once
 ```
 
-## Retention and the residual risk — read this before relying on it
+## Retention
 
-**14 rotating daily dumps, on the same host's local disk, with no offsite
-copy.** This is a deliberate, documented scope limit, not an oversight: no
-offsite storage target (S3 bucket, remote host, etc.) is provisioned for this
-single-VPS deployment. In plain terms — **if the KVM4 host is lost, destroyed,
-or its disk fails, these backups are lost with it.** This covers accidental
-data loss, a bad migration, or an operator mistake; it does not cover host-
-level disaster recovery. Provisioning an offsite copy (e.g. a nightly `scp`/
-`rclone` of the volume to another host or object storage) is the natural next
-step if that risk needs closing.
+**Local:** 14 rotating daily dumps in the `weekly_weed_flow_backups` volume.
+**Offsite:** 60 days on Google Drive (encrypted), independent of local — see
+next section. Local rotation covers accidental data loss, a bad migration, or
+an operator mistake; the offsite copy covers host-level disaster (disk
+failure, fire, VPS loss).
+
+## Offsite copy (Google Drive, encrypted)
+
+The `backup-offsite` container (`docker-compose.yml`) runs
+`backend/scripts/offsite_backup.sh`: a daily `rclone copy` of the local dump
+volume to an **rclone-crypt-encrypted** folder on Google Drive (filenames and
+contents both encrypted — Google never sees plaintext GMP-adjacent data).
+
+Key properties:
+
+- **`copy`, never `sync`** — the offsite pass only ever ADDS files. A local
+  wipe (disk failure mid-rotation, ransomware, `docker volume rm`) cannot
+  propagate deletions to Drive. Remote retention is enforced separately by
+  age (`OFFSITE_RETENTION_DAYS`, default 60).
+- **Config custody:** `./rclone/rclone.conf` on the deploy host (mode 0600,
+  git-ignored) holds the Drive OAuth token and the crypt password pair.
+  ⚠️ **Losing the crypt password means every offsite backup becomes
+  unreadable ciphertext.** Keep an offline copy of the two crypt password
+  values (they are stored obscured in rclone.conf; recover the plain values
+  with `rclone reveal <obscured>`).
+- **One-time setup:** `rclone authorize "drive"` on any machine with a
+  browser → paste the token into the `[wwf-gdrive]` remote; the `[wwf-crypt]`
+  remote wraps `wwf-gdrive:wwf-backups` with generated passwords.
+
+Verify the offsite copy / restore from it:
+
+```bash
+# list what's offsite (decrypted names)
+docker exec wwf-backup-offsite rclone ls wwf-crypt:
+# pull one dump back and check it's a real SQL dump
+docker exec wwf-backup-offsite rclone copy wwf-crypt:wwf_tasks_<TIMESTAMP>.sql.gz /tmp/
+docker exec wwf-backup-offsite sh -c 'gunzip -c /tmp/wwf_tasks_<TIMESTAMP>.sql.gz | head -5'
+```
+
+Then restore exactly as in the procedure below. Run this drill after setup
+and periodically (monthly is reasonable) — a backup that has never been
+restored is a hope, not a backup.
 
 ## Restore procedure (tested — see below)
 

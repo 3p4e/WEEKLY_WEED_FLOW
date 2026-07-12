@@ -62,7 +62,7 @@
       </h2>
       <div class="search" style="margin-left:16px">
         <svg class="icon" viewBox="0 0 20 20"><path d="M17 17l-3.2-3.2M15.5 9.5a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-        <input id="search-input" placeholder="Search tasks, batches, rooms…">
+        <input id="search-input" placeholder="Search tasks…">
       </div>
       <div class="spacer"></div>
       <div class="lang-toggle">
@@ -81,7 +81,7 @@
         <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--orange)"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>
       </button>
       <button class="btn btn-sm" onclick="GF.goToday()">Today</button>
-      <button class="icon-btn" id="theme-btn" onclick="GF.toggleTheme()" title="Switch theme"></button>
+      <button class="icon-btn" id="theme-btn" onclick="GF.toggleTheme()" title="Themes"></button>
       <button class="icon-btn" onclick="GF.openSettings()" title="Settings">
         <svg class="icon" viewBox="0 0 20 20"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1"/></svg>
       </button>
@@ -152,9 +152,9 @@
     <button class="btn-ghost" onclick="GF.closeModal('export-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
       <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('csv')">
-        <svg class="icon" viewBox="0 0 20 20"><path d="M4 6h12v11H4zM4 6V4m12 2V4M7 3v3m6-3v3M4 9h12"/></svg>Export CSV</button>
+        <svg class="icon" viewBox="0 0 20 20"><path d="M4 6h12v11H4zM4 6V4m12 2V4M7 3v3m6-3v3M4 9h12"/></svg><span id="export-csv-label">Export CSV</span></button>
       <button class="btn" style="width:100%;justify-content:center" onclick="GF.export.run('json')">
-        <svg class="icon" viewBox="0 0 20 20"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/></svg>Export JSON</button>
+        <svg class="icon" viewBox="0 0 20 20"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/></svg><span id="export-json-label">Export JSON</span></button>
       <button class="btn" style="width:100%;justify-content:center;flex-direction:column;gap:2px" onclick="GF.export.goToDocuments()">
         <span style="display:flex;align-items:center;gap:8px"><svg class="icon" viewBox="0 0 20 20"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>PDF</span>
         <span id="export-pdf-hint" style="font-size:10.5px;color:var(--ink-3);font-weight:400">PDF reports live in Report → Documents</span></button>
