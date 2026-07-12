@@ -138,6 +138,10 @@ GF.API = {
     const p = new URLSearchParams(q).toString();
     return this._req('GET', '/reports/documents' + (p ? '?' + p : ''));
   },
+  documentStatus(q = {}) {
+    const p = new URLSearchParams(q).toString();
+    return this._req('GET', '/reports/documents/status' + (p ? '?' + p : ''));
+  },
   compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
   previewDocument(body)     { return this._req('POST', '/reports/documents/preview', body); },
   patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },

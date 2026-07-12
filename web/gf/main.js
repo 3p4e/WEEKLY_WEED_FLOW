@@ -57,7 +57,10 @@ GF.openAdd = (weekId, parentId) => {
     <div class="field"><label>${GF.t('new_task')}</label>
       <div class="row" style="gap:8px"><input id="add-title" placeholder="${GF.t('new_task')}…" style="flex:1">
         <button class="mini-btn" title="${GF.t('dictate')}" id="mic-add-title" onclick="GF.voice.dictate('add-title')">${GF.icon('mic')}</button></div></div>
-    <div class="field"><label>${GF.t('dept_label')} ${deptHint}</label><select id="add-dept" ${lockDept ? 'disabled' : ''}>${deptOpts}</select></div>
+    <div class="field"><label>${GF.t('dept_label')} ${deptHint}</label><select id="add-dept" ${lockDept ? 'disabled' : ''}
+      onchange="GF.refreshDeptFields&&GF.refreshDeptFields(this.value,null,${!fromEdit && !parentId})">${deptOpts}</select></div>
+    <div class="field" id="add-preset-row" style="display:none"></div>
+    <div id="add-dept-fields"></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
@@ -72,6 +75,10 @@ GF.openAdd = (weekId, parentId) => {
       <div class="field" style="flex:1"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
     </div>
     <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
+  // Department template fields (+ quick-add presets in create mode) for the
+  // currently selected department; re-rendered by the select's onchange, and
+  // re-rendered with prefill by worklog.js's openEdit in edit mode.
+  if (GF.refreshDeptFields) GF.refreshDeptFields(GF.$('add-dept').value, null, !fromEdit && !parentId);
   // Default to create-mode labels; worklog.js's openEdit flips these to
   // "Edit task" / "Save" after it sets GF._editTask.
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('new_task');

@@ -70,6 +70,7 @@ GF.I18N = {
     log_work:'Log work', add_subtask:'Add subtask', archive:'Archive', outcome:'Outcome',
     all_tags:'All tags', overdue:'Overdue',
     exec_overview:'Executive', exec_sub:'Cross-department overview, one screen',
+    dept_home:'My Department',
   },
   mk: {
     my_week:'Моја недела', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -101,6 +102,7 @@ GF.I18N = {
     log_work:'Внеси работа', add_subtask:'Додај под-задача', archive:'Архивирај', outcome:'Резултат',
     all_tags:'Сите ознаки', overdue:'Задоцнето',
     exec_overview:'Раководство', exec_sub:'Меѓуодделски преглед на еден екран',
+    dept_home:'Мојот оддел',
   },
 };
 

@@ -154,47 +154,76 @@ GF.WWF.lockDocument = async () => {
   GF.WWF._renderDocPanel();
 };
 
+/* ── shared authenticated file download (PDF / standalone HTML) ──
+   One owner of the raw-fetch → blob → <a download> flow, the 401 → re-login
+   routing, the Content-Disposition filename adoption, and the demo-mode
+   guard. Also used by execreport-view.js. */
+GF.WWF._fetchDownload = async (path, fallbackName, init) => {
+  if (GF.DEMO && GF.DEMO.active && GF.DEMO.active()) {
+    GF.toast(AL('File export is not available in demo mode — on the live system this downloads the document.',
+                'Извозот на датотеки не е достапен во демо режим — во живата апликација се презема документот.'), 'info');
+    return;
+  }
+  const res = await fetch(GF.API.base + path, Object.assign(
+    { headers: { Authorization: 'Bearer ' + GF.API.token } }, init || {}));
+  if (res.status === 401) {
+    // Route an expired token back to the login overlay, same as GF.API._req —
+    // a raw fetch here would otherwise strand the user behind a toast.
+    GF.API.logout();
+    if (GF.WWF.showLogin) GF.WWF.showLogin();
+    throw new Error(AL('Session expired', 'Сесијата истече'));
+  }
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+  // Take the filename from the server's Content-Disposition (single owner of
+  // the naming + DRAFT-suffix policy); fall back only if the header is absent.
+  const cd = res.headers.get('content-disposition') || '';
+  const m = /filename="?([^"]+)"?/.exec(cd);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (m && m[1]) || fallbackName;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+};
+
 GF.WWF.exportDocumentPdf = async () => {
   const ds = GF.WWF._doc;
   if (!ds.data) return;
-  // PDF rendering is server-side (WeasyPrint) and this exporter uses a raw
-  // fetch — in demo mode it must neither hit the real API nor pretend.
-  if (GF.DEMO && GF.DEMO.active && GF.DEMO.active()) {
-    GF.toast(AL('PDF export is not available in demo mode — on the live system this downloads the A4 bilingual PDF.',
-                'PDF извозот не е достапен во демо режим — во живата апликација се презема A4 двојазичен PDF.'), 'info');
-    return;
-  }
   // A custom-range preview has no stored row (id === null) — POST the reviewed
   // content back to the range-export endpoint; a saved week doc exports by id.
   const isPreview = ds.data.status === 'preview' || !ds.data.id;
+  const fallback = 'wwf-' + ds.data.kind + '-' + ds.data.week_start
+    + (ds.data.status === 'locked' ? '' : '-DRAFT') + '.pdf';
   try {
-    const res = isPreview
-      ? await fetch(GF.API.base + '/reports/documents/export-range.pdf',
+    if (isPreview) {
+      await GF.WWF._fetchDownload('/reports/documents/export-range.pdf', fallback,
         { method: 'POST', headers: { Authorization: 'Bearer ' + GF.API.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: ds.data.kind, content: ds.data.content }) })
-      : await fetch(GF.API.base + '/reports/documents/' + ds.data.id + '/export.pdf',
-        { headers: { Authorization: 'Bearer ' + GF.API.token } });
-    if (res.status === 401) {
-      // Route an expired token back to the login overlay, same as GF.API._req —
-      // a raw fetch here would otherwise strand the user behind a toast.
-      GF.API.logout();
-      if (GF.WWF.showLogin) GF.WWF.showLogin();
-      throw new Error(AL('Session expired', 'Сесијата истече'));
+          body: JSON.stringify({ kind: ds.data.kind, content: ds.data.content }) });
+    } else {
+      await GF.WWF._fetchDownload('/reports/documents/' + ds.data.id + '/export.pdf', fallback);
     }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
-    // Take the filename from the server's Content-Disposition (single owner of
-    // the naming + DRAFT-suffix policy); fall back only if the header is absent.
-    const cd = res.headers.get('content-disposition') || '';
-    const m = /filename="?([^"]+)"?/.exec(cd);
-    const name = (m && m[1]) || ('wwf-' + ds.data.kind + '-' + ds.data.week_start
-      + (ds.data.status === 'locked' ? '' : '-DRAFT') + '.pdf');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
   } catch (e) { GF.toast(AL('Export failed: ', 'Неуспешен извоз: ') + e.message, 'error'); }
+};
+
+// Standalone interactive HTML snapshot — stored documents only (a preview has
+// no row to export; the offline artifact is for the submitted/draft record).
+GF.WWF.exportDocumentHtml = async () => {
+  const ds = GF.WWF._doc;
+  if (!ds.data) return;
+  if (ds.data.status === 'preview' || !ds.data.id) {
+    GF.toast(AL('HTML export works on the stored week document — compile it first.',
+                'HTML извозот работи на зачуваниот неделен документ — прво составете го.'), 'info');
+    return;
+  }
+  try {
+    await GF.WWF._fetchDownload('/reports/documents/' + ds.data.id + '/export.html',
+      'wwf-' + ds.data.kind + '-' + ds.data.week_start + '.html');
+  } catch (e) {
+    if (/HTTP 40(4|5)/.test(e.message || '')) {
+      GF.toast(AL('HTML export needs the newer backend — deploy it first.',
+                  'HTML извозот бара понов backend — прво деплојирајте.'), 'info');
+    } else { GF.toast(AL('Export failed: ', 'Неуспешен извоз: ') + e.message, 'error'); }
+  }
 };
 
 /* ── ribbon: 7 day-rows × 24h, sessions as SOP-colored bars ──
@@ -397,6 +426,7 @@ GF.WWF._renderDocPanel = () => {
         ${isPreview && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.previewDocument()">${AL('Regenerate', 'Регенерирај')}</button>` : ''}
         ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.compileDocument()">${AL('Recompile', 'Состави повторно')}</button>` : ''}
         <button class="btn btn-sm" onclick="GF.WWF.exportDocumentPdf()">${AL('Export PDF', 'Извези PDF')}</button>
+        ${!isPreview ? `<button class="btn btn-sm" onclick="GF.WWF.exportDocumentHtml()">${AL('Export HTML', 'Извези HTML')}</button>` : ''}
         ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" style="background:var(--primary);color:#03130C;font-weight:700" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}
       </div>
       ${c.ribbon && c.ribbon.length ? `
@@ -431,8 +461,34 @@ GF.WWF._renderDocPanel = () => {
       style="font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line,rgba(43,232,160,.12));
       border-radius:7px;background:var(--surface-2,#102219);color:var(--ink,#DDF3E9)">${opts}</select>`;
   }
+  // Per-department submission strip on the ORG-WIDE panel: executives see at
+  // a glance which departments haven't submitted before locking the org-wide
+  // record. Loaded lazily from GET /status (execreport-view.js shares the
+  // renderer); hidden for scoped managers and while a department is selected.
+  let statusStrip = '';
+  if (!scoped && elevated && !ds.deptId && GF.WWF.xrStatusChips) {
+    statusStrip = GF.WWF.xrStatusChips(ds.status, { compact: true });
+    GF.WWF._loadDocStatus && GF.WWF._loadDocStatus();
+  }
   el.innerHTML = `<div style="margin:18px 0;background:var(--surface,#0B1913);border:1px solid var(--line,rgba(43,232,160,.12));border-radius:11px;overflow:hidden">
     <div style="padding:12px 14px;border-bottom:1px solid var(--line,rgba(43,232,160,.12));font-weight:700;font-size:14px;color:var(--primary,#2BE8A0);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       ${GF.icon('calendar')} ${kindLbl}<div style="flex:1"></div>${deptCtl}
-    </div>${rangeControls}${body}</div>`;
+    </div>${statusStrip}${rangeControls}${body}</div>`;
+};
+
+// Fetch the per-department submission roll-up for the panel's current week /
+// kind — cached per (kind, refDate) so the render → load → render cycle
+// settles after one round trip. An older backend without /status (or demo
+// mode) simply hides the strip.
+GF.WWF._loadDocStatus = async () => {
+  const st = GF.WWF._report, ds = GF.WWF._doc;
+  const key = st.mode + '|' + (st.refDate || '');
+  if (ds._statusKey === key) return;
+  ds._statusKey = key;
+  try {
+    const q = { kind: st.mode };
+    if (st.refDate) q.ref_date = st.refDate;
+    ds.status = await GF.API.documentStatus(q);
+  } catch (e) { ds.status = null; }
+  GF.WWF._renderDocPanel();
 };

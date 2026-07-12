@@ -615,6 +615,11 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sess-hours .icon{stroke:var(--primary)}
 .tag-chip{font-size:10.5px;font-weight:700;color:var(--blue);background:var(--blue-soft);
   padding:2px 7px;border-radius:999px;white-space:nowrap}
+/* Attribute chips (dept template values: room/batch/equipment…) — filled soft
+   chip with a mono value, visually distinct from the #tag outline chips. */
+.attr-chip{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink-2);
+  background:var(--primary-soft);border:1px solid var(--line-2);
+  padding:2px 7px;border-radius:6px;white-space:nowrap}
 .tag-filter{padding:7px 10px;border:1px solid var(--glass-border);border-radius:9px;
   background:var(--surface-2);font-size:12.5px;font-weight:600;color:var(--ink-2);font-family:var(--font)}
 
@@ -764,3 +769,31 @@ body.demo-on .main{padding-bottom:56px}
 .ops-tag{flex-shrink:0;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:999px}
 .ops-tag.stuck{background:var(--red-soft);color:var(--red-fg)}
 .ops-tag.overdue{background:var(--amber-soft);color:var(--amber-fg)}
+
+/* ── Card tree rows (render.treeRows): theme → document → version ──
+   Children are indented compact rows under the parent card, tied to it by a
+   left rail; deliberately quieter than full cards (secondary information). */
+.tree-toggle{display:inline-flex;align-items:center;gap:3px;cursor:pointer;user-select:none;
+  border-radius:6px;padding:1px 5px 1px 2px;transition:background .12s}
+.tree-toggle:hover{background:var(--primary-soft)}
+.tree-toggle.open{color:var(--primary)}
+.tree-toggle .icon{width:13px;height:13px}
+.tree-count{font-size:10.5px;font-weight:700}
+.tree-rows{border-left:2px solid var(--line);margin:2px 0 6px 26px;padding-left:10px;
+  display:flex;flex-direction:column;gap:4px}
+.tree-rows .tree-rows{margin-left:14px}
+.tree-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;cursor:pointer;
+  font-size:12.5px;min-width:0;transition:background .12s}
+.tree-row:hover{background:var(--surface-2)}
+.tree-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0;background:var(--ink-4)}
+.tree-dot.s-done{background:var(--green)}.tree-dot.s-working{background:var(--orange)}
+.tree-dot.s-review{background:var(--blue)}.tree-dot.s-stuck{background:var(--red)}
+.tree-dot.s-postponed{background:var(--amber)}
+.tree-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--ink-2);font-weight:600}
+.tree-row:hover .tree-title{color:var(--ink)}
+.tree-range{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap}
+.tree-row .pill{font-size:9.5px;padding:2px 7px}
+.tree-edit{opacity:0;transition:opacity .12s}
+.tree-row:hover .tree-edit{opacity:1}
+@media (max-width:760px){.tree-range{display:none}.tree-edit{opacity:1}}

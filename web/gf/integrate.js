@@ -68,6 +68,7 @@ GF.WWF.transform = (t) => ({
   type: t.task_type || 'other', ref: t.reference_code || '',
   due: t.due_date || null, recurrence: t.recurrence || null,
   outcome: t.outcome || '', archived: !!t.is_archived, parentId: t.parent_id || null,
+  attrs: t.attributes || {},
   sessionHours: t.session_hours != null ? Number(t.session_hours) : 0,
   subCount: Number(t.subtask_count || 0), subDone: Number(t.subtask_done_count || 0),
 });
@@ -216,7 +217,9 @@ GF.WWF.loadAndRender = async () => {
   try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
   if (depts.length) {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
-      return { id:d.id, name:d.name, mk:d.name_mk || d.name,
+      // `code` rides along so dept-templates.js can resolve the department's
+      // field template / presets / home layout from the backend code.
+      return { id:d.id, code:d.code, name:d.name, mk:d.name_mk || d.name,
                abbr: DEPT_ABBR[d.code] || (d.code || '').toUpperCase().slice(0, 3),
                icon:st.icon, color:st.color }; });
     // Resolve the code-keyed handoff pipeline to the real backend ids.
@@ -227,8 +230,30 @@ GF.WWF.loadAndRender = async () => {
     });
   }
   await GF.WWF.loadTeam();
+  // Role-aware landing for a FRESH browser only (no persisted gf_view):
+  // TRUE executives (Owner/CEO/COO — not ADMIN, whose exec access is a
+  // preview convenience, and whose real account here is a working manager)
+  // land on the exec overview; department members (operators and dept
+  // managers alike) on their department home. Deliberately not persisted —
+  // GF.setView stores the choice once the user actually navigates.
+  if (!localStorage.getItem('gf_view')) {
+    const role = (GF.API.user || {}).role;
+    if (role === 'OWNER' || role === 'CEO' || role === 'COO') GF.state.view = 'exec';
+    else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
+  }
   GF.WWF.buildCalendar(weeks);
   GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
+  // Children (subtasks / sub-subtasks) never render as board rows — index
+  // them by parent for the tree toggle on parent cards (theme → document →
+  // version). Same transform as any task; sorted oldest-first so a theme's
+  // documents read chronologically. GF.state.tasks stays parents-only —
+  // exec/report/board views all assume that.
+  GF.state.children = {};
+  tasks.filter(t => t.parent_id).map(GF.WWF.transform).forEach(c => {
+    (GF.state.children[c.parentId] = GF.state.children[c.parentId] || []).push(c);
+  });
+  Object.values(GF.state.children).forEach(list =>
+    list.sort((a, b) => String(a.week_start || '9999').localeCompare(String(b.week_start || '9999'))));
   // If current week is empty, navigate to the most recent past week that has tasks
   if (GF.state.tasks.filter(t => t.weekId === GF.state.selWeek).length === 0 && GF.state.tasks.length > 0) {
     const taskWeeks = [...new Set(GF.state.tasks.map(t => t.weekId))]
@@ -327,6 +352,9 @@ GF.WWF.install = () => {
           estimated_hours: estHours, due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
           recurrence,
+          // Whole-object replace; collect starts from the task's existing
+          // attributes so keys outside the current dept template survive.
+          attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId, (t && t.attrs) || {}) : undefined,
         });
         // Persist Responsible changes: diff the selected chips against the
         // task's current helpers and add/remove via the collab endpoints.
@@ -386,6 +414,7 @@ GF.WWF.install = () => {
         estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
         reference_code: refCode, recurrence, parent_id: GF._addParent || null,
+        attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId) : undefined,
       });
       if (GF._addParent) {
         // Subtasks never render as top-level cards — bump the parent's counter instead.
