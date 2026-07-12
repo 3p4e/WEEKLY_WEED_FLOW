@@ -57,6 +57,11 @@ async def log_requests(request: Request, call_next):
         "path": request.url.path,
         "status_code": response.status_code,
         "duration_ms": round((time.monotonic() - start) * 1000, 1),
+        # request.client.host is the real client only when uvicorn trusts the
+        # proxy (FORWARDED_ALLOW_IPS = the frontend's IP); otherwise it's the
+        # immediate peer. Logging it makes the forwarded-headers config
+        # observable and gives every request a client-IP forensic anchor.
+        "client": request.client.host if request.client else None,
     }
     level = logging.WARNING if response.status_code >= 500 else logging.INFO
     request_logger.log(level, "request", extra={"fields": fields})
