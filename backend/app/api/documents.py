@@ -747,6 +747,57 @@ async def get_document(kind: str = "report", ref_date: str | None = None,
     return _doc_row(row)
 
 
+@router.get("/status")
+async def documents_status(kind: str = "report", ref_date: str | None = None,
+                           user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Per-department submission roll-up for one week — the executive report's
+    status board ("who has reported"). One row per active department
+    (missing | draft | locked) plus the org-wide document's state. A
+    dept-scoped manager receives ONLY their own department's row and no
+    org-wide state (same boundary as every other document surface); a scoped
+    manager with no department is refused like _effective_dept_id does.
+    Registered before the /{doc_id}-shaped routes so a future bare
+    GET /{doc_id} can never shadow it."""
+    if kind not in ("report", "plan"):
+        raise HTTPException(422, "kind must be 'report' or 'plan'")
+    try:
+        ref = date.fromisoformat(ref_date) if ref_date else _today()
+    except ValueError:
+        raise HTTPException(422, "ref_date must be ISO format YYYY-MM-DD")
+    fri, _thu = _fri_thu(ref)
+    if kind == "plan":
+        fri = fri + timedelta(days=7)
+
+    scope = dept_scope(user)
+    if is_dept_scoped_role(user) and not scope:
+        raise HTTPException(403, "No department assigned — ask an admin to set your department")
+
+    async with rls(user) as c:
+        depts = await c.fetch(
+            "SELECT id, code, name, name_mk FROM departments WHERE is_active=true ORDER BY name")
+        docs = await c.fetch(
+            "SELECT id, department_id, status, updated_at FROM weekly_documents"
+            " WHERE kind=$1 AND week_start=$2", kind, fri)
+    by_dept = {(str(d["department_id"]) if d["department_id"] else None): d for d in docs}
+
+    def _entry(doc):
+        if doc is None:
+            return {"doc_id": None, "status": "missing", "updated_at": None}
+        return {"doc_id": str(doc["id"]), "status": doc["status"], "updated_at": _iso(doc["updated_at"])}
+
+    departments = [{
+        "id": str(d["id"]), "code": d["code"], "name": d["name"],
+        "name_mk": d["name_mk"] or d["name"], **_entry(by_dept.get(str(d["id"]))),
+    } for d in depts]
+    if scope:
+        departments = [e for e in departments if e["id"] == scope]
+        org_wide = None
+    else:
+        org_wide = _entry(by_dept.get(None))
+    return {"kind": kind, "week_start": fri.isoformat(),
+            "org_wide": org_wide, "departments": departments}
+
+
 class PatchReq(BaseModel):
     content: dict
 
@@ -1174,6 +1225,210 @@ async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_RO
     pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
     name = f"wwf-{doc['kind']}-{doc['week_start']}{'' if doc['status'] == 'locked' else '-DRAFT'}.pdf"
     return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+# ── Standalone interactive HTML export ──────────────────────────────────────
+# One self-contained file the owner opens anywhere — offline, months later, on
+# a phone. ZERO JavaScript and ZERO network fetches by design: interactivity
+# is <details>/<summary> only, styles are inline, fonts are the system stack.
+# Every interpolated value passes through _e()/_nl() exactly like the PDF.
+
+_HTML_CSS = """
+  :root { color-scheme: light dark;
+    --bg:#F7FAF8; --card:#FFFFFF; --ink:#16233B; --ink2:#5D6B7E; --line:#E2E8F0;
+    --brand:#0E7A4A; --soft:#E7F6EE; --warn:#B45309; --warnbg:#FFF4E5; }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0E1F17; --card:#163025; --ink:#E9F6EF; --ink2:#A2C4B5; --line:#2F5A44;
+    --brand:#2BE8A0; --soft:#123A29; --warn:#E0A73E; --warnbg:#3A2A10; } }
+  * { box-sizing: border-box; }
+  body { margin:0 auto; padding:28px 18px 60px; max-width:860px; background:var(--bg);
+    color:var(--ink); font:14px/1.55 -apple-system,'Segoe UI',system-ui,sans-serif; }
+  h1 { font-size:24px; margin:0; } .h1mk { color:var(--brand); font-size:15px; font-weight:600; }
+  h2 { font-size:16px; margin:26px 0 10px; border-bottom:2px solid var(--brand); padding-bottom:4px; }
+  h2 .mk { font-size:12px; color:var(--ink2); font-weight:600; margin-left:6px; }
+  .sub { color:var(--ink2); font-size:12px; }
+  .chip { font-size:10px; font-weight:700; letter-spacing:.4px; padding:2px 9px; border-radius:9px; }
+  .chip.locked { background:var(--soft); color:var(--brand); }
+  .chip.draft { background:var(--warnbg); color:var(--warn); }
+  .disclaimer { background:var(--warnbg); color:var(--warn); border-radius:8px;
+    padding:9px 12px; font-size:12px; margin:14px 0; }
+  .meta { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px; }
+  .meta td { padding:2px 14px 2px 0; } .meta td.k { color:var(--ink2); white-space:nowrap; }
+  .kpis { display:flex; flex-wrap:wrap; gap:10px; margin:16px 0; }
+  .kpi { flex:1 1 130px; background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px; } .kpi .v { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .kpi .l { font-size:11px; color:var(--ink2); }
+  details { background:var(--card); border:1px solid var(--line); border-radius:10px;
+    margin:8px 0; padding:0 12px; overflow-x:auto; }
+  details[open] { padding-bottom:10px; }
+  summary { cursor:pointer; padding:10px 0; font-weight:700; font-size:13.5px; display:flex;
+    align-items:center; gap:8px; flex-wrap:wrap; }
+  summary::marker { color:var(--brand); }
+  details details { border-style:dashed; margin-left:8px; }
+  table.grid { border-collapse:collapse; width:100%; font-size:12px; }
+  table.grid td, table.grid th { border:1px solid var(--line); padding:4px 7px; text-align:left; vertical-align:top; }
+  table.grid th { background:var(--soft); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:5px; margin-right:5px; }
+  .lang-lbl { font-size:10px; font-weight:800; letter-spacing:.6px; color:var(--brand); margin:8px 0 2px; }
+  .badge { background:var(--warnbg); color:var(--warn); font-size:10px; padding:1px 7px; border-radius:8px; }
+  .note { font-size:12px; color:var(--ink2); padding:2px 0 2px 10px; border-left:2px solid var(--line); margin:4px 0; }
+  .note b { color:var(--ink); } .note .by { font-style:italic; }
+  .lg { margin-right:10px; font-size:11px; white-space:nowrap; }
+  .ribbon-wrap { overflow-x:auto; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:8px; }
+  .mono { font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+  @media print { body { background:#fff; } details { break-inside:avoid; } }
+"""
+
+
+def _html_kpis(c: dict) -> str:
+    tasks = c.get("tasks", [])
+    metrics = c.get("metrics", {}) or {}
+    total_h = 0.0
+    for b in metrics.get("per_sop", []):
+        try:
+            total_h += float(b.get("hours") or 0)
+        except (TypeError, ValueError):
+            pass  # a hostile/legacy value never breaks the export
+    completed = sum(1 for t in tasks if t.get("status") == "completed")
+    ot = metrics.get("on_time") or {}
+    rate = f"{round(100 * ot['rate'])}%" if isinstance(ot.get("rate"), (int, float)) else "—"
+    kpi = lambda v, en, mk: (f'<div class="kpi"><div class="v">{_e(v)}</div>'
+                             f'<div class="l">{_e(en)} / {_e(mk)}</div></div>')
+    return ('<div class="kpis">'
+            + kpi(len(tasks), "Tasks", "Задачи")
+            + kpi(completed, "Completed", "Завршени")
+            + kpi(rate, "On-time", "Навремено")
+            + (kpi(f"{total_h:.1f}h", "Logged hours", "Одработени часови") if total_h else "")
+            + "</div>")
+
+
+def _html_task_details(c: dict, who) -> str:
+    groups: dict[str, list[dict]] = {}
+    for t in c.get("tasks", []):
+        groups.setdefault(t.get("department") or "—", []).append(t)
+    out = ""
+    for dept_label, tasks in groups.items():
+        rows = ""
+        for t in tasks:
+            notes = "".join(
+                f'<div class="note"><b>{_e(n.get("day") or "")}</b> {_e(n.get("note", ""))}'
+                + (f' <span class="by">— {_e(who(n.get("user_id")))}</span>' if n.get("user_id") else "")
+                + "</div>" for n in t.get("notes", []))
+            days = "/".join(_e(d) for d in (t.get("days") or []))
+            body = ((f'<div class="sub">Days: {days}</div>' if days else "")
+                    + (f"<div>{_nl(t['description'])}</div>" if t.get("description") else "")
+                    + notes) or '<div class="sub">—</div>'
+            hours = f"{t.get('estimated_hours') or '—'} / {t.get('actual_hours') or '—'}"
+            rows += (f'<details><summary>{_e(t.get("title", ""))}'
+                     f' <span class="chip {"locked" if t.get("status") == "completed" else "draft"}">{_e(t.get("status", ""))}</span>'
+                     f' <span class="sub mono">{_e(t.get("reference_code") or "")}</span>'
+                     f' <span class="sub mono">est/act {_e(hours)}</span>'
+                     f' <span class="sub mono">{_e(t.get("due_date") or "")}</span></summary>{body}</details>')
+        out += (f'<details><summary>{_e(dept_label)} <span class="sub">({len(tasks)})</span></summary>{rows}</details>')
+    n = len(c.get("tasks", []))
+    return f'<h2>Tasks ({n}) <span class="mk">Задачи</span></h2>{out}' if out else ""
+
+
+def _html_narratives(c: dict, is_locked: bool) -> str:
+    """Template-section grids + AI sections as collapsible blocks — the same
+    locked/draft inclusion rules as the PDF renderer."""
+    out = ""
+    for sec in c.get("template_sections", []):
+        rows = "".join(
+            f'<tr><td class="k">{_e(f.get("label_en", ""))}<br><span class="sub">{_e(f.get("label_mk", ""))}</span></td>'
+            f'<td>{_nl(f.get("value") or "—")}{(" " + _e(f["unit"])) if f.get("unit") and f.get("value") else ""}</td></tr>'
+            for f in sec.get("fields", []))
+        nar = sec.get("narrative") or {}
+        nar_html = ""
+        if (nar.get("en") or nar.get("mk")) and not (is_locked and not sec.get("approved")):
+            badge = "" if sec.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
+            nar_html = badge
+            if nar.get("en"):
+                nar_html += f'<div class="lang-lbl">EN</div><div>{_nl(nar["en"])}</div>'
+            if nar.get("mk"):
+                nar_html += f'<div class="lang-lbl">МК</div><div>{_nl(nar["mk"])}</div>'
+        out += (f'<details open><summary>{_e(sec.get("title_en", ""))}'
+                f' <span class="sub">/ {_e(sec.get("title_mk", ""))}</span></summary>'
+                f'<table class="grid">{rows}</table>{nar_html}</details>')
+    ai = ""
+    for s in c.get("ai_sections", []):
+        if s.get("status") in ("not_configured", "unavailable"):
+            continue
+        if is_locked and not s.get("approved"):
+            continue
+        body_en, body_mk = _sec_body_en(s), s.get("body_mk") or ""
+        if not body_en and not body_mk:
+            continue
+        badge = "" if s.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
+        ai += (f'<details><summary>{_e(s["title"])}{badge}</summary>'
+               + (f'<div class="lang-lbl">EN</div><div>{_nl(body_en)}</div>' if body_en else "")
+               + (f'<div class="lang-lbl">МК</div><div>{_nl(body_mk)}</div>' if body_mk else "")
+               + "</details>")
+    return ((f'<h2>Department status <span class="mk">Статус по оддели</span></h2>{out}' if out else "")
+            + (f'<h2>Narrative <span class="mk">Наративен дел</span></h2>{ai}' if ai else ""))
+
+
+def _html_export(doc: dict, people: dict) -> str:
+    c = doc["content"]
+    kind = c.get("kind", "report")
+    period = c.get("period", {})
+    dept = c.get("department")
+    is_locked = doc["status"] == "locked"
+    who = lambda uid: (people.get(uid or "", {}) or {}).get("full_name") or (people.get(uid or "", {}) or {}).get("username") or ""
+
+    title_en = "Weekly Report" if kind == "report" else "Weekly Plan"
+    title_mk = "Неделен извештај" if kind == "report" else "Неделен план"
+    dept_line = (f'{_e(dept["name"])} / {_e(dept.get("name_mk") or dept["name"])}'
+                 if dept else "All departments / Сите оддели")
+    status_chip = ('<span class="chip locked">LOCKED · SUBMITTED</span>' if is_locked
+                   else '<span class="chip draft">DRAFT / НАЦРТ</span>')
+    ribbon = _ribbon_svg(c.get("ribbon", []), period.get("start", _today().isoformat()),
+                         period.get("days", 7)) if c.get("ribbon") else ""
+    legend = "".join(
+        f'<span class="lg"><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</span>'
+        for b in (c.get("metrics", {}) or {}).get("per_sop", [])[:12])
+    lock_row = (f'<tr><td class="k">Approved / Одобрил</td><td>{_e(who(doc.get("locked_by")))}'
+                f' — {_e((doc.get("locked_at") or "")[:16].replace("T", " "))}</td></tr>' if is_locked else "")
+
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{_e(title_en)} · {_e(period.get("label", ""))}</title>
+<style>{_HTML_CSS}</style></head><body>
+<h1>{_e(title_en)} {status_chip}</h1><div class="h1mk">{_e(title_mk)}</div>
+<div class="disclaimer">Weekly informational summary for management — not a GMP/QMS record. /
+Неделен информативен преглед за раководството — не е GMP/QMS запис.</div>
+<table class="meta">
+  <tr><td class="k">Period / Период</td><td>{_e(period.get("label", ""))}</td></tr>
+  <tr><td class="k">Department / Оддел</td><td>{dept_line}</td></tr>
+  <tr><td class="k">Prepared / Изготвил</td><td>{_e(who(doc.get("created_by")))}</td></tr>
+  {lock_row}
+  <tr><td class="k">Generated / Генерирано</td><td>{datetime.now(TZ).strftime("%Y-%m-%d %H:%M")} {_e(TZ.key)}</td></tr>
+</table>
+{_html_kpis(c) if kind == "report" else ""}
+{_html_narratives(c, is_locked)}
+{f'<h2>Week ribbon — logged work by SOP <span class="mk">Работа по SOP</span></h2><div class="ribbon-wrap">{ribbon}</div><div>{legend}</div>' if ribbon else ''}
+{_html_task_details(c, who)}
+<p class="sub">GrowFlow · Purely Plant — self-contained snapshot; opens offline, no scripts, no network.</p>
+</body></html>"""
+
+
+@router.get("/{doc_id}/export.html")
+async def export_html(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """The interactive offline snapshot — same guard stack as export.pdf."""
+    _require_uuid(doc_id)
+    async with rls(user) as c:
+        row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
+    if row is None:
+        raise HTTPException(404, "Document not found")
+    _scope_guard(user, row)
+    doc = _doc_row(row)
+    people = await roster(user)
+    dept = (doc["content"].get("department") or {}).get("code")
+    name = (f"wwf-{doc['kind']}-{doc['week_start']}{'-' + dept if dept else ''}"
+            f"{'' if doc['status'] == 'locked' else '-DRAFT'}.html")
+    return Response(content=_html_export(doc, people), media_type="text/html; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 

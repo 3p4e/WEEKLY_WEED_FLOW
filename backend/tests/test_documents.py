@@ -534,3 +534,118 @@ async def test_pdf_html_bilingual_and_locked_rules(client, admin_headers, org):
     assert "Narr EN" not in h2, "unapproved narrative dropped from locked export"
     assert "Отворени CAPA" in h2, "metric grid always kept in the record"
     assert "Sum EN" not in h2, "unapproved AI section dropped from locked export"
+
+
+# ── GET /status — per-department submission roll-up ─────────────────────────
+
+async def test_status_rollup_lifecycle_and_scoping(client, admin_headers, org):
+    depts = await _dept_pair(org)
+
+    # Nothing compiled: every department missing, org-wide missing.
+    r = await client.get("/reports/documents/status", params={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "report" and body["week_start"]
+    assert body["org_wide"]["status"] == "missing" and body["org_wide"]["doc_id"] is None
+    assert {d["code"] for d in body["departments"]} == {"cultivation", "qc"}
+    assert all(d["status"] == "missing" for d in body["departments"])
+    assert all(d["name_mk"] for d in body["departments"])
+
+    # A manager compiles their department's report → that row turns draft.
+    await _task_in(client, admin_headers, "status task", depts["cultivation"])
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=mgr)
+    assert r.status_code == 200, r.text
+    doc_id = r.json()["id"]
+
+    r = await client.get("/reports/documents/status", params={"kind": "report"}, headers=admin_headers)
+    rows = {d["code"]: d for d in r.json()["departments"]}
+    assert rows["cultivation"]["status"] == "draft" and rows["cultivation"]["doc_id"] == doc_id
+    assert rows["cultivation"]["updated_at"]
+    assert rows["qc"]["status"] == "missing"
+
+    # Locking flips it to locked.
+    r = await client.post(f"/reports/documents/{doc_id}/lock", headers=mgr)
+    assert r.status_code == 200, r.text
+    r = await client.get("/reports/documents/status", params={"kind": "report"}, headers=admin_headers)
+    assert {d["code"]: d["status"] for d in r.json()["departments"]}["cultivation"] == "locked"
+
+    # A dept-scoped manager sees ONLY their own row, and no org-wide state.
+    r = await client.get("/reports/documents/status", params={"kind": "report"}, headers=mgr)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [d["code"] for d in body["departments"]] == ["cultivation"]
+    assert body["org_wide"] is None
+
+    # Base USER: the roll-up leaks submission metadata — denied entirely.
+    prof, otp = await create_user(client, admin_headers, role="USER", full_name="Status Op")
+    token = await login_and_set_password(client, prof["username"], otp)
+    r = await client.get("/reports/documents/status", params={"kind": "report"},
+                         headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+
+    # Validation: bad kind / bad ref_date are clean 422s.
+    r = await client.get("/reports/documents/status", params={"kind": "memo"}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.get("/reports/documents/status", params={"kind": "report", "ref_date": "not-a-date"},
+                         headers=admin_headers)
+    assert r.status_code == 422
+
+
+# ── GET /{doc_id}/export.html — self-contained interactive snapshot ─────────
+
+async def test_export_html_selfcontained_bilingual_escaped(client, admin_headers, org):
+    # A task whose title/description try to inject markup — must come out escaped.
+    r = await client.post("/tasks", json={
+        "title": '<script>alert(1)</script> Evil task',
+        "description": '<img src=x onerror=alert(2)> payload',
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+
+    r = await client.get(f"/reports/documents/{doc['id']}/export.html", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/html")
+    assert "attachment" in r.headers["content-disposition"]
+    assert f"wwf-report-{doc['week_start']}-DRAFT.html" in r.headers["content-disposition"]
+    text = r.text
+    # XSS: the injected markup is escaped, and the file carries NO script at all.
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in text
+    assert "<script" not in text.lower()
+    assert "<img src=x" not in text          # description markup stayed escaped
+    # Self-contained + interactive: <details> hierarchy, no external fetches.
+    assert "<details" in text and "</details>" in text
+    assert "http://" not in text and "https://" not in text
+    # Bilingual titles + the non-GMP disclaimer in both languages.
+    assert "Неделен извештај" in text
+    assert "not a GMP/QMS record" in text and "не е GMP/QMS запис" in text
+
+    # Locked export drops the -DRAFT suffix.
+    r = await client.post(f"/reports/documents/{doc['id']}/lock", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/reports/documents/{doc['id']}/export.html", headers=admin_headers)
+    assert f"wwf-report-{doc['week_start']}.html" in r.headers["content-disposition"]
+    assert "LOCKED" in r.text
+
+
+async def test_export_html_scope_and_role_guards(client, admin_headers, org):
+    depts = await _dept_pair(org)
+    # Org-wide document exists…
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    org_doc = r.json()
+    # …a dept-scoped manager may NOT export it (same rule as export.pdf).
+    _, mgr = await _dept_manager(client, admin_headers, depts["cultivation"])
+    r = await client.get(f"/reports/documents/{org_doc['id']}/export.html", headers=mgr)
+    assert r.status_code == 403
+    # Base USER is denied by the role gate.
+    prof, otp = await create_user(client, admin_headers, role="USER", full_name="Html Op")
+    token = await login_and_set_password(client, prof["username"], otp)
+    r = await client.get(f"/reports/documents/{org_doc['id']}/export.html",
+                         headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+    # Malformed id: clean 404.
+    r = await client.get("/reports/documents/not-a-uuid/export.html", headers=admin_headers)
+    assert r.status_code == 404
