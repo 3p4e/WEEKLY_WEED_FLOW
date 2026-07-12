@@ -68,14 +68,15 @@ stale**, and which are **deliberate design choices** — so that future reviews
 | *(found during verification, not in any report)* Wrong-password login gave **no visible feedback** — the 401 handler rebuilt the login card, detaching the node the error was written to, silently bouncing the user to the splash | `web/gf/api.js`: a failed `/auth/login` no longer tears down the card; the error renders on the live element. Pinned by `auth-negative.spec.js`. |
 | *(found during verification)* "Delete permanently" purge button emitted a malformed `onclick` for every username (raw JSON quotes terminated the attribute) | `web/gf/integrate.js`: attribute-safe `GF.esc(JSON.stringify(...))`. |
 | No offsite backups | `backup-offsite` compose service — nightly `rclone` **crypt**-encrypted sync of the local dump volume to Google Drive. Restore procedure + crypt-key custody documented in `docs/BACKUP.md`. |
-| kvm4-runner audit trail; `.env` modes | Host-side: structured command logging on the runner; `.env` files restricted to 0600. Documented in `docs/DEPLOY.md`. |
+| `.env` file modes | Live stack's real secrets file `/opt/stacks/wwf_app/app.env` was world-readable (644) → tightened to **0600** (root-owned; docker reads as root, no restart needed; stack verified healthy after). The legacy `.env` there was already 0600. |
+| kvm4-runner command audit trail | Recon finding: the runner (`/app/runner.py`) **already logs every command** (`log.info` on `/exec`, `/exec/stream`, `/shell` with timestamp + truncated command) to its container stdout. It is **shared infrastructure across ~10 stacks** (letta, qdrant, suma, coa_tracker, gotenberg, wwf_app…), not WWF-specific. Persistent host-file logging + source-IP capture + token rotation + network restriction all require restarting that shared runner — deploy-channel-lockout risk for every stack — so they are coordinated future steps, not blind live edits. See §4. |
 
 ## 4. CONFIRMED but deferred at current scale (5 users, 1 org, 1 VPS)
 
 | Item | Rationale / trigger to revisit |
 |---|---|
 | MFA (TOTP) for elevated roles | Worth doing before external exposure or GxP-lite scope change. |
-| kvm4-runner token rotation / network restriction | Rotation must be coordinated with GitHub secrets + deploy tooling in one window; binding to VPN/localhost would sever the only deploy path. Logged as a coordinated future step. |
+| kvm4-runner token rotation / network restriction / persistent-file + source-IP audit logging | The runner is SHARED across ~10 stacks and is the sole deploy channel (SSH port 22 is blocked from the cloud session). Rotation must be coordinated with GitHub secrets + every stack's tooling in one window; binding to VPN/localhost or restarting it to add host-file logging would sever the deploy path for all stacks. Per-command logging to container stdout already exists. All logged as coordinated future steps requiring a maintenance window. |
 | Redis-backed rate limiter | Needed only past one backend replica. |
 | Internal TLS nginx↔backend | Docker-internal traffic on one host; MITM requires host compromise, which already grants everything. |
 | Monitoring/metrics stack (Prometheus etc.) | JSON logs + `/health` exist; a metrics stack exceeds ops budget today. |
