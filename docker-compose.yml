@@ -59,6 +59,12 @@ services:
     container_name: weekly_weed_flow-backend-1
     depends_on: [db-users, db-tasks]
     env_file: .env
+    # Trust X-Forwarded-For ONLY from the frontend nginx's fixed IP (below),
+    # never '*' — a wildcard would let any container on this shared network
+    # (incl. the internet-exposed capture-mcp) spoof its source IP and defeat
+    # the login rate-limiter. uvicorn reads FORWARDED_ALLOW_IPS with --proxy-headers.
+    environment:
+      - FORWARDED_ALLOW_IPS=172.16.31.20
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
     expose: ["8000"]
@@ -82,7 +88,12 @@ services:
     image: wwf-growflow:latest
     container_name: wwf-gf-frontend
     depends_on: [backend]
-    networks: [internal, traefik]
+    # Fixed IP so the backend can trust X-Forwarded-For from exactly this proxy
+    # (FORWARDED_ALLOW_IPS above) rather than the whole subnet.
+    networks:
+      internal:
+        ipv4_address: 172.16.31.20
+      traefik: {}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_network"
@@ -161,6 +172,11 @@ services:
 networks:
   internal:
     name: weekly_weed_flow_internal
+    # Fixed subnet so the frontend can hold a stable IP the backend trusts for
+    # X-Forwarded-For (see frontend.ipv4_address / backend.FORWARDED_ALLOW_IPS).
+    ipam:
+      config:
+        - subnet: 172.16.31.0/24
   traefik:
     name: traefik_network
     external: true

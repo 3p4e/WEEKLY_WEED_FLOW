@@ -79,14 +79,30 @@ async def test_string_inputs_are_bounded(client, admin_headers, org):
     assert r.status_code == 422
 
 
-def test_uvicorn_trusts_the_frontend_proxy_for_client_ip():
-    """Without --forwarded-allow-ips, uvicorn's --proxy-headers defaults to
-    trusting only 127.0.0.1 — but the backend is only ever reached through
-    the frontend nginx container, never localhost, so request.client.host
-    (the login rate-limiter's IP bucket, and the failed-login forensic log)
-    silently became the SAME docker-internal address for every real user,
-    turning the per-IP limiter into one shared facility-wide bucket. Pins the
-    flag against a silent regression; the actual proxy chain can't be
-    exercised from a plain TestClient."""
+def test_uvicorn_trusts_only_the_frontend_proxy_ip_not_wildcard():
+    """The backend must honour X-Forwarded-For (so the login rate-limiter and
+    forensic log see the real client, not the frontend container's IP), but
+    trust it ONLY from the frontend's fixed IP — never '*', which would let a
+    compromised sibling container (e.g. the internet-exposed capture-mcp on the
+    same docker network) spoof its source IP and defeat the limiter. Pins the
+    mechanism: --proxy-headers on, no wildcard in the image, and the compose
+    wires a specific FORWARDED_ALLOW_IPS matching the frontend's static IP.
+    The live proxy chain itself can't be exercised from a plain TestClient."""
+    root = Path(__file__).parent.parent.parent
     dockerfile = (Path(__file__).parent.parent / "Dockerfile").read_text()
-    assert "--forwarded-allow-ips" in dockerfile
+    # Check the actual CMD line, not the explanatory comments (which name the
+    # wildcard on purpose to say why it's avoided).
+    cmd_line = next((ln for ln in dockerfile.splitlines()
+                     if ln.strip().startswith("CMD") and "uvicorn" in ln), "")
+    assert "--proxy-headers" in cmd_line
+    assert "--forwarded-allow-ips=*" not in cmd_line, "wildcard XFF trust is spoofable"
+
+    compose = (root / "docker-compose.yml").read_text()
+    import re
+    m = re.search(r"FORWARDED_ALLOW_IPS=(\d+\.\d+\.\d+\.\d+)", compose)
+    assert m, "compose must set FORWARDED_ALLOW_IPS to a specific frontend IP"
+    trusted_ip = m.group(1)
+    assert trusted_ip != "0.0.0.0"
+    # the frontend must actually hold that IP statically, or the trust is dead
+    assert f"ipv4_address: {trusted_ip}" in compose, \
+        "frontend must have the static ipv4_address the backend trusts"

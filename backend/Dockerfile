@@ -28,14 +28,14 @@ COPY alembic_tasks ./alembic_tasks
 # the uvicorn app.
 COPY scripts ./scripts
 EXPOSE 8000
-# --forwarded-allow-ips=* : trust X-Forwarded-For from the immediate peer.
-# Safe here because this container is NEVER reached directly from the
-# internet — only the frontend nginx (which sets X-Forwarded-For from the
-# real client via Traefik) and same-network sibling containers (scheduler,
-# capture-mcp) can reach :8000 at all. Without this, uvicorn's default
-# (trust only 127.0.0.1) means the immediate peer is always the frontend
-# container's own docker-bridge IP, so request.client.host — the login
-# rate-limiter's IP bucket and the failed-login forensic log — is the SAME
-# value for every real user, turning the per-IP limiter into one shared
-# facility-wide bucket instead of one per actual client.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+# --proxy-headers makes uvicorn honour X-Forwarded-For, but ONLY from peers
+# listed in FORWARDED_ALLOW_IPS (set in compose to the frontend nginx's
+# static IP — see docker-compose.yml). We deliberately do NOT bake
+# --forwarded-allow-ips=* here: '*' would trust a forged X-Forwarded-For from
+# ANY container on the shared docker network — including capture-mcp, which
+# is itself internet-exposed — letting a compromised sibling spoof its source
+# IP and defeat the login rate-limiter. Trusting only the frontend's IP means
+# every other peer's request.client.host is its real address. If the env var
+# is unset, uvicorn falls back to trusting 127.0.0.1 only (fail-safe: the
+# per-IP limiter degrades to one shared bucket, never becomes spoofable).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

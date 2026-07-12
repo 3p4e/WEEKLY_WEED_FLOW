@@ -29,13 +29,22 @@ EXECUTIVE_ROLES = ("OWNER", "CEO", "COO")
 # create only USER staff, and only in their own department.
 MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SE_MGR", "CU_MGR", "MU_MGR", "QP")
 
-# Department managers whose LIVE task visibility is scoped to their own
-# department (plus tasks they personally own or are assigned): GET /tasks and
-# /reports/weekly force department_id = the manager's department. QP is manager
-# rank but certifies batches across every department, so it stays org-wide;
-# executives and ADMIN are org-wide by definition. This is workflow scoping at
-# the API layer, not an RLS boundary — RLS still grants elevated org-wide read
-# (audit, documents, collaboration need it).
+# Department managers whose task access is scoped to their own department (plus
+# tasks they personally own or are assigned): GET /tasks and /reports/weekly
+# force department_id = the manager's department. QP is manager rank but
+# certifies batches across every department, so it stays org-wide; executives
+# and ADMIN are org-wide by definition.
+#
+# ⚠️ CRITICAL: department scoping for these roles is enforced ENTIRELY at the
+# application layer, NOT by RLS. app.is_elevated() (the tasks_read/tasks_write
+# policies) treats every manager role as org-wide, so the database grants a
+# dept-scoped manager org-wide read AND write on tasks/task_*. That org-wide DB
+# grant is intentional (audit, documents, collaboration need it) — but it means
+# EVERY endpoint that touches a task by id, on BOTH the read and the write side,
+# MUST call tasks._assert_scope_visible(c, task_id, user) to re-impose the
+# department boundary. Forgetting it silently reopens a cross-department
+# read/write bypass (this has already happened twice). test_dept_scope.py's
+# test_every_task_id_route_calls_the_scope_guard enforces this structurally.
 DEPT_SCOPED_ROLES = tuple(r for r in MANAGER_ROLES if r != "QP")
 
 USER = "USER"

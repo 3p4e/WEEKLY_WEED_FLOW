@@ -6,9 +6,43 @@ sides of any multi-departmental family (a parent whose subtask is delegated to
 their department, and a subtask under a parent in their department). Their
 /reports/weekly is forced to their department. Executives, QP and ADMIN stay
 org-wide. Enforced in tasks.py / reports.py via app.deps.dept_scope."""
+import inspect
+
 import pytest
 
 from tests.conftest import create_user, login_and_set_password
+
+
+def test_every_task_id_route_calls_the_scope_guard():
+    """Structural backstop for the whole class of bug this file exists to pin:
+    department scoping is enforced only at the app layer (RLS grants managers
+    org-wide access — see roles.DEPT_SCOPED_ROLES), so EVERY endpoint that
+    reaches a task by id must call tasks._assert_scope_visible. This test fails
+    if a route with {task_id} in its path (or the by-session delete) is added
+    without the guard — so a future endpoint can't silently reopen the bypass,
+    which is exactly how it reopened for 11+ endpoints before. If a new such
+    route legitimately needs no guard, add it to _EXEMPT with a reason."""
+    from app.main import app
+
+    # Routes that take a task id but genuinely don't need the guard, with why.
+    _EXEMPT: dict[str, str] = {}  # none today: every {task_id} route is by-id task access
+
+    offenders = []
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None:
+            continue
+        targets_a_task = "{task_id}" in path or path == "/sessions/{session_id}"
+        if not targets_a_task or endpoint.__name__ in _EXEMPT:
+            continue
+        src = inspect.getsource(endpoint)
+        if "_assert_scope_visible" not in src:
+            methods = ",".join(sorted(getattr(route, "methods", []) or []))
+            offenders.append(f"{methods} {path} ({endpoint.__name__})")
+    assert not offenders, (
+        "these task-id routes don't call _assert_scope_visible — a dept-scoped "
+        "manager could reach a foreign task through them:\n  " + "\n  ".join(offenders))
 
 
 async def _two_departments(org):
