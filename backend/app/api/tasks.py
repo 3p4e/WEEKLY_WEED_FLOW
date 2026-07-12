@@ -4,6 +4,8 @@ v2 task model: task_type / reference_code / due_date / blocker_reason /
 recurrence / outcome / archive on tasks, plus two child resources —
 work_sessions (every sitting of real work; the overtime engine's source of
 truth) and task_links (external Drive/SOP references)."""
+import json
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
@@ -13,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.db import rls
-from app.deps import dept_scope, require_password_set
-from app.roles import ELEVATED_ROLES
+from app.deps import dept_scope, require_password_set, require_role
+from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
 router = APIRouter(tags=["tasks"])
@@ -71,6 +73,37 @@ async def departments(user: dict = Depends(require_password_set)):
         return _ser(await c.fetch("SELECT id,code,name,name_mk,parent_id,is_active FROM departments ORDER BY name"))
 
 
+class DepartmentIn(BaseModel):
+    # Backend codes are the stable keys the frontend templates hang off
+    # (web/gf/dept-templates.js) — same charset rule as attribute keys.
+    code: str = Field(max_length=64, pattern=r"^[a-z0-9_]{1,64}$")
+    name: str = Field(max_length=120)
+    name_mk: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/departments", status_code=201)
+async def create_department(body: DepartmentIn, user: dict = Depends(require_role(ADMIN))):
+    """ADMIN-only, idempotent department creation. Until now live departments
+    were seeded out-of-band; the test-account provisioning script
+    (backend/scripts/provision_test_accounts.py) needs a first-class API path
+    that keeps the audit trail intact. Managers (who may provision USER staff)
+    and executives deliberately may NOT create departments — org structure is
+    a system-administration concern. Idempotent: re-POSTing an existing code
+    returns the existing row (UNIQUE (org_id, code) + DO NOTHING), so reruns
+    are safe. Inside rls(user) so the audit_departments trigger attributes the
+    actor and RLS pins the org."""
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4)"
+            " ON CONFLICT (org_id, code) DO NOTHING RETURNING *",
+            user["org_id"], body.code, body.name, body.name_mk)
+        if row is None:  # already existed — return it unchanged
+            row = await c.fetchrow(
+                "SELECT * FROM departments WHERE org_id=$1 AND code=$2",
+                user["org_id"], body.code)
+    return dict(row)
+
+
 @router.get("/weeks")
 async def weeks(user: dict = Depends(require_password_set)):
     async with rls(user) as c:
@@ -81,7 +114,7 @@ async def weeks(user: dict = Depends(require_password_set)):
 _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
     "t.task_type,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
-    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,"
+    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,"
     "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
 )
 
@@ -182,6 +215,7 @@ class TaskIn(BaseModel):
     parent_id: str | None = None
     days: list[str] = []
     tags: list[str] = []
+    attributes: dict | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
 
 
@@ -199,6 +233,33 @@ def _check_days(days: list[str] | None) -> None:
     bad = [d for d in days if d not in _DAY_TOKENS]
     if bad:
         raise HTTPException(422, f"days must be Mon..Sun tokens, got: {', '.join(map(str, bad[:3]))}")
+
+
+# Department-template metadata (room, strain, sample_ref, equipment_ref, …).
+# Shape-only validation — WHICH keys a department uses is a frontend template
+# concern (web/gf/dept-templates.js), so new fields never need a backend
+# change. Bounds are abuse hygiene: snake_case keys, scalar values, small map.
+_ATTR_KEY_RE = re.compile(r"^[a-z0-9_]{1,48}$")
+_ATTR_MAX_KEYS = 24
+_ATTR_MAX_STR = 500
+_ATTR_MAX_BYTES = 8192
+
+
+def _check_attributes(attrs: dict | None) -> None:
+    if attrs is None:
+        return
+    if len(attrs) > _ATTR_MAX_KEYS:
+        raise HTTPException(422, f"attributes: at most {_ATTR_MAX_KEYS} keys")
+    for k, v in attrs.items():
+        if not isinstance(k, str) or not _ATTR_KEY_RE.match(k):
+            raise HTTPException(422, "attributes: keys must match ^[a-z0-9_]{1,48}$")
+        if isinstance(v, str):
+            if len(v) > _ATTR_MAX_STR:
+                raise HTTPException(422, f"attributes.{k}: strings are capped at {_ATTR_MAX_STR} chars")
+        elif not isinstance(v, (int, float, bool)) or v is None:
+            raise HTTPException(422, f"attributes.{k}: values must be scalar (string, number, boolean)")
+    if len(json.dumps(attrs)) > _ATTR_MAX_BYTES:
+        raise HTTPException(422, f"attributes: serialized size is capped at {_ATTR_MAX_BYTES} bytes")
 
 
 def _check_recurrence(rec: dict | None) -> None:
@@ -223,6 +284,7 @@ def _check_recurrence(rec: dict | None) -> None:
 async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
     _check_days(body.days)
+    _check_attributes(body.attributes)
     # A dept-scoped manager creates TOP-LEVEL tasks in their own department
     # only; an omitted department defaults to theirs instead of landing
     # unassigned (which their scoped list could then never show them again).
@@ -256,14 +318,15 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
                 " task_type,reference_code,external_ref,blocker_reason,recurrence,"
-                " department,department_id,week_id,week_start,due_date,days,tags,estimated_hours,"
-                " created_by,updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$2,$2)"
+                " department,department_id,week_id,week_start,due_date,days,tags,attributes,"
+                " estimated_hours,created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$2,$2)"
                 " RETURNING *",
                 user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
                 body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
                 body.recurrence, body.department, body.department_id, body.week_id,
-                body.week_start, body.due_date, body.days, body.tags, body.estimated_hours,
+                body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
+                body.estimated_hours,
             )
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
@@ -287,6 +350,7 @@ class TaskPatch(BaseModel):
     is_archived: bool | None = None
     days: list[str] | None = None
     tags: list[str] | None = None
+    attributes: dict | None = None
     week_id: str | None = None
     week_start: date | None = None
     due_date: date | None = None
@@ -345,10 +409,10 @@ async def _materialize_recurrence(c, row) -> dict | None:
     new = await c.fetchrow(
         "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
         " task_type,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
-        " days,tags,estimated_hours,created_by,updated_by)"
+        " days,tags,attributes,estimated_hours,created_by,updated_by)"
         " SELECT org_id,user_id,parent_id,title,description,'pending',priority,"
         " task_type,reference_code,recurrence,department,department_id,$2,$3,$4,"
-        " days,tags,estimated_hours,$5,$5 FROM tasks WHERE id=$1 RETURNING *",
+        " days,tags,attributes,estimated_hours,$5,$5 FROM tasks WHERE id=$1 RETURNING *",
         row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None, row["updated_by"])
     return dict(new) if new else None
 
@@ -360,6 +424,12 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         _check_recurrence(patch["recurrence"])
     if "days" in patch:
         _check_days(patch["days"])
+    if "attributes" in patch:
+        _check_attributes(patch["attributes"])
+        # The column is NOT NULL DEFAULT '{}' — an explicit null means "clear",
+        # which is the empty map (recurrence, by contrast, genuinely nulls out).
+        if patch["attributes"] is None:
+            patch["attributes"] = {}
     scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():
