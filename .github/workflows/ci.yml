@@ -32,14 +32,28 @@ jobs:
         # (the default), same as it would for an actual deployment.
         env:
           SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
+        # starlette 1.x no longer flattens included routers into app.routes —
+        # each include_router() appears as one _IncludedRouter wrapper whose
+        # real APIRoutes live on .original_router.routes. Walk the nesting or
+        # this probe sees only 14 top-level entries and false-alarms.
         run: |
-          python -c "import app.main as m; \
-            paths=[getattr(r,'path','') for r in m.app.routes]; \
-            print('routes:', len(paths)); \
-            assert any(p.startswith('/audit') for p in paths), 'audit router not wired'; \
-            assert any(p.startswith('/auth') for p in paths), 'auth router not wired'; \
-            assert any(p.startswith('/reports') for p in paths), 'reports router not wired'; \
-            assert any('/sessions' in p for p in paths), 'work-session routes not wired'"
+          python - <<'PY'
+          import app.main as m
+          def walk(routes):
+              for r in routes:
+                  p = getattr(r, "path", None)
+                  if p:
+                      yield p
+                  orig = getattr(r, "original_router", None)
+                  if orig is not None:
+                      yield from walk(orig.routes)
+          paths = list(walk(m.app.routes))
+          print("routes:", len(paths))
+          assert any(p.startswith("/audit") for p in paths), "audit router not wired"
+          assert any(p.startswith("/auth") for p in paths), "auth router not wired"
+          assert any(p.startswith("/reports") for p in paths), "reports router not wired"
+          assert any("/sessions" in p for p in paths), "work-session routes not wired"
+          PY
 
   security:
     name: Security scan (pip-audit + bandit)
