@@ -26,10 +26,12 @@ async def main():
     org_id = uuid.uuid4()
     admin_id = uuid.uuid4()
     teammate_id = uuid.uuid4()
+    operator_id = uuid.uuid4()
     suffix = uuid.uuid4().hex[:8]
     username = f"e2e_admin_{suffix}"
     password = "E2ETestPassword123456"
     teammate_name = f"E2E Teammate {suffix[:4]}"
+    operator_username = f"e2e_operator_{suffix}"
 
     uconn = await asyncpg.connect(os.environ["USERS_ADMIN_DATABASE_URL"])
     conn = await asyncpg.connect(os.environ["TASKS_ADMIN_DATABASE_URL"])
@@ -46,9 +48,18 @@ async def main():
             "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
             " VALUES ($1,$2,$3,$4,$5,'USER',false)",
             teammate_id, org_id, f"e2e_teammate_{suffix}", hash_password(password), teammate_name)
-        await conn.execute(
-            "INSERT INTO departments(org_id, code, name) VALUES ($1,'cultivation','Cultivation')",
+        dept_id = await conn.fetchval(
+            "INSERT INTO departments(org_id, code, name, name_mk)"
+            " VALUES ($1,'cultivation','Cultivation','Одгледување') RETURNING id",
             org_id)
+        # A department-bound operator — the dept-home e2e spec logs in as this
+        # account to exercise the role landing + department home screen.
+        await uconn.execute(
+            "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role,"
+            " department_id, must_change_password)"
+            " VALUES ($1,$2,$3,$4,$5,'USER',$6,false)",
+            operator_id, org_id, operator_username, hash_password(password),
+            "E2E Operator", dept_id)
         today = datetime.date.today()
         starts_on = today - datetime.timedelta(days=today.weekday())  # Monday of the current week
         ends_on = starts_on + datetime.timedelta(days=6)
@@ -71,6 +82,7 @@ async def main():
     print(json.dumps({
         "org_id": str(org_id), "username": username, "password": password,
         "teammate_name": teammate_name,
+        "operator_username": operator_username, "department_id": str(dept_id),
     }))
 
 
