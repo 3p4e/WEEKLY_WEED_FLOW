@@ -286,10 +286,14 @@ GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.
 // also carry a data-skin-carbon marker (set by setTheme + the boot script) so
 // their shared derived-token block applies. Adding a skin = one CSS block +
 // one row here; the 3D leaf auto-derives its colour from the active tokens.
-GF.THEME_CORE = { dark: 1, light: 1, suma: 1 };   // the 3 non-Carbon skins
+// Core (non-Carbon) skins: their full derived-token sets live in app.css /
+// mass-weed.css, so they never carry the data-skin-carbon marker.
+GF.THEME_CORE = { dark: 1, light: 1, suma: 1, 'mass-weed': 1, 'mass-weed-light': 1 };
 GF.THEMES = [
   // Core
-  { id: 'dark',  name: 'Plasma (default)', group: 'dark' },
+  { id: 'mass-weed',       name: 'Mass Weed (default)', group: 'dark' },
+  { id: 'mass-weed-light', name: 'Mass Weed · Cool Mist', group: 'light' },
+  { id: 'dark',  name: 'Plasma',           group: 'dark' },
   { id: 'suma',  name: 'SUMA · Protoss',   group: 'dark' },
   { id: 'light', name: 'Cool Mist',        group: 'light' },
   // Carbon — dark
@@ -328,7 +332,7 @@ GF.THEMES = [
 GF.themeById = (id) => GF.THEMES.find(t => t.id === id);
 GF.curTheme = () => {
   const t = document.documentElement.dataset.theme;
-  return GF.themeById(t) ? t : 'dark';
+  return GF.themeById(t) ? t : 'mass-weed';
 };
 GF.syncThemeBtn = () => {
   const btn = GF.$('theme-btn');
