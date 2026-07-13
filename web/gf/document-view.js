@@ -122,6 +122,32 @@ GF.WWF._applyDocInputs = (content, inputs, skipKey) => {
   });
 };
 
+// Render an AI narrative body: escape-first, then a fixed markdown-lite
+// whitelist (## headings, **bold**, [task:xxxxxxxx] citations — the agents
+// emit these even when asked for plain prose). Citations that match a loaded
+// task become deep links into the board; unknown ids stay inert chips. The
+// backend's _md_lite is the export-side twin of this — keep them in step.
+GF.WWF.aiHtml = (text) => {
+  let t = GF.esc(String(text || ''));
+  t = t.replace(/^#{1,4}\s+(.+)$/gm, '<b style="display:block;font-size:13.5px;margin:7px 0 2px">$1</b>');
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  t = t.replace(/\[task:([0-9a-fA-F-]{4,36})\]/g, (_, ref) => {
+    const short = ref.slice(0, 8).toLowerCase();
+    const all = (GF.state && GF.state.tasks) ? GF.state.tasks : [];
+    const kids = (GF.state && GF.state.childrenByParent)
+      ? Object.values(GF.state.childrenByParent).flat() : [];
+    const hit = all.concat(kids).find(x => String(x.id || '').toLowerCase().startsWith(short));
+    const chip = 'background:rgba(43,232,160,.10);border:1px solid rgba(43,232,160,.25);border-radius:7px;'
+               + 'padding:0 5px;font-size:11px;font-family:ui-monospace,monospace;color:#2BE8A0';
+    if (hit && GF.WWF.jumpToTask) {
+      return `<a href="#" style="${chip};cursor:pointer;text-decoration:none" `
+           + `onclick="GF.WWF.jumpToTask('${GF.esc(String(hit.id))}');return false">задача/task ${GF.esc(short)}</a>`;
+    }
+    return `<span style="${chip}">задача/task ${GF.esc(short)}</span>`;
+  });
+  return t;
+};
+
 // Save one section's inputs; optionally flip `approved` in the same PATCH.
 GF.WWF.saveDocSection = async (key, approved) => {
   const ds = GF.WWF._doc;
@@ -371,8 +397,8 @@ GF.WWF._renderDocPanel = () => {
       const bodyHtml = editable
         ? langLbl('EN') + ta(s.key, 'body_en', bodyEn, AL('English narrative…', 'Наратив на англиски…'))
           + langLbl('МК') + ta(s.key, 'body_mk', bodyMk, AL('Macedonian narrative…', 'Наратив на македонски…'))
-        : (bodyEn ? `${langLbl('EN')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.esc(bodyEn)}</div>` : '')
-          + (bodyMk ? `${langLbl('МК')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.esc(bodyMk)}</div>` : '');
+        : (bodyEn ? `${langLbl('EN')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.WWF.aiHtml(bodyEn)}</div>` : '')
+          + (bodyMk ? `${langLbl('МК')}<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--ink)">${GF.WWF.aiHtml(bodyMk)}</div>` : '');
       return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <b style="font-size:13px">${GF.esc(s.title)}</b>

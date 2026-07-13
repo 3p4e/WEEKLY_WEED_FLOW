@@ -649,3 +649,62 @@ async def test_export_html_scope_and_role_guards(client, admin_headers, org):
     # Malformed id: clean 404.
     r = await client.get("/reports/documents/not-a-uuid/export.html", headers=admin_headers)
     assert r.status_code == 404
+
+
+# ── AI narrative normalization + markdown-lite rendering (2026-07-13 fix) ────
+# The scheduler-pipeline Letta agents answer in their persona's strict-JSON
+# contract no matter what the compile prompt asks; these pin the unwrap layer
+# and the escape-first renderer that turned the owner's export into raw JSON.
+
+from app.api.documents import _md_lite, _normalize_ai_reply, _split_bilingual
+
+
+def test_normalize_unwraps_json_envelope():
+    raw = '{"weekly_report": "## Executive Narrative — W28\\n\\n**No tasks were completed.** Detail here."}'
+    out = _normalize_ai_reply(raw)
+    assert out.startswith("## Executive Narrative — W28")
+    assert "**No tasks were completed.**" in out
+    assert '{"weekly_report"' not in out
+    assert "\\n" not in out  # JSON escapes decoded to real newlines
+
+
+def test_normalize_unwraps_fenced_envelope_and_bare_string():
+    fenced = '```json\n{"weekly_plan": "Plan text."}\n```'
+    assert _normalize_ai_reply(fenced) == "Plan text."
+    assert _normalize_ai_reply('"Just a JSON string."') == "Just a JSON string."
+
+
+def test_normalize_repairs_truncated_envelope():
+    # Agent hit its token limit mid-string: no closing quote/brace.
+    truncated = '{"weekly_report": "First line.\\nSecond line that got cut of'
+    out = _normalize_ai_reply(truncated)
+    assert "First line." in out and "Second line" in out
+    assert '{"weekly_report"' not in out
+
+
+def test_normalize_two_key_envelope_feeds_bilingual_split():
+    raw = '{"report_en": "English text.", "report_mk": "Македонски текст."}'
+    en, mk = _split_bilingual(_normalize_ai_reply(raw))
+    assert en == "English text."
+    assert mk == "Македонски текст."
+
+
+def test_normalize_passes_plain_prose_through():
+    plain = "Nothing fancy here.\n---\nНишто посебно."
+    assert _normalize_ai_reply(plain) == plain
+
+
+def test_md_lite_renders_whitelist_and_stays_escaped():
+    ids = {"a5e66bd9-1111-4111-8111-111111111111"}
+    html = _md_lite("## Head\n**bold** & <script>alert(1)</script> [task:a5e66bd9] [task:deadbeef]", ids)
+    assert '<span class="mdh">Head</span>' in html
+    assert "<b>bold</b>" in html
+    assert "&lt;script&gt;" in html and "<script>" not in html
+    assert 'href="#task-a5e66bd9"' in html          # cited id resolves to anchor
+    assert '<span class="cite">задача/task deadbeef</span>' in html  # unknown id stays inert
+    assert "<br>" in html
+
+
+def test_md_lite_bold_marker_cannot_smuggle_tags():
+    html = _md_lite("**<img src=x onerror=alert(1)>**")
+    assert "<img" not in html and "&lt;img" in html
