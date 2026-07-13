@@ -157,7 +157,7 @@ const xrNarratives = (c) => {
     if (!rows && !text) return;
     out += `<div class="xr-tsec">
       <div class="xr-tsec-head">${GF.esc(lang === 'mk' ? (s.title_mk || s.title_en) : s.title_en)}</div>
-      ${rows}${text ? `<div class="xr-nar">${GF.esc(text)}</div>` : ''}
+      ${rows}${text ? `<div class="xr-nar">${GF.WWF.aiHtml(text)}</div>` : ''}
     </div>`;
   });
   (c.ai_sections || []).forEach(s => {
@@ -166,7 +166,7 @@ const xrNarratives = (c) => {
     if (!text) return;
     out += `<div class="xr-tsec">
       <div class="xr-tsec-head">${GF.esc(s.title)}${s.approved ? '' : ` <span class="xr-badge">${AL('draft', 'нацрт')}</span>`}</div>
-      <div class="xr-nar">${GF.esc(text)}</div>${GF.WWF._aiDisclaimer ? GF.WWF._aiDisclaimer() : ''}
+      <div class="xr-nar">${GF.WWF.aiHtml(text)}</div>${GF.WWF._aiDisclaimer ? GF.WWF._aiDisclaimer() : ''}
     </div>`;
   });
   return out;

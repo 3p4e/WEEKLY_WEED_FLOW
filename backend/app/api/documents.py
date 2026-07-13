@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.api.ai import _letta_message
+from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
@@ -318,6 +319,12 @@ def _split_bilingual(reply: str) -> tuple[str, str]:
         return parts[0].strip(), parts[1].strip()
     return reply.strip(), ""
 
+
+# _normalize_ai_reply lives in app.api.ai (imported below as _normalize_ai_reply)
+# so the JSON-envelope-unwrap logic has exactly one implementation shared by
+# the generic /ai/{function_key} invoke endpoint and every document narrative
+# reader here — they were drifting apart before this was consolidated.
+
 # (function_key, section title) per document kind. The prompt is looked up in
 # _ASK by key so weekly_summary can carry a kind-specific title.
 _AI_SECTIONS = {
@@ -505,7 +512,7 @@ async def _ai_sections(kind: str, context: str, bindings: dict) -> list[dict]:
         reply = await _letta_message(agent, f"{context}\n\nREQUEST: {_ASK[key]}{_BILINGUAL_SUFFIX}")
         if reply is None:
             return {**base, "status": "unavailable"}
-        body_en, body_mk = _split_bilingual(reply)
+        body_en, body_mk = _split_bilingual(_normalize_ai_reply(reply))
         # `body` mirrors body_en for old readers (pre-v2 frontend/PDF code paths).
         return {**base, "body": body_en, "body_en": body_en, "body_mk": body_mk, "status": "draft"}
 
@@ -587,7 +594,7 @@ async def _prefill_template_narratives(sections: list[dict], tasks: list[dict],
             f"REQUEST: Draft a factual narrative for this section grounded ONLY in the tasks above."
             f" LENGTH BUDGET: at most 80 words per language.{_BILINGUAL_SUFFIX}"))
         if reply:
-            en, mk = _split_bilingual(reply)
+            en, mk = _split_bilingual(_normalize_ai_reply(reply))
             sec["narrative"] = {"en": en, "mk": mk}
 
     await asyncio.gather(*(one(s) for s in sections))
@@ -1001,6 +1008,9 @@ _PDF_CSS = """
     h4 { font-size: 10px; margin: 0 0 2px; }
     .sub { color: #5D6B7E; margin: 2px 0 0; }
     .badge { background: #FFF4E5; color: #B45309; font-size: 7.5px; padding: 1px 6px; border-radius: 8px; }
+    .mdh { display: block; font-weight: 800; font-size: 10.5px; margin: 6px 0 2px; }
+    .cite { background: #F3F6FA; border: 1px solid #E2E8F0; border-radius: 6px; padding: 0 4px;
+      font-size: 8px; font-family: 'DejaVu Sans Mono', monospace; color: #0E7A4A; text-decoration: none; }
     .chip { font-size: 8px; font-weight: 700; letter-spacing: .4px; padding: 2px 8px; border-radius: 9px; }
     .chip.locked { background: #E7F6EE; color: #0E7A4A; } .chip.draft { background: #FFF4E5; color: #B45309; }
     .cover { border-bottom: 3px solid #15A86B; padding-bottom: 9px; }
@@ -1032,6 +1042,47 @@ def _nl(text: str) -> str:
     """Escape then newline→<br> — the only sanctioned way multi-line user/AI
     text reaches the PDF markup."""
     return _e(text).replace("\n", "<br>")
+
+
+_MD_HEAD_RE = re.compile(r"^#{1,4}\s+(.+)$", re.M)
+_MD_BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")
+_MD_CITE_RE = re.compile(r"\[task:([0-9a-fA-F-]{4,36})\]")
+
+
+def _md_lite(text: str, task_ids: set[str] | None = None) -> str:
+    """Escape-first markdown-lite for AI narrative bodies. The agents write
+    `## headings`, `**bold**` and `[task:xxxxxxxx]` citations even when asked
+    for plain prose — render those three (and nothing more) instead of showing
+    the markers. UNTRUSTED input: html-escape happens BEFORE any tag is
+    inserted and only a fixed whitelist of tags is ever emitted. When a cited
+    id prefixes a task in `task_ids` the citation becomes an in-document
+    anchor (the export's task rows carry matching ids); otherwise a plain
+    reference chip."""
+    t = _e(text)
+    t = _MD_HEAD_RE.sub(r'<span class="mdh">\1</span>', t)
+    # An odd count of "**" means the agent opened a bold span it never closed;
+    # pairing markers left-to-right in that case grabs the NEXT legitimate
+    # opening marker as the close, bolding a whole run of unrelated prose in
+    # between. Leave every marker literal instead — worse-looking but never
+    # scrambles the sentence.
+    if t.count("**") % 2 == 0:
+        t = _MD_BOLD_RE.sub(r"<b>\1</b>", t)
+
+    def cite(m: "re.Match[str]") -> str:
+        ref = m.group(1).lower()
+        # Sorted so an ambiguous short ref (>=4 hex chars) resolves the same
+        # way every time regardless of set/hash iteration order.
+        full = next((tid for tid in sorted(task_ids or ()) if tid.startswith(ref)), None)
+        if full:
+            return f'<a class="cite" href="#task-{full[:8]}">задача/task {ref[:8]}</a>'
+        return f'<span class="cite">задача/task {ref[:8]}</span>'
+
+    t = _MD_CITE_RE.sub(cite, t)
+    return t.replace("\n", "<br>")
+
+
+def _content_task_ids(c: dict) -> set[str]:
+    return {str(t.get("id", "")).lower() for t in c.get("tasks", []) if t.get("id")}
 
 
 def _sec_body_en(s: dict) -> str:
@@ -1072,6 +1123,7 @@ def _pdf_cover(doc: dict, c: dict, who) -> str:
 
 def _pdf_template_sections(c: dict, is_locked: bool) -> str:
     out = ""
+    ids = _content_task_ids(c)
     for sec in c.get("template_sections", []):
         rows = "".join(
             f'<tr><td class="k">{_e(f.get("label_en", ""))}<br><span class="sub">{_e(f.get("label_mk", ""))}</span></td>'
@@ -1086,9 +1138,9 @@ def _pdf_template_sections(c: dict, is_locked: bool) -> str:
             badge = "" if sec.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
             nar_html = f'<div class="ai">{badge}'
             if nar.get("en"):
-                nar_html += f'<div class="lang-lbl">EN</div><div>{_nl(nar["en"])}</div>'
+                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"], ids)}</div>'
             if nar.get("mk"):
-                nar_html += f'<div class="lang-lbl">МК</div><div>{_nl(nar["mk"])}</div>'
+                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"], ids)}</div>'
             nar_html += "</div>"
         out += (f'<div class="tsec"><h3>{_e(sec.get("title_en", ""))}'
                 f' <span class="sub">/ {_e(sec.get("title_mk", ""))}</span></h3>'
@@ -1098,6 +1150,7 @@ def _pdf_template_sections(c: dict, is_locked: bool) -> str:
 
 def _pdf_ai_sections(c: dict, is_locked: bool) -> str:
     out = ""
+    ids = _content_task_ids(c)
     for s in c.get("ai_sections", []):
         if s.get("status") in ("not_configured", "unavailable"):
             continue
@@ -1109,9 +1162,9 @@ def _pdf_ai_sections(c: dict, is_locked: bool) -> str:
         badge = "" if s.get("approved") else '<span class="badge">DRAFT — not approved</span>'
         out += f'<div class="sec"><h3>{_e(s["title"])} {badge}</h3><div class="ai">'
         if body_en:
-            out += f'<div class="lang-lbl">EN</div><div>{_nl(body_en)}</div>'
+            out += f'<div class="lang-lbl">EN</div><div>{_md_lite(body_en, ids)}</div>'
         if body_mk:
-            out += f'<div class="lang-lbl">МК</div><div>{_nl(body_mk)}</div>'
+            out += f'<div class="lang-lbl">МК</div><div>{_md_lite(body_mk, ids)}</div>'
         out += "</div></div>"
     return f'<h2>Narrative <span class="mk">Наративен дел</span></h2>{out}' if out else ""
 
@@ -1137,7 +1190,8 @@ def _pdf_task_tables(c: dict, who) -> str:
                        + (f'{_nl(t["description"])}' if t.get("description") else "")
                        + (f'<ul>{notes}</ul>' if notes else "") + "</td></tr>")
             hours = f'{t.get("estimated_hours") or "—"} / {t.get("actual_hours") or "—"}'
-            rows += (f'<tr><td>{_e(t.get("title", ""))}</td><td>{_e(t.get("reference_code") or "—")}</td>'
+            anchor = f' id="task-{_e(str(t.get("id", ""))[:8].lower())}"' if t.get("id") else ""
+            rows += (f'<tr{anchor}><td>{_e(t.get("title", ""))}</td><td>{_e(t.get("reference_code") or "—")}</td>'
                      f'<td>{_e(t.get("status", ""))}</td><td>{_e(t.get("priority", ""))}</td>'
                      f'<td>{_e(hours)}</td><td>{_e(t.get("due_date") or "—")}</td></tr>{sub}')
         out += (f'<h3>{_e(dept_label)} <span class="sub">({len(tasks)})</span></h3>'
@@ -1272,6 +1326,9 @@ _HTML_CSS = """
   .dot { display:inline-block; width:9px; height:9px; border-radius:5px; margin-right:5px; }
   .lang-lbl { font-size:10px; font-weight:800; letter-spacing:.6px; color:var(--brand); margin:8px 0 2px; }
   .badge { background:var(--warnbg); color:var(--warn); font-size:10px; padding:1px 7px; border-radius:8px; }
+  .mdh { display:block; font-weight:800; font-size:13px; margin:8px 0 3px; }
+  .cite { background:var(--soft); border:1px solid var(--line); border-radius:7px; padding:0 5px;
+    font-size:10.5px; font-family:ui-monospace,monospace; color:var(--brand); text-decoration:none; }
   .note { font-size:12px; color:var(--ink2); padding:2px 0 2px 10px; border-left:2px solid var(--line); margin:4px 0; }
   .note b { color:var(--ink); } .note .by { font-style:italic; }
   .lg { margin-right:10px; font-size:11px; white-space:nowrap; }
@@ -1321,7 +1378,8 @@ def _html_task_details(c: dict, who) -> str:
                     + (f"<div>{_nl(t['description'])}</div>" if t.get("description") else "")
                     + notes) or '<div class="sub">—</div>'
             hours = f"{t.get('estimated_hours') or '—'} / {t.get('actual_hours') or '—'}"
-            rows += (f'<details><summary>{_e(t.get("title", ""))}'
+            anchor = f' id="task-{_e(str(t.get("id", ""))[:8].lower())}"' if t.get("id") else ""
+            rows += (f'<details{anchor}><summary>{_e(t.get("title", ""))}'
                      f' <span class="chip {"locked" if t.get("status") == "completed" else "draft"}">{_e(t.get("status", ""))}</span>'
                      f' <span class="sub mono">{_e(t.get("reference_code") or "")}</span>'
                      f' <span class="sub mono">est/act {_e(hours)}</span>'
@@ -1335,6 +1393,7 @@ def _html_narratives(c: dict, is_locked: bool) -> str:
     """Template-section grids + AI sections as collapsible blocks — the same
     locked/draft inclusion rules as the PDF renderer."""
     out = ""
+    ids = _content_task_ids(c)
     for sec in c.get("template_sections", []):
         rows = "".join(
             f'<tr><td class="k">{_e(f.get("label_en", ""))}<br><span class="sub">{_e(f.get("label_mk", ""))}</span></td>'
@@ -1346,9 +1405,9 @@ def _html_narratives(c: dict, is_locked: bool) -> str:
             badge = "" if sec.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
             nar_html = badge
             if nar.get("en"):
-                nar_html += f'<div class="lang-lbl">EN</div><div>{_nl(nar["en"])}</div>'
+                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"], ids)}</div>'
             if nar.get("mk"):
-                nar_html += f'<div class="lang-lbl">МК</div><div>{_nl(nar["mk"])}</div>'
+                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"], ids)}</div>'
         out += (f'<details open><summary>{_e(sec.get("title_en", ""))}'
                 f' <span class="sub">/ {_e(sec.get("title_mk", ""))}</span></summary>'
                 f'<table class="grid">{rows}</table>{nar_html}</details>')
@@ -1363,8 +1422,8 @@ def _html_narratives(c: dict, is_locked: bool) -> str:
             continue
         badge = "" if s.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
         ai += (f'<details><summary>{_e(s["title"])}{badge}</summary>'
-               + (f'<div class="lang-lbl">EN</div><div>{_nl(body_en)}</div>' if body_en else "")
-               + (f'<div class="lang-lbl">МК</div><div>{_nl(body_mk)}</div>' if body_mk else "")
+               + (f'<div class="lang-lbl">EN</div><div>{_md_lite(body_en, ids)}</div>' if body_en else "")
+               + (f'<div class="lang-lbl">МК</div><div>{_md_lite(body_mk, ids)}</div>' if body_mk else "")
                + "</details>")
     return ((f'<h2>Department status <span class="mk">Статус по оддели</span></h2>{out}' if out else "")
             + (f'<h2>Narrative <span class="mk">Наративен дел</span></h2>{ai}' if ai else ""))

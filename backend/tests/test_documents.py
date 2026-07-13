@@ -649,3 +649,93 @@ async def test_export_html_scope_and_role_guards(client, admin_headers, org):
     # Malformed id: clean 404.
     r = await client.get("/reports/documents/not-a-uuid/export.html", headers=admin_headers)
     assert r.status_code == 404
+
+
+# ── AI narrative normalization + markdown-lite rendering (2026-07-13 fix) ────
+# The scheduler-pipeline Letta agents answer in their persona's strict-JSON
+# contract no matter what the compile prompt asks; these pin the unwrap layer
+# and the escape-first renderer that turned the owner's export into raw JSON.
+
+from app.api.documents import _md_lite, _normalize_ai_reply, _split_bilingual
+
+
+def test_normalize_unwraps_json_envelope():
+    raw = '{"weekly_report": "## Executive Narrative — W28\\n\\n**No tasks were completed.** Detail here."}'
+    out = _normalize_ai_reply(raw)
+    assert out.startswith("## Executive Narrative — W28")
+    assert "**No tasks were completed.**" in out
+    assert '{"weekly_report"' not in out
+    assert "\\n" not in out  # JSON escapes decoded to real newlines
+
+
+def test_normalize_unwraps_fenced_envelope_and_bare_string():
+    fenced = '```json\n{"weekly_plan": "Plan text."}\n```'
+    assert _normalize_ai_reply(fenced) == "Plan text."
+    assert _normalize_ai_reply('"Just a JSON string."') == "Just a JSON string."
+
+
+def test_normalize_repairs_truncated_envelope():
+    # Agent hit its token limit mid-string: no closing quote/brace.
+    truncated = '{"weekly_report": "First line.\\nSecond line that got cut of'
+    out = _normalize_ai_reply(truncated)
+    assert "First line." in out and "Second line" in out
+    assert '{"weekly_report"' not in out
+
+
+def test_normalize_two_key_envelope_feeds_bilingual_split():
+    raw = '{"report_en": "English text.", "report_mk": "Македонски текст."}'
+    en, mk = _split_bilingual(_normalize_ai_reply(raw))
+    assert en == "English text."
+    assert mk == "Македонски текст."
+
+
+def test_normalize_passes_plain_prose_through():
+    plain = "Nothing fancy here.\n---\nНишто посебно."
+    assert _normalize_ai_reply(plain) == plain
+
+
+def test_md_lite_renders_whitelist_and_stays_escaped():
+    ids = {"a5e66bd9-1111-4111-8111-111111111111"}
+    html = _md_lite("## Head\n**bold** & <script>alert(1)</script> [task:a5e66bd9] [task:deadbeef]", ids)
+    assert '<span class="mdh">Head</span>' in html
+    assert "<b>bold</b>" in html
+    assert "&lt;script&gt;" in html and "<script>" not in html
+    assert 'href="#task-a5e66bd9"' in html          # cited id resolves to anchor
+    assert '<span class="cite">задача/task deadbeef</span>' in html  # unknown id stays inert
+    assert "<br>" in html
+
+
+def test_md_lite_bold_marker_cannot_smuggle_tags():
+    html = _md_lite("**<img src=x onerror=alert(1)>**")
+    assert "<img" not in html and "&lt;img" in html
+
+
+# ── xhigh review follow-ups (2026-07-13): fence-with-prose, bold-pairing,
+# deterministic citation resolution, list-envelope bilingual split ──────────
+
+def test_normalize_unwraps_fence_with_surrounding_prose():
+    reply = 'Sure thing!\n```json\n{"weekly_report": "Done."}\n```'
+    assert _normalize_ai_reply(reply) == "Done."
+
+
+def test_normalize_list_envelope_uses_bilingual_separator():
+    en, mk = _split_bilingual(_normalize_ai_reply('["EN narrative text", "MK narrative text"]'))
+    assert en == "EN narrative text"
+    assert mk == "MK narrative text"
+
+
+def test_md_lite_unbalanced_bold_marker_leaves_text_literal_not_scrambled():
+    text = ("Deployment went well **but we still need to verify backups, "
+            "and next week's plan **highlight** is the HVAC retrofit.")
+    html = _md_lite(text)
+    # No sentence-spanning <b> — the unmatched marker must not swallow
+    # unrelated prose between it and the next legitimate pair.
+    assert "still need to verify backups, and next week" not in html.split("<b>")[-1] if "<b>" in html else True
+    assert "**" in html  # left literal rather than mis-paired
+
+
+def test_md_lite_citation_resolves_deterministically_with_ambiguous_prefix():
+    ids = {"a5e66bd9-1111-4111-8111-111111111111", "a5e66bd9-2222-4222-8222-222222222222"}
+    html1 = _md_lite("[task:a5e66bd9]", ids)
+    html2 = _md_lite("[task:a5e66bd9]", ids)
+    assert html1 == html2  # same input -> same output regardless of set iteration order
