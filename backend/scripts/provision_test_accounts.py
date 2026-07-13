@@ -37,6 +37,7 @@ import os
 import secrets
 import stat
 import sys
+import time
 
 DEFAULT_BASE_URL = "https://wwf.srv1231216.hstgr.cloud"
 STATE_FILE = "test_accounts.local.json"
@@ -155,28 +156,52 @@ def save_state(state, path=STATE_FILE):
     print(f"credentials written to {path} (0600)")
 
 
+def _post_with_429_retry(c, path, payload, headers, what):
+    """The API throttles auth mutations (20 per 5-minute window per actor) —
+    wait the window out instead of dying mid-run."""
+    while True:
+        r = c.post(path, json=payload, headers=headers)
+        if r.status_code != 429:
+            return r
+        print(f"  … throttled on {what} — waiting 75s for the window")
+        time.sleep(75)
+
+
 def provision(c, token, dept_ids, state):
     r = c.get("/auth/users", headers=_auth(token))
     r.raise_for_status()
-    existing = {u["username"] for u in r.json()}
-    created = 0
+    server_users = {u["username"]: u for u in r.json()}
+    created = recovered = 0
     for row in MATRIX:
-        if row["username"] in existing:
-            print(f"  = {row['username']} exists — skipped")
+        u = row["username"]
+        if u in server_users:
+            rec = state["accounts"].get(u)
+            if rec and (rec.get("otp") or rec.get("password")):
+                print(f"  = {u} exists — skipped")
+                continue
+            # Account exists but this state file has no credential for it (a
+            # previous run died before saving) — mint a fresh OTP.
+            r = _post_with_429_retry(c, f"/auth/users/{server_users[u]['id']}/reset-password",
+                                     None, _auth(token), f"reset {u}")
+            if r.status_code != 200:
+                sys.exit(f"reset-password {u} failed: {r.status_code} {r.text[:200]}")
+            state["accounts"][u] = {"full_name": row["full_name"], "role": row["role"],
+                                    "department": row["dept"], "otp": r.json()["otp"], "password": None}
+            save_state(state)
+            recovered += 1
+            print(f"  ~ {u} existed without saved credentials — new OTP captured")
             continue
-        payload = {"username": row["username"], "full_name": row["full_name"], "role": row["role"],
+        payload = {"username": u, "full_name": row["full_name"], "role": row["role"],
                    "department_id": dept_ids[row["dept"]] if row["dept"] else None}
-        r = c.post("/auth/users", json=payload, headers=_auth(token))
+        r = _post_with_429_retry(c, "/auth/users", payload, _auth(token), f"create {u}")
         if r.status_code != 201:
-            sys.exit(f"POST /auth/users {row['username']} failed: {r.status_code} {r.text[:200]}")
-        body = r.json()
-        state["accounts"][row["username"]] = {
-            "full_name": row["full_name"], "role": row["role"], "department": row["dept"],
-            "otp": body["otp"], "password": None,
-        }
+            sys.exit(f"POST /auth/users {u} failed: {r.status_code} {r.text[:200]}")
+        state["accounts"][u] = {"full_name": row["full_name"], "role": row["role"],
+                                "department": row["dept"], "otp": r.json()["otp"], "password": None}
+        save_state(state)   # incremental — a mid-run death never loses OTPs again
         created += 1
-        print(f"  + {row['username']} ({row['role']}) otp captured")
-    print(f"{created} account(s) created, {len(MATRIX) - created} already existed")
+        print(f"  + {u} ({row['role']}) otp captured")
+    print(f"{created} created, {recovered} recovered, {len(MATRIX) - created - recovered} already provisioned")
 
 
 def set_passwords(c, state):
