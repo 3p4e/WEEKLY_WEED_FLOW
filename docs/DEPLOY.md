@@ -166,3 +166,24 @@ traefik.http.services.wwf.loadbalancer.server.port=80
 nginx serves the UI and reverse-proxies `/auth /departments /weeks /tasks
 /sessions /ai /audit /reports /health` to the backend same-origin (resolved at request time
 via Docker DNS), so the browser only ever talks to one origin.
+
+## Parallel test instance — wwf_mass (added 2026-07-13)
+
+An isolated clone of the full app runs alongside production for validation
+and experiments:
+
+- **URL:** https://wwf-mass.srv1231216.hstgr.cloud · **Stack:** `/opt/stacks/wwf_mass`
+- **Containers:** `wwf-mass-{db-users,db-tasks,backend,frontend}` on their own
+  network `wwf_mass_internal` (172.16.37.0/24) with their own volumes
+  (`wwf_mass_*_pgdata`, cloned from production 2026-07-13 via `pg_dumpall`).
+- Runs the same images as production (`weekly_weed_flow-backend:v29`,
+  `wwf-growflow:v45`). The backend carries the network-alias
+  `weekly_weed_flow-backend-1` *inside its own network only* — the stock
+  frontend nginx upstream resolves locally and can never cross to production.
+- Fresh `SECRET_KEY` (tokens not interchangeable with production);
+  **Letta AI disabled** (`LETTA_*` pointed at an unroutable address) so the
+  test instance cannot drive the production AI agents; the operational
+  singletons (scheduler, capture-mcp, backups) are deliberately not run —
+  **the mass instance has no backups by design**.
+- Accounts/passwords equal production at clone time (incl. the `tt.*` cast).
+- Full teardown procedure: see `/opt/stacks/wwf_mass/README.md` on the host.
