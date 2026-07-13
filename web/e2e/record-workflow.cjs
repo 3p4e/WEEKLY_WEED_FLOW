@@ -26,7 +26,10 @@ const { BATCH, STAGES } = require('./workflow-story.cjs');
 const BASE = 'http://localhost:8091';
 const OUT = path.join(__dirname, '..', '..', '.demo-videos');
 const PW = 'Demo-2026-Mass!';
-const SUF = Date.now().toString(36).slice(-4);
+// EXEC_ONLY_SUF re-records just the three executive clips against an org that
+// a previous full run already seeded (skips seeding + account creation).
+const EXEC_ONLY = process.env.EXEC_ONLY_SUF || '';
+const SUF = EXEC_ONLY || Date.now().toString(36).slice(-4);
 const EXEC_PATH = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
 /* ── week math (this Monday / next Monday, facility local) ─────────────── */
@@ -373,7 +376,15 @@ async function kickoffStory(page, ids) {
 }
 
 /* ── exec review (COO ops / CEO / Owner) ──────────────────────────────── */
-async function execReview(page, e, ids) {
+const expandSection = async (page, label) => {
+  const head = page.locator('.xr-sec-head', { hasText: label }).first();
+  if (!(await head.count())) return false;
+  await head.scrollIntoViewIfNeeded().catch(() => {});
+  await head.click();
+  await pause(page, 1700);   // the department's document loads asynchronously
+  return true;
+};
+async function execReview(page, e) {
   const isOwner = e.role === 'OWNER', isCoo = e.role === 'COO';
   await uiLogin(page, uname[e.u]);
   await setChapter(page, e.tag, `${e.name} · ${e.role}`);
@@ -382,47 +393,62 @@ async function execReview(page, e, ids) {
     : 'The strategic view — outcomes and momentum, not the mechanics.';
   await titleCard(page, e.tag, isOwner ? 'Owner review' : isCoo ? 'Operations review' : 'Executive summary', intro);
   await pause(page, 800);
-  await page.evaluate(() => GF.setView('execreport')); await pause(page, 2200);
-  await say(page, `${e.name} opens the Executive Report. The status board shows which departments have submitted this week — locked, draft, or still missing.`);
+  await page.evaluate(() => GF.setView('execreport')); await pause(page, 2400);
+  await say(page, `${e.name} opens the Executive Report. The band across the top rolls up the whole week — tasks, completion, on-time rate and logged hours — and the board below shows every department's submission: submitted, draft, or still missing.`);
 
-  const secs = page.locator('.xr-sec summary');
-  const n = Math.min(await secs.count(), isOwner ? 3 : 2);
-  for (let i = 0; i < n; i++) {
-    await secs.nth(i).click(); await pause(page, 1000);
-    if (i === 0) await say(page, `Expanding a department shows its metrics and a plain-language narrative — the same data the managers entered against batch ${BATCH.ref}.`);
+  // Expand the department sections that carry content (chip status Draft /
+  // Submitted). Headers are clickable rows, not <details>.
+  const want = isOwner ? ['Org-wide document', 'Cultivation', 'Quality Control']
+    : isCoo ? ['Cultivation', 'Production', 'Quality Control']
+    : ['Cultivation', 'Quality Control'];
+  for (let i = 0; i < want.length; i++) {
+    const ok = await expandSection(page, want[i]);
+    if (ok && i === 0) await say(page, `Expanding a department opens its metrics grid and a plain-language narrative — the very figures the managers entered against batch ${BATCH.ref}.`);
   }
+
+  // Drill into a task inside an expanded section.
   const task = page.locator('.xr-task summary').first();
   if (await task.count()) {
-    await task.click(); await pause(page, 1200);
-    await say(page, `Drilling into a task reveals the progress notes — with author names — and the hours logged against it.`);
-  }
-  const ai = page.getByRole('button', { name: /AI shown|AI прикажано/ }).first();
-  if (await ai.count()) {
-    await say(page, `The AI narrative can be toggled off entirely — the executives can read the raw human record whenever they prefer.`);
-    await ai.click(); await pause(page, 1100);
-    await page.getByRole('button', { name: /AI hidden|AI скриено/ }).first().click(); await pause(page, 800);
+    await task.scrollIntoViewIfNeeded().catch(() => {});
+    await task.click(); await pause(page, 1400);
+    await say(page, `Drilling into a task reveals its progress notes — with author names — and the hours logged against it. Every number traces back to a real entry.`);
   }
 
-  if (isCoo) {
-    await say(page, `For operations, this is the single pane of glass: the batch, its seven stages, and exactly where the work sits mid-week.`);
+  // Toggle the AI-drafted narrative off, then back on (re-renders the view).
+  const aiOn = page.getByRole('button', { name: /AI shown|AI прикажано/ }).first();
+  if (await aiOn.count()) {
+    await aiOn.scrollIntoViewIfNeeded().catch(() => {});
+    await say(page, `The AI-drafted passages can be hidden entirely — executives can read only the raw human record whenever they prefer.`);
+    await aiOn.click(); await pause(page, 1300);
+    const aiOff = page.getByRole('button', { name: /AI hidden|AI скриено/ }).first();
+    if (await aiOff.count()) { await aiOff.click(); await pause(page, 900); }
   }
+
+  if (isCoo) await say(page, `For operations this is the single pane of glass — the batch, its seven stages, and exactly where the work sits mid-week.`);
+
   if (isOwner) {
+    // Deep link: jump from a report figure to its source task on the board.
+    if (!(await page.locator('.xr-task summary').count())) await expandSection(page, 'Cultivation');
     const jump = page.getByRole('button', { name: /Open in board|Отвори на табла/ }).first();
     if (await jump.count()) {
-      await say(page, `Any figure links straight to its source — one click jumps from the report to the exact task on the board.`);
-      await jump.click(); await pause(page, 1800);
-      await page.evaluate(() => GF.setView('execreport')); await pause(page, 1400);
+      await jump.scrollIntoViewIfNeeded().catch(() => {});
+      await say(page, `Every figure links to its source — one click jumps from the report straight to that task on the board.`);
+      await jump.click(); await pause(page, 2100);
+      await page.evaluate(() => GF.setView('execreport')); await pause(page, 1900);
     }
+    // Export the whole thing as one self-contained interactive HTML file.
+    if (!(await page.locator('.xr-exports').count())) await expandSection(page, 'Org-wide document');
     const dl = page.waitForEvent('download', { timeout: 15000 }).catch(() => null);
     const btn = page.getByRole('button', { name: /Interactive HTML|Интерактивен/ }).first();
     if (await btn.count()) {
-      await say(page, `And the whole thing exports as one self-contained interactive HTML file — no login, works offline, still expandable.`);
+      await btn.scrollIntoViewIfNeeded().catch(() => {});
+      await say(page, `And the whole report exports as one self-contained interactive HTML file — no login, works offline, still expandable.`);
       await btn.click(); const d = await dl; if (d) await d.saveAs(path.join(OUT, 'owner-export.html'));
-      await pause(page, 1200);
+      await pause(page, 1300);
     }
-    await say(page, `The owner can hand that single file to a partner or regulator, or explore the planning tools directly.`);
-    await page.evaluate(() => GF.setView('workload')); await pause(page, 1700);
-    await page.evaluate(() => GF.setView('calendar')); await pause(page, 1700);
+    await say(page, `The owner can hand that single file to a partner or a regulator — or explore the planning tools directly.`);
+    await page.evaluate(() => GF.setView('workload')); await pause(page, 1900);
+    await page.evaluate(() => GF.setView('calendar')); await pause(page, 1900);
     await say(page, `From one delegated batch to the boardroom view — that is Weekly Weed Flow, end to end.`);
   }
   await capOff(page); await pause(page, 700);
@@ -475,6 +501,32 @@ async function seedBatch(coo, ids) {
 
 /* ── main ────────────────────────────────────────────────────────────── */
 (async () => {
+  // Fast path: re-record only the three executive clips against an already
+  // seeded org (keeps the seven manager clips already in OUT).
+  if (EXEC_ONLY) {
+    const browser = await chromium.launch({ executablePath: EXEC_PATH, args: ['--no-sandbox'] });
+    const execClips = [
+      { idx: 8, name: 'coo-review', e: EXECS[0] },
+      { idx: 9, name: 'ceo', e: EXECS[1] },
+      { idx: 10, name: 'owner', e: EXECS[2] },
+    ];
+    for (const c of execClips) {
+      const label = String(c.idx).padStart(2, '0') + '-' + c.name;
+      const ctx = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        recordVideo: { dir: OUT, size: { width: 1440, height: 900 } }, acceptDownloads: true,
+      });
+      const page = await ctx.newPage();
+      try { await execReview(page, c.e); console.log('recorded:', label); }
+      catch (err) { console.log('CLIP ERROR', label, err.message.slice(0, 200)); await page.screenshot({ path: path.join(OUT, label + '-error.png') }).catch(() => {}); }
+      const video = page.video(); await ctx.close();
+      if (video) { const p = await video.path(); fs.renameSync(p, path.join(OUT, label + '.webm')); }
+    }
+    await browser.close();
+    console.log('DONE (exec-only). videos in', OUT);
+    return;
+  }
+
   fs.rmSync(OUT, { recursive: true, force: true }); fs.mkdirSync(OUT, { recursive: true });
 
   // 1) fresh org + admin
@@ -529,9 +581,9 @@ async function seedBatch(coo, ids) {
   const clips = [];
   clips.push({ name: 'kickoff-coo', fn: (p) => kickoffStory(p, ids) });
   for (const s of STAGES) clips.push({ name: s.code, fn: (p) => managerStory(p, s.mgr, s, ids) });
-  clips.push({ name: 'coo-review', fn: (p) => execReview(p, EXECS[0], ids) });
-  clips.push({ name: 'ceo', fn: (p) => execReview(p, EXECS[1], ids) });
-  clips.push({ name: 'owner', fn: (p) => execReview(p, EXECS[2], ids) });
+  clips.push({ name: 'coo-review', fn: (p) => execReview(p, EXECS[0]) });
+  clips.push({ name: 'ceo', fn: (p) => execReview(p, EXECS[1]) });
+  clips.push({ name: 'owner', fn: (p) => execReview(p, EXECS[2]) });
 
   let idx = 0;
   for (const clip of clips) {
