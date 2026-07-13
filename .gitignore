@@ -32,3 +32,6 @@ Thumbs.db
 # token + crypt password pair; lives only on the deploy host, never in git.
 rclone/
 test_accounts.local.json
+
+# Local demo-video recordings (delivered via Google Drive, never committed)
+.demo-videos/
