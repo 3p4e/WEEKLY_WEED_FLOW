@@ -162,6 +162,27 @@ GF.WWF.aiHtml = (text) => {
   return t;
 };
 
+// Bulk-approve: flip every not-yet-approved section (AI + template) in one
+// pass, reusing the per-section endpoint sequentially — before locking, the
+// reviewer otherwise ticks up to 10 checkboxes one by one. (approvals.html
+// mockup adoption, scoped to the one approval flow the app actually has.)
+GF.WWF.approveAllSections = async () => {
+  const ds = GF.WWF._doc;
+  const c = ds.data && ds.data.content;
+  if (!c || ds.data.status !== 'draft') return;
+  const keys = [
+    ...(c.ai_sections || []).filter(s => !s.approved && (s.body_en || s.body || s.body_mk)).map(s => s.key),
+    ...(c.template_sections || []).filter(s => !s.approved).map(s => s.key),
+  ];
+  if (!keys.length) { GF.toast(AL('Everything is already approved', 'Сè е веќе одобрено'), 'info'); return; }
+  let ok = 0;
+  for (const key of keys) {
+    try { await GF.WWF.saveDocSection(key, true); ok++; }
+    catch (e) { GF.toast(AL('Failed on ', 'Неуспешно на ') + key + ': ' + e.message, 'error'); break; }
+  }
+  if (ok) GF.toast(AL(`Approved ${ok} section(s)`, `Одобрени ${ok} секции`), 'success');
+};
+
 // Save one section's inputs; optionally flip `approved` in the same PATCH.
 GF.WWF.saveDocSection = async (key, approved) => {
   const ds = GF.WWF._doc;
@@ -465,6 +486,7 @@ GF.WWF._renderDocPanel = () => {
         <div style="flex:1"></div>
         ${isPreview && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.previewDocument()">${AL('Regenerate', 'Регенерирај')}</button>` : ''}
         ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.compileDocument()">${AL('Recompile', 'Состави повторно')}</button>` : ''}
+        ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" onclick="GF.WWF.approveAllSections()">${AL('Approve all sections', 'Одобри ги сите секции')}</button>` : ''}
         <button class="btn btn-sm" onclick="GF.WWF.exportDocumentPdf()">${AL('Export PDF', 'Извези PDF')}</button>
         ${!isPreview ? `<button class="btn btn-sm" onclick="GF.WWF.exportDocumentHtml()">${AL('Export HTML', 'Извези HTML')}</button>` : ''}
         ${!isPreview && !locked && elevated ? `<button class="btn btn-sm" style="background:var(--primary);color:#03130C;font-weight:700" onclick="GF.WWF.lockDocument()">${AL('Lock & submit', 'Заклучи и поднеси')}</button>` : ''}

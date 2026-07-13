@@ -161,6 +161,7 @@ const xrNarratives = (c) => {
     </div>`;
   });
   (c.ai_sections || []).forEach(s => {
+    if (GF.state.xrHideAI) return;   // "human narrative only" review mode
     if (s.status === 'not_configured' || s.status === 'unavailable') return;
     const text = lang === 'mk' ? (s.body_mk || s.body_en || s.body) : (s.body_en || s.body || s.body_mk);
     if (!text) return;
@@ -181,9 +182,17 @@ const xrTasks = (c) => {
   });
   const who = (uid) => (GF.PEOPLE[uid] || {}).name || '';
   const rows = (c.tasks || []).map(t => {
-    const notes = (t.notes || []).map(n => `
-      <div class="xr-note"><b>${GF.esc(n.day || '')}</b> ${GF.esc(n.note || '')}
-        ${n.user_id && who(n.user_id) ? `<span class="by">— ${GF.esc(who(n.user_id))}</span>` : ''}</div>`).join('');
+    const notes = (t.notes || []).map(n => {
+      // Executive/owner remarks get the same gold/cyan treatment as the board
+      // card (render.js note-owner/note-exec) — the owner reading his own
+      // report should spot leadership commentary instantly.
+      const p = n.user_id && GF.PEOPLE[n.user_id];
+      const br = p && p.backendRole;
+      const owner = br === 'OWNER', exec = owner || br === 'CEO' || br === 'COO';
+      return `
+      <div class="xr-note note ${exec ? 'note-exec' : ''} ${owner ? 'note-owner' : ''}"><b>${GF.esc(n.day || '')}</b> ${GF.esc(n.note || '')}
+        ${n.user_id && who(n.user_id) ? `<span class="by">— ${GF.esc(who(n.user_id))}</span>` : ''}</div>`;
+    }).join('');
     const h = hoursBy[t.id];
     return `<details class="xr-task"><summary>
         <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(t.status || '')}</span>
@@ -228,6 +237,9 @@ const xrSection = (label, deptId, statusEntry) => {
       const exports = `<div class="xr-exports">
         <button class="btn btn-sm" onclick="GF.WWF.xrExport('${GF.esc(doc.id)}','pdf','wwf-${GF.esc(doc.kind)}-${GF.esc(doc.week_start)}.pdf')">${AL('PDF', 'PDF')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.xrExport('${GF.esc(doc.id)}','html','wwf-${GF.esc(doc.kind)}-${GF.esc(doc.week_start)}.html')">${AL('Interactive HTML', 'Интерактивен HTML')}</button>
+        <button class="btn btn-sm ${GF.state.xrHideAI ? 'btn-primary' : ''}" onclick="GF.state.xrHideAI=!GF.state.xrHideAI;GF.render.all()"
+          title="${AL('Hide AI-drafted passages — human narrative only', 'Скриј ги AI пасусите — само човечки наратив')}">
+          ${GF.icon(GF.state.xrHideAI ? 'eyeOff' : 'sparkle', 'icon')}${GF.state.xrHideAI ? AL('AI hidden', 'AI скриено') : AL('AI shown', 'AI прикажано')}</button>
       </div>`;
       body = `<div class="xr-sec-body">
         ${exports}

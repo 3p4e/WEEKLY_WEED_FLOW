@@ -106,7 +106,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'ArrowLeft') GF.selectWeek(GF.state.selWeek - 1);
   if (e.key === 'ArrowRight') GF.selectWeek(GF.state.selWeek + 1);
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); GF.$('search-input')?.focus(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); GF.cmdk ? GF.cmdk.toggle() : GF.$('search-input')?.focus(); }
 });
 
 // ── Boot ──

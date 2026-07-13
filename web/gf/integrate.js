@@ -574,7 +574,7 @@ GF.WWF.install = () => {
     const admin = !!(GF.WWF.isAdmin && GF.WWF.isAdmin());
     if (GF._setTab === 'ai' && !admin) GF._setTab = 'prefs';
     if (GF.$('set-title')) GF.$('set-title').textContent = AL('Settings', 'Поставки');
-    const tabs = [['prefs', AL('Preferences', 'Поставки')], ['security', AL('Security', 'Безбедност')]];
+    const tabs = [['prefs', AL('Preferences', 'Поставки')], ['display', AL('Display', 'Приказ')], ['security', AL('Security', 'Безбедност')]];
     if (admin) tabs.push(['ai', AL('AI agents', 'AI агенти')]);
     tabs.push(['account', AL('Account', 'Сметка')]);
     const bar = tabs.map(([k, l]) => `<button class="set-tab ${GF._setTab === k ? 'on' : ''}" onclick="GF.WWF.setTab('${k}')">${l}</button>`).join('');
@@ -588,6 +588,30 @@ GF.WWF.install = () => {
             <button class="seg-b ${lg === 'en' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('en')">English</button>
             <button class="seg-b ${lg === 'mk' ? 'on' : ''}" onclick="GF.WWF.setLangKeep('mk')">Македонски</button>
           </div></div></div>`;
+    } else if (GF._setTab === 'display') {
+      // Density / character / accent — the engine has lived in
+      // tweaks-vanilla.js all along (design-mode only); GF.tweaks makes it a
+      // real user preference. Theme itself stays on the header palette button.
+      const tw = GF.tweaks ? GF.tweaks.get() : null;
+      const segBtn = (key, field, cur, desc) =>
+        `<button class="seg-b ${cur === key ? 'on' : ''}" title="${GF.esc(desc || '')}"
+           onclick='GF.tweaks.set({"${field}":"${key}"});GF.WWF.renderSettings()'>${GF.esc(key)}</button>`;
+      pane = !tw ? `<div class="set-pane set-hint">${AL('Display engine unavailable.', 'Модулот за приказ е недостапен.')}</div>`
+        : `<div class="set-pane">
+        <div class="set-row"><div><div class="set-lab">${AL('Density', 'Густина')}</div>
+            <div class="set-hint">${AL('How much fits on screen.', 'Колку содржина се собира на екранот.')}</div></div>
+          <div class="seg">${GF.tweaks.DENSITY_KEYS.map(k => segBtn(k, 'density', tw.density, GF.tweaks.DENSITY_DESC[k])).join('')}</div></div>
+        <div class="set-row"><div><div class="set-lab">${AL('Character', 'Карактер')}</div>
+            <div class="set-hint">${AL('Corner radius, shadows and type weight.', 'Заобленост, сенки и дебелина на фонтот.')}</div></div>
+          <div class="seg">${GF.tweaks.CHAR_KEYS.map(k => segBtn(k, 'character', tw.character, GF.tweaks.CHAR_DESC[k])).join('')}</div></div>
+        <div class="set-row"><div><div class="set-lab">${AL('Accent pair', 'Акцентни бои')}</div>
+            <div class="set-hint">${AL('Secondary blue/orange accents. "Theme default" follows the active skin.', 'Секундарни акценти. Стандардно ги следи активниот изглед.')}</div></div>
+          <div class="seg">${GF.tweaks.PALETTES.map((p, i) =>
+            `<button class="seg-b ${tw.paletteIdx === i ? 'on' : ''}" onclick="GF.tweaks.set({paletteIdx:${i}});GF.WWF.renderSettings()">
+               <span style="display:inline-block;width:9px;height:9px;border-radius:5px;background:${p.blue}"></span>
+               <span style="display:inline-block;width:9px;height:9px;border-radius:5px;background:${p.orange};margin-right:5px"></span>
+               ${i === 0 ? AL('Theme default', 'Стандардно') : GF.esc(p.label)}</button>`).join('')}</div></div>
+        </div>`;
     } else if (GF._setTab === 'security') {
       pane = `<div class="set-pane">
         <div class="field"><label>${AL('Current password', 'Тековна лозинка')}</label><input id="set-cur" type="password" autocomplete="current-password"></div>
