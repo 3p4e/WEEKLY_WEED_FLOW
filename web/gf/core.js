@@ -46,6 +46,9 @@ GF.state = {
   view: localStorage.getItem('gf_view') || 'mywork',
   selWeek: 0, selDay: 'All', deptFilter: null, tagFilter: null, search: '',
   tasks: [], expanded: new Set(), teleOpen: false,
+  // Subtasks/sub-subtasks indexed by parent id (integrate.js builds this from
+  // the same /tasks payload) + which parents have their tree expanded.
+  children: {}, treeOpen: new Set(),
 };
 
 // ── Roles (used by Team / user management) ──
@@ -186,7 +189,10 @@ GF.store = {
   save() { try { localStorage.setItem('gf_tasks_v1', JSON.stringify(GF.state.tasks)); } catch {} },
 };
 
-GF.task = (id) => GF.state.tasks.find(t => t.id === id);
+GF.task = (id) => GF.state.tasks.find(t => t.id === id)
+  // Child rows (theme → document → version tree) resolve too, so worklog/edit
+  // opened from a tree row find their task like any board card's would.
+  || Object.values(GF.state.children || {}).flat().find(t => t.id === id);
 
 // ── People (team) persistence + CRUD ──
 GF.people = {
@@ -407,6 +413,7 @@ GF.selectWeek = (id) => { GF.state.selWeek = Math.max(0, Math.min(GF.calendar.we
 GF.selectDay = (d) => { GF.state.selDay = d; GF.render.panels(); GF.render.dayPills(); };
 GF.filterDept = (id) => { GF.state.deptFilter = GF.state.deptFilter === id ? null : id; GF.render.all(); };
 GF.toggleExpand = (id) => { const s = GF.state.expanded; s.has(id) ? s.delete(id) : s.add(id); GF.render.panels(); };
+GF.toggleTree = (id) => { const s = GF.state.treeOpen; s.has(id) ? s.delete(id) : s.add(id); GF.render.panels(); };
 GF.goToday = () => { GF.state.selWeek = GF.calendar.todayId; GF.state.selDay = 'All'; GF.render.all(); };
 
 // ── Modals + toast ──

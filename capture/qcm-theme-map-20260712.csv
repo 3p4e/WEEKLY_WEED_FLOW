@@ -1,0 +1,232 @@
+task_id,external_ref,theme_id,theme_title,status,session_count
+87b5009f-338f-482b-9f87-04f15fb69c82,qcpl-001-micro-monitoring,micro-monitoring-plan,Microbiological Monitoring Plan (QCPL 001),completed,1
+0c65e3e7-a232-479f-9604-f85f5d41c59b,qcsop-014-water-sampling,qc-water-testing-sop,QC Water Testing & Sampling SOP (PP-QC-SOP-002),completed,1
+11ebe496-fc2d-461f-ba4c-9bfc4598af55,qms-dc-sop-memorandum-v2,qa-qms-general-sops,QA/QMS General SOPs,postponed,1
+ea621865-b13d-4705-9262-bc28137dc7be,pp-qc-wr-001,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),pending,2
+6dd8148b-c58e-441b-861b-4a81b5726e82,pp-lo-sop-001,material-logistics-warehouse,Material Logistics & Warehouse Control,completed,4
+1128a401-3ef3-41b2-a7f4-0b366e6039be,pp-qc-wr-002,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+d419719d-251f-4f0c-8ea7-9ae772c37e0e,pp-qc-wr-003,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+fb65f517-25f3-47da-9a07-4a7fd30daaf3,pp-qc-wr-004,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+041e9b3a-2db0-4371-af3e-1a18b1dabf3f,mvr-001-25-hma-method-comparison,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,1
+f40bfed8-039c-43e6-9695-dee49d407a7e,qc-sop-016-a03-stp-a08,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,2
+b58eb335-6d00-4bd3-baa4-f63a67e761b7,skill-equipment-sop-generator,equipment-sop-templates,Equipment SOP Templates & Authoring Tooling,completed,1
+2df593b8-e070-4abc-bd42-a985a869db14,qasop-031-labeling,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+7fb35b96-1ef8-460a-92b9-114c00d4d49b,pp-qc-sop-018,analytical-methods-lifecycle,Analytical Methods Lifecycle & Governance (QCSOP 009 / PP-QC-SOP-018),ongoing,2
+4adffd73-576d-4f89-85fb-fbb5c2df238b,qasop-008-a04-supplier-qualification-report,supplier-procurement-qualification,Supplier & Procurement Qualification (QASOP 008/009),completed,1
+c8cc1275-a35b-4ff4-b771-e5847c5c75eb,pp-qc-wr-005,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+38026e74-f324-4f82-9cc3-6aa0a61a0c5e,pp-qc-sop-001,qc-lab-operations-sops,QC Lab Operations SOPs,ongoing,5
+022c9f89-eca4-4c63-89f0-9ddaddd37030,qcsop-004-lab-waste-management,qc-lab-operations-sops,QC Lab Operations SOPs,completed,2
+a739f3cf-d7db-4354-96c6-85086c1ee144,pp-qc-sop-012-sample-transport,sample-transport-sop,Sample Transport to Outsourced Labs SOP (PP-QC-SOP-012),ongoing,2
+12138151-d9ae-4a31-9b56-b2ebd5c44f46,pp-qc-sop-017-a01-sampling-plan,sampling-sop,QC Sampling SOP Authoring (PP-QC-SOP-017 / 008 / QCSOP 011),ongoing,2
+801a17f2-7691-4cd4-926d-cabd15fa6f10,pp-qc-wr-006,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+76795509-2eeb-485c-8202-4de3a9dcd3f5,pp-qc-sop-009-annexes,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),completed,1
+a3ba3056-7355-4e31-a729-b5b3429084f4,qasop-009-annexes,supplier-procurement-qualification,Supplier & Procurement Qualification (QASOP 008/009),completed,1
+6d1ee578-f563-4768-9308-73c722193f47,qasop-008-annexes,supplier-procurement-qualification,Supplier & Procurement Qualification (QASOP 008/009),completed,1
+3a2d3603-d960-486c-ba6d-e613eaa0287e,qa-sop-008-sample-logbooks,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),completed,2
+98cfaee6-76c2-4752-aab3-e8cf679c3909,pp-qc-sop-003-axx,stability-study,Stability Studies (QCSOP 018),ongoing,1
+85e41b6b-daee-4595-96af-b2f4b3954d1c,pp-qc-sop-003-ayy,stability-study,Stability Studies (QCSOP 018),ongoing,1
+2fbf463e-a184-4d92-b848-1787fd3f9b08,qasop-031-a10,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+cc84b9ae-739a-4121-91d3-cae46aac9094,qasop-031-a09,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,2
+4bcfb24b-e0fc-4448-bc51-2182fa7f4a85,kn-air-logistics-sop,clone-import-logistics-sop,Cannabis Clone Import Air-Logistics SOP,review,1
+f6335a9b-b1a1-483e-9d81-bf874edf03f5,qasop-003,qa-qms-general-sops,QA/QMS General SOPs,completed,1
+7eaf7bc9-baef-43c8-b149-5c7e74546432,sop-qc-water-annexes,qc-water-testing-sop,QC Water Testing & Sampling SOP (PP-QC-SOP-002),completed,2
+e156136b-2c1f-4524-8773-67e7af296fd9,pp-sop-header-template,equipment-sop-templates,Equipment SOP Templates & Authoring Tooling,ongoing,2
+ebc278ce-e0ea-4a91-9102-ecf80f6fc4de,pp-qc-wr-007,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+e34a75a7-f9ef-440a-bea7-926cb4a9bbfe,pp-qc-sop-002-a06,qc-water-testing-sop,QC Water Testing & Sampling SOP (PP-QC-SOP-002),ongoing,2
+468313b2-3098-488f-95ea-f373e71356b2,qasop-013,qualification-validation-framework,Qualification & Validation Framework SOPs,completed,2
+d4f8a2a2-c879-453e-af8d-07a3da4c1132,eqp-ro01-pq,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,2
+b0d1d35a-f741-4e32-95e1-ee5ec4fc4595,pp-pq-template,equipment-sop-templates,Equipment SOP Templates & Authoring Tooling,ongoing,1
+335bd90c-cb36-4c23-8166-ab67b08d0fa1,qasop-031-dev-001,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+834b9847-c57f-47ea-b26a-1b9ed0e1b19b,qasop-031-a05,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,3
+e33d4805-d3cc-44c3-8e79-676ceec5b74f,qasop-031-a09-sl-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,1
+3025a588-7091-486d-9f5a-197937cc6a79,qa-sop-008-a03,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),ongoing,1
+c4259850-1cf1-419b-9584-83e181511a44,qa-sop-008-a05,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),ongoing,1
+40257a39-7b2c-4217-b84f-ff77c1fe3292,qa-sop-008-a04,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),ongoing,1
+f2610469-ff57-4912-a0b8-ae4d836095d8,qasop-031-a06-inspected-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+1e0daadf-28c6-46a9-83e4-7295d3d637b1,qasop-031-a05-storage-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+a3053cd8-e2ca-4bd7-b4f9-1ab5a53eb45c,qasop-031-a01-quarantine-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+069619cb-cc3b-48e5-8a67-066fa5000fb9,capa-cm-03-26,gmp-compliance-remediation,GMP Compliance & Remediation Programme,ongoing,1
+23005bdf-097a-4ccd-8363-99b3214684a1,qasop-031,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,4
+5cabefc4-079f-40db-9cb3-54aa8fd5840c,eqsop-equipment-template,equipment-sop-templates,Equipment SOP Templates & Authoring Tooling,ongoing,2
+86bb7900-2050-410b-9e7d-1b3732b55e05,qasop-031-a07,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+edac6452-0759-474d-abb6-462d6f6cd598,qasop-031-a06,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+2f918c26-4aff-4d6d-afd2-1214d244527b,pp-balance-periodic-check-sops,equipment-instrument-sops,Instrument Equipment SOPs,ongoing,1
+7c7e07d9-9f07-451b-88dd-e1a19728ab94,whsop-001,material-logistics-warehouse,Material Logistics & Warehouse Control,completed,1
+0defc306-43de-4510-8b45-2612e8309b36,eqsop-013,equipment-instrument-sops,Instrument Equipment SOPs,ongoing,1
+aa17996b-b5c0-455b-b679-56548d9f130f,pp-qc-sop-012,sample-transport-sop,Sample Transport to Outsourced Labs SOP (PP-QC-SOP-012),ongoing,2
+f4dc2bed-6355-4555-ac77-3f652d4a327a,pp-qc-sop-015-a01,analytical-methods-lifecycle,Analytical Methods Lifecycle & Governance (QCSOP 009 / PP-QC-SOP-018),ongoing,2
+3e5afd26-97c2-4e72-9b9a-b98e9712448f,eqp-pps002-rc,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+b0f7b5cc-66a3-49c2-b681-ffe50555b3a5,eqp-pps002-urs,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+081953f9-d512-495f-9cf5-ce3748b51023,ost-001-coco-perlite-26-100-00021,substrate-pathogen-test-request,Substrate Pathogen Testing (External Lab Request),completed,1
+96ad26c4-395a-415a-8f84-c87b87a5dd5f,qcsp-img-001,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),completed,1
+d30debac-1f7f-4742-b264-b7dce7f3eb73,qcsp-img-xxx-000,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),completed,2
+7ff91526-f6ae-4af6-b26b-18297cf08b24,pp-ecoa-coq-system-urs,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,ongoing,1
+7b71123a-2a52-4950-864c-ba5ffd13d601,icoa-pp-2026-0011,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),completed,1
+0a1b84e2-c271-438d-b12c-083b2a9a2e29,variationf-design-system,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),ongoing,1
+f230159a-ec3a-4fc6-82f4-e160c911091b,coq-template-v02-variationf,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),ongoing,1
+8f2b97d2-6d68-497e-9ab6-9366275ef8a5,icoa-pp-2026-0012,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),completed,1
+a5e4483b-fedb-47b2-bbd6-2414a95e0999,coq-cbiii-001-p0501242,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),completed,2
+7166b120-380c-4726-b313-8726a9e85bd7,pp-qc-mvp-003-26,hplc-cannabinoid-validation,HPLC-DAD Cannabinoid Assay Validation (MVP-003),ongoing,4
+d914c6d9-7669-439e-86d8-3df7ea683f85,qcsp-img-register-v01,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),completed,1
+bc6fe51c-22ac-419d-8203-bbfe667d3c3d,pp-qc-html-template-pack-variationf,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),completed,3
+72032bc7-5948-455d-9079-424125cd5335,pp-memo-glp-printer-relocation,glp-printer-relocation,GLP Printer Relocation Memo,completed,1
+ec836089-7eb8-4c25-9e18-a4d0147cbe6d,pp-qc-wr-008,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+bb0d82c3-cf5f-46f3-9600-c04dcaa6a485,qa-sop-008-a14-rsa-logbook,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),completed,1
+c78578e0-032f-4c85-a4f1-a247ce0f621a,rsa-inpcr-9118-1,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),completed,1
+aa4e9354-6d0f-45ea-af23-b1ed5d02049e,pp-gmp-gap-analysis-2026,gmp-compliance-remediation,GMP Compliance & Remediation Programme,completed,1
+5df2a445-7684-4c1d-abea-43b80344d582,qa-sop-008-a13-mll-logbook,sample-management-logbooks,QC Sample-Management Logbooks (QA_SOP_008),completed,2
+f30c23e4-5265-4900-bdfc-8beaa06c5a10,pp-qc-amsf-a02.1,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),ongoing,2
+987dedd6-8ddc-4ee2-bfd7-7f98ce56270d,pp-qc-wr-009,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+a1b377e2-28e9-41cf-84aa-b3bb1ade3b75,pp-qc-mvr-003-26,hplc-cannabinoid-validation,HPLC-DAD Cannabinoid Assay Validation (MVP-003),completed,1
+ac4bce81-b923-4bad-a1a4-34ef84223ba9,pp-qc-mvp-a02.1,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,2
+120fc929-81d8-49a4-9962-aedd9b459023,pp-qc-mvp-a02.2,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,1
+a1fba366-5fec-47e2-b15b-d06577c772c4,pp-qc-mvr-a02.2,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,1
+d674b03d-92b7-44a9-afdc-42e82a9cf0bc,pp-qc-amsf-a02.2,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),ongoing,2
+cf446baa-8b3f-40f4-9608-81c313b22de5,pp-lod-a02.2-handover-cowork,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,1
+01d3d58d-f8c7-4aec-8917-d30d20c20f04,pp-document-suite-skills,suma-tooling-automation,SUMA Tooling & Automation,completed,1
+0f786d52-ef66-48dc-adb2-ddb1f22220c8,qcsop-009-analytical-methods-lifecycle,analytical-methods-lifecycle,Analytical Methods Lifecycle & Governance (QCSOP 009 / PP-QC-SOP-018),ongoing,1
+ebe3b456-885d-4a8d-91b9-21d1b994dcf8,qcsop009-a03-outsourced-correlation-matrix,analytical-methods-lifecycle,Analytical Methods Lifecycle & Governance (QCSOP 009 / PP-QC-SOP-018),completed,1
+795b5f08-dd23-4534-af20-96b5adfcc8a2,pp-qc-amv-a02.2-lod,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),review,1
+3f90bad6-1dda-4e55-8ac4-011e5631fb2f,pp-qc-amv-a02.1-sam,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),review,2
+119b6600-a67c-4726-b559-bb5106de8c20,pp-qc-amvp-a04-foreign-matter,foreign-matter-verification,Foreign Matter Verification Method (Ph.Eur. 2.8.2),ongoing,1
+a4844c26-bed5-47b2-8b41-064c36ef6bbc,qcsop009-a03-outsourced-matrix,analytical-methods-lifecycle,Analytical Methods Lifecycle & Governance (QCSOP 009 / PP-QC-SOP-018),review,1
+71e39adb-fcf4-4b32-ba2e-92adc0bc7d0e,pp-qc-mvp-003-hplc,hplc-cannabinoid-validation,HPLC-DAD Cannabinoid Assay Validation (MVP-003),review,2
+e577114d-6482-4f81-9c5a-5d4899f3621c,pp-qc-amvr-003-hplc,hplc-cannabinoid-validation,HPLC-DAD Cannabinoid Assay Validation (MVP-003),review,2
+a864b601-f8b7-46b5-ae63-307a20e7425c,pp-qc-mvr-003-hplc,hplc-cannabinoid-validation,HPLC-DAD Cannabinoid Assay Validation (MVP-003),review,1
+8805971a-06be-448a-988e-1b679c8b7311,pp-qc-rep-cum-001,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+f0e1d26d-fe99-4134-b2c9-9d9195d201d2,pp-qc-wr-010,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,2
+294c31ed-37af-461a-b3e6-14ea6425cea9,pp-qc-task-registry-2026,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,1
+1284f3da-67af-43ae-8cab-48e0b2136cad,pp-qc-handoff-2026-06-22,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),completed,1
+9c0b09e8-d795-4557-96e1-10996804854c,pp-qc-tasklog-automation-pack,suma-tooling-automation,SUMA Tooling & Automation,completed,2
+eab8bad0-223c-46c4-8a25-831f54a8de85,pp-th-qta-2026-001,quality-technical-agreement,Quality/Technical Agreement (Tetra Hip),review,2
+bdc21782-9a69-4c15-b113-b3ba7c8ebe0b,pp-fert-sop-001-qual-annexes,fertigation-system-qualification,NetaJet/Netafim Fertigation System (PP-FERT-SOP-001),review,2
+9dfcdd60-9367-402a-a28a-99159f26df79,pp-fert-sop-001-qualification,fertigation-system-qualification,NetaJet/Netafim Fertigation System (PP-FERT-SOP-001),ongoing,2
+ff062fd7-b3fd-4036-8147-bd7902ff8a0e,eqsop-fert-01,fertigation-system-qualification,NetaJet/Netafim Fertigation System (PP-FERT-SOP-001),ongoing,3
+fd281fba-127c-444e-bb57-145e701b5113,pp-warehouse-quarantine-register,material-logistics-warehouse,Material Logistics & Warehouse Control,ongoing,1
+74f39f10-0b39-4dcd-b836-90e8583a7468,cannabis-flos-sampling-micro-ref,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,1
+5c017cd0-e86e-495a-93d2-5f4c1ae80031,pp-qc-sp-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,5
+217320b0-2100-4fce-a6bf-ebe473e36a32,pp-qc-sop-012-transport,sample-transport-sop,Sample Transport to Outsourced Labs SOP (PP-QC-SOP-012),ongoing,1
+5a9fcb22-1d56-4f6f-8b71-84cf59e0f2c8,qcsop-012-coa-coq-issuance,coa-coq-document-suite,CoA/CoQ Document Suite & Issuance (VariationF),ongoing,1
+9750cf72-74ef-4c8c-9efe-eb88f03c4954,pp-qc-oox-register,oox-investigation,Out-of-Expected-Results Investigation (QCSOP 019),ongoing,1
+0eb6ddff-eed4-49b8-a130-c18d85e9c08b,qcsop-018-stability,stability-study,Stability Studies (QCSOP 018),ongoing,1
+725d6631-203c-4989-a652-a36371ed06a3,pp-qc-spec-ib-001,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),ongoing,1
+23fcd666-fcd6-4a90-bfb5-f3f6b96ae5b5,pp-qc-lims,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,ongoing,2
+d996e160-7206-4313-8ea1-483157ff49c3,pp-suma-capture-prompts,suma-tooling-automation,SUMA Tooling & Automation,ongoing,3
+10aee7f9-9114-47e8-9250-8f76b7df1ef4,pp-gmp-sweep-candidate-register,suma-tooling-automation,SUMA Tooling & Automation,ongoing,2
+75c92861-126f-4fcd-b48d-93023eb460e8,pp-suma-design-system,suma-tooling-automation,SUMA Tooling & Automation,ongoing,1
+f1a5e170-3de6-4f83-bdaa-6b08886c10c4,pp-coa-tracker-app,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,stuck,1
+bba50820-614c-437e-b097-b1b8fb88e53f,qcsop-019,oox-investigation,Out-of-Expected-Results Investigation (QCSOP 019),ongoing,1
+485d6814-00c7-4353-b00a-e3fac256cad3,qcsop-018,stability-study,Stability Studies (QCSOP 018),ongoing,1
+442b300c-9a72-4b84-a326-50b6e416279f,qcsop-018-a01,stability-study,Stability Studies (QCSOP 018),ongoing,1
+bd0e46e7-7b6c-4965-8eec-0215451f40e1,qcsop-018-a02,stability-study,Stability Studies (QCSOP 018),ongoing,1
+d2825ea1-dd53-4caf-9582-8c9272e04c38,qcsop-018-a06,stability-study,Stability Studies (QCSOP 018),ongoing,1
+fe46cb9b-07a4-499f-b95b-5da53df9c1c2,qcsop-018-a07,stability-study,Stability Studies (QCSOP 018),ongoing,1
+8ed1ca73-19db-4aa2-b16f-119491b9e60b,qcsop-018-a09,stability-study,Stability Studies (QCSOP 018),ongoing,1
+05db9fad-c491-4e0b-bf8a-5cb9262921b5,qcsop-010,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),ongoing,1
+49a0ec20-a3e0-4100-b22c-5182448e9df0,qcsp-003,material-product-specifications,Material & Product Specifications (IMG / QCSOP 010),ongoing,1
+9b7d464a-da91-438a-888a-48dfa286fa6f,pp-qc-sop-008,sampling-sop,QC Sampling SOP Authoring (PP-QC-SOP-017 / 008 / QCSOP 011),ongoing,1
+bb1e9f6c-e0c5-4b70-82ff-ce9c5efdd6ac,pp-qc-sop-017,sampling-sop,QC Sampling SOP Authoring (PP-QC-SOP-017 / 008 / QCSOP 011),ongoing,3
+502da00c-5eea-48ff-a9e1-ddcef3b2b32e,pp-qc-sop-002-water,qc-water-testing-sop,QC Water Testing & Sampling SOP (PP-QC-SOP-002),ongoing,1
+953305ea-50c9-4add-83f9-1e76ec913d52,pp-ceo-ord-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,1
+a660c741-e28e-4c5a-aa4a-ae376918b920,pp-qc-ser-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,1
+a32d5085-1a82-45c8-ab8d-4bed65481cd8,pp-qc-micro-sampling-handover,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,1
+1b3a0b76-bb93-42bc-b173-a39f57f5216e,pp-material-transfer-forms,material-logistics-warehouse,Material Logistics & Warehouse Control,ongoing,1
+9f1f3341-9b4c-4228-9a35-458f169ca111,prd-qc-lims,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,ongoing,1
+8727f152-3b84-44cc-b932-31f294dcd9e1,coa-track-qc-lims-roadmap,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,ongoing,1
+75bc7159-3f65-4560-8f97-cde957c50ef6,qc-lims-gmp-compliance,qc-lims-coa-systems,QC LIMS & CoA/eCoA Systems,ongoing,1
+6a1f1663-b661-4742-8054-dac5052de07c,pp-qc-mhr-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,1
+5203bdab-001a-40c0-9444-4ab337b51a34,pp-qc-mhr-002-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,1
+ebd3b841-3338-4fef-8204-0acbf76f3a12,pp-qc-amvr-a02-1-001-2026,lod-hma-validation,LoD / HMA Method Validation (SAM a02.1/a02.2),completed,1
+438498f9-3a46-40c2-a205-17a60bbb43a6,po-sop-a01-cannabis-material-handover,material-logistics-warehouse,Material Logistics & Warehouse Control,completed,1
+c07b2e93-a957-49bf-9911-88d4c97e78c0,po-sop-a02-cannabis-material-receipt,material-logistics-warehouse,Material Logistics & Warehouse Control,completed,1
+dfad8b48-c1b9-4b2d-ba9a-cf3021287ab9,po-sop-007-a26-a01-qc-assay-labels,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+5517392e-7223-452b-ae10-afdd3564b030,qasop-031-axx-rs-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+46dd6cce-ee8b-4aca-ba73-411d08a3cfc3,po-sop-007-a14-sampled-label,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+4a1a0646-a5e0-467d-afad-4eb80e583922,qcsop-011,sampling-sop,QC Sampling SOP Authoring (PP-QC-SOP-017 / 008 / QCSOP 011),ongoing,2
+481c5f6a-8e47-4061-bc99-10255ca90252,pp-qc-sop-008-annexes,sampling-sop,QC Sampling SOP Authoring (PP-QC-SOP-017 / 008 / QCSOP 011),ongoing,1
+120f36eb-5d62-4b78-91ea-22bbe4ee585c,pp-qc-sr-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,2
+4adac856-9f4a-4486-a1ec-1cbe3a837cd9,pp-qc-dsp-template,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,1
+fb3efb75-4c10-457a-8e7b-0ca678c7dae6,pp-qc-dsp-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,1
+e583642a-fb88-42d3-bf3e-f5ba44f3a931,qasop-031-status-labels,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,2
+aee0ecbd-f699-4770-bb5c-2572ac0537ab,qc-sampling-labels-hpa1024-opm1024,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),completed,2
+6ed08a69-a6d4-4aff-a76b-b05ba93cd443,pp-document-suite-skill-addendum,suma-tooling-automation,SUMA Tooling & Automation,completed,1
+89294582-8d90-4b09-8049-4b556eb62cf4,qc-sampling-labeling-training-decks,labeling-qasop-031,Labeling & Label Control (QASOP 031),completed,1
+f43ea968-b1d2-4a8b-9bab-c5c976dd1f8c,pp-qc-handover-001-26,micro-sampling-campaign,Micro-Verification Sampling Campaign (21 batches),ongoing,1
+2101f678-9098-455e-ab5d-d587b7f99776,pp-qasop-031-v1-01-rebaseline,labeling-qasop-031,Labeling & Label Control (QASOP 031),ongoing,3
+94daf639-7249-4509-838b-16b2109df4a5,pp-qms-deviation-qasop-031-version-mismatch,labeling-qasop-031,Labeling & Label Control (QASOP 031),pending,1
+a5e66bd9-8550-42ce-993b-dbb2c507e7d3,pp-qms-structural-gap-qa-head-qp-separation,gmp-compliance-remediation,GMP Compliance & Remediation Programme,pending,1
+56c3cd9b-5e5f-4777-9bb3-442ff20dfc7e,sop-rd-phe-001,phenotype-selection-sop,Cannabis Phenotype Selection SOP,completed,1
+4571edfa-879b-4506-a7b9-5312c8d5d9ef,eqp-pps002-pq1-v01,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,3
+661d8be3-fcd1-4bdf-ac80-3b53ba6deb9e,pp-mval-formatter-skill,suma-tooling-automation,SUMA Tooling & Automation,ongoing,2
+819a40c6-b033-40fd-b6c4-eb6ceba850f0,eqp-pps002-annex-package-format,ro-water-qualification,RO Water System Qualification (PP/S/002),completed,1
+08c47776-f27f-46a1-8188-735805ba08f9,suma-weeklysuma-task-capture-system,suma-tooling-automation,SUMA Tooling & Automation,ongoing,2
+1b820996-3739-4cbd-882b-23fe5afd1fcc,eqsop-001-moc63u-hma,equipment-instrument-sops,Instrument Equipment SOPs,stuck,2
+01b23a0c-c6b7-4e8f-b6dd-53f6b3b37e22,gmp-training-programme-competency,gmp-compliance-remediation,GMP Compliance & Remediation Programme,pending,0
+f199a034-9022-4233-a2ee-c38e85ed8b9e,external-lab-audit-programme,gmp-compliance-remediation,GMP Compliance & Remediation Programme,pending,0
+f7d5d800-f44d-424b-84b7-9d6b53d3009c,eqp-pps002-qr-v01,ro-water-qualification,RO Water System Qualification (PP/S/002),pending,0
+10fa8c1f-88da-449f-84f3-5bd74b9c6591,cph-kumanovo-pdf-reissue-sl-correction,cph-pdf-reissue,CPH Kumanovo PDF Re-issuance & SL Correction,pending,0
+441f5915-475f-443e-96d4-592554d56e6a,qc-monthly-report-2026-04,qc-weekly-plans-reports,QC Weekly Plans & Reports (SUMA cadence),pending,0
+b5cce79e-1c57-462a-8930-6bbc4f7c3aa8,datalogger-recalibration-q2-2026,datalogger-recalibration,Datalogger Recalibration Cycle,pending,0
+22e98a4c-480e-4531-b1d4-1630037e096a,eqsop-zeb,equipment-instrument-sops,Instrument Equipment SOPs,ongoing,1
+2fb25c16-ac4c-4d3b-aa55-bfa2928fefc7,pp-qa-sop-vq-001,qualification-validation-framework,Qualification & Validation Framework SOPs,completed,1
+ee35eae8-f310-4751-810f-58d7f36e86c3,pp-co-sop-001,qa-qms-general-sops,QA/QMS General SOPs,completed,1
+63eed61e-ecfe-4269-934c-837597abada3,annual-purified-water-testing-plan,qc-water-testing-sop,QC Water Testing & Sampling SOP (PP-QC-SOP-002),completed,1
+dde49eb2-3e77-4f9e-a282-0bdafbcd6c82,eqsop-shimadzu-hplc-sst,equipment-instrument-sops,Instrument Equipment SOPs,ongoing,1
+886a5477-ec9b-4ca4-bdab-f6493cb936b7,eqsop-netafim-irrigation,fertigation-system-qualification,NetaJet/Netafim Fertigation System (PP-FERT-SOP-001),ongoing,1
+81bd5ed3-3860-4619-83fa-7b899d16b232,eqp-pps002-a05-a06-ph-spec-revision,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+3e826b58-7aed-4bd0-9f51-c6df74d88dc3,eqp-pps002-ammonia-spec-lod-gap,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+000c514e-5774-42a8-8f56-4ba7b940a744,capa-dp-pps002-pq-cond-f117,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+b6d8b1c2-ebe2-40c5-aa0d-371aeae51607,capa-dp-pps002-pq-micro-1203,ro-water-qualification,RO Water System Qualification (PP/S/002),ongoing,1
+96b3318d-a38e-475a-8bdc-3ce7e9b8695f,fert-01-netafim-4g-iqoq,fertigation-system-qualification,NetaJet/Netafim Fertigation System (PP-FERT-SOP-001),ongoing,1
+4d771e00-b403-4620-9afa-8171e6e974a1,qcsop-012-v3-transport-sop,sample-transport-sop,Sample Transport to Outsourced Labs SOP (PP-QC-SOP-012),ongoing,1
+3654b8b8-f551-4b04-b9d0-085a610d2549,intake:ceo-memo-2026-07:01,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,completed,0
+d3d20c36-dfc2-414f-83c6-48ea1648a9de,intake:ceo-memo-2026-07:02,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,ongoing,0
+4852ad06-f878-4729-b8fe-c9019126d4ee,intake:ceo-memo-2026-07:03,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,ongoing,0
+76340491-7ce5-4d2a-a9ce-7607b8f049fb,intake:ceo-memo-2026-07:04,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,ongoing,0
+99da12e8-291e-4923-9633-e2bbabc29a1e,intake:ceo-memo-2026-07:05,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+e2587058-d9d1-44de-b79e-1ae59c4bf561,intake:ceo-memo-2026-07:06,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+7a78e72d-5dfe-4f76-848d-7102c7370437,intake:ceo-memo-2026-07:07,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+b2702d22-e55f-4d28-b18f-32ff0985e022,intake:ceo-memo-2026-07:08,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+bdf4ca4f-9617-4a03-98e5-b8c79747fd68,intake:ceo-memo-2026-07:09,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+e7b8587f-4287-4e56-b62c-d06ceac71c1a,intake:ceo-memo-2026-07:10,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+cff0aad7-7447-49b6-bfd1-f6af1c4656cd,intake:ceo-memo-2026-07:11,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+5bd71e68-f622-4a80-95d0-82e93b8c6645,intake:ceo-memo-2026-07:12,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+488c9946-e074-4fb3-97c2-8b1db44616ca,intake:ceo-memo-2026-07:13,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+69d78a05-dfdd-4f2f-83ac-9e49fcd7d65d,intake:ceo-memo-2026-07:14,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+f7ea0222-88ba-4287-905e-03bb91bfc457,intake:ceo-memo-2026-07:15,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+0a781bb9-9a1c-4442-82bb-94e3293cb664,intake:ceo-memo-2026-07:16,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+1672f392-4439-4739-8056-0932544e12d7,intake:ceo-memo-2026-07:17,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+fff4cb07-d034-4c80-936b-02a40b085493,intake:ceo-memo-2026-07:18,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+5f4ab89c-b688-412b-bd2d-d875424b2395,intake:ceo-memo-2026-07:19,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+7bcc1aa2-183d-448f-863c-b5578e31394a,intake:ceo-memo-2026-07:20,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+22961051-563a-480a-998c-e14a075e721f,intake:ceo-memo-2026-07:21,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+dbf75801-c52d-4f23-a9ba-5f741415406b,intake:ceo-memo-2026-07:22,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+f813820c-eba5-4f3f-830c-322186831bfe,intake:97757c74-fdab-4bb8-8305-b29d6619d03d,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+637f48c2-bcdf-44f8-b995-8208bd07be70,intake:d6440b3e-48ab-4732-af6c-b53d29523836,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+a1bf55d7-2bd6-4670-8bc1-282c6fdd7d39,intake:e7c46907-1d32-4b18-ba75-ca6daa01a507,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+742d82ca-9111-4da2-bbcf-2df42d94e0fb,intake:a1810d14-11e1-4d42-a2c8-632923055db1,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+bdb84118-6794-4314-bb90-249955c3981f,intake:6dfd67f8-8939-42a7-b45a-d333554633bd,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+9ee2f283-317b-44d1-a35f-227c2a1d9f7a,intake:d19617b0-af66-4378-a10e-72e05b317e6e,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+51c5f020-ec1b-473b-98f4-d55a84794872,intake:8df3bae5-7a31-469b-b571-4f71c78822f7,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+733d6d30-47e5-42c2-b858-541763c117ff,intake:73981e02-dd57-42b9-bc04-f46178242df2,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+db4a4756-a255-4ad7-8947-34e599971771,intake:6749ceab-44d0-4587-97ea-f591c61c8d46,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+bed96a96-410e-4b2c-b7ed-a9d7e8966983,intake:1ff501ba-4ab5-4d87-8730-dd75bee378c0,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+a62a2b6e-9799-422a-aac5-89ed448f1ca2,intake:fd9065d8-5081-41cb-a68c-77d246013ebd,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+c705da95-e7d1-44e2-83a8-75ca25f50446,intake:50acb1f7-99ec-42c2-85e4-1b357723e4f3,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+01e9dff8-016b-4995-a1e3-aa9fdcda6ad7,intake:ae7f01a1-4923-47c4-8b72-9b6451571917,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+d3282417-12aa-4e68-8151-7d1151248ae5,intake:a4862a60-12e4-4917-a2c6-bc50eff1fa57,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+23af68cc-26bd-4ea6-905a-3c54a26f5948,intake:e82da983-f674-48c9-b8fc-43493b6dc4ae,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+d8919b1a-fe2e-4f14-bb3f-1b1ea7d4c513,intake:645a8db2-dfe8-4659-8746-1ee1fb6ad5cb,ceo-tranche1-release-gmp-dossier,CEO Order — Tranche 1 Release & EU GMP Dossier,pending,0
+df450505-39d6-47c4-875d-a46e3b98c596,intake:9d75fc0b-739a-4e01-bfdf-7e7b6d5d37aa,ceo-facility-hvac-remediation,CEO Order — Facility & HVAC Remediation,pending,0
+be312844-0c7c-44f5-9f6d-827f95175e2c,intake:ebceb4bf-e410-43c7-9d77-dde3309e3fd0,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+dc0cab8f-1271-480f-93eb-c6c2ce93fc12,intake:6511dd10-90dc-4874-886b-f9339f72fec3,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+4dabeaa3-a4de-4abd-9266-fec0cdad7106,intake:95d78ae6-38e7-48ab-bb24-f636c0d940b8,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+5a944636-060c-43f1-b498-1c4eb8e49a43,intake:e194c4c1-cb74-41cb-a662-955554c81f01,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+3eb43e00-7729-4979-93b6-d836a0e30b0f,intake:a82a773b-3662-4475-a704-4ba12a37589c,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+bc348cca-a8b5-4ec2-99a8-928c1560bfda,intake:7c5c9068-a6be-485c-a160-342543380e75,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+32689d14-352b-4ae7-8109-a74b5b03379c,intake:cd858b94-be1a-4908-95e2-be1e510eb4ce,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+b99cab0d-e2cf-4735-a213-c263eaae5967,intake:2a6ea3b5-cf98-4e07-be77-7015d5f3a551,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+f764c03d-d1e9-4e65-a9b0-f5e80671225a,intake:7712fddb-f4f4-4b80-bc6f-18c23728dde5,ceo-weekly-reporting-cadence,CEO Order — Weekly Reporting Cadence,pending,0
+d0d78f97-766a-4fbf-bd2b-744f91a8149d,intake:cc9edc70-d93f-410c-9fdf-81dea50f5e85,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+788b2394-8327-4da9-a8f2-4bfd31a32824,intake:8ff1ddce-de94-4732-bb9d-9be9bb9b1338,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0
+9ffda780-a333-415f-8df0-4d1fcc194dc7,intake:0f3e5c90-fc0a-425e-89db-e8739fd23c78,ceo-genetics-transition,CEO Order — Genetics Transition & Decontamination,pending,0

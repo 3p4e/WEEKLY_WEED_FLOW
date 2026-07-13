@@ -232,6 +232,10 @@ GF.WWF.openEdit = (taskId) => {
   GF._editTask = taskId;
   GF.$('add-title').value = t.title;
   GF.$('add-dept').value = t.dept;
+  // Re-render the department template fields for the task's real department,
+  // prefilled from its attributes (openAdd rendered them for the default
+  // selection, empty). No presets in edit mode.
+  if (GF.refreshDeptFields) GF.refreshDeptFields(t.dept, t.attrs || {}, false);
   GF.$('add-pr').value = t.pr;
   if (GF.$('add-type')) GF.$('add-type').value = t.type || 'other';
   if (GF.$('add-due')) GF.$('add-due').value = t.due || '';

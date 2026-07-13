@@ -14,8 +14,10 @@ GF.render = {
   all() {
     this.sidebar(); this.header();
     // The exec view is executive-only; if a stale gf_view lands a non-exec here
-    // (e.g. a shared browser), fall back to My Week.
+    // (e.g. a shared browser), fall back to My Week. Same bounce for the
+    // department home when the user has no department (execs, QP, ADMIN).
     if (GF.state.view === 'exec' && !(GF.isExec && GF.isExec())) GF.state.view = 'mywork';
+    if (GF.state.view === 'depthome' && !(GF.hasDeptHome && GF.hasDeptHome())) GF.state.view = 'mywork';
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
@@ -53,9 +55,10 @@ GF.render = {
 
   sidebar() {
     const nav = [];
-    // Executives get an exec-only Overview at the top of the nav; everyone keeps
-    // the standard views below it.
+    // Executives get an exec-only Overview at the top of the nav; department
+    // members get their department home; everyone keeps the standard views.
     if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
+    if (GF.hasDeptHome && GF.hasDeptHome()) nav.push(['depthome', 'dept_home', 'home']);
     // Coordination badge = pending cross-department handoffs (handoff tasks
     // not yet ready) in the selected week. 0 → no badge renders.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
@@ -201,9 +204,14 @@ GF.render = {
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
     const refCode = t.ref ? `<span class="ref-code">${GF.esc(t.ref)}</span>` : '';
-    const subProg = t.subCount > 0 ? `<span class="sub-prog" title="${GF.t('subtasks')}">${GF.icon('check', 'icon')}${t.subDone || 0}/${t.subCount}</span>` : '';
+    // The subtask counter is the tree toggle: themes expand into their
+    // documents (and documents into versions) as indented rows below the card.
+    const treeOpen = GF.state.treeOpen && GF.state.treeOpen.has(t.id);
+    const subProg = t.subCount > 0 ? `<span class="sub-prog tree-toggle${treeOpen ? ' open' : ''}" title="${GF.t('subtasks')}"
+      onclick="event.stopPropagation();GF.toggleTree('${t.id}')">${GF.icon(treeOpen ? 'chevD' : 'chevR', 'icon')}${t.subDone || 0}/${t.subCount}</span>` : '';
     const sessHours = t.sessionHours > 0 ? `<span class="sess-hours" title="${GF.t('log_work')}">${GF.icon('clock', 'icon')}${t.sessionHours}h</span>` : '';
     const tagChips = (t.tags || []).map(tg => `<span class="tag-chip">#${GF.esc(tg)}</span>`).join('');
+    const attrChips = GF.attrChips ? GF.attrChips(t) : '';
     const head = `
       <div class="card-head" onclick="GF.toggleExpand('${t.id}')">
         <button class="check ${t.status === 'done' ? 'done' : ''}" onclick="event.stopPropagation();GF.toggleDone('${t.id}')">
@@ -212,7 +220,7 @@ GF.render = {
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
-            ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${tagChips}</div>
+            ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${attrChips}${tagChips}</div>
         </div>
         <div class="card-side">
           <div class="daytags">${daytags}</div>
@@ -222,7 +230,8 @@ GF.render = {
         </div>
         ${GF.icon('chevD', 'icon chev-card')}
       </div>`;
-    if (!exp) return `<div class="card s-${t.status}">${head}</div>`;
+    const tree = treeOpen ? this.treeRows(t.id, 1) : '';
+    if (!exp) return `<div class="card s-${t.status}">${head}${tree}</div>`;
 
     const noteId = 'note-' + t.id;
     // Executive input stands out: notes written by the OWNER get the strongest
@@ -270,6 +279,35 @@ GF.render = {
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
         </div>
       </div>`;
-    return `<div class="card s-${t.status} expanded">${head}${body}</div>`;
+    return `<div class="card s-${t.status} expanded">${head}${body}${tree}</div>`;
+  },
+
+  /* ── Tree rows: a parent's children as indented compact rows (theme →
+     document → version; two levels below the card). Children deliberately
+     are NOT week-filtered — a theme card sits in its initiation week while
+     its documents span months, so the tree always shows ALL of them, each
+     with its own date range. Row click opens the worklog (sessions/notes);
+     the pencil opens the normal edit modal. */
+  treeRows(parentId, depth) {
+    const kids = (GF.state.children && GF.state.children[parentId]) || [];
+    if (!kids.length || depth > 2) return '';
+    const rows = kids.map(c => {
+      const grand = ((GF.state.children && GF.state.children[c.id]) || []).length;
+      const open = GF.state.treeOpen.has(c.id);
+      const range = [c.week_start, c.due].filter(Boolean).join(' → ');
+      const toggle = grand
+        ? `<span class="tree-toggle${open ? ' open' : ''}" onclick="event.stopPropagation();GF.toggleTree('${c.id}')">${GF.icon(open ? 'chevD' : 'chevR', 'icon')}<span class="tree-count">${grand}</span></span>`
+        : `<span class="tree-dot s-${c.status}"></span>`;
+      return `
+      <div class="tree-row s-${c.status}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${c.id}')">
+        ${toggle}
+        <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
+        ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
+        ${c.sessionHours > 0 ? `<span class="sess-hours">${GF.icon('clock', 'icon')}${c.sessionHours}h</span>` : ''}
+        <span class="pill s-${c.status}" style="pointer-events:none"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
+        <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
+      </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
+    }).join('');
+    return `<div class="tree-rows tree-d${depth}">${rows}</div>`;
   },
 };
