@@ -74,3 +74,12 @@
   --ls-label:   0.10em;    /* @kind other */
   --ls-caps:    0.22em;    /* @kind other */
 }
+
+/* ═══════════════ MASS WEED typography override (2026-07-13) ═══════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=Saira+Condensed:wght@400;500;600;700&family=Orbitron:wght@600;700;800;900&display=swap');
+:root {
+  --font:'Titillium Web','Saira',-apple-system,system-ui,sans-serif;
+  --font-display:'Saira Condensed','Saira',system-ui,sans-serif;
+  --font-brand:'Saira Condensed','Saira',sans-serif;
+  --font-num:'Orbitron','Saira Condensed',sans-serif;
+}

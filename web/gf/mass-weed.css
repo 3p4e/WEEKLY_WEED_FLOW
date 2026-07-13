@@ -1,0 +1,205 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED — Mass Effect-inspired HUD skin for WEEKLY_WEED_FLOW
+   ───────────────────────────────────────────────────────────────────────
+   Two theme ids plug into GF's skin system (core.js GF.THEMES / THEME_CORE):
+     • mass-weed        — dark "command deck" (default)
+     • mass-weed-light  — "Cool Mist Glass" daylight variant
+   The token maps are authored in the app's REAL token names, so every
+   token-driven component (app.css/views.css) recolours with no markup change.
+   Section 3 layers the HUD chrome (chamfered panels, cyan edge-glow, starfield)
+   onto the app's actual .card/.btn/.modal/.sidebar classes.
+   Source: Purely Plant "Mass Weed" design (wwf-skin.css), 2026-07-13.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=Saira+Condensed:wght@400;500;600;700&family=Orbitron:wght@600;700;800;900&display=swap');
+
+/* ═══════════════ 1 · DARK — command deck (mass-weed) ═══════════════ */
+:root[data-theme="mass-weed"] {
+  color-scheme: dark;
+  /* Surfaces — hull black, gunmetal blue steel */
+  --bg:#050b18; --surface:#0a1c33; --surface-2:#0d2545; --surface-3:#123a5c;
+  --line:rgba(94,200,240,.16); --line-2:rgba(94,200,240,.09);
+  --border-strong:rgba(94,200,240,.34); --overlay:rgba(3,6,16,.74);
+
+  /* Ink — pale HUD cyan-white */
+  --ink:#eaf6ff; --ink-2:#9dc0d8; --ink-3:#6a8aa4; --ink-4:#47657c;
+
+  /* Primary accent = Mass Weed cyan (was plasma green) */
+  --accent-rgb:94,200,240;
+  --primary:#5ec8f0; --primary-hover:#8fe3ff; --primary-soft:rgba(var(--accent-rgb),.14);
+  --primary-fg:#a8e4fb; --text-on-primary:#041018; --text-on-brand:#041018;
+  --focus-ring:rgba(var(--accent-rgb),.5);
+
+  /* Secondary accents (console glows) */
+  --blue:#5ec8f0; --blue-700:#1c6ca3; --blue-soft:rgba(94,200,240,.16); --blue-soft-2:rgba(94,200,240,.08);
+  --orange:#f0b95e; --orange-700:#c88a2a; --orange-soft:rgba(240,185,94,.16); --orange-soft-2:rgba(240,185,94,.08);
+  --red:#ef4d4d; --red-700:#c62222; --red-soft:rgba(239,77,77,.18); --red-fg:#ff8f8f;
+  --amber:#ecec4a; --amber-700:#c9c522; --amber-soft:rgba(236,236,74,.16); --amber-fg:#f2f290;
+  --violet:#c89bf0; --violet-700:#9a5be0; --violet-soft:rgba(200,155,240,.18);
+  --teal:#6cf05a; --teal-soft:rgba(108,240,90,.14);
+  --green:#6cf05a; --green-500:#6cf05a; --green-fg:#9df58c; --green-soft:rgba(108,240,90,.15);
+
+  /* Department identity colours */
+  --dept-cultivation:#2be8a0; --dept-production:#2fd9d9; --dept-qc:#a07bf0;
+  --dept-quality_assurance:#f0803e; --dept-logistics:#35b6e0; --dept-security:#8296b4; --dept-tooling:#9fb0c8;
+
+  /* Glass / HUD fills */
+  --glass-bg:rgba(9,28,52,.72); --glass-border:rgba(var(--accent-rgb),.14); --glass-blur:blur(14px);
+
+  /* Typography — Titillium Web (UI) + Saira Condensed (headers) + Orbitron (numeric).
+     Cyrillic (МК) gracefully falls back to Saira, which is already loaded. */
+  --font:'Titillium Web','Saira',-apple-system,system-ui,sans-serif;
+  --font-display:'Saira Condensed','Saira',system-ui,sans-serif;
+  --font-brand:'Saira Condensed','Saira',sans-serif;
+  --font-num:'Orbitron','Saira Condensed',sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SF Mono',monospace;
+  --ls-label:.14em; --ls-wide:.28em;
+
+  /* Angular radii — corners are cut, not rounded */
+  --r-sm:3px; --r-md:4px; --r-lg:5px; --r-xl:6px; --chamfer:14px; --chamfer-sm:8px;
+
+  /* Elevation — plasma glow, not soft shadow */
+  --sh-1:0 1px 2px rgba(0,0,0,.5), inset 0 0 0 1px rgba(var(--accent-rgb),.05);
+  --sh-2:0 8px 24px rgba(0,0,0,.55), inset 0 0 24px rgba(28,108,163,.16);
+  --sh-3:0 24px 60px rgba(0,0,0,.66), 0 0 0 1px rgba(var(--accent-rgb),.08);
+  --sh-brand:0 0 26px rgba(var(--accent-rgb),.5), 0 2px 8px rgba(0,0,0,.6);
+  --glow-cyan:0 0 12px rgba(var(--accent-rgb),.55), 0 0 2px rgba(143,227,255,.9);
+
+  /* HUD scanline texture (the app already applies --scanlines to card/modal/sidebar) */
+  --scanlines:repeating-linear-gradient(0deg, rgba(94,200,240,.05) 0 1px, transparent 1px 3px);
+  --clip-panel:polygon(var(--chamfer) 0,100% 0,100% calc(100% - var(--chamfer)),calc(100% - var(--chamfer)) 100%,0 100%,0 var(--chamfer));
+  --clip-notch:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
+}
+
+/* ═══════════════ 2 · LIGHT — "Cool Mist Glass" (mass-weed-light) ═══════════════ */
+:root[data-theme="mass-weed-light"] {
+  color-scheme: light;
+  --bg:#e7eef6; --surface:rgba(255,255,255,.9); --surface-2:rgba(237,245,252,.95); --surface-3:rgba(203,222,240,.8);
+  --line:rgba(26,127,180,.22); --line-2:rgba(26,127,180,.12); --border-strong:rgba(26,127,180,.4);
+  --overlay:rgba(200,220,238,.6);
+  --ink:#102c44; --ink-2:#3d5e78; --ink-3:#587892; --ink-4:#93aabf;
+  --accent-rgb:26,127,180;
+  --primary:#1a7fb4; --primary-hover:#0d5c8a; --primary-soft:rgba(26,127,180,.12);
+  --primary-fg:#0b5480; --text-on-primary:#ffffff; --text-on-brand:#ffffff; --focus-ring:rgba(26,127,180,.45);
+  --blue:#1a7fb4; --blue-700:#0d5c8a; --blue-soft:rgba(26,127,180,.14); --blue-soft-2:rgba(26,127,180,.07);
+  --orange:#c88320; --orange-700:#9a6212; --orange-soft:rgba(200,131,32,.15); --orange-soft-2:rgba(200,131,32,.08);
+  --red:#d33636; --red-700:#a82424; --red-soft:rgba(211,54,54,.14); --red-fg:#b02525;
+  --amber:#b8a41a; --amber-700:#8f7f12; --amber-soft:rgba(184,164,26,.16); --amber-fg:#8f7f12;
+  --violet:#7a4fc2; --violet-700:#5d3a99; --violet-soft:rgba(122,79,194,.14);
+  --teal:#1c9a4d; --teal-soft:rgba(28,154,77,.13);
+  --green:#1c9a4d; --green-500:#1c9a4d; --green-fg:#178043; --green-soft:rgba(28,154,77,.14);
+  --dept-cultivation:#12a06a; --dept-production:#0e9aa0; --dept-qc:#6a3fc0;
+  --dept-quality_assurance:#c2410c; --dept-logistics:#0e7fa8; --dept-security:#4a5e7c; --dept-tooling:#54677f;
+  --glass-bg:rgba(255,255,255,.82); --glass-border:rgba(26,127,180,.2); --glass-blur:blur(14px);
+  --font:'Titillium Web','Saira',-apple-system,system-ui,sans-serif;
+  --font-display:'Saira Condensed','Saira',system-ui,sans-serif;
+  --font-brand:'Saira Condensed','Saira',sans-serif;
+  --font-num:'Orbitron','Saira Condensed',sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SF Mono',monospace;
+  --ls-label:.14em; --ls-wide:.28em;
+  --chamfer:14px; --chamfer-sm:8px;
+  --sh-1:0 1px 2px rgba(40,90,140,.12), inset 0 0 0 1px rgba(123,184,222,.18);
+  --sh-2:0 8px 26px -12px rgba(40,90,140,.35), inset 0 0 0 1px rgba(123,184,222,.22);
+  --sh-3:0 20px 48px -14px rgba(40,90,140,.4), 0 0 0 1px rgba(26,127,180,.12);
+  --sh-brand:0 0 18px rgba(26,127,180,.3), 0 2px 8px rgba(40,90,140,.15);
+  --glow-cyan:0 0 8px rgba(26,127,180,.25), 0 0 2px rgba(13,92,138,.4);
+  --scanlines:repeating-linear-gradient(0deg, rgba(60,120,165,.028) 0 1px, transparent 1px 3px);
+  --clip-panel:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+  --clip-notch:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
+}
+
+/* ═══════════════ 3 · HUD CHROME (both mass-weed variants) ═══════════════ */
+
+/* Deep-space canvas + faint starfield behind the whole shell */
+:root[data-theme="mass-weed"] body{
+  background:radial-gradient(120% 90% at 50% -10%, #0c2445 0%, #061224 45%, var(--bg) 100%), var(--bg);
+}
+:root[data-theme="mass-weed-light"] body{
+  background:radial-gradient(120% 90% at 50% -10%, #f4f9ff 0%, #e7eff7 45%, #dbe6f2 100%), var(--bg);
+}
+:root[data-theme="mass-weed"] body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.55;
+  background:
+    radial-gradient(1px 1px at 20% 30%, rgba(143,227,255,.55), transparent),
+    radial-gradient(1px 1px at 70% 60%, rgba(143,227,255,.4), transparent),
+    radial-gradient(1px 1px at 45% 80%, rgba(143,227,255,.45), transparent),
+    radial-gradient(1px 1px at 85% 22%, rgba(143,227,255,.35), transparent),
+    radial-gradient(1px 1px at 32% 55%, rgba(143,227,255,.3), transparent);
+}
+:root[data-theme="mass-weed"] #app{position:relative;z-index:1}
+
+/* Brand lockup + section headers run wide, uppercase, condensed */
+:root[data-theme^="mass-weed"] .gf-name,
+:root[data-theme^="mass-weed"] .brand .gf-name{
+  font-family:var(--font-brand);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--primary-hover);text-shadow:0 0 14px rgba(var(--accent-rgb),.5);
+}
+:root[data-theme^="mass-weed"] .modal-head h3,
+:root[data-theme^="mass-weed"] .card-title,
+:root[data-theme^="mass-weed"] .tele-stat .l,
+:root[data-theme^="mass-weed"] .tele-card .l{
+  font-family:var(--font-display);letter-spacing:var(--ls-label);
+}
+:root[data-theme^="mass-weed"] .field label,
+:root[data-theme^="mass-weed"] .side-label{letter-spacing:var(--ls-wide)}
+
+/* KPI / telemetry numerals — Orbitron with a plasma glow */
+:root[data-theme^="mass-weed"] .tele-stat .v,
+:root[data-theme^="mass-weed"] .tele-card .v{
+  font-family:var(--font-num);text-shadow:0 0 16px rgba(var(--accent-rgb),.4);
+}
+
+/* Chamfered task cards + cyan edge glow */
+:root[data-theme^="mass-weed"] .card{
+  clip-path:var(--clip-notch);border-radius:0;
+  box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.1);
+}
+:root[data-theme^="mass-weed"] .card:hover{
+  box-shadow:var(--sh-2), 0 0 18px rgba(var(--accent-rgb),.28);transform:translateY(-1px)
+}
+:root[data-theme="mass-weed"] .card::before{opacity:.5}
+
+/* Chamfered dialogs with a glowing cyan frame */
+:root[data-theme^="mass-weed"] .modal{
+  clip-path:var(--clip-panel);border-radius:0;
+  box-shadow:var(--sh-3), 0 0 34px rgba(var(--accent-rgb),.35);
+}
+
+/* Buttons — condensed uppercase, swept corners, cyan glow */
+:root[data-theme^="mass-weed"] .btn{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:var(--ls-label);
+  border-radius:0;clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px);
+}
+:root[data-theme^="mass-weed"] .btn-primary{
+  box-shadow:0 0 18px rgba(var(--accent-rgb),.4), 0 2px 6px rgba(0,0,0,.4);
+  text-shadow:0 0 8px rgba(var(--accent-rgb),.4);
+}
+:root[data-theme^="mass-weed"] .btn-sm{clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px)}
+
+/* Chamfered inputs with inner cyan focus glow */
+:root[data-theme^="mass-weed"] .field input,
+:root[data-theme^="mass-weed"] .field textarea,
+:root[data-theme^="mass-weed"] .field select{
+  border-radius:0;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+}
+:root[data-theme^="mass-weed"] .field input:focus,
+:root[data-theme^="mass-weed"] .field textarea:focus,
+:root[data-theme^="mass-weed"] .field select:focus{
+  box-shadow:inset 0 0 0 1px var(--primary), inset 0 0 16px rgba(var(--accent-rgb),.18)
+}
+
+/* Active nav item — brighter cyan wash + edge bar */
+:root[data-theme^="mass-weed"] .nav-item.active{
+  text-shadow:0 0 10px rgba(var(--accent-rgb),.5)
+}
+:root[data-theme="mass-weed"] .sidebar::before{opacity:.6}
+
+/* Telemetry tiles + pills pick up cut corners */
+:root[data-theme^="mass-weed"] .tele-card{
+  border-radius:0;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)
+}
+:root[data-theme^="mass-weed"] .pill{letter-spacing:.06em;text-transform:uppercase}
+
+@media (prefers-reduced-motion: reduce){
+  :root[data-theme^="mass-weed"] .card:hover{transform:none}
+}

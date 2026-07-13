@@ -21,10 +21,10 @@ GF.render = {
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
-    show('week-strip', v !== 'team');
+    show('week-strip', v !== 'team' && v !== 'calendar');   // calendar is month-scoped
     show('day-pills', v === 'mywork' || v === 'board');
     show('telemetry', v === 'mywork');
-    if (v !== 'team') { this.weekStrip(); }
+    if (v !== 'team' && v !== 'calendar') { this.weekStrip(); }
     if (v === 'mywork' || v === 'board') this.dayPills();
     if (v === 'mywork') this.telemetry();
 
@@ -65,8 +65,11 @@ GF.render = {
       .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
     nav.push(
       ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
+      ['calendar', 'calendar', 'calendar'],
       ['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
     );
+    // Workload balancing is a coordination tool — managers/execs only.
+    if (GF.can('team')) nav.push(['workload', 'workload', 'clock']);
     GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
       <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
         ${GF.icon(ic)}<span>${GF.t(key)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}
@@ -290,7 +293,7 @@ GF.render = {
      the pencil opens the normal edit modal. */
   treeRows(parentId, depth) {
     const kids = (GF.state.children && GF.state.children[parentId]) || [];
-    if (!kids.length || depth > 2) return '';
+    if (!kids.length || depth > 8) return '';   // depth 8 = cycle sanity, not a UI cap
     const rows = kids.map(c => {
       const grand = ((GF.state.children && GF.state.children[c.id]) || []).length;
       const open = GF.state.treeOpen.has(c.id);

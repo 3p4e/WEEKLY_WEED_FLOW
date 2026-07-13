@@ -81,7 +81,10 @@ GF.WWF._renderWorklog = () => {
     </div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${AL('End', 'Крај')}</label><input id="wl-end" type="time"></div>
-      <div class="field" style="flex:1"><label>${AL('or hours', 'или часови')}</label><input id="wl-hours" type="number" min="0.25" step="0.25" placeholder="2.5"></div>
+      <div class="field" style="flex:1"><label>${AL('or hours', 'или часови')}</label><input id="wl-hours" type="number" min="0.25" step="0.25" placeholder="2.5">
+        <div style="display:flex;gap:5px;margin-top:5px">${[['¼', 0.25], ['½', 0.5], ['1', 1]].map(([l, q]) =>
+          `<button type="button" class="btn btn-sm" style="padding:3px 9px"
+             onclick="var i=GF.$('wl-hours');i.value=String(Math.round(((parseFloat(i.value)||0)+${q})*100)/100)">+${l}h</button>`).join('')}</div></div>
     </div>
     <div class="field"><label>${AL('Note', 'Белешка')}</label>
       <div class="row" style="gap:8px"><input id="wl-note" placeholder="${AL('What was done…', 'Што беше направено…')}" style="flex:1">

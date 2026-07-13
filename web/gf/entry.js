@@ -26,7 +26,7 @@ GF.WWF = GF.WWF || {};
   // (see the loadAndRender override below).
   function pickEntrySkin() {
     try {
-      if (!(GF.THEMES && GF.setTheme)) return 'dark';
+      if (!(GF.THEMES && GF.setTheme)) return 'mass-weed';
       const pool = GF.THEMES.filter(t => t.group === 'dark');
       const pick = (pool.length ? pool : GF.THEMES)[Math.floor(Math.random() * (pool.length || GF.THEMES.length))];
       entrySkin = (pick && pick.id) || 'dark';
@@ -219,7 +219,7 @@ GF.WWF = GF.WWF || {};
       // way the logged-in app reflects the remembered choice, not the splash's
       // random one.
       try {
-        const saved = localStorage.getItem('gf_theme') || 'dark';
+        const saved = localStorage.getItem('gf_theme') || 'mass-weed';
         if (GF.setTheme && document.documentElement.dataset.theme !== saved) {
           GF.setTheme(saved, { silent: true, noPersist: true });
         }

@@ -116,3 +116,17 @@
   --primary-fg:   #7CF5C4;
   --focus-ring:   rgba(43,232,160,.42);
 }
+
+/* ═══════════════ MASS WEED override (2026-07-13) ═══════════════
+   Replaces the TAL SHIAR command-deck values with the Mass Effect
+   HUD palette. Same token names → components follow untouched. */
+:root {
+  --green-500:#5ec8f0; --green-600:#3a9fd4; --green-700:#1c6ca3;
+  --leaf-from:#8fe3ff; --leaf-to:#1c6ca3; --leaf-lime:#a8e4fb;
+  --navy-900:#030610;
+  --ink:#eaf6ff; --ink-2:#9dc0d8; --ink-3:#6a8aa4; --ink-4:#47657c;
+  --bg:#050b18; --surface:#0a1c33; --surface-2:#0d2545; --surface-3:#123a5c;
+  --line:rgba(94,200,240,.16); --line-2:rgba(94,200,240,.09); --overlay:rgba(3,6,16,.74);
+  --accent-rgb:94,200,240; --primary:#5ec8f0; --primary-hover:#8fe3ff; --primary-fg:#a8e4fb;
+  --blue:#5ec8f0; --orange:#f0b95e; --red:#ef4d4d; --amber:#ecec4a; --violet:#c89bf0; --teal:#6cf05a;
+}

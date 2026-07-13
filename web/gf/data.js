@@ -41,7 +41,7 @@ GF.DAYS_MK = ['Пон', 'Вто', 'Сре', 'Чет', 'Пет', 'Саб', 'Не�
 // ── i18n ──
 GF.I18N = {
   en: {
-    my_week:'My Week', board:'Board', timeline:'Timeline', coordination:'Coordination', dashboard:'Dashboard',
+    my_week:'My Week', calendar:'Calendar', workload:'Workload', board:'Board', timeline:'Timeline', coordination:'Coordination', dashboard:'Dashboard',
     departments:'Departments', search:'Search tasks…', voice_task:'Voice task', today:'Today',
     this_week:'This Week', next_week:'Next Week', all:'All', add_task:'Add a task — or speak it', new_task:'New task', edit_task:'Edit task',
     done_count:'Done', total:'Total', working:'Working', stuck:'Stuck', postponed:'Postponed', completion:'Completion',
@@ -73,7 +73,7 @@ GF.I18N = {
     dept_home:'My Department',
   },
   mk: {
-    my_week:'Моја недела', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
+    my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
     departments:'Оддели', search:'Барај задачи…', voice_task:'Гласовна задача', today:'Денес',
     this_week:'Оваа недела', next_week:'Следна недела', all:'Сите', add_task:'Додај задача — или кажи ја', new_task:'Нова задача', edit_task:'Уреди задача',
     done_count:'Завршени', total:'Вкупно', working:'Во тек', stuck:'Блокирани', postponed:'Одложени', completion:'Завршеност',

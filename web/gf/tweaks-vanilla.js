@@ -113,6 +113,18 @@
     `;
   }
   applyAll();   // reapply any previously saved customization for every visitor
+  // Public API for the Settings → Display tab (settings.html mockup adoption):
+  // the full design editor stays design-mode-gated, but density/character/accent
+  // are user preferences and deserve a first-class UI. Exposed BEFORE the
+  // design-mode gate so it exists for every user.
+  GF.tweaks = {
+    get: () => ({ ...S }),
+    set(patch) { Object.assign(S, patch); save(); applyAll(); },
+    CHAR_KEYS: Object.keys(CHAR), DENSITY_KEYS: Object.keys(DENSITY),
+    PALETTES: PALETTES.map(p => ({ label: p.label, blue: p.blue, orange: p.orange })),
+    CHAR_DESC, DENSITY_DESC,
+  };
+
   if (!_designMode) return;   // everything below builds/mounts the editor UI
 
   /* ── Panel HTML ── */
@@ -258,4 +270,5 @@
   document.body.appendChild(toggle);
 
   render();   // sync the panel's active-option highlighting to the state applyAll() already applied
+
 })();
