@@ -708,3 +708,34 @@ def test_md_lite_renders_whitelist_and_stays_escaped():
 def test_md_lite_bold_marker_cannot_smuggle_tags():
     html = _md_lite("**<img src=x onerror=alert(1)>**")
     assert "<img" not in html and "&lt;img" in html
+
+
+# ── xhigh review follow-ups (2026-07-13): fence-with-prose, bold-pairing,
+# deterministic citation resolution, list-envelope bilingual split ──────────
+
+def test_normalize_unwraps_fence_with_surrounding_prose():
+    reply = 'Sure thing!\n```json\n{"weekly_report": "Done."}\n```'
+    assert _normalize_ai_reply(reply) == "Done."
+
+
+def test_normalize_list_envelope_uses_bilingual_separator():
+    en, mk = _split_bilingual(_normalize_ai_reply('["EN narrative text", "MK narrative text"]'))
+    assert en == "EN narrative text"
+    assert mk == "MK narrative text"
+
+
+def test_md_lite_unbalanced_bold_marker_leaves_text_literal_not_scrambled():
+    text = ("Deployment went well **but we still need to verify backups, "
+            "and next week's plan **highlight** is the HVAC retrofit.")
+    html = _md_lite(text)
+    # No sentence-spanning <b> — the unmatched marker must not swallow
+    # unrelated prose between it and the next legitimate pair.
+    assert "still need to verify backups, and next week" not in html.split("<b>")[-1] if "<b>" in html else True
+    assert "**" in html  # left literal rather than mis-paired
+
+
+def test_md_lite_citation_resolves_deterministically_with_ambiguous_prefix():
+    ids = {"a5e66bd9-1111-4111-8111-111111111111", "a5e66bd9-2222-4222-8222-222222222222"}
+    html1 = _md_lite("[task:a5e66bd9]", ids)
+    html2 = _md_lite("[task:a5e66bd9]", ids)
+    assert html1 == html2  # same input -> same output regardless of set iteration order

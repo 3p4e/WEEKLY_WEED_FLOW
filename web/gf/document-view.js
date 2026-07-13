@@ -125,23 +125,37 @@ GF.WWF._applyDocInputs = (content, inputs, skipKey) => {
 // Render an AI narrative body: escape-first, then a fixed markdown-lite
 // whitelist (## headings, **bold**, [task:xxxxxxxx] citations — the agents
 // emit these even when asked for plain prose). Citations that match a loaded
-// task become deep links into the board; unknown ids stay inert chips. The
-// backend's _md_lite is the export-side twin of this — keep them in step.
+// task become deep links into the board (via the same xrJump the executive
+// report uses); unknown ids stay inert chips. The backend's _md_lite is the
+// export-side twin of this — keep them in step.
 GF.WWF.aiHtml = (text) => {
   let t = GF.esc(String(text || ''));
   t = t.replace(/^#{1,4}\s+(.+)$/gm, '<b style="display:block;font-size:13.5px;margin:7px 0 2px">$1</b>');
-  t = t.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  // An odd count of "**" means an unclosed bold marker would otherwise pair
+  // with the NEXT legitimate opening marker, bolding everything in between —
+  // leave the markers literal rather than scramble the sentence.
+  if ((t.match(/\*\*/g) || []).length % 2 === 0) {
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  }
+  // Built once per call, not per citation match, and matched on the FULL
+  // cited ref (not pre-truncated) so this resolves identically to the
+  // backend's _md_lite for the same narrative + task list.
+  const pool = ((GF.state && GF.state.tasks) ? GF.state.tasks : [])
+    .concat((GF.state && GF.state.childrenByParent) ? Object.values(GF.state.childrenByParent).flat() : [])
+    .map(x => String(x.id || '').toLowerCase())
+    .filter(Boolean)
+    .sort();
   t = t.replace(/\[task:([0-9a-fA-F-]{4,36})\]/g, (_, ref) => {
-    const short = ref.slice(0, 8).toLowerCase();
-    const all = (GF.state && GF.state.tasks) ? GF.state.tasks : [];
-    const kids = (GF.state && GF.state.childrenByParent)
-      ? Object.values(GF.state.childrenByParent).flat() : [];
-    const hit = all.concat(kids).find(x => String(x.id || '').toLowerCase().startsWith(short));
+    const refLc = ref.toLowerCase();
+    const short = refLc.slice(0, 8);
+    const full = pool.find(id => id.startsWith(refLc));
     const chip = 'background:rgba(43,232,160,.10);border:1px solid rgba(43,232,160,.25);border-radius:7px;'
                + 'padding:0 5px;font-size:11px;font-family:ui-monospace,monospace;color:#2BE8A0';
-    if (hit && GF.WWF.jumpToTask) {
+    if (full && GF.WWF.xrJump) {
+      const hit = GF.task ? GF.task(full) : null;
+      const weekStart = hit ? (hit.week_start || hit.weekStart || '') : '';
       return `<a href="#" style="${chip};cursor:pointer;text-decoration:none" `
-           + `onclick="GF.WWF.jumpToTask('${GF.esc(String(hit.id))}');return false">задача/task ${GF.esc(short)}</a>`;
+           + `onclick="GF.WWF.xrJump('${GF.esc(full)}','${GF.esc(weekStart)}');return false">задача/task ${GF.esc(short)}</a>`;
     }
     return `<span style="${chip}">задача/task ${GF.esc(short)}</span>`;
   });
@@ -428,8 +442,8 @@ GF.WWF._renderDocPanel = () => {
       const narHtml = editable
         ? langLbl('EN') + ta(s.key, 'narrative_en', nar.en, AL('Narrative (English)…', 'Наратив (англиски)…'))
           + langLbl('МК') + ta(s.key, 'narrative_mk', nar.mk, AL('Narrative (Macedonian)…', 'Наратив (македонски)…'))
-        : (nar.en ? `${langLbl('EN')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.esc(nar.en)}</div>` : '')
-          + (nar.mk ? `${langLbl('МК')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.esc(nar.mk)}</div>` : '');
+        : (nar.en ? `${langLbl('EN')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.WWF.aiHtml(nar.en)}</div>` : '')
+          + (nar.mk ? `${langLbl('МК')}<div style="font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink)">${GF.WWF.aiHtml(nar.mk)}</div>` : '');
       return `<div style="border:1px solid var(--line,rgba(43,232,160,.12));border-radius:9px;padding:10px 12px;margin:8px 0;background:${ok ? 'rgba(43,232,160,.06)' : 'var(--surface,#0B1913)'}">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
           <b style="font-size:13px">${GF.esc(s.title_en || '')}</b>

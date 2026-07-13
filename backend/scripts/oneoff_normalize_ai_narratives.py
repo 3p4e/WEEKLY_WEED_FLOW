@@ -21,13 +21,18 @@ import json  # noqa: E402
 
 
 def _fix_pair(en: str, mk: str) -> tuple[str, str, bool]:
-    """Normalize one bilingual body pair. When MK is empty the normalized EN
-    may reveal the `---` separator the envelope was hiding — re-split then."""
-    if mk:
-        nen, nmk = _normalize_ai_reply(en) if en else "", _normalize_ai_reply(mk)
-        return nen, nmk, (nen != en or nmk != mk)
-    norm = _normalize_ai_reply(en) if en else ""
-    nen, nmk = _split_bilingual(norm) if norm else ("", "")
+    """Normalize one bilingual body pair. The normalized EN half may reveal
+    the `---` separator a JSON envelope was hiding (both languages were
+    packed into one string) — re-split whenever that separator shows up,
+    regardless of whether MK already held something (a stale/partial
+    hand-edit in MK must not block recovering the real split)."""
+    norm_en = _normalize_ai_reply(en) if en else ""
+    if "---" in norm_en:
+        split_en, split_mk = _split_bilingual(norm_en)
+        if split_mk:
+            return split_en, split_mk, (split_en != en or split_mk != mk)
+    nen = norm_en
+    nmk = _normalize_ai_reply(mk) if mk else mk
     return nen, nmk, (nen != en or nmk != mk)
 
 

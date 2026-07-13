@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.api.ai import _letta_message
+from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
@@ -319,58 +320,10 @@ def _split_bilingual(reply: str) -> tuple[str, str]:
     return reply.strip(), ""
 
 
-_FENCE_RE = re.compile(r"```[a-zA-Z]*\s*\n(.*?)\n?\s*```", re.S)
-_ENVELOPE_RE = re.compile(r'^\{\s*"[\w.-]+"\s*:\s*"(.*?)"?\s*\}?\s*$', re.S)
-
-
-def _normalize_ai_reply(reply: str) -> str:
-    """Peel machine packaging off an agent reply so document sections always
-    store human prose. The scheduler-pipeline Letta agents answer in their
-    persona's strict-JSON contract ({"weekly_report": "…"}) no matter what the
-    per-message prompt asks, sometimes inside a ```json fence and sometimes
-    truncated mid-envelope — all of which previously landed verbatim in
-    body_en and reached the owner's export as raw JSON. Plain prose passes
-    through untouched."""
-    text = reply.strip()
-    m = _FENCE_RE.fullmatch(text)
-    if m:
-        text = m.group(1).strip()
-    if text[:1] not in '{["':
-        return text
-    try:
-        data = json.loads(text)
-    except ValueError:
-        # Truncated envelope (agent hit its token limit mid-string): repair by
-        # closing the string/object, else extract the first value by regex and
-        # decode the JSON escapes it carries.
-        data = None
-        for suffix in ('"}', '"]}', "}"):
-            try:
-                data = json.loads(text + suffix)
-                break
-            except ValueError:
-                continue
-        if data is None:
-            m = _ENVELOPE_RE.match(text)
-            if m:
-                raw = m.group(1)
-                try:
-                    data = json.loads(f'"{raw}"')
-                except ValueError:
-                    data = raw.replace("\\n", "\n").replace('\\"', '"').replace("\\t", "\t")
-    if isinstance(data, str):
-        return data.strip()
-    if isinstance(data, dict):
-        # One value per language key is common; join multiple string values
-        # with the bilingual separator so _split_bilingual keeps working.
-        parts = [v.strip() for v in data.values() if isinstance(v, str) and v.strip()]
-        if parts:
-            return "\n\n---\n\n".join(parts) if len(parts) > 1 else parts[0]
-    if isinstance(data, list):
-        parts = [v.strip() for v in data if isinstance(v, str) and v.strip()]
-        if parts:
-            return "\n".join(parts)
-    return text
+# _normalize_ai_reply lives in app.api.ai (imported below as _normalize_ai_reply)
+# so the JSON-envelope-unwrap logic has exactly one implementation shared by
+# the generic /ai/{function_key} invoke endpoint and every document narrative
+# reader here — they were drifting apart before this was consolidated.
 
 # (function_key, section title) per document kind. The prompt is looked up in
 # _ASK by key so weekly_summary can carry a kind-specific title.
@@ -1107,11 +1060,19 @@ def _md_lite(text: str, task_ids: set[str] | None = None) -> str:
     reference chip."""
     t = _e(text)
     t = _MD_HEAD_RE.sub(r'<span class="mdh">\1</span>', t)
-    t = _MD_BOLD_RE.sub(r"<b>\1</b>", t)
+    # An odd count of "**" means the agent opened a bold span it never closed;
+    # pairing markers left-to-right in that case grabs the NEXT legitimate
+    # opening marker as the close, bolding a whole run of unrelated prose in
+    # between. Leave every marker literal instead — worse-looking but never
+    # scrambles the sentence.
+    if t.count("**") % 2 == 0:
+        t = _MD_BOLD_RE.sub(r"<b>\1</b>", t)
 
     def cite(m: "re.Match[str]") -> str:
-        ref = m.group(1)
-        full = next((tid for tid in (task_ids or ()) if tid.startswith(ref.lower())), None)
+        ref = m.group(1).lower()
+        # Sorted so an ambiguous short ref (>=4 hex chars) resolves the same
+        # way every time regardless of set/hash iteration order.
+        full = next((tid for tid in sorted(task_ids or ()) if tid.startswith(ref)), None)
         if full:
             return f'<a class="cite" href="#task-{full[:8]}">задача/task {ref[:8]}</a>'
         return f'<span class="cite">задача/task {ref[:8]}</span>'
@@ -1162,6 +1123,7 @@ def _pdf_cover(doc: dict, c: dict, who) -> str:
 
 def _pdf_template_sections(c: dict, is_locked: bool) -> str:
     out = ""
+    ids = _content_task_ids(c)
     for sec in c.get("template_sections", []):
         rows = "".join(
             f'<tr><td class="k">{_e(f.get("label_en", ""))}<br><span class="sub">{_e(f.get("label_mk", ""))}</span></td>'
@@ -1176,9 +1138,9 @@ def _pdf_template_sections(c: dict, is_locked: bool) -> str:
             badge = "" if sec.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
             nar_html = f'<div class="ai">{badge}'
             if nar.get("en"):
-                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"])}</div>'
+                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"], ids)}</div>'
             if nar.get("mk"):
-                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"])}</div>'
+                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"], ids)}</div>'
             nar_html += "</div>"
         out += (f'<div class="tsec"><h3>{_e(sec.get("title_en", ""))}'
                 f' <span class="sub">/ {_e(sec.get("title_mk", ""))}</span></h3>'
@@ -1228,7 +1190,8 @@ def _pdf_task_tables(c: dict, who) -> str:
                        + (f'{_nl(t["description"])}' if t.get("description") else "")
                        + (f'<ul>{notes}</ul>' if notes else "") + "</td></tr>")
             hours = f'{t.get("estimated_hours") or "—"} / {t.get("actual_hours") or "—"}'
-            rows += (f'<tr><td>{_e(t.get("title", ""))}</td><td>{_e(t.get("reference_code") or "—")}</td>'
+            anchor = f' id="task-{_e(str(t.get("id", ""))[:8].lower())}"' if t.get("id") else ""
+            rows += (f'<tr{anchor}><td>{_e(t.get("title", ""))}</td><td>{_e(t.get("reference_code") or "—")}</td>'
                      f'<td>{_e(t.get("status", ""))}</td><td>{_e(t.get("priority", ""))}</td>'
                      f'<td>{_e(hours)}</td><td>{_e(t.get("due_date") or "—")}</td></tr>{sub}')
         out += (f'<h3>{_e(dept_label)} <span class="sub">({len(tasks)})</span></h3>'
@@ -1430,6 +1393,7 @@ def _html_narratives(c: dict, is_locked: bool) -> str:
     """Template-section grids + AI sections as collapsible blocks — the same
     locked/draft inclusion rules as the PDF renderer."""
     out = ""
+    ids = _content_task_ids(c)
     for sec in c.get("template_sections", []):
         rows = "".join(
             f'<tr><td class="k">{_e(f.get("label_en", ""))}<br><span class="sub">{_e(f.get("label_mk", ""))}</span></td>'
@@ -1441,14 +1405,13 @@ def _html_narratives(c: dict, is_locked: bool) -> str:
             badge = "" if sec.get("approved") else ' <span class="badge">DRAFT — not approved</span>'
             nar_html = badge
             if nar.get("en"):
-                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"])}</div>'
+                nar_html += f'<div class="lang-lbl">EN</div><div>{_md_lite(nar["en"], ids)}</div>'
             if nar.get("mk"):
-                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"])}</div>'
+                nar_html += f'<div class="lang-lbl">МК</div><div>{_md_lite(nar["mk"], ids)}</div>'
         out += (f'<details open><summary>{_e(sec.get("title_en", ""))}'
                 f' <span class="sub">/ {_e(sec.get("title_mk", ""))}</span></summary>'
                 f'<table class="grid">{rows}</table>{nar_html}</details>')
     ai = ""
-    ids = _content_task_ids(c)
     for s in c.get("ai_sections", []):
         if s.get("status") in ("not_configured", "unavailable"):
             continue

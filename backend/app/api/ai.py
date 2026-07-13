@@ -7,6 +7,9 @@ call degrades gracefully — if no binding exists or the Letta stack is
 unreachable, the endpoint returns {available:false} instead of erroring, so the
 UI can fall back.
 """
+import json
+import re
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -18,6 +21,63 @@ from app.roles import ADMIN
 from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+_FENCE_RE = re.compile(r"```[a-zA-Z]*\s*\n(.*?)\n?\s*```", re.S)
+_ENVELOPE_RE = re.compile(r'^\{\s*"[\w.-]+"\s*:\s*"(.*?)"?\s*\}?\s*$', re.S)
+
+
+def normalize_ai_reply(reply: str) -> str:
+    """Peel machine packaging off an agent reply so callers always get human
+    prose. Several Letta agents answer in their persona's strict-JSON contract
+    ({"weekly_report": "…"}) no matter what the per-message prompt asks —
+    sometimes inside a ```json fence (possibly with surrounding prose the
+    fence pattern doesn't fully swallow), sometimes truncated mid-envelope —
+    all of which would otherwise reach the UI/export as literal JSON. Plain
+    prose passes through untouched. Shared by every reader of a Letta reply
+    (this module's generic /ai/{function_key} invoke, and documents.py's
+    document-compile narratives) so the unwrap logic can't drift between them."""
+    text = reply.strip()
+    m = _FENCE_RE.search(text)
+    if m:
+        text = m.group(1).strip()
+    if text[:1] not in '{["':
+        return text
+    try:
+        data = json.loads(text)
+    except ValueError:
+        # Truncated envelope (agent hit its token limit mid-string): repair by
+        # closing the string/object, else extract the first value by regex and
+        # decode the JSON escapes it carries.
+        data = None
+        for suffix in ('"}', '"]}', "}"):
+            try:
+                data = json.loads(text + suffix)
+                break
+            except ValueError:
+                continue
+        if data is None:
+            m = _ENVELOPE_RE.match(text)
+            if m:
+                raw = m.group(1)
+                try:
+                    data = json.loads(f'"{raw}"')
+                except ValueError:
+                    data = raw.replace("\\n", "\n").replace('\\"', '"').replace("\\t", "\t")
+    if isinstance(data, str):
+        return data.strip()
+    if isinstance(data, dict):
+        # One value per language key is common; join multiple string values
+        # with the bilingual separator so a positional EN/MK split keeps
+        # working. Preserve insertion order — callers that care about EN-vs-MK
+        # ordering rely on the agent emitting EN first, per the prompt contract.
+        parts = [v.strip() for v in data.values() if isinstance(v, str) and v.strip()]
+        if parts:
+            return "\n\n---\n\n".join(parts) if len(parts) > 1 else parts[0]
+    if isinstance(data, list):
+        parts = [v.strip() for v in data if isinstance(v, str) and v.strip()]
+        if parts:
+            return "\n\n---\n\n".join(parts)
+    return text
 
 # Catalog of user-facing AI functions (bindings activate them per-org).
 CATALOG = {
@@ -236,4 +296,4 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
     reply = await _letta_message(binding["letta_agent_id"], prompt)
     if reply is None:
         return {"available": False, "reason": "letta_unreachable", "function": function_key}
-    return {"available": True, "function": function_key, "output": reply}
+    return {"available": True, "function": function_key, "output": normalize_ai_reply(reply)}

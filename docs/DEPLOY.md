@@ -1,5 +1,14 @@
 # Deploying the WWF stack to KVM4
 
+## Deploy order (binding, since 2026-07-13)
+
+`https://wwf-mass.srv1231216.hstgr.cloud/` is the **test server** — every
+change ships and gets verified there first (see "Parallel test instance —
+wwf_mass" below for what it is and isn't).
+`https://wwf.srv1231216.hstgr.cloud/` is **production** — real Purely Plant
+user accounts and real work data. It is promoted to **only after**
+verification on wwf_mass, never deployed to first.
+
 [`docker-compose.yml`](../docker-compose.yml) describes the deployed stack:
 
 | Service     | Container                     | Image                        | Role |
