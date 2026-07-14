@@ -252,6 +252,11 @@ GF.WWF.openEdit = (taskId) => {
   if (GF.$('add-ref')) GF.$('add-ref').value = t.ref || '';
   if (GF.$('add-rec')) GF.$('add-rec').value = (t.recurrence && t.recurrence.freq) || '';
   if (GF.$('add-est')) GF.$('add-est').value = t.est != null ? t.est : '';
+  if (GF.$('add-tags')) GF.$('add-tags').value = (t.tags || []).join(', ');
+  // The dept/priority/type/recurrence fields are popup choosers (hidden input
+  // + trigger button) — setting .value above needs a label sync + re-tint.
+  if (GF.syncSelect) ['add-dept', 'add-pr', 'add-type', 'add-rec'].forEach(GF.syncSelect);
+  if (GF._addAccent) GF._addAccent(t.dept);
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });

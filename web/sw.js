@@ -5,14 +5,14 @@
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
    Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.14.0';
+const VERSION = 'wwf-shell-v3.15.0';
 
 const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
   '/gf/app.css', '/gf/skins.css', '/gf/brand.css', '/gf/mobile.css', '/gf/views.css', '/gf/leaf-fx.css', '/gf/entry.css', '/gf/mass-weed.css',
-  '/gf/boot-guard.js', '/gf/data.js', '/gf/core.js', '/gf/render.js', '/gf/voice.js',
+  '/gf/boot-guard.js', '/gf/data.js', '/gf/core.js', '/gf/chooser.js', '/gf/render.js', '/gf/voice.js',
   '/gf/export.js', '/gf/views.js', '/gf/cmdk.js', '/gf/calendar-view.js', '/gf/workload-view.js', '/gf/leaf-fx.js', '/gf/assistant.js', '/gf/main.js',
   '/gf/api.js', '/gf/demo.js', '/gf/integrate.js', '/gf/audit-view.js', '/gf/collab.js', '/gf/worklog.js',
   '/gf/report-view.js', '/gf/document-view.js', '/gf/execreport-view.js', '/gf/import-view.js', '/gf/intake-view.js',

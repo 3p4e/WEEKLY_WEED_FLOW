@@ -326,6 +326,10 @@ GF.WWF.install = () => {
     const refCode = (GF.$('add-ref')?.value || '').trim() || null;
     const recFreq = GF.$('add-rec')?.value || '';
     const recurrence = recFreq ? { freq: recFreq, interval: 1 } : null;
+    // Comma-separated free tags; bounded client-side to the backend's 422
+    // limits (≤32 tags, ≤64 chars each) so a long paste degrades gracefully.
+    const tags = (GF.$('add-tags')?.value || '').split(',')
+      .map(s => s.trim()).filter(Boolean).slice(0, 32).map(s => s.slice(0, 64));
 
     // Bilingual on Save: every task the app creates/edits is stored bilingual
     // "Македонски | English" regardless of the language it was typed in. A brief
@@ -351,7 +355,7 @@ GF.WWF.install = () => {
           days: days.length?days:[GF.todayDay],
           estimated_hours: estHours, due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
-          recurrence,
+          recurrence, tags,
           // Whole-object replace; collect starts from the task's existing
           // attributes so keys outside the current dept template survive.
           attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId, (t && t.attrs) || {}) : undefined,
@@ -413,7 +417,7 @@ GF.WWF.install = () => {
         week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
         estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
-        reference_code: refCode, recurrence, parent_id: GF._addParent || null,
+        reference_code: refCode, recurrence, tags, parent_id: GF._addParent || null,
         attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId) : undefined,
       });
       if (GF._addParent) {

@@ -31,7 +31,9 @@ test('due date + type at creation, weekend work session shows up in the report h
     await page.getByRole('button', { name: /new task/i }).click();
     await page.locator('#add-title').fill(taskTitle);
     await page.locator('#add-due').fill(sat);
-    await page.locator('#add-type').selectOption('lab');
+    // task type is a popup chooser (chooser.js), not a native <select>
+    await page.locator('#add-type-btn').click();
+    await page.locator('#gf-chooser .sel-row[data-v="lab"]').click();
     await page.getByRole('button', { name: 'Create task' }).click();
     await expect(page.locator('.card-title', { hasText: taskTitle })).toBeVisible({ timeout: 10_000 });
   });

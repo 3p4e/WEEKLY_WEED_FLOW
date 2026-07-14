@@ -38,7 +38,7 @@ GF.openAdd = (weekId, parentId) => {
   const scopeDept = GF.WWF && GF.WWF.deptScope ? GF.WWF.deptScope() : null;
   const lockDept = scopeDept && !parentId && !fromEdit;
   const deptList = lockDept ? GF.DEPTS.filter(d => d.id === scopeDept) : GF.DEPTS;
-  const deptOpts = deptList.map(d => `<option value="${d.id}">${GF.esc(GF.depName(d.id))}</option>`).join('');
+  const deptOptions = deptList.map(d => ({ v: d.id, label: GF.depName(d.id), color: d.color }));
   const deptHint = parentId && scopeDept
     ? `<span class="lbl-hint">${GF.state.lang === 'mk'
         ? 'изберете друг оддел за да ја делегирате под-задачата'
@@ -48,37 +48,48 @@ GF.openAdd = (weekId, parentId) => {
   const activePeople = Object.entries(GF.PEOPLE).filter(([, v]) => !v.inactive);
   const respChips = activePeople.map(([k, v]) =>
     `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
-  const prOpts = ['critical','high','medium','low'].map(p => `<option value="${p}" ${p==='medium'?'selected':''}>${GF.prLabel(p)}</option>`).join('');
+  const prOptions = ['critical','high','medium','low'].map(p => ({ v: p, label: GF.prLabel(p) }));
   const dayChips = GF.DAYS.slice(0, 5).map(d => `<span class="chip-opt" data-day="${d}" onclick="this.classList.toggle('on')">${GF.dayLabel(d)}</span>`).join('');
-  const typeOpts = GF.TASK_TYPES.map(t => `<option value="${t}" ${t==='other'?'selected':''}>${GF.taskTypeLabel(t)}</option>`).join('');
-  const recOpts = ['', 'daily', 'weekly', 'monthly'].map(r =>
-    `<option value="${r}">${r ? GF.t('rec_' + r) : GF.t('rec_none')}</option>`).join('');
+  const typeOptions = GF.TASK_TYPES.map(t => ({ v: t, label: GF.taskTypeLabel(t) }));
+  const recOptions = ['', 'daily', 'weekly', 'monthly'].map(r => ({ v: r, label: r ? GF.t('rec_' + r) : GF.t('rec_none') }));
+  const defaultDept = deptList[0] ? deptList[0].id : '';
   el.innerHTML = `
     <div class="field"><label>${GF.t('new_task')}</label>
       <div class="row" style="gap:8px"><input id="add-title" placeholder="${GF.t('new_task')}…" style="flex:1">
         <button class="mini-btn" title="${GF.t('dictate')}" id="mic-add-title" onclick="GF.voice.dictate('add-title')">${GF.icon('mic')}</button></div></div>
-    <div class="field"><label>${GF.t('dept_label')} ${deptHint}</label><select id="add-dept" ${lockDept ? 'disabled' : ''}
-      onchange="GF.refreshDeptFields&&GF.refreshDeptFields(this.value,null,${!fromEdit && !parentId})">${deptOpts}</select></div>
+    <div class="field"><label>${GF.t('dept_label')} ${deptHint}</label>${GF.selectField('add-dept', {
+      value: defaultDept, options: deptOptions, disabled: lockDept, title: GF.t('dept_label'),
+      onPick: (v) => { if (GF.refreshDeptFields) GF.refreshDeptFields(v, null, !fromEdit && !parentId); if (GF._addAccent) GF._addAccent(v); },
+    })}</div>
     <div class="field" id="add-preset-row" style="display:none"></div>
     <div id="add-dept-fields"></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
     <div class="row" style="gap:10px">
-      <div class="field" style="flex:1"><label>${GF.t('priority')}</label><select id="add-pr">${prOpts}</select></div>
-      <div class="field" style="flex:1"><label>${GF.t('task_type')}</label><select id="add-type">${typeOpts}</select></div>
+      <div class="field" style="flex:1"><label>${GF.t('priority')}</label>${GF.selectField('add-pr', {
+        value: 'medium', options: prOptions, title: GF.t('priority'), onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
+      <div class="field" style="flex:1"><label>${GF.t('task_type')}</label>${GF.selectField('add-type', {
+        value: 'other', options: typeOptions, title: GF.t('task_type') })}</div>
     </div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('due_date')}</label><input id="add-due" type="date"></div>
-      <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label><select id="add-rec">${recOpts}</select></div>
+      <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label>${GF.selectField('add-rec', {
+        value: '', options: recOptions, title: GF.t('recurrence') })}</div>
     </div>
+    <div class="field"><label>${GF.state.lang === 'mk' ? 'Ознаки' : 'Tags'} <span class="lbl-hint">${GF.state.lang === 'mk' ? 'одделени со запирка' : 'comma-separated'}</span></label>
+      <input id="add-tags" placeholder="hlvd, tranche-1" oninput="GF.renderAddPreview&&GF.renderAddPreview()"></div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('reference_code')}</label><input id="add-ref" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
       <div class="field" style="flex:1"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
     </div>
-    <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>`;
+    <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>
+    <div class="af-prev" id="add-preview"></div>`;
   // Department template fields (+ quick-add presets in create mode) for the
-  // currently selected department; re-rendered by the select's onchange, and
-  // re-rendered with prefill by worklog.js's openEdit in edit mode.
+  // currently selected department; re-rendered by the dept chooser's onPick,
+  // and re-rendered with prefill by worklog.js's openEdit in edit mode.
   if (GF.refreshDeptFields) GF.refreshDeptFields(GF.$('add-dept').value, null, !fromEdit && !parentId);
+  if (GF._addAccent) GF._addAccent(GF.$('add-dept').value);
+  const titleEl = GF.$('add-title');
+  if (titleEl) titleEl.addEventListener('input', () => GF.renderAddPreview && GF.renderAddPreview());
   // Default to create-mode labels; worklog.js's openEdit flips these to
   // "Edit task" / "Save" after it sets GF._editTask.
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('new_task');

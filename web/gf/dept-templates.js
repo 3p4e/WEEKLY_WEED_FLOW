@@ -156,16 +156,58 @@ GF.renderDeptFields = (deptId, current) => {
   const input = (f) => {
     const v = cur[f.key] != null ? String(cur[f.key]) : '';
     if (f.type === 'select') {
-      const blank = `<option value=""></option>`;
-      return `<select id="attr-f-${f.key}" data-attr="${f.key}" data-type="select">${blank}${
-        f.opts.map(o => `<option value="${GF.esc(o.v)}" ${o.v === v ? 'selected' : ''}>${GF.esc(GF.tplLabel(o))}</option>`).join('')}</select>`;
+      // Popup chooser (chooser.js), not a native dropdown — the hidden input
+      // keeps the `GF.$('attr-f-…').value` contract for collectDeptAttrs.
+      return GF.selectField(`attr-f-${f.key}`, {
+        value: v, title: GF.tplLabel(f), placeholder: '—',
+        options: [{ v: '', label: '—' }].concat(f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) }))),
+        onPick: () => GF.renderAddPreview && GF.renderAddPreview(),
+      });
     }
     const t = f.type === 'number' ? 'number' : 'text';
     return `<input id="attr-f-${f.key}" data-attr="${f.key}" data-type="${f.type}" type="${t}"`
-      + ` value="${GF.esc(v)}" placeholder="${GF.esc(f.ph || '')}"${f.type === 'number' ? ' min="0" step="1"' : ''}>`;
+      + ` value="${GF.esc(v)}" placeholder="${GF.esc(f.ph || '')}"${f.type === 'number' ? ' min="0" step="1"' : ''}`
+      + ` oninput="GF.renderAddPreview&&GF.renderAddPreview()">`;
   };
-  return `<div class="dept-fields">${tpl.fields.map(f => `
-    <div class="field af-field"><label>${GF.esc(GF.tplLabel(f))}${f.unit ? ` <span class="lbl-hint">(${GF.esc(f.unit)})</span>` : ''}</label>${input(f)}</div>`).join('')}</div>`;
+  // Dept-tinted "fields well" (the mockup's af-modal .af-block): the accent
+  // comes from --dept-acc, set on the modal by GF._addAccent.
+  const dn = GF.depName(deptId);
+  return `<div class="af-block">
+    <div class="af-block-hd"><span class="dot"></span>${GF.esc(dn)} ${GF.state.lang === 'mk' ? 'полиња · опционални метаподатоци' : 'fields · optional metadata'}</div>
+    <div class="dept-fields">${tpl.fields.map(f => `
+    <div class="field af-field"><label>${GF.esc(GF.tplLabel(f))}${f.unit ? ` <span class="lbl-hint">(${GF.esc(f.unit)})</span>` : ''}</label>${input(f)}</div>`).join('')}</div></div>`;
+};
+
+// Tint the add modal with the chosen department's color (drives the af-block
+// well + header dot via --dept-acc) and refresh the live preview.
+GF._addAccent = (deptId) => {
+  const modal = document.querySelector('#add-modal .modal');
+  const color = (GF.dep(deptId) || {}).color || '';
+  if (modal) { if (color) modal.style.setProperty('--dept-acc', color); else modal.style.removeProperty('--dept-acc'); }
+  if (GF.renderAddPreview) GF.renderAddPreview();
+};
+
+// Live preview under the form (mockup af-modal): shows how the dept-field
+// values become attribute chips and the comma tags become #tag chips, using
+// the SAME chip renderers the board cards use — so what you see is what the
+// card will look like.
+GF.renderAddPreview = () => {
+  const host = GF.$('add-preview'); if (!host) return;
+  const deptId = GF.$('add-dept') ? GF.$('add-dept').value : null;
+  const title = (GF.$('add-title') && GF.$('add-title').value || '').trim();
+  const attrs = GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId, {}) : {};
+  const tags = (GF.$('add-tags') && GF.$('add-tags').value || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const chips = (GF.attrChips ? GF.attrChips({ attrs, dept: deptId }) : '')
+    + tags.map(tg => `<span class="tag-chip">#${GF.esc(tg)}</span>`).join('');
+  if (!title && !chips) { host.innerHTML = ''; return; }
+  const d = GF.dep(deptId) || {};
+  host.innerHTML = `
+    <div class="af-prev-lbl">${GF.state.lang === 'mk' ? 'Преглед' : 'Preview'}</div>
+    <div class="af-prev-card">
+      <div class="af-prev-title">${GF.esc(title || '…')}</div>
+      <div class="af-prev-meta"><span class="dn" style="color:${d.color || 'var(--primary)'}">${GF.esc(GF.depAbbr(deptId))}</span>${chips}</div>
+    </div>`;
 };
 
 GF.refreshDeptFields = (deptId, current, showPresets) => {
@@ -181,6 +223,7 @@ GF.refreshDeptFields = (deptId, current, showPresets) => {
       <div class="chips">${tpl.presets.map((p, i) =>
         `<span class="chip-opt preset-chip" onclick="GF.applyPreset(${i})">${GF.esc(GF.tplLabel(p))}</span>`).join('')}</div>` : '';
   }
+  if (GF.renderAddPreview) GF.renderAddPreview();
 };
 
 // One-tap preset: bilingual title ("МК | EN" — the save path's translator
@@ -192,10 +235,11 @@ GF.applyPreset = (i) => {
   if (!p) return;
   const title = GF.$('add-title');
   if (title) { title.value = `${p.mk} | ${p.en}`; title.focus(); }
-  if (p.type && GF.$('add-type')) GF.$('add-type').value = p.type;
+  if (p.type && GF.$('add-type')) { GF.$('add-type').value = p.type; if (GF.syncSelect) GF.syncSelect('add-type'); }
   Object.entries(p.attrs || {}).forEach(([k, v]) => {
-    const el = GF.$('attr-f-' + k); if (el) el.value = String(v);
+    const el = GF.$('attr-f-' + k); if (el) { el.value = String(v); if (GF.syncSelect) GF.syncSelect('attr-f-' + k); }
   });
+  if (GF.renderAddPreview) GF.renderAddPreview();
 };
 
 // Read the rendered field inputs → attributes object. Starts from `base`

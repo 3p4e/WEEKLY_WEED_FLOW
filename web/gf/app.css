@@ -797,3 +797,39 @@ body.demo-on .main{padding-bottom:56px}
 .tree-edit{opacity:0;transition:opacity .12s}
 .tree-row:hover .tree-edit{opacity:1}
 @media (max-width:760px){.tree-range{display:none}.tree-edit{opacity:1}}
+
+/* ── Popup chooser (chooser.js) — replaces native <select> app-wide ────── */
+.sel-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  border:1px solid var(--glass-border);border-radius:9px;padding:10px 12px;font-size:14px;
+  background:var(--surface-2);color:var(--ink);cursor:pointer;text-align:left;font-family:inherit}
+.sel-btn:focus{outline:none;border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.sel-btn:disabled{opacity:.55;cursor:not-allowed}
+.sel-btn .sel-cur{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel-caret{flex:none;opacity:.6}
+.sel-modal{max-width:420px}
+.sel-search{width:100%;border:1px solid var(--glass-border);border-radius:9px;padding:9px 12px;
+  font-size:14px;background:var(--surface-2);color:var(--ink);outline:none;margin-bottom:10px}
+.sel-search:focus{border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.sel-list{display:flex;flex-direction:column;gap:2px;max-height:52vh;overflow-y:auto}
+.sel-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;
+  border-radius:8px;background:none;color:var(--ink);font-size:14px;font-family:inherit;
+  cursor:pointer;text-align:left;min-height:42px}
+.sel-row:hover,.sel-row.hover{background:var(--primary-soft)}
+.sel-row.on{background:var(--primary-soft);font-weight:600}
+.sel-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.sel-lbl{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.sel-sub{font-size:11.5px;color:var(--ink-3);font-weight:400}
+.sel-ck{flex:none;color:var(--primary)}
+.sel-empty{padding:18px;text-align:center;color:var(--ink-3);font-size:13px}
+
+/* ── Add-modal department-fields well (mockup af-modal .af-block) ──────── */
+.af-block{border:1px solid var(--glass-border);border-radius:10px;padding:12px;margin-bottom:12px;
+  background:color-mix(in srgb, var(--dept-acc, var(--primary)) 7%, var(--surface-2))}
+.af-block-hd{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--ink-3);margin-bottom:10px}
+.af-block-hd .dot{width:8px;height:8px;border-radius:50%;background:var(--dept-acc, var(--primary));flex:none}
+.af-prev{margin-top:12px}
+.af-prev-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:6px}
+.af-prev-card{border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.af-prev-title{font-size:14px;font-weight:600;margin-bottom:6px}
+.af-prev-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--ink-3)}
