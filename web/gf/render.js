@@ -303,11 +303,14 @@ GF.render = {
         : `<span class="tree-dot s-${c.status}"></span>`;
       return `
       <div class="tree-row s-${c.status}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${c.id}')">
+        <button class="check ${c.status === 'done' ? 'done' : ''}" title="${GF.t('mark_done') || 'Done'}"
+          onclick="event.stopPropagation();GF.toggleDone('${c.id}')">${c.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
         ${toggle}
         <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
         ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
         ${c.sessionHours > 0 ? `<span class="sess-hours">${GF.icon('clock', 'icon')}${c.sessionHours}h</span>` : ''}
-        <span class="pill s-${c.status}" style="pointer-events:none"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
+        <span class="pill s-${c.status}" title="${GF.t('change_status') || 'Change status'}"
+          onclick="event.stopPropagation();GF.cycleStatus('${c.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
         <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
       </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
     }).join('');

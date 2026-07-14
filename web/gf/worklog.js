@@ -133,7 +133,14 @@ GF.WWF.submitWorklog = async () => {
     GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
     st.sessions = (st.sessions || []).concat([s]);
     const t = GF.task(st.taskId);
-    if (t) { t.sessionHours = Math.round(((t.sessionHours || 0) + Number(s.hours)) * 100) / 100; GF.render.panels(); }
+    if (t) {
+      t.sessionHours = Math.round(((t.sessionHours || 0) + Number(s.hours)) * 100) / 100;
+      // Logging effort is a strong signal the task is underway: advance a
+      // still-"Not started" task to "Working on it" (persisted + permission-
+      // gated by GF.setStatus; never regresses a later status).
+      if (t.status === 'pending' && GF.setStatus) GF.setStatus(st.taskId, 'working');
+      GF.render.panels();
+    }
     GF.WWF._renderWorklog();
   } catch (e) { GF.toast(AL('Log failed: ', 'Неуспешен внес: ') + e.message, 'error'); }
 };
