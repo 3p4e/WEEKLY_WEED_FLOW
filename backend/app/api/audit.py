@@ -25,7 +25,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
-from app.deps import require_role
+from app.deps import dept_scope, require_role
 from app.roles import ELEVATED_ROLES
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -94,17 +94,34 @@ async def list_audit(
         except ValueError:
             raise HTTPException(422, "before must be an ISO timestamp")
         clauses.append(f"created_at<${len(args)}")
+
+    # M1: a department-scoped manager must not read OTHER departments' task
+    # content through the audit trail. Audit rows carry the full task JSON but
+    # no department column, so filter on the department_id embedded in the
+    # row's new/old payload, and drop the users-DB (identity) chain entirely —
+    # profiles events are org-wide/cross-department by nature. Org-wide elevated
+    # roles (execs, QP, ADMIN) are unaffected: dept_scope() returns None for
+    # them AND for a scoped manager with no department set yet, which then
+    # falls through to org-wide — the app's usual anti-"manager-sees-nothing"
+    # behaviour. Rows without a department_id in their payload (progress,
+    # sessions, comments…) fall out for scoped managers, which is the safe side.
+    dscope = dept_scope(user)
+    if dscope:
+        args.append(dscope)
+        clauses.append(f"COALESCE(new_values->>'department_id', old_values->>'department_id')=${len(args)}")
+
     where = " AND ".join(clauses)
     args.append(limit)
     q = f"{_SELECT} WHERE {where} ORDER BY created_at DESC LIMIT ${len(args)}"
+    eff_source = "tasks" if dscope else source
 
     # Each side is over-fetched to `limit`, merged, then cut — so the page is
     # correct no matter how the two chains interleave in time.
     merged: list[dict] = []
-    if source in (None, "tasks"):
+    if eff_source in (None, "tasks"):
         async with rls(user) as c:
             merged += [_ser(r, "tasks") for r in await c.fetch(q, *args)]
-    if source in (None, "users"):
+    if eff_source in (None, "users"):
         async with rls_users(user) as c:
             merged += [_ser(r, "users") for r in await c.fetch(q, *args)]
     merged.sort(key=lambda r: r["created_at"] or "", reverse=True)

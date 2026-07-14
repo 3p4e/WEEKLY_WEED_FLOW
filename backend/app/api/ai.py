@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import rls
-from app.deps import require_password_set, require_role
+from app.deps import dept_scope, require_password_set, require_role
 from app.roles import ADMIN
 from app.roster import roster
 
@@ -247,13 +247,29 @@ _CTX_COLS = ("t.id, t.title, t.status, t.priority, t.department, t.week_start, t
              " t.estimated_hours, t.actual_hours, t.completed_date, t.user_id")
 
 
-async def _task_context(conn, names: dict, week_id: str | None = None, limit: int = 200) -> str:
+async def _task_context(conn, names: dict, week_id: str | None = None, limit: int = 200,
+                        dept: str | None = None) -> str:
     """*names* is the app-side roster map (owner usernames live in the users
-    database — no SQL join possible)."""
-    if week_id:
+    database — no SQL join possible).
+
+    M2: *dept* is the caller's department_id when they are a department-scoped
+    manager (None for org-wide execs/QP/ADMIN). RLS lets any elevated role read
+    every org task, so without this the corpus would ground a manager's AI
+    answer in ALL departments' work; scope it to their own department instead."""
+    if week_id and dept:
+        rows = await conn.fetch(
+            f"SELECT {_CTX_COLS} FROM tasks t"
+            " WHERE t.is_deleted=false AND t.week_id=$1 AND t.department_id=$2"
+            " ORDER BY t.created_at DESC LIMIT $3", week_id, dept, limit)
+    elif week_id:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
             " WHERE t.is_deleted=false AND t.week_id=$1 ORDER BY t.created_at DESC LIMIT $2", week_id, limit)
+    elif dept:
+        rows = await conn.fetch(
+            f"SELECT {_CTX_COLS} FROM tasks t"
+            " WHERE t.is_deleted=false AND t.department_id=$1"
+            " ORDER BY t.week_start DESC NULLS LAST, t.created_at DESC LIMIT $2", dept, limit)
     else:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
@@ -287,7 +303,7 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
             "SELECT letta_agent_id FROM ai_agent_bindings"
             " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", function_key)
         if function_key in _DATA_FUNCS:
-            context = await _task_context(c, await roster(user), week_id=week_id)
+            context = await _task_context(c, await roster(user), week_id=week_id, dept=dept_scope(user))
         else:
             context = ""
     if binding is None:

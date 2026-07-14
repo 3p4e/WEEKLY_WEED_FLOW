@@ -109,6 +109,60 @@ async def test_qa_auditor_role_no_longer_exists(client, admin_headers):
     assert r.status_code == 422, r.text
 
 
+async def _dept(org, code, name):
+    from app.db import tasks_admin_pool
+    row = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,$2,$3) RETURNING id",
+        org["org_id"], code, name)
+    return str(row["id"])
+
+
+async def test_dept_manager_audit_is_scoped_to_own_department(client, admin_headers, org):
+    """M1: a department-scoped manager reads the audit trail but must see only
+    their OWN department's task rows — never another department's task content,
+    and never the users-DB (profiles) identity chain."""
+    from tests.conftest import login_and_set_password
+    d_qc = await _dept(org, "qc", "QC")
+    d_pr = await _dept(org, "pr", "Production")
+
+    assert (await client.post("/tasks", json={"title": "QC secret", "department_id": d_qc},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.post("/tasks", json={"title": "PR secret", "department_id": d_pr},
+                              headers=admin_headers)).status_code == 201
+    await create_user(client, admin_headers)  # guarantees a users-DB (profiles) row exists
+
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=d_qc)
+    token = await login_and_set_password(client, mgr["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+
+    rows = (await client.get("/audit?limit=500", headers=h)).json()
+    # sees its own department's task rows
+    assert any(e["source"] == "tasks" and (e.get("new_values") or {}).get("department_id") == d_qc
+               for e in rows), "QC manager should see its own department's audit rows"
+    # never another department's task content (in either payload side)
+    assert all((e.get("new_values") or {}).get("department_id") != d_pr for e in rows)
+    assert all((e.get("old_values") or {}).get("department_id") != d_pr for e in rows)
+    # never the identity (profiles/users) chain
+    assert all(e["source"] != "users" for e in rows)
+
+
+async def test_org_wide_role_still_sees_all_departments_in_audit(client, admin_headers, org):
+    """M1 must not over-restrict: an org-wide role (CEO) still sees every
+    department's task rows AND the users chain."""
+    from tests.conftest import login_and_set_password
+    d_qc = await _dept(org, "qc", "QC")
+    d_pr = await _dept(org, "pr", "Production")
+    await client.post("/tasks", json={"title": "QC t", "department_id": d_qc}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "PR t", "department_id": d_pr}, headers=admin_headers)
+    ceo, otp = await create_user(client, admin_headers, role="CEO")
+    token = await login_and_set_password(client, ceo["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+    rows = (await client.get("/audit?limit=500", headers=h)).json()
+    depts = {(e.get("new_values") or {}).get("department_id") for e in rows if e["source"] == "tasks"}
+    assert d_qc in depts and d_pr in depts
+    assert any(e["source"] == "users" for e in rows), "org-wide role should still see the identity chain"
+
+
 async def test_verify_reports_ok_when_chain_intact(client, admin_headers):
     await client.post("/tasks", json={"title": "Keeps the chain honest", "status": "pending"},
                        headers=admin_headers)

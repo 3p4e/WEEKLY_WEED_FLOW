@@ -82,6 +82,7 @@ DECLARE
   v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END).id::text, '');
   v_payload text;
 BEGIN
+  PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
   SELECT entry_hash INTO v_prev FROM audit_log ORDER BY id DESC LIMIT 1;
   -- IMPORTANT: convert_to(text,'UTF8'), never text::bytea (escape-format bug).
   v_payload := COALESCE(v_prev,'') || v_actor || TG_OP || TG_TABLE_NAME || v_rec

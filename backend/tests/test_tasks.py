@@ -349,3 +349,27 @@ async def test_negative_hours_rejected_with_422(client, admin_headers):
     task_id = r.json()["id"]
     r = await client.patch(f"/tasks/{task_id}", json={"actual_hours": -2}, headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_recurrence_interval_upper_bound_rejected_with_422(client, admin_headers):
+    """L3: a huge interval sails past the positive-int check but overflows date
+    arithmetic at rollover — a 500 that rolls back (and blocks) the completion.
+    Reject it at write time; a sane interval still works."""
+    r = await client.post("/tasks", json={"title": "R", "recurrence": {"freq": "weekly", "interval": 100000}},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post("/tasks", json={"title": "R2", "recurrence": {"freq": "weekly", "interval": 2}},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_tags_bounds_rejected_with_422(client, admin_headers):
+    """L5: bound the free-form tag list (count + per-tag length); a normal
+    list is accepted."""
+    r = await client.post("/tasks", json={"title": "T", "tags": [f"t{i}" for i in range(100)]},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post("/tasks", json={"title": "T2", "tags": ["x" * 500]}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post("/tasks", json={"title": "T3", "tags": ["ok", "fine"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text

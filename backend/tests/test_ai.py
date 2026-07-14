@@ -271,3 +271,68 @@ async def test_invoke_with_binding_returns_letta_message(client, admin_headers, 
     assert body["function"] == "draft_description"
     assert body["output"] == "Here is your drafted description."
     assert captured["agent_id"] == "agent-xyz"
+
+
+async def test_ai_corpus_is_scoped_to_managers_department(client, admin_headers, org, monkeypatch):
+    """M2: a department-scoped manager's AI grounding corpus must contain ONLY
+    their own department's tasks. RLS grants any elevated role org-wide task
+    read, so without the dept filter in _task_context the corpus would leak
+    other departments' work into the manager's AI answer. Intercept the Letta
+    call and assert on the prompt that was actually built."""
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+
+    d_qc = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"]))["id"]
+    d_pr = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'pr','Production') RETURNING id", org["org_id"]))["id"]
+
+    await client.post("/tasks", json={"title": "QCONLYMARKER", "department_id": str(d_qc)}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "PRONLYMARKER", "department_id": str(d_pr)}, headers=admin_headers)
+
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
+
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=str(d_qc))
+    token = await login_and_set_password(client, mgr["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post("/ai/weekly_summary", json={"input": "summarise"}, headers=h)
+    assert r.status_code == 200
+    assert "QCONLYMARKER" in captured["prompt"], "manager's own department task must ground the answer"
+    assert "PRONLYMARKER" not in captured["prompt"], "another department's task must NOT leak into the corpus"
+
+
+async def test_ai_corpus_is_org_wide_for_executives(client, admin_headers, org, monkeypatch):
+    """M2 must not over-restrict: an org-wide role (CEO) still grounds on every
+    department's tasks."""
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+
+    d_qc = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"]))["id"]
+    d_pr = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'pr','Production') RETURNING id", org["org_id"]))["id"]
+    await client.post("/tasks", json={"title": "QCMARK", "department_id": str(d_qc)}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "PRMARK", "department_id": str(d_pr)}, headers=admin_headers)
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
+
+    ceo, otp = await create_user(client, admin_headers, role="CEO")
+    token = await login_and_set_password(client, ceo["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+    r = await client.post("/ai/weekly_summary", json={"input": "summarise"}, headers=h)
+    assert r.status_code == 200
+    assert "QCMARK" in captured["prompt"] and "PRMARK" in captured["prompt"]

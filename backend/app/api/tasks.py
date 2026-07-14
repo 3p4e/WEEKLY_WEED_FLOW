@@ -220,6 +220,14 @@ class TaskIn(BaseModel):
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
+# L3: an unbounded interval sails through the positive-int check but then
+# overflows date arithmetic at rollover — a 500 that rolls back (and so
+# permanently blocks) the completion that triggers it. 1000 covers every real
+# cadence (every 1000 months ≈ 83y) while keeping base+interval*unit in range.
+_RECUR_INTERVAL_MAX = 1000
+# L5: DoS hygiene on the free-form tag list (bounds, not a business rule).
+_TAGS_MAX = 32
+_TAG_MAX_LEN = 64
 
 # The UI writes 3-letter capitalized tokens (GF.DAYS in web/gf/data.js);
 # anything else in days text[] is a typo or an API caller inventing values
@@ -233,6 +241,15 @@ def _check_days(days: list[str] | None) -> None:
     bad = [d for d in days if d not in _DAY_TOKENS]
     if bad:
         raise HTTPException(422, f"days must be Mon..Sun tokens, got: {', '.join(map(str, bad[:3]))}")
+
+
+def _check_tags(tags: list[str] | None) -> None:
+    if not tags:
+        return
+    if len(tags) > _TAGS_MAX:
+        raise HTTPException(422, f"tags: at most {_TAGS_MAX}")
+    if any(not isinstance(t, str) or len(t) > _TAG_MAX_LEN for t in tags):
+        raise HTTPException(422, f"tags: each tag must be a string of at most {_TAG_MAX_LEN} chars")
 
 
 # Department-template metadata (room, strain, sample_ref, equipment_ref, …).
@@ -267,8 +284,9 @@ def _check_recurrence(rec: dict | None) -> None:
         return
     if rec.get("freq") not in _RECURRENCE_FREQS:
         raise HTTPException(422, "recurrence.freq must be daily|weekly|monthly")
-    if not isinstance(rec.get("interval", 1), int) or rec.get("interval", 1) < 1:
-        raise HTTPException(422, "recurrence.interval must be a positive integer")
+    iv = rec.get("interval", 1)
+    if not isinstance(iv, int) or isinstance(iv, bool) or iv < 1 or iv > _RECUR_INTERVAL_MAX:
+        raise HTTPException(422, f"recurrence.interval must be an integer in 1..{_RECUR_INTERVAL_MAX}")
     # `until` is only parsed later, inside the completion transaction — validate
     # it here so a bad value is a clean 422 at write time, not a 500 that rolls
     # back (and permanently blocks) the completion that triggers it.
@@ -285,6 +303,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
     _check_days(body.days)
     _check_attributes(body.attributes)
+    _check_tags(body.tags)
     # A dept-scoped manager creates TOP-LEVEL tasks in their own department
     # only; an omitted department defaults to theirs instead of landing
     # unassigned (which their scoped list could then never show them again).
@@ -424,6 +443,8 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         _check_recurrence(patch["recurrence"])
     if "days" in patch:
         _check_days(patch["days"])
+    if "tags" in patch:
+        _check_tags(patch["tags"])
     if "attributes" in patch:
         _check_attributes(patch["attributes"])
         # The column is NOT NULL DEFAULT '{}' — an explicit null means "clear",

@@ -151,7 +151,13 @@ GF.WWF.aiHtml = (text) => {
     const full = pool.find(id => id.startsWith(refLc));
     const chip = 'background:rgba(43,232,160,.10);border:1px solid rgba(43,232,160,.25);border-radius:7px;'
                + 'padding:0 5px;font-size:11px;font-family:ui-monospace,monospace;color:#2BE8A0';
-    if (full && GF.WWF.xrJump) {
+    // L4 (defense-in-depth): `full` is resolved from GF.state task ids (always
+    // UUIDs) and every interpolation already goes through GF.esc, but the id
+    // lands inside an inline onclick JS-string — so require a clean UUID shape
+    // before emitting the clickable link. Anything else degrades to the inert
+    // chip below rather than risk a malformed handler.
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    if (full && uuidRe.test(full) && GF.WWF.xrJump) {
       const hit = GF.task ? GF.task(full) : null;
       const weekStart = hit ? (hit.week_start || hit.weekStart || '') : '';
       return `<a href="#" style="${chip};cursor:pointer;text-decoration:none" `
