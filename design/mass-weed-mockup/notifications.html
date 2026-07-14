@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Notifications</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:860px; margin:0 auto; padding:20px 24px 60px; }
+  .ntf{ display:flex; gap:14px; align-items:flex-start; padding:14px 16px; border:1px solid rgba(94,200,240,.12); border-left:3px solid var(--mw-cyan); background:var(--mw-panel-in); clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px)); transition:background .15s ease; }
+  .ntf + .ntf{ margin-top:9px; }
+  .ntf.unread{ background:rgba(58,159,212,.08); }
+  .ntf.unread .ntf__tt::before{ content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--mw-cyan-bright); box-shadow:0 0 6px var(--mw-cyan); margin-right:8px; vertical-align:middle; }
+  .ntf--ok{ border-left-color:var(--mw-stat-hi); } .ntf--warn{ border-left-color:var(--mw-stat-mid); } .ntf--err{ border-left-color:var(--mw-stat-lo); }
+  .ntf__ic{ width:38px; height:38px; flex:none; display:grid; place-items:center; border-radius:50%; border:1px solid rgba(94,200,240,.28); color:var(--mw-cyan-bright); background:var(--mw-panel); }
+  .ntf--ok .ntf__ic{ color:var(--mw-stat-hi); border-color:rgba(108,240,90,.4); }
+  .ntf--warn .ntf__ic{ color:var(--mw-stat-mid); border-color:rgba(236,236,74,.4); }
+  .ntf--err .ntf__ic{ color:var(--mw-stat-lo); border-color:rgba(239,77,77,.4); }
+  .ntf__b{ flex:1; }
+  .ntf__tt{ font-size:14px; font-weight:600; color:var(--mw-ink); }
+  .ntf__ds{ font-size:12.5px; color:var(--mw-text-dim); margin-top:3px; line-height:1.5; }
+  .ntf__meta{ display:flex; gap:12px; align-items:center; margin-top:7px; }
+  .ntf__ts{ font-size:11px; color:var(--mw-text-faint); text-transform:uppercase; letter-spacing:.06em; }
+  .ntf__act{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-cyan-bright); text-decoration:none; cursor:pointer; }
+  .ntf__act:hover{ text-shadow:0 0 8px rgba(94,200,240,.6); }
+  .daylabel{ font-family:var(--mw-font-cond); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-faint); margin:22px 0 10px; }
+  .bar{ display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Notifications">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="orders.html">Orders</a>
+    <a href="compliance.html">Compliance</a>
+    <a href="notifications.html" class="is-active">Alerts</a>
+    <a href="settings.html">Settings</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Notifications</h1><span class="mw-rule"></span></div>
+
+  <div class="bar">
+    <div class="mw-utabs" style="flex:1;">
+      <button class="mw-utab is-active" data-f="all">All <span class="mw-badge2 mw-badge2--cyan" style="margin-left:4px;">9</span></button>
+      <button class="mw-utab" data-f="unread">Unread</button>
+      <button class="mw-utab" data-f="ops">Operations</button>
+      <button class="mw-utab" data-f="compliance">Compliance</button>
+    </div>
+    <button class="mw-btn mw-btn--ghost" id="markall" style="padding:8px 14px; font-size:11px;">Mark all read</button>
+  </div>
+
+  <div id="list"></div>
+</div>
+</div>
+<script>
+  const IC = {
+    alert:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+    check:'<path d="M20 6L9 17l-5-5"/>',
+    box:'<path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>',
+    thermo:'<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+    doc:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1" transform="translate(2 0)"/>',
+  };
+  const N = [
+    {day:'Today', tone:'err', ic:'alert', cat:'ops', unread:true, tt:'Climate excursion — Flower Room B', ds:'Temperature hit 31.4°C, above the 29°C ceiling for 12 minutes. HVAC-2 fault suspected.', ts:'8 min ago', act:'View Zone'},
+    {day:'Today', tone:'warn', ic:'thermo', cat:'ops', unread:true, tt:'Cure humidity drifting — Chamber C-3', ds:'RH at 68%, above the 60–65% target. Burp recommended within 2 hours.', ts:'41 min ago', act:'Open Cure'},
+    {day:'Today', tone:'err', ic:'doc', cat:'compliance', unread:true, tt:'METRC sync failed', ds:'2 package tags unmatched on manifest MAN-0412. Reconcile before the transfer window closes.', ts:'1 hr ago', act:'Reconcile'},
+    {day:'Today', tone:'ok', ic:'check', cat:'ops', unread:false, tt:'Batch B-24-05 sealed', ds:'R. Kane completed packaging — 312 eighths, 184 pre-rolls. Chain of custody updated.', ts:'2 hr ago', act:'View Batch'},
+    {day:'Today', tone:'', ic:'box', cat:'ops', unread:false, tt:'Order ORD-3388 shipped', ds:'Element Retail Group — 28.0 kg dispatched on Route East. ETA 14:20.', ts:'3 hr ago', act:'Track'},
+    {day:'Yesterday', tone:'ok', ic:'doc', cat:'compliance', unread:false, tt:'Lab results passed — Reaper Haze', ds:'THC 24.3%, microbial and pesticide panels clear. Certificate on file.', ts:'Yesterday · 16:02', act:'View COA'},
+    {day:'Yesterday', tone:'warn', ic:'user', cat:'ops', unread:false, tt:'N. Vega flagged Reaper Haze', ds:'Requested re-test on phenotype variation in Flower Room A, rows 4–6.', ts:'Yesterday · 11:20', act:'Review'},
+    {day:'Yesterday', tone:'', ic:'thermo', cat:'ops', unread:false, tt:'Nutrient reservoir refilled', ds:'Tank 2 topped to 480 L. EC 1.8, pH 6.1 — within Flower program range.', ts:'Yesterday · 09:47', act:''},
+    {day:'Yesterday', tone:'ok', ic:'check', cat:'compliance', unread:false, tt:'Manifest MAN-0409 delivered', ds:'Citadel Mart confirmed receipt — 9.8 kg, signed by store manager.', ts:'Yesterday · 08:15', act:''},
+  ];
+  function render(f){
+    const items = N.filter(n=> f==='all' || (f==='unread'&&n.unread) || n.cat===f);
+    let html=''; let lastDay='';
+    if(!items.length){ document.getElementById('list').innerHTML='<div class="mw-empty"><div class="mw-empty__tt">All Clear</div><div class="mw-empty__ds">No notifications in this filter.</div></div>'; return; }
+    items.forEach(n=>{
+      if(n.day!==lastDay){ html+=`<div class="daylabel">${n.day}</div>`; lastDay=n.day; }
+      html+=`<div class="ntf ${n.tone?'ntf--'+n.tone:''} ${n.unread?'unread':''}">
+        <span class="ntf__ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${IC[n.ic]}</svg></span>
+        <div class="ntf__b">
+          <div class="ntf__tt">${n.tt}</div>
+          <div class="ntf__ds">${n.ds}</div>
+          <div class="ntf__meta"><span class="ntf__ts">${n.ts}</span>${n.act?`<a class="ntf__act">${n.act} →</a>`:''}</div>
+        </div>
+      </div>`;
+    });
+    document.getElementById('list').innerHTML=html;
+  }
+  render('all');
+  document.querySelectorAll('.mw-utab').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.mw-utab').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active'); render(b.dataset.f);
+  }));
+  document.getElementById('markall').addEventListener('click',()=>{ N.forEach(n=>n.unread=false); render(document.querySelector('.mw-utab.is-active').dataset.f); });
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

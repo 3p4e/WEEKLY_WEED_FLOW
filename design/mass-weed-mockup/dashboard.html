@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Ops Dashboard</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .grid{ display:grid; gap:16px; }
+  .kpis{ grid-template-columns:repeat(4,1fr); }
+  .two{ grid-template-columns:1.2fr 1fr; margin-top:16px; }
+  .deptrow{ display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid rgba(58,159,212,.1); }
+  .deptrow:last-child{ border:none; }
+  .deptrow .nm{ font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); }
+  .deptrow .vv{ font-family:'Saira Condensed',sans-serif; font-weight:600; text-align:right; color:var(--mw-ink); }
+  .alert{ display:flex; align-items:center; gap:12px; padding:10px 12px; margin-bottom:9px; background:rgba(6,20,40,.5); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); border-left:3px solid var(--mw-stat-mid); }
+  .alert--crit{ border-left-color:var(--mw-stat-lo); }
+  .alert .dot{ width:8px; height:8px; border-radius:50%; background:var(--mw-stat-mid); box-shadow:0 0 8px currentColor; flex:none; }
+  .alert--crit .dot{ background:var(--mw-stat-lo); }
+  .alert .tx{ font-size:13px; color:var(--mw-text); } .alert .mt{ margin-left:auto; font-size:11px; color:var(--mw-text-faint); letter-spacing:.08em; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Ops Dashboard">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html" class="is-active">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="reports.html">Reports</a>
+    <a href="approvals.html">Approvals</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="decrypt.html">Vault</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Cultivation Ops</h1><span class="mw-rule"></span></div>
+
+  <div class="grid kpis">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Active Batches</div><div class="mw-kpi__val">46</div><div class="mw-kpi__delta mw-kpi__delta--up">▲ 4 this cycle</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Yield (kg)</div><div class="mw-kpi__val mw-kpi__val--green">312</div><div class="mw-kpi__delta mw-kpi__delta--up">▲ 8.2%</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Avg Potency</div><div class="mw-kpi__val mw-kpi__val--amber">24%</div><div class="mw-kpi__delta mw-kpi__delta--down">▼ 1.1%</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Compliance</div><div class="mw-kpi__val mw-kpi__val--green">98</div><div class="mw-kpi__delta">2 flags open</div></div>
+  </div>
+
+  <div class="grid two">
+    <div class="mw-panel mw-panel--hero">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:14px;">Zone Readouts</h2>
+      <div id="depts"></div>
+    </div>
+    <div class="mw-panel mw-panel--alt">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:14px;">Alerts</h2>
+      <div class="alert alert--crit"><span class="dot"></span><span class="tx">Zone 4 humidity 68% — mildew risk</span><span class="mt">2m</span></div>
+      <div class="alert"><span class="dot"></span><span class="tx">Batch F-24 cure window closes in 36h</span><span class="mt">1h</span></div>
+      <div class="alert"><span class="dot"></span><span class="tx">METRC tag reconcile: 2 packages</span><span class="mt">3h</span></div>
+      <div class="alert alert--crit"><span class="dot"></span><span class="tx">Nutrient reservoir B below 15%</span><span class="mt">5h</span></div>
+    </div>
+  </div>
+
+  <div class="mw-panel mw-panel--quiet" style="margin-top:16px; padding:14px 20px;">
+    <div class="mw-resbar">
+      <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2c-1 5-5 7-5 11a5 5 0 0 0 10 0c0-4-4-6-5-11z"/></svg></span><span class="mw-res__val">128</span><span class="mw-label" style="font-size:10px;">strains</span></div>
+      <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span><span class="mw-res__val">46</span><span class="mw-label" style="font-size:10px;">batches</span></div>
+      <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="9" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="mw-res__val">18</span><span class="mw-label" style="font-size:10px;">crew</span></div>
+      <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h3.5a1.5 1.5 0 0 1 0 3h-2a1.5 1.5 0 0 0 0 3H14"/></svg></span><span class="mw-res__val">427,340</span><span class="mw-label" style="font-size:10px;">revenue</span></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  const depts=[['Clone Bay',96,'hi','48/50'],['Veg Hall',88,'hi','120'],['Flower A',72,'mid','64'],['Flower B',54,'mid','58'],['Dry / Cure',41,'lo','12'],['Extraction',83,'hi','9'],['Packaging',67,'mid','—']];
+  document.getElementById('depts').innerHTML = depts.map(d=>`<div class="deptrow"><span class="nm">${d[0]}</span><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--${d[2]}" style="width:${d[1]}%"></div></div><span class="vv">${d[3]}</span></div>`).join('');
+</script>
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Facility Map</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+
+  .cols{ display:grid; grid-template-columns:1fr 340px; gap:16px; align-items:start; }
+
+  /* ---- tactical floor plan ---- */
+  .mapwrap{ position:relative; padding:16px; overflow:hidden; }
+  .mapwrap::before{ /* grid backdrop */
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:linear-gradient(rgba(58,159,212,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(58,159,212,.06) 1px,transparent 1px);
+    background-size:26px 26px; }
+  .sweep{ position:absolute; top:0; bottom:0; width:120px; pointer-events:none;
+    background:linear-gradient(90deg,transparent,rgba(94,200,240,.09),transparent); }
+  @media (prefers-reduced-motion:no-preference){ .sweep{ animation:sweep 6.5s linear infinite; } }
+  @keyframes sweep{ 0%{ left:-140px; } 100%{ left:100%; } }
+
+  .maphd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; position:relative; z-index:2; }
+  .maphd .lvl{ font-family:var(--mw-font-cond),sans-serif; font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--mw-text-dim); }
+  .legend{ display:flex; gap:14px; }
+  .legend span{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); display:flex; align-items:center; gap:6px; }
+  .legend i{ width:8px; height:8px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+
+  .map{ display:grid; gap:9px; position:relative; z-index:2;
+    grid-template-columns:repeat(5,1fr);
+    grid-template-rows:1.15fr .38fr 1.15fr;
+    grid-template-areas:
+      "mother clone veg veg vault"
+      "corr corr corr corr corr"
+      "flowa flowb cure trim pack"; }
+
+  .room{ position:relative; padding:11px 12px; cursor:pointer; min-height:98px; display:flex; flex-direction:column;
+    background:rgba(6,20,40,.55); border:1px solid rgba(58,159,212,.2);
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    transition:border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+  .room:hover{ border-color:rgba(94,200,240,.55); background:rgba(12,34,60,.6); }
+  .room.is-active{ border-color:var(--mw-cyan); background:rgba(30,90,150,.18); box-shadow:0 0 22px rgba(94,200,240,.2) inset, 0 0 20px rgba(58,159,212,.14); }
+  .room[data-st="warn"]{ border-color:rgba(236,200,74,.4); }
+  .room[data-st="crit"]{ border-color:rgba(240,90,90,.5); box-shadow:0 0 18px rgba(240,90,90,.14) inset; }
+  .room[data-st="crit"].is-active{ box-shadow:0 0 22px rgba(240,90,90,.24) inset; }
+
+  .room__nm{ font-family:var(--mw-font-cond),sans-serif; font-weight:600; font-size:14px; letter-spacing:.05em; text-transform:uppercase; color:var(--mw-ink); padding-right:14px; line-height:1.1; }
+  .room__dot{ position:absolute; top:12px; right:12px; width:8px; height:8px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+  .st-ok{ color:var(--mw-stat-hi); } .st-warn{ color:var(--mw-stat-mid); } .st-crit{ color:var(--mw-stat-lo); }
+  .room__big{ margin-top:auto; display:flex; align-items:baseline; gap:6px; }
+  .room__n{ font-family:var(--mw-font-cond),sans-serif; font-weight:700; font-size:26px; line-height:1; color:var(--mw-ink); text-shadow:0 0 12px rgba(94,200,240,.3); }
+  .room__u{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-faint); }
+  .room__foot{ display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:3px; }
+  .room__t{ font-size:11px; color:var(--mw-cyan-dim); letter-spacing:.05em; font-family:var(--mw-font-cond),sans-serif; white-space:nowrap; }
+  .room__badge{ flex:none; font-size:9px; letter-spacing:.05em; text-transform:uppercase; padding:2px 6px; color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); border-radius:2px; }
+
+  .corr{ grid-area:corr; display:flex; align-items:center; justify-content:center; gap:10px;
+    background:rgba(6,20,40,.35); border:1px dashed rgba(58,159,212,.22);
+    clip-path:polygon(6px 0,100% 0,100% 100%,6px 100%,0 calc(100% - 6px),0 6px);
+    font-family:var(--mw-font-cond),sans-serif; font-size:11px; letter-spacing:.32em; text-transform:uppercase; color:var(--mw-text-faint); }
+  .corr::before,.corr::after{ content:""; height:1px; flex:1; max-width:120px; background:linear-gradient(90deg,transparent,rgba(94,200,240,.3),transparent); }
+
+  /* ---- detail panel ---- */
+  .dt__hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:3px; }
+  .dt__nm{ font-family:var(--mw-font-cond),sans-serif; font-weight:700; font-size:19px; letter-spacing:.03em; color:var(--mw-ink); }
+  .dt__st{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
+  .dt__st i{ width:7px;height:7px;border-radius:50%;box-shadow:0 0 8px currentColor; }
+  .dt__sub{ font-size:11px; color:var(--mw-text-dim); letter-spacing:.05em; margin-bottom:14px; }
+
+  .env{ display:grid; grid-template-columns:1fr 1fr; gap:9px 16px; margin-bottom:16px; }
+  .envc .el{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+  .envc .ek{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); }
+  .envc .ev{ font-family:var(--mw-font-cond),sans-serif; font-weight:600; font-size:13px; color:var(--mw-ink); }
+  .bar{ height:4px; background:var(--mw-stat-track); border-radius:2px; overflow:hidden; }
+  .bar i{ display:block; height:100%; border-radius:2px; }
+
+  .sec{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-faint); margin:0 0 9px; }
+  .plants{ display:flex; gap:8px; margin-bottom:16px; }
+  .pcell{ flex:1; text-align:center; padding:9px 4px; background:rgba(6,20,40,.5); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .pcell .n{ font-family:var(--mw-font-cond),sans-serif; font-weight:700; font-size:19px; color:var(--mw-ink); }
+  .pcell .l{ font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); margin-top:2px; }
+  .pcell.rdy .n{ color:var(--mw-stat-hi); }
+
+  .stor{ display:flex; align-items:baseline; gap:8px; padding:12px 14px; margin-bottom:16px; background:rgba(6,20,40,.5); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .stor .n{ font-family:var(--mw-font-cond),sans-serif; font-weight:700; font-size:26px; color:var(--mw-ink); }
+  .stor .u{ font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); }
+
+  .tk{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid rgba(58,159,212,.1); cursor:pointer; }
+  .tk:last-child{ border:none; }
+  .tk:hover .tk__t{ color:var(--mw-cyan-bright); }
+  .tk__d{ width:7px;height:7px;border-radius:50%;flex:none; }
+  .tk__t{ font-size:12.5px; color:var(--mw-text); flex:1; transition:color .12s ease; }
+  .tk__p{ font-size:9px; text-transform:uppercase; letter-spacing:.09em; padding:2px 7px; border-radius:2px; }
+  .p-high{ color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); }
+  .p-med{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,200,74,.35); }
+  .p-low{ color:var(--mw-cyan); box-shadow:inset 0 0 0 1px rgba(94,200,240,.3); }
+  .empty{ font-size:12px; color:var(--mw-text-faint); font-style:italic; padding:8px 0 4px; }
+
+  .crew{ display:flex; align-items:center; gap:7px; margin:14px 0 4px; }
+  .crew .av{ width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mw-font-cond),sans-serif; font-weight:700; font-size:11px; color:var(--mw-void);
+    background:linear-gradient(135deg,var(--mw-cyan-bright),var(--mw-cyan-deep)); box-shadow:0 0 10px rgba(94,200,240,.3); }
+  .crew .none{ font-size:11.5px; color:var(--mw-text-faint); font-style:italic; }
+
+  .acts{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:16px; }
+  .acts .mw-btn{ font-size:11px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Facility Map">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="facility.html" class="is-active">Facility</a>
+    <a href="environment.html">Climate</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Facility Map</h1><span class="mw-rule"></span></div>
+
+  <div class="grid kpis">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Total Plants</div><div class="mw-kpi__val" id="k-plants">—</div><div class="mw-kpi__delta">across live zones</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Active Zones</div><div class="mw-kpi__val" id="k-zones">—</div><div class="mw-kpi__delta">of 9 total</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Zone Alerts</div><div class="mw-kpi__val mw-kpi__val--amber" id="k-alerts">—</div><div class="mw-kpi__delta">need attention</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Harvest-Ready</div><div class="mw-kpi__val mw-kpi__val--green" id="k-ready">—</div><div class="mw-kpi__delta">plants flagged</div></div>
+  </div>
+
+  <div class="cols">
+    <!-- FLOOR PLAN -->
+    <div class="mw-panel mapwrap">
+      <div class="sweep"></div>
+      <div class="maphd">
+        <span class="lvl">Level 1 · Cultivation Floor</span>
+        <div class="legend">
+          <span class="st-ok"><i></i>Nominal</span>
+          <span class="st-warn"><i></i>Watch</span>
+          <span class="st-crit"><i></i>Alert</span>
+        </div>
+      </div>
+      <div class="map" id="map"></div>
+    </div>
+
+    <!-- DETAIL -->
+    <div class="mw-panel mw-panel--alt" id="detail"></div>
+  </div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+(function(){
+  const ZONES = [
+    { id:'mother', area:'mother', nm:'Mother Room', st:'ok',   plants:12,  temp:24.0, rh:64, co2:900,  vpd:0.80, veg:12,  flower:0,  ready:0,  crew:['MT'],
+      tasks:[['Prune & tag mother stock','low']] },
+    { id:'clone',  area:'clone',  nm:'Clone Bay',   st:'ok',   plants:48,  temp:24.2, rh:72, co2:800,  vpd:0.62, veg:48,  flower:0,  ready:0,  crew:['KA'],
+      tasks:[['Transplant 48 clones to veg','med']] },
+    { id:'veg',    area:'veg',    nm:'Veg Hall',    st:'ok',   plants:120, temp:25.6, rh:65, co2:1100, vpd:0.94, veg:120, flower:0,  ready:0,  crew:['KA','GA'],
+      tasks:[['Top plants rows 3–5','low'],['Defoliate block B','low']] },
+    { id:'vault',  area:'vault',  nm:'Vault',       st:'ok',   plants:0,   temp:18.0, rh:55, co2:600,  vpd:0.70, veg:0,   flower:0,  ready:0,  crew:[], storeKg:42, storeLbl:'Cured Stock',
+      tasks:[['Reconcile 2 METRC tags','high']] },
+    { id:'flowa',  area:'flowa',  nm:'Flower A',    st:'warn', plants:96,  temp:27.1, rh:58, co2:1350, vpd:1.28, veg:0,   flower:84, ready:12, crew:['GA'],
+      tasks:[['Inspect Zone 4 dehumidifier','high'],['Trim & manicure canopy','med']] },
+    { id:'flowb',  area:'flowb',  nm:'Flower B',    st:'crit', plants:96,  temp:28.4, rh:68, co2:1200, vpd:1.02, veg:0,   flower:96, ready:0,  crew:['GA','TA'], alert:'Mildew Risk',
+      tasks:[['Humidity 68% — mildew risk','high'],['Lower RH setpoint to 55%','high']] },
+    { id:'cure',   area:'cure',   nm:'Dry / Cure',  st:'ok',   plants:0,   temp:18.5, rh:60, co2:600,  vpd:0.71, veg:0,   flower:0,  ready:0,  crew:['TA'], storeKg:28, storeLbl:'Curing',
+      tasks:[['Batch F-24 cure window closes 36h','med']] },
+    { id:'trim',   area:'trim',   nm:'Trim Room',   st:'ok',   plants:0,   temp:20.0, rh:55, co2:600,  vpd:0.75, veg:0,   flower:0,  ready:0,  crew:['TA','LI'],
+      tasks:[['Manicure Batch F-23','med']] },
+    { id:'pack',   area:'pack',   nm:'Packaging',   st:'ok',   plants:0,   temp:20.0, rh:52, co2:600,  vpd:0.78, veg:0,   flower:0,  ready:0,  crew:['LI'],
+      tasks:[['Pack order #MW-3182','med']] },
+  ];
+  const STLABEL={ ok:'Nominal', warn:'Watch', crit:'Alert' };
+  let active=4; // Flower A
+
+  // env ranges for mini bars: [min,max,loGood,hiGood]
+  const RANGE={ temp:[14,34,22,28], rh:[30,90,50,65], co2:[400,1600,900,1400], vpd:[0.4,1.8,0.8,1.2] };
+  function ecolor(k,v){ const [mn,mx,lo,hi]=RANGE[k];
+    if(v<lo) return v<mn+(lo-mn)*0.4?'var(--mw-stat-lo)':'var(--mw-stat-mid)';
+    if(v>hi) return v>hi+(mx-hi)*0.4?'var(--mw-stat-lo)':'var(--mw-stat-mid)';
+    return 'var(--mw-stat-hi)'; }
+  function epct(k,v){ const [mn,mx]=RANGE[k]; return Math.max(4,Math.min(100,(v-mn)/(mx-mn)*100)); }
+
+  // ---- KPIs ----
+  const totPlants=ZONES.reduce((s,z)=>s+z.plants,0);
+  const activeZones=ZONES.filter(z=>z.plants>0).length;
+  const alerts=ZONES.filter(z=>z.st!=='ok').length;
+  const ready=ZONES.reduce((s,z)=>s+z.ready,0);
+  document.getElementById('k-plants').textContent=totPlants;
+  document.getElementById('k-zones').textContent=activeZones;
+  document.getElementById('k-alerts').textContent=alerts;
+  document.getElementById('k-ready').textContent=ready;
+
+  // ---- MAP ----
+  const mapEl=document.getElementById('map');
+  function renderMap(){
+    mapEl.innerHTML = ZONES.map((z,i)=>{
+      const hero = z.plants>0
+        ? `<div class="room__big"><span class="room__n">${z.plants}</span><span class="room__u">plants</span></div>`
+        : (z.storeKg!=null
+            ? `<div class="room__big"><span class="room__n">${z.storeKg}</span><span class="room__u">kg</span></div>`
+            : `<div class="room__big"><span class="room__n" style="color:var(--mw-text-faint)">—</span></div>`);
+      const badge = z.alert?`<span class="room__badge">${z.alert}</span>`:'';
+      const foot = `<div class="room__foot"><span class="room__t">${z.temp.toFixed(1)}°C · ${Math.round(z.rh)}% RH</span>${badge}</div>`;
+      return `<div class="room ${i===active?'is-active':''}" data-i="${i}" data-st="${z.st}" style="grid-area:${z.area}">
+        <div class="room__nm">${z.nm}</div>
+        <span class="room__dot st-${z.st}" style="background:currentColor"></span>
+        ${hero}${foot}
+      </div>`;
+    }).join('') + `<div class="corr">Corridor</div>`;
+    mapEl.querySelectorAll('.room').forEach(el=>el.onclick=()=>{ active=+el.dataset.i; renderMap(); renderDetail(); });
+  }
+
+  // ---- DETAIL ----
+  const dEl=document.getElementById('detail');
+  function envBlock(z){
+    const rows=[['temp','Temp',z.temp.toFixed(1)+'°C'],['rh','Humidity',Math.round(z.rh)+'%'],['co2','CO₂',Math.round(z.co2)],['vpd','VPD',z.vpd.toFixed(2)]];
+    return `<div class="env">${rows.map(([k,lbl,val])=>{
+      const c=ecolor(k,z[k]);
+      return `<div class="envc">
+        <div class="el"><span class="ek">${lbl}</span><span class="ev">${val}</span></div>
+        <div class="bar"><i style="width:${epct(k,z[k])}%;background:${c};box-shadow:0 0 8px ${c}"></i></div>
+      </div>`; }).join('')}</div>`;
+  }
+  function renderDetail(){
+    const z=ZONES[active];
+    let mid;
+    if(z.plants>0){
+      mid = `<p class="sec">Plant Population</p>
+        <div class="plants">
+          <div class="pcell"><div class="n">${z.veg}</div><div class="l">Vegetative</div></div>
+          <div class="pcell"><div class="n">${z.flower}</div><div class="l">Flowering</div></div>
+          <div class="pcell rdy"><div class="n">${z.ready}</div><div class="l">Ready</div></div>
+        </div>`;
+    } else if(z.storeKg!=null){
+      mid = `<p class="sec">Storage</p>
+        <div class="stor"><span class="n">${z.storeKg}</span><span class="u">kg · ${z.storeLbl}</span></div>`;
+    } else {
+      mid = `<p class="sec">Population</p><div class="empty">No live plants — processing zone.</div>`;
+    }
+    const tasks = z.tasks.length
+      ? z.tasks.map(t=>`<div class="tk" onclick="location.href='task-detail.html'">
+          <span class="tk__d" style="background:${t[1]==='high'?'var(--mw-stat-lo)':t[1]==='med'?'var(--mw-stat-mid)':'var(--mw-cyan)'};box-shadow:0 0 8px currentColor;color:${t[1]==='high'?'var(--mw-stat-lo)':t[1]==='med'?'var(--mw-stat-mid)':'var(--mw-cyan)'}"></span>
+          <span class="tk__t">${t[0]}</span><span class="tk__p p-${t[1]}">${t[1]}</span></div>`).join('')
+      : `<div class="empty">No open tasks.</div>`;
+    const crew = z.crew.length
+      ? z.crew.map(c=>`<span class="av">${c}</span>`).join('')
+      : `<span class="none">No crew on-site</span>`;
+
+    dEl.innerHTML = `
+      <div class="dt__hd">
+        <span class="dt__nm">${z.nm}</span>
+        <span class="dt__st st-${z.st}"><i style="background:currentColor"></i>${STLABEL[z.st]}</span>
+      </div>
+      <div class="dt__sub">Level 1 · Sector ${String.fromCharCode(65+active)}</div>
+      ${envBlock(z)}
+      ${mid}
+      <p class="sec">Open Tasks · ${z.tasks.length}</p>
+      ${tasks}
+      <div class="crew">${crew}</div>
+      <div class="acts">
+        <button class="mw-btn" onclick="location.href='environment.html'">Climate</button>
+        <button class="mw-btn mw-btn--ghost" onclick="location.href='af-modal.html'">New Task</button>
+      </div>`;
+  }
+
+  renderMap(); renderDetail();
+
+  // gentle live jitter on active zone readouts
+  setInterval(()=>{
+    const z=ZONES[active];
+    z.temp+=(Math.random()-.5)*0.12; z.rh+=(Math.random()-.5)*0.4;
+    z.co2+=(Math.random()-.5)*7; z.vpd+=(Math.random()-.5)*0.015;
+    z.temp=Math.max(15,Math.min(33,z.temp)); z.rh=Math.max(35,Math.min(85,z.rh));
+    z.co2=Math.max(500,Math.min(1550,z.co2)); z.vpd=Math.max(0.5,Math.min(1.6,z.vpd));
+    renderDetail();
+    const el=mapEl.querySelector(`.room[data-i="${active}"] .room__foot .room__t`);
+    if(el) el.textContent=`${z.temp.toFixed(1)}°C · ${Math.round(z.rh)}% RH`;
+  },2400);
+})();
+</script>
+</body>
+</html>

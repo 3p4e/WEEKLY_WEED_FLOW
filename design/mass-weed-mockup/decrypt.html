@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Decrypt Dialog</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;height:100%;background:#0a1420;overflow:hidden;}
+  /* faux facility backdrop so the dialog translucency reads */
+  .scene{ position:fixed; inset:0; background:
+      linear-gradient(115deg,#14304d 0%,#0c2138 40%,#081726 100%);
+  }
+  .scene::before{ content:""; position:absolute; inset:0; background:
+      radial-gradient(40% 60% at 12% 40%, rgba(230,90,70,0.22), transparent 60%),
+      radial-gradient(45% 70% at 88% 55%, rgba(90,200,150,0.14), transparent 60%),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 46px),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 60px);
+  }
+  /* silhouette of an operative in front of the terminal */
+  .scene::after{ content:""; position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+      width:150px; height:280px; background:linear-gradient(180deg,#132a40,#0a1826);
+      clip-path:polygon(30% 0,70% 0,80% 30%,72% 100%,28% 100%,20% 30%);
+      opacity:.85; filter:blur(1px); }
+  .hint{ position:fixed; top:16px; left:0; right:0; text-align:center; z-index:70;
+      font-family:'Saira Condensed',sans-serif; letter-spacing:.2em; text-transform:uppercase;
+      font-size:11px; color:rgba(168,228,251,.55); }
+  .again{ position:fixed; bottom:18px; left:0; right:0; text-align:center; z-index:70; }
+</style>
+</head>
+<body>
+<div class="scene"></div>
+<div class="hint">MASS WEED · Access Override Dialog — hover / ↑↓ + Enter</div>
+<a href="design-system.html" class="mw-tabbtn" style="position:fixed; top:10px; left:14px; z-index:70; text-decoration:none;">◄ Design System</a>
+
+<div class="mw-dialog-scrim" id="scrim">
+  <div class="mw-dialog" role="dialog" aria-label="Decrypting" data-screen-label="Decrypt Dialog">
+    <div class="mw-dialog__title"><span class="mw-rule"></span><h2 id="dlgTitle">Decrypting</h2><span class="mw-rule"></span></div>
+    <div class="mw-dialog__body" id="menu">
+      <button class="mw-menubtn" data-act="override">Begin Manual Override</button>
+      <button class="mw-menubtn mw-menubtn--sel" data-act="cancel">Cancel</button>
+      <button class="mw-menubtn mw-menubtn--dim" data-act="omni">Override Using 25 <span class="mw-menubtn__sub">Omni-Gel</span></button>
+      <div class="mw-decrypt" id="decWrap" style="display:none;"><div class="mw-decrypt__bar" id="decBar"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="again"><button class="mw-btn mw-btn--ghost" id="resetBtn" style="display:none;">Re-run Lock</button></div>
+
+<script>
+(function(){
+  const btns = [...document.querySelectorAll('.mw-menubtn')];
+  const title = document.getElementById('dlgTitle');
+  const decWrap = document.getElementById('decWrap'), decBar = document.getElementById('decBar');
+  const resetBtn = document.getElementById('resetBtn');
+  let focus = 1; // Cancel pre-selected (orange)
+  let busy = false;
+
+  function applyFocus(){ btns.forEach((b,i)=>b.classList.toggle('is-focus', i===focus && !b.classList.contains('mw-menubtn--sel'))); }
+  applyFocus();
+
+  function decrypt(){
+    if(busy) return; busy=true;
+    title.textContent = 'Decrypting…'; decWrap.style.display='block';
+    let p=0; const iv=setInterval(()=>{ p=Math.min(100,p+2+Math.random()*4); decBar.style.width=p+'%';
+      if(p>=100){ clearInterval(iv); title.textContent='Access Granted'; resetBtn.style.display='inline-flex'; }
+    }, 60);
+  }
+  function reset(){ busy=false; title.textContent='Decrypting'; decWrap.style.display='none'; decBar.style.width='0'; resetBtn.style.display='none'; }
+
+  btns.forEach((b,i)=>{
+    b.addEventListener('mouseenter',()=>{ focus=i; applyFocus(); });
+    b.addEventListener('click',()=>{
+      const a=b.dataset.act;
+      if(a==='cancel') reset();
+      else decrypt();
+    });
+  });
+  resetBtn.onclick = reset;
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){ focus=(focus+1)%btns.length; applyFocus(); e.preventDefault(); }
+    else if(e.key==='ArrowUp'){ focus=(focus-1+btns.length)%btns.length; applyFocus(); e.preventDefault(); }
+    else if(e.key==='Enter'){ btns[focus].click(); }
+    else if(e.key==='Escape'){ reset(); }
+  });
+})();
+</script>
+</body>
+</html>

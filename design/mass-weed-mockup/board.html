@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Cycle Board</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .cols{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .cols > *{ min-width:0; }
+  .col-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .col-count{ font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:14px; color:var(--mw-cyan-bright); background:rgba(58,159,212,.18); padding:1px 9px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .colbody{ min-height:340px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Cycle Board">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html" class="is-active">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="decrypt.html">Vault</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Grow Cycle Board</h1><span class="mw-rule"></span></div>
+  <div class="cols" id="cols"></div>
+</div>
+</div>
+<script>
+  const cols=[
+    {t:'Queued',   acc:'#7fa3bd', cards:[['Blue Dream IX','Clone Bay','lo','Seedling'],['Gelato VIII','Clone Bay','mid','Seedling'],['OG Kush VIII','Veg Hall','lo','Transplant']]},
+    {t:'In Cycle', acc:'#5ec8f0', cards:[['Wedding Cake IX','Flower A','hi','Day 42'],['Sour Diesel VIII','Flower B','mid','Day 21'],['Northern Lights','Flower A','lo','Day 58'],['Purple Haze','Veg Hall','mid','Day 12']]},
+    {t:'Curing',   acc:'#f0b95e', cards:[['Live Resin IX','Dry / Cure','hi','Cure 6/14'],['Diamonds IX','Extraction','mid','Purge']]},
+    {t:'Complete', acc:'#6cf05a', cards:[['Hurricane VIII','Packaging','lo','Sealed'],['Avenger VIII','Packaging','lo','METRC ✓'],['Reaper VIII','Vault','lo','Shipped']]}
+  ];
+  document.getElementById('cols').innerHTML = cols.map(col=>`
+    <div class="mw-panel mw-col" style="--mw-col-acc:${col.acc}">
+      <div class="col-head"><h2 class="mw-title mw-title--md">${col.t}</h2><span class="col-count">${col.cards.length}</span></div>
+      <div class="colbody">${col.cards.map(c=>`
+        <div class="mw-card" onclick="location.href='batch.html'">
+          <div class="mw-card__strain">${c[0]}</div>
+          <div class="mw-card__meta"><span>${c[1]}</span><span class="mw-tag mw-tag--${c[2]}">${c[3]}</span></div>
+        </div>`).join('')}</div>
+    </div>`).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

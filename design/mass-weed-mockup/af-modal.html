@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Add / Edit Task</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  ════════════════════════════════════════════════════════════════════
+  DESIGN NOTES · Add / Edit Task modal  (surface 3.2, brief §3.2) — .af-*
+  ────────────────────────────────────────────────────────────────────
+  WHAT THIS IS: the Add-task modal gains a DEPARTMENT FIELDS BLOCK under
+  the department select — 2–4 small bilingual labeled inputs defined per
+  department. The block re-renders when the department changes. A live
+  preview card underneath shows how those field values become ATTRIBUTE
+  CHIPS in the task card meta line.
+
+  EXTENDED FROM THE SYSTEM:
+    .af-* (this file): .af-modal shell, .af-fields grid, .af-field,
+    .af-block (the collapsible dept-fields well), .af-legend. Reuses
+    system primitives .mw-input / .mw-select / .mw-field / .mw-btn.
+    Attribute + hash chips reuse the shared .mw-attr / .mw-htag atoms
+    (defined in mass-weed.css) so the preview matches real cards exactly.
+
+  ATTRIBUTE vs TAG (brief requirement, made visually distinct):
+    attribute = FILLED soft chip, dept-tinted, MONO value  → .mw-attr
+    tag       = OUTLINE #hash chip, neutral               → .mw-htag
+    One dept accent per card (--mw-acc) — the meta line never rainbows.
+
+  NEW TOKENS PROPOSED: none. Field block tint = --mw-acc (dept color),
+    kept LIGHT (soft well, thin rule) so optional metadata never reads as
+    a form wall — per the brief's "visually light" note.
+
+  STATES COVERED: department switch (block re-renders + preview updates),
+    input focus rings (--focus via system), empty optional fields (chip
+    omitted from preview), hover on buttons, dark + light theme.
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+  html,body{ margin:0; background:var(--mw-void); }
+  /* faint board behind the modal (context) */
+  .af-back{ position:fixed; inset:0; padding:60px 40px; overflow:hidden; }
+  .af-back__cols{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; max-width:1180px; margin:40px auto 0; filter:blur(1.5px); opacity:.5; }
+  .af-ghost{ height:70px; background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.1); margin-bottom:12px; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+
+  .af-scrim{ position:fixed; inset:0; z-index:20; display:flex; align-items:flex-start; justify-content:center; padding:34px 18px; overflow-y:auto;
+    background:radial-gradient(80% 70% at 50% 30%, transparent, var(--mw-overlay)); transition:left .22s cubic-bezier(.4,0,.2,1); }
+  body.mw-has-rail .af-scrim{ left:var(--mw-rail-w); }
+  body.mw-rail-collapsed .af-scrim{ left:var(--mw-rail-w-collapsed); }
+  .af-modal{ position:relative; width:600px; max-width:100%;
+    background:linear-gradient(165deg, var(--mw-panel) 0%, var(--mw-panel-2) 100%);
+    clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px);
+    box-shadow:var(--mw-inner-glow), 0 24px 60px -18px rgba(0,0,0,.7); padding:0; }
+  .af-modal::before{ content:""; position:absolute; inset:0; clip-path:inherit; padding:1.5px;
+    background:linear-gradient(150deg, var(--mw-edge), var(--mw-cyan-deep) 55%, var(--mw-edge));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; filter:drop-shadow(0 0 4px rgba(94,200,240,.5)); }
+  .af-modal__hd{ display:flex; align-items:center; gap:12px; padding:16px 22px; border-bottom:1px solid rgba(94,200,240,.16); }
+  .af-modal__hd h2{ margin:0; font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:var(--mw-track); font-size:18px; font-weight:600; color:var(--mw-header); text-shadow:0 0 12px rgba(94,200,240,.5); }
+  .af-modal__x{ margin-left:auto; width:30px; height:30px; display:grid; place-items:center; cursor:pointer; color:var(--mw-text-dim); background:rgba(94,200,240,.08); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .af-modal__x:hover{ color:var(--mw-cyan-bright); }
+  .af-modal__x svg{ width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+  .af-modal__bd{ padding:20px 22px 8px; max-height:calc(100vh - 210px); overflow-y:auto; }
+  .af-modal__ft{ display:flex; align-items:center; gap:12px; padding:14px 22px; border-top:1px solid rgba(94,200,240,.16); }
+  .af-modal__ft .sp{ flex:1; }
+
+  .af-row2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .af-row2 > *{ min-width:0; }
+
+  /* department fields block — the star of 3.2 (kept visually light) */
+  .af-block{ position:relative; margin:6px 0 16px; padding:14px 15px 4px;
+    background:color-mix(in srgb, var(--mw-acc,#5ec8f0) 8%, var(--mw-panel-in));
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-acc,#5ec8f0) 24%, transparent);
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
+  .af-block__hd{ display:flex; align-items:center; gap:8px; margin-bottom:12px; font-family:var(--mw-font-cond); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--mw-acc,#5ec8f0); }
+  .af-block__hd .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 6px currentColor; }
+  .af-block__hd .opt{ margin-left:auto; font-family:var(--mw-font); font-size:9.5px; letter-spacing:.1em; color:var(--mw-text-faint); }
+  .af-fields{ display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .af-fields > *{ min-width:0; }
+  .af-field label{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.09em; color:var(--mw-text-dim); margin-bottom:5px; }
+  .af-field .mw-input, .af-field .mw-select{ padding-top:8px; padding-bottom:8px; font-size:13px; }
+
+  /* live preview */
+  .af-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin:2px 0 10px; font-size:11px; color:var(--mw-text-dim); }
+  .af-legend b{ color:var(--mw-text); font-weight:600; }
+  .af-preview__lbl{ font-family:var(--mw-font-cond); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--mw-text-dim); margin:14px 0 9px; display:flex; align-items:center; gap:8px; }
+  .af-preview__lbl::after{ content:""; flex:1; height:1px; background:linear-gradient(90deg, rgba(94,200,240,.3), transparent); }
+
+  @media (max-width:560px){ .af-row2,.af-fields{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="mw-root">
+
+  <!-- faint board context behind -->
+  <div class="af-back" aria-hidden="true">
+    <div class="af-back__cols">
+      <div><div class="af-ghost"></div><div class="af-ghost"></div><div class="af-ghost"></div></div>
+      <div><div class="af-ghost"></div><div class="af-ghost"></div></div>
+      <div><div class="af-ghost"></div><div class="af-ghost"></div><div class="af-ghost"></div></div>
+      <div><div class="af-ghost"></div></div>
+    </div>
+  </div>
+
+  <!-- modal -->
+  <div class="af-scrim">
+    <div class="af-modal" id="modal" data-screen-label="Add / Edit Task" style="--mw-acc:#2BE8A0">
+      <div class="af-modal__hd">
+        <h2><span class="en">New Task</span><span class="mk">Нова задача</span></h2>
+        <div class="mw-ctlbar" style="margin-left:16px">
+          <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+          <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+        </div>
+        <div class="af-modal__x" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+      </div>
+
+      <div class="af-modal__bd">
+        <!-- title -->
+        <div class="mw-field">
+          <label><span class="en">Task title</span><span class="mk">Наслов на задача</span></label>
+          <input class="mw-input" id="fTitle" value="Defoliate canopy row 3–5" />
+        </div>
+
+        <div class="af-row2">
+          <div class="mw-field">
+            <label><span class="en">Department</span><span class="mk">Оддел</span></label>
+            <div class="mw-select"><select id="fDept"></select></div>
+          </div>
+          <div class="mw-field">
+            <label><span class="en">Type</span><span class="mk">Тип</span></label>
+            <div class="mw-select"><select id="fType">
+              <option>Routine</option><option>Inspection</option><option>Handoff</option><option>Corrective</option>
+            </select></div>
+          </div>
+        </div>
+
+        <!-- ★ DEPARTMENT FIELDS BLOCK — re-renders on dept change ★ -->
+        <div class="af-block" id="deptBlock">
+          <div class="af-block__hd"><span class="dot"></span><span id="deptBlockTtl"></span>
+            <span class="opt"><span class="en">optional metadata</span><span class="mk">опционални податоци</span></span></div>
+          <div class="af-fields" id="deptFields"></div>
+        </div>
+
+        <div class="af-row2">
+          <div class="mw-field">
+            <label><span class="en">Priority</span><span class="mk">Приоритет</span></label>
+            <div class="mw-select"><select id="fPrio">
+              <option>Normal</option><option>Low</option><option>High</option><option>Critical</option>
+            </select></div>
+          </div>
+          <div class="mw-field">
+            <label><span class="en">Due</span><span class="mk">Рок</span></label>
+            <input class="mw-input" id="fDue" value="Jul 12" />
+          </div>
+        </div>
+
+        <div class="mw-field">
+          <label><span class="en">Tags</span><span class="mk">Ознаки</span></label>
+          <input class="mw-input" id="fTags" value="flower, canopy" />
+        </div>
+
+        <!-- live preview -->
+        <div class="af-preview__lbl"><span class="en">Preview on the board</span><span class="mk">Преглед на таблата</span></div>
+        <div class="af-legend">
+          <span><span class="mw-attr" style="--mw-acc:#2BE8A0">Attr <b>value</b></span> = <b><span class="en">department field</span><span class="mk">поле на оддел</span></b></span>
+          <span><span class="mw-htag">#tag</span> = <b><span class="en">free tag</span><span class="mk">слободна ознака</span></b></span>
+        </div>
+        <div id="preview"></div>
+      </div>
+
+      <div class="af-modal__ft">
+        <button class="mw-btn mw-btn--ghost" type="button"><span class="en">Cancel</span><span class="mk">Откажи</span></button>
+        <span class="sp"></span>
+        <button class="mw-btn" type="button"><span class="en">Save draft</span><span class="mk">Зачувај нацрт</span></button>
+        <button class="mw-btn mw-btn--accent" id="modalAcc" type="button"><span class="en">Create task</span><span class="mk">Создади задача</span></button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* departments + per-dept field definitions (brief §3.2) */
+const DEPTS = [
+  { c:'cultivation', en:'Cultivation', mk:'Одгледување', col:'#2BE8A0', ab:'CU' },
+  { c:'production',  en:'Production',  mk:'Производство', col:'#2FD9D9', ab:'PR' },
+  { c:'qc',          en:'Quality Control', mk:'Контрола на квалитет', col:'#9B7BE8', ab:'QC' },
+  { c:'quality_assurance', en:'Quality Assurance', mk:'Обезбедување квалитет', col:'#E0743A', ab:'QA' },
+  { c:'logistics',   en:'Warehouse',   mk:'Магацин',      col:'#22B8D8', ab:'WH' },
+  { c:'security',    en:'Security',    mk:'Обезбедување', col:'#7C90AE', ab:'SE' },
+  { c:'tooling',     en:'Maintenance', mk:'Одржување',    col:'#8496B2', ab:'MU' }
+];
+/* field: {k:attr-key, en,mk label, type, options?, val} */
+const FIELDS = {
+  cultivation:[
+    {k:'Room',   en:'Room',        mk:'Просторија',      type:'select', options:['GR-A','GR-B','VEG','GR-2'], val:'GR-A'},
+    {k:'Strain', en:'Strain',      mk:'Сорта',           type:'text',   val:'Wedding Cake'},
+    {k:'Plants', en:'Plant count', mk:'Број растенија',  type:'number', val:'120', unit:'pl'},
+    {k:'Day',    en:'Growth day',  mk:'Ден на раст',     type:'number', val:'42'}
+  ],
+  production:[
+    {k:'Batch',  en:'Batch ref',   mk:'Ознака серија',   type:'text',   val:'WC-2405'},
+    {k:'Dry',    en:'Dry weight',  mk:'Сува тежина',     type:'number', val:'4.2', unit:'kg'},
+    {k:'Proc',   en:'Process',     mk:'Процес',          type:'select', options:['Trim','Extraction','Weigh','Package'], val:'Trim'}
+  ],
+  qc:[
+    {k:'Sample', en:'Sample ref',  mk:'Ознака мостра',   type:'text',   val:'WC-S1'},
+    {k:'Test',   en:'Test type',   mk:'Тип на тест',     type:'select', options:['Potency','Micro','Moisture','Pesticide'], val:'Potency'},
+    {k:'Lot',    en:'Lot',         mk:'Лот',             type:'text',   val:'GRA-9'}
+  ],
+  quality_assurance:[
+    {k:'Doc',    en:'Document ref',mk:'Ознака документ', type:'text',   val:'SOP-CU-03'},
+    {k:'Kind',   en:'Kind',        mk:'Вид',             type:'select', options:['CAPA','SOP','Plan','Report','Deviation'], val:'SOP'},
+    {k:'Rev',    en:'Revision',    mk:'Ревизија',        type:'number', val:'4'}
+  ],
+  logistics:[
+    {k:'Order',  en:'Order / PO',  mk:'Нарачка / ПО',    type:'text',   val:'SO-118'},
+    {k:'Dir',    en:'Direction',   mk:'Насока',          type:'select', options:['Inbound','Outbound'], val:'Outbound'},
+    {k:'Units',  en:'Units',       mk:'Единици',         type:'number', val:'240'},
+    {k:'Loc',    en:'Location',    mk:'Локација',        type:'text',   val:'A-12'}
+  ],
+  security:[
+    {k:'Zone',   en:'Zone',        mk:'Зона',            type:'select', options:['PERIM','VAULT','GR-2','GATE'], val:'PERIM'},
+    {k:'Sev',    en:'Severity',    mk:'Сериозност',      type:'select', options:['Low','Medium','High'], val:'Low'},
+    {k:'Shift',  en:'Shift',       mk:'Смена',           type:'select', options:['Day','Night'], val:'Night'}
+  ],
+  tooling:[
+    {k:'Equip',  en:'Equipment',   mk:'Опрема',          type:'select', options:['HVAC-01','DR-2','CH-1','Scale-4'], val:'HVAC-01'},
+    {k:'PM',     en:'PM type',     mk:'Тип ПО',          type:'select', options:['Preventive','Corrective'], val:'Preventive'},
+    {k:'Cycle',  en:'Cycle',       mk:'Циклус',          type:'text',   val:'Q3'}
+  ]
+};
+
+let dept = DEPTS[0];
+
+function bil(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+
+/* dept <select> */
+document.getElementById('fDept').innerHTML = DEPTS.map(d=>
+  '<option value="'+d.c+'" data-en="'+d.en+'" data-mk="'+d.mk+'">'+d.en+' · '+d.mk+'</option>').join('');
+
+function renderFields(){
+  const wrap = document.getElementById('deptFields');
+  document.getElementById('modal').style.setProperty('--mw-acc', dept.col);
+  document.getElementById('deptBlockTtl').innerHTML = bil(dept.en+' fields', 'Полиња — '+dept.mk);
+  wrap.innerHTML = FIELDS[dept.c].map((f,i)=>{
+    let input;
+    if(f.type==='select'){
+      input = '<div class="mw-select"><select data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'">'+
+        f.options.map(o=>'<option'+(o===f.val?' selected':'')+'>'+o+'</option>').join('')+'</select></div>';
+    } else {
+      input = '<input class="mw-input" data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'" type="'+(f.type==='number'?'text':'text')+'" value="'+f.val+'" />';
+    }
+    return '<div class="af-field"><label>'+bil(f.en,f.mk)+(f.unit?' <span style="color:var(--mw-text-faint)">('+f.unit+')</span>':'')+'</label>'+input+'</div>';
+  }).join('');
+  wrap.querySelectorAll('[data-fk]').forEach(el=> el.addEventListener('input', renderPreview));
+  renderPreview();
+}
+
+function renderPreview(){
+  const title = document.getElementById('fTitle').value || '—';
+  const due = document.getElementById('fDue').value.trim();
+  const prio = document.getElementById('fPrio').value;
+  const tags = document.getElementById('fTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const attrs = [];
+  document.querySelectorAll('#deptFields [data-fk]').forEach(el=>{
+    const v = (el.value||'').trim(); if(!v) return;
+    const unit = el.getAttribute('data-unit');
+    attrs.push([el.getAttribute('data-fk'), unit ? v+' '+unit : v]);
+  });
+  let meta = '<span class="mw-tcard__dept">'+dept.ab+'</span><span class="mw-tcard__id">CU-104_</span>';
+  attrs.forEach(a=> meta += '<span class="mw-attr">'+a[0]+' <b>'+a[1]+'</b></span>');
+  tags.forEach(t=> meta += '<span class="mw-htag">#'+t+'</span>');
+  if(due) meta += '<span class="mw-due">'+due+'</span>';
+  const stMap = { Normal:'review', Low:'review', High:'working', Critical:'stuck' };
+  document.getElementById('preview').innerHTML =
+    '<div class="mw-tcard" style="--mw-acc:'+dept.col+';margin-bottom:0;cursor:default">'+
+      '<span class="mw-tcard__box"></span>'+
+      '<div class="mw-tcard__main"><div class="mw-tcard__title">'+title+'</div>'+
+        '<div class="mw-tcard__meta">'+meta+'</div></div>'+
+      '<div class="mw-tcard__right"><span class="mw-st mw-st--'+(stMap[prio]||'review')+'">'+prio+'</span></div>'+
+    '</div>';
+}
+
+document.getElementById('fDept').addEventListener('change', e=>{
+  dept = DEPTS.find(d=>d.c===e.target.value); renderFields();
+});
+['fTitle','fDue','fPrio','fTags'].forEach(id=> document.getElementById(id).addEventListener('input', renderPreview));
+
+renderFields();
+</script>
+<script src="mw-i18n.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Batch Dossier</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:960px; margin:0 auto; padding:20px 24px 60px; }
+  .hero{ display:flex; align-items:center; gap:20px; margin-bottom:8px; }
+  .hero__glyph{ width:72px; height:72px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--mw-cyan); filter:drop-shadow(0 0 10px rgba(94,200,240,.6)); }
+  .hero__name{ font-family:'Saira Condensed',sans-serif; font-size:40px; font-weight:600; color:var(--mw-rare); text-shadow:0 0 16px rgba(94,200,240,.5); line-height:1; }
+  .hero__sub{ font-size:12px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-dim); margin-top:8px; }
+  .grade{ margin-left:auto; text-align:right; }
+  .grade b{ font-family:'Saira Condensed',sans-serif; font-size:30px; color:var(--mw-cyan-bright); text-shadow:0 0 14px rgba(94,200,240,.5); }
+  .two{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  .three{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:16px; }
+  /* lifecycle timeline */
+  .track{ display:flex; align-items:flex-start; margin-top:8px; }
+  .node{ flex:1; text-align:center; position:relative; }
+  .node::before{ content:""; position:absolute; top:9px; left:50%; right:-50%; height:2px; background:rgba(58,159,212,.3); z-index:0; }
+  .node:last-child::before{ display:none; }
+  .node .dot{ width:20px; height:20px; margin:0 auto 8px; border-radius:50%; background:var(--mw-hull); box-shadow:inset 0 0 0 2px var(--mw-cyan-dim); position:relative; z-index:1; }
+  .node.done .dot{ background:var(--mw-cyan); box-shadow:0 0 12px rgba(94,200,240,.7); }
+  .node.now .dot{ background:var(--mw-stat-mid); box-shadow:0 0 12px rgba(236,236,74,.7); }
+  .node .lb{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); }
+  .node.done .lb, .node.now .lb{ color:var(--mw-ink); }
+  .log{ font-family:'Saira Condensed',monospace; font-size:12.5px; line-height:2; color:var(--mw-text-dim); }
+  .log b{ color:var(--mw-cyan-bright); } .log .t{ color:var(--mw-text-faint); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Batch Dossier">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="decrypt.html">Vault</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-panel">
+    <div class="hero">
+      <div class="hero__glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2c-1 5-5 7-5 11a5 5 0 0 0 10 0c0-4-4-6-5-11z"/><path d="M12 8v12"/></svg></div>
+      <div>
+        <div class="hero__name">Wedding Cake IX</div>
+        <div class="hero__sub">Batch F-24 · Ariake Genetics · Indica-Dominant Hybrid</div>
+      </div>
+      <div class="grade"><div class="mw-label">Grade</div><b>A+</b></div>
+    </div>
+    <div class="track">
+      <div class="node done"><div class="dot"></div><div class="lb">Clone</div></div>
+      <div class="node done"><div class="dot"></div><div class="lb">Veg</div></div>
+      <div class="node now"><div class="dot"></div><div class="lb">Flower · D42</div></div>
+      <div class="node"><div class="dot"></div><div class="lb">Dry / Cure</div></div>
+      <div class="node"><div class="dot"></div><div class="lb">Package</div></div>
+      <div class="node"><div class="dot"></div><div class="lb">Vault</div></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="mw-panel">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:14px;">Cannabinoid Profile</h2>
+      <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">THC Potency (%)</span><span class="mw-stat__val">33</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:94%"></div></div></div>
+      <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">CBD Content (%)</span><span class="mw-stat__val">4</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--lo" style="width:16%"></div></div></div>
+      <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Terpene Load (%)</span><span class="mw-stat__val">4.6</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:88%"></div></div></div>
+      <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Cure Quality</span><span class="mw-stat__val">95</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:95%"></div></div></div>
+    </div>
+    <div class="mw-panel mw-panel--alt">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:12px;">Chain of Custody</h2>
+      <div class="log">
+        <div><span class="t">D00</span> Clone taken · <b>K. Chakwas</b></div>
+        <div><span class="t">D14</span> Transplant → Veg · <b>M. Solus</b></div>
+        <div><span class="t">D28</span> Flip → Flower A · <b>A. Shepard</b></div>
+        <div><span class="t">D35</span> IPM pass · clean · <b>G. Vakarian</b></div>
+        <div><span class="t">D42</span> Mid-flower sample pulled · <b>L. T'Soni</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="three">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Plant Count</div><div class="mw-kpi__val">64</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Est. Yield</div><div class="mw-kpi__val mw-kpi__val--green">7.2kg</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Harvest In</div><div class="mw-kpi__val mw-kpi__val--amber">16d</div></div>
+  </div>
+
+  <div style="display:flex; gap:12px; justify-content:center; margin-top:22px;">
+    <button class="mw-btn">Log Action</button>
+    <button class="mw-btn mw-btn--ghost">Pull Sample</button>
+    <button class="mw-btn mw-btn--ghost" onclick="location.href='board.html'">◄ Back to Board</button>
+  </div>
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

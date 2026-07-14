@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Processing & Packaging</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .kpi{ flex:1; background:rgba(58,159,212,.07); border:1px solid rgba(94,200,240,.16); padding:12px 16px; clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px); }
+  .kpi__v{ font-family:var(--mw-font-cond); font-size:30px; font-weight:700; color:var(--mw-ink); line-height:1; }
+  .kpi__l{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:6px; }
+  .grid2{ display:grid; grid-template-columns:1.15fr 1fr; gap:14px; }
+
+  /* pipeline flow */
+  .flow{ display:flex; flex-direction:column; gap:10px; }
+  .stage{ display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--mw-panel-in); border:1px solid rgba(94,200,240,.12); border-left:3px solid var(--mw-cyan); clip-path:polygon(0 0,100% 0,100% 100%,8px 100%,0 calc(100% - 8px)); }
+  .stage__ico{ width:34px; height:34px; flex:none; display:grid; place-items:center; border:1px solid rgba(94,200,240,.3); border-radius:50%; color:var(--mw-cyan-bright); font-family:var(--mw-font-cond); font-weight:700; font-size:14px; }
+  .stage__b{ flex:1; }
+  .stage__n{ font-size:13px; font-weight:600; color:var(--mw-text); }
+  .stage__meta{ font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); margin-top:2px; }
+  .stage__amt{ font-family:var(--mw-font-cond); font-size:17px; font-weight:700; color:var(--mw-cyan-bright); }
+  .stage.done{ border-left-color:var(--mw-stat-hi); opacity:.75; }
+  .stage.done .stage__ico{ color:var(--mw-stat-hi); border-color:rgba(108,240,90,.4); }
+  .stage.active{ border-left-color:var(--mw-stat-mid); box-shadow:var(--mw-glow-soft); }
+  .stage.active .stage__ico{ color:var(--mw-stat-mid); border-color:rgba(236,236,74,.5); animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{box-shadow:0 0 0 rgba(236,236,74,0);} 50%{box-shadow:0 0 14px rgba(236,236,74,.5);} }
+
+  /* SKU packaging cards */
+  .sku{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid rgba(94,200,240,.08); }
+  .sku:last-child{ border-bottom:none; }
+  .sku__sz{ font-family:var(--mw-font-cond); font-size:16px; font-weight:700; color:var(--mw-ink); width:56px; }
+  .sku__b{ flex:1; }
+  .sku__n{ font-size:12px; color:var(--mw-text); }
+  .sku__track{ height:6px; background:var(--mw-stat-track); border-radius:3px; margin-top:5px; overflow:hidden; }
+  .sku__track i{ display:block; height:100%; background:linear-gradient(90deg,var(--mw-cyan-deep),var(--mw-cyan-bright)); border-radius:3px; }
+  .sku__ct{ font-family:var(--mw-font-cond); font-size:15px; font-weight:700; color:var(--mw-cyan-bright); width:60px; text-align:right; }
+  .batch{ margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Processing & Packaging">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html" class="is-active">Packaging</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Processing &amp; Packaging</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi__v">42.6<span style="font-size:15px;">kg</span></div><div class="kpi__l">In Processing</div></div>
+    <div class="kpi"><div class="kpi__v">3</div><div class="kpi__l">Active Batches</div></div>
+    <div class="kpi"><div class="kpi__v">1,284</div><div class="kpi__l">Units Packed Today</div></div>
+    <div class="kpi"><div class="kpi__v">18.2<span style="font-size:15px;">%</span></div><div class="kpi__l">Trim / Waste Ratio</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:10px;">Batch B-24-07 · Reaper Haze · Processing Pipeline</div>
+      <div class="flow">
+        <div class="stage done"><div class="stage__ico">✓</div><div class="stage__b"><div class="stage__n">Wet Trim</div><div class="stage__meta">Complete · 2 days ago</div></div><div class="stage__amt">61.4 kg</div></div>
+        <div class="stage done"><div class="stage__ico">✓</div><div class="stage__b"><div class="stage__n">Dry &amp; Cure</div><div class="stage__meta">Complete · Cure Vault C-3</div></div><div class="stage__amt">48.9 kg</div></div>
+        <div class="stage active"><div class="stage__ico">▶</div><div class="stage__b"><div class="stage__n">Machine Trim &amp; Sort</div><div class="stage__meta">In progress · 74% · Line 2</div></div><div class="stage__amt">42.6 kg</div></div>
+        <div class="stage"><div class="stage__ico">3</div><div class="stage__b"><div class="stage__n">QA &amp; Lab Sampling</div><div class="stage__meta">Queued · pending trim</div></div><div class="stage__amt">—</div></div>
+        <div class="stage"><div class="stage__ico">4</div><div class="stage__b"><div class="stage__n">Weigh &amp; Package</div><div class="stage__meta">Queued</div></div><div class="stage__amt">—</div></div>
+        <div class="stage"><div class="stage__ico">5</div><div class="stage__b"><div class="stage__n">Label &amp; Manifest</div><div class="stage__meta">Queued · METRC tag pending</div></div><div class="stage__amt">—</div></div>
+      </div>
+    </div>
+
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:10px;">SKU Packaging Run · today</div>
+      <div class="sku"><span class="sku__sz">1g</span><div class="sku__b"><div class="sku__n">Pre-roll · single</div><div class="sku__track"><i style="width:82%"></i></div></div><span class="sku__ct">640</span></div>
+      <div class="sku"><span class="sku__sz">3.5g</span><div class="sku__b"><div class="sku__n">Eighth · flower jar</div><div class="sku__track"><i style="width:64%"></i></div></div><span class="sku__ct">312</span></div>
+      <div class="sku"><span class="sku__sz">7g</span><div class="sku__b"><div class="sku__n">Quarter · flower jar</div><div class="sku__track"><i style="width:41%"></i></div></div><span class="sku__ct">184</span></div>
+      <div class="sku"><span class="sku__sz">14g</span><div class="sku__b"><div class="sku__n">Half · bulk pouch</div><div class="sku__track"><i style="width:28%"></i></div></div><span class="sku__ct">96</span></div>
+      <div class="sku"><span class="sku__sz">28g</span><div class="sku__b"><div class="sku__n">Ounce · bulk pouch</div><div class="sku__track"><i style="width:14%"></i></div></div><span class="sku__ct">52</span></div>
+
+      <div class="batch">
+        <div class="mw-label" style="margin-bottom:8px;">Batch Queue</div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">B-24-07 · Reaper Haze</span><span class="mw-badge mw-badge--warn">Trimming</span></div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">B-24-06 · Citadel Kush</span><span class="mw-badge">Packaging</span></div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">B-24-05 · Nova Diesel</span><span class="mw-badge mw-badge--ok">Manifested</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script src="nav.js"></script>
+</body>
+</html>

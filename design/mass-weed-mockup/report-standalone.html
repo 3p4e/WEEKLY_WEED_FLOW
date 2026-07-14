@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purely Plant — Weekly Report W28 · Неделен извештај Н28</title>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  DESIGN NOTES · Standalone interactive report (surface 3.4, brief §3.4)
+  ────────────────────────────────────────────────────────────────────
+  WHAT THIS IS: the offline artifact the owner downloads and opens
+  anywhere — train, phone, no network, months later.
+    · ZERO JavaScript, ZERO network. Interactivity = <details>/<summary>.
+    · All styles inline in one <style>. SYSTEM FONT STACK ONLY (never
+      fetches a webfont) — an elegant humanist stack echoing Saira's
+      voice, tabular/mono for codes & hours.
+    · Dark + light via prefers-color-scheme (BOTH designed).
+    · Bilingual, NON-toggleable: EN primary + МК secondary side by side.
+    · No glass / glow — this must look intentional ON PAPER too, so
+      hierarchy is carried by BORDERS + WEIGHT + rules, not blur.
+    · Fluid to 360px. Print CSS force-opens every <details> so a printed
+      copy shows all content regardless of on-screen collapse state.
+
+  SAME IA AS §3.3: disclaimer banner → title block → KPI band →
+    per-department <details> → per-task <details> → notes with authors,
+    each task carrying an inline-SVG effort ribbon (hours across the week).
+    Missing dept (QA) renders as a ghost "not submitted" block.
+
+  SELF-CONTAINED: does NOT link mass-weed.css (would pull webfonts +
+    glass). It is a deliberate print-document cousin of the HUD, not a
+    reskin of it. Class prefix: .rp-*.
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+  :root{
+    --bg:#eef1f5; --sheet:#ffffff; --ink:#182530; --dim:#5a6b78; --faint:#8496a3;
+    --line:#d7dee6; --line-2:#e7ecf1; --accent:#0e6b96; --accent-soft:#e2eef4;
+    --ok:#1f8a52; --warn:#b9840f; --err:#c33; --gold:#9a6b12;
+    --mono:'SFMono-Regular',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,monospace;
+    --sans:'Optima','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,system-ui,sans-serif;
+    --dept-cu:#1f9e6e; --dept-pr:#1f9fb0; --dept-qc:#6a54b8; --dept-qa:#c0602f;
+    --dept-wh:#1487a8; --dept-se:#5a6b82; --dept-mu:#5a6b82; --dept-org:#0e6b96;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0b141d; --sheet:#101c27; --ink:#dde9f1; --dim:#93a9b8; --faint:#5f7686;
+      --line:#213240; --line-2:#18262f; --accent:#57b6dd; --accent-soft:#12303e;
+      --ok:#4cc586; --warn:#e3b25a; --err:#f0777f; --gold:#e0b45e;
+      --accent-soft:#12303e;
+      --dept-cu:#3fd39a; --dept-pr:#43c7d6; --dept-qc:#a58ff0; --dept-qa:#e08a56;
+      --dept-wh:#3fb6d6; --dept-se:#8ea3bd; --dept-mu:#8ea3bd; --dept-org:#57b6dd;
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{ background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased; padding:26px 16px 80px; }
+  .rp{ max-width:860px; margin:0 auto; background:var(--sheet); border:1px solid var(--line);
+    box-shadow:0 1px 0 var(--line); }
+  .rp__pad{ padding:34px 40px; }
+  @media (max-width:600px){ .rp__pad{ padding:22px 18px; } body{ padding:12px 8px 60px; } }
+
+  /* bilingual helper: EN primary block, МК secondary block */
+  .mk2{ color:var(--dim); font-weight:400; }
+
+  /* disclaimer banner */
+  .rp-disc{ display:flex; gap:13px; align-items:flex-start; padding:13px 40px; background:var(--accent-soft);
+    border-bottom:2px solid var(--accent); }
+  @media (max-width:600px){ .rp-disc{ padding:12px 18px; } }
+  .rp-disc svg{ width:20px; height:20px; flex:none; stroke:var(--accent); fill:none; stroke-width:1.7; margin-top:1px; }
+  .rp-disc__en{ font-size:12.5px; font-weight:600; color:var(--ink); }
+  .rp-disc__mk{ font-size:12px; color:var(--dim); margin-top:1px; }
+
+  /* title block */
+  .rp-title{ border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:24px; }
+  .rp-kicker{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); }
+  .rp-h1{ font-size:30px; font-weight:700; letter-spacing:.01em; margin:8px 0 2px; line-height:1.1; }
+  .rp-h1 .mk2{ display:block; font-size:20px; margin-top:3px; letter-spacing:.005em; }
+  .rp-sub{ font-family:var(--mono); font-size:12.5px; color:var(--dim); margin-top:10px; letter-spacing:.02em; }
+  .rp-sub b{ color:var(--ink); font-weight:600; }
+
+  .rp-lbl{ font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint);
+    margin:26px 0 12px; display:flex; align-items:center; gap:10px; }
+  .rp-lbl::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .rp-lbl .mk2{ font-size:10.5px; letter-spacing:.1em; }
+
+  /* KPI band */
+  .rp-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--line); }
+  .rp-kpi{ padding:15px 16px; border-right:1px solid var(--line); }
+  .rp-kpi:last-child{ border-right:none; }
+  .rp-kpi__l{ font-family:var(--mono); font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); }
+  .rp-kpi__l .mk2{ text-transform:none; letter-spacing:0; }
+  .rp-kpi__v{ font-size:32px; font-weight:700; margin:6px 0 2px; letter-spacing:.01em; }
+  .rp-kpi__v.ok{ color:var(--ok); } .rp-kpi__v.err{ color:var(--err); } .rp-kpi__v.warn{ color:var(--warn); }
+  .rp-kpi__d{ font-size:11px; color:var(--dim); }
+  @media (max-width:600px){ .rp-kpis{ grid-template-columns:repeat(2,1fr); } .rp-kpi:nth-child(2){ border-right:none; } .rp-kpi:nth-child(1),.rp-kpi:nth-child(2){ border-bottom:1px solid var(--line); } }
+
+  /* department section */
+  .rp-sec{ border:1px solid var(--line); margin-bottom:10px; background:var(--sheet); }
+  .rp-sec > summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:14px; padding:14px 18px;
+    border-left:4px solid var(--dc,var(--accent)); }
+  .rp-sec > summary::-webkit-details-marker{ display:none; }
+  .rp-sec > summary:hover{ background:var(--line-2); }
+  .rp-sec__ab{ font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:.05em; color:var(--dc,var(--accent));
+    border:1px solid var(--dc,var(--accent)); padding:4px 8px; flex:none; }
+  .rp-sec__nm{ font-size:17px; font-weight:700; }
+  .rp-sec__nm .mk2{ font-size:13.5px; font-weight:400; }
+  .rp-sec__sp{ flex:1; }
+  .rp-sec__st{ font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding:3px 9px; border:1px solid currentColor; white-space:nowrap; }
+  .st-locked{ color:var(--ok); } .st-draft{ color:var(--warn); } .st-missing{ color:var(--err); }
+  .rp-sec__chev{ width:9px; height:9px; border-right:2px solid var(--dim); border-bottom:2px solid var(--dim); transform:rotate(45deg); flex:none; transition:transform .18s ease; }
+  .rp-sec[open] > summary .rp-sec__chev{ transform:rotate(-135deg); }
+  .rp-sec__body{ padding:6px 18px 16px; border-top:1px solid var(--line-2); }
+
+  .rp-metrics{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--line-2); margin:14px 0 16px; }
+  .rp-metric{ padding:10px 12px; border-right:1px solid var(--line-2); }
+  .rp-metric:last-child{ border-right:none; }
+  .rp-metric__l{ font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .rp-metric__v{ font-size:21px; font-weight:700; margin-top:3px; }
+  @media (max-width:600px){ .rp-metrics{ grid-template-columns:repeat(2,1fr); } }
+
+  .rp-narr{ font-size:14px; line-height:1.62; margin:0 0 6px; }
+  .rp-narr .mk2{ display:block; font-size:12.5px; margin-top:7px; padding-top:7px; border-top:1px dotted var(--line); }
+
+  /* task rows */
+  .rp-task{ border:1px solid var(--line-2); margin-top:8px; }
+  .rp-task > summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:11px; padding:9px 13px; }
+  .rp-task > summary::-webkit-details-marker{ display:none; }
+  .rp-task > summary:hover{ background:var(--line-2); }
+  .rp-task__st{ font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border:1px solid currentColor; flex:none; }
+  .rp-task__ttl{ flex:1; min-width:0; font-size:13.5px; font-weight:600; }
+  .rp-task__ttl .mk2{ font-weight:400; font-size:12px; }
+  .rp-task__id{ font-family:var(--mono); font-size:11px; color:var(--faint); flex:none; }
+  .rp-task__body{ padding:8px 14px 13px; border-top:1px solid var(--line-2); }
+
+  /* effort ribbon */
+  .rp-ribbon{ margin:4px 0 12px; }
+  .rp-ribbon__lbl{ font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin-bottom:5px; display:flex; justify-content:space-between; }
+  .rp-ribbon svg{ display:block; width:100%; height:42px; }
+
+  /* notes */
+  .rp-note{ display:flex; gap:12px; padding:7px 0; border-bottom:1px solid var(--line-2); }
+  .rp-note:last-child{ border-bottom:none; }
+  .rp-note__m{ flex:none; width:120px; }
+  .rp-note__a{ font-size:11.5px; font-weight:700; color:var(--ink); }
+  .rp-note__d{ font-family:var(--mono); font-size:10px; color:var(--faint); }
+  .rp-note__t{ flex:1; font-size:12.5px; color:var(--dim); }
+  .rp-note__t .mk2{ display:block; margin-top:2px; }
+  .rp-note--owner{ border-left:3px solid var(--gold); padding-left:11px; background:color-mix(in srgb,var(--gold) 8%, transparent); }
+  .rp-note--owner .rp-note__a{ color:var(--gold); } .rp-note--owner .rp-note__a::after{ content:" ★"; }
+  .rp-note--exec{ border-left:3px solid var(--accent); padding-left:11px; }
+  .rp-note--exec .rp-note__a{ color:var(--accent); }
+
+  /* ghost */
+  .rp-ghost{ padding:18px; text-align:center; border-top:1px solid var(--line-2); }
+  .rp-ghost__t{ font-weight:700; color:var(--err); }
+  .rp-ghost__d{ font-size:12.5px; color:var(--dim); margin-top:4px; }
+
+  .rp-foot{ margin-top:26px; padding-top:16px; border-top:1px solid var(--line); font-size:11px; color:var(--faint); font-family:var(--mono); letter-spacing:.02em; }
+
+  /* PRINT — reveal all collapsed content, drop shadows/interactive chrome */
+  @media print{
+    body{ background:#fff; color:#000; padding:0; }
+    .rp{ border:none; box-shadow:none; max-width:none; }
+    details > *{ display:revert !important; }   /* force-open every <details> */
+    .rp-sec,.rp-task{ break-inside:avoid; }
+    .rp-sec__chev{ display:none; }
+    summary{ cursor:default; }
+  }
+</style>
+</head>
+<body>
+<div class="rp">
+
+  <!-- disclaimer -->
+  <div class="rp-disc">
+    <svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+    <div>
+      <div class="rp-disc__en">Weekly informational summary for management — not a GMP/QMS record.</div>
+      <div class="rp-disc__mk">Неделно информативно резиме за менаџментот — не е GMP/QMS запис.</div>
+    </div>
+  </div>
+
+  <div class="rp__pad">
+    <!-- title -->
+    <div class="rp-title">
+      <div class="rp-kicker">Purely Plant · [TEST] site · Skopje</div>
+      <div class="rp-h1">Weekly Report<span class="mk2">Неделен извештај</span></div>
+      <div class="rp-sub"><b>Week 28</b> · Jul 7 – Jul 13, 2026 &nbsp;·&nbsp; <b>Недела 28</b> · 7–13 јули 2026 &nbsp;·&nbsp; compiled Jul 13, 15:00</div>
+    </div>
+
+    <!-- KPI band -->
+    <div class="rp-lbl">Organisation this week <span class="mk2">· Организација оваа недела</span></div>
+    <div class="rp-kpis">
+      <div class="rp-kpi"><div class="rp-kpi__l">On-time <span class="mk2">Навреме</span></div><div class="rp-kpi__v ok">88%</div><div class="rp-kpi__d">of 142 tasks · од 142</div></div>
+      <div class="rp-kpi"><div class="rp-kpi__l">Overdue <span class="mk2">Задоцнети</span></div><div class="rp-kpi__v err">6</div><div class="rp-kpi__d">across 3 depts · 3 оддели</div></div>
+      <div class="rp-kpi"><div class="rp-kpi__l">Logged hours <span class="mk2">Часови</span></div><div class="rp-kpi__v">1 084</div><div class="rp-kpi__d">+7% vs W27</div></div>
+      <div class="rp-kpi"><div class="rp-kpi__l">Complexity <span class="mk2">Комплексност</span></div><div class="rp-kpi__v warn">3.4</div><div class="rp-kpi__d">avg / task · просек</div></div>
+    </div>
+
+    <!-- departments -->
+    <div class="rp-lbl">Departments <span class="mk2">· Оддели</span></div>
+
+    <!-- Cultivation -->
+    <details class="rp-sec" open style="--dc:var(--dept-cu)">
+      <summary>
+        <span class="rp-sec__ab">CU</span>
+        <span class="rp-sec__nm">Cultivation<span class="mk2"> · Одгледување</span></span>
+        <span class="rp-sec__sp"></span>
+        <span class="rp-sec__st st-locked">Locked · Заклучено</span>
+        <span class="rp-sec__chev"></span>
+      </summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">92%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">214</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">31</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Rooms</div><div class="rp-metric__v">5</div></div>
+        </div>
+        <p class="rp-narr">All five flowering rooms held target VPD through the week. GR-B was harvested Thursday (18.4 kg wet) and handed to Production on schedule. One humidity excursion in GR-B triggered CAPA-14.
+          <span class="mk2">Сите пет соби за цветање го одржаа целниот VPD оваа недела. GR-B е обрана во четврток (18,4 kg свежо) и предадена на Производство навреме. Едно отстапување на влажност во GR-B ја активираше КАПА-14.</span></p>
+
+        <details class="rp-task" open>
+          <summary><span class="rp-task__st st-locked">Done</span><span class="rp-task__ttl">Harvest Flower B — Sour Diesel<span class="mk2"> · Берба Соба Б</span></span><span class="rp-task__id">CU-1039</span></summary>
+          <div class="rp-task__body">
+            <div class="rp-ribbon"><div class="rp-ribbon__lbl"><span>Effort · Ангажман</span><span>26 h</span></div>
+              <svg viewBox="0 0 350 42" preserveAspectRatio="none">
+                <line x1="0" y1="41" x2="350" y2="41" stroke="currentColor" stroke-opacity=".2"/>
+                <rect x="2"   y="18" width="44" height="23" fill="var(--dept-cu)" opacity=".85"/>
+                <rect x="52"  y="8"  width="44" height="33" fill="var(--dept-cu)" opacity=".85"/>
+                <rect x="102" y="26" width="44" height="15" fill="var(--dept-cu)" opacity=".85"/>
+                <rect x="152" y="2"  width="44" height="39" fill="var(--dept-cu)"/>
+                <rect x="202" y="30" width="44" height="11" fill="var(--dept-cu)" opacity=".55"/>
+                <rect x="252" y="41" width="44" height="0"  fill="var(--dept-cu)" opacity=".3"/>
+                <rect x="302" y="41" width="44" height="0"  fill="var(--dept-cu)" opacity=".3"/>
+              </svg>
+            </div>
+            <div class="rp-note"><div class="rp-note__m"><div class="rp-note__a">[TEST] Ana Stoeva</div><div class="rp-note__d">Thu · чет</div></div><div class="rp-note__t">Wet weight 18.4 kg logged. Moved to Dry/Cure DR-2.<span class="mk2">Свежа тежина 18,4 kg. Преместено во Сушара DR-2.</span></div></div>
+            <div class="rp-note rp-note--owner"><div class="rp-note__m"><div class="rp-note__a">[TEST] Owner</div><div class="rp-note__d">Thu · чет</div></div><div class="rp-note__t">Good yield. Prioritise this pheno next cycle.<span class="mk2">Добар принос. Приоритизирај го овој фенотип следен циклус.</span></div></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- Production -->
+    <details class="rp-sec" open style="--dc:var(--dept-pr)">
+      <summary><span class="rp-sec__ab">PR</span><span class="rp-sec__nm">Production<span class="mk2"> · Производство</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-locked">Locked · Заклучено</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">86%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">198</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">24</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Batches</div><div class="rp-metric__v">3</div></div>
+        </div>
+        <p class="rp-narr">Three batches in motion. WC-2405 trimming 50% complete; SD-2404 extraction yielded 780 g live resin. Weigh-and-log on SD is blocked pending a calibrated scale.
+          <span class="mk2">Три серии во тек. WC-2405 тримање 50% завршено; SD-2404 екстракција даде 780 g live resin. Мерењето на SD е блокирано до калибрирана вага.</span></p>
+        <details class="rp-task"><summary><span class="rp-task__st st-missing">Stuck</span><span class="rp-task__ttl">Weigh &amp; log output<span class="mk2"> · Мерење и запис</span></span><span class="rp-task__id">PR-879</span></summary>
+          <div class="rp-task__body">
+            <div class="rp-ribbon"><div class="rp-ribbon__lbl"><span>Effort · Ангажман</span><span>1 h</span></div>
+              <svg viewBox="0 0 350 42" preserveAspectRatio="none"><line x1="0" y1="41" x2="350" y2="41" stroke="currentColor" stroke-opacity=".2"/><rect x="102" y="34" width="44" height="7" fill="var(--dept-pr)" opacity=".7"/></svg></div>
+            <div class="rp-note"><div class="rp-note__m"><div class="rp-note__a">[TEST] Marija Koleva</div><div class="rp-note__d">Wed · сре</div></div><div class="rp-note__t">Blocked — scale out of calibration. Raised MU-43.<span class="mk2">Блокирано — вагата без калибрација. Подигнато MU-43.</span></div></div>
+            <div class="rp-note rp-note--exec"><div class="rp-note__m"><div class="rp-note__a">[TEST] COO</div><div class="rp-note__d">Wed · сре</div></div><div class="rp-note__t">Escalated to Maintenance as high priority.<span class="mk2">Ескалирано до Одржување со висок приоритет.</span></div></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- QC -->
+    <details class="rp-sec" open style="--dc:var(--dept-qc)">
+      <summary><span class="rp-sec__ab">QC</span><span class="rp-sec__nm">Quality Control<span class="mk2"> · Контрола на квалитет</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-draft">Draft · Нацрт</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">79%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">96</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">14</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Samples</div><div class="rp-metric__v">9</div></div>
+        </div>
+        <p class="rp-narr">Micro-verification sampling campaign progressing (21 batches). Potency and micro panels running; one moisture test overdue. Labeling &amp; Label Control (QASOP 031) remains the largest open theme.
+          <span class="mk2">Кампањата за микро-верификација напредува (21 серија). Тестови за потентност и микро во тек; еден тест за влага задоцни. Означување (QASOP 031) е најголемата отворена тема.</span></p>
+        <details class="rp-task"><summary><span class="rp-task__st st-draft">Working</span><span class="rp-task__ttl">Potency — WC-S1 (HPLC)<span class="mk2"> · Потентност</span></span><span class="rp-task__id">QC-311</span></summary>
+          <div class="rp-task__body">
+            <div class="rp-ribbon"><div class="rp-ribbon__lbl"><span>Effort · Ангажман</span><span>5 h</span></div>
+              <svg viewBox="0 0 350 42" preserveAspectRatio="none"><line x1="0" y1="41" x2="350" y2="41" stroke="currentColor" stroke-opacity=".2"/><rect x="152" y="22" width="44" height="19" fill="var(--dept-qc)" opacity=".85"/><rect x="202" y="30" width="44" height="11" fill="var(--dept-qc)" opacity=".6"/></svg></div>
+            <div class="rp-note"><div class="rp-note__m"><div class="rp-note__a">[TEST] Ivona Vasi</div><div class="rp-note__d">Thu · чет</div></div><div class="rp-note__t">HPLC queued, result expected Friday.<span class="mk2">HPLC во ред, резултат во петок.</span></div></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- QA — MISSING (ghost) -->
+    <details class="rp-sec" style="--dc:var(--dept-qa)">
+      <summary><span class="rp-sec__ab">QA</span><span class="rp-sec__nm">Quality Assurance<span class="mk2"> · Обезбедување квалитет</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-missing">Missing · Недостасува</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-ghost">
+        <div class="rp-ghost__t">No document submitted · Нема поднесен документ</div>
+        <div class="rp-ghost__d">This department did not compile its weekly section for Week 28. · Овој оддел не го состави своето поглавје за Недела 28.</div>
+      </div>
+    </details>
+
+    <!-- Warehouse -->
+    <details class="rp-sec" open style="--dc:var(--dept-wh)">
+      <summary><span class="rp-sec__ab">WH</span><span class="rp-sec__nm">Warehouse<span class="mk2"> · Магацин</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-locked">Locked · Заклучено</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">94%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">132</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">19</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Orders</div><div class="rp-metric__v">7</div></div>
+        </div>
+        <p class="rp-narr">Inbound nutrient delivery received and put away under Material Logistics &amp; Warehouse Control. Order SO-118 (Skopje Dispensary, 240 units) picked and staged for Friday cold-chain dispatch.
+          <span class="mk2">Влезна испорака на прихрана примена и складирана. Нарачка SO-118 (Диспанзер Скопје, 240 единици) подготвена за петочна испорака со ладен ланец.</span></p>
+        <details class="rp-task"><summary><span class="rp-task__st st-draft">Working</span><span class="rp-task__ttl">Pick order — Skopje Dispensary<span class="mk2"> · Подготви нарачка</span></span><span class="rp-task__id">WH-208</span></summary>
+          <div class="rp-task__body">
+            <div class="rp-ribbon"><div class="rp-ribbon__lbl"><span>Effort · Ангажман</span><span>7 h</span></div>
+              <svg viewBox="0 0 350 42" preserveAspectRatio="none"><line x1="0" y1="41" x2="350" y2="41" stroke="currentColor" stroke-opacity=".2"/><rect x="152" y="14" width="44" height="27" fill="var(--dept-wh)" opacity=".85"/><rect x="202" y="28" width="44" height="13" fill="var(--dept-wh)" opacity=".6"/></svg></div>
+            <div class="rp-note"><div class="rp-note__m"><div class="rp-note__a">[TEST] Blagoj Nikolov</div><div class="rp-note__d">Thu · чет</div></div><div class="rp-note__t">240 units staged, awaiting van.<span class="mk2">240 единици подготвени, се чека комбе.</span></div></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- Security -->
+    <details class="rp-sec" style="--dc:var(--dept-se)">
+      <summary><span class="rp-sec__ab">SE</span><span class="rp-sec__nm">Security<span class="mk2"> · Обезбедување</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-draft">Draft · Нацрт</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">90%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">88</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">11</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Incidents</div><div class="rp-metric__v">1</div></div>
+        </div>
+        <p class="rp-narr">Routine patrols complete. One low-severity door-sensor fault in GR-2 logged and passed to Maintenance.
+          <span class="mk2">Рутинските патроли завршени. Еден дефект на сензор за врата со ниска сериозност во GR-2 пријавен и предаден на Одржување.</span></p>
+      </div>
+    </details>
+
+    <!-- Maintenance -->
+    <details class="rp-sec" open style="--dc:var(--dept-mu)">
+      <summary><span class="rp-sec__ab">MU</span><span class="rp-sec__nm">Maintenance<span class="mk2"> · Одржување</span></span><span class="rp-sec__sp"></span><span class="rp-sec__st st-locked">Locked · Заклучено</span><span class="rp-sec__chev"></span></summary>
+      <div class="rp-sec__body">
+        <div class="rp-metrics">
+          <div class="rp-metric"><div class="rp-metric__l">On-time</div><div class="rp-metric__v">83%</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Hours</div><div class="rp-metric__v">76</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Tasks</div><div class="rp-metric__v">9</div></div>
+          <div class="rp-metric"><div class="rp-metric__l">Assets</div><div class="rp-metric__v">12</div></div>
+        </div>
+        <p class="rp-narr">Preventive maintenance on HVAC-01 done. Chiller CH-1 refrigerant leak is the week's critical open item; parts on order. Scale calibration (blocks PR-879) scheduled Friday.
+          <span class="mk2">Превентивно одржување на ХВАК-01 завршено. Протекување на ладилник CH-1 е критична отворена ставка; делови нарачани. Калибрација на вага (го блокира PR-879) закажана за петок.</span></p>
+        <details class="rp-task" open><summary><span class="rp-task__st st-missing">Stuck</span><span class="rp-task__ttl">Chiller CH-1 — refrigerant leak<span class="mk2"> · Ладилник CH-1</span></span><span class="rp-task__id">MU-46</span></summary>
+          <div class="rp-task__body">
+            <div class="rp-ribbon"><div class="rp-ribbon__lbl"><span>Effort · Ангажман</span><span>5 h</span></div>
+              <svg viewBox="0 0 350 42" preserveAspectRatio="none"><line x1="0" y1="41" x2="350" y2="41" stroke="currentColor" stroke-opacity=".2"/><rect x="102" y="20" width="44" height="21" fill="var(--dept-mu)" opacity=".85"/><rect x="152" y="30" width="44" height="11" fill="var(--dept-mu)" opacity=".6"/></svg></div>
+            <div class="rp-note"><div class="rp-note__m"><div class="rp-note__a">[TEST] Filip Andov</div><div class="rp-note__d">Wed · сре</div></div><div class="rp-note__t">Leak isolated, valve kit on order (ETA Fri).<span class="mk2">Протекувањето изолирано, вентил нарачан (петок).</span></div></div>
+            <div class="rp-note rp-note--owner"><div class="rp-note__m"><div class="rp-note__a">[TEST] Owner</div><div class="rp-note__d">Wed · сре</div></div><div class="rp-note__t">Keep GR-A on backup cooling until resolved. Report daily.<span class="mk2">Држи ја GR-A на резервно ладење додека не се реши. Извести дневно.</span></div></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <div class="rp-foot">Generated offline · Purely Plant WEEKLY_WEED_FLOW · W28-2026 · This artifact contains no live data and makes no network requests. Информативно — не е GMP/QMS запис.</div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — UI Elements</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 70px; }
+  .sec{ margin-top:38px; }
+  .cap{ font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-faint); margin:0 0 12px; }
+  .row{ display:flex; flex-wrap:wrap; gap:18px 26px; align-items:center; }
+  .stack{ display:flex; flex-direction:column; gap:12px; }
+  .lab{ font-size:12px; color:var(--mw-text-dim); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="UI Elements">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="compliance.html">Compliance</a>
+    <a href="ui-elements.html" class="is-active">Elements</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">UI Element Library</h1><span class="mw-rule"></span></div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Toggles · Segmented · Selection</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row">
+      <div class="stack"><span class="cap">Switch</span><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div>
+      <div class="stack"><span class="cap">Segmented</span><div class="mw-seg"><button class="is-active">Week</button><button>Month</button><button>Cycle</button></div></div>
+      <div class="stack"><span class="cap">Checkbox</span><label class="mw-check"><input type="checkbox" checked><span class="box"></span> METRC verified</label><label class="mw-check"><input type="checkbox"><span class="box"></span> Lab tested</label></div>
+      <div class="stack"><span class="cap">Chips</span><div style="display:flex; gap:8px;"><span class="mw-chip2">Indica <span class="x">✕</span></span><span class="mw-chip2">Flower <span class="x">✕</span></span></div></div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Progress · Gauges · Charts</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row" style="gap:40px;">
+      <div class="stack" style="align-items:center;"><span class="cap">Rings</span><div style="display:flex; gap:16px;">
+        <div class="mw-ring mw-ring--green" style="--p:82;"><span class="mw-ring__val">82%</span></div>
+        <div class="mw-ring mw-ring--amber" style="--p:54;"><span class="mw-ring__val">54%</span></div>
+        <div class="mw-ring mw-ring--red" style="--p:23;"><span class="mw-ring__val">23%</span></div>
+      </div></div>
+      <div class="stack" style="align-items:center;"><span class="cap">Gauge</span><div class="mw-gauge"><div class="mw-gauge__arc"></div><div class="mw-gauge__needle" id="gn"></div><div class="mw-gauge__val">24% THC</div></div></div>
+      <div class="stack" style="flex:1; min-width:280px;"><span class="cap">Yield by Zone (kg)</span><div class="mw-chart" id="chart"></div></div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Sliders · Tabs · Tooltip</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel">
+      <div class="mw-utabs" style="margin-bottom:16px;"><button class="mw-utab is-active">Overview</button><button class="mw-utab">Genetics</button><button class="mw-utab">Lab Results</button><button class="mw-utab">History</button></div>
+      <div class="row" style="gap:40px;">
+        <div class="stack" style="flex:1; min-width:260px;"><span class="cap">Target Humidity — <b id="humv" style="color:var(--mw-cyan-bright)">55%</b></span><input type="range" class="mw-slider" min="30" max="70" value="55" oninput="document.getElementById('humv').textContent=this.value+'%'"></div>
+        <div class="stack"><span class="cap">Tooltip</span><span class="mw-tip"><button class="mw-btn mw-btn--ghost">Hover me<span class="mw-tip__pop">Batch flagged for re-test</span></button></span></div>
+        <div class="stack"><span class="cap">Badges</span><div style="display:flex; gap:12px; align-items:center;"><span class="lab">Alerts <span class="mw-badge2">3</span></span><span class="lab">Msgs <span class="mw-badge2 mw-badge2--cyan">12</span></span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Toasts</h2><span class="mw-rule"></span></div>
+    <div class="row">
+      <div class="mw-toast mw-toast--ok"><span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span><div><div class="mw-toast__tt">Batch F-24 logged</div><div class="mw-toast__ds">Chain of custody updated</div></div></div>
+      <div class="mw-toast mw-toast--warn"><span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span><div><div class="mw-toast__tt">Cure window closing</div><div class="mw-toast__ds">36 hours remaining</div></div></div>
+      <div class="mw-toast mw-toast--err"><span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></span><div><div class="mw-toast__tt">2 METRC tags unmatched</div><div class="mw-toast__ds">Reconcile required</div></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Data Table</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="mw-well" style="padding:4px 8px;">
+      <table class="mw-table">
+        <thead><tr><th>Tag</th><th>Strain</th><th>Zone</th><th>Weight</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1A4-F0024</td><td>Wedding Cake IX</td><td>Flower A</td><td>7.2 kg</td><td><span class="mw-tag mw-tag--lo">In Cycle</span></td></tr>
+          <tr><td class="mono">1A4-F0021</td><td>Sour Diesel VIII</td><td>Flower B</td><td>5.8 kg</td><td><span class="mw-tag mw-tag--mid">Flagged</span></td></tr>
+          <tr><td class="mono">1A4-D0012</td><td>Live Resin IX</td><td>Dry / Cure</td><td>1.1 kg</td><td><span class="mw-tag mw-tag--lo">Curing</span></td></tr>
+          <tr><td class="mono">1A4-P0008</td><td>Hurricane VIII</td><td>Packaging</td><td>3.4 kg</td><td><span class="mw-tag mw-tag--hi">Sealed</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Buttons</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row">
+      <button class="mw-btn">Primary</button>
+      <button class="mw-btn mw-btn--ghost">Ghost</button>
+      <button class="mw-btn" style="filter:brightness(1.2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> With Icon
+      </button>
+      <button class="mw-btn" disabled style="opacity:.4; cursor:not-allowed;">Disabled</button>
+      <div class="stack" style="min-width:170px;"><span class="cap">Full width</span><button class="mw-btn mw-btn--wide">Commit Batch</button></div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Form Controls</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row" style="align-items:flex-start; gap:26px 32px;">
+      <div class="stack" style="flex:1; min-width:220px;">
+        <div class="mw-field"><label>Batch Label</label><input class="mw-input" placeholder="e.g. B-24-08"></div>
+        <div class="mw-field"><label>Search</label><span class="mw-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input class="mw-input" placeholder="Find strain, tag, zone…"></span></div>
+      </div>
+      <div class="stack" style="flex:1; min-width:220px;">
+        <div class="mw-field"><label>Zone</label><span class="mw-select"><select><option>Flower Room A</option><option>Flower Room B</option><option>Veg Bay</option><option>Dry / Cure</option></select></span></div>
+        <div class="stack"><span class="cap">Priority</span><div style="display:flex; gap:18px;">
+          <label class="mw-radio"><input type="radio" name="pri" checked><span class="dot"></span> Standard</label>
+          <label class="mw-radio"><input type="radio" name="pri"><span class="dot"></span> Rush</label>
+        </div></div>
+      </div>
+      <div class="stack" style="flex:1; min-width:220px;">
+        <div class="mw-field"><label>Notes</label><textarea class="mw-textarea" placeholder="Cultivation notes…"></textarea></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Progress · Spinner · Skeleton</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row" style="gap:36px; align-items:flex-start;">
+      <div class="stack" style="flex:1; min-width:240px;">
+        <span class="cap">Linear</span>
+        <div class="mw-progress"><i style="width:72%"></i></div>
+        <span class="cap" style="margin-top:6px;">Indeterminate</span>
+        <div class="mw-progress mw-progress--striped"><i style="width:100%"></i></div>
+      </div>
+      <div class="stack" style="align-items:center;"><span class="cap">Spinner</span><div style="display:flex; gap:14px; align-items:center;"><div class="mw-spinner"></div><div class="mw-spinner mw-spinner--sm"></div></div></div>
+      <div class="stack" style="flex:1; min-width:200px;"><span class="cap">Skeleton</span>
+        <div class="mw-skel" style="height:14px; width:80%; margin-bottom:8px;"></div>
+        <div class="mw-skel" style="height:14px; width:60%; margin-bottom:8px;"></div>
+        <div class="mw-skel" style="height:44px; width:100%;"></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Alert Banners</h2><span class="mw-rule"></span></div>
+    <div class="stack">
+      <div class="mw-alert mw-alert--ok"><span class="mw-alert__ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span><div><div class="mw-alert__tt">Manifest accepted</div><div class="mw-alert__ds">State transfer authorized — 8 packages, 42.6 kg.</div></div></div>
+      <div class="mw-alert mw-alert--warn"><span class="mw-alert__ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span><div><div class="mw-alert__tt">Cure humidity drifting</div><div class="mw-alert__ds">Chamber C-3 at 68% RH — above 65% target.</div></div></div>
+      <div class="mw-alert mw-alert--err"><span class="mw-alert__ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></span><div><div class="mw-alert__tt">METRC sync failed</div><div class="mw-alert__ds">2 tags unmatched — reconcile before transfer.</div></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Stepper · Pagination · Breadcrumbs</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="stack" style="gap:22px;">
+      <div class="mw-stepper">
+        <div class="mw-step done"><span class="mw-step__n">✓</span><span class="mw-step__l">Harvest</span></div>
+        <span class="mw-step__bar done"></span>
+        <div class="mw-step done"><span class="mw-step__n">✓</span><span class="mw-step__l">Cure</span></div>
+        <span class="mw-step__bar done"></span>
+        <div class="mw-step active"><span class="mw-step__n">3</span><span class="mw-step__l">Trim</span></div>
+        <span class="mw-step__bar"></span>
+        <div class="mw-step"><span class="mw-step__n">4</span><span class="mw-step__l">Package</span></div>
+      </div>
+      <div class="row" style="gap:40px;">
+        <div class="stack"><span class="cap">Pagination</span><div class="mw-pager"><button disabled>‹</button><button class="is-active">1</button><button>2</button><button>3</button><button>4</button><button>›</button></div></div>
+        <div class="stack"><span class="cap">Breadcrumbs</span><nav class="mw-crumbs"><a href="#">Ops</a><span class="sep">/</span><a href="#">Flower A</a><span class="sep">/</span><span class="cur">B-24-07</span></nav></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Avatars · Dropdown Menu · Accordion</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel"><div class="row" style="align-items:flex-start; gap:36px;">
+      <div class="stack"><span class="cap">Avatars</span><div style="display:flex; gap:12px; align-items:center;">
+        <span class="mw-avatar mw-avatar--sm">JT</span>
+        <span class="mw-avatar">RK<span class="mw-avatar__dot"></span></span>
+        <span class="mw-avatar mw-avatar--lg">NV<span class="mw-avatar__dot mw-avatar__dot--busy"></span></span>
+        <span class="mw-avstack"><span class="mw-avatar mw-avatar--sm">A</span><span class="mw-avatar mw-avatar--sm">B</span><span class="mw-avatar mw-avatar--sm">C</span><span class="mw-avatar mw-avatar--sm">+5</span></span>
+      </div></div>
+      <div class="stack"><span class="cap">Dropdown Menu</span><div class="mw-menu">
+        <button class="mw-menu__item"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span> Edit Batch</button>
+        <button class="mw-menu__item"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 17l4 4 4-4M12 3v18" transform="rotate(180 12 12)"/></svg></span> Duplicate</button>
+        <button class="mw-menu__item"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span> Export Manifest</button>
+        <div class="mw-menu__sep"></div>
+        <button class="mw-menu__item mw-menu__item--danger"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></span> Destroy Batch</button>
+      </div></div>
+      <div class="stack" style="flex:1; min-width:260px;"><span class="cap">Accordion</span>
+        <div class="mw-acc is-open"><button class="mw-acc__hd" onclick="this.parentNode.classList.toggle('is-open')">Cultivation Log<span class="chev"></span></button><div class="mw-acc__bd">Day 47 of flower. Trichomes ~15% amber. EC holding at 1.8, pH 6.1. No pest pressure.</div></div>
+        <div class="mw-acc"><button class="mw-acc__hd" onclick="this.parentNode.classList.toggle('is-open')">Lab Results<span class="chev"></span></button><div class="mw-acc__bd">THC 24.3% · CBD 0.4% · Total terpenes 2.1%. Passed microbial &amp; pesticide panels.</div></div>
+        <div class="mw-acc"><button class="mw-acc__hd" onclick="this.parentNode.classList.toggle('is-open')">Chain of Custody<span class="chev"></span></button><div class="mw-acc__bd">4 handlers logged. Last transfer: Cure Vault → Trim Line 2 by R. Kane.</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--md">Stat Cards · Activity Feed · Empty State</h2><span class="mw-rule"></span></div>
+    <div class="row" style="align-items:stretch; gap:14px;">
+      <div class="stack" style="flex:1; min-width:200px; gap:12px;">
+        <div class="mw-stat-card"><div class="mw-stat-card__l">Live Plants</div><div class="mw-stat-card__v">3,842</div><div class="mw-stat-card__d up">▲ 4.2% wk</div></div>
+        <div class="mw-stat-card"><div class="mw-stat-card__l">Est. Yield</div><div class="mw-stat-card__v">184 kg</div><div class="mw-stat-card__d dn">▼ 1.1% wk</div></div>
+      </div>
+      <div class="mw-panel" style="flex:1.4; min-width:280px;">
+        <div class="mw-label" style="margin-bottom:6px;">Activity</div>
+        <div class="mw-feed">
+          <div class="mw-feed__item"><span class="mw-feed__rail"><span class="mw-feed__dot mw-feed__dot--ok"></span></span><div><div class="mw-feed__tt"><b>R. Kane</b> sealed batch B-24-05</div><div class="mw-feed__ts">14 min ago</div></div></div>
+          <div class="mw-feed__item"><span class="mw-feed__rail"><span class="mw-feed__dot"></span></span><div><div class="mw-feed__tt"><b>System</b> logged climate setpoint change · Zone B</div><div class="mw-feed__ts">1 hr ago</div></div></div>
+          <div class="mw-feed__item"><span class="mw-feed__rail"><span class="mw-feed__dot mw-feed__dot--warn"></span></span><div><div class="mw-feed__tt"><b>N. Vega</b> flagged Reaper Haze for re-test</div><div class="mw-feed__ts">3 hr ago</div></div></div>
+        </div>
+      </div>
+      <div class="mw-panel" style="flex:1; min-width:240px; display:flex; align-items:center;">
+        <div class="mw-empty" style="width:100%;">
+          <div class="mw-empty__ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7h18v13H3zM3 7l3-4h12l3 4M9 12h6"/></svg></div>
+          <div class="mw-empty__tt">No Batches Queued</div>
+          <div class="mw-empty__ds">All cycles are active. New harvests appear here when scheduled.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  // gauge needle: value 0..1 maps 0..90deg (of the 180 sweep shown)
+  document.getElementById('gn').style.transform = 'translateX(-50%) rotate(' + (24/40*90 - 45) + 'deg)';
+  const data=[[5.2,'A'],[4.1,'B'],[6.8,'C'],[3.4,'D'],[5.9,'E'],[2.7,'F']]; const mx=7;
+  document.getElementById('chart').innerHTML = data.map((d,i)=>`<div class="mw-chart__bar ${i===2?'hot':''}" style="height:${d[0]/mx*100}%"><span>${d[1]}</span></div>`).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

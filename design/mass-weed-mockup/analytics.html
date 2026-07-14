@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Yield Analytics</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .kpi{ flex:1; background:rgba(58,159,212,.07); border:1px solid rgba(94,200,240,.16); padding:12px 16px; clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px); }
+  .kpi__v{ font-family:var(--mw-font-cond); font-size:30px; font-weight:700; color:var(--mw-ink); line-height:1; }
+  .kpi__d{ font-size:11px; font-weight:700; margin-top:3px; }
+  .kpi__d.up{ color:var(--mw-stat-hi); } .kpi__d.dn{ color:var(--mw-stat-lo); }
+  .kpi__l{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:5px; }
+  .grid2{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; }
+  .grid2b{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+  /* bar chart */
+  .bars{ display:flex; align-items:flex-end; gap:18px; height:200px; padding:10px 6px 0; position:relative;
+    background:repeating-linear-gradient(0deg, rgba(94,200,240,.07) 0 1px, transparent 1px 25%); }
+  .barcol{ flex:1; display:flex; flex-direction:column; align-items:center; gap:0; height:100%; justify-content:flex-end; }
+  .barcol > b{ width:100%; max-width:44px; background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan-deep)); border-radius:3px 3px 0 0; box-shadow:0 0 10px rgba(94,200,240,.4); position:relative; min-height:var(--h,0px); animation:barGrow .7s cubic-bezier(.2,.8,.2,1) both; animation-delay:var(--d,0ms); }
+  .barcol > b span{ position:absolute; top:-18px; left:0; right:0; text-align:center; font-family:var(--mw-font-cond); font-size:12px; font-weight:700; color:var(--mw-cyan-bright); }
+  .barcol > em{ font-style:normal; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mw-text-dim); margin-top:8px; text-align:center; line-height:1.2; }
+  /* efficiency rows */
+  .effrow{ display:flex; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid rgba(94,200,240,.08); }
+  .effrow:last-child{ border-bottom:none; }
+  .effrow > .n{ font-size:12px; color:var(--mw-text); width:120px; }
+  .effrow > .track{ flex:1; height:8px; background:var(--mw-stat-track); border-radius:4px; overflow:hidden; }
+  .effrow > .track > i{ display:block; height:100%; border-radius:4px; width:var(--w,0%); animation:trackGrow .8s cubic-bezier(.2,.8,.2,1) both; animation-delay:var(--d,0ms); }
+  .effrow > .val{ font-family:var(--mw-font-cond); font-size:14px; font-weight:700; color:var(--mw-ink); width:56px; text-align:right; }
+  /* trend line */
+  .legend{ display:flex; gap:16px; margin-top:10px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); }
+  .legend b{ display:inline-block; width:10px; height:3px; margin-right:5px; vertical-align:middle; }
+  /* entrance animation gating */
+  @keyframes barGrow{ from{ min-height:0 } to{ min-height:var(--h,0px) } }
+  @keyframes trackGrow{ from{ width:0 } to{ width:var(--w,0%) } }
+  @keyframes lineDraw{ from{ stroke-dashoffset:var(--len,1000px) } to{ stroke-dashoffset:0 } }
+  @keyframes dotIn{ from{ opacity:0 } to{ opacity:1 } }
+  #trend .line-draw{ animation:lineDraw 1.1s cubic-bezier(.4,0,.2,1) both; }
+  @media (prefers-reduced-motion: reduce){
+    .barcol > b, .effrow > .track > i, #trend .line-draw, #trend circle{ animation:none !important; }
+    #trend .line-draw{ stroke-dashoffset:0 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Yield Analytics">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html" class="is-active">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Yield Analytics</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi__v">184<span style="font-size:15px;">kg</span></div><div class="kpi__d up">▲ 12.4%</div><div class="kpi__l">Yield · Last 12mo</div></div>
+    <div class="kpi"><div class="kpi__v">1.42<span style="font-size:15px;">g/W</span></div><div class="kpi__d up">▲ 6.1%</div><div class="kpi__l">Grams per Watt</div></div>
+    <div class="kpi"><div class="kpi__v">58<span style="font-size:15px;">g</span></div><div class="kpi__d up">▲ 3.8%</div><div class="kpi__l">Avg / Plant</div></div>
+    <div class="kpi"><div class="kpi__v">$4.12<span style="font-size:15px;">/g</span></div><div class="kpi__d dn">▼ 2.2%</div><div class="kpi__l">Cost / Gram</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="mw-panel mw-panel--hero">
+      <div class="mw-label" style="margin-bottom:6px;">Yield per Cycle · kg</div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:6px;">Yield by Strain · this cycle</div>
+      <svg id="trend" width="100%" height="230" viewBox="0 0 380 230" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <div class="grid2b">
+    <div class="mw-panel mw-panel--quiet">
+      <div class="mw-label" style="margin-bottom:8px;">Efficiency by Zone · g/W</div>
+      <div id="eff"></div>
+    </div>
+    <div class="mw-panel mw-panel--quiet">
+      <div class="mw-label" style="margin-bottom:8px;">Quality Grade Distribution</div>
+      <div id="grade"></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  // Bar chart: yield per cycle
+  const cyc=[['C-19',132],['C-20',148],['C-21',141],['C-22',167],['C-23',175],['C-24',184]];
+  const max=200;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const barMax=160; // px — tallest bar (leaves room for value label above + cycle label below)
+  document.getElementById('bars').innerHTML=cyc.map((c,i)=>{
+    const px=Math.round(c[1]/max*barMax);
+    return `<div class="barcol"><b style="--h:${px}px;--d:${i*70}ms"><span>${c[1]}</span></b><em>${c[0]}</em></div>`;
+  }).join('');
+
+  // Trend line: yield by strain (glowing multi-point line)
+  const pts=[42,58,51,68,61,74,66];
+  const W=380,H=230,pad=20;
+  const stepX=(W-pad*2)/(pts.length-1);
+  const mx=Math.max(...pts)*1.15;
+  const coords=pts.map((v,i)=>[pad+i*stepX, H-pad-(v/mx)*(H-pad*2)]);
+  const line=coords.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=line+` L${(W-pad).toFixed(1)} ${H-pad} L${pad} ${H-pad} Z`;
+  document.getElementById('trend').innerHTML=`
+    <defs>
+      <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(94,200,240,.35)"/>
+        <stop offset="1" stop-color="rgba(94,200,240,0)"/>
+      </linearGradient>
+    </defs>
+    ${[0,.25,.5,.75,1].map(f=>`<line x1="${pad}" y1="${pad+f*(H-pad*2)}" x2="${W-pad}" y2="${pad+f*(H-pad*2)}" stroke="rgba(94,200,240,.08)" stroke-width="1"/>`).join('')}
+    <path d="${area}" fill="url(#fill)"/>
+    <path d="${line}" class="line-draw" fill="none" stroke="var(--mw-cyan-bright)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 5px var(--mw-cyan));"/>
+    ${coords.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="var(--mw-cyan-bright)" style="filter:drop-shadow(0 0 4px var(--mw-cyan));animation:dotIn .3s ease both;animation-delay:${(700+i*90)}ms;"/>`).join('')}
+  `;
+  {
+    const lp=document.querySelector('#trend .line-draw');
+    const len=lp.getTotalLength();
+    lp.style.strokeDasharray=len; lp.style.setProperty('--len', len+'px');
+  }
+
+  // Efficiency by zone
+  const eff=[['Zone A · Veg',1.28],['Zone B · Flower',1.61],['Zone C · Flower',1.54],['Zone D · Mother',1.12],['Zone E · Clone',0.94]];
+  const effmax=1.8;
+  const col=v=>v>=1.5?'var(--mw-stat-hi)':v>=1.2?'var(--mw-stat-mid)':'var(--mw-stat-lo)';
+  document.getElementById('eff').innerHTML=eff.map((e,i)=>
+    `<div class="effrow"><span class="n">${e[0]}</span><span class="track"><i style="--w:${Math.round(e[1]/effmax*100)}%;--d:${i*60}ms;background:${col(e[1])};box-shadow:0 0 8px ${col(e[1])}"></i></span><span class="val">${e[1].toFixed(2)}</span></div>`
+  ).join('');
+
+  // Quality grade distribution
+  const grades=[['A · Premium',46,'var(--mw-stat-hi)'],['B · Mid',34,'var(--mw-cyan)'],['C · Value',14,'var(--mw-stat-mid)'],['Trim / Extract',6,'var(--mw-text-dim)']];
+  document.getElementById('grade').innerHTML=grades.map((g,i)=>
+    `<div class="effrow"><span class="n">${g[0]}</span><span class="track"><i style="--w:${g[1]}%;--d:${i*60}ms;background:${g[2]};box-shadow:0 0 8px ${g[2]}"></i></span><span class="val">${g[1]}%</span></div>`
+  ).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

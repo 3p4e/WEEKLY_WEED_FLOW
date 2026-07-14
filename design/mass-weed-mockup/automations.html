@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Automations</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .rule{ padding:14px 16px; margin-bottom:12px; border-left:3px solid var(--mw-cyan); }
+  .rule.off{ border-left-color:rgba(94,200,240,.2); opacity:.62; }
+  .rule__top{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .rule__name{ font-family:var(--mw-font-cond); font-size:17px; font-weight:700; color:var(--mw-ink); letter-spacing:.02em; }
+  .rule__runs{ font-size:11px; color:var(--mw-text-dim); margin-left:auto; }
+  .flow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .cap{ font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-faint); }
+  .tok{ display:inline-flex; align-items:center; gap:7px; font-size:12.5px; padding:6px 12px; border-radius:2px; background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18); }
+  .tok.when{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,236,74,.35); }
+  .tok.then{ color:var(--mw-stat-hi); box-shadow:inset 0 0 0 1px rgba(108,240,90,.32); }
+  .arrow{ color:var(--mw-cyan-dim); }
+  .tmpl{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .tcard{ padding:14px; cursor:pointer; transition:box-shadow .15s ease, transform .12s ease; }
+  .tcard:hover{ transform:translateY(-2px); box-shadow:inset 0 0 0 1px var(--mw-cyan), 0 6px 22px rgba(0,0,0,.4); }
+  .tcard__h{ display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+  .tcard__ic{ width:20px; height:20px; color:var(--mw-cyan); flex:none; }
+  .tcard__t{ font-size:13px; font-weight:700; color:var(--mw-text); }
+  .tcard__d{ font-size:11.5px; color:var(--mw-text-dim); line-height:1.5; }
+  .grid2{ display:grid; grid-template-columns:1.7fr 1fr; gap:14px; align-items:start; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Automations">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="orders.html">Orders</a>
+    <a href="automations.html" class="is-active">Automations</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Automations</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Active Rules</div><div class="mw-stat-card__v">6</div><div class="mw-stat-card__d">of 9 total</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Runs (7d)</div><div class="mw-stat-card__v">248</div><div class="mw-stat-card__d up">▲ 12%</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Tasks Auto-Created</div><div class="mw-stat-card__v">83</div><div class="mw-stat-card__d">this week</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Hours Saved</div><div class="mw-stat-card__v">~19h</div><div class="mw-stat-card__d up">est. crew time</div></div>
+  </div>
+
+  <div class="grid2">
+    <!-- LEFT: rule list -->
+    <div>
+      <div class="mw-utabs" style="margin-bottom:14px;">
+        <button class="mw-utab is-active" data-f="all">All</button>
+        <button class="mw-utab" data-f="on">Active</button>
+        <button class="mw-utab" data-f="off">Paused</button>
+      </div>
+      <div id="rules"></div>
+      <button class="mw-btn mw-btn--wide" style="margin-top:6px;" onclick="location.href='rule-builder.html'">+ New Rule</button>
+    </div>
+
+    <!-- RIGHT: templates + recent runs -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:12px;">Start From a Template</div>
+        <div class="tmpl" onclick="location.href='rule-builder.html'">
+          <div class="tcard mw-panel--alt"><div class="tcard__h"><span class="tcard__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M2 12h20"/></svg></span><span class="tcard__t">Stage → Task</span></div><div class="tcard__d">Auto-create a checklist task when a batch enters a new stage.</div></div>
+          <div class="tcard mw-panel--alt"><div class="tcard__h"><span class="tcard__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8v5M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg></span><span class="tcard__t">Threshold Alert</span></div><div class="tcard__d">Notify a team when a sensor reading leaves its safe band.</div></div>
+          <div class="tcard mw-panel--alt"><div class="tcard__h"><span class="tcard__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 6L9 17l-5-5"/></svg></span><span class="tcard__t">SLA Escalation</span></div><div class="tcard__d">Reassign or ping a lead when a task is overdue.</div></div>
+          <div class="tcard mw-panel--alt"><div class="tcard__h"><span class="tcard__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16v4H4zM4 12h16v8H4z"/></svg></span><span class="tcard__t">Compliance Log</span></div><div class="tcard__d">Append a METRC entry whenever a batch is packaged.</div></div>
+        </div>
+      </div>
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:8px;">Recent Runs</div>
+        <div id="runs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  const RULES = [
+    {on:true,  name:'Cure → QA Task', runs:'42 runs', when:'Batch enters Cure', then:['Create task “QA moisture check”','Assign QA team','Due in 2 days']},
+    {on:true,  name:'Humidity Guard', runs:'61 runs', when:'Flower A RH > 62%', then:['Alert Environment team','Open incident']},
+    {on:true,  name:'Harvest Prep', runs:'18 runs', when:'Batch ≤ 7d to harvest', then:['Create trim-crew task','Reserve dry room']},
+    {on:true,  name:'Order Packed', runs:'55 runs', when:'Order marked Packed', then:['Generate manifest','Notify dispatch']},
+    {on:true,  name:'Overdue Escalation', runs:'27 runs', when:'Task overdue > 24h', then:['Ping team lead','Raise priority → High']},
+    {on:true,  name:'Package → METRC', runs:'45 runs', when:'Batch packaged', then:['Append METRC log','Attach COA']},
+    {on:false, name:'Low Nutrient Stock', runs:'0 runs', when:'CalMag < 20L', then:['Create purchase task','Notify Ops']},
+    {on:false, name:'New Genetics Intake', runs:'0 runs', when:'Strain added to Vault', then:['Create phenotype-log task','Schedule review']},
+    {on:false, name:'Weekly Yield Digest', runs:'0 runs', when:'Every Monday 08:00', then:['Compile yield report','Send to leads']},
+  ];
+  const dept = {'QA team':'#ec4ec4','Environment team':'#ecec4a','Ops':'#5ec8f0','dispatch':'#6cf05a','team lead':'#ff8a5c'};
+  function render(f){
+    const list = RULES.filter(r=> f==='all' || (f==='on'?r.on:!r.on));
+    document.getElementById('rules').innerHTML = list.map((r,i)=>`
+      <div class="mw-panel rule ${r.on?'':'off'}">
+        <div class="rule__top">
+          <label class="mw-switch"><input type="checkbox" ${r.on?'checked':''} onchange="toggle('${r.name}')"><span class="slot"></span><span class="knob"></span></label>
+          <span class="rule__name">${r.name}</span>
+          <span class="rule__runs">${r.runs}</span>
+        </div>
+        <div class="flow">
+          <span class="cap">When</span>
+          <span class="tok when">${r.when}</span>
+          <span class="arrow">→</span>
+          <span class="cap">Then</span>
+          ${r.then.map(t=>`<span class="tok then">${t}</span>`).join('<span class="arrow">+</span>')}
+        </div>
+      </div>`).join('') || '<div class="mw-empty"><div class="mw-empty__tt">No Rules</div><div class="mw-empty__ds">Nothing in this filter.</div></div>';
+  }
+  function toggle(name){ const r=RULES.find(x=>x.name===name); if(r){ r.on=!r.on; } }
+  render('all');
+  document.querySelectorAll('.mw-utab').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.mw-utab').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active'); render(b.dataset.f);
+  }));
+
+  const RUNS = [
+    {t:'Cure → QA Task', s:'created “QA moisture check” · BAT-2291', ago:'4m', ok:true},
+    {t:'Humidity Guard', s:'alerted Environment · Flower A 63%', ago:'22m', ok:false},
+    {t:'Order Packed', s:'manifest MAN-0412 generated', ago:'1h', ok:true},
+    {t:'Package → METRC', s:'logged BAT-2287 · COA attached', ago:'2h', ok:true},
+    {t:'Overdue Escalation', s:'raised “Ballast swap” → High', ago:'3h', ok:true},
+  ];
+  document.getElementById('runs').innerHTML = RUNS.map(r=>`
+    <div class="mw-catalog-row">
+      <span style="width:7px;height:7px;border-radius:50%;flex:none;background:${r.ok?'var(--mw-stat-hi)':'var(--mw-stat-mid)'};box-shadow:0 0 8px ${r.ok?'var(--mw-stat-hi)':'var(--mw-stat-mid)'};margin-right:9px;"></span>
+      <div style="flex:1;"><div style="font-size:12px;color:var(--mw-text);font-weight:600;">${r.t}</div><div style="font-size:10.5px;color:var(--mw-text-dim);margin-top:1px;">${r.s}</div></div>
+      <span style="font-size:10px;color:var(--mw-text-faint);white-space:nowrap;">${r.ago} ago</span>
+    </div>`).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

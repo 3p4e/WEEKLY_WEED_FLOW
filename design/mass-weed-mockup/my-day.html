@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — My Day</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .hero{ display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin:6px 0 20px; }
+  .hero__hi{ font-family:var(--mw-font-cond),sans-serif; font-size:30px; font-weight:700; color:var(--mw-ink); letter-spacing:.01em; }
+  .hero__sub{ font-size:13px; color:var(--mw-text-dim); margin-top:4px; letter-spacing:.04em; }
+  .hero__cmd{ display:flex; align-items:center; gap:9px; cursor:pointer; padding:9px 14px; background:rgba(6,20,40,.5);
+    box-shadow:inset 0 0 0 1px rgba(94,200,240,.22); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .hero__cmd:hover{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .hero__cmd svg{ width:15px; height:15px; color:var(--mw-cyan); }
+  .hero__cmd span{ font-size:12px; color:var(--mw-text-dim); letter-spacing:.05em; white-space:nowrap; }
+  .hero__cmd kbd{ font-size:10px; letter-spacing:.08em; color:var(--mw-text-faint); border:1px solid rgba(94,200,240,.25); border-radius:3px; padding:2px 6px; }
+
+  .strip{ display:grid; grid-template-columns:repeat(7,1fr); gap:8px; margin-bottom:18px; }
+  .day{ text-align:center; padding:10px 0; cursor:pointer; background:rgba(6,20,40,.4); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); transition:all .12s ease; }
+  .day:hover{ box-shadow:inset 0 0 0 1px rgba(94,200,240,.4); }
+  .day.on{ background:linear-gradient(180deg,rgba(58,159,212,.3),rgba(16,48,80,.5)); box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .day .dn{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-faint); }
+  .day .dd{ font-family:var(--mw-font-cond),sans-serif; font-size:20px; font-weight:700; color:var(--mw-ink); margin-top:2px; }
+  .day .cnt{ margin-top:5px; height:5px; display:flex; gap:3px; justify-content:center; }
+  .day .cnt i{ width:5px; height:5px; border-radius:50%; background:var(--mw-cyan-dim); }
+
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .cols{ display:grid; grid-template-columns:1.5fr 1fr; gap:16px; align-items:start; }
+
+  .task{ display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid rgba(58,159,212,.1); cursor:pointer; }
+  .task:last-child{ border:none; }
+  .task:hover .task__t{ color:var(--mw-cyan-bright); }
+  .chk{ width:18px; height:18px; flex:none; margin-top:1px; border:1.5px solid var(--mw-cyan-dim); border-radius:3px; cursor:pointer; transition:all .12s ease; position:relative; }
+  .chk:hover{ border-color:var(--mw-cyan); }
+  .chk.done{ background:var(--mw-cyan); border-color:var(--mw-cyan); }
+  .chk.done::after{ content:""; position:absolute; left:5px; top:1px; width:5px; height:10px; border:solid var(--mw-void); border-width:0 2px 2px 0; transform:rotate(45deg); }
+  .task.is-done .task__t{ text-decoration:line-through; color:var(--mw-text-faint); }
+  .task__b{ flex:1; min-width:0; }
+  .task__t{ font-size:14px; color:var(--mw-text); font-weight:500; transition:color .12s ease; }
+  .task__m{ display:flex; align-items:center; gap:10px; margin-top:5px; }
+  .pill{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; padding:2px 8px; border-radius:2px; }
+  .pill--dept{ color:var(--mw-cyan); box-shadow:inset 0 0 0 1px rgba(94,200,240,.3); }
+  .pill--hi{ color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); }
+  .pill--mid{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,236,74,.35); }
+  .task__time{ font-size:11px; color:var(--mw-text-faint); letter-spacing:.06em; font-family:var(--mw-font-cond),sans-serif; }
+
+  .alert{ display:flex; align-items:center; gap:11px; padding:10px 12px; margin-bottom:9px; background:rgba(6,20,40,.5); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); border-left:3px solid var(--mw-stat-mid); }
+  .alert--crit{ border-left-color:var(--mw-stat-lo); }
+  .alert .dot{ width:8px;height:8px;border-radius:50%;background:var(--mw-stat-mid);box-shadow:0 0 8px currentColor;flex:none; }
+  .alert--crit .dot{ background:var(--mw-stat-lo); }
+  .alert .tx{ font-size:12.5px; color:var(--mw-text); } .alert .mt{ margin-left:auto; font-size:10px; color:var(--mw-text-faint); letter-spacing:.08em; }
+
+  .focus{ padding:16px; }
+  .focus__t{ font-family:var(--mw-font-cond),sans-serif; font-size:15px; font-weight:700; color:var(--mw-ink); margin-bottom:4px; }
+  .focus__task{ font-size:14px; color:var(--mw-cyan-bright); margin-bottom:14px; }
+  .timer{ font-family:var(--mw-font-cond),sans-serif; font-size:44px; font-weight:700; color:var(--mw-ink); letter-spacing:.02em; text-align:center; text-shadow:0 0 18px rgba(94,200,240,.35); }
+  .focus__row{ display:flex; gap:8px; margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="My Day">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html" class="is-active">My Day</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="automations.html">Automations</a>
+    <a href="orders.html">Orders</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <div class="hero__hi">Good morning, Kaidan</div>
+      <div class="hero__sub" id="today"></div>
+    </div>
+    <div class="hero__cmd" onclick="MWCmdK && MWCmdK.open()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <span>Jump to anything</span><kbd>⌘K</kbd>
+    </div>
+  </div>
+
+  <div class="strip" id="strip"></div>
+
+  <div class="grid kpis">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Due Today</div><div class="mw-kpi__val" id="k-due">7</div><div class="mw-kpi__delta">3 high priority</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Completed</div><div class="mw-kpi__val mw-kpi__val--green" id="k-done">2</div><div class="mw-kpi__delta mw-kpi__delta--up">▲ on track</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Alerts to Me</div><div class="mw-kpi__val mw-kpi__val--amber">4</div><div class="mw-kpi__delta">1 critical</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Focus Time</div><div class="mw-kpi__val">2.5h</div><div class="mw-kpi__delta">scheduled</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="mw-panel mw-panel--hero">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:8px;">Today's Agenda</h2>
+      <div id="tasks"></div>
+    </div>
+
+    <div>
+      <div class="mw-panel mw-panel--alt mw-panel--quiet" style="margin-bottom:16px;">
+        <h2 class="mw-title mw-title--md" style="margin-bottom:12px;">Assigned Alerts</h2>
+        <div class="alert alert--crit"><span class="dot"></span><span class="tx">Zone 4 humidity 68% — mildew risk</span><span class="mt">2m</span></div>
+        <div class="alert"><span class="dot"></span><span class="tx">Batch F-24 cure window closes 36h</span><span class="mt">1h</span></div>
+        <div class="alert"><span class="dot"></span><span class="tx">Nutrient reservoir B below 15%</span><span class="mt">5h</span></div>
+        <div class="alert"><span class="dot"></span><span class="tx">2 METRC tags to reconcile</span><span class="mt">6h</span></div>
+      </div>
+
+      <div class="mw-panel focus">
+        <div class="focus__t">FOCUS BLOCK</div>
+        <div class="focus__task">Trim & manicure — Flower A</div>
+        <div class="timer" id="timer">25:00</div>
+        <div class="focus__row">
+          <button class="mw-btn mw-btn--wide" id="startBtn">Start</button>
+          <button class="mw-btn mw-btn--ghost mw-btn--wide" id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  const now = new Date();
+  document.getElementById('today').textContent =
+    now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}) + ' · 7 tasks on deck';
+
+  // week strip
+  const dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const start=new Date(now); start.setDate(now.getDate()-now.getDay());
+  const loads=[1,3,2,3,2,1,0];
+  document.getElementById('strip').innerHTML = Array.from({length:7},(_,i)=>{
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const on=d.toDateString()===now.toDateString();
+    const dots=Array.from({length:loads[i]},()=>'<i></i>').join('');
+    return `<div class="day${on?' on':''}"><div class="dn">${dn[i]}</div><div class="dd">${d.getDate()}</div><div class="cnt">${dots}</div></div>`;
+  }).join('');
+
+  // agenda
+  const tasks=[
+    ['08:00','Inspect Zone 4 dehumidifier','Climate','hi',false],
+    ['09:30','Trim & manicure — Flower A','Cultivation','mid',false],
+    ['11:00','Sign COA for Batch F-24','Compliance','hi',false],
+    ['12:30','Approve nutrient order — Res B','Nutrients','hi',false],
+    ['14:00','Pack order #MW-3182','Packaging','mid',false],
+    ['15:30','Weekly crew stand-up','Team','',false],
+    ['16:30','Reconcile 2 METRC tags','Compliance','',false],
+  ];
+  const done=[
+    ['07:15','Log morning climate readings','Climate',''],
+    ['07:40','Clone bay transplant — 48 units','Cultivation',''],
+  ];
+  function pill(p){ return p==='hi'?'<span class="pill pill--hi">High</span>':p==='mid'?'<span class="pill pill--mid">Med</span>':''; }
+  function row(t,isDone){
+    return `<div class="task${isDone?' is-done':''}">
+      <div class="chk${isDone?' done':''}"></div>
+      <div class="task__b" onclick="location.href='task-detail.html'">
+        <div class="task__t">${t[1]}</div>
+        <div class="task__m"><span class="task__time">${t[0]}</span><span class="pill pill--dept">${t[2]}</span>${pill(t[3])}</div>
+      </div></div>`;
+  }
+  document.getElementById('tasks').innerHTML =
+    tasks.map(t=>row(t,false)).join('') +
+    `<div class="mw-label" style="margin:14px 0 4px;font-size:10px;">Completed earlier</div>` +
+    done.map(t=>row([t[0],t[1],t[2],''],true)).join('');
+
+  // check toggle
+  let dCount=2;
+  document.querySelectorAll('.chk').forEach(c=>{
+    c.addEventListener('click',e=>{
+      e.stopPropagation();
+      const t=c.closest('.task'); const was=c.classList.contains('done');
+      c.classList.toggle('done'); t.classList.toggle('is-done');
+      dCount += was?-1:1; document.getElementById('k-done').textContent=dCount;
+      const due=Math.max(0,7-(dCount-2)); document.getElementById('k-due').textContent=due;
+    });
+  });
+
+  // focus timer
+  let sec=1500, iv=null;
+  const tEl=document.getElementById('timer'), sB=document.getElementById('startBtn');
+  function fmt(){ const m=String(Math.floor(sec/60)).padStart(2,'0'), s=String(sec%60).padStart(2,'0'); tEl.textContent=`${m}:${s}`; }
+  sB.addEventListener('click',()=>{
+    if(iv){ clearInterval(iv); iv=null; sB.textContent='Start'; return; }
+    sB.textContent='Pause';
+    iv=setInterval(()=>{ if(sec>0){sec--;fmt();} else {clearInterval(iv);iv=null;sB.textContent='Start';} },1000);
+  });
+  document.getElementById('resetBtn').addEventListener('click',()=>{ clearInterval(iv);iv=null;sec=1500;fmt();sB.textContent='Start'; });
+</script>
+</body>
+</html>

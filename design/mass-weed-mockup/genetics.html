@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Genetics Vault</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .genefilter{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }
+  .genefilter .mw-label{ margin-right:4px; }
+  .fbtn{ font-family:'Saira Condensed',sans-serif; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--mw-text-dim);
+    background:rgba(58,159,212,.08); border:1px solid rgba(94,200,240,.18); padding:6px 15px; cursor:pointer;
+    clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); transition:all .15s; }
+  .fbtn:hover{ color:var(--mw-ink); border-color:var(--mw-cyan-bright); }
+  .fbtn.is-active{ color:var(--mw-void); background:var(--mw-cyan-bright); border-color:var(--mw-cyan-bright); box-shadow:0 0 14px rgba(94,200,240,.4); }
+  .genegrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .strain__top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+  .strain__nm{ font-family:'Saira Condensed',sans-serif; font-size:22px; font-weight:700; color:var(--mw-ink); line-height:1.05; }
+  .strain__lin{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-cyan-dim); margin-top:3px; }
+  .typebadge{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:3px 10px; clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .type--indica{ color:var(--mw-void); background:#a879e0; }
+  .type--sativa{ color:var(--mw-void); background:var(--mw-stat-hi); }
+  .type--hybrid{ color:var(--mw-void); background:var(--mw-cyan-bright); }
+  .chem{ display:flex; gap:22px; margin-bottom:14px; }
+  .chem__item{ flex:1; }
+  .chem__lab{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); }
+  .chem__val{ font-family:'Saira Condensed',sans-serif; font-size:26px; font-weight:700; color:var(--mw-ink); line-height:1; margin-top:3px; }
+  .chem__val small{ font-size:13px; color:var(--mw-text-dim); font-weight:400; }
+  .terps{ margin-bottom:12px; }
+  .terp{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .terp__nm{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); width:82px; flex:none; }
+  .terp__track{ flex:1; height:6px; background:rgba(58,159,212,.14); clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); overflow:hidden; }
+  .terp__fill{ height:100%; background:linear-gradient(90deg,var(--mw-cyan-dim),var(--mw-cyan-bright)); box-shadow:0 0 8px rgba(94,200,240,.4); }
+  .traits{ display:flex; gap:14px; border-top:1px solid rgba(94,200,240,.12); padding-top:12px; }
+  .trait{ flex:1; text-align:center; }
+  .trait__lab{ font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); }
+  .trait__val{ font-family:'Saira Condensed',sans-serif; font-size:15px; font-weight:600; color:var(--mw-cyan-bright); margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Genetics Vault">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html" class="is-active">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Genetics Vault</h1><span class="mw-rule"></span></div>
+  <div class="genefilter">
+    <span class="mw-label">Filter</span>
+    <button class="fbtn is-active" data-f="all">All</button>
+    <button class="fbtn" data-f="indica">Indica</button>
+    <button class="fbtn" data-f="sativa">Sativa</button>
+    <button class="fbtn" data-f="hybrid">Hybrid</button>
+  </div>
+  <div class="genegrid" id="grid"></div>
+</div>
+</div>
+<script>
+  const strains=[
+    {nm:'Citadel Kush',lin:'OG Kush × Afghani',type:'indica',thc:24.5,cbd:0.4,yield:'High',flower:'8–9 wk',diff:'Easy',
+     terps:[['Myrcene',88],['Limonene',52],['Caryophyllene',70],['Linalool',44]]},
+    {nm:'Reaper Haze',lin:'Sour Diesel × Haze',type:'sativa',thc:22.1,cbd:0.2,yield:'Med',flower:'10–11 wk',diff:'Hard',
+     terps:[['Limonene',90],['Terpinolene',76],['Pinene',60],['Caryophyllene',38]]},
+    {nm:'Omega Relay',lin:'GSC × Gelato',type:'hybrid',thc:26.8,cbd:0.1,yield:'High',flower:'9 wk',diff:'Med',
+     terps:[['Caryophyllene',84],['Limonene',72],['Humulene',58],['Myrcene',50]]},
+    {nm:'Element Zero',lin:'Blue Dream × Zkittlez',type:'hybrid',thc:21.3,cbd:0.6,yield:'Med',flower:'9–10 wk',diff:'Easy',
+     terps:[['Myrcene',80],['Pinene',66],['Limonene',54],['Linalool',48]]},
+    {nm:'Thresher Purple',lin:'GDP × Purple Punch',type:'indica',thc:23.0,cbd:0.3,yield:'Med',flower:'8 wk',diff:'Easy',
+     terps:[['Myrcene',92],['Linalool',68],['Caryophyllene',56],['Pinene',30]]},
+    {nm:'Nova Diesel',lin:'NYC Diesel × Jack Herer',type:'sativa',thc:20.4,cbd:0.2,yield:'High',flower:'11 wk',diff:'Med',
+     terps:[['Terpinolene',82],['Limonene',70],['Pinene',64],['Ocimene',46]]}
+  ];
+  const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+  function render(f){
+    const list = f==='all'?strains:strains.filter(s=>s.type===f);
+    document.getElementById('grid').innerHTML = list.map(s=>`
+      <div class="mw-panel">
+        <div class="strain__top">
+          <div><div class="strain__nm">${s.nm}</div><div class="strain__lin">${s.lin}</div></div>
+          <span class="typebadge type--${s.type}">${cap(s.type)}</span>
+        </div>
+        <div class="chem">
+          <div class="chem__item"><div class="chem__lab">THC</div><div class="chem__val">${s.thc.toFixed(1)}<small>%</small></div></div>
+          <div class="chem__item"><div class="chem__lab">CBD</div><div class="chem__val">${s.cbd.toFixed(1)}<small>%</small></div></div>
+        </div>
+        <div class="terps">
+          ${s.terps.map(t=>`<div class="terp"><span class="terp__nm">${t[0]}</span><div class="terp__track"><div class="terp__fill" style="width:${t[1]}%"></div></div></div>`).join('')}
+        </div>
+        <div class="traits">
+          <div class="trait"><div class="trait__lab">Yield</div><div class="trait__val">${s.yield}</div></div>
+          <div class="trait"><div class="trait__lab">Flower</div><div class="trait__val">${s.flower}</div></div>
+          <div class="trait"><div class="trait__lab">Difficulty</div><div class="trait__val">${s.diff}</div></div>
+        </div>
+      </div>`).join('');
+  }
+  render('all');
+  document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.fbtn').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active');
+    render(b.dataset.f);
+  }));
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Settings</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:980px; margin:0 auto; padding:20px 24px 60px; }
+  .layout{ display:grid; grid-template-columns:210px 1fr; gap:18px; align-items:start; }
+  .snav{ position:sticky; top:16px; display:flex; flex-direction:column; gap:3px; }
+  .snav a{ display:flex; align-items:center; gap:10px; padding:10px 13px; font-size:13px; color:var(--mw-text-dim); text-decoration:none; border-left:2px solid transparent; transition:all .13s ease; }
+  .snav a:hover{ color:var(--mw-cyan-bright); background:rgba(58,159,212,.07); }
+  .snav a.is-active{ color:var(--mw-cyan-bright); border-left-color:var(--mw-cyan); background:rgba(58,159,212,.1); }
+  .set{ display:flex; align-items:center; gap:16px; padding:14px 0; border-bottom:1px solid rgba(94,200,240,.08); }
+  .set:last-child{ border-bottom:none; }
+  .set__b{ flex:1; }
+  .set__t{ font-size:14px; color:var(--mw-text); }
+  .set__d{ font-size:12px; color:var(--mw-text-dim); margin-top:3px; line-height:1.5; }
+  .set__ctl{ flex:none; }
+  .panelhd{ font-family:var(--mw-font-cond); font-size:17px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--mw-header); margin:0 0 4px; }
+  .panelsub{ font-size:12px; color:var(--mw-text-dim); margin-bottom:8px; }
+  .profile{ display:flex; align-items:center; gap:16px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Settings">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="orders.html">Orders</a>
+    <a href="notifications.html">Alerts</a>
+    <a href="settings.html" class="is-active">Settings</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Settings</h1><span class="mw-rule"></span></div>
+
+  <div class="layout">
+    <nav class="snav">
+      <a href="#profile" class="is-active">Profile</a>
+      <a href="#facility">Facility</a>
+      <a href="#alerts">Alerts</a>
+      <a href="#compliance">Compliance</a>
+      <a href="#display">Display</a>
+      <a href="#access">Access</a>
+    </nav>
+
+    <div class="stack" style="display:flex; flex-direction:column; gap:16px;">
+      <div class="mw-panel" id="profile">
+        <div class="panelhd">Profile</div>
+        <div class="panelsub">Your operator identity and contact details.</div>
+        <div class="profile">
+          <span class="mw-avatar mw-avatar--lg">RK<span class="mw-avatar__dot"></span></span>
+          <div style="flex:1;">
+            <div class="mw-field" style="margin-bottom:10px;"><label>Display Name</label><input class="mw-input" value="R. Kane"></div>
+            <div style="display:flex; gap:12px;">
+              <div class="mw-field" style="flex:1; margin:0;"><label>Role</label><span class="mw-select"><select><option>Head Cultivator</option><option>Compliance Lead</option><option>Facility Manager</option><option>Trim Tech</option></select></span></div>
+              <div class="mw-field" style="flex:1; margin:0;"><label>Shift</label><span class="mw-select"><select><option>Day (06:00–14:00)</option><option>Swing (14:00–22:00)</option><option>Night (22:00–06:00)</option></select></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mw-panel" id="facility">
+        <div class="panelhd">Facility Defaults</div>
+        <div class="set"><div class="set__b"><div class="set__t">Measurement units</div><div class="set__d">Weight and volume shown across all screens.</div></div><div class="set__ctl"><div class="mw-seg"><button class="is-active">Metric</button><button>Imperial</button></div></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Default room on login</div><div class="set__d">Which cultivation zone opens first.</div></div><div class="set__ctl" style="min-width:200px;"><span class="mw-select"><select><option>Flower Room A</option><option>Flower Room B</option><option>Veg Bay</option><option>Dry / Cure</option></select></span></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Auto-log climate readings</div><div class="set__d">Write sensor data to the batch record every 5 minutes.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+      </div>
+
+      <div class="mw-panel" id="alerts">
+        <div class="panelhd">Alert Preferences</div>
+        <div class="set"><div class="set__b"><div class="set__t">Climate excursions</div><div class="set__d">Temp / RH / CO₂ out of the safe band.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Cure burp reminders</div><div class="set__d">Notify when a chamber is due to burp.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Compliance / METRC failures</div><div class="set__d">Tag mismatches and manifest errors.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Delivery channel</div><div class="set__d">How urgent alerts reach you.</div></div><div class="set__ctl" style="display:flex; gap:18px;">
+          <label class="mw-radio"><input type="radio" name="ch" checked><span class="dot"></span> In-app</label>
+          <label class="mw-radio"><input type="radio" name="ch"><span class="dot"></span> SMS</label>
+          <label class="mw-radio"><input type="radio" name="ch"><span class="dot"></span> Email</label>
+        </div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Quiet hours threshold</div><div class="set__d">Only critical alerts below this priority after 22:00. <b id="qv" style="color:var(--mw-cyan-bright)">High</b></div></div><div class="set__ctl" style="width:200px;"><input type="range" class="mw-slider" min="0" max="2" step="1" value="1" oninput="document.getElementById('qv').textContent=['All','High','Critical'][this.value]"></div></div>
+      </div>
+
+      <div class="mw-panel" id="compliance">
+        <div class="panelhd">Compliance</div>
+        <div class="mw-field"><label>METRC API Key</label><span class="mw-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input class="mw-input" type="password" value="mtc_live_8842xxxxxxxx"></span></div>
+        <div class="set"><div class="set__b"><div class="set__t">Auto-sync manifests</div><div class="set__d">Push package tags to the state system on seal.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Block transfer on unmatched tags</div><div class="set__d">Prevent shipping until reconciliation passes.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+      </div>
+
+      <div class="mw-panel" id="display">
+        <div class="panelhd">Display</div>
+        <div class="set"><div class="set__b"><div class="set__t">Interface density</div><div class="set__d">Compact fits more rows per screen.</div></div><div class="set__ctl"><div class="mw-seg"><button>Comfort</button><button class="is-active">Standard</button><button>Compact</button></div></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Motion &amp; glow effects</div><div class="set__d">Animated gauges, scanlines, and pulses.</div></div><div class="set__ctl"><label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Accent</div><div class="set__d">HUD highlight color.</div></div><div class="set__ctl" style="display:flex; gap:10px;">
+          <span style="width:24px;height:24px;border-radius:50%;background:#5ec8f0;box-shadow:0 0 0 2px var(--mw-void),0 0 0 4px #5ec8f0;cursor:pointer;"></span>
+          <span style="width:24px;height:24px;border-radius:50%;background:#6cf05a;cursor:pointer;"></span>
+          <span style="width:24px;height:24px;border-radius:50%;background:#e88a34;cursor:pointer;"></span>
+          <span style="width:24px;height:24px;border-radius:50%;background:#c89bf0;cursor:pointer;"></span>
+        </div></div>
+      </div>
+
+      <div class="mw-panel" id="access">
+        <div class="panelhd">Access &amp; Security</div>
+        <div class="set"><div class="set__b"><div class="set__t">Two-factor authentication</div><div class="set__d">Require a second factor at sign-in.</div></div><div class="set__ctl"><span class="mw-badge mw-badge--ok">Enabled</span></div></div>
+        <div class="set"><div class="set__b"><div class="set__t">Active sessions</div><div class="set__d">3 devices signed in. Sign out of all others.</div></div><div class="set__ctl"><button class="mw-btn mw-btn--ghost" style="padding:8px 14px; font-size:11px;">Revoke</button></div></div>
+        <div class="set"><div class="set__b"><div class="set__t" style="color:var(--mw-stat-lo);">Delete account</div><div class="set__d">Permanently remove your operator profile.</div></div><div class="set__ctl"><button class="mw-btn mw-btn--ghost" style="padding:8px 14px; font-size:11px; color:var(--mw-stat-lo);">Delete</button></div></div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:12px;">
+        <button class="mw-btn mw-btn--ghost">Cancel</button>
+        <button class="mw-btn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  const links = document.querySelectorAll('.snav a');
+  links.forEach(a=>a.addEventListener('click',e=>{
+    links.forEach(x=>x.classList.remove('is-active')); a.classList.add('is-active');
+  }));
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

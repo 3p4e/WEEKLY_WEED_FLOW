@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Schedule</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .toolbar{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .navbtn{ width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    color:var(--mw-cyan); background:rgba(6,20,40,.5); box-shadow:inset 0 0 0 1px rgba(94,200,240,.22);
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .navbtn:hover{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .monthlbl{ font-family:var(--mw-font-cond),sans-serif; font-size:22px; font-weight:700; color:var(--mw-ink); letter-spacing:.02em; min-width:210px; }
+  .legend{ display:flex; gap:16px; margin-left:auto; }
+  .lg{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--mw-text-dim); text-transform:uppercase; letter-spacing:.06em; }
+  .lg i{ width:10px; height:10px; border-radius:2px; }
+
+  .dow{ display:grid; grid-template-columns:repeat(7,1fr); gap:8px; margin-bottom:8px; }
+  .dow div{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-faint); text-align:center; padding:4px 0; }
+  .cal{ display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:118px; gap:8px; }
+  .cell{ background:rgba(6,20,40,.4); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); padding:7px 8px; overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(94,200,240,.08); display:flex; flex-direction:column; gap:4px; }
+  .cell.mut{ opacity:.4; }
+  .cell.today{ box-shadow:inset 0 0 0 1.5px var(--mw-cyan), 0 0 18px rgba(58,159,212,.2); }
+  .cell__d{ font-family:var(--mw-font-cond),sans-serif; font-size:15px; font-weight:700; color:var(--mw-text); }
+  .cell.today .cell__d{ color:var(--mw-cyan-bright); }
+  .ev{ font-size:10.5px; padding:3px 6px; border-radius:2px; color:var(--mw-void); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  .ev:hover{ filter:brightness(1.15); }
+  .ev--harvest{ background:var(--mw-stat-hi); } .ev--task{ background:var(--mw-cyan); }
+  .ev--deliv{ background:#ff8a5c; } .ev--compl{ background:#ec4ec4; } .ev--shift{ background:rgba(94,200,240,.28); color:var(--mw-ink); }
+  .more{ font-size:10px; color:var(--mw-text-faint); padding-left:2px; }
+  /* upcoming — horizontal strip above the grid */
+  .upstrip-wrap{ margin-bottom:16px; }
+  .upstrip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:8px; scrollbar-width:thin; scrollbar-color:rgba(94,200,240,.3) transparent; }
+  .upstrip::-webkit-scrollbar{ height:6px; }
+  .upstrip::-webkit-scrollbar-thumb{ background:rgba(94,200,240,.25); border-radius:3px; }
+  .upcard{ flex:none; min-width:186px; display:flex; gap:11px; align-items:flex-start; padding:11px 15px; cursor:pointer;
+    background:rgba(6,20,40,.5); box-shadow:inset 0 0 0 1px rgba(94,200,240,.12); border-left:3px solid var(--mw-cyan);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); transition:box-shadow .13s ease, transform .13s ease; }
+  .upcard:hover{ box-shadow:inset 0 0 0 1px rgba(94,200,240,.3), 0 0 16px rgba(58,159,212,.15); transform:translateY(-1px); }
+  .upcard .dot{ width:9px; height:9px; border-radius:2px; flex:none; margin-top:4px; }
+  .upcard .t{ font-size:12.5px; color:var(--mw-text); font-weight:600; white-space:nowrap; }
+  .upcard .d{ font-size:10.5px; color:var(--mw-text-faint); margin-top:3px; letter-spacing:.04em; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Schedule">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="calendar.html" class="is-active">Schedule</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="automations.html">Automations</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Schedule</h1><span class="mw-rule"></span></div>
+
+  <div class="toolbar">
+    <div class="navbtn" id="prev">‹</div>
+    <div class="monthlbl" id="monthLbl"></div>
+    <div class="navbtn" id="next">›</div>
+    <div class="navbtn" id="today" style="width:auto;padding:0 14px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;">Today</div>
+    <div class="legend">
+      <span class="lg"><i class="ev--task" style="display:inline-block;"></i>Task</span>
+      <span class="lg"><i class="ev--harvest" style="display:inline-block;"></i>Harvest</span>
+      <span class="lg"><i class="ev--deliv" style="display:inline-block;"></i>Delivery</span>
+      <span class="lg"><i class="ev--compl" style="display:inline-block;"></i>Compliance</span>
+    </div>
+  </div>
+
+  <div class="upstrip-wrap">
+    <div class="mw-label" style="margin-bottom:10px;">Upcoming</div>
+    <div class="upstrip" id="upcoming"></div>
+  </div>
+
+  <div>
+    <div class="dow"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+    <div class="cal" id="cal"></div>
+  </div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  const now=new Date();
+  let view=new Date(now.getFullYear(), now.getMonth(), 1);
+  // events keyed by day-of-month (for the current view month)
+  const EV={
+    3:[['task','Ballast swap — Flower B']],
+    5:[['harvest','Harvest F-24'],['task','Trim crew prep']],
+    8:[['compl','METRC reconcile'],['shift','Full crew']],
+    11:[['deliv','Deliver #MW-3179']],
+    12:[['task','Sign COA F-24'],['task','Nutrient order'],['compl','COA sign-off'],['shift','A. Shepard']],
+    14:[['harvest','Harvest A-07']],
+    16:[['deliv','Deliver #MW-3182'],['task','Pack order']],
+    19:[['compl','Weekly compliance log']],
+    21:[['task','Clone bay transplant'],['harvest','Dry room rotate']],
+    24:[['deliv','Deliver #MW-3190']],
+    27:[['task','Extraction run'],['shift','Night crew']],
+    29:[['harvest','Harvest B-12']],
+  };
+  const CLS={task:'ev--task',harvest:'ev--harvest',deliv:'ev--deliv',compl:'ev--compl',shift:'ev--shift'};
+  const HREF={task:'task-detail.html',harvest:'harvest.html',deliv:'orders.html',compl:'compliance.html',shift:'workload.html'};
+
+  function render(){
+    document.getElementById('monthLbl').textContent = view.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const y=view.getFullYear(), m=view.getMonth();
+    const first=new Date(y,m,1).getDay();
+    const dim=new Date(y,m+1,0).getDate();
+    const prevDim=new Date(y,m,0).getDate();
+    const isThisMonth = (m===now.getMonth() && y===now.getFullYear());
+    let cells=[];
+    for(let i=first-1;i>=0;i--) cells.push({d:prevDim-i,mut:true});
+    for(let d=1;d<=dim;d++) cells.push({d,mut:false});
+    while(cells.length%7!==0) cells.push({d:cells.length-first-dim+1,mut:true});
+    document.getElementById('cal').innerHTML = cells.map(c=>{
+      const evs = (!c.mut && isThisMonth) ? (EV[c.d]||[]) : (!c.mut ? (EV[c.d]||[]) : []);
+      const today = !c.mut && isThisMonth && c.d===now.getDate();
+      const shown=evs.slice(0,3), extra=evs.length-3;
+      return `<div class="cell${c.mut?' mut':''}${today?' today':''}">
+        <div class="cell__d">${c.d}</div>
+        ${shown.map(e=>`<div class="ev ${CLS[e[0]]}" onclick="location.href='${HREF[e[0]]}'" title="${e[1]}">${e[1]}</div>`).join('')}
+        ${extra>0?`<div class="more">+${extra} more</div>`:''}
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('prev').onclick=()=>{ view.setMonth(view.getMonth()-1); render(); };
+  document.getElementById('next').onclick=()=>{ view.setMonth(view.getMonth()+1); render(); };
+  document.getElementById('today').onclick=()=>{ view=new Date(now.getFullYear(),now.getMonth(),1); render(); };
+  render();
+
+  // upcoming list (from this month's events, day >= today)
+  const up=[];
+  Object.keys(EV).map(Number).sort((a,b)=>a-b).forEach(d=>{ EV[d].forEach(e=>up.push([d,e[0],e[1]])); });
+  const upNext=up.filter(u=>u[0]>=now.getDate()).slice(0,8);
+  document.getElementById('upcoming').innerHTML = (upNext.length?upNext:up.slice(0,8)).map(u=>{
+    const color={task:'var(--mw-cyan)',harvest:'var(--mw-stat-hi)',deliv:'#ff8a5c',compl:'#ec4ec4',shift:'rgba(94,200,240,.4)'}[u[1]];
+    const dt=new Date(now.getFullYear(),now.getMonth(),u[0]);
+    return `<div class="upcard" style="border-left-color:${color};" onclick="location.href='${HREF[u[1]]}'"><i class="dot" style="background:${color};"></i><div><div class="t">${u[2]}</div><div class="d">${dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</div></div></div>`;
+  }).join('');
+</script>
+</body>
+</html>

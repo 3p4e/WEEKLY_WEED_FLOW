@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — SOP Library</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .layout{ display:grid; grid-template-columns:250px 1fr; gap:18px; align-items:start; }
+
+  /* category rail */
+  .cats{ display:flex; flex-direction:column; gap:4px; }
+  .cat{ display:flex; align-items:center; justify-content:space-between; padding:10px 13px; font-size:13px; color:var(--mw-text); cursor:pointer;
+    clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); transition:background .12s ease,color .12s ease; }
+  .cat:hover{ background:rgba(58,159,212,.08); }
+  .cat.on{ background:rgba(58,159,212,.16); color:var(--mw-cyan-bright); box-shadow:inset 2px 0 0 var(--mw-cyan); }
+  .cat span.c{ font-family:var(--mw-font-cond); font-size:12px; color:var(--mw-text-faint); }
+
+  .toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:14px; }
+  .search{ flex:1; display:flex; align-items:center; gap:9px; background:rgba(6,20,40,.6); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18); padding:9px 13px;
+    clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .search input{ flex:1; background:none; border:none; outline:none; color:var(--mw-ink); font-family:var(--mw-font); font-size:13px; }
+  .search svg{ width:15px; height:15px; fill:var(--mw-text-dim); }
+
+  .sops{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .sop{ padding:15px 16px; cursor:pointer; transition:box-shadow .12s ease,transform .1s ease; }
+  .sop:hover{ box-shadow:inset 0 0 0 1.5px var(--mw-cyan), 0 0 22px rgba(58,159,212,.18); transform:translateY(-1px); }
+  .sop__top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .sop__name{ font-family:var(--mw-font-cond); font-size:16px; font-weight:700; color:var(--mw-ink); line-height:1.15; }
+  .sop__id{ font-family:var(--mw-font-cond); font-size:11px; color:var(--mw-text-faint); letter-spacing:.06em; margin-top:2px; }
+  .sop__desc{ font-size:12px; color:var(--mw-text-dim); margin:9px 0 12px; line-height:1.4; }
+  .sop__foot{ display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--mw-text-dim); }
+  .sop__steps{ display:flex; align-items:center; gap:6px; }
+  .sop__bar{ width:70px; height:4px; background:rgba(6,20,40,.7); position:relative; overflow:hidden; }
+  .sop__bar i{ position:absolute; inset:0; width:var(--p); background:var(--mw-stat-hi); }
+
+  /* drawer */
+  .scrim{ position:fixed; inset:0; background:rgba(2,8,18,.72); opacity:0; pointer-events:none; transition:opacity .18s ease; z-index:40; }
+  .scrim.on{ opacity:1; pointer-events:auto; }
+  .drawer{ position:fixed; top:0; right:0; bottom:0; width:520px; max-width:92vw; background:var(--mw-panel); box-shadow:-14px 0 40px rgba(0,0,0,.5), inset 1px 0 0 rgba(94,200,240,.2);
+    transform:translateX(100%); transition:transform .22s cubic-bezier(.4,0,.2,1); z-index:41; display:flex; flex-direction:column; }
+  .drawer.on{ transform:translateX(0); }
+  .drawer__hd{ padding:20px 22px 16px; border-bottom:1px solid rgba(94,200,240,.14); }
+  .drawer__body{ padding:8px 22px 24px; overflow:auto; flex:1; }
+  .drawer__close{ position:absolute; top:18px; right:20px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:var(--mw-text-dim); cursor:pointer; font-size:18px; }
+  .drawer__close:hover{ color:var(--mw-cyan-bright); }
+  .step{ display:flex; gap:12px; padding:12px 0; border-bottom:1px solid rgba(94,200,240,.08); cursor:pointer; }
+  .step:last-child{ border-bottom:none; }
+  .step__box{ flex:none; width:22px; height:22px; margin-top:1px; box-shadow:inset 0 0 0 1.5px rgba(94,200,240,.4); clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);
+    display:flex; align-items:center; justify-content:center; transition:background .12s ease; }
+  .step.done .step__box{ background:var(--mw-stat-hi); box-shadow:none; }
+  .step.done .step__box svg{ opacity:1; } .step__box svg{ width:13px; height:13px; fill:var(--mw-void); opacity:0; }
+  .step.done .step__txt{ color:var(--mw-text-faint); text-decoration:line-through; }
+  .step__txt{ font-size:13.5px; color:var(--mw-text); line-height:1.4; }
+  .step__note{ font-size:11.5px; color:var(--mw-text-dim); margin-top:3px; }
+  .prog{ display:flex; align-items:center; gap:12px; margin:14px 0 4px; }
+  .prog__track{ flex:1; height:8px; background:rgba(6,20,40,.7); clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); overflow:hidden; }
+  .prog__fill{ height:100%; background:linear-gradient(90deg,var(--mw-cyan),var(--mw-stat-hi)); transition:width .2s ease; }
+  .prog__pct{ font-family:var(--mw-font-cond); font-size:15px; font-weight:700; color:var(--mw-cyan-bright); width:44px; text-align:right; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="SOP Library">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="sop.html" class="is-active">SOP Library</a>
+    <a href="workload.html">Workload</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">SOP Library</h1><span class="mw-rule"></span></div>
+
+  <div class="layout">
+    <div class="mw-panel cats" id="cats"></div>
+    <div>
+      <div class="toolbar">
+        <div class="search">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+          <input id="q" placeholder="Search procedures…" oninput="render()">
+        </div>
+        <button class="mw-btn mw-btn--primary">+ New SOP</button>
+      </div>
+      <div class="sops" id="sops"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<div class="drawer mw-panel" id="drawer">
+  <div class="drawer__close" onclick="closeDrawer()">✕</div>
+  <div class="drawer__hd">
+    <div class="sop__id" id="d-id"></div>
+    <h2 class="mw-title" id="d-name" style="margin:4px 0 2px;font-size:20px;"></h2>
+    <div class="sop__desc" id="d-desc" style="margin-bottom:0;"></div>
+    <div class="prog"><div class="prog__track"><div class="prog__fill" id="d-fill"></div></div><span class="prog__pct" id="d-pct">0%</span></div>
+  </div>
+  <div class="drawer__body" id="d-steps"></div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  const CHK='<svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.4-1.4z"/></svg>';
+  const SOPS=[
+    {id:'SOP-CU-01',cat:'Cultivation',name:'Flower Room Daily Walk',desc:'Environmental checks, canopy inspection, and IPM scouting for a flowering room.',steps:[
+      ['Record temp / RH / CO₂ at 3 canopy points','Log to zone terminal'],['Inspect canopy for pests & deficiencies','Flag any hotspots'],
+      ['Check irrigation runoff EC / pH','Target 5.8–6.2 pH'],['Confirm light schedule & intensity','12/12, 900 PPFD'],['Photo-log any anomalies','Attach to batch record']]},
+    {id:'SOP-CU-02',cat:'Cultivation',name:'Transplant to Flower',desc:'Moving vegetative plants into the flower room with tagging and spacing.',steps:[
+      ['Verify plant tags match METRC','Scan each tag'],['Inspect root health','Reject any rot'],['Space plants per grid map','4 per m²'],['Set drippers & test flow','Confirm each site'],['Update batch stage → Flower','System + board']]},
+    {id:'SOP-EX-01',cat:'Extraction',name:'Live Resin Run',desc:'Fresh-frozen live resin extraction, purge, and QA sampling.',steps:[
+      ['Confirm material frozen ≤ -18°C','Check log'],['Load column & set solvent ratio','Per batch sheet'],['Run extraction cycle','Monitor pressure'],['Solvent recovery to spec','< 500ppm target'],['Purge & vacuum cycle','48h @ 29inHg'],['Pull QA sample → lab','Label + chain of custody']]},
+    {id:'SOP-QA-01',cat:'Quality',name:'COA Review & Release',desc:'Reviewing a certificate of analysis and releasing a batch for sale.',steps:[
+      ['Match COA batch ID to record','No mismatches'],['Verify potency within spec','THC/CBD range'],['Confirm all contaminants pass','Pesticide/microbial/heavy metal'],['QA sign-off','Named reviewer'],['Release batch in system','Sets available-for-sale']]},
+    {id:'SOP-QA-02',cat:'Quality',name:'Deviation Report',desc:'Documenting and escalating any process deviation.',steps:[
+      ['Describe deviation & timestamp',''],['Classify severity','Minor / Major / Critical'],['Assign corrective action owner',''],['Escalate if Critical → QA lead',''],['Close-out with verification','']]},
+    {id:'SOP-CP-01',cat:'Compliance',name:'METRC Daily Reconcile',desc:'Reconciling seed-to-sale inventory tags at end of day.',steps:[
+      ['Pull system inventory report',''],['Compare to METRC package counts',''],['Investigate any variance','> 0 requires note'],['Adjust with reason codes',''],['Confirm reconciled state','Green across all zones']]},
+    {id:'SOP-PK-01',cat:'Packaging',name:'Retail Pack & Label',desc:'Packaging finished flower into compliant retail units.',steps:[
+      ['Verify strain & batch on label','Scan to confirm'],['Weigh to declared net','± tolerance check'],['Apply compliance label','QR + warnings'],['Heat-seal & inspect','No leaks'],['Case-pack & scan out','Update inventory']]},
+    {id:'SOP-SF-01',cat:'Safety',name:'Solvent Spill Response',desc:'Emergency response to a solvent spill in the extraction lab.',steps:[
+      ['Evacuate & isolate area','Sound alarm'],['Kill ignition sources','Cut power to zone'],['Ventilate','Activate exhaust'],['Contain with spill kit','PPE required'],['Report incident','Log + notify EHS']]},
+  ];
+  let CAT='All', OPEN=null;
+  const done={}; // sopId -> Set of step indices
+
+  function cats(){
+    const counts={}; SOPS.forEach(s=>counts[s.cat]=(counts[s.cat]||0)+1);
+    const list=['All',...Object.keys(counts)];
+    document.getElementById('cats').innerHTML=list.map(c=>
+      `<div class="cat ${c===CAT?'on':''}" onclick="CAT='${c}';cats();render()">
+        <span>${c}</span><span class="c">${c==='All'?SOPS.length:counts[c]}</span></div>`).join('');
+  }
+  function progOf(s){ const d=done[s.id]; return d?Math.round(d.size/s.steps.length*100):0; }
+  function render(){
+    const q=(document.getElementById('q').value||'').toLowerCase();
+    const rows=SOPS.filter(s=>(CAT==='All'||s.cat===CAT) && (s.name.toLowerCase().includes(q)||s.desc.toLowerCase().includes(q)||s.id.toLowerCase().includes(q)));
+    document.getElementById('sops').innerHTML=rows.map(s=>{
+      const p=progOf(s);
+      return `<div class="mw-panel--alt sop" onclick="openSop('${s.id}')">
+        <div class="sop__top"><div><div class="sop__name">${s.name}</div><div class="sop__id">${s.id} · ${s.cat}</div></div>
+          <span class="mw-tag mw-tag--lo">${s.steps.length} steps</span></div>
+        <div class="sop__desc">${s.desc}</div>
+        <div class="sop__foot"><div class="sop__steps">Progress<div class="sop__bar"><i style="--p:${p}%"></i></div>${p}%</div>
+          <span style="color:var(--mw-cyan);">Open →</span></div>
+      </div>`;
+    }).join('') || '<div style="color:var(--mw-text-faint);padding:20px;grid-column:1/-1;">No procedures match.</div>';
+  }
+  function openSop(id){
+    OPEN=SOPS.find(s=>s.id===id); if(!done[id]) done[id]=new Set();
+    document.getElementById('d-id').textContent=OPEN.id+' · '+OPEN.cat;
+    document.getElementById('d-name').textContent=OPEN.name;
+    document.getElementById('d-desc').textContent=OPEN.desc;
+    drawSteps();
+    document.getElementById('scrim').classList.add('on');
+    document.getElementById('drawer').classList.add('on');
+  }
+  function drawSteps(){
+    const s=OPEN, d=done[s.id];
+    document.getElementById('d-steps').innerHTML=s.steps.map((st,i)=>
+      `<div class="step ${d.has(i)?'done':''}" onclick="toggleStep(${i})">
+        <div class="step__box">${CHK}</div>
+        <div><div class="step__txt">${st[0]}</div>${st[1]?`<div class="step__note">${st[1]}</div>`:''}</div></div>`).join('');
+    const p=progOf(s);
+    document.getElementById('d-fill').style.width=p+'%';
+    document.getElementById('d-pct').textContent=p+'%';
+  }
+  function toggleStep(i){ const d=done[OPEN.id]; d.has(i)?d.delete(i):d.add(i); drawSteps(); render(); }
+  function closeDrawer(){ document.getElementById('scrim').classList.remove('on'); document.getElementById('drawer').classList.remove('on'); }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrawer(); });
+  cats(); render();
+</script>
+</body>
+</html>

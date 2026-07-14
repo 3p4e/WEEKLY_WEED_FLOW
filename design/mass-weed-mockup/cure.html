@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Cure Vault</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .kpi{ flex:1; background:rgba(58,159,212,.07); border:1px solid rgba(94,200,240,.16); padding:12px 16px; clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px); }
+  .kpi__v{ font-family:var(--mw-font-cond); font-size:30px; font-weight:700; color:var(--mw-ink); line-height:1; }
+  .kpi__l{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:5px; }
+  .jars{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .jar{ background:rgba(58,159,212,.055); border:1px solid rgba(94,200,240,.16); padding:16px 14px; position:relative; clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%); transition:border-color .2s; }
+  .jar:hover{ border-color:var(--mw-cyan); }
+  .jar__id{ font-family:var(--mw-font-cond); font-size:15px; font-weight:700; color:var(--mw-header); letter-spacing:.05em; }
+  .jar__strain{ font-size:11px; color:var(--mw-text-dim); margin-top:2px; }
+  /* RH dial */
+  .dial{ position:relative; width:100px; height:100px; margin:14px auto 8px; }
+  .dial svg{ transform:rotate(-90deg); }
+  .dial__v{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .dial__num{ font-family:var(--mw-font-cond); font-size:24px; font-weight:700; line-height:1; }
+  .dial__u{ font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); }
+  .jar__foot{ display:flex; justify-content:space-between; font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-top:6px; }
+  .jar__day{ color:var(--mw-cyan); }
+  .jar__burp{ color:var(--mw-text-dim); }
+  .jar__burp.due{ color:var(--mw-stat-mid); font-weight:700; }
+  .pill{ position:absolute; top:12px; right:12px; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:2px 7px; border-radius:2px; }
+  .pill--dry{ background:rgba(236,236,74,.16); color:var(--mw-stat-mid); border:1px solid rgba(236,236,74,.4); }
+  .pill--cure{ background:rgba(108,240,90,.14); color:var(--mw-stat-hi); border:1px solid rgba(108,240,90,.35); }
+  .pill--done{ background:rgba(94,200,240,.14); color:var(--mw-cyan-bright); border:1px solid rgba(94,200,240,.4); }
+  .barmini{ height:5px; background:var(--mw-stat-track); border-radius:3px; overflow:hidden; margin-top:10px; }
+  .barmini > i{ display:block; height:100%; background:linear-gradient(90deg,var(--mw-cyan-deep),var(--mw-cyan-bright)); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Cure Vault">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html" class="is-active">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Cure Vault</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi__v">8</div><div class="kpi__l">Active Chambers</div></div>
+    <div class="kpi"><div class="kpi__v">62<span style="font-size:15px;">%</span></div><div class="kpi__l">Avg Chamber RH</div></div>
+    <div class="kpi"><div class="kpi__v">3</div><div class="kpi__l">Burps Due Now</div></div>
+    <div class="kpi"><div class="kpi__v">2</div><div class="kpi__l">Cure Complete</div></div>
+  </div>
+
+  <div class="mw-panel">
+    <div class="mw-label" style="margin-bottom:14px;">Cure Chambers · Target RH 60–65%</div>
+    <div class="jars" id="jars"></div>
+  </div>
+</div>
+</div>
+<script>
+  // [id, strain, rh, day, totalDays, burpHrs, phase]
+  const jars=[
+    ['CJ-01','Citadel Kush',63,12,21,4,'cure'],
+    ['CJ-02','Reaper Haze',58,6,21,0,'cure'],
+    ['CJ-03','Omega Relay',68,3,21,0,'dry'],
+    ['CJ-04','Element Zero',61,18,21,9,'cure'],
+    ['CJ-05','Thresher Purple',72,2,21,0,'dry'],
+    ['CJ-06','Nova Diesel',60,21,21,14,'done'],
+    ['CJ-07','Citadel Kush',64,15,21,6,'cure'],
+    ['CJ-08','Reaper Haze',62,21,21,16,'done']
+  ];
+  const R=42, C=2*Math.PI*R;
+  const rhColor=rh=>{ if(rh>=60&&rh<=65)return 'var(--mw-stat-hi)'; if(rh>=56&&rh<=68)return 'var(--mw-stat-mid)'; return 'var(--mw-stat-lo)'; };
+  const phase={dry:['Drying','pill--dry'],cure:['Curing','pill--cure'],done:['Complete','pill--done']};
+  document.getElementById('jars').innerHTML=jars.map(j=>{
+    const [id,st,rh,day,tot,burp,ph]=j;
+    const frac=Math.min(1,rh/100), off=C*(1-frac), col=rhColor(rh);
+    const due=burp>0&&burp<=5;
+    const [plabel,pcls]=phase[ph];
+    return `<div class="jar">
+      <div class="pill ${pcls}">${plabel}</div>
+      <div class="jar__id">${id}</div>
+      <div class="jar__strain">${st}</div>
+      <div class="dial">
+        <svg width="100" height="100" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--mw-stat-track)" stroke-width="8"/>
+          <circle cx="50" cy="50" r="${R}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round"
+            stroke-dasharray="${C}" stroke-dashoffset="${off}" style="filter:drop-shadow(0 0 5px ${col});"/>
+        </svg>
+        <div class="dial__v"><span class="dial__num" style="color:${col}">${rh}<span style="font-size:12px;">%</span></span><span class="dial__u">RH</span></div>
+      </div>
+      <div class="barmini"><i style="width:${Math.round(day/tot*100)}%"></i></div>
+      <div class="jar__foot">
+        <span class="jar__day">Day ${day}/${tot}</span>
+        <span class="jar__burp ${due?'due':''}">${ph==='done'?'Sealed':(burp===0?'Burp now':'Burp ~'+burp+'h')}</span>
+      </div>
+    </div>`;
+  }).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Design System</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  a{color:var(--mw-cyan);} a:hover{color:var(--mw-cyan-bright);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:34px 26px 80px; }
+  .masthead{ text-align:center; margin-bottom:8px; }
+  .masthead h1{ font-family:var(--mw-font-cond); font-size:52px; font-weight:700; letter-spacing:.22em; margin:0; color:var(--mw-cyan-bright); text-shadow:0 0 24px rgba(94,200,240,.6); text-transform:uppercase; }
+  .masthead p{ font-size:12px; letter-spacing:.3em; text-transform:uppercase; color:var(--mw-text-dim); margin:6px 0 0; }
+  .sec{ margin-top:46px; }
+  .sec > .mw-header-bar{ margin-bottom:22px; }
+  .grid{ display:grid; gap:16px; }
+  .g2{ grid-template-columns:repeat(2,1fr); }
+  .g3{ grid-template-columns:repeat(3,1fr); }
+  .g4{ grid-template-columns:repeat(4,1fr); }
+  .swatch{ height:78px; clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); box-shadow:inset 0 0 0 1px rgba(94,200,240,.3); display:flex; align-items:flex-end; padding:8px 10px; }
+  .swatch b{ font-size:11px; font-family:var(--mw-font-cond); letter-spacing:.05em; color:#fff; mix-blend-mode:difference; }
+  .cap{ font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-faint); margin:0 0 10px; }
+  .demo{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; }
+  .typerow{ display:flex; align-items:baseline; gap:16px; padding:8px 0; border-bottom:1px solid rgba(58,159,212,.12); }
+  .typerow span:last-child{ font-size:11px; color:var(--mw-text-faint); margin-left:auto; letter-spacing:.1em; }
+  .cardgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap">
+
+  <div class="masthead" style="display:flex; flex-direction:column; align-items:center;">
+    <div class="mw-leaf" data-mw-leaf data-size="mini" style="width:110px; height:110px; margin-bottom:10px;"></div>
+    <h1>Mass&nbsp;Weed</h1>
+    <p>Sci-fi HUD Design System · v1.0</p>
+  </div>
+  <p style="text-align:center; max-width:560px; margin:14px auto 0; color:var(--mw-text-dim); font-size:14px; line-height:1.6;">
+    A Mass Effect-inspired interface language for cannabis inventory &amp; cultivation tracking. Chamfered glass hulls, electric-cyan glow, tiered stat readouts, and rarity-coded catalog rows.
+  </p>
+  <div style="display:flex; gap:12px; justify-content:center; margin-top:20px;">
+    <a href="index.html" class="mw-btn" style="text-decoration:none;">Inventory Terminal</a>
+    <a href="decrypt.html" class="mw-btn mw-btn--ghost" style="text-decoration:none;">Decrypt Dialog</a>
+  </div>
+
+  <!-- COLOR -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Color Tokens</h2><span class="mw-rule"></span></div>
+    <p class="cap">Hull &amp; Void</p>
+    <div class="grid g4">
+      <div class="swatch" style="background:var(--mw-void)"><b>--mw-void</b></div>
+      <div class="swatch" style="background:var(--mw-abyss)"><b>--mw-abyss</b></div>
+      <div class="swatch" style="background:var(--mw-hull)"><b>--mw-hull</b></div>
+      <div class="swatch" style="background:var(--mw-hull-2)"><b>--mw-hull-2</b></div>
+    </div>
+    <p class="cap" style="margin-top:18px;">Electric Cyan System</p>
+    <div class="grid g4">
+      <div class="swatch" style="background:var(--mw-cyan-bright)"><b>cyan-bright</b></div>
+      <div class="swatch" style="background:var(--mw-cyan)"><b>cyan</b></div>
+      <div class="swatch" style="background:var(--mw-cyan-dim)"><b>cyan-dim</b></div>
+      <div class="swatch" style="background:var(--mw-cyan-deep)"><b>cyan-deep</b></div>
+    </div>
+    <p class="cap" style="margin-top:18px;">Rarity Grades</p>
+    <div class="grid g4">
+      <div class="swatch" style="background:linear-gradient(150deg,var(--mw-common-bg1),var(--mw-common-bg2))"><b style="color:var(--mw-common); mix-blend-mode:normal;">Common</b></div>
+      <div class="swatch" style="background:linear-gradient(150deg,#113b2c,#0a2018)"><b style="color:var(--mw-uncommon); mix-blend-mode:normal;">Uncommon</b></div>
+      <div class="swatch" style="background:linear-gradient(150deg,var(--mw-rare-bg1),var(--mw-rare-bg2))"><b style="color:var(--mw-rare); mix-blend-mode:normal;">Rare</b></div>
+      <div class="swatch" style="background:linear-gradient(150deg,#341c50,#1c0f2e)"><b style="color:var(--mw-epic); mix-blend-mode:normal;">Epic</b></div>
+    </div>
+    <p class="cap" style="margin-top:18px;">Stat Spectrum &amp; Signals</p>
+    <div class="grid g4">
+      <div class="swatch" style="background:linear-gradient(90deg,var(--mw-stat-hi-2),var(--mw-stat-hi))"><b>stat-hi</b></div>
+      <div class="swatch" style="background:linear-gradient(90deg,var(--mw-stat-mid-2),var(--mw-stat-mid))"><b>stat-mid</b></div>
+      <div class="swatch" style="background:linear-gradient(90deg,var(--mw-stat-lo-2),var(--mw-stat-lo))"><b>stat-lo</b></div>
+      <div class="swatch" style="background:var(--mw-selected)"><b>selected</b></div>
+    </div>
+  </div>
+
+  <!-- TYPE -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Typography</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel">
+      <div class="typerow"><span class="mw-title mw-title--xl">Recovered Harvest</span><span>Saira Condensed · Title XL · tracking .14em</span></div>
+      <div class="typerow"><span class="mw-title mw-title--lg">Selected Batch</span><span>Title LG</span></div>
+      <div class="typerow"><span class="mw-title mw-title--md">Flower</span><span>Title MD</span></div>
+      <div class="typerow"><span class="mw-label">Damage Per Second</span><span>Label · Titillium 11/600</span></div>
+      <div class="typerow"><span style="font-family:var(--mw-font); font-size:15px; color:var(--mw-text);">Body copy — Titillium Web renders the readable interface text.</span><span>Body</span></div>
+      <div class="typerow" style="border:none;"><span class="mw-res__val">427,340</span><span>Resource digits · Saira 700 glow</span></div>
+    </div>
+  </div>
+
+  <!-- PANELS -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Frames &amp; Panels</h2><span class="mw-rule"></span></div>
+    <div class="grid g3">
+      <div><p class="cap">Chamfered Hull</p><div class="mw-panel" style="height:120px; display:flex; align-items:center; justify-content:center;"><span class="mw-label">.mw-panel</span></div></div>
+      <div><p class="cap">Alt Chamfer</p><div class="mw-panel mw-panel--alt" style="height:120px; display:flex; align-items:center; justify-content:center;"><span class="mw-label">.mw-panel--alt</span></div></div>
+      <div><p class="cap">Inset Well</p><div class="mw-panel" style="height:120px; padding:10px;"><div class="mw-well" style="height:100%; display:flex; align-items:center; justify-content:center;"><span class="mw-label">.mw-well</span></div></div></div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Controls</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel">
+      <p class="cap">Angular Buttons</p>
+      <div class="demo"><button class="mw-btn">Stock Batch</button><button class="mw-btn mw-btn--ghost">Reduce to Trim</button><button class="mw-btn">Log All</button></div>
+      <p class="cap" style="margin-top:22px;">Tab Buttons</p>
+      <div class="demo"><button class="mw-tabbtn">◄ Stock Intake</button><button class="mw-tabbtn">Sort: Potency ▾</button><button class="mw-tabbtn">Omni-gel</button></div>
+      <p class="cap" style="margin-top:22px;">Category Icon Tabs</p>
+      <div class="mw-tabs" id="tabsDemo"></div>
+      <p class="cap" style="margin-top:22px;">Thumbnail Slots</p>
+      <div class="mw-slots"><span class="mw-slot mw-slot--filled">◆</span><span class="mw-slot">＋</span><span class="mw-slot">＋</span></div>
+    </div>
+  </div>
+
+  <!-- STAT BARS -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Stat Readouts</h2><span class="mw-rule"></span></div>
+    <div class="grid g2">
+      <div class="mw-panel">
+        <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">THC Potency (%)</span><span class="mw-stat__val">28</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:80%"></div></div></div>
+        <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">CBD Content (%)</span><span class="mw-stat__val">12</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--mid" style="width:48%"></div></div></div>
+        <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Terpene Load (%)</span><span class="mw-stat__val">1.4</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--lo" style="width:22%"></div></div></div>
+      </div>
+      <div class="mw-panel mw-panel--alt">
+        <p class="cap" style="margin:0 0 10px;">hi / mid / lo tiers auto-color by comparison to the equipped batch — green better, yellow parity, red worse.</p>
+        <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Yield (g)</span><span class="mw-stat__val">14</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:70%"></div></div></div>
+        <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Purity</span><span class="mw-stat__val">97</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--hi" style="width:97%"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATALOG -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Catalog Rows</h2><span class="mw-rule"></span></div>
+    <p class="cap">Rarity Item Cards (intake style)</p>
+    <div class="cardgrid" id="itemDemo"></div>
+    <p class="cap" style="margin-top:22px;">List Rows</p>
+    <div class="mw-panel"><div class="mw-well" style="padding:6px 4px;">
+      <div class="mw-row mw-row--active"><span class="mw-row__label">Flower — Serrice</span><span class="mw-row__val" style="color:var(--mw-rare)">Blue Dream IX</span></div>
+      <div class="mw-row mw-row--selected"><span class="mw-row__label">Concentrate — Ariake</span><span class="mw-row__val">Live Resin IX</span></div>
+      <div class="mw-row"><span class="mw-row__label">Flower — Elkoss</span><span class="mw-row__val" style="color:var(--mw-common)">OG Kush VIII</span></div>
+      <div class="mw-row"><span class="mw-row__label">Edible — Elanus</span><span class="mw-row__val" style="color:var(--mw-epic)">Micro Mint IX</span></div>
+    </div></div>
+  </div>
+
+  <!-- RESOURCE BAR -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Resource HUD</h2><span class="mw-rule"></span></div>
+    <div class="mw-panel" style="padding:14px 20px;">
+      <div class="mw-resbar">
+        <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2c-1 5-5 7-5 11a5 5 0 0 0 10 0c0-4-4-6-5-11z"/></svg></span><span class="mw-res__val">128</span><span class="mw-label" style="font-size:10px;">strains</span></div>
+        <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span><span class="mw-res__val">46</span><span class="mw-label" style="font-size:10px;">batches</span></div>
+        <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18M4 8l8-5 8 5"/></svg></span><span class="mw-res__val">300</span><span class="mw-label" style="font-size:10px;">grams</span></div>
+        <div class="mw-res"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h3.5a1.5 1.5 0 0 1 0 3h-2a1.5 1.5 0 0 0 0 3H14"/></svg></span><span class="mw-res__val">427,340</span><span class="mw-label" style="font-size:10px;">revenue</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLANNING ATOMS -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Task Card &amp; Meta Chips</h2><span class="mw-rule"></span></div>
+    <p class="cap">Compact task card — accent via <code>--mw-acc</code> (department color)</p>
+    <div class="grid g2">
+      <div class="mw-tcard" style="--mw-acc:#2BE8A0">
+        <span class="mw-tcard__box"></span>
+        <div class="mw-tcard__main"><div class="mw-tcard__title">Defoliate canopy row 3–5</div>
+          <div class="mw-tcard__meta"><span class="mw-tcard__dept">CU</span><span class="mw-tcard__id">CU-1042</span>
+            <span class="mw-attr">Room <b>GR-A</b></span><span class="mw-attr">Strain <b>Wedding Cake</b></span><span class="mw-htag">#flower</span></div></div>
+        <div class="mw-tcard__right"><span class="mw-st mw-st--working">working</span></div>
+      </div>
+      <div class="mw-tcard mw-tcard--done" style="--mw-acc:#9B7BE8">
+        <span class="mw-tcard__box"></span>
+        <div class="mw-tcard__main"><div class="mw-tcard__title">Pesticide panel sign-off</div>
+          <div class="mw-tcard__meta"><span class="mw-tcard__dept">QC</span><span class="mw-tcard__id">QC-305</span>
+            <span class="mw-attr">Sample <b>WC-S1</b></span><span class="mw-due">Jul 9</span></div></div>
+        <div class="mw-tcard__right"><span class="mw-st mw-st--done">done</span></div>
+      </div>
+    </div>
+    <div class="mw-panel" style="margin-top:14px; display:flex; flex-wrap:wrap; gap:20px; align-items:center;">
+      <div><p class="cap" style="margin:0 0 8px;">Attribute vs tag</p>
+        <span class="mw-attr" style="--mw-acc:#2FD9D9">Batch <b>WC-2405</b></span> &nbsp; <span class="mw-htag">#extract</span></div>
+      <div><p class="cap" style="margin:0 0 8px;">Due (overdue)</p>
+        <span class="mw-due">Jul 12</span> &nbsp; <span class="mw-due mw-due--over">Jul 9</span></div>
+      <div><p class="cap" style="margin:0 0 8px;">Status pills</p>
+        <span class="mw-st mw-st--done">done</span> <span class="mw-st mw-st--working">working</span> <span class="mw-st mw-st--review">review</span> <span class="mw-st mw-st--stuck">stuck</span> <span class="mw-st mw-st--postponed">postponed</span></div>
+    </div>
+  </div>
+
+  <!-- PLANNING SURFACES -->
+  <div class="sec">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Planning Surfaces</h2><span class="mw-rule"></span></div>
+    <p class="cap">Bilingual (EN·МК) · dark + Cool-Mist light · built on the atoms above</p>
+    <div class="grid g3">
+      <a href="depthome.html" class="mw-btn mw-btn--accent" style="--mw-acc:#2BE8A0;text-decoration:none;">Department Home</a>
+      <a href="af-modal.html" class="mw-btn" style="text-decoration:none;">Add / Edit Task</a>
+      <a href="board-tree.html" class="mw-btn mw-btn--accent" style="--mw-acc:#5ec8f0;text-decoration:none;">Theme Board (tree)</a>
+      <a href="execreport.html" class="mw-btn mw-btn--accent" style="--mw-acc:#f0b95e;text-decoration:none;">Executive Report</a>
+      <a href="report-standalone.html" class="mw-btn mw-btn--ghost" style="text-decoration:none;">Offline Report ⤓</a>
+    </div>
+  </div>
+
+</div>
+</div>
+<script src="data.js"></script>
+<script>
+  const GL = window.MW_GLYPHS, cats = window.MW_CATS;
+  document.getElementById('tabsDemo').innerHTML = cats.map((c,i)=>`<div class="mw-tab ${i===0?'mw-tab--active':''}" title="${c.label}">${GL[c.glyph]}</div>`).join('');
+  const demo = [
+    {cat:'Flower',name:'Hurricane VIII',brand:'Elanus Growworks',r:'common'},
+    {cat:'Concentrate',name:'Reaper VIII',brand:'Elkoss Botanicals',r:'rare'},
+    {cat:'Edible',name:'Micro Mint IX',brand:'Elanus Growworks',r:'epic'}
+  ];
+  document.getElementById('itemDemo').innerHTML = demo.map(it=>`<div class="mw-item mw-item--${it.r}"><span class="mw-item__cat">${it.cat}</span><span class="mw-item__name">${it.name}</span><span class="mw-item__brand">${it.brand}</span></div>`).join('');
+</script>
+<script type="module" src="mw-leaf.js"></script>
+</body>
+</html>
