@@ -115,6 +115,15 @@ Local gate before deploy: `pg_dump` schema-diff **byte-exact** for both DBs
 tests); a 320-concurrent-write H1 probe (**unlocked → 299 breaks / 56 forks;
 locked → 0 / 0**); `node --check` clean.
 
+Deployed as backend image **v32** to **test (`wwf_mass`) then live (production)**,
+each DB snapshotted (`pg_dump -Fc`) first. All four DBs migrated
+(tasks 0011→0012, users 0005→0006); both trigger copies confirmed carrying
+`pg_advisory_xact_lock`. Post-deploy: backend + scheduler boot clean, prod
+`/health` 200, index 200, bad-login 401. `/audit/verify` on prod still reports
+the **38 pre-existing historical breaks** — expected: the lock prevents *new*
+forks; it does not (and must not) rewrite immutable audit history. The users
+chain shows 0 breaks.
+
 Deferred as product/design (own cycle): **H3** report data plumbing, **M5**
 HMAC-keyed audit, **M6** department single-key convergence, **M7** in-app
 disclaimer, **L6–L8**.
