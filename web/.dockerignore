@@ -1,0 +1,6 @@
+# Keep test/build cruft out of the public web root. (nginx.conf and Dockerfile
+# are intentionally NOT excluded — the Dockerfile COPYs nginx.conf into the
+# nginx config dir and rm's the strays from the web root itself.)
+e2e/
+**/node_modules
+*.cjs

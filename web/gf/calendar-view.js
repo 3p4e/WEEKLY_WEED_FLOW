@@ -23,7 +23,7 @@ window.GF = window.GF || {};
     const first = new Date(y, m, 1);
     const startDow = (first.getDay() + 6) % 7;                  // Monday-first
     const daysIn = new Date(y, m + 1, 0).getDate();
-    const todayISO = now.toISOString().slice(0, 10);
+    const todayISO = GF.todayISO();   // facility-local; UTC toISOString() drifts a day for +offset
 
     // Bucket every task (top-level + tree children) by due date.
     const kids = Object.values(GF.state.children || {}).flat();
