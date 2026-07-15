@@ -95,3 +95,70 @@ async def test_creation_is_feed_only(client, admin_headers):
     # ...and notified nobody (org has only admin + prior test users; check admin)
     inbox = (await client.get("/notifications", headers=admin_headers)).json()
     assert not any(n["task_id"] == tid for n in inbox)
+
+
+async def test_unassign_notifies_the_ex_assignee(client, admin_headers):
+    target, th = await _actor(client, admin_headers)
+    r = await client.post("/tasks", json={"title": "Take-back"}, headers=admin_headers)
+    tid = r.json()["id"]
+    await client.post(f"/tasks/{tid}/assignees", json={"user_id": target["id"]}, headers=admin_headers)
+    await client.post("/notifications/read-all", headers=th)
+    assert (await client.delete(f"/tasks/{tid}/assignees/{target['id']}",
+                                headers=admin_headers)).status_code == 200
+    unread = (await client.get("/notifications?unread=true", headers=th)).json()
+    assert any(n["verb"] == "unassigned" and n["task_id"] == tid for n in unread)
+
+
+async def test_mention_in_comment_notifies_with_mentioned_reason(client, admin_headers):
+    bystander, bh = await _actor(client, admin_headers)
+    r = await client.post("/tasks", json={"title": "Mention target"}, headers=admin_headers)
+    tid = r.json()["id"]
+    # the bystander has NO participation stake — only the @mention reaches them
+    assert (await client.post(f"/tasks/{tid}/comments",
+                              json={"content": f"ping @{bystander['username']} please look"},
+                              headers=admin_headers)).status_code == 201
+    inbox = (await client.get("/notifications", headers=bh)).json()
+    row = next(n for n in inbox if n["task_id"] == tid)
+    assert row["reason"] == "mentioned"
+
+
+async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
+    from datetime import date, timedelta
+
+    from app.duescan import run_for_org
+
+    from app.db import users_admin_pool
+
+    me = (await client.get("/auth/me", headers=admin_headers)).json()
+    org_id = await users_admin_pool().fetchval(
+        "SELECT org_id FROM profiles WHERE id=$1::uuid", me["id"])
+    admin = {"id": me["id"], "org_id": org_id, "role": me["role"]}
+    dept = (await client.post("/departments", json={"code": "due_d1", "name": "Due D1"},
+                              headers=admin_headers)).json()
+    worker, wh = await _actor(client, admin_headers)
+    mgr, mh = await _actor(client, admin_headers, role="QC_MGR")
+    await client.patch(f"/auth/users/{mgr['id']}", json={"department_id": dept["id"]},
+                       headers=admin_headers)
+    today = date.today()
+    r1 = await client.post("/tasks", json={"title": "Due today", "department_id": dept["id"],
+                                           "due_date": today.isoformat()}, headers=admin_headers)
+    r2 = await client.post("/tasks", json={"title": "Late", "department_id": dept["id"],
+                                           "due_date": (today - timedelta(days=3)).isoformat()},
+                           headers=admin_headers)
+    for tid in (r1.json()["id"], r2.json()["id"]):
+        await client.post(f"/tasks/{tid}/assignees", json={"user_id": worker["id"]},
+                          headers=admin_headers)
+    counts = await run_for_org(admin, today)
+    assert counts["due_soon"] >= 1 and counts["overdue"] >= 1
+    inbox = (await client.get("/notifications", headers=wh)).json()
+    due_rows = [n for n in inbox if n["reason"] == "due"]
+    verbs = {n["verb"] for n in due_rows if n["task_id"] in (r1.json()["id"], r2.json()["id"])}
+    assert verbs == {"due_soon", "overdue"}
+    # the dept manager hears about the OVERDUE one only
+    m_inbox = (await client.get("/notifications", headers=mh)).json()
+    m_verbs = {n["verb"] for n in m_inbox if n["reason"] == "due"
+               and n["task_id"] in (r1.json()["id"], r2.json()["id"])}
+    assert m_verbs == {"overdue"}
+    # idempotent within the day: a second run emits nothing new
+    again = await run_for_org(admin, today)
+    assert again == {"due_soon": 0, "overdue": 0}

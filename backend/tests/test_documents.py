@@ -46,7 +46,8 @@ async def test_compile_review_lock_export_lifecycle(client, admin_headers, org):
     assert any(s["task_id"] == task["id"] and s["sop"] == "PP-QC-012" for s in c["ribbon"])
     seg = next(s for s in c["ribbon"] if s["task_id"] == task["id"])
     assert 0 <= seg["start_h"] < seg["end_h"] <= 24
-    # metrics: per-SOP hours + trend fields exist
+    # metrics: per-SOP buckets exist (hour sums stay in the stored record
+    # for continuity, but no renderer shows them anymore)
     sop = next(b for b in c["metrics"]["per_sop"] if b["sop"] == "PP-QC-012")
     assert sop["hours"] > 0 and "prev4_avg_hours" in sop
     # AI sections exist but are not_configured (no Letta binding in tests)

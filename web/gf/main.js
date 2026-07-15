@@ -77,10 +77,7 @@ GF.openAdd = (weekId, parentId) => {
     </div>
     <div class="field"><label>${GF.state.lang === 'mk' ? 'Ознаки' : 'Tags'} <span class="lbl-hint">${GF.state.lang === 'mk' ? 'одделени со запирка' : 'comma-separated'}</span></label>
       <input id="add-tags" placeholder="hlvd, tranche-1" oninput="GF.renderAddPreview&&GF.renderAddPreview()"></div>
-    <div class="row" style="gap:10px">
-      <div class="field" style="flex:1"><label>${GF.t('reference_code')}</label><input id="add-ref" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
-      <div class="field" style="flex:1"><label>${GF.t('est_hours')}</label><input id="add-est" type="number" min="0" step="0.5" placeholder="0"></div>
-    </div>
+    <div class="field"><label>${GF.t('reference_code')}</label><input id="add-ref" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
     <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>
     <div class="af-prev" id="add-preview"></div>`;
   // Department template fields (+ quick-add presets in create mode) for the

@@ -21,7 +21,7 @@ function windowSaturday() {
   return `${sat.getFullYear()}-${p(sat.getMonth() + 1)}-${p(sat.getDate())}`;
 }
 
-test('due date + type at creation, weekend work session shows up in the report hours table', async ({ page }) => {
+test('due date + type at creation, weekend session logged; report renders WITHOUT hour metrics', async ({ page }) => {
   const taskTitle = `Worklog task ${Date.now()}`;
   const sat = windowSaturday();
 
@@ -79,11 +79,12 @@ test('due date + type at creation, weekend work session shows up in the report h
     await expect(card.locator('.card-actions .mono')).toHaveText('100%');
   });
 
-  await test.step('the report view shows the hours in the weekend bucket', async () => {
+  await test.step('the report view renders and the hours table is GONE (removed app-wide)', async () => {
     await page.locator('[data-nav="report"]').click();
-    const hours = page.locator('#report-hours');
-    await expect(hours).toBeVisible({ timeout: 15_000 });
-    await expect(hours).toContainText('E2E Admin');          // seeded full_name
-    await expect(hours.locator('td.hb-weekend.nonzero').first()).toContainText('2.5');
+    // the report body renders (activity band region or summary cards present)
+    await expect(page.locator('#report-view')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#report-view')).toContainText(taskTitle, { timeout: 15_000 });
+    // the per-person hours table was removed with the rest of the hour metrics
+    await expect(page.locator('#report-hours')).toHaveCount(0);
   });
 });

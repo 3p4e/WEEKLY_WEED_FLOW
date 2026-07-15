@@ -164,32 +164,6 @@ def build_digest(snap: dict) -> str:
         L.append(f"- {o}: {n}")
     L.append("")
 
-    # Hours actual vs estimated
-    act = sum(float(t["actual_hours"]) for t in tasks if t["actual_hours"] is not None)
-    est = sum(float(t["estimated_hours"]) for t in tasks if t["estimated_hours"] is not None)
-    L.append("## Hours (actual / estimated)")
-    L.append(f"- Org total: {act:g} / {est:g}")
-    per_owner: dict[str, list[float]] = {}
-    for t in tasks:
-        o = t["owner"] or "—"
-        pa, pe = per_owner.setdefault(o, [0.0, 0.0])
-        per_owner[o] = [pa + float(t["actual_hours"] or 0), pe + float(t["estimated_hours"] or 0)]
-    for o, (pa, pe) in per_owner.items():
-        if pa or pe:
-            L.append(f"- {o}: {pa:g} / {pe:g}")
-    L.append("")
-
-    # Time-class hours from logged work sessions — the overtime evidence.
-    L.append("## Hours by time class (work sessions)")
-    hbp = snap.get("hours_by_person") or {}
-    if hbp:
-        for o, b in sorted(hbp.items(), key=lambda kv: -kv[1]["total"]):
-            L.append(f"- {o}: total {b['total']:g}h — regular {b['regular']:g}, "
-                     f"overtime {b['overtime']:g}, night {b['night']:g}, weekend {b['weekend']:g}")
-    else:
-        L.append("- none logged")
-    L.append("")
-
     L.append("## Overdue")
     if snap.get("overdue"):
         for o in snap["overdue"]:
@@ -226,8 +200,7 @@ def build_digest(snap: dict) -> str:
     for t in tasks:
         done_s = f", done={t['completed_date']}" if t["completed_date"] else ""
         L.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {_clean(t['title'])} "
-                 f"(dept={t['department']}, owner={t['owner']}, "
-                 f"hours={_hrs(t['actual_hours'])}/{_hrs(t['estimated_hours'])}{done_s})")
+                 f"(dept={t['department']}, owner={t['owner']}{done_s})")
     L.append("")
     return "\n".join(L)
 
@@ -236,7 +209,7 @@ def _task_bullets(tasks: list[dict], limit: int = 120) -> str:
     out = []
     for t in tasks[:limit]:
         out.append(f"- {_cite(t['id'])} [{t['status']}/{t['priority']}] {_clean(t['title'])} "
-                   f"(owner={t['owner']}, hours={_hrs(t['actual_hours'])}/{_hrs(t['estimated_hours'])})")
+                   f"(owner={t['owner']})")
     return "\n".join(out)
 
 

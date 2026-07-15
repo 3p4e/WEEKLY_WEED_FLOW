@@ -27,6 +27,9 @@ import httpx  # noqa: E402
 import planner_prompts  # noqa: E402
 import weekly_snapshot as snap  # noqa: E402
 
+from app import duescan  # noqa: E402  (app pools; init_pools() runs in main)
+from app.db import init_pools  # noqa: E402
+
 try:
     from zoneinfo import ZoneInfo
 except Exception:  # pragma: no cover
@@ -138,6 +141,26 @@ async def main():
             except Exception as e:
                 snap.log(f"recovery run failed for org {o['name']}: {type(e).__name__}: {e}")
 
+    # Daily due-soon/overdue scan (research matrix v1.x). Fires once per
+    # local day after 06:00; duescan itself is idempotent within a day (it
+    # skips tasks that already produced today's event), so container
+    # restarts never re-ping.
+    await init_pools()
+    last_due_scan: date | None = None
+
+    async def due_tick():
+        nonlocal last_due_scan
+        local = datetime.now(timezone.utc).astimezone(tz)
+        if local.hour >= 6 and last_due_scan != local.date():
+            try:
+                counts = await duescan.run_all(local.date())
+                snap.log(f"due scan {local.date().isoformat()}: {counts}")
+                last_due_scan = local.date()
+            except Exception as e:
+                snap.log(f"due scan failed: {type(e).__name__}: {e}")
+
+    await due_tick()
+
     while True:
         # Pick the fire target ONCE, then sleep toward it in chunks. The
         # target must stay fixed while we wait: next_fire() always returns a
@@ -147,6 +170,7 @@ async def main():
         fire = next_fire(datetime.now(timezone.utc), tz)
         while (remaining := (fire - datetime.now(timezone.utc)).total_seconds()) > 0:
             await asyncio.sleep(min(1800, remaining))
+            await due_tick()
         snap.log(f"firing weekly snapshot for {fire.astimezone(tz).date().isoformat()}")
         try:
             await snap.run_all(fire.astimezone(tz).date())

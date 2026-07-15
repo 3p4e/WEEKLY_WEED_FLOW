@@ -132,8 +132,6 @@ const xrKpis = (c) => {
   const m = (c && c.metrics) || {};
   const tasks = (c && c.tasks) || [];
   const done = tasks.filter(t => t.status === 'completed').length;
-  let hours = 0;
-  (m.per_sop || []).forEach(b => { const h = Number(b.hours); if (Number.isFinite(h)) hours += h; });
   const ot = m.on_time || {};
   const rate = (ot.rate != null && Number.isFinite(Number(ot.rate))) ? Math.round(ot.rate * 100) + '%' : '—';
   const kpi = (v, l) => `<div class="xr-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
@@ -141,7 +139,6 @@ const xrKpis = (c) => {
     ${kpi(tasks.length, AL('Tasks', 'Задачи'))}
     ${kpi(done, AL('Completed', 'Завршени'))}
     ${kpi(rate, AL('On-time', 'Навремено'))}
-    ${hours ? kpi(hours.toFixed(1) + 'h', AL('Logged hours', 'Часови')) : ''}
   </div>`;
 };
 
@@ -174,12 +171,6 @@ const xrNarratives = (c) => {
 };
 
 const xrTasks = (c) => {
-  // per-task logged hours from the ribbon segments
-  const hoursBy = {};
-  (c.ribbon || []).forEach(s => {
-    const h = Number(s.hours);
-    if (s.task_id && Number.isFinite(h)) hoursBy[s.task_id] = (hoursBy[s.task_id] || 0) + h;
-  });
   const who = (uid) => (GF.PEOPLE[uid] || {}).name || '';
   const rows = (c.tasks || []).map(t => {
     const notes = (t.notes || []).map(n => {
@@ -193,12 +184,10 @@ const xrTasks = (c) => {
       <div class="xr-note note ${exec ? 'note-exec' : ''} ${owner ? 'note-owner' : ''}"><b>${GF.esc(n.day || '')}</b> ${GF.esc(n.note || '')}
         ${n.user_id && who(n.user_id) ? `<span class="by">— ${GF.esc(who(n.user_id))}</span>` : ''}</div>`;
     }).join('');
-    const h = hoursBy[t.id];
     return `<details class="xr-task"><summary>
         <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(t.status || '')}</span>
         <span class="xr-task-title">${GF.esc(t.title || '')}</span>
         ${t.reference_code ? `<span class="ref-code">${GF.esc(t.reference_code)}</span>` : ''}
-        ${h ? `<span class="sess-hours">${GF.icon('clock', 'icon')}${h.toFixed(1)}h</span>` : ''}
       </summary>
       ${t.description ? `<div class="xr-desc">${GF.esc(t.description)}</div>` : ''}
       ${notes || `<div class="xr-note" style="border:none;color:var(--ink-4)">${AL('No progress notes.', 'Нема белешки.')}</div>`}

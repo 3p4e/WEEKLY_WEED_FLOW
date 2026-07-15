@@ -323,7 +323,7 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
       if (seg.date !== iso) return;
       const x = LEFT + seg.start_h * hw, w = Math.max(2, (seg.end_h - seg.start_h) * hw);
       s += `<rect x="${x.toFixed(1)}" y="${y + 6}" width="${w.toFixed(1)}" height="${ROW - 12}" rx="3" fill="${seg.color}" fill-opacity="0.92">`
-        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${seg.hours}h (${seg.start.slice(11, 16)}–${seg.end.slice(11, 16)})</title></rect>`;
+        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${seg.start.slice(11, 16)}–${seg.end.slice(11, 16)}</title></rect>`;
     });
   }
   s += '</svg>';
@@ -331,33 +331,13 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
 };
 
 GF.WWF._docMetricsHtml = (m) => {
-  if (!m || !m.per_sop || !m.per_sop.length) return '';
-  const rows = m.per_sop.map(b => {
-    const delta = b.prev4_avg_hours ? Math.round(((b.hours - b.prev4_avg_hours) / b.prev4_avg_hours) * 100) : null;
-    const trend = delta === null ? '—' : (delta >= 0 ? '+' : '') + delta + '%';
-    return `<tr>
-      <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${b.color};margin-right:6px;vertical-align:middle"></span>${GF.esc(b.sop)}</td>
-      <td style="text-align:right;font-weight:700">${b.hours}h</td>
-      <td style="text-align:right;color:var(--ink-3)">${b.prev4_avg_hours}h</td>
-      <td style="text-align:right;color:${delta > 25 ? '#E5484D' : 'var(--ink-2)'}">${trend}</td>
-      <td style="text-align:right">${b.tasks}</td>
-      <td style="text-align:right;color:${(b.night + b.weekend) > 0 ? '#E0A73E' : 'var(--ink-3)'}">${(b.night + b.weekend + b.overtime).toFixed(1)}h</td>
-    </tr>`;
-  }).join('');
+  // Hour sums were removed app-wide (owner: not a meaningful metric here) —
+  // the ribbon above already shows WHEN work happened, per SOP. Only the
+  // on-time completion line remains.
+  if (!m) return '';
   const ot = m.on_time || {};
-  return `<div style="margin:14px 0">
-    <div style="font-weight:700;font-size:14px;margin-bottom:8px">${AL('Metrics by SOP', 'Метрики по СОП')}</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <tr style="color:var(--ink-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em">
-        <th style="text-align:left;padding:4px 6px">${AL('SOP / area', 'СОП / област')}</th>
-        <th style="text-align:right;padding:4px 6px">${AL('Hours', 'Часови')}</th>
-        <th style="text-align:right;padding:4px 6px">${AL('4-wk avg', '4-нед. просек')}</th>
-        <th style="text-align:right;padding:4px 6px">Δ</th>
-        <th style="text-align:right;padding:4px 6px">${AL('Tasks', 'Задачи')}</th>
-        <th style="text-align:right;padding:4px 6px">${AL('Off-hours', 'Вон работно')}</th>
-      </tr>${rows}</table></div>
-    ${ot.completed ? `<div style="font-size:12px;color:var(--ink-2);margin-top:6px">${AL('On-time completion', 'Навремено завршени')}: <b>${ot.on_time}/${ot.measured != null ? ot.measured : ot.completed}</b> ${AL('with deadlines', 'со рокови')}${ot.rate != null ? ' (' + Math.round(ot.rate * 100) + '%)' : ''} · ${ot.completed} ${AL('completed', 'завршени')}</div>` : ''}
-  </div>`;
+  if (!ot.completed) return '';
+  return `<div style="margin:14px 0;font-size:12px;color:var(--ink-2)">${AL('On-time completion', 'Навремено завршени')}: <b>${ot.on_time}/${ot.measured != null ? ot.measured : ot.completed}</b> ${AL('with deadlines', 'со рокови')}${ot.rate != null ? ' (' + Math.round(ot.rate * 100) + '%)' : ''} · ${ot.completed} ${AL('completed', 'завршени')}</div>`;
 };
 
 /* Document lifecycle stepper (mockup .mw-stepper): Compile → Review → Lock.

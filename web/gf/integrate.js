@@ -322,9 +322,6 @@ GF.WWF.install = () => {
     const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
     const deptId = GF.$('add-dept').value;
     const wk = GF.calendar.weeks[GF._addWeek] || GF.calendar.weeks[GF.calendar.todayId];
-    const estRaw = parseFloat(GF.$('add-est')?.value);
-    // >= 0, not > 0: a deliberate zero-hour estimate is a value, not "no estimate".
-    const estHours = Number.isFinite(estRaw) && estRaw >= 0 ? estRaw : null;
     // v2 fields (due date, typology, recurrence)
     const dueDate = GF.$('add-due')?.value || null;
     const refCode = (GF.$('add-ref')?.value || '').trim() || null;
@@ -357,7 +354,7 @@ GF.WWF.install = () => {
           // column, so updating only department_id leaves the two out of sync.
           department_id: deptId, department: (GF.dep(deptId)||{}).name || null,
           days: days.length?days:[GF.todayDay],
-          estimated_hours: estHours, due_date: dueDate,
+          due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
           recurrence, tags,
           // Whole-object replace; collect starts from the task's existing
@@ -419,7 +416,6 @@ GF.WWF.install = () => {
         title: biTitle, description: biDesc, status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
         week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
-        estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
         reference_code: refCode, recurrence, tags, parent_id: GF._addParent || null,
         attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId) : undefined,

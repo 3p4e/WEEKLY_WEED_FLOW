@@ -6,6 +6,7 @@ visibility (the `tasks_read` policy) are enforced by the database. The
 to a task makes it visible to them (tasks_read has an assignee clause) and it
 shows up in their week, which is what gives acknowledgment something to act on.
 """
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +18,11 @@ from app.deps import require_password_set
 from app.roles import ELEVATED_ROLES
 from app.notify import emit, participants
 from app.roster import display_name, roster
+
+# @username mentions in comments — usernames are the login handles
+# (lowercase word chars, dots, hyphens), matched conservatively so an email
+# address in a comment doesn't half-match as a mention.
+_MENTION_RE = re.compile(r"(?<![\w@])@([a-z0-9][a-z0-9_.\-]{1,63})", re.IGNORECASE)
 
 router = APIRouter(tags=["collab"])
 
@@ -80,12 +86,27 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             "VALUES ($1,$2,$3,$4) RETURNING id, created_at",
             user["org_id"], task_id, user["id"], content)
         # Notify everyone with a participation stake (creator/owner/assignees/
-        # prior commenters), never the author (emit guards that).
+        # prior commenters), never the author (emit guards that). @username
+        # mentions (usernames are unique, so plain @token resolves exactly)
+        # are listed FIRST so emit's first-reason-wins dedupe labels a
+        # mentioned participant as `mentioned`, not `comment` — mentions are
+        # the strongest signal in every vendor default.
         try:
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
+            mentioned = []
+            handles = {h.lower() for h in _MENTION_RE.findall(content)}
+            if handles:
+                async with rls_users(user) as uc:
+                    rows = await uc.fetch(
+                        "SELECT id FROM profiles WHERE org_id=$1 AND is_deleted=false"
+                        " AND lower(username) = ANY($2::text[])",
+                        user["org_id"], sorted(handles)[:16])
+                mentioned = [str(r["id"]) for r in rows]
             who = await participants(c, task_id)
             await emit(c, user, verb="commented", object_type="task", object_id=task_id,
-                       recipients=[(u, "comment") for u in who], task_id=task_id,
+                       recipients=[(u, "mentioned") for u in mentioned]
+                                  + [(u, "comment") for u in who],
+                       task_id=task_id,
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "preview": content[:80]})
         except Exception:
@@ -159,7 +180,17 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         if not _can_manage_task(user, task):
             raise HTTPException(403, "Only the task owner or an elevated role can unassign")
         await _assert_scope_visible(c, task_id, user)
-        await c.execute("DELETE FROM task_assignees WHERE task_id=$1 AND user_id=$2", task_id, assignee_id)
+        res = await c.execute("DELETE FROM task_assignees WHERE task_id=$1 AND user_id=$2", task_id, assignee_id)
+        # Research matrix: assigned AND unassigned notify the (ex-)assignee.
+        if res.split()[-1] != "0":
+            try:
+                t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
+                await emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
+                           recipients=[(assignee_id, "assigned")], task_id=task_id,
+                           department_id=t["department_id"] if t else None,
+                           params={"title": (t["title"] if t else "")})
+            except Exception:
+                pass
     return {"ok": True}
 
 

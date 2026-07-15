@@ -136,7 +136,6 @@ GF.WWF.adoptSelected = async () => {
     reference_code: c.reference_code || null,
     department: c.department || null,       // canonical dept code (kept as the tag)
     due_date: c.due_date || null,
-    estimated_hours: c.estimated_hours != null ? c.estimated_hours : null,
     subtasks: (c.subtasks || []).map((s) => ({ title: s.title, description: s.description || null })),
   }));
   if (out) out.innerHTML = `<span style="color:var(--ink-3);font-size:13px">${AL('Adopting…', 'Се внесува…')}</span>`;

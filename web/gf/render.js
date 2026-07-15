@@ -253,7 +253,6 @@ GF.render = {
     const subHint = (t.subCount > 0 && t.subDone === t.subCount && t.status !== 'done' && GF.can('status', t))
       ? `<button class="subdone-hint" title="${GF.t('subtasks')}: ${t.subDone}/${t.subCount}"
            onclick="event.stopPropagation();GF.toggleDone('${t.id}')">✓ ${GF.t('mark_done')}?</button>` : '';
-    const sessHours = t.sessionHours > 0 ? `<span class="sess-hours" title="${GF.t('log_work')}">${GF.icon('clock', 'icon')}${t.sessionHours}h</span>` : '';
     const tagChips = (t.tags || []).map(tg => `<span class="tag-chip">#${GF.esc(tg)}</span>`).join('');
     const attrChips = GF.attrChips ? GF.attrChips(t) : '';
     const head = `
@@ -264,7 +263,7 @@ GF.render = {
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
-            ${refCode}${typeChip}${dueBadge}${subProg}${subHint}${sessHours}${attrChips}${tagChips}</div>
+            ${refCode}${typeChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
         </div>
         <div class="card-side">
           <div class="daytags">${daytags}</div>
@@ -349,7 +348,6 @@ GF.render = {
         ${toggle}
         <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
         ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
-        ${c.sessionHours > 0 ? `<span class="sess-hours">${GF.icon('clock', 'icon')}${c.sessionHours}h</span>` : ''}
         ${(() => { const p = GF.progress(c); return p > 0 ? `<span class="tree-prog" title="${GF.t('completion')}: ${p}%">
           <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="width:${p}%"></span></span>
           <span class="tp-val">${p}%</span></span>` : ''; })()}

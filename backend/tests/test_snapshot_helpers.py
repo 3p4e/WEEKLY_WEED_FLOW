@@ -65,12 +65,14 @@ def _synthetic_snapshot():
     }
 
 
-def test_build_digest_has_citations_blockers_aging_and_hours():
+def test_build_digest_has_citations_blockers_and_aging():
     md = w.build_digest(_synthetic_snapshot())
     assert "[task:aaaaaaaa]" in md          # every task cites its id
     assert "STUCK" in md and "DECLINED" in md  # blockers section
     assert "rolled 2w" in md                # carry-over aging
-    assert "Org total: 7.5 / 6" in md       # hours actual/estimated
+    # hour sums were removed app-wide (owner: not a meaningful metric) — the
+    # digest must NOT feed them to the AI planners anymore
+    assert "Org total:" not in md and "Hours by time class" not in md
     assert "Completion: 50% (1/2)" in md
 
 
