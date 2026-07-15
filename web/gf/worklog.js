@@ -53,9 +53,18 @@ GF.WWF._renderWorklog = () => {
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 
+  // Breadcrumb for subtasks (mockup .mw-crumbs): parent → this task, the
+  // parent crumb jumps to the parent's worklog. Keeps hierarchy visible when
+  // a tree row opened this modal.
+  const wlTask = GF.task(st.taskId);
+  const wlParent = wlTask && wlTask.parentId ? GF.task(wlTask.parentId) : null;
+  const crumbs = wlParent ? `<div class="mw-crumbs" style="margin-bottom:10px">
+    <a href="#" onclick="event.preventDefault();GF.WWF.openWorklog('${wlParent.id}')" title="${GF.esc(wlParent.title)}">${GF.esc(wlParent.title.slice(0, 34))}</a>
+    <span class="sep">›</span><span class="cur" title="${GF.esc(wlTask.title)}">${GF.esc(wlTask.title.slice(0, 34))}</span></div>` : '';
+
   let list;
   if (st.sessions === null) {
-    list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('Loading…', 'Се вчитува…')}</div>`;
+    list = `<div class="wl-loading"><span class="mw-spinner mw-spinner--sm"></span>${AL('Loading…', 'Се вчитува…')}</div>`;
   } else if (!st.sessions.length) {
     list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('No work logged yet.', 'Сè уште нема внесена работа.')}</div>`;
   } else {
@@ -75,6 +84,7 @@ GF.WWF._renderWorklog = () => {
   }
 
   body.innerHTML = `
+    ${crumbs}
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label><input id="wl-date" type="date" value="${today}"></div>
       <div class="field" style="flex:1"><label>${AL('Start', 'Почеток')}</label><input id="wl-start" type="time" value="09:00"></div>

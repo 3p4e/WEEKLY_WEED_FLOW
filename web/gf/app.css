@@ -911,3 +911,61 @@ body.demo-on .main{padding-bottom:56px}
 .ntf-fdot.warn{background:var(--amber)}
 .ntf-feed{display:flex;gap:11px}
 .ntf-feed + .ntf-feed .ntf-rail::before{content:"";position:absolute;top:-14px;height:16px;width:1px;background:var(--line)}
+
+/* ── Pass-3 library components (owner's ui-elements.html + nav.js rail) ──── */
+/* nav rail group labels (mockup grouped rail: Operations / Management / System) */
+.nav-group{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--ink-4);padding:12px 14px 4px}
+.nav-group:first-child{padding-top:2px}
+
+/* .mw-gauge — semicircular completion gauge (dashboard). Arc gradient and
+   needle rotation are inline (value-dependent); geometry lives here. */
+.mw-gauge{position:relative;width:140px;height:78px;overflow:hidden;margin:4px auto 12px}
+.mw-gauge__arc{position:absolute;top:0;left:0;width:140px;height:140px;border-radius:50%}
+.mw-gauge__arc::after{content:"";position:absolute;inset:16px;border-radius:50%;background:var(--surface)}
+.mw-gauge__needle{position:absolute;bottom:0;left:50%;width:2px;height:58px;background:var(--ink-2);
+  transform-origin:bottom center;transition:transform .5s cubic-bezier(.2,.8,.3,1);z-index:2}
+.mw-gauge__val{position:absolute;bottom:2px;left:0;right:0;text-align:center;
+  font:700 17px var(--mono);color:var(--ink);z-index:3}
+
+/* .mw-pager — cursor-pagination controls (audit load-more, inbox load-older) */
+.mw-pager{display:inline-flex;gap:5px}
+.mw-pager button{min-width:32px;height:32px;padding:0 14px;font:600 13px var(--font);
+  color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);cursor:pointer;
+  border-radius:var(--r-sm,4px);transition:all .14s ease}
+.mw-pager button:hover{color:var(--primary);border-color:var(--border-strong)}
+.mw-pager button:disabled{opacity:.35;cursor:not-allowed}
+
+/* .mw-crumbs — breadcrumb trail (subtask worklog: parent › child) */
+.mw-crumbs{display:flex;align-items:center;gap:8px;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.07em;min-width:0}
+.mw-crumbs a{color:var(--ink-3);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mw-crumbs a:hover{color:var(--primary)}
+.mw-crumbs .sep{color:var(--ink-4);flex:none}
+.mw-crumbs .cur{color:var(--primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* .mw-spinner — loading indicator replacing bare "Loading…" text */
+@keyframes mwSpin{to{transform:rotate(360deg)}}
+.mw-spinner{width:28px;height:28px;flex:none;border-radius:50%;
+  border:3px solid var(--line);border-top-color:var(--primary);animation:mwSpin .8s linear infinite}
+.mw-spinner--sm{width:16px;height:16px;border-width:2px}
+.wl-loading{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-3);padding:6px 0}
+
+/* .mw-skel — shimmer placeholder rows (inbox first load) */
+@keyframes mwShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.mw-skel{background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:mwShimmer 1.4s ease-in-out infinite;border-radius:var(--r-md,6px)}
+
+/* .mw-progress--striped — animated stripes on ACTIVE work: completion bars
+   of tasks currently "Working on it" signal live effort. */
+@keyframes mwStripe{to{background-position:24px 0}}
+.tree-row.s-working .tp-fill,
+.card.s-working .card-actions .track > span{
+  background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.16) 0,rgba(255,255,255,.16) 6px,transparent 6px,transparent 12px);
+  animation:mwStripe 1s linear infinite}
+
+@media (prefers-reduced-motion: reduce){
+  .mw-spinner{animation-duration:1.6s}
+  .mw-skel{animation:none}
+  .tree-row.s-working .tp-fill,.card.s-working .card-actions .track > span{animation:none}
+}

@@ -368,7 +368,8 @@ GF.WWF.renderReport = () => {
 /* nav item for the report/plan view, above Audit Trail */
 GF.WWF._registerFullPageView({
   key: 'report', icon: 'trend', label: () => AL('Report', 'Извештај'),
-  insertBefore: 'audit', badge: () => GF.WWF._hasNewReportPin,
+  // Management group of the rail (mockup nav.js) — audit/intake/import stay System.
+  insertBefore: 'coord', badge: () => GF.WWF._hasNewReportPin,
 });
 
 /* ── Minimal in-app "new AI report" indicator (no email/push/SMTP) ──────

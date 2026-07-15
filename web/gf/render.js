@@ -77,28 +77,35 @@ GF.render = {
   },
 
   sidebar() {
-    const nav = [];
-    // Executives get an exec-only Overview at the top of the nav; department
-    // members get their department home; everyone keeps the standard views.
-    if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
-    if (GF.hasDeptHome && GF.hasDeptHome()) nav.push(['depthome', 'dept_home', 'home']);
+    // Grouped rail per the owner's mockup (nav.js: Operations / Manager /
+    // System). Items keep their existing visibility rules — groups only
+    // organize, never hide. data-nav anchors let the full-page views
+    // (_registerFullPageView) insert themselves into the right group.
     // Coordination badge = pending cross-department handoffs (handoff tasks
     // not yet ready) in the selected week. 0 → no badge renders.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
       .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
     const unreadN = (GF.WWF && GF.WWF._notif && GF.WWF._notif.unread) || 0;
-    nav.push(['inbox', 'inbox', 'bell', unreadN]);
-    nav.push(
-      ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
-      ['calendar', 'calendar', 'calendar'],
-      ['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
-    );
+    const ops = [];
+    if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
+    ops.push(['mywork', 'my_week', 'check'], ['board', 'board', 'grid'],
+             ['timeline', 'timeline', 'timeline'], ['calendar', 'calendar', 'calendar']);
+    const mgr = [];
+    if (GF.isExec && GF.isExec()) mgr.push(['exec', 'exec_overview', 'layers']);
+    mgr.push(['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']);
     // Workload balancing is a coordination tool — managers/execs only.
-    if (GF.can('team')) nav.push(['workload', 'workload', 'clock']);
-    GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
-      <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
+    if (GF.can('team')) mgr.push(['workload', 'workload', 'clock']);
+    const sys = [['inbox', 'inbox', 'bell', unreadN]];
+    const item = ([id, key, ic, badge]) => `
+      <div class="nav-item ${id === GF.state.view ? 'active' : ''}" data-nav="${id}" onclick="GF.setView('${id}')">
         ${GF.icon(ic)}<span>${GF.t(key)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}
-      </div>`).join('');
+      </div>`;
+    const group = (lbl, items) => items.length
+      ? `<div class="nav-group">${lbl}</div>` + items.map(item).join('') : '';
+    GF.$('nav').innerHTML =
+      group(AL('Operations', 'Операции'), ops)
+      + group(AL('Management', 'Менаџмент'), mgr)
+      + group(AL('System', 'Систем'), sys);
 
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};

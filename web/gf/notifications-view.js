@@ -9,7 +9,9 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
 (function () {
   const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
-  GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false };
+  GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false,
+                    moreItems: false, moreFeed: false };
+  const PAGE = 50;   // backend default limit on /notifications and /activity
 
   const who = (id) => (GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
 
@@ -83,7 +85,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   GF.views.inbox = () => {
     const st = GF.WWF._notif;
     if (!st.loaded) { GF.WWF.loadInbox(); }
-    const tab = (id, lbl) => `<button class="btn btn-sm ${st.tab === id ? 'btn-primary' : ''}"
+    const tab = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.tab === id ? 'btn-primary on' : ''}"
       onclick="GF.WWF._notif.tab='${id}';GF.render.all()">${lbl}</button>`;
     const flt = (id, lbl) => `<span class="chip-opt ${st.filter === id ? 'on' : ''}"
       onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.WWF.loadInbox()">${lbl}</span>`;
@@ -97,17 +99,49 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       </div>
       ${st.tab === 'inbox' ? `<div class="chips" style="margin:0 4px 10px">${
         ['assigned', 'comment', 'status', 'report'].map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
-      <div class="ntf-list">${st.tab === 'inbox' ? grouped(items, itemRow) : grouped(st.feed, feedRow)}</div>`;
+      <div class="ntf-list">${!st.loaded
+        ? `<div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
+           <div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
+           <div class="mw-skel" style="height:52px"></div>`
+        : st.tab === 'inbox' ? grouped(items, itemRow) : grouped(st.feed, feedRow)}</div>
+      ${(st.tab === 'inbox' ? st.moreItems : st.moreFeed)
+        ? `<div class="mw-pager" style="justify-content:center;margin-top:10px">
+             <button onclick="GF.WWF.notifOlder('${st.tab === 'inbox' ? 'items' : 'feed'}')">${AL('Load older', 'Вчитај постари')}</button></div>` : ''}`;
   };
 
   GF.WWF.loadInbox = async () => {
     const st = GF.WWF._notif;
+    // Demo mode has no notification data — the demo API router answers these
+    // paths with junk that would poison st.items (must stay an ARRAY).
+    if (GF.state && GF.state.demo) { st.items = []; st.feed = []; st.loaded = true; return; }
     try {
       const [items, feed, uc] = await Promise.all([
         GF.API.notifications({}), GF.API.activity({}), GF.API.notifUnread()]);
-      st.items = items || []; st.feed = feed || []; st.unread = (uc && uc.unread) || 0; st.loaded = true;
+      st.items = Array.isArray(items) ? items : [];
+      st.feed = Array.isArray(feed) ? feed : [];
+      st.unread = (uc && uc.unread) || 0; st.loaded = true;
+      st.moreItems = st.items.length === PAGE; st.moreFeed = st.feed.length === PAGE;
       if (GF.state.view === 'inbox') GF.render.all(); else GF.render.sidebar();
     } catch (e) { /* offline / unauthenticated: badge just stays stale */ }
+  };
+
+  // Cursor pagination (mockup .mw-pager): append the next page of history
+  // using the oldest loaded row as the `before` cursor.
+  GF.WWF.notifOlder = async (kind) => {
+    const st = GF.WWF._notif;
+    const list = kind === 'feed' ? st.feed : st.items;
+    if (!list.length) return;
+    const before = list[list.length - 1].created_at;
+    try {
+      const page = kind === 'feed'
+        ? await GF.API.activity({ before })
+        : await GF.API.notifications({ before });
+      const seen = new Set(list.map(x => x.id));
+      (page || []).forEach(x => { if (!seen.has(x.id)) list.push(x); });
+      if (kind === 'feed') st.moreFeed = (page || []).length === PAGE;
+      else st.moreItems = (page || []).length === PAGE;
+      GF.render.all();
+    } catch (e) { GF.toast(AL('Load failed: ', 'Неуспешно вчитување: ') + e.message, 'error'); }
   };
 
   GF.WWF.openNotif = async (id, taskId) => {

@@ -354,3 +354,21 @@
   font-family:var(--font-display);text-transform:uppercase;letter-spacing:.05em;font-size:14px}
 :root[data-theme^="mass-weed"] .xr-sec.open{
   box-shadow:inset 2px 0 0 var(--primary), inset 0 0 24px rgba(var(--accent-rgb),.06)}
+
+/* ═══ Component fill, pass 3 — rail groups, gauge, pager, crumbs, spinner,
+   tab buttons (owner's ui-elements.html library + nav.js grouped rail) ═══ */
+:root[data-theme^="mass-weed"] .nav-group{
+  font-family:var(--font-display);letter-spacing:var(--ls-wide);color:var(--ink-3)}
+:root[data-theme^="mass-weed"] .mw-gauge__needle{
+  background:var(--primary-hover);box-shadow:0 0 8px rgba(var(--accent-rgb),.9)}
+:root[data-theme^="mass-weed"] .mw-gauge__val{
+  font-family:var(--font-num);text-shadow:0 0 12px rgba(var(--accent-rgb),.4)}
+:root[data-theme^="mass-weed"] .mw-pager button{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.06em;border-radius:0;
+  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
+:root[data-theme^="mass-weed"] .mw-crumbs .cur{text-shadow:0 0 8px rgba(var(--accent-rgb),.4)}
+:root[data-theme^="mass-weed"] .mw-spinner{box-shadow:0 0 12px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .ntf-tab{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.1em}
+:root[data-theme^="mass-weed"] .ntf-tab.on{
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.4), inset 0 -2px 0 var(--primary-hover)}

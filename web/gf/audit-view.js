@@ -183,7 +183,7 @@ GF.WWF.renderAudit = () => {
   }
 
   const more = st.hasMore
-    ? `<div style="text-align:center;margin-top:10px"><button class="btn" onclick="GF.WWF.loadAudit({reset:false})">${AL('Load more', 'Вчитај повеќе')}</button></div>`
+    ? `<div class="mw-pager" style="justify-content:center;margin-top:10px"><button onclick="GF.WWF.loadAudit({reset:false})">${AL('Load more', 'Вчитај повеќе')}</button></div>`
     : '';
 
   v.innerHTML = toolbar + `<div id="audit-list">${rows}</div>` + more;

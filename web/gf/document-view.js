@@ -403,7 +403,8 @@ GF.WWF._renderDocPanel = () => {
 
   let body;
   if (ds.loading) {
-    body = `<div style="padding:16px;color:var(--ink-3)">${AL('Working…', 'Се работи…')}</div>`;
+    body = `<div style="padding:16px;color:var(--ink-3);display:flex;align-items:center;gap:10px">
+      <span class="mw-spinner mw-spinner--sm"></span>${AL('Working…', 'Се работи…')}</div>`;
   } else if (ds.error) {
     // A real failure (500/network/permission) — NOT the empty state. Offer a
     // retry, never a Compile button that could overwrite an existing draft.

@@ -151,7 +151,14 @@ GF.views = {
         ${kpi(busiest?GF.dayLabel(busiest[0]):'—', GF.t('busiest'), 'var(--violet)')}
       </div>
       <div class="dash-grid">
-        <div class="dash-card"><div class="dash-card-ttl">${GF.t('completion')} · ${GF.t('total')}</div>${statRows}</div>
+        <div class="dash-card"><div class="dash-card-ttl">${GF.t('completion')} · ${GF.t('total')}</div>
+          ${(() => { const ang = Math.round(rate * 1.8); return `
+          <div class="mw-gauge" title="${GF.t('completion')}: ${rate}%">
+            <div class="mw-gauge__arc" style="background:conic-gradient(from 270deg, var(--green) 0deg ${ang}deg, var(--surface-3) ${ang}deg 180deg, transparent 180deg 360deg)"></div>
+            <div class="mw-gauge__needle" style="transform:translateX(-50%) rotate(${ang - 90}deg)"></div>
+            <div class="mw-gauge__val">${rate}%</div>
+          </div>`; })()}
+          ${statRows}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('departments')}</div>${deptRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('responsible')}</div>${loadRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('blocker')} · ${blockers.length}</div>

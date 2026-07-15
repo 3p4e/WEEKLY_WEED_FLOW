@@ -227,7 +227,8 @@ const xrSection = (label, deptId, statusEntry) => {
   if (open) {
     const doc = st.docs[deptId];
     if (doc === null || doc === undefined) {
-      body = `<div class="xr-sec-body sub">${AL('Loading…', 'Се вчитува…')}</div>`;
+      body = `<div class="xr-sec-body sub" style="display:flex;align-items:center;gap:10px">
+        <span class="mw-spinner mw-spinner--sm"></span>${AL('Loading…', 'Се вчитува…')}</div>`;
     } else if (doc.missing) {
       body = `<div class="xr-sec-body sub">${AL('Not submitted — no document compiled for this week.', 'Не е поднесено — нема составен документ за оваа недела.')}</div>`;
     } else if (doc.error) {
@@ -303,6 +304,7 @@ GF.views.execreport = function () {
 GF.WWF._registerFullPageView({
   key: 'execreport',
   icon: 'eye',
+  insertBefore: 'coord',   // Management group of the rail (mockup nav.js)
   label: () => AL('Executive Report', 'Извештај'),
   // Same gate as the backend's require_role(*ELEVATED_ROLES) on /status and
   // the document endpoints — a base USER would only collect 403s here.
