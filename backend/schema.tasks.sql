@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict rdPk63NQhINg5NZVgME3L96Swkj7gTZcngY60GdMxh3iLrO2dvbJHwvIdQaNIgf
+\restrict 1rkdvxVyVLRTjvQ1dSILaH9GEnG9ay2yrz21Aynkmnl4GgBtwKa9FPBOmakWrRJ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -286,6 +286,52 @@ ALTER TABLE ONLY public.notifications FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: plant_batches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plant_batches (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    strain text NOT NULL,
+    plant_count integer NOT NULL,
+    phase text NOT NULL,
+    phase_since date DEFAULT CURRENT_DATE NOT NULL,
+    note text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT plant_batches_phase_check CHECK ((phase = ANY (ARRAY['clone'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'drying'::text]))),
+    CONSTRAINT plant_batches_plant_count_check CHECK ((plant_count >= 0))
+);
+
+ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rooms (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    name_mk text,
+    kind text DEFAULT 'flower'::text NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rooms_kind_check CHECK ((kind = ANY (ARRAY['nursery'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'dry'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: task_assignees; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -540,6 +586,30 @@ ALTER TABLE ONLY public.notifications
 
 
 --
+-- Name: plant_batches plant_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rooms rooms_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_org_id_code_key UNIQUE (org_id, code);
+
+
+--
+-- Name: rooms rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: task_assignees task_assignees_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -642,6 +712,13 @@ CREATE INDEX notifications_recipient_created_idx ON public.notifications USING b
 --
 
 CREATE INDEX notifications_unread_idx ON public.notifications USING btree (recipient_id) WHERE ((read_at IS NULL) AND (done_at IS NULL));
+
+
+--
+-- Name: plant_batches_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org_id, room_id) WHERE is_active;
 
 
 --
@@ -764,6 +841,20 @@ CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoff
 
 
 --
+-- Name: plant_batches audit_plant_batches; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.plant_batches FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: rooms audit_rooms; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_rooms AFTER INSERT OR DELETE OR UPDATE ON public.rooms FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: task_progress audit_task_prog; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -845,6 +936,14 @@ ALTER TABLE ONLY public.handoffs
 
 ALTER TABLE ONLY public.notifications
     ADD CONSTRAINT notifications_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE CASCADE;
+
+
+--
+-- Name: plant_batches plant_batches_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -1044,6 +1143,20 @@ CREATE POLICY org_isolation ON public.handoffs USING ((org_id = app.current_org_
 
 
 --
+-- Name: plant_batches org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: rooms org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.rooms USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: task_assignees org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1072,11 +1185,23 @@ CREATE POLICY org_isolation ON public.work_sessions USING ((org_id = app.current
 
 
 --
+-- Name: plant_batches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: task_progress progress_rw; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_assignees; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1170,5 +1295,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rdPk63NQhINg5NZVgME3L96Swkj7gTZcngY60GdMxh3iLrO2dvbJHwvIdQaNIgf
+\unrestrict 1rkdvxVyVLRTjvQ1dSILaH9GEnG9ay2yrz21Aynkmnl4GgBtwKa9FPBOmakWrRJ
 

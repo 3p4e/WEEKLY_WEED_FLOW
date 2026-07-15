@@ -73,6 +73,7 @@ GF.I18N = {
     all_tags:'All tags', overdue:'Overdue',
     exec_overview:'Executive', exec_sub:'Cross-department overview, one screen',
     dept_home:'My Department',
+    facility_map:'Facility', facility_sub:'Plants by room, strain and phase',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -107,6 +108,7 @@ GF.I18N = {
     all_tags:'Сите ознаки', overdue:'Задоцнето',
     exec_overview:'Раководство', exec_sub:'Меѓуодделски преглед на еден екран',
     dept_home:'Мојот оддел',
+    facility_map:'Капацитет', facility_sub:'Растенија по соба, сорта и фаза',
   },
 };
 

@@ -969,3 +969,25 @@ body.demo-on .main{padding-bottom:56px}
   .mw-skel{animation:none}
   .tree-row.s-working .tp-fill,.card.s-working .card-actions .track > span{animation:none}
 }
+
+/* ── Facility board (owner's facility.html): room cells + strain rows ───── */
+.fac-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.fac-room{display:flex;flex-direction:column;min-height:120px;padding:12px 14px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  transition:border-color .16s ease,box-shadow .16s ease}
+.fac-room:hover{border-color:var(--border-strong);box-shadow:var(--sh-1)}
+.fac-room-hd{display:flex;align-items:baseline;gap:8px}
+.fr-nm{font-weight:800;font-size:14px;color:var(--ink);flex:1;min-width:0}
+.fr-kind{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-3);border:1px solid var(--line);border-radius:99px;padding:1px 8px;white-space:nowrap}
+.fr-big{display:flex;align-items:baseline;gap:6px;margin:8px 0 6px}
+.fr-n{font:800 26px var(--mono);line-height:1;color:var(--ink)}
+.fr-u{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4)}
+.fac-strains{display:flex;flex-direction:column;gap:3px;margin-top:auto}
+.fac-strain{display:flex;align-items:center;gap:7px;font-size:12px;min-width:0}
+.fs-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.fs-nm{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fs-n{font:700 12px var(--mono);color:var(--ink)}
+.fs-ph{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  margin-left:auto;white-space:nowrap}
+.fr-empty{font-size:12px;color:var(--ink-4);font-style:italic}

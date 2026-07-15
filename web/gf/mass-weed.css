@@ -372,3 +372,14 @@
   font-family:var(--font-display);text-transform:uppercase;letter-spacing:.1em}
 :root[data-theme^="mass-weed"] .ntf-tab.on{
   box-shadow:0 0 14px rgba(var(--accent-rgb),.4), inset 0 -2px 0 var(--primary-hover)}
+
+/* Facility board under the HUD: chamfered room cells, glowing counts
+   (the mockup facility.html floor-plan look). */
+:root[data-theme^="mass-weed"] .fac-room{
+  border-radius:0;clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px)}
+:root[data-theme^="mass-weed"] .fac-room:hover{box-shadow:0 0 18px rgba(var(--accent-rgb),.2)}
+:root[data-theme^="mass-weed"] .fr-nm{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.05em}
+:root[data-theme^="mass-weed"] .fr-n{
+  font-family:var(--font-num);text-shadow:0 0 12px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .fs-dot{box-shadow:0 0 8px currentColor;color:inherit}

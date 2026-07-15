@@ -30,6 +30,12 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'report_locked':  return AL(`${a} locked the weekly ${p.kind} (${p.week_start})`,
                                        `${a} го заклучи неделниот ${p.kind === 'plan' ? 'план' : 'извештај'} (${p.week_start})`);
       case 'created':        return AL(`${a} created: ${t}`, `${a} креираше: ${t}`);
+      case 'batch_added':    return AL(`${a} added ${p.plant_count} × ${p.strain} to ${p.room} (${p.phase})`,
+                                       `${a} додаде ${p.plant_count} × ${p.strain} во ${p.room} (${p.phase})`);
+      case 'batch_moved':    return AL(`${a} moved ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`,
+                                       `${a} премести ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`);
+      case 'batch_closed':   return AL(`${a} closed the ${p.strain} batch in ${p.room} (${p.plant_count} plants)`,
+                                       `${a} ја затвори серијата ${p.strain} во ${p.room} (${p.plant_count} растенија)`);
       default:               return `${a}: ${n.verb} ${t}`;
     }
   };
