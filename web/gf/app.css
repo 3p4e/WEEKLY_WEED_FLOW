@@ -851,3 +851,39 @@ body.demo-on .main{padding-bottom:56px}
 .ntf-reason{border:1px solid var(--glass-border);border-radius:99px;padding:1px 8px}
 .ntf-done{flex:none}
 .ntf-empty{padding:40px;text-align:center;color:var(--ink-3)}
+
+/* ── Completion progress (tasks.progress) ─────────────────────────────────
+   ring-mini: parent card ring = sub-tasks done fraction (conic, --p 0..100,
+   --col dept colour). tree-prog: per-subtask completion bar in tree rows.
+   pl-*: the worklog modal's completion control (quick-set + slider), from
+   the Mass Weed mockup's log-progress panel. Token-based → all themes. */
+.ring-mini{--p:0;--col:var(--primary);width:15px;height:15px;border-radius:50%;flex:none;
+  display:inline-block;vertical-align:-3px;position:relative;
+  background:conic-gradient(var(--col) calc(var(--p)*1%), var(--surface-3) 0)}
+.ring-mini::before{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--surface)}
+.subdone-hint{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 9px;cursor:pointer;
+  font:600 11px var(--font);color:var(--green-fg,var(--green));background:var(--green-soft);
+  border:1px solid var(--green);border-radius:11px;white-space:nowrap}
+.subdone-hint:hover{filter:brightness(1.15)}
+.tree-prog{display:inline-flex;align-items:center;gap:6px;flex:none}
+.tp-track{width:52px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--line-2)}
+.tp-fill{display:block;height:100%;border-radius:3px;transition:width .4s cubic-bezier(.2,.7,.3,1)}
+.tp-fill.hi{background:var(--green)}
+.tp-fill.mid{background:var(--amber)}
+.tp-fill.lo{background:var(--red)}
+.tp-val{font:600 11px var(--mono);color:var(--ink-2);min-width:32px}
+.pl-quick{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:2px 0 10px}
+.pl-q{font:600 11px var(--font);letter-spacing:.05em;color:var(--ink-2);cursor:pointer;
+  background:var(--surface-2);border:none;box-shadow:inset 0 0 0 1px var(--line);
+  padding:7px 0;border-radius:var(--r-sm,4px)}
+.pl-q:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--border-strong)}
+.pl-q.on{color:var(--text-on-primary);font-weight:700;background:var(--primary);
+  box-shadow:0 0 12px -2px var(--primary)}
+.pl-range{-webkit-appearance:none;appearance:none;flex:1;height:6px;border-radius:3px;
+  background:var(--surface-3);outline:none;margin:4px 0 8px;cursor:pointer}
+.pl-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 8px var(--primary-soft),0 0 0 1px var(--border-strong);cursor:pointer}
+.pl-range::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 8px var(--primary-soft);cursor:pointer}
+.pl-val{font:700 13px var(--mono);color:var(--ink);min-width:44px;text-align:right}

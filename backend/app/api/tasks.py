@@ -115,7 +115,7 @@ async def weeks(user: dict = Depends(require_password_set)):
 _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
     "t.task_type,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
-    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,"
+    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,t.progress,"
     "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
 )
 
@@ -218,6 +218,7 @@ class TaskIn(BaseModel):
     tags: list[str] = []
     attributes: dict | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
+    progress: int = Field(default=0, ge=0, le=100)
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
@@ -339,14 +340,14 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
                 " task_type,reference_code,external_ref,blocker_reason,recurrence,"
                 " department,department_id,week_id,week_start,due_date,days,tags,attributes,"
-                " estimated_hours,created_by,updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$2,$2)"
+                " estimated_hours,progress,created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$2,$2)"
                 " RETURNING *",
                 user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
                 body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
                 body.recurrence, body.department, body.department_id, body.week_id,
                 body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
-                body.estimated_hours,
+                body.estimated_hours, body.progress,
             )
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
@@ -386,6 +387,7 @@ class TaskPatch(BaseModel):
     completed_date: date | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
     actual_hours: Decimal | None = Field(default=None, ge=0)
+    progress: int | None = Field(default=None, ge=0, le=100)
 
 
 # Columns a PATCH may set to SQL NULL. exclude_unset (not exclude_none)
@@ -474,6 +476,12 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         args.append(date.today()); fields.append(f"completed_date=${len(args)}")
     elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
+    # Completing forward-fills the completion bar unless the caller set one.
+    # Deliberately one-directional: progress=100 never forces status (the
+    # research rule — never hard-enforce completion), and reopening keeps the
+    # percentage (work done stays done; the user adjusts it if it regressed).
+    if patch.get("status") == "completed" and "progress" not in patch:
+        args.append(100); fields.append(f"progress=${len(args)}")
     noop = not fields  # nothing to apply once null-drops are accounted for
     if not noop:
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

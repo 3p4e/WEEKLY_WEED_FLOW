@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ol3wdBnAe4YdsA5eCcHgIuJ6xczbuI2NWeJDgRchF5zGPxeisRq1CdlzR8gbx4X
+\restrict rdPk63NQhINg5NZVgME3L96Swkj7gTZcngY60GdMxh3iLrO2dvbJHwvIdQaNIgf
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -393,7 +393,9 @@ CREATE TABLE public.tasks (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     external_ref text,
     attributes jsonb DEFAULT '{}'::jsonb NOT NULL,
+    progress smallint DEFAULT 0 NOT NULL,
     CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
+    CONSTRAINT tasks_progress_check CHECK (((progress >= 0) AND (progress <= 100))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text]))),
     CONSTRAINT tasks_task_type_check CHECK ((task_type = ANY (ARRAY['capa'::text, 'sop'::text, 'validation'::text, 'document'::text, 'lab'::text, 'meeting'::text, 'admin'::text, 'other'::text])))
 );
@@ -1168,5 +1170,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ol3wdBnAe4YdsA5eCcHgIuJ6xczbuI2NWeJDgRchF5zGPxeisRq1CdlzR8gbx4X
+\unrestrict rdPk63NQhINg5NZVgME3L96Swkj7gTZcngY60GdMxh3iLrO2dvbJHwvIdQaNIgf
 

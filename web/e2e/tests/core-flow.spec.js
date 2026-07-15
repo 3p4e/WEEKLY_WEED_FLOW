@@ -25,11 +25,12 @@ test('login, create a task, cycle its status, assign a teammate, logout', async 
 
   const card = page.locator('.card', { has: page.locator('.card-title', { hasText: taskTitle }) });
 
-  await test.step('cycle its status', async () => {
+  await test.step('change its status via the picker', async () => {
     const pill = card.locator('.pill');
-    const before = await pill.getAttribute('class');
+    // the pill opens an explicit status chooser (mockup interaction), not a blind cycle
     await pill.click();
-    await expect(pill).not.toHaveClass(before ?? '');
+    await page.locator('#gf-chooser .sel-row[data-v="review"]').click();
+    await expect(pill).toHaveClass(/s-review/);
   });
 
   await test.step('assign a teammate', async () => {

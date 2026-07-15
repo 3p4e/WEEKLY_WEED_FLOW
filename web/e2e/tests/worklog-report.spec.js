@@ -63,6 +63,22 @@ test('due date + type at creation, weekend work session shows up in the report h
     await modal.locator('.btn-ghost').click();               // close the modal
   });
 
+  await test.step('set completion % from the worklog panel', async () => {
+    await card.getByRole('button', { name: /log work/i }).click();
+    const modal = page.locator('#worklog-modal');
+    await expect(modal).toBeVisible();
+    // quick-set 75% → persists (PATCH progress) and re-renders with the value
+    await modal.locator('.pl-q', { hasText: '75%' }).click();
+    await expect(modal.locator('#wl-pct-val')).toHaveText('75%', { timeout: 15_000 });
+    await expect(modal.locator('.pl-q.on')).toHaveText('75%');
+    // 100% surfaces the never-enforced "mark done?" suggestion
+    await modal.locator('.pl-q', { hasText: '100%' }).click();
+    await expect(modal.locator('.subdone-hint')).toBeVisible({ timeout: 15_000 });
+    await modal.locator('.btn-ghost').click();
+    // the card's completion bar now reads the explicit percent
+    await expect(card.locator('.card-actions .mono')).toHaveText('100%');
+  });
+
   await test.step('the report view shows the hours in the weekend bucket', async () => {
     await page.locator('[data-nav="report"]').click();
     const hours = page.locator('#report-hours');

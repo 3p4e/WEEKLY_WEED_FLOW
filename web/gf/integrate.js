@@ -71,6 +71,7 @@ GF.WWF.transform = (t) => ({
   attrs: t.attributes || {},
   sessionHours: t.session_hours != null ? Number(t.session_hours) : 0,
   subCount: Number(t.subtask_count || 0), subDone: Number(t.subtask_done_count || 0),
+  progressPct: t.progress != null ? Number(t.progress) : 0,
 });
 
 GF.WWF.weekIndex = (t) => {
@@ -288,6 +289,9 @@ GF.WWF.install = () => {
     try {
       const resp = await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' });
       if (resp && resp.completed_date !== undefined) t.completed_date = resp.completed_date;
+      // Completion forward-fills progress=100 server-side — mirror it so the
+      // local bar doesn't lag until the next full reload.
+      if (resp && resp.progress !== undefined) t.progressPct = Number(resp.progress);
       // Completing a recurring task auto-creates its next instance server-side.
       if (t.status === 'done' && resp && resp.next_instance) {
         GF.state.tasks.push(GF.WWF.transform(resp.next_instance));

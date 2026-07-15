@@ -53,20 +53,27 @@ CSS. Nav item gets an unread badge. This is the "COO/owner sees what happened"
 surface — pairs with a shared, append-only, **bilingual** activity feed
 (structured events rendered per-language, never pre-composed strings).
 
-**4. Subtask status control — effort S–M (checkbox already shipped in Phase 0)**
-Files: `render.js` (`treeRows`), `worklog.js`, `mass-weed.css`. The Phase-0 fix
-already added a checkbox + clickable pill and session→working auto-advance.
-Remaining: swap the cycle-only pill for an explicit status picker (reuse #1),
-add the completion-% control to the worklog modal, adopt `.mw-st--{status}` /
-`.mw-stat__fill` styling.
+**4. Subtask status control — SHIPPED (v34 backend / v56 frontend)**
+Every status pill (cards + tree rows) opens an explicit `GF.choose` popup
+picker instead of blind-cycling. `tasks.progress` (0–100, migration 0014) is
+the explicit completion percentage, set from the worklog modal's quick-set +
+slider control (the mockup's log-progress panel); completing a task
+forward-fills 100 server-side, but 100% never forces done — it only surfaces
+a "mark done?" suggestion (never-enforce rule). Parents show a mini progress
+ring (`.ring-mini`, fraction of sub-tasks completed) and, when ALL sub-tasks
+are done, the same never-enforced suggestion chip. Tree rows carry
+`.mw-stat`-style completion bars.
 
-**5. Fill out the design-system CSS — effort L, ongoing, behind 1–4**
-Grow `mass-weed.css` with the missing `.mw-*` families as views adopt them
-(rail collapse/groups/accent, `.mw-btn` variants, badges/pills, and the utility
-set: toast, alert, empty, avatar, accordion, stepper, pager, crumbs, table,
-progress, ring, gauge, feed, stat-card). Do it component-by-component — a
-big-bang CSS dump is what failed the first time. Keep the app's `GF.t()`/`AL()`
-JS i18n; do NOT port the mockup's `html[data-lang]` CSS toggle.
+**5. Fill out the design-system CSS — IN PROGRESS (first pass shipped)**
+Shipped, each consumed by live markup: status pills as `.mw-st` (condensed +
+inset ring), `.mw-stat__fill` banded/sheen completion bars, `.mw-ring` glow,
+`.mw-badge2` nav badges, `.mw-toast` chamfer, `.mw-alert` blocker geometry,
+`.mw-avatar` chamfered stack avatars, `.mw-empty` console empty states,
+`.mw-table` headers/hover, `.mw-btn` swept-hexagon primary CTAs, `.pl-*`
+progress controls. Remaining families port as views adopt them (accordion,
+stepper, pager, crumbs, gauge, feed, stat-card, rail groups). Keep the app's
+`GF.t()`/`AL()` JS i18n; do NOT port the mockup's `html[data-lang]` CSS
+toggle.
 
 ## Already done (Phase 0, live in v52)
 Subtask rows got a real completion checkbox + clickable status pill; logging a

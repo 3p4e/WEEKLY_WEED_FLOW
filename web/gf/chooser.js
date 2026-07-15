@@ -54,12 +54,17 @@ window.GF = window.GF || {};
       </button>`).join('');
   };
 
+  // Imperative popup — same chooser, no form field. For pickers that act
+  // immediately (subtask status pill, quick actions): cfg.value is the
+  // current selection, cfg.onPick receives the choice.
+  GF.choose = (cfg) => { REG.__choose = cfg; GF.openChooser('__choose'); };
+
   GF.openChooser = (id) => {
     const cfg = REG[id]; if (!cfg) return;
     openId = id; hi = -1;
     let el = GF.$('gf-chooser');
     if (!el) { el = document.createElement('div'); el.id = 'gf-chooser'; el.className = 'overlay'; document.body.appendChild(el); }
-    const cur = GF.$(id) ? GF.$(id).value : '';
+    const cur = GF.$(id) ? GF.$(id).value : (cfg.value != null ? String(cfg.value) : '');
     const search = cfg.searchable || (cfg.options || []).length > 8;
     el.innerHTML = `
       <div class="modal sel-modal">
@@ -78,14 +83,15 @@ window.GF = window.GF || {};
   GF._selFilter = (q) => {
     const cfg = REG[openId]; if (!cfg) return;
     hi = -1;
-    GF.$('sel-list').innerHTML = rows(cfg, GF.$(openId) ? GF.$(openId).value : '', q);
+    const cur = GF.$(openId) ? GF.$(openId).value : (cfg.value != null ? String(cfg.value) : '');
+    GF.$('sel-list').innerHTML = rows(cfg, cur, q);
   };
 
   GF.pickSel = (id, v) => {
-    const cfg = REG[id], inp = GF.$(id);
-    if (!cfg || !inp) return;
-    inp.value = v;
-    GF.syncSelect(id);
+    const cfg = REG[id];
+    if (!cfg) return;
+    const inp = GF.$(id);           // absent for imperative GF.choose pickers
+    if (inp) { inp.value = v; GF.syncSelect(id); }
     GF.closeModal('gf-chooser'); openId = null;
     if (cfg.onPick) cfg.onPick(v);
   };

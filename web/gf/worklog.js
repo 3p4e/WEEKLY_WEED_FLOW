@@ -89,9 +89,56 @@ GF.WWF._renderWorklog = () => {
     <div class="field"><label>${AL('Note', 'Белешка')}</label>
       <div class="row" style="gap:8px"><input id="wl-note" placeholder="${AL('What was done…', 'Што беше направено…')}" style="flex:1">
         ${GF.WWF.micBtn('wl-note')}</div></div>
+    ${GF.WWF._progressBlock()}
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="GF.WWF.submitWorklog()">${GF.t('log_work')}</button>
     <div class="sec-label" style="margin-top:16px">${GF.icon('clock','icon')}${AL('Logged sessions', 'Внесени сесии')}</div>
     <div id="wl-list">${list}</div>`;
+};
+
+/* ── Completion % (tasks.progress) — the mockup's log-progress control:
+   quick-set buttons + a slider. Persists on release (PATCH {progress});
+   deliberately decoupled from status — 100% only SUGGESTS "mark done". */
+GF.WWF._progressBlock = () => {
+  const t = GF.task(GF.WWF._worklog.taskId); if (!t) return '';
+  if (!GF.can('status', t)) return '';
+  const pct = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  const quick = [0, 25, 50, 75, 100].map(q =>
+    `<button type="button" class="pl-q${q === pct ? ' on' : ''}" onclick="GF.WWF.setProgress('${t.id}',${q})">${q}%</button>`).join('');
+  const hint = (pct === 100 && t.status !== 'done')
+    ? `<button type="button" class="subdone-hint" style="margin-top:6px" onclick="GF.WWF.progressMarkDone('${t.id}')">✓ ${GF.t('mark_done')}?</button>` : '';
+  return `
+    <div class="sec-label" style="margin-top:4px">${GF.icon('trend','icon')}${GF.t('completion')}</div>
+    <div class="pl-quick">${quick}</div>
+    <div class="row" style="gap:10px;align-items:center">
+      <input type="range" id="wl-pct" class="pl-range" min="0" max="100" step="5" value="${pct}"
+        oninput="var v=GF.$('wl-pct-val');if(v)v.textContent=this.value+'%'"
+        onchange="GF.WWF.setProgress('${t.id}',+this.value)">
+      <span id="wl-pct-val" class="pl-val">${pct}%</span>
+    </div>${hint}`;
+};
+
+GF.WWF.setProgress = async (taskId, pct) => {
+  const t = GF.task(taskId); if (!t) return;
+  pct = Math.max(0, Math.min(100, Math.round(pct)));
+  const prev = t.progressPct;
+  t.progressPct = pct;                       // optimistic; reverted on failure
+  try {
+    await GF.API.updateTask(taskId, { progress: pct });
+    // Scoring progress is the same "work is underway" signal as logging a
+    // session: advance a still-"Not started" task to "Working on it".
+    if (pct > 0 && t.status === 'pending' && GF.setStatus) GF.setStatus(taskId, 'working');
+    GF.render.panels();
+  } catch (e) {
+    t.progressPct = prev;
+    GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error');
+  }
+  GF.WWF._renderWorklog();
+};
+
+GF.WWF.progressMarkDone = (taskId) => {
+  const t = GF.task(taskId); if (!t || t.status === 'done') return;
+  if (GF.setStatus && GF.setStatus(taskId, 'done')) { GF.render.panels(); GF.render.telemetry(); }
+  GF.WWF._renderWorklog();
 };
 
 GF.WWF.submitWorklog = async () => {
