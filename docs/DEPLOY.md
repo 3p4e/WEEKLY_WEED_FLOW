@@ -196,3 +196,53 @@ and experiments:
   **the mass instance has no backups by design**.
 - Accounts/passwords equal production at clone time (incl. the `tt.*` cast).
 - Full teardown procedure: see `/opt/stacks/wwf_mass/README.md` on the host.
+
+## QMS Studio federation (unification Phase 1)
+
+New internal service `qms-api` — the QMS Creator backend built from this
+repo's `qms-creator/` (image `wwf-qms-api:vN`). It is **never published**:
+its only client is the platform backend's authed proxy (`backend/app/api/
+qms.py`), which injects the service's `X-API-Key` server-side.
+
+Compose service (added to the stack's compose.yaml):
+
+```yaml
+  qms-api:
+    image: wwf-qms-api:v1
+    environment:
+      API_KEY: ${QMS_API_KEY}
+      LETTA_BASE_URL: http://host.docker.internal:8283
+      LETTA_API_KEY: ${LETTA_API_KEY}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - qms_data:/app/data
+      - qms_output:/app/output
+    networks: [internal]
+```
+
+Backend env (app.env): `QMS_API_URL=http://qms-api:8000` and
+`QMS_API_KEY=<same secret as the service's API_KEY>`. An EMPTY
+`QMS_API_KEY` disables the federation cleanly — the proxy answers
+503 "QMS service unavailable" and the QMS Studio views show a labeled
+unavailable state.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**. Production (`wwf_app`) is promoted
+ONLY after the owner's additional tests and explicit approval. The
+promotion is exactly:
+
+1. `wwf_app/compose.yaml`: add the `qms-api` service block above (+ the two
+   named volumes at the bottom `qms_data: {}`, `qms_output: {}`).
+2. `wwf_app/app.env`: add `QMS_API_URL` + `QMS_API_KEY` (generate a fresh
+   secret; also export it for compose interpolation or inline it).
+3. `docker compose up -d qms-api && docker compose up -d --no-deps backend
+   frontend` with the same backend/frontend image tags already verified on
+   wwf_mass.
+4. Verify: /qms 401 unauthenticated, registry + knowledge views load for an
+   elevated account, USER gets no QMS Studio group.
+
+Note: the `qms-api` container in the `/opt/stacks/letta` project is an
+unrelated April prototype (18KB main.py) — not this service, not touched by
+this deployment; cleanup candidate at unification Phase 4.

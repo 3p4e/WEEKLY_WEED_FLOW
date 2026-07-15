@@ -77,6 +77,8 @@ GF.I18N = {
     approvals:'Approvals', approvals_sub:'Everything waiting on a decision',
     my_day:'My Day', my_day_sub:'Your tasks and acknowledgments for today',
     analytics:'Analytics', analytics_sub:'Trends across weeks — throughput, on-time delivery, activity',
+    sop_registry:'SOP Registry', sop_registry_sub:'The QMS document registry — codes, status, versions, downloads',
+    knowledge:'Knowledge', knowledge_sub:'Search the regulatory corpus and the facility document base',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -115,6 +117,8 @@ GF.I18N = {
     approvals:'Одобрувања', approvals_sub:'Сè што чека одлука',
     my_day:'Мојот ден', my_day_sub:'Вашите задачи и потврди за денес',
     analytics:'Аналитика', analytics_sub:'Трендови низ неделите — проток, навременост, активност',
+    sop_registry:'Регистар на СОП', sop_registry_sub:'QMS регистар на документи — кодови, статус, верзии, преземања',
+    knowledge:'Знаење', knowledge_sub:'Пребарување на регулаторниот корпус и документите на капацитетот',
   },
 };
 

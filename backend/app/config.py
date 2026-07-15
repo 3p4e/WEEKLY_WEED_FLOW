@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://host.docker.internal:6333"
     letta_api_key: str = ""
 
+    # QMS Studio federation (Phase 1 of the unification — see
+    # docs/UNIFICATION-ANALYSIS-2026-07.md). The internal qms-api container
+    # is reached only through the authed proxy router (app/api/qms.py); an
+    # EMPTY key means "not deployed here" and the proxy answers 503 without
+    # attempting, so local/dev/e2e degrade cleanly.
+    qms_api_url: str = "http://qms-api:8000"
+    qms_api_key: str = ""
+
     # CORS / host
     cors_origins: str = "*"
     app_host: str = "wwf.srv1231216.hstgr.cloud"

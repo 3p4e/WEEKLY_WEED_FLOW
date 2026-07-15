@@ -291,6 +291,8 @@ Concrete decisions embedded in this design:
 
 **Phase 0 — this analysis.** ✅ (this document)
 
+*(Phase 1 in progress since 2026-07-15 — deployed to wwf_mass; prod promotion awaits owner approval. See docs/DEPLOY.md §QMS Studio federation.)*
+
 **Phase 1 — federation interim (1–2 cycles).** Deploy the *imported, newer*
 qms-api build behind the WWF nginx at `/qms/api/*`; add WWF-JWT verification
 middleware to it (shared secret, one host); retire the standalone API key;
@@ -333,8 +335,16 @@ exist because the platform is unified.
 | Registry import fidelity (JSON + YAML + loose files disagree) | Phase 2 includes a reconciliation report before any import is committed |
 | CI/repo growth | path-scoped jobs already isolate `backend/`+`web/`; `qms/` additions ride the same backend jobs; no new tooling |
 
-**Decisions the owner should confirm before Phase 1 starts:**
-1. Platform name/brand for the unified shell ("Purely Plant Platform"?).
+**Owner decisions (confirmed 2026-07-15):**
+1. Platform name: **GrowFlow** — the unified platform keeps the existing
+   name and brand; no rebrand work.
+1a. Same containers, same links: the QMS capability ships inside the
+   existing GrowFlow deployment (wwf stacks) at the same URLs.
+1b. Test-first gating: every unification phase deploys to wwf_mass only;
+   production is promoted per-phase after the owner's additional tests and
+   explicit approval.
+
+Remaining open decisions:
 2. Confirm the GrowFlow (vanilla-JS PWA) shell as the surviving UI — the
    alternative (migrating the whole platform to React) is a much larger
    separate project and is *not* required by anything in this analysis.

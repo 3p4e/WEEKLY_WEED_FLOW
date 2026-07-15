@@ -102,9 +102,19 @@ GF.render = {
       </div>`;
     const group = (lbl, items) => items.length
       ? `<div class="nav-group">${lbl}</div>` + items.map(item).join('') : '';
+    // QMS Studio zone (unification Phase 1 — docs/UNIFICATION-ANALYSIS-2026-07.md):
+    // an empty labeled group whose hidden end-marker anchors the QMS views
+    // registered via _registerFullPageView({insertBefore:'qms-end'}). Only
+    // rendered for roles above base USER — same gate as the views themselves —
+    // so operators never see an empty group label.
+    const role = (GF.API && GF.API.user || {}).role;
+    const qmsGroup = role && role !== 'USER'
+      ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
+         <div data-nav="qms-end" style="display:none"></div>` : '';
     GF.$('nav').innerHTML =
       group(AL('Operations', 'Операции'), ops)
       + group(AL('Management', 'Менаџмент'), mgr)
+      + qmsGroup
       + group(AL('System', 'Систем'), sys);
 
     GF.$('side-label').textContent = GF.t('departments');
