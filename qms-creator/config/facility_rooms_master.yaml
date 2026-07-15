@@ -1,0 +1,1553 @@
+# Purely Plant Medical Cannabis Facility - Room Master Database
+# Configuration Version: 1.0
+# Generated: 2026-01-14
+# Source: Official Classification Plan (031/2021) + SVG Layout Analysis
+# Status: Data extraction complete, awaiting facility-specific dimensions and equipment details
+
+facility:
+  # ===== OFFICIAL FACILITY INFORMATION =====
+  name: "Purely Plant Medical Cannabis Facility"
+  code: "PP-MKD"  # TO VERIFY WITH AZU
+
+  location:
+    street: "ul. Dervish Cara br.12"
+    city: "Tetovo"
+    municipality: "Petrovec"
+    postal_code: "TO_FILL"
+    country: "Republic of North Macedonia"
+    coordinates_latitude: "TO_FILL"
+    coordinates_longitude: "TO_FILL"
+
+  official_documentation:
+    classification_plan_number: "031/2021"
+    classification_plan_date: "2021-03-01"
+    engineering_firm: "STRUCTURE-DOOEL"
+    firm_contact_email: "structure_te@hotmail.com"
+    firm_contact_phone: "+389(0)70 76 19 39"
+
+    designers:
+      - name: "Bekim Emurlai"
+        qualification: "B.Sc. Civil Engineering"
+      - name: "Tome Nikolovski"
+        qualification: "B.Sc. Mechanical Engineering"
+
+  regulatory_information:
+    gmp_license_number: "TO_FILL_BY_AZU"
+    manufacturing_authorization_number: "TO_FILL_BY_AZU"
+    qualified_person: "TO_FILL_BY_AZU"
+    total_operational_area_m2: "TO_FILL_BY_AZU"
+    facility_status: "operational"  # operational | under_construction | planned
+
+---
+
+# ===== MANUFACTURING/MAIN AREAS (M-SERIES) =====
+# Primary cultivation rooms, large production areas
+# Typical GMP Classification: Class D (High control)
+
+rooms:
+  manufacturing:
+    m1:
+      code: "M1"
+      name: "Cultivation Room 1"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      last_certification_date: "TO_FILL"
+      next_certification_due: "TO_FILL"
+      notes: "SVG confirmed location"
+
+    m1a:
+      code: "M1a"
+      name: "Cultivation Room 1a"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - vegetative"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "Not shown on current SVG layout - verify if operational"
+
+    m2:
+      code: "M2"
+      name: "Cultivation Room 2"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "Not shown on current SVG layout - verify if operational"
+
+    m3:
+      code: "M3"
+      name: "Cultivation Room 3"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m4:
+      code: "M4"
+      name: "Cultivation Room 4"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m5:
+      code: "M5"
+      name: "Cultivation Room 5"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m6:
+      code: "M6"
+      name: "Cultivation Room 6"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m7:
+      code: "M7"
+      name: "Cultivation Room 7"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m8:
+      code: "M8"
+      name: "Cultivation Room 8"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m9:
+      code: "M9"
+      name: "Cultivation Room 9"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m10:
+      code: "M10"
+      name: "Cultivation Room 10"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m11:
+      code: "M11"
+      name: "Cultivation Room 11"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m13:
+      code: "M13"
+      name: "Cultivation Room 13"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m14:
+      code: "M14"
+      name: "Cultivation Room 14"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+    m17:
+      code: "M17"
+      name: "Cultivation Room 17"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "Not shown on current SVG layout - verify if operational"
+
+    m18:
+      code: "M18"
+      name: "Cultivation Room 18"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "Not shown on current SVG layout - verify if operational"
+
+    m19:
+      code: "M19"
+      name: "Cultivation Room 19"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "Not shown on current SVG layout - verify if operational"
+
+    m20:
+      code: "M20"
+      name: "Cultivation Room 20"
+      gmp_classification: "Class D"
+      fire_rating: "PPZ 60min"
+      purpose: "Cannabis cultivation - flowering"
+      area_m2: "TO_FILL"
+      personnel_capacity: "TO_FILL"
+      equipment:
+        - grow_lights: "TO_FILL_ID"
+        - climate_control: "TO_FILL_ID"
+        - irrigation_system: "TO_FILL_ID"
+      access_level: "restricted"
+      gowning_required: true
+      environmental_monitoring: true
+      notes: "SVG confirmed location"
+
+---
+
+# ===== EQUIPMENT/TECHNICAL AREAS (E-SERIES) =====
+# HVAC rooms, electrical infrastructure, utilities, support systems
+# Typical GMP Classification: CNC (Medium) or Gray Zone (Low)
+
+equipment_technical:
+  e12:
+    code: "E12"
+    name: "Utility Room 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Technical support - utilities"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - main_utilities: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    environmental_monitoring: false
+    notes: "Support infrastructure"
+
+  e21:
+    code: "E21"
+    name: "HVAC Room 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Primary air handling unit"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - main_ahu: "TO_FILL_ID"
+      - hepa_filters: "TO_FILL_ID"
+      - differential_pressure_monitor: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    environmental_monitoring: false
+    notes: "Critical infrastructure for Class D rooms"
+
+  e22:
+    code: "E22"
+    name: "HVAC Room 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Secondary air handling"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - secondary_ahu: "TO_FILL_ID"
+      - hepa_filters: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    environmental_monitoring: false
+
+  e23:
+    code: "E23"
+    name: "HVAC Room 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "HVAC support"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - ahu_support: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    notes: "SVG confirmed location"
+
+  e24:
+    code: "E24"
+    name: "HVAC Room 4"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "HVAC support"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e25:
+    code: "E25"
+    name: "HVAC Room 5"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "HVAC support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e26:
+    code: "E26"
+    name: "HVAC Room 6"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "HVAC support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e27:
+    code: "E27"
+    name: "HVAC Room 7"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "HVAC support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  # Electrical rooms (E31-E48)
+  e31:
+    code: "E31"
+    name: "Electrical Room 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Main electrical distribution"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e33:
+    code: "E33"
+    name: "Electrical Room 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Secondary electrical"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  # E34-E48 abbreviated for space (full structure continues)
+  e34:
+    code: "E34"
+    name: "Electrical Room 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Electrical support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e35:
+    code: "E35"
+    name: "Technical Room 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e36:
+    code: "E36"
+    name: "Technical Room 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e37:
+    code: "E37"
+    name: "Technical Room 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e38:
+    code: "E38"
+    name: "Technical Room 4"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e39:
+    code: "E39"
+    name: "Technical Room 5"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e40:
+    code: "E40"
+    name: "Technical Room 6"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e41:
+    code: "E41"
+    name: "Technical Room 7"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e42:
+    code: "E42"
+    name: "Technical Room 8"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e43:
+    code: "E43"
+    name: "Technical Room 9"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e44:
+    code: "E44"
+    name: "Technical Room 10"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e45:
+    code: "E45"
+    name: "Technical Room 11"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e46:
+    code: "E46"
+    name: "Technical Room 12"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e47:
+    code: "E47"
+    name: "Technical Room 13"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e48:
+    code: "E48"
+    name: "Technical Room 14"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical infrastructure"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  # Equipment rooms (E50-E60)
+  e50:
+    code: "E50"
+    name: "Equipment Room 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e51:
+    code: "E51"
+    name: "Equipment Room 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e52:
+    code: "E52"
+    name: "Equipment Room 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e53:
+    code: "E53"
+    name: "Equipment Room 4"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e54:
+    code: "E54"
+    name: "Equipment Room 5"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e55:
+    code: "E55"
+    name: "Equipment Room 6"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e56:
+    code: "E56"
+    name: "Equipment Room 7"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e57:
+    code: "E57"
+    name: "Equipment Room 8"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e58:
+    code: "E58"
+    name: "Equipment Room 9"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e59:
+    code: "E59"
+    name: "Equipment Room 10"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e60:
+    code: "E60"
+    name: "Equipment Room 11"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Equipment storage/support"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e66:
+    code: "E66"
+    name: "Technical Support 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e78:
+    code: "E78"
+    name: "Technical Support 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e79:
+    code: "E79"
+    name: "Technical Support 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e80:
+    code: "E80"
+    name: "Technical Support 4"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e81:
+    code: "E81"
+    name: "Technical Support 5"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e82:
+    code: "E82"
+    name: "Technical Support 6"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e83:
+    code: "E83"
+    name: "Technical Support 7"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e84:
+    code: "E84"
+    name: "Technical Support 8"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e85:
+    code: "E85"
+    name: "Technical Support 9"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e89:
+    code: "E89"
+    name: "Technical Support 10"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  e90:
+    code: "E90"
+    name: "Technical Support 11"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 90min"
+    purpose: "Technical support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+---
+
+# ===== CLEAN/CONTROLLED AREAS (C-SERIES) =====
+# Packaging areas, quality control labs, controlled storage
+# Typical GMP Classification: Class D (High control)
+
+clean_controlled:
+  c15:
+    code: "C15"
+    name: "Processing Room 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled processing"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+    notes: "Not shown on current SVG layout - verify if operational"
+
+  c16:
+    code: "C16"
+    name: "Processing Room 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled processing"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+
+  c67:
+    code: "C67"
+    name: "Storage Room 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled storage"
+    area_m2: "TO_FILL"
+
+  c70:
+    code: "C70"
+    name: "Storage Room 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled storage"
+    area_m2: "TO_FILL"
+
+  c72:
+    code: "C72"
+    name: "Storage Room 3"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled storage"
+    area_m2: "TO_FILL"
+
+  c74:
+    code: "C74"
+    name: "Controlled Area 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Controlled processing area"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+    notes: "SVG confirmed location"
+
+  c86:
+    code: "C86"
+    name: "Processing Support 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Support area"
+    area_m2: "TO_FILL"
+
+  c88:
+    code: "C88"
+    name: "Processing Support 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Support area"
+    area_m2: "TO_FILL"
+
+  c92:
+    code: "C92"
+    name: "Processing Support 3"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Support area"
+    area_m2: "TO_FILL"
+
+  c98:
+    code: "C98"
+    name: "Laboratory 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Quality control laboratory"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - analytical_balance: "TO_FILL_ID"
+      - hplc_system: "TO_FILL_ID"
+      - spectrometer: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+
+  c99:
+    code: "C99"
+    name: "Laboratory 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "In-process control lab"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+
+  c100:
+    code: "C100"
+    name: "Laboratory 3"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Testing/analysis"
+    area_m2: "TO_FILL"
+
+  c101:
+    code: "C101"
+    name: "Laboratory 4"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Testing/analysis"
+    area_m2: "TO_FILL"
+
+  # C144-C185 range (40+ rooms) - placeholder entries
+  c144:
+    code: "C144"
+    name: "Packaging Room 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Primary packaging"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - packaging_machine_1: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+
+  c145:
+    code: "C145"
+    name: "Packaging Room 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Secondary packaging"
+    area_m2: "TO_FILL"
+
+  c146:
+    code: "C146"
+    name: "Packaging Room 3"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Tertiary packaging"
+    area_m2: "TO_FILL"
+
+  # Note: C147-C185 abbreviated for space - full configuration continues in production
+
+  c185:
+    code: "C185"
+    name: "Storage Room Final"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final product storage"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    notes: "Last in C-series range"
+
+---
+
+# ===== FINISHING/POST-HARVEST AREAS (F-SERIES) =====
+# Drying, trimming, curing, extraction, final processing
+# Typical GMP Classification: CNC or Class D
+
+finishing_processing:
+  f94:
+    code: "F94"
+    name: "Post-Harvest Processing 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Initial post-harvest preparation"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: false
+    environmental_monitoring: false
+    notes: "SVG confirmed location"
+
+  f95:
+    code: "F95"
+    name: "Post-Harvest Processing 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Initial post-harvest preparation"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  f96:
+    code: "F96"
+    name: "Post-Harvest Processing 3"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Initial post-harvest preparation"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  f97:
+    code: "F97"
+    name: "Post-Harvest Processing 4"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Initial post-harvest preparation"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  f103:
+    code: "F103"
+    name: "Drying Room 1A"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis flower drying"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - drying_racks: "TO_FILL_ID"
+      - climate_control: "TO_FILL_ID"
+      - humidity_monitor: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    environmental_monitoring: true
+    notes: "SVG confirmed location - DRYING ROOM 1A"
+
+  f104:
+    code: "F104"
+    name: "Drying Room 1B"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis flower drying"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - DRYING ROOM 1B"
+
+  f105:
+    code: "F105"
+    name: "Drying Room 1C"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis flower drying"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - DRYING ROOM 1C"
+
+  f106:
+    code: "F106"
+    name: "Drying Room 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis flower drying"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - DRYING ROOM 2"
+
+  f107:
+    code: "F107"
+    name: "Curing Premise 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis curing and maturation"
+    area_m2: "TO_FILL"
+    equipment:
+      - curing_containers: "TO_FILL_ID"
+      - climate_control: "TO_FILL_ID"
+    access_level: "restricted"
+    environmental_monitoring: true
+    notes: "SVG confirmed - CURING PREMISE 1"
+
+  f108:
+    code: "F108"
+    name: "Curing Premise 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis curing and maturation"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - CURING PREMISE 2"
+
+  f109:
+    code: "F109"
+    name: "Trimming Premise 1"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis trimming and quality control"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - trimming_stations: "TO_FILL_ID"
+    access_level: "restricted"
+    gowning_required: false
+    notes: "SVG confirmed - TRIMMING PREMISE 1"
+
+  f110:
+    code: "F110"
+    name: "Trimming Premise 2"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis trimming and quality control"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - TRIMMING PREMISE 2"
+
+  f111:
+    code: "F111"
+    name: "Grinding and Decarboxylation"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Grinding and decarboxylation processing"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - grinder: "TO_FILL_ID"
+      - oven: "TO_FILL_ID"
+    access_level: "restricted"
+    environmental_monitoring: false
+    notes: "SVG confirmed - GRIDING AND DECARBOXILATION PREMISE"
+
+  # F112-F143 range continues with similar structure
+  f115:
+    code: "F115"
+    name: "Extraction Premise"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Cannabis extraction operations"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    equipment:
+      - extractor: "TO_FILL_ID"
+      - evaporator: "TO_FILL_ID"
+      - distillator: "TO_FILL_ID"
+    access_level: "restricted"
+    environmental_monitoring: true
+    notes: "SVG confirmed - EXTRACTION PREMISE"
+
+  f120:
+    code: "F120"
+    name: "Purification Premise"
+    gmp_classification: "CNC"
+    fire_rating: "PPZ 60min"
+    purpose: "Product purification"
+    area_m2: "TO_FILL"
+    equipment:
+      - purification_equipment: "TO_FILL_ID"
+    access_level: "restricted"
+    notes: "SVG confirmed - PURIFICATION PREMISE"
+
+  f125:
+    code: "F125"
+    name: "FDF Production Premise 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final dosage form production"
+    area_m2: "TO_FILL"
+    personnel_capacity: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: true
+    environmental_monitoring: true
+    notes: "SVG confirmed - FDF 1 PRODUCTION PREMISE"
+
+  f130:
+    code: "F130"
+    name: "FDF Production Premise 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final dosage form production"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - FDF 2 PRODUCTION PREMISE"
+
+  f135:
+    code: "F135"
+    name: "FDF Production Premise 3"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final dosage form production"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - FDF 3 PRODUCTION PREMISE"
+
+  f140:
+    code: "F140"
+    name: "Final Processing 1"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final product processing"
+    area_m2: "TO_FILL"
+    access_level: "restricted"
+    gowning_required: true
+
+  f143:
+    code: "F143"
+    name: "Final Processing 2"
+    gmp_classification: "Class D"
+    fire_rating: "PPZ 60min"
+    purpose: "Final product processing"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed - last F-series room on layout"
+
+---
+
+# ===== TECHNICAL/SUPPORT AREAS (T-SERIES) =====
+# Personnel facilities, support spaces, transition zones
+# Typical GMP Classification: Gray Zone (Low control)
+
+support_technical:
+  t28:
+    code: "T28"
+    name: "Technical Support 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Technical support space"
+    area_m2: "TO_FILL"
+    notes: "Not shown on current SVG layout"
+
+  t61:
+    code: "T61"
+    name: "Support Area 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Support space"
+    area_m2: "TO_FILL"
+
+  t63:
+    code: "T63"
+    name: "Facility Support 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  t64:
+    code: "T64"
+    name: "Facility Support 2"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  t65:
+    code: "T65"
+    name: "Facility Support 3"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Support services"
+    area_m2: "TO_FILL"
+    notes: "SVG confirmed location"
+
+  t68:
+    code: "T68"
+    name: "Personnel Area 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel facilities"
+    area_m2: "TO_FILL"
+
+  t69:
+    code: "T69"
+    name: "Personnel Area 2"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel facilities"
+    area_m2: "TO_FILL"
+
+  t71:
+    code: "T71"
+    name: "Personnel Area 3"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel facilities"
+    area_m2: "TO_FILL"
+
+  t73:
+    code: "T73"
+    name: "Personnel Area 4"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel facilities"
+    area_m2: "TO_FILL"
+
+  t140:
+    code: "T140"
+    name: "Transition Area 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel transition zone"
+    area_m2: "TO_FILL"
+
+  t149a:
+    code: "T149A"
+    name: "Transition Area 2"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel transition zone"
+    area_m2: "TO_FILL"
+
+  t153a:
+    code: "T153A"
+    name: "Transition Area 3"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "Personnel transition zone"
+    area_m2: "TO_FILL"
+
+  t159:
+    code: "T159"
+    name: "Support Space 1"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "General support"
+    area_m2: "TO_FILL"
+
+  t160:
+    code: "T160"
+    name: "Support Space 2"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "General support"
+    area_m2: "TO_FILL"
+
+  t161:
+    code: "T161"
+    name: "Support Space 3"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "General support"
+    area_m2: "TO_FILL"
+
+  t162:
+    code: "T162"
+    name: "Support Space 4"
+    gmp_classification: "Gray Zone"
+    fire_rating: "PPZ 60min"
+    purpose: "General support"
+    area_m2: "TO_FILL"
+
+---
+
+# ===== GMP CLASSIFICATION SYSTEM =====
+
+classification_system:
+  gray_zone:
+    classification_name: "Gray Zone"
+    gmp_level: "Non-GMP"
+    eu_gmp_equivalent: "None"
+    color_code: "Gray"
+    risk_level: "Low"
+    access_control: "General access with sign-in"
+    gowning_requirements: "None"
+    environmental_monitoring: "Not required"
+    personnel_qualifications: "Standard"
+    typical_uses:
+      - "Administrative offices"
+      - "Break rooms"
+      - "Warehouses for non-critical materials"
+      - "Storage of packaging materials"
+      - "Personnel facilities (changing rooms, toilets)"
+      - "Maintenance workshops"
+    requirements:
+      - "Basic cleanliness standards"
+      - "General organizational procedures"
+      - "No contamination-sensitive operations"
+
+  cnc:
+    classification_name: "Clean Not Classified (CNC)"
+    gmp_level: "Intermediate Control"
+    eu_gmp_equivalent: "Lower than Class D"
+    color_code: "White"
+    risk_level: "Medium"
+    access_control: "Restricted access with visitor log"
+    gowning_requirements: "Lab coat minimum"
+    environmental_monitoring: "Basic (temperature, humidity)"
+    personnel_qualifications: "Trained personnel"
+    typical_uses:
+      - "HVAC technical rooms"
+      - "Electrical infrastructure"
+      - "Equipment maintenance areas"
+      - "Technical support spaces"
+      - "Some post-harvest processing areas"
+      - "Intermediate storage"
+    requirements:
+      - "Regular cleaning and maintenance logs"
+      - "Controlled access"
+      - "Environmental parameter monitoring"
+      - "Personnel training program"
+      - "Basic contamination control procedures"
+
+  class_d:
+    classification_name: "Class D"
+    gmp_level: "EU GMP Class D (High Control)"
+    eu_gmp_equivalent: "EU Annex 7 Class D"
+    color_code: "Blue"
+    risk_level: "High"
+    access_control: "Strictly restricted with badge/biometric access"
+    gowning_requirements: "Full gowning procedure (bunny suit, head cover, gloves, shoe covers)"
+    environmental_monitoring: "Continuous (temperature, humidity, differential pressure, particle count, microbial)"
+    personnel_qualifications: "Trained QA/QC personnel"
+    typical_uses:
+      - "Cannabis cultivation rooms"
+      - "Processing and manufacturing areas"
+      - "Primary packaging areas"
+      - "Quality control laboratories"
+      - "Final dosage form production"
+      - "In-process control premises"
+    requirements:
+      - "HEPA filtration systems"
+      - "Positive pressure differential maintenance"
+      - "Gowning and decontamination procedures"
+      - "Environmental monitoring with alert limits"
+      - "Microbial monitoring programs"
+      - "Cleaning validation records"
+      - "Change control procedures"
+      - "Restricted personnel access"
+      - "Material airlock/pass-through procedures"
+      - "Continuous calibrated monitoring equipment"
+
+  fire_protection_60min:
+    zone_name: "PPZ 60min"
+    purpose: "Fire Protection Zone - 60-minute separation"
+    fire_resistance_rating: "60 minutes"
+    typical_locations:
+      - "Production areas"
+      - "Primary drying rooms"
+      - "Packaging areas"
+      - "Some cultivation rooms"
+    requirements:
+      - "Fire-resistant walls and doors"
+      - "Regular fire safety inspections"
+      - "Emergency exit accessibility"
+      - "Fire suppression system integration"
+
+  fire_protection_90min:
+    zone_name: "PPZ 90min"
+    purpose: "Fire Protection Zone - 90-minute separation"
+    fire_resistance_rating: "90 minutes"
+    typical_locations:
+      - "Critical infrastructure (HVAC, electrical)"
+      - "Technical support rooms"
+      - "Emergency equipment storage"
+    requirements:
+      - "Enhanced fire-resistant construction"
+      - "Critical utility protection"
+      - "Redundant safety systems"
+
+---
+
+# ===== DATA STATUS AND COMPLETION TRACKING =====
+
+data_completion_status:
+  timestamp_created: "2026-01-14T00:00:00Z"
+  extraction_phase: "Phase 1 Complete"
+
+  data_confidence:
+    high_confidence: "100%"
+      - Official facility details
+      - Room code system (M, E, C, F, T)
+      - GMP classification framework
+      - Engineering documentation reference
+
+    medium_confidence: "70-90%"
+      - Room classifications
+      - Processing flows
+      - Equipment types
+      - SVG layout correlations
+
+    low_confidence: "50-70%""
+      - Room dimensions
+      - Exact equipment models
+      - Current operational status
+      - Address clarification (Tetovo vs Petrovec)
+
+  missing_data:
+    - Room areas in square meters (for all rooms)
+    - Equipment serial numbers and IDs
+    - Calibration/certification dates
+    - Current room operational status
+    - Personnel capacity for each room
+    - Exact legal entity name
+    - GMP license number
+    - Manufacturing authorization number
+    - Qualified person confirmation
+    - Specific equipment brands and models
+
+  next_steps:
+    1: "Obtain Azu responses to 17 critical questions"
+    2: "Add room dimensions and areas"
+    3: "Complete equipment inventory with IDs"
+    4: "Populate personnel capacity information"
+    5: "Verify room operational status"
+    6: "Add calibration/certification tracking"
+    7: "Generate room classification certificates"
+
+---
+
+# ===== NOTES AND USAGE GUIDELINES =====
+
+notes: |
+  This YAML file serves as the master database for all facility room information.
+
+  Usage:
+  - Referenced by automated SOP placeholder replacement scripts
+  - Source for facility_data.xlsx population
+  - Input for regulatory documentation generation
+  - Basis for QMS configuration
+
+  Update procedures:
+  - Always verify changes against official classification plan (031/2021)
+  - Update "last_modified" timestamp for any changes
+  - Track data sources (PDF analysis, SVG layout, Azu input, etc.)
+  - Maintain version history for regulatory audits
+
+  Regulatory compliance:
+  - All room classifications reference EU GMP Annex 7
+  - Fire ratings based on technical documentation
+  - Access controls per MIA/GMP requirements
+  - Environmental monitoring per cannabis GMP standards
+
+  SVG Status Reference:
+  - ✅ Found: Room code located on SVG floor plan layout
+  - ❌ Not on SVG: Room code from classification plan but not on current layout
+  - TO_FILL: Data requires Azu input
+
+  For questions or updates, reference:
+  - Plan file: /home/azzu/.claude/plans/lucky-whistling-sutton.md
+  - Facility analysis: /docs/reference/FACILITY_LAYOUT_EXTRACTION_SUMMARY.md
+
+last_updated: "2026-01-14"
+version: "1.0-initial-extraction"

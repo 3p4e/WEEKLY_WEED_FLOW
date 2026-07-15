@@ -1,0 +1,42 @@
+flowchart TB
+    subgraph ContentPhase["Content Development Phase"]
+        A1((A1<br/>Meta))
+        A2((A2<br/>Intro))
+        A3((A3<br/>Proc))
+        A4((A4<br/>Comp))
+        A5((A5<br/>RACI))
+    end
+
+    subgraph QualityGate["Quality Gate"]
+        A6((A6<br/>QA))
+    end
+
+    subgraph FormatPhase["Formatting Phase"]
+        A7((A7<br/>Format))
+        A8((A8<br/>AnnexQ))
+        A9((A9<br/>AnnexF))
+    end
+
+    DB1[(DB1<br/>Regulatory)]
+    DB2[(DB2<br/>Operational)]
+
+    A1 -->|metadata| A2
+    A2 -->|+purpose/scope| A3
+    A3 -->|+procedure| A4
+    A4 -->|+compliance| A5
+    A5 -->|+raci| A6
+
+    A6 -->|approved| A7
+    A6 -.->|reject| A2
+
+    A7 -->|main_doc| A8
+    A8 -->|annex_specs| A9
+
+    A2 <-->|search| DB1
+    A2 <-->|search| DB2
+    A3 <-->|search| DB2
+    A4 <-->|search| DB1
+
+    style ContentPhase fill:#E8F5E9
+    style QualityGate fill:#FFF3E0
+    style FormatPhase fill:#E3F2FD

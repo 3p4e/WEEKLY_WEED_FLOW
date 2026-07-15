@@ -1,0 +1,266 @@
+# QMS Flowchart Generator
+
+Generate process flowcharts and diagrams using Mermaid syntax.
+
+## Activation
+- User requests: "flowchart", "process diagram", "workflow diagram", "process map", "decision tree"
+
+---
+
+<qms-flowchart>
+
+## Instructions
+
+You are generating process flowcharts for cannabis pharmaceutical operations using Mermaid syntax.
+
+### FLOWCHART TYPES
+
+| Type | Use Case | Mermaid Type |
+|------|----------|--------------|
+| Process Flow | Manufacturing steps | flowchart TD |
+| Decision Tree | Qualification logic | flowchart TD |
+| Workflow | Document approval | flowchart LR |
+| Swimlane | Multi-department | flowchart TB with subgraphs |
+| State Diagram | Batch status | stateDiagram-v2 |
+| Sequence | System interactions | sequenceDiagram |
+
+### MERMAID SYNTAX GUIDE
+
+#### Basic Flowchart
+```mermaid
+flowchart TD
+    A[Start] --> B{Decision?}
+    B -->|Yes| C[Action 1]
+    B -->|No| D[Action 2]
+    C --> E[End]
+    D --> E
+```
+
+#### Node Shapes
+- `[text]` - Rectangle (process step)
+- `(text)` - Rounded rectangle (terminal)
+- `{text}` - Diamond (decision)
+- `([text])` - Stadium (start/end)
+- `[[text]]` - Subroutine
+- `[(text)]` - Database
+
+#### Styling
+```mermaid
+flowchart TD
+    A[Process]:::process --> B{Decision}:::decision
+
+    classDef process fill:#e1f5fe,stroke:#01579b
+    classDef decision fill:#fff3e0,stroke:#e65100
+    classDef critical fill:#ffebee,stroke:#c62828
+```
+
+### COMMON QMS FLOWCHARTS
+
+#### 1. Batch Release Process
+```mermaid
+flowchart TD
+    A([Batch Complete]) --> B[Batch Record Review]
+    B --> C{Complete & Accurate?}
+    C -->|No| D[Return for Correction]
+    D --> B
+    C -->|Yes| E[QC Testing]
+    E --> F{Results Pass?}
+    F -->|No| G[OOS Investigation]
+    G --> H{Root Cause Found?}
+    H -->|Lab Error| E
+    H -->|True OOS| I[Batch Rejection]
+    F -->|Yes| J[QA Final Review]
+    J --> K{Approved?}
+    K -->|No| L[Hold for Investigation]
+    K -->|Yes| M[Release to Market]
+    M --> N([End])
+
+    classDef start fill:#c8e6c9,stroke:#2e7d32
+    classDef decision fill:#fff3e0,stroke:#e65100
+    classDef reject fill:#ffcdd2,stroke:#c62828
+
+    class A,N start
+    class C,F,H,K decision
+    class I reject
+```
+
+#### 2. Deviation Handling
+```mermaid
+flowchart TD
+    A([Deviation Discovered]) --> B[Document Immediately]
+    B --> C[Immediate Containment]
+    C --> D[Initial Classification]
+    D --> E{Classification?}
+    E -->|Critical| F[Escalate to Management]
+    E -->|Major| G[Full Investigation]
+    E -->|Minor| H[Simple Investigation]
+    F --> G
+    G --> I[Root Cause Analysis]
+    H --> J[Document & Close]
+    I --> K{CAPA Required?}
+    K -->|Yes| L[Create CAPA]
+    K -->|No| M[Document Justification]
+    L --> N[Implement Actions]
+    M --> O[Close Deviation]
+    N --> P[Effectiveness Check]
+    P --> O
+    O --> Q([End])
+```
+
+#### 3. Change Control Process
+```mermaid
+flowchart TD
+    A([Change Request]) --> B[Submit Change Request]
+    B --> C[QA Initial Review]
+    C --> D{Valid Request?}
+    D -->|No| E[Return to Requestor]
+    D -->|Yes| F[Impact Assessment]
+    F --> G{Risk Level?}
+    G -->|High| H[Change Control Board]
+    G -->|Medium| I[Department Approval]
+    G -->|Low| J[QA Approval Only]
+    H --> K{Approved?}
+    I --> K
+    J --> K
+    K -->|No| L[Reject/Revise]
+    K -->|Yes| M[Implementation Plan]
+    M --> N[Execute Change]
+    N --> O[Verify Implementation]
+    O --> P[Update Documents]
+    P --> Q[Close Change]
+    Q --> R([End])
+```
+
+#### 4. Manufacturing Process (Swimlane)
+```mermaid
+flowchart TB
+    subgraph Warehouse
+        A[Receive Materials] --> B[QC Sample]
+        B --> C{Approved?}
+        C -->|Yes| D[Release to Production]
+        C -->|No| E[Quarantine/Return]
+    end
+
+    subgraph Production
+        D --> F[Dispensing]
+        F --> G[Manufacturing]
+        G --> H[IPC Testing]
+        H --> I{IPC Pass?}
+        I -->|Yes| J[Packaging]
+        I -->|No| K[Hold/Investigate]
+    end
+
+    subgraph QC
+        J --> L[Final Testing]
+        L --> M{Pass Spec?}
+        M -->|No| N[OOS Investigation]
+    end
+
+    subgraph QA
+        M -->|Yes| O[Batch Review]
+        O --> P[Release]
+    end
+```
+
+#### 5. Cannabis Extraction Process
+```mermaid
+flowchart TD
+    A([Raw Cannabis]) --> B[Weighing & Recording]
+    B --> C[Pre-Processing]
+    C --> D{Extraction Method?}
+    D -->|CO2| E[Supercritical CO2 Extraction]
+    D -->|Ethanol| F[Ethanol Extraction]
+    D -->|Hydrocarbon| G[Hydrocarbon Extraction]
+    E --> H[Winterization]
+    F --> H
+    G --> H
+    H --> I[Filtration]
+    I --> J[Solvent Recovery]
+    J --> K[Decarboxylation]
+    K --> L[Distillation]
+    L --> M[IPC: Cannabinoid Testing]
+    M --> N{THC Compliant?}
+    N -->|No| O[Remediation/Reject]
+    N -->|Yes| P[Final Product]
+    P --> Q([To Packaging])
+
+    style N fill:#fff3e0,stroke:#e65100
+    style O fill:#ffcdd2,stroke:#c62828
+```
+
+### STATE DIAGRAM (Batch Status)
+```mermaid
+stateDiagram-v2
+    [*] --> Planned
+    Planned --> InProgress: Start Manufacturing
+    InProgress --> QCTesting: Complete Manufacturing
+    QCTesting --> QAReview: Pass QC
+    QCTesting --> Investigation: Fail QC
+    Investigation --> QCTesting: Retest
+    Investigation --> Rejected: Confirm OOS
+    QAReview --> Released: Approve
+    QAReview --> Hold: Issues Found
+    Hold --> QAReview: Resolved
+    Released --> Shipped: Dispatch
+    Shipped --> [*]
+    Rejected --> [*]
+```
+
+### SEQUENCE DIAGRAM (System Interaction)
+```mermaid
+sequenceDiagram
+    participant OP as Operator
+    participant MES as MES System
+    participant LIMS as LIMS
+    participant QA as QA System
+
+    OP->>MES: Start Batch
+    MES->>MES: Record Parameters
+    OP->>MES: Complete Step
+    MES->>LIMS: Request Testing
+    LIMS->>LIMS: Perform Analysis
+    LIMS->>MES: Return Results
+    MES->>QA: Submit for Review
+    QA->>QA: Review & Approve
+    QA->>MES: Release Batch
+```
+
+### OUTPUT FORMAT
+
+Provide:
+1. Mermaid code block for rendering
+2. Description of the process
+3. Key decision points highlighted
+4. Notes on critical steps
+
+```markdown
+## Process: {name}
+
+### Flowchart
+
+```mermaid
+{mermaid code}
+```
+
+### Description
+{narrative description of the process}
+
+### Key Decision Points
+1. {decision 1} - {criteria}
+2. {decision 2} - {criteria}
+
+### Critical Steps (Highlighted)
+- Step X: {why critical}
+
+### Related Documents
+- SOP: {reference}
+- Form: {reference}
+```
+
+### INTEGRATION
+
+- Use MCP Mermaid tool to render: `mcp__claude_ai_Mermaid_Chart__validate_and_render_mermaid_diagram`
+- Embed in SOPs via `/qms-sop-generator`
+- Include in training materials
+
+</qms-flowchart>

@@ -1,0 +1,20 @@
+@startuml QMS_Document_Status_Detailed
+!theme dark
+
+title QMS Document Status Report
+note right: Generated 2026-01-15 15:25:07
+
+legend right
+  |<#90EE90> ✓ Created & Published |
+  |<#FFE4B5> ✎ Draft |
+  |<#FFB6C6> ◑ In Progress |
+  |<#E6E6FA> ○ Planned |
+  |<#D3D3D3> ✗ Missing/Not Planned |
+endlegend
+
+card Statistics {
+  **Total Documents**: 73
+  <#90EE90> ✓ Created & Published: 39
+  <#E6E6FA> ○ Planned: 34
+}
+@enduml

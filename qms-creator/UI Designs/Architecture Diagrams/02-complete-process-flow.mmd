@@ -1,0 +1,36 @@
+flowchart TD
+    START([User Login]) --> INIT[Initialize Session]
+    INIT --> LANG{Select UI<br/>Language}
+    LANG -->|English| EN_UI[English Interface]
+    LANG -->|Macedonian| MK_UI[Macedonian Interface]
+    EN_UI --> META
+    MK_UI --> META
+
+    subgraph Phase1["PHASE 1: Content Development"]
+        META[Agent 1: Metadata Entry<br/>Title, Code, Department]
+        META --> INTRO[Agent 2: Introduction Questions<br/>Purpose, Scope, Regulatory]
+        INTRO --> PROC[Agent 3: Procedure Questions<br/>Steps, Equipment, Parameters]
+        PROC --> COMP[Agent 4: Compliance Analysis<br/>Regulatory Validation]
+        COMP --> RACI[Agent 5: RACI Generation<br/>Responsibility Matrix]
+        RACI --> QA{Agent 6: QA Review<br/>Score >= 80?}
+    end
+
+    QA -->|No| REVISE[Revise Content]
+    REVISE --> INTRO
+    QA -->|Yes| APPROVE[Content Approved]
+
+    subgraph Phase2["PHASE 2: Template Formatting"]
+        APPROVE --> FORMAT[Agent 7: Document Formatting<br/>DOCX Generation]
+        FORMAT --> ANNEX{Annexes<br/>Requested?}
+        ANNEX -->|Yes| ANNEXQ[Agent 8: Annex Questions<br/>Form Requirements]
+        ANNEXQ --> ANNEXF[Agent 9: Annex Formatting<br/>Generate Annexes]
+        ANNEX -->|No| FINAL
+        ANNEXF --> FINAL[Final Document]
+    end
+
+    FINAL --> DOWNLOAD[Download DOCX]
+    DOWNLOAD --> AUDIT[Audit Trail Entry]
+    AUDIT --> END([Complete])
+
+    style Phase1 fill:#E8F5E9,stroke:#2E7D32
+    style Phase2 fill:#E3F2FD,stroke:#1565C0

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS Documentation Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .progress-bar {
+            background: #e5e7eb;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #10b981, #34d399);
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .diagram-section {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .diagram-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-container {
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 2rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .tab {
+            padding: 1rem 0;
+            font-weight: 500;
+            color: #6b7280;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .family-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .family-card {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border-left: 4px solid #667eea;
+        }
+
+        .family-name {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .family-code {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-family: monospace;
+        }
+
+        .family-progress {
+            margin-top: 1rem;
+        }
+
+        .family-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .legend {
+            display: flex;
+            gap: 2rem;
+            margin: 2rem 0;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 2rem 0;
+        }
+
+        .chart-container {
+            max-width: 400px;
+            margin: 2rem auto;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏥 Cannabis EU GMP QMS Documentation</h1>
+            <p class="subtitle">Generated: 2026-01-15 15:32:22</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">21</div>
+                <div class="stat-label">Documents Created</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 29%"></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">52</div>
+                <div class="stat-label">Documents Remaining</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">29%</div>
+                <div class="stat-label">Overall Progress</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">13</div>
+                <div class="stat-label">Document Families</div>
+            </div>
+        </div>
+
+        <div class="diagram-section">
+            <div class="tab-container">
+                <div class="tabs">
+                    <div class="tab active" onclick="showTab('hierarchy')">📊 Hierarchy</div>
+                    <div class="tab" onclick="showTab('progress')">📈 Progress</div>
+                    <div class="tab" onclick="showTab('timeline')">📅 Timeline</div>
+                    <div class="tab" onclick="showTab('families')">📁 Families</div>
+                </div>
+            </div>
+
+            <div id="hierarchy" class="tab-content active">
+                <h2 class="diagram-title">Document Hierarchy</h2>
+                <div class="mermaid">
+graph TD
+    QMS[QMS Documents] --> QA_00["Quality Management System Core<br/>11/22 docs"]
+    style QA_00 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> QC_01["Batch Release and Certification<br/>8/19 docs"]
+    style QC_01 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> PRO_03["Production Operations<br/>1/3 docs"]
+    style PRO_03 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> PRO_01["Cultivation Processes<br/>1/3 docs"]
+    style PRO_01 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> PRO_06["Distribution & Logistics<br/>0/1 docs"]
+    style PRO_06 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> MAT_02["Material Management<br/>0/2 docs"]
+    style MAT_02 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> HRM_05["Human Resources<br/>0/6 docs"]
+    style HRM_05 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> EQU_06["Equipment Management<br/>0/1 docs"]
+    style EQU_06 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> SAN_07["Sanitation & Hygiene<br/>0/1 docs"]
+    style SAN_07 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> VAL_08["Validation & Qualification<br/>0/3 docs"]
+    style VAL_08 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> QCS_01["QC System & Documentation<br/>0/10 docs"]
+    style QCS_01 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> REC_09["Records Management<br/>0/1 docs"]
+    style REC_09 fill:#f3f4f6,stroke:#6b7280
+    QMS[QMS Documents] --> RES_10["Research & Development<br/>0/1 docs"]
+    style RES_10 fill:#f3f4f6,stroke:#6b7280
+</div>
+            </div>
+
+            <div id="progress" class="tab-content">
+                <h2 class="diagram-title">Progress Overview</h2>
+                <div class="mermaid">
+pie title Document Status
+    "Created" : 21
+    "Planned" : 52
+</div>
+                <div class="chart-container">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+
+            <div id="timeline" class="tab-content">
+                <h2 class="diagram-title">Implementation Timeline</h2>
+                <div class="mermaid">
+gantt
+    title QMS Implementation Timeline
+    dateFormat YYYY-MM-DD
+    Quality Management System Core :active, 2024-01-01, 90d
+    Batch Release and Certification :active, 2024-01-01, 90d
+    Production Operations :active, 2024-01-01, 90d
+    Cultivation Processes :active, 2024-01-01, 90d
+    Distribution & Logistics :crit, 2024-01-01, 90d
+    Material Management :crit, 2024-01-01, 90d
+    Human Resources :crit, 2024-01-01, 90d
+    Equipment Management :crit, 2024-01-01, 90d
+    Sanitation & Hygiene :crit, 2024-01-01, 90d
+    Validation & Qualification :crit, 2024-01-01, 90d
+    QC System & Documentation :crit, 2024-01-01, 90d
+    Records Management :crit, 2024-01-01, 90d
+    Research & Development :crit, 2024-01-01, 90d
+</div>
+            </div>
+
+            <div id="families" class="tab-content">
+                <h2 class="diagram-title">Document Families</h2>
+                <div class="family-grid">
+                <div class="family-card">
+                    <div class="family-name">Quality Management System Core</div>
+                    <div class="family-code">QA_00</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>11/22 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">50%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 50.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Batch Release and Certification</div>
+                    <div class="family-code">QC_01</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>8/19 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">42%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 42.10526315789473%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Production Operations</div>
+                    <div class="family-code">PRO_03</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>1/3 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">33%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 33.33333333333333%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Cultivation Processes</div>
+                    <div class="family-code">PRO_01</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>1/3 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">33%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 33.33333333333333%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Distribution & Logistics</div>
+                    <div class="family-code">PRO_06</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/1 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Material Management</div>
+                    <div class="family-code">MAT_02</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/2 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Human Resources</div>
+                    <div class="family-code">HRM_05</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/6 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Equipment Management</div>
+                    <div class="family-code">EQU_06</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/1 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Sanitation & Hygiene</div>
+                    <div class="family-code">SAN_07</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/1 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Validation & Qualification</div>
+                    <div class="family-code">VAL_08</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/3 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">QC System & Documentation</div>
+                    <div class="family-code">QCS_01</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/10 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Records Management</div>
+                    <div class="family-code">REC_09</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/1 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="family-card">
+                    <div class="family-name">Research & Development</div>
+                    <div class="family-code">RES_10</div>
+                    <div class="family-progress">
+                        <div class="family-stats">
+                            <span>0/1 documents</span>
+                            <span style="color: #667eea; font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0.0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#667eea',
+                primaryTextColor: '#1f2937',
+                primaryBorderColor: '#e5e7eb',
+                lineColor: '#9ca3af',
+                secondaryColor: '#f3f4f6',
+                tertiaryColor: '#fef3c7'
+            }
+        });
+
+        function showTab(tabName) {
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+                if(tab.textContent.toLowerCase().includes(tabName.toLowerCase().substring(0,4))) {
+                    tab.classList.add('active');
+                }
+            });
+
+            contents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            document.getElementById(tabName).classList.add('active');
+
+            if(tabName === 'progress') {
+                initProgressChart();
+            }
+        }
+
+        function initProgressChart() {
+            const ctx = document.getElementById('progressChart');
+            if(ctx && !ctx.chart) {
+                ctx.chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Created', 'Planned'],
+                        datasets: [{
+                            data: [21, 52],
+                            backgroundColor: ['#10b981', '#e5e7eb']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

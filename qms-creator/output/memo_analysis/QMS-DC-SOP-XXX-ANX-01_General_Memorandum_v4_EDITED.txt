@@ -1,0 +1,23 @@
+Реф. МЕМ код | Ref. MEM code:		Датум: | Date:	
+ДО | TO:	ДО | TO:
+[Замени со Име, Организација, Оддел | Replace with Name / Organization / Department: ]	[Замени со Име, Организација, Оддел | Replace with Name / Organization / Department: ]
+[Замени со Адреса, Град, поштенски број | Replace with Address, City, Postal Code: ]	[Замени со Адреса, Град, поштенски број | Replace with Address, City, Postal Code: ]
+Тел. | Phone:	
+Факс | Fax:	
+е-пошта| e-mail:	
+*Add or remove rows if needed; Delete or cross out all that does not apply;
+ОД | FROM:	ОД | FROM:
+[Замени со Име, Организација, Оддел | Replace with Name / Organization / Department:]	[Замени со Име, Организација, Оддел | Replace with Name / Organization / Department:]
+Замени со Адреса, Град, поштенски број | Replace with Address, City, Postal Code: ]	Замени со Адреса, Град, поштенски број | Replace with Address, City, Postal Code: ]
+Тел. | Phone:	
+Факс | Fax:	
+Е-пошта| e-mail:	
+*Add or remove rows if needed; Delete or cross out all that does not apply;
+[ SUBJECT:  Replace with Document Type by format and intended use, ex. REQUEST / COMPLAINT / NOTATION / URGENT INSTRUCTION etc.]
+[CONTENT: Replace with intended content in bilingual formatting “MKD text | Eng Text”]
+Подготвил: (Име Презиме, Датум, Потпис) | Prepared by: (Name Surname, Date, Signature)		Примил, Одговорно лице од институција што го прима барањето (Име Презиме, Потпис) | Received by, Responsible person from the institution receiving the request (Name & Surname, Signature)	Примил, Одговорно лице од институција што го прима барањето (Име Презиме, Потпис) | Received by, Responsible person from the institution receiving the request (Name & Surname, Signature)	Примил, Одговорно лице од институција што го прима барањето (Име Презиме, Потпис) | Received by, Responsible person from the institution receiving the request (Name & Surname, Signature)
+				
+Проверил и Одобрил, (Име Презиме, Датум, Потпис) | Checked & Approved by (Name Surname, Date, Signature)		Датум: | Date:		Време | Time:
+				
+Одобрил ГМ на Пјурели Плант ГмбХ (Име Презиме, Датум, Потпис) | Approved by COO Purely Plant GmbH, (Name Surname, Date, Signature)				
+Одобрил ГМ на Пјурели Плант ГмбХ (Име Презиме, Датум, Потпис) | Approved by COO Purely Plant GmbH, (Name Surname, Date, Signature)		Печат | Stamp	Печат | Stamp	Печат | Stamp

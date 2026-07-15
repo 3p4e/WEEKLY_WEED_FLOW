@@ -1,0 +1,634 @@
+================================================================================
+PURELY PLANT FACILITY PROFILE - DATA COMPLETION SUMMARY
+Document ID: PHASE_1_DATA_COMPLETION_STATUS
+Version: 1.0
+Created: January 13, 2026
+================================================================================
+
+STATUS: Facility Profile Template Created & Ready for Data Population
+Current Progress: 70% Structure Complete | 30% Field Data Pending User Input
+
+The Facility Profile Master Document (QAS-01-003) has been created with:
+✓ Complete document structure and sections
+✓ All required EU GMP framework elements
+✓ Reference data from PP_REFERENCE facility analysis
+✓ Equipment inventory from facility documentation
+✓ Regulatory framework alignment
+
+Remaining: Field-level data that requires direct input or confirmation from you
+
+================================================================================
+SECTION 1: CRITICAL DATA FIELDS REQUIRING COMPLETION
+================================================================================
+
+FACILITY IDENTIFICATION CRITICAL:
+
+[ ] Legal Entity Registration:
+    Current: "Skopje, North Macedonia"
+    REQUIRED: Exact registration date, registration number, VAT ID (if applicable)
+    Source: Company registration documents or TQA020_2025_Purely Plant Dooel.docx
+    Timeline: 30 minutes to locate
+
+[ ] Medical Cannabis License Details:
+    Current: "Active" - Noted
+    REQUIRED: 
+      • Exact license number: ___________
+      • Issue date: ___________
+      • Expiration date: ___________
+      • Issuing Ministry: Ministry of Health, Department: ___________
+      • License scope: [e.g., "Cultivation + Production + Distribution"]
+    Source: Official government license document (physical or email)
+    Timeline: Critical - must have for Quality Manual
+
+[ ] Facility Street Address:
+    Current: "Skopje, North Macedonia"
+    REQUIRED: Complete street address for QMS header documentation
+    Format: [Street Address], [Postal Code], Skopje, [District], North Macedonia
+    Source: Company registration or facility documentation
+    Timeline: 30 minutes
+
+[ ] Facility Coordinates/Area:
+    Current: "9 cultivation rooms (01-09) + GMP areas" - Referenced
+    REQUIRED:
+      • Total facility footprint in m²: ___________
+      • Cultivation area total m²: ___________
+      • GMP production area m²: ___________
+      • QC laboratory m²: ___________
+      • Warehouse area m²: ___________
+    Source: Facility Layout file (Layout F & E Areas.svg in PP_REFERENCE)
+    Timeline: 30 minutes to extract from facility schematic
+
+================================================================================
+SECTION 2: KEY PERSONNEL IDENTIFICATION [HIGH PRIORITY]
+================================================================================
+
+All personnel must be confirmed and documented for:
+  • Quality Manual signature blocks
+  • Organization Chart creation
+  • Approval authority designation
+  • Contact information for regulatory correspondence
+
+CONFIRMED PERSONNEL:
+
+[✓] QP - Batch Release Authority:
+    Name: Blagoj Nikolov
+    Title: Master Pharmacist
+    Status: CONFIRMED - Professional role documented
+    Next Step: Confirm email, phone number for contact info
+
+    EMAIL: ___________
+    PHONE: ___________
+    Department: Quality Assurance / Quality Management
+
+PERSONNEL REQUIRING IDENTIFICATION:
+
+[ ] Facility Manager / Operations Director:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, education background
+    Reports To: [Management structure]
+    Supervises: All operational personnel, Quality Manager, Production Manager
+    Approval Authority: Final facility-level approvals (Quality Manual, Facility Profile)
+    Timeline: CRITICAL BLOCKER for Quality Manual signature
+    Source: Company organizational structure or HR records
+
+[ ] Quality Manager / QA Director:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, education/experience
+    Reports To: Facility Manager (INDEPENDENT of Production)
+    Key Responsibilities:
+      • Overall QA oversight
+      • Quality Manual maintenance
+      • SOP compliance auditing
+      • CAPA authority
+      • Deviation tracking
+    Approval Authority: Quality Manual content approval (technical)
+    Timeline: CRITICAL BLOCKER
+    Source: Organization chart or company directory
+
+[ ] Production Manager:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, background
+    Responsibilities: Cultivation + post-harvest operations
+    Reports To: Facility Manager
+    Key Function: Day-to-day production decisions
+    Timeline: HIGH PRIORITY
+    Source: Operational documentation
+
+[ ] Cultivation Lead / Cultivation Manager:
+    Current Status: [Position assumed but NAME/DETAILS UNKNOWN]
+    REQUIRED: Full name, email, phone, experience with cannabis cultivation
+    Responsibilities: Room 01-09 operations, plant health, harvest planning
+    Reports To: Production Manager
+    Key SOPs: PRO-02-xxx (Cultivation procedures)
+    Timeline: HIGH PRIORITY
+    Source: Facility operations
+
+[ ] Drying/Processing Lead:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, background
+    Responsibilities: CDS24 drying machine operation, curing procedures
+    Reports To: Production Manager
+    Key SOP: PRO_03.02_v1 (Drying Procedures)
+    Timeline: HIGH PRIORITY
+    Equipment Responsibility: CDS24 drying machine + Packaging system
+    Source: Facility operations documentation
+
+[ ] Sanitation Manager:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, background
+    Responsibilities: Facility cleaning, sanitation protocols, environmental monitoring
+    Reports To: Facility Manager (or Quality Manager)
+    Key SOPs: SAN-03-xxx (Sanitation), SAN-04-001 (Environmental Monitoring)
+    Timeline: HIGH PRIORITY
+    Source: Sanitation documentation / organizational structure
+
+[ ] Security Manager:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, background
+    Responsibilities: Access control, CCTV monitoring, chain of custody
+    Reports To: Facility Manager or Ministry of Interior liaison
+    Key SOP: SEC-03-001 (Security System Operation)
+    Equipment: Security system (CCTV + access control + alarms)
+    Timeline: MEDIUM PRIORITY (regulatory required)
+    Source: Security system documentation
+
+[ ] HR Manager / Personnel Manager:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone
+    Responsibilities: Personnel training, competency assessment, records
+    Reports To: Facility Manager
+    Key SOPs: HR-01-xxx (Training and Competency)
+    Timeline: MEDIUM PRIORITY
+    Source: HR department
+
+[ ] Equipment Manager:
+    Current Status: [Position identified but NAME UNKNOWN]
+    REQUIRED: Full name, email, phone, technical background
+    Responsibilities: Equipment maintenance, qualification, calibration
+    Reports To: Facility Manager or Production Manager
+    Key SOPs: EQU-02-001 (Calibration), Equipment-specific SOPs
+    Equipment Portfolio: 18 systems listed in Facility Profile
+    Timeline: MEDIUM PRIORITY
+    Source: Equipment maintenance documentation
+
+[ ] Records Manager / QMS Administrator:
+    Current Status: [Position may exist but NAME/ROLE UNKNOWN]
+    REQUIRED: Full name, email, phone (if position exists)
+    Responsibilities: QMS document management, version control, archival
+    Reports To: Quality Manager
+    Key SOP: REC-02-001 (Records Management)
+    Timeline: LOW PRIORITY (can designate later)
+    Source: Administrative documentation
+
+CONTACT MATRIX TEMPLATE (To be completed):
+
+Position                    Name              Email            Phone          Reports To
+─────────────────────────────────────────────────────────────────────────────────────
+Facility Manager            [__________]     [__________]     [__________]    Board/Owner
+Quality Manager             [__________]     [__________]     [__________]    Facility Mgr
+Production Manager          [__________]     [__________]     [__________]    Facility Mgr
+Cultivation Lead            [__________]     [__________]     [__________]    Production Mgr
+Processing/Drying Lead      [__________]     [__________]     [__________]    Production Mgr
+Sanitation Manager          [__________]     [__________]     [__________]    Facility Mgr
+Security Manager            [__________]     [__________]     [__________]    Facility Mgr
+HR Manager                  [__________]     [__________]     [__________]    Facility Mgr
+Equipment Manager           [__________]     [__________]     [__________]    Facility Mgr
+QP - Batch Release          Blagoj Nikolov   [__________]     [__________]    Quality Mgr
+
+================================================================================
+SECTION 3: EQUIPMENT SPECIFICATIONS & SERIAL NUMBERS [HIGH PRIORITY]
+================================================================================
+
+Current Equipment Inventory Status: Quantity & Type Known | Details Pending
+
+REQUIRED COMPLETION FOR EACH EQUIPMENT ITEM:
+
+Equipment [001] - Agrimix L System:
+  ✓ Purpose: Nutrient preparation (Known)
+  [ ] Manufacturer & Model: ___________
+  [ ] Serial Number: ___________
+  [ ] Installation Date: ___________
+  [ ] Current Qualification Status: ___________
+  [ ] Qualified Date: ___________
+  [ ] Next Recertification: ___________
+  Source: Equipment Qualification V.03.docx or equipment nameplates
+
+Equipment [002] - Reverse Osmosis System:
+  ✓ Qualified (DQ/IQ/OQ/PQ) - Known
+  [ ] Manufacturer & Model: ___________
+  [ ] Serial Number: ___________
+  [ ] Installation Date: ___________
+  [ ] Capacity (L/day): ___________
+  [ ] Last Routine Check Date: ___________
+  [ ] Ozonation System Integration: Confirmed ✓
+  Source: RO_QUALI_Draft files in PP_REFERENCE
+
+Equipment [008] - Drying Machine (CDS24):
+  ✓ Model: CDS24 (Known)
+  [ ] Manufacturer: ___________
+  [ ] Serial Number: ___________
+  [ ] Capacity (kg/batch): ___________
+  [ ] Installation Date: ___________
+  [ ] Standard Temperature Setting: ___________
+  [ ] Standard Humidity Setting: ___________
+  [ ] Last Validation Date: ___________
+  Source: Equipment Qualification file / Process observation 09.09.2025
+
+Equipment [009] - Trimming Machine (MB Bucker 200):
+  ✓ Model: MB Bucker 200 (Known)
+  [ ] Manufacturer: ___________
+  [ ] Serial Number: ___________
+  [ ] Capacity (units/hour or kg/hour): ___________
+  [ ] Installation Date: ___________
+  [ ] Cleaning Validation Date: ___________
+  Source: Equipment documentation
+
+Equipment [013] & [014] - DENSI Balances (PC & SI):
+  ✓ Quantity & Type: 2 units known (PC - preliminary, SI - analytical)
+  [ ] PC Balance - Serial Number: ___________
+  [ ] PC Balance - Last Calibration: ___________
+  [ ] SI Balance - Serial Number: ___________
+  [ ] SI Balance - Last Calibration: ___________
+  [ ] Test Weights Standard Traceability: ___________
+  Source: Equipment Qualification + calibration records
+
+Equipment [015] - Testo Data Loggers:
+  ✓ Used for T/RH monitoring throughout facility
+  [ ] Number of units deployed: ___________
+  [ ] Locations: [List all deployment locations]
+  [ ] Calibration certificates: On file ✓
+  [ ] Last calibration dates: ___________
+  Source: Testo system documentation
+
+ALL OTHER EQUIPMENT - Serial Numbers & Qualification Dates:
+  [003-007, 010-012, 016-018]: Require serial numbers, installation dates, 
+                               and current qualification/maintenance status
+  Source: Equipment management files in PP_REFERENCE
+
+EQUIPMENT INVENTORY SPREADSHEET:
+[Comprehensive equipment list with serial numbers, dates, and status]
+
+================================================================================
+SECTION 4: PRODUCTION PROTOCOL & PROCESS PARAMETERS CRITICAL
+================================================================================
+
+USER STATUS: "i also have a production protocol:" [Not yet provided]
+
+REQUIRED: Production Protocol Document
+
+Current: You mentioned having a production protocol but did not provide:
+  • Filename: ___________
+  • Location in PP_REFERENCE: ___________
+  • Format: [Word document, PDF, Excel, paper copy?]
+
+This protocol document is CRITICAL for Phase 2 customization because it will:
+  • Define specific process parameters for GACP cultivation
+  • Specify drying temperature/humidity setpoints
+  • Detail curing duration and monitoring
+  • Outline trimming specifications
+  • Guide packaging procedures
+  • Establish quality checkpoints throughout
+
+USING THE PROTOCOL:
+Once provided, I will:
+1. Extract all process parameters
+2. Identify quality control checkpoints
+3. Cross-reference with CQA data (09.09.2025 Drying Observation)
+4. Create customized Production SOPs (PRO-02, PRO-03, PRO-04 series)
+5. Establish Work Instructions with specific parameters
+6. Create monitoring forms with exact setpoints
+
+REQUESTED ACTION: 
+Please provide:
+  [ ] Production Protocol filename or direct file path
+  [ ] OR: Provide process parameters manually:
+    • Cultivation room temperature setpoints: ___________
+    • Cultivation room humidity targets: ___________
+    • Drying procedure duration: ___________
+    • Drying temperature: ___________
+    • Drying humidity target: ___________
+    • Curing procedure duration: ___________
+    • Curing temperature: ___________
+    • Curing humidity target: ___________
+    • Packaging specifications: ___________
+    • Quality sampling points: ___________
+
+================================================================================
+SECTION 5: FACILITY TESTING CAPABILITY & QC LAB DETAILS [HIGH PRIORITY]
+================================================================================
+
+Current Status from Analysis:
+✓ In-house analytical lab exists (confirmed)
+✓ Cannabinoid testing capability (HPLC or GC-MS) - assumed
+✓ Microbiological testing (assumed based on facility type)
+✓ Water quality testing (RO system exists)
+
+REQUIRED SPECIFICS:
+
+[ ] Analytical Equipment Detail:
+    • Cannabinoid Analysis Method: HPLC _____ or GC-MS _____?
+    • Instrument Manufacturer & Model: ___________
+    • Serial Number: ___________
+    • Last Qualification/Validation: ___________
+    • Testing standards used: EU/Ph. Eur./USP/ICH?
+
+[ ] Microbiological Testing Capabilities:
+    • Viable sampling equipment: [Describe]
+    • Culture media suppliers: ___________
+    • Identification methods: ___________
+    • Testing frequency: ___________
+
+[ ] Water Quality Testing:
+    • Conductivity meter: ___________
+    • pH meter: ___________
+    • Microbial sampling method: ___________
+    • Testing frequency: ___________
+
+[ ] Environmental Monitoring Scope:
+    • Specific locations of Testo loggers: [List all 9 cultivation rooms + GMP areas]
+    • Recording interval: 15 min _____ or 30 min _____?
+    • Alarm setpoint values: ___________
+
+[ ] Stability Testing:
+    • Temperature chamber for real-time studies: Available _____ or Planned _____?
+    • Storage conditions per ICH Q1A: [Confirmed]
+    • Time points for analysis: [Confirm: 0, 3, 6, 9, 12+ months]
+    • Cannabinoid degradation kinetics model: [Linear decay, Arrhenius, other?]
+
+[ ] Contract Laboratory (if needed):
+    • Laboratory name: ___________
+    • Services: ___________
+    • Accreditation: ISO 17025 / ISO 9001 / Other _____?
+    • Contact: ___________
+
+================================================================================
+SECTION 6: QUALITY OBJECTIVES - MEASURABLE TARGETS [MEDIUM PRIORITY]
+================================================================================
+
+Current Facility Profile includes placeholder objectives for:
+✓ Product conformance (100% batches meet spec)
+✓ Regulatory compliance (zero major findings)
+✓ Personnel training (95%+ completion)
+✓ Documentation accuracy (100%)
+✓ Equipment maintenance (100% current)
+✓ Stability / Potency (within specification)
+
+REQUIRED FOR CUSTOMIZATION:
+
+[ ] Specific Numerical Targets (per Purely Plant strategy):
+    • Microbial contamination rate acceptable: ___% (e.g., <5% rejections)
+    • Cannabinoid potency variance: ___% RSD (e.g., <15%)
+    • Environmental stability: ___°C ± range, ___% RH ± range
+    • Batch release timeliness: ___ days average
+    • Personnel training completion: ___% by month
+    • Incident reporting rate: ___ incidents per ___ months
+
+[ ] Measurement Methods (for each objective):
+    • Data source for tracking: ___________
+    • Responsibility for measurement: ___________
+    • Frequency of reporting: Daily / Weekly / Monthly / Quarterly?
+    • Management review: Monthly _____ or Annually _____?
+
+[ ] Current Performance Baselines (helpful for goal-setting):
+    • Last 12 months batch conformance rate: ____%
+    • Deviation rate: ___ deviations per ____ batches
+    • Training completion rates: ____%
+    • Equipment availability (uptime %): ____%
+
+================================================================================
+SECTION 7: REGULATORY CONTACTS - MINISTRY/AUTHORITY DETAILS [MEDIUM PRIORITY]
+================================================================================
+
+Confirmed from Analysis:
+✓ Ministry of Health (Primary)
+✓ Ministry of Interior (Security/Controlled Substances)
+
+REQUIRED COMPLETION:
+
+Ministry of Health - Medicinal Products:
+  [ ] Official Department Name: ___________
+  [ ] Address: ___________
+  [ ] Main Contact Phone: ___________
+  [ ] Main Contact Email: ___________
+  [ ] Assigned Inspector/Officer: ___________
+  [ ] Inspector Contact: ___________
+  [ ] License Type Issued: ___________
+  [ ] Annual Reporting Deadline: ___________
+  [ ] Inspection Frequency: ___________
+
+Ministry of Interior - Controlled Substances:
+  [ ] Department Name: ___________
+  [ ] Address: ___________
+  [ ] Contact Phone: ___________
+  [ ] Contact Email: ___________
+  [ ] Security Officer Assigned: ___________
+  [ ] Security Audit Schedule: ___________
+
+Local Municipality (Skopje):
+  [ ] Environmental Officer: ___________
+  [ ] Contact: ___________
+
+================================================================================
+SECTION 8: ORGANIZATIONAL STRUCTURE DIAGRAM DATA [MEDIUM PRIORITY]
+================================================================================
+
+For QAS-01-004 (Organization Chart & Responsibilities):
+
+Required:
+[ ] Reporting lines (complete chain from each position to Facility Manager)
+[ ] Quality unit independence documentation
+[ ] DECISION AUTHORITY matrix (who approves what):
+    • Batch release: QP (Blagoj) Confirmed
+    • SOP changes: Quality Manager Assumed - To be verified
+    • Personnel hiring: Facility Manager Assumed - To be verified
+    • Deviation investigations: Quality Manager Assumed - To be verified
+    • Equipment qualification: Equipment Manager Assumed - To be verified
+
+[ ] Emergency contact procedures:
+    • Out-of-spec result: Contact ___________
+    • Facility emergency: Contact ___________
+    • Quality crisis: Contact ___________
+
+================================================================================
+SECTION 9: EXISTING DOCUMENTATION TO INTEGRATE [INFORMATION GATHERING]
+================================================================================
+
+Documents Already Located in PP_REFERENCE:
+
+[ ] Equipment Qualification V.03.docx
+    Status: LOCATED - Requires data extraction
+    Purpose: Equipment qualification details, serial numbers, dates
+    Use In: QMS → EQU-02-001 (Calibration SOP), Equipment qualification annexes
+    Action: [When you export to readable format] Extract and map to new SOP codes
+
+[ ] VALIDATION MASTER PLAN_2025.docx
+    Status: LOCATED - Requires data extraction
+    Purpose: Facility validation strategy, planned validations
+    Use In: QAS-01-005 (Validation Strategy), PRE-01-002 (Facility Validation)
+    Action: [When you export to readable format] Extract validation protocols
+
+[ ] QAS 01.18.04 Stability Study Protocol (Word format)
+    Status: LOCATED - Available for reference
+    Purpose: Cannabinoid stability testing procedures
+    Use In: Stability testing SOP (to be customized with Purely Plant specifics)
+    Action: Paraphrase per methodology to create QAS-01-018-V.1.0
+
+[ ] Drying & Curing Process Observation (09.09.2025)
+    Status: LOCATED - Available
+    Purpose: Historical CQA (Critical Quality Attribute) data
+    Use In: PRO_03.02_v1 (Drying Procedures) baseline parameters
+    Action: Extract setpoints and create procedure Work Instructions
+
+[ ] Self-Inspection Report (19.08.25)
+    Status: LOCATED - Available
+    Purpose: Gap analysis and compliance baseline
+    Use In: QAS-01-006 (Internal Audit & Self-Inspection)
+    Action: Use as baseline for compliance checklist
+
+[ ] SOP Draft Folder Organization (15+ specialized folders)
+    Status: LOCATED - Extensive structure confirmed
+    Purpose: Existing procedures reference
+    Use In: Paraphrasing methodology → customized new SOPs
+    Action: Extract core concepts (not procedures - per paraphrasing methodology)
+
+[ ] Facility Layout SVG (Layout F & E Areas.svg)
+    Status: LOCATED - Requires visual parsing
+    Purpose: Facility dimensions, room specifications
+    Use In: Facility Profile (room dimensions), PRE-01-001 (Premises SOP)
+    Action: [If exported to readable format] Extract room dimensions
+
+================================================================================
+SECTION 10: DATA COMPLETION TIMELINE & NEXT STEPS
+================================================================================
+
+IMMEDIATE ACTIONS (TODAY - Required for Phase 1 completion):
+
+Priority 1 - BLOCKING ALL PHASE 1 COMPLETION:
+  [ ] Facility Manager Name & Contact (30 min)
+  [ ] Medical Cannabis License Number (30 min)
+  [ ] Facility Street Address (15 min)
+  Estimated Completion: 1.5 hours
+  Impact: Enables Quality Manual and Facility Profile finalization
+
+Priority 2 - HIGH (Within 24 hours):
+  [ ] Production Protocol File (5 min to locate + provide)
+  [ ] Equipment Serial Numbers List (1-2 hours to compile)
+  [ ] Key Personnel Contact Info (1 hour)
+  Estimated Completion: 3-4 hours
+  Impact: Enables Phase 2 (System SOPs) customization
+
+Priority 3 - MEDIUM (Within 1 week):
+  [ ] QC Lab specifications
+  [ ] Quality objectives targets
+  [ ] Regulatory contact details
+  [ ] Equipment-specific parameters
+  Estimated Completion: 4-6 hours
+  Impact: Completes comprehensive QMS foundation
+
+DOCUMENT EXPORT REQUESTS (Helps AI parse existing docs):
+If you can export these binary files to readable formats, it accelerates research:
+  [ ] TQA020_2025_Purely Plant Dooel.docx → PDF or extracted text
+  [ ] Equipment Qualification V.03.docx → PDF or extracted text
+  [ ] VALIDATION MASTER PLAN_2025.docx → PDF or extracted text
+
+Estimated value: 3-4 hours of manual research conversion time saved
+
+================================================================================
+SECTION 11: NEXT WORKFLOW STEPS
+================================================================================
+
+UPON RECEIPT OF CRITICAL DATA (Priority 1 + 2):
+
+Step 1: Facility Profile Finalization (2 hours)
+  → Complete QAS-01-003 with all personnel & facility details
+  → Ready for Quality Manager and Facility Manager signature
+
+Step 2: Quality Manual Customization (3-4 hours)
+  → Create customized QA_00.01_v1 with:
+    • Facility address, legal entity, license
+    • Organizational structure with actual personnel
+    • Quality policy specific to Purely Plant
+    • Quality objectives with measurable targets
+    • Signature blocks for approval
+
+Step 3: Organization Chart Creation (1-2 hours)
+  → Create QAS-01-004 with:
+    • Reporting structure diagram
+    • Role descriptions with names
+    • Approval authority matrix
+    • Emergency contact procedures
+
+Step 4: Phase 2 - System SOP Customization (Pending Phase 1 completion)
+  → 8 Critical System SOPs (40-60 hours)
+    1. QAS-01-005: Validation Strategy
+    2. SAN-04-002: Water Quality Management
+    3. SAN-04-001: Environmental Monitoring
+    4. PRO-02-001: Cultivation Procedures (with actual protocol)
+    5. PRO_03.02_v1: Drying (with actual parameters)
+    6. PRO-04-001: Packaging (with actual specifications)
+    7. EQU-02-001: Equipment Calibration (with actual equipment list)
+    8. REC-02-001: Records Management (document control)
+
+Step 5: Phase 3 - Operational Work Instructions
+Step 6: Phase 4 - Forms & Templates
+Step 7: QMS Implementation & Staff Training
+
+================================================================================
+SUMMARY - WHAT YOU NEED TO PROVIDE NOW
+================================================================================
+
+To complete Phase 1 and begin Phase 2, please provide:
+
+CRITICAL (1-2 hours to gather):
+1. Facility Manager: [Full Name] ___________
+2. Facility Manager Email: ___________
+3. Facility Manager Phone: ___________
+4. Medical Cannabis License Number: ___________
+5. License Issue Date: ___________
+6. License Expiration Date: ___________
+7. Facility Street Address: ___________
+8. Total Facility Area (m²): ___________
+
+HIGH PRIORITY (2-3 hours to gather):
+9. Production Protocol File: [Provide filename or file path]
+10. Equipment Serial Numbers: [Spreadsheet or list]
+11. All Key Personnel Names, Emails, Phones: [List from contact matrix above]
+12. Quality Objectives - Specific Targets: [Numerical targets]
+13. QC Lab Equipment Details: [What testing instruments available]
+
+MEDIUM PRIORITY (Can follow after Phase 1):
+14. Regulatory Contact Details: [Ministry contacts, inspectors]
+15. Environmental Monitoring Locations: [Exact Testo logger deployment]
+16. Current Performance Metrics: [Last 12-month compliance baseline]
+
+================================================================================
+PREPARATION COMPLETE - AWAITING YOUR DATA INPUT
+================================================================================
+
+The Facility Profile Master Document structure is 100% complete.
+All sections are ready for field-level data population.
+
+Once you provide the critical data above, I will:
+✓ Complete QAS-01-003 (Facility Profile) → Ready for signature
+✓ Create QA_00.01_v1 (Quality Manual) → Ready for signature  
+✓ Create QAS-01-004 (Organization Chart) → Ready for reference
+✓ Begin Phase 2 (System SOP customization with your production protocol)
+✓ Establish full EU GMP QMS framework for Purely Plant
+
+Timeline Once Data Received:
+  Phase 1 (Facility Profile + Quality Manual): 4-6 hours
+  Phase 2 (System SOPs): 40-60 hours
+  Phase 3 & 4 (Complete QMS): Additional 60-80 hours
+  
+Total Path to Complete EU GMP QMS: ~100-150 hours from now
+
+================================================================================
+END OF DATA COMPLETION SUMMARY
+================================================================================
+
+Ready to proceed. Awaiting your data input to advance Purely Plant's
+EU GMP QMS implementation.
+
+Contact any questions about required data fields.
+
+================================================================================

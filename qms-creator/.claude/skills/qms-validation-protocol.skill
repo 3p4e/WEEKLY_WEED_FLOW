@@ -1,0 +1,249 @@
+# QMS Validation Protocol Generator
+
+Generate EU GMP Annex 15 compliant validation protocols (IQ/OQ/PQ).
+
+## Activation
+- User requests: "validation protocol", "IQ", "OQ", "PQ", "qualification", "process validation"
+
+---
+
+<qms-validation-protocol>
+
+## Instructions
+
+You are generating EU GMP Annex 15 compliant validation/qualification protocols for cannabis pharmaceutical operations.
+
+### PROTOCOL TYPES
+
+| Type | Full Name | Purpose | When |
+|------|-----------|---------|------|
+| DQ | Design Qualification | Verify design meets requirements | Before purchase |
+| IQ | Installation Qualification | Verify correct installation | After installation |
+| OQ | Operational Qualification | Verify operation within limits | After IQ |
+| PQ | Performance Qualification | Verify consistent performance | After OQ |
+| PV | Process Validation | Verify process produces quality product | Before routine production |
+| CV | Cleaning Validation | Verify cleaning removes residues | Before use |
+
+### EU GMP ANNEX 15 REQUIREMENTS
+
+- <cite source="ANNEX15-3.2">Written protocols specifying how qualification will be conducted</cite>
+- <cite source="ANNEX15-3.3">Protocols should include acceptance criteria</cite>
+- <cite source="ANNEX15-3.4">Qualification documents may be combined where appropriate</cite>
+- <cite source="ANNEX15-5.1">Critical process parameters (CPPs) should be identified</cite>
+
+### PROTOCOL STRUCTURE
+
+#### 1. Cover Page
+```markdown
+# {Type} Protocol: {Equipment/Process Name}
+
+| Field | Value |
+|-------|-------|
+| Protocol Number | {VAL-XXX-001} |
+| Equipment/Process | {name} |
+| Equipment ID | {asset number} |
+| Location | {room/area} |
+| Manufacturer | {manufacturer} |
+| Model/Serial | {model} / {serial} |
+| Protocol Version | 1.0 |
+| Effective Date | {date} |
+
+## Approval Signatures
+
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Author | __________ | __________ | _____ |
+| Reviewer (Engineering) | __________ | __________ | _____ |
+| Reviewer (QA) | __________ | __________ | _____ |
+| Approver (QA Manager) | __________ | __________ | _____ |
+```
+
+#### 2. Purpose and Scope
+```markdown
+## 1. Purpose
+
+This protocol establishes the procedure for {IQ/OQ/PQ} of the {equipment name} to demonstrate that it is properly {installed/operates/performs} according to specifications and is suitable for its intended use in cannabis pharmaceutical manufacturing.
+
+## 2. Scope
+
+This protocol applies to:
+- Equipment: {name and ID}
+- Location: {room}
+- Processes: {associated processes}
+
+Out of scope:
+- {items not covered}
+```
+
+#### 3. References
+```markdown
+## 3. References
+
+| Document | Title |
+|----------|-------|
+| EU GMP Annex 15 | Qualification and Validation |
+| SOP-VAL-001 | Validation Master Plan |
+| SOP-EQP-XXX | Equipment Operation SOP |
+| URS-XXX | User Requirements Specification |
+| Vendor Manual | {manufacturer documentation} |
+```
+
+#### 4. Responsibilities
+```markdown
+## 4. Responsibilities
+
+| Role | Responsibility |
+|------|----------------|
+| Validation Lead | Execute protocol, document results |
+| Engineering | Technical support, equipment access |
+| QA | Review/approve protocol and report |
+| Production | Witness testing, provide input |
+```
+
+#### 5. Prerequisites (IQ/OQ/PQ specific)
+```markdown
+## 5. Prerequisites
+
+### For IQ:
+- [ ] Purchase order received
+- [ ] Site preparation complete
+- [ ] Utilities available (power, water, compressed air)
+- [ ] Vendor documentation received
+
+### For OQ:
+- [ ] IQ approved
+- [ ] Calibrated instruments available
+- [ ] Operating SOP draft available
+- [ ] Training completed
+
+### For PQ:
+- [ ] OQ approved
+- [ ] Production materials available
+- [ ] Trained operators available
+- [ ] Sampling plan approved
+```
+
+#### 6. Test Sections
+
+##### IQ Tests
+```markdown
+## 6. Installation Qualification Tests
+
+### 6.1 Documentation Verification
+| Test ID | Item | Expected | Actual | Pass/Fail |
+|---------|------|----------|--------|-----------|
+| IQ-001 | Purchase Order | On file | ☐ Verified | ☐ P ☐ F |
+| IQ-002 | Vendor Manual | Received | ☐ Verified | ☐ P ☐ F |
+| IQ-003 | Certificates (CE, calibration) | Received | ☐ Verified | ☐ P ☐ F |
+| IQ-004 | Spare Parts List | On file | ☐ Verified | ☐ P ☐ F |
+
+### 6.2 Physical Verification
+| Test ID | Item | Specification | Actual | Pass/Fail |
+|---------|------|---------------|--------|-----------|
+| IQ-005 | Equipment ID tag | {ID} installed | _____ | ☐ P ☐ F |
+| IQ-006 | Location | Room {XXX} | _____ | ☐ P ☐ F |
+| IQ-007 | Model number | {model} | _____ | ☐ P ☐ F |
+| IQ-008 | Serial number | {serial} | _____ | ☐ P ☐ F |
+
+### 6.3 Utility Verification
+| Test ID | Utility | Requirement | Actual | Pass/Fail |
+|---------|---------|-------------|--------|-----------|
+| IQ-009 | Electrical | {voltage} | _____ V | ☐ P ☐ F |
+| IQ-010 | Compressed Air | {pressure} | _____ bar | ☐ P ☐ F |
+| IQ-011 | Water | Purified Water | _____ | ☐ P ☐ F |
+```
+
+##### OQ Tests
+```markdown
+## 6. Operational Qualification Tests
+
+### 6.1 Alarm/Interlock Testing
+| Test ID | Alarm/Interlock | Trigger Condition | Expected Response | Actual | Pass/Fail |
+|---------|-----------------|-------------------|-------------------|--------|-----------|
+| OQ-001 | High temp alarm | >30°C | Audible alarm, display | _____ | ☐ P ☐ F |
+| OQ-002 | Door interlock | Door open | Operation stops | _____ | ☐ P ☐ F |
+
+### 6.2 Operational Range Testing
+| Test ID | Parameter | Set Point | Actual | Tolerance | Pass/Fail |
+|---------|-----------|-----------|--------|-----------|-----------|
+| OQ-003 | Temperature | 25°C | _____ °C | ±2°C | ☐ P ☐ F |
+| OQ-004 | Speed | 500 rpm | _____ rpm | ±5% | ☐ P ☐ F |
+| OQ-005 | Time | 30 min | _____ min | ±1 min | ☐ P ☐ F |
+
+### 6.3 Challenge Tests (Min/Max)
+| Test ID | Parameter | Challenge | Result | Pass/Fail |
+|---------|-----------|-----------|--------|-----------|
+| OQ-006 | Temp Low | 15°C | _____ °C | ☐ P ☐ F |
+| OQ-007 | Temp High | 40°C | _____ °C | ☐ P ☐ F |
+```
+
+##### PQ Tests
+```markdown
+## 6. Performance Qualification Tests
+
+### 6.1 Test Conditions
+- Product: {product name}
+- Batch size: {size}
+- Number of runs: 3 consecutive
+
+### 6.2 Performance Testing
+| Test ID | Parameter | Acceptance Criteria | Run 1 | Run 2 | Run 3 | Pass/Fail |
+|---------|-----------|---------------------|-------|-------|-------|-----------|
+| PQ-001 | Yield | ≥95% | _____ | _____ | _____ | ☐ P ☐ F |
+| PQ-002 | Uniformity | RSD ≤2% | _____ | _____ | _____ | ☐ P ☐ F |
+| PQ-003 | Assay | 95-105% | _____ | _____ | _____ | ☐ P ☐ F |
+
+### 6.3 Statistical Analysis
+- Mean: _____
+- Standard Deviation: _____
+- RSD: _____ %
+- Range: _____
+```
+
+#### 7. Deviation Handling
+```markdown
+## 7. Deviation Handling
+
+Any deviation from this protocol must be documented:
+
+| Dev No. | Test ID | Description | Impact Assessment | Resolution |
+|---------|---------|-------------|-------------------|------------|
+| | | | | |
+
+Minor deviations: Document and justify, no retest required
+Major deviations: Investigate, may require retest or protocol amendment
+```
+
+#### 8. Summary and Conclusions
+```markdown
+## 8. Summary and Conclusions
+
+### Test Summary
+| Category | Total Tests | Passed | Failed | Deviations |
+|----------|-------------|--------|--------|------------|
+| Documentation | {n} | {n} | {n} | {n} |
+| Physical | {n} | {n} | {n} | {n} |
+| Functional | {n} | {n} | {n} | {n} |
+| **Total** | {n} | {n} | {n} | {n} |
+
+### Conclusion
+Based on the results documented in this protocol, the {equipment name} has been demonstrated to be properly {installed/operating/performing} and is approved for use in cannabis pharmaceutical manufacturing.
+
+### Final Approval
+
+| Role | Signature | Date |
+|------|-----------|------|
+| Validation Lead | __________ | _____ |
+| QA Approval | __________ | _____ |
+```
+
+### CANNABIS-SPECIFIC CONSIDERATIONS
+
+Include these for cannabis equipment:
+- Containment verification (controlled substance)
+- Cross-contamination controls (THC/CBD segregation)
+- Cleaning validation requirements
+- Potency testing equipment qualification
+- Extraction equipment safety systems
+
+</qms-validation-protocol>

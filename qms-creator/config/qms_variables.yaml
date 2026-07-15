@@ -1,0 +1,252 @@
+# =============================================================================
+# QMS MASTER VARIABLE DEFINITIONS
+# =============================================================================
+# All variables in QMS documents are shown in [BLUE_BRACKETS]
+# Variables to be replaced by facility before document issuance
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMPANY INFORMATION
+# -----------------------------------------------------------------------------
+company:
+  name: "Purely Plant GmbH"
+  legal_name: "Purely Plant GmbH"
+  address: "123 Cannabis Boulevard"
+  city: "Skopje"
+  country: "North Macedonia"
+  phone: "+389 2 3000 000"
+  email: "info@purelyplant.mk"
+  website: "www.purelyplant.mk"
+  manufacturing_license: "MK-MED-CANNABIS-2024-001"
+  gdp_license: "EU-GDP-MK-2024-001"
+  gacp_certificate: "EU-GACP-MK-2024-001"
+
+# -----------------------------------------------------------------------------
+# KEY PERSONNEL
+# -----------------------------------------------------------------------------
+personnel:
+  qualified_person:
+    name: "Blagoj Nikolov"
+    title: "Qualified Person (QP)"
+    qualifications: "Master Pharmacist, EU GMP Certified"
+    license_number: "QP-MK-2024-001"
+
+  qa_manager:
+    name: "Ana Dimitrova"
+    title: "Quality Assurance Manager"
+
+  qc_manager:
+    name: "Ana Dimitrova"
+    title: "Quality Control Manager"
+
+  production_manager:
+    name: "Marko Georgiev"
+    title: "Production Manager"
+
+  cultivation_manager:
+    name: "Stefan Petrov"
+    title: "Facility Manager"
+
+  warehouse_manager:
+    name: "Dejan Angelov"
+    title: "Records Manager"
+
+  hr_manager:
+    name: "Katerina Trajkovska"
+    title: "Human Resources Manager"
+
+  it_manager:
+    name: "Dejan Angelov"
+    title: "Records Manager"
+
+  facility_manager:
+    name: "Stefan Petrov"
+    title: "Facility Manager"
+
+# -----------------------------------------------------------------------------
+# FACILITY AREAS
+# -----------------------------------------------------------------------------
+facility:
+  # Cultivation Areas
+  propagation_room:
+    name: "Propagation Room"
+    code: "ROOM-02"
+    classification: "Grade D"
+    temperature: "18-24°C"
+    humidity: "65-75% RH"
+    lighting: "18h photoperiod, 400-600 µmol/m²/s"
+
+  vegetation_room:
+    name: "Vegetative Growth Room"
+    code: "ROOM-03"
+    classification: "Grade D"
+    temperature: "20-26°C"
+    humidity: "55-70% RH"
+    lighting: "18h photoperiod, 600-800 µmol/m²/s"
+
+  flowering_room:
+    name: "Flowering Room"
+    code: "ROOM-04"
+    classification: "Grade D"
+    temperature: "20-26°C day / 18-22°C night"
+    humidity: "45-55% RH"
+    lighting: "12h photoperiod, 800-1200 µmol/m²/s"
+
+  drying_room:
+    name: "Drying & Curing Room"
+    code: "ROOM-06"
+    classification: "Grade D"
+    temperature: "15-22°C"
+    humidity: "55-65% RH"
+    air_exchange: "10-15 air changes/hour"
+    drying_duration: "10-14 days"
+
+  curing_room:
+    name: "Drying & Curing Room"
+    code: "ROOM-06"
+    classification: "Grade D"
+    temperature: "15-21°C"
+    humidity: "58-62% RH"
+    curing_duration: "2-8 weeks"
+
+  trimming_room:
+    name: "Trimming & Processing Room"
+    code: "ROOM-07"
+    classification: "Grade D"
+    temperature: "18-22°C"
+    humidity: "45-55% RH"
+
+  packaging_room:
+    name: "Packaging Room"
+    code: "ROOM-08"
+    classification: "Grade C"
+    temperature: "18-22°C"
+    humidity: "35-50% RH"
+
+  qc_laboratory:
+    name: "QC Laboratory"
+    code: "ROOM-01"
+    classification: "Grade D"
+    temperature: "20-25°C"
+    humidity: "30-60% RH"
+
+  warehouse_rm:
+    name: "Reception & Material Intake"
+    code: "ROOM-01"
+    classification: "Controlled"
+    temperature: "15-25°C"
+    humidity: "30-60% RH"
+
+  warehouse_fg:
+    name: "Secure Storage Vault"
+    code: "ROOM-09"
+    classification: "Controlled"
+    temperature: "15-25°C"
+    humidity: "30-60% RH"
+
+  quarantine_area:
+    name: "Secure Storage Vault"
+    code: "ROOM-09"
+    classification: "Controlled"
+
+# -----------------------------------------------------------------------------
+# PRODUCT SPECIFICATIONS
+# -----------------------------------------------------------------------------
+products:
+  dried_flower:
+    name: "Dried Cannabis Flower"
+    thc_content: "<0.2% (EU-compliant) or as registered"
+    cbd_content: "As per product specification"
+    moisture_content: "8-12%"
+    water_activity: "<0.65 aw"
+    particle_size: "As per specification"
+
+  specifications:
+    total_aerobic_count: "≤10,000 CFU/g"
+    total_yeast_mold: "≤1,000 CFU/g"
+    bile_tolerant_gnb: "≤100 CFU/g"
+    salmonella: "Absent in 10g"
+    e_coli: "Absent in 1g"
+    staphylococcus: "Absent in 1g"
+    aflatoxins_total: "≤4 µg/kg"
+    aflatoxin_b1: "≤2 µg/kg"
+    ochratoxin_a: "≤10 µg/kg"
+    lead: "≤1.0 mg/kg"
+    cadmium: "≤0.3 mg/kg"
+    mercury: "≤0.1 mg/kg"
+    arsenic: "≤0.2 mg/kg"
+    pesticides: "Per Ph. Eur. 2.8.13"
+
+# -----------------------------------------------------------------------------
+# EQUIPMENT LIST (Examples - facility to complete)
+# -----------------------------------------------------------------------------
+equipment:
+  hvac_cultivation: "EQU-HVAC-001"
+  hvac_drying: "EQU-HVAC-001"
+  dehumidifiers: "EQU-HVAC-001"
+  scales_production: "EQU-SCALE-001"
+  scales_laboratory: "EQU-QC-001"
+  hplc_system: "EQU-QC-LAB-001"
+  gc_ms_system: "EQU-QC-LAB-002"
+  icp_ms_system: "EQU-QC-LAB-003"
+  moisture_analyzer: "EQU-QC-001"
+  water_activity_meter: "EQU-QC-002"
+  ph_meter: "EQU-QC-002"
+  autoclave: "EQU-STEAM-001"
+  laminar_flow: "EQU-LAF-001"
+  incubators: "EQU-INCUB-001"
+  refrigerators: "EQU-REFRIG-001"
+  freezers: "EQU-FREEZER-001"
+
+# -----------------------------------------------------------------------------
+# DOCUMENT CONTROL
+# -----------------------------------------------------------------------------
+documents:
+  retention_period_batch: "[5 years after batch expiry or 10 years, whichever longer]"
+  retention_period_training: "[Duration of employment + 5 years]"
+  retention_period_equipment: "[Life of equipment + 5 years]"
+  retention_period_validation: "[Life of process/equipment + 5 years]"
+  review_frequency: "[Annual or as triggered by change]"
+  distribution_method: "[Electronic via QMS / Controlled hard copy]"
+
+# -----------------------------------------------------------------------------
+# TIMING PARAMETERS
+# -----------------------------------------------------------------------------
+timing:
+  deviation_initial_report: "24 hours"
+  deviation_investigation: "30 days"
+  capa_implementation: "90 days or as defined"
+  capa_effectiveness: "90 days after implementation"
+  change_control_review: "30 days"
+  complaint_response: "48 hours acknowledgment, 30 days investigation"
+  recall_initiation: "24 hours for Class I"
+  training_completion: "30 days of assignment"
+  document_review: "Every 2 years or after significant change"
+  self_inspection: "Annual - all areas"
+  management_review: "Annual minimum"
+  supplier_qualification: "Every 3 years or after significant change"
+
+# -----------------------------------------------------------------------------
+# REGULATORY REFERENCES
+# -----------------------------------------------------------------------------
+regulations:
+  eu_gmp_vol4_part1: "EudraLex Volume 4, Part I - Basic Requirements"
+  eu_gmp_vol4_part2: "EudraLex Volume 4, Part II - APIs"
+  eu_gmp_annex1: "EU GMP Annex 1 - Sterile Medicinal Products"
+  eu_gmp_annex7: "EU GMP Annex 7 - Herbal Medicinal Products"
+  eu_gmp_annex11: "EU GMP Annex 11 - Computerized Systems"
+  eu_gmp_annex15: "EU GMP Annex 15 - Qualification and Validation"
+  ich_q7: "ICH Q7 - GMP for APIs"
+  ich_q9: "ICH Q9 - Quality Risk Management"
+  ich_q10: "ICH Q10 - Pharmaceutical Quality System"
+  gacp: "EU Guidelines on GACP for Medicinal Plants"
+  ph_eur: "European Pharmacopoeia (current edition)"
+  ph_eur_cannabis: "Ph. Eur. Monograph - Cannabis Flos"
+
+# -----------------------------------------------------------------------------
+# COLOR CODING FOR DOCUMENT DISPLAY
+# -----------------------------------------------------------------------------
+# All variables shown in documents will be displayed in CYAN/BLUE color
+# Format: [VARIABLE_VALUE]
+# Color code: #00D9FF (cyan) - matches console cursor
+# CSS: color: #00d9ff; or class="qms-variable"

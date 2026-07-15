@@ -1,0 +1,209 @@
+# QMS Training Matrix Generator
+
+Generate EU GMP compliant training matrices and competency assessment plans.
+
+## Activation
+- User requests: "training matrix", "training plan", "competency assessment", "qualification matrix"
+
+---
+
+<qms-training-matrix>
+
+## Instructions
+
+You are generating EU GMP compliant training documentation for cannabis pharmaceutical personnel.
+
+### EU GMP REQUIREMENTS (Chapter 2)
+
+- <cite source="EUGMP-2.8">Training in GMP should be provided to all personnel</cite>
+- <cite source="EUGMP-2.10">Training should be appropriate to the duties assigned</cite>
+- <cite source="EUGMP-2.11">Training records should be maintained</cite>
+- <cite source="EUGMP-2.12">Periodic assessment of training effectiveness</cite>
+
+### TRAINING DOCUMENT TYPES
+
+| Document | Purpose | Frequency |
+|----------|---------|-----------|
+| Training Matrix | Role vs. training requirements grid | Annual review |
+| Training Plan | Individual development plan | Per employee |
+| Competency Assessment | Skills verification | Per training |
+| Training Curriculum | Course content outline | Per SOP change |
+| Training Record | Completion evidence | Per session |
+
+### TRAINING CATEGORIES
+
+| Category | Description | Examples |
+|----------|-------------|----------|
+| GMP Foundation | Basic GMP principles | GMP Overview, Data Integrity, Documentation |
+| Role-Specific | Job function training | SOP training, Equipment operation |
+| Safety | Health and safety | COSHH, Fire safety, First aid |
+| Cannabis-Specific | Controlled substance | Security, Handling, Regulations |
+| Quality Systems | QMS elements | Deviations, CAPA, Change Control |
+| Technical | Specialized skills | HPLC, Extraction, Cultivation |
+
+### TRAINING MATRIX STRUCTURE
+
+```markdown
+# Training Matrix
+
+**Document Code:** TRN-MTX-001
+**Version:** 1.0
+**Effective Date:** {date}
+**Review Date:** {date + 1 year}
+
+## 1. Scope
+
+This matrix defines mandatory training requirements by role for {facility name}.
+
+## 2. Role Definitions
+
+| Role Code | Role Title | Department | Reports To |
+|-----------|------------|------------|------------|
+| QAM | QA Manager | Quality Assurance | Site Director |
+| QAS | QA Specialist | Quality Assurance | QA Manager |
+| QCM | QC Manager | Quality Control | Site Director |
+| QCA | QC Analyst | Quality Control | QC Manager |
+| PRM | Production Manager | Production | Site Director |
+| PRO | Production Operator | Production | Production Manager |
+| WHM | Warehouse Manager | Logistics | Site Director |
+| WHO | Warehouse Operator | Logistics | Warehouse Manager |
+
+## 3. Training Requirements Matrix
+
+### Legend
+- **M** = Mandatory (must complete before performing duties)
+- **R** = Recommended (complete within 6 months)
+- **A** = Awareness (overview level)
+- **-** = Not applicable
+
+### 3.1 GMP Foundation Training
+
+| Training Topic | Code | QAM | QAS | QCM | QCA | PRM | PRO | WHM | WHO |
+|----------------|------|-----|-----|-----|-----|-----|-----|-----|-----|
+| GMP Principles | GMP-001 | M | M | M | M | M | M | M | M |
+| EU GMP Overview | GMP-002 | M | M | M | M | M | A | M | A |
+| Documentation & Records | GMP-003 | M | M | M | M | M | M | M | M |
+| Data Integrity (ALCOA+) | GMP-004 | M | M | M | M | M | M | M | M |
+| Hygiene & Gowning | GMP-005 | M | M | M | M | M | M | M | M |
+| Cleanroom Behavior | GMP-006 | R | M | M | M | M | M | A | A |
+
+### 3.2 Quality Systems Training
+
+| Training Topic | Code | QAM | QAS | QCM | QCA | PRM | PRO | WHM | WHO |
+|----------------|------|-----|-----|-----|-----|-----|-----|-----|-----|
+| Deviation Management | QS-001 | M | M | M | M | M | A | M | A |
+| CAPA System | QS-002 | M | M | M | R | M | A | M | A |
+| Change Control | QS-003 | M | M | M | R | M | A | M | A |
+| Complaint Handling | QS-004 | M | M | R | A | R | A | A | A |
+| Audit & Self-Inspection | QS-005 | M | M | R | A | R | A | R | A |
+| Batch Record Review | QS-006 | M | M | R | R | M | A | R | A |
+
+### 3.3 Cannabis-Specific Training
+
+| Training Topic | Code | QAM | QAS | QCM | QCA | PRM | PRO | WHM | WHO |
+|----------------|------|-----|-----|-----|-----|-----|-----|-----|-----|
+| Controlled Substance Handling | CAN-001 | M | M | M | M | M | M | M | M |
+| Cannabis Regulations | CAN-002 | M | M | M | R | M | A | M | A |
+| Security Procedures | CAN-003 | M | M | M | M | M | M | M | M |
+| Product Segregation | CAN-004 | M | M | M | M | M | M | M | M |
+| Cannabinoid Testing | CAN-005 | R | A | M | M | A | A | A | A |
+
+### 3.4 Safety Training
+
+| Training Topic | Code | QAM | QAS | QCM | QCA | PRM | PRO | WHM | WHO |
+|----------------|------|-----|-----|-----|-----|-----|-----|-----|-----|
+| Health & Safety Induction | SAF-001 | M | M | M | M | M | M | M | M |
+| Fire Safety | SAF-002 | M | M | M | M | M | M | M | M |
+| First Aid (Designated) | SAF-003 | R | A | R | A | M | A | M | A |
+| Manual Handling | SAF-004 | A | A | A | A | M | M | M | M |
+| Chemical Safety | SAF-005 | M | M | M | M | M | M | R | R |
+
+## 4. Training Frequency
+
+| Type | Initial | Refresher |
+|------|---------|-----------|
+| GMP Foundation | Within 30 days | Every 2 years |
+| SOP Training | Before task | On SOP revision |
+| Safety | Within 7 days | Annual |
+| Cannabis-Specific | Within 14 days | Annual |
+| Equipment | Before use | As needed |
+
+## 5. Competency Assessment Methods
+
+| Method | Description | When Used |
+|--------|-------------|-----------|
+| Written Test | Multiple choice/short answer | GMP knowledge |
+| Practical Assessment | Observed task performance | Equipment operation |
+| Read & Understand | Signature acknowledgment | SOP awareness |
+| Verbal Q&A | Discussion with trainer | Technical topics |
+
+### Passing Criteria
+- Written tests: ≥80% correct
+- Practical: All critical steps performed correctly
+- Retest allowed: 1 time after additional training
+```
+
+### INDIVIDUAL TRAINING RECORD
+
+```markdown
+# Training Record
+
+**Employee:** {name}
+**Employee ID:** {id}
+**Department:** {dept}
+**Role:** {role}
+
+## Training History
+
+| Date | Training Code | Training Title | Trainer | Method | Score | Status |
+|------|---------------|----------------|---------|--------|-------|--------|
+| {date} | GMP-001 | GMP Principles | {trainer} | Test | 85% | Pass |
+| {date} | CAN-001 | Controlled Substances | {trainer} | Practical | Pass | Pass |
+
+## Training Due
+
+| Training Code | Title | Due Date | Priority |
+|---------------|-------|----------|----------|
+| GMP-001 | GMP Principles Refresher | {date} | High |
+
+## Signatures
+
+**Employee:** __________ **Date:** _____
+**Supervisor:** __________ **Date:** _____
+```
+
+### COMPETENCY ASSESSMENT FORM
+
+```markdown
+# Competency Assessment
+
+**Employee:** {name}
+**Training:** {training code} - {title}
+**Assessor:** {assessor name}
+**Date:** {date}
+
+## Practical Assessment Checklist
+
+| Step | Task Description | Performed Correctly | Comments |
+|------|------------------|---------------------|----------|
+| 1 | {task} | ☐ Yes ☐ No | |
+| 2 | {task} | ☐ Yes ☐ No | |
+| 3 | {task} | ☐ Yes ☐ No | |
+
+## Assessment Result
+
+☐ **COMPETENT** - Employee may perform task independently
+☐ **NOT YET COMPETENT** - Additional training required
+
+**Assessor Signature:** __________ **Date:** _____
+**Employee Signature:** __________ **Date:** _____
+```
+
+### INTEGRATION
+
+After generating training matrix:
+- Link training to SOPs via `/qms-sop-generator`
+- Export to Excel via `/qms-excel-generator`
+- Include in gap analysis via `/qms-gap-analysis`
+
+</qms-training-matrix>

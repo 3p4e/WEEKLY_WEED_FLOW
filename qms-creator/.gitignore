@@ -1,0 +1,260 @@
+# Environment Variables
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.sublime-project
+.sublime-workspace
+*.iml
+.nbdime
+
+# Python Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+*.log
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+.node_repl_history
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+
+# React
+qms-ui/build/
+qms-ui/dist/
+qms-ui/.env.local
+qms-ui/.env.development.local
+qms-ui/.env.test.local
+qms-ui/.env.production.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+postgres/
+
+# Generated Files
+*.pdf
+*.docx
+*.xlsx
+generated/
+outputs/
+results/
+downloads/
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.sav
+.tmp/
+tmp/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Git
+.git/
+.gitattributes
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.lnk
+
+# Logs
+logs/
+*.log
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+lerna-debug.log
+
+# Project Specific
+data/*.json
+!data/example.json
+uploads/
+temp/
+cache/
+.cache/
+
+# Reference Materials (External - Not Part of App)
+REFERENCE_MATERIALS/
+PP_REFERENCE/
+reference/
+refs/
+
+# Test Output & Temporary
+test_output/
+archive/legacy_status_files/
+archive/old_data/
+archive/old_exports/
+archive/old_output/
+
+# Sensitive Information
+secrets/
+credentials/
+private_keys/
+*.pem
+*.key
+
+# Alembic
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# CI/CD
+.github/workflows/secrets
+ci-output/
+
+# Documentation Build
+docs/_build/
+docs/.doctrees/
+
+# Backup Files from Git Conflict
+*.orig
+*.BACKUP.*
+*.BASE.*
+*.CURRENT.*
+*.REMOTE.*
+
+# Python Virtual Environment Creation
+poetry.lock
+Pipfile.lock
+
+# API Keys and Tokens (Security)
+.api_key
+.auth_token
+.access_token
+
+# Local Testing
+test_results/
+test_output/
+.pytest_cache/
+
+# Ignore specific large directories
+CONTENT_CREATOR_FRAMEWORK/outputs/*
+!CONTENT_CREATOR_FRAMEWORK/outputs/.gitkeep
+
+# IDE Folders
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/*
+!.idea/.gitignore
+
+# Large data / external
+Knowledgebase/
+letta-main/
+data/
+output/
+
+# Miscellaneous
+*.bak
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.venv
+*.egg-info
+build
+dist
+
+# System files
+.AppleDouble
+.LSOverride
+._*
+
+# DynamoDB Local Files
+.dynamodb/
+
+# Docker Network
+.docker/network/
+
+# Package managers lock files (optional, uncomment to ignore)
+# package-lock.json
+# poetry.lock
+# Pipfile.lock
+
+.config/

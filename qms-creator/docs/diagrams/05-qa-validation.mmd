@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph Input["Input Validation (L1)"]
+        IV1[Required Fields Check]
+        IV2[Format Validation]
+        IV3[Business Rules]
+        IV1 --> IV2 --> IV3
+    end
+
+    subgraph Regulatory["Regulatory Validation (L2)"]
+        RV1[Citation Accuracy]
+        RV2[Requirement Coverage]
+        RV3[Gap Detection]
+        RV1 --> RV2 --> RV3
+    end
+
+    subgraph Structural["Structural Validation (L3)"]
+        SV1[RACI Integrity]
+        SV2[Cross-Reference Check]
+        SV3[Terminology Consistency]
+        SV1 --> SV2 --> SV3
+    end
+
+    subgraph Document["Document Validation (L4)"]
+        DV1[Section Completeness]
+        DV2[Format Compliance]
+        DV3[Print Readiness]
+        DV1 --> DV2 --> DV3
+    end
+
+    subgraph Scoring["Compliance Scoring"]
+        SC1[Regulatory: 30%]
+        SC2[Citation: 20%]
+        SC3[Terminology: 15%]
+        SC4[Structure: 15%]
+        SC5[RACI: 10%]
+        SC6[Cross-Ref: 10%]
+        SC1 --> TOTAL
+        SC2 --> TOTAL
+        SC3 --> TOTAL
+        SC4 --> TOTAL
+        SC5 --> TOTAL
+        SC6 --> TOTAL
+        TOTAL[Total Score]
+    end
+
+    subgraph Decision["Quality Gate"]
+        DEC{Score >= 80?}
+        PASS[APPROVED<br/>Proceed to Formatting]
+        FAIL[REJECTED<br/>Return for Revision]
+        DEC -->|Yes| PASS
+        DEC -->|No| FAIL
+    end
+
+    Input --> Regulatory --> Structural --> Document --> Scoring --> Decision
+
+    style Input fill:#E3F2FD
+    style Regulatory fill:#E8F5E9
+    style Structural fill:#FFF3E0
+    style Document fill:#F3E5F5
+    style Scoring fill:#FFEBEE
+    style Decision fill:#E0E0E0

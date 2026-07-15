@@ -1,0 +1,133 @@
+LOGBOOK IDENTIFICATION AND CONTINUITY	LOGBOOK IDENTIFICATION AND CONTINUITY
+MEMO Issuance List Code: (e.g. MEM_PR_01/25)	MEM_         _      /
+Issuing Department	
+Date Issued	
+Previous Log Reference	(N/A if first logbook)
+Next Log Reference	(Complete upon closure)
+MEM Code Range	_001 to _100
+Date Closed / Closed By	
+LEGEND: PREP = Preparer Initials | DDR = Distribution Record Required (Y/N) | STAT: C = Closed, V = Void
+MEMORANDUM REGISTER (1-25)
+#	REF. NO.	DATE	RECIPIENT	SUBJECT	PREP	DDR	FINAL	STAT	ARCHIVE
+1									
+2									
+3									
+4									
+5									
+6									
+7									
+8									
+9									
+10									
+11									
+12									
+13									
+14									
+15									
+16									
+17									
+18									
+19									
+20									
+21									
+22									
+23									
+24									
+25									
+MEMORANDUM REGISTER (26-50)
+#	REF. NO.	REF. NO.	DATE	DATE	RECIPIENT	RECIPIENT	SUBJECT	SUBJECT	PREP	PREP	DDR	DDR	FINAL	FINAL	STAT	STAT	ARCHIVE	ARCHIVE	26
+																		27	
+																	28		
+																29			
+															30				
+														31					
+													32						
+												33							
+											34								
+										35									
+									36										
+								37											
+							38												
+						39													
+					40														
+				41															
+			42																
+		43																	
+	44																		
+45																			46
+																		47	
+																	48		
+																49			
+															50				
+																			
+																			
+													Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks
+Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks							
+												
+
+MEMORANDUM REGISTER (51-75)
+#	REF. NO.	DATE	RECIPIENT	SUBJECT	PREP	DDR	FINAL	STAT	ARCHIVE
+51									
+52									
+53									
+54									
+55									
+56									
+57									
+58									
+59									
+60									
+61									
+62									
+63									
+64									
+65									
+66									
+67									
+68									
+69									
+70									
+71									
+72									
+73									
+74									
+75									
+									
+									
+Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks
+									
+MEMORANDUM REGISTER (76-100)
+#	REF. NO.	REF. NO.	DATE	DATE	RECIPIENT	RECIPIENT	SUBJECT	SUBJECT	PREP	PREP	DDR	DDR	FINAL	FINAL	STAT	STAT	ARCHIVE	ARCHIVE
+76																		
+77																		
+78																		
+79																		
+80																		
+81																		
+82																		
+83																		
+84																		
+85																		
+86																		
+87																		
+88																		
+89																		
+90																		
+91																		
+92																		
+93																		
+94																		
+95																		
+96																		
+97																		
+98																		
+99																		
+100																		
+																		
+																		Забелешки: | Remarks
+Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	Забелешки: | Remarks	
+																	
+LIST CLOSURE
+CLOSED BY DEPARTMENT HEAD	VERIFIED BY QA
+Name: Signature: Date:	Name: Signature: Date:
+Archive per Company document retention policy and SOP Logbooks.

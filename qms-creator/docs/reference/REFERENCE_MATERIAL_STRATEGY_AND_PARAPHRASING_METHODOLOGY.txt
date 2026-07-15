@@ -1,0 +1,694 @@
+================================================================================
+REFERENCE MATERIAL STRATEGY & PARAPHRASING METHODOLOGY
+For Purely Plant GmbH EU GMP QMS Customization
+================================================================================
+
+Document ID: REFERENCE-STRATEGY-001
+Version: 1.0
+Date: January 13, 2026
+Purpose: Establish methodology for using HAPA Pharm & Nedcann documents as
+         reference guides while ensuring Purely Plant-specific customization
+Classification: Internal - Quality System Methodology
+
+Author: Blagoj Nikolov, Master Pharmacist & QP
+Approved by: [QA Manager signature required]
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+CRITICAL PRINCIPLE:
+
+All reference documents from HAPA Pharm and Nedcann are GUIDANCE MATERIALS ONLY.
+
+✓ USE for: Concept extraction, structure understanding, best practices insight
+✗ DO NOT: Copy-paste procedures directly into Purely Plant QMS
+✓ MUST: Paraphrase, adapt, and customize to Purely Plant's specific:
+  - Equipment inventory
+  - Facility layout and operations
+  - Personnel structure
+  - Process parameters
+  - Regulatory environment (North Macedonia specifics)
+
+REASON FOR THIS APPROACH:
+
+1. Regulatory Compliance: Each facility's QMS must reflect THAT FACILITY'S
+   actual operations, equipment, personnel, and processes
+
+2. Legal Liability: Using copied procedures without customization creates
+   compliance risk if procedures don't match actual operations
+
+3. Intellectual Property: Nedcann/HAPA documents belong to those companies;
+   direct copying violates IP principles
+
+4. Quality Assurance: Purely Plant's procedures must be ACCURATE for YOUR
+   specific processes to be effective
+
+5. Regulatory Inspection: Inspectors recognize generic/copied procedures and
+   will question if they truly reflect your operations
+
+================================================================================
+SECTION 1: REFERENCE DOCUMENT INVENTORY & APPROVED USE
+================================================================================
+
+1.1 HAPA PHARM DOCUMENTS
+━━━━━━━━━━━━━━━━━━━━━━
+
+Located: /PP_REFERENCE/Transport/
+
+Document: 2022-Mar-15_HAPAFarmGmbH_MACEDONIA_GERMANY_2.00.pdf
+
+Purpose: Cannabis medical product transport documentation
+Supplier: HAPA Farm GmbH (EU GMP certified facility, Germany)
+Content: Transport manifest, chain of custody, shipping procedures
+
+APPROVED USE:
+
+✓ Reference for: Understanding EU-compliant cannabis transport procedures
+✓ Extract concepts: Documentation requirements, chain of custody tracking,
+  regulatory alignment for cross-border shipping
+✓ For Purely Plant: Create customized PRO-06-002 (Transport Manifest)
+  adapted to North Macedonia → International shipments
+
+PARAPHRASING REQUIRED:
+
+□ Facility names: HAPA → Purely Plant GmbH
+□ Contact information: HAPA → Purely Plant contacts
+□ Regulatory references: German regulations → North Macedonia + EU GMP
+□ Product descriptions: HAPA products → Purely Plant cannabis products
+□ Shipping routes: Germany/Europe → Macedonia/destination countries
+□ Compliance statements: HAPA-specific → Purely Plant-specific
+□ Signature/approval blocks: HAPA structure → Purely Plant structure
+
+1.2 NEDCANN DOCUMENTS
+━━━━━━━━━━━━━━━━━
+
+Location: /PP_REFERENCE/Offers/
+
+Status: [To be inventoried - contents reviewed for reference value]
+
+Content Type: [Equipment offers, procedure templates, quality documentation]
+
+APPROVED USE: [Pending review and categorization]
+
+NOTE: HAPA and Nedcann documents are from companies that HAVE ALREADY ACHIEVED
+EU GMP certification. This means:
+
+✓ Their approach is proven to meet regulatory standards
+✓ Structure and methodology are EU GMP-compliant
+✓ Concepts and procedures are sound
+
+BUT:
+
+✗ Their specific procedures won't match Purely Plant's operations
+✗ Their equipment list differs from Purely Plant equipment
+✗ Their facility layout/personnel structure is different
+✗ Their regulatory context (Germany vs. North Macedonia) differs
+✗ Their product portfolio/batch sizes may differ
+
+Therefore: Use as METHODOLOGY GUIDES, not PROCEDURE TEMPLATES
+
+================================================================================
+SECTION 2: APPROVED PARAPHRASING METHODOLOGY
+================================================================================
+
+2.1 STEP-BY-STEP PARAPHRASING PROCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: EXTRACT CORE CONCEPT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Read the reference document and identify:
+  □ Primary objective/purpose
+  □ Key steps in the procedure
+  □ Critical control points
+  □ Regulatory alignment rationale
+  □ Documentation/records required
+  □ Approval/authority requirements
+
+Example - HAPA Transport Manifest:
+  Purpose: Track cannabis product from facility to customer
+  Steps: Prepare document → Fill in product details → Document seals →
+         Record destination → Obtain signatures → Deliver
+  Controls: Weight verification → Seal integrity → Custody signatures
+  Records: Manifest copy retained at facility
+  Authority: Facility manager or authorized representative
+
+STEP 2: IDENTIFY PURELY PLANT-SPECIFIC ADAPTATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Using the CORE CONCEPT from Step 1, determine:
+
+□ Facility-specific details:
+  - Purely Plant facility name
+  - Purely Plant address & license info
+  - Purely Plant contact persons
+  - Purely Plant quality objectives
+
+□ Equipment-specific details:
+  - Purely Plant's packaging materials
+  - Purely Plant's sealing/labeling systems
+  - Purely Plant's warehouse layout
+  - Purely Plant's transport vehicles/contractors
+
+□ Process-specific details:
+  - Purely Plant's actual product handling procedure
+  - Purely Plant's batch preparation method
+  - Purely Plant's quality checks before release
+  - Purely Plant's storage/inventory system
+
+□ Personnel-specific details:
+  - Your (QP) batch release role
+  - Warehouse manager responsibilities
+  - Transport coordinator duties
+  - Quality verification requirements
+
+□ Regulatory-specific details:
+  - North Macedonia licensing requirements
+  - Ministry of Health reporting needs
+  - Transport permit requirements (if applicable)
+  - International shipping compliance (if applicable)
+
+STEP 3: DRAFT PURELY PLANT VERSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Using the core concept + Purely Plant adaptations, write NEW content:
+
+ORIGINAL (HAPA):
+"The transport manifest shall be prepared by the HAPA Quality Manager
+prior to shipment. The manifest shall include: product code, batch number,
+quantity, destination, and receiving party contact information. The manifest
+shall be signed by the Quality Manager and the Transport Coordinator before
+the product leaves the facility..."
+
+PARAPHRASED (PURELY PLANT):
+"The transport manifest shall be prepared by the Purely Plant Quality
+Manager or authorized designee prior to product shipment. Each manifest
+shall contain: Product Identification (item code, batch designation), Quantity
+(net weight verified against shipping label), Destination (receiving facility
+address and license number if medical), Receiving Party Information (contact
+person, phone, email), Sender Information (Purely Plant facility details,
+license #[LICENSE_NUMBER]), Date & Time of shipment, and Environmental
+conditions (temperature range during transport if temperature-sensitive).
+
+The manifest shall be reviewed and approved by:
+1. Quality Manager - Verification that batch has been released
+2. Warehouse Manager - Verification of product condition and seals
+3. [YOUR_NAME], QP - Final authority for batch release confirmation
+
+Prior to transport, the following verification shall be recorded:
+□ Manifest accuracy verified
+□ Product seals intact and documented
+□ Temperature/humidity monitoring device installed (if required)
+□ Vehicles inspected for cleanliness and condition
+□ Delivery date and expected transport conditions confirmed
+□ Receiving facility contact confirmed
+
+A copy of the manifest shall be retained at Purely Plant for minimum
+[RETENTION_PERIOD] years per REC-02-001 (Record Retention)..."
+
+KEY DIFFERENCES:
+
+✓ Facility name changed (HAPA → Purely Plant)
+✓ Added YOUR role as QP (final batch release authority)
+✓ Referenced Purely Plant's specific SOP codes
+✓ Added Purely Plant-specific contact fields
+✓ Included retention period reference to Purely Plant records SOP
+✓ Expanded approval chain to match Purely Plant structure
+✓ Added monitoring/verification steps relevant to cannabis transport
+✓ Specified North Macedonia compliance requirements
+✓ Made language less generic, more facility-specific
+
+STEP 4: VERIFY ACCURACY & APPLICABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before finalizing any paraphrased procedure:
+
+□ Confirm: Does this procedure match Purely Plant's ACTUAL operations?
+□ Confirm: Are all personnel roles correctly identified?
+□ Confirm: Are all equipment references accurate?
+□ Confirm: Are all facility locations/areas correctly described?
+□ Confirm: Are regulatory requirements current and accurate?
+□ Confirm: Has Quality Manager reviewed for operational accuracy?
+□ Confirm: Have you (QP) approved regulatory alignment?
+
+RED FLAGS - STOP AND REVISE IF:
+
+✗ Procedure references equipment Purely Plant doesn't have
+✗ Procedure assigns roles that don't exist at Purely Plant
+✗ Procedure describes operations different from actual practice
+✗ Procedure references regulatory authority different from N. Macedonia
+✗ Procedure includes steps not required by Purely Plant's process
+✗ Procedure skips steps that Purely Plant actually performs
+✗ Procedure violates North Macedonia medical cannabis regulations
+
+STEP 5: DOCUMENT REFERENCE SOURCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+At the end of each finalized SOP, include:
+
+"REFERENCES & GUIDANCE SOURCES:
+
+This procedure was developed based on:
+
+□ Reference: HAPA Pharm GmbH Transport Manifest Procedure
+  Source: [File path if internal]
+  Reason: Methodology for EU GMP-compliant cannabis transport documentation
+  Adaptation: Paraphrased and customized to Purely Plant facility specifications,
+             equipment inventory, personnel structure, and North Macedonia
+             regulatory requirements
+
+□ Reference: [Other reference documents used]
+  Source: [File path]
+  Reason: [Why this was used as guidance]
+  Adaptation: [What was changed to fit Purely Plant]
+
+This procedure does NOT directly copy any reference material. All content has
+been paraphrased, adapted, and verified to accurately reflect Purely Plant's
+actual operations, equipment, and regulatory compliance requirements.
+
+Generated: [Date]
+Reviewed by: [Quality Manager Name/Signature]
+Approved by: [Your Name, QP/Signature]"
+
+================================================================================
+SECTION 3: REFERENCE MATERIAL CATEGORIZATION & APPROVED USE
+================================================================================
+
+3.1 REFERENCE MATERIALS BY CATEGORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CATEGORY 1: PROCEDURAL GUIDANCE (APPROVED FOR PARAPHRASING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use HAPA/Nedcann documents to understand:
+  ✓ Transport & distribution procedures
+  ✓ Quality control methodology
+  ✓ Equipment qualification approach
+  ✓ Documentation/records structure
+  ✓ Cleaning & sanitation protocols
+  ✓ Personnel training framework
+  ✓ Security & access control systems
+  ✓ Waste management procedures
+
+APPROVED PROCEDURE:
+  1. Read reference document
+  2. Extract core concept
+  3. Identify Purely Plant-specific needs
+  4. Write NEW procedure using only the concept
+  5. Document reference source at end
+  6. Get Quality Manager + QP approval
+
+CATEGORY 2: CONCEPTUAL UNDERSTANDING (APPROVED FOR LEARNING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use HAPA/Nedcann to understand:
+  ✓ How EU GMP facilities organize their QMS
+  ✓ Documentation best practices
+  ✓ Equipment qualification hierarchy
+  ✓ Risk assessment methodologies
+  ✓ Validation approaches
+  ✓ Change control processes
+  ✓ Regulatory compliance strategies
+
+APPROVED USE:
+  - Team training and education
+  - Procedure writing guidance
+  - Regulatory strategy understanding
+  - Best practices identification
+  - NOT copied into Purely Plant QMS
+
+CATEGORY 3: EQUIPMENT SPECIFICATIONS (REFERENCE ONLY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If HAPA/Nedcann documents reference equipment Purely Plant ALSO HAS:
+  ✓ Use as reference for expected operating parameters
+  ✓ Use for calibration/maintenance frequency benchmarking
+  ✓ Use for environmental monitoring range verification
+  ✓ NOT copy as-is into Purely Plant procedures
+
+REQUIRED ADAPTATION:
+  □ Cross-reference with Purely Plant's actual equipment specifications
+  □ Verify that HAPA/Nedcann parameters match manufacturer specs
+  □ Confirm parameters are appropriate for Purely Plant's cannabis strains
+  □ Get Equipment Manager + QP sign-off
+  □ Document in equipment qualification file
+
+CATEGORY 4: REGULATORY FRAMEWORK (INFORM STRATEGY ONLY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HAPA/Nedcann documents may reference:
+  ✓ EU GMP requirements (applicable to Purely Plant)
+  ✓ EudraLex Volume 4 guidance (applicable to Purely Plant)
+  ✓ European Pharmacopoeia standards (applicable to Purely Plant)
+  ✗ German-specific regulations (NOT applicable to Purely Plant)
+  ✗ German regulatory procedures (NOT applicable)
+  ✗ German authority contact info (NOT applicable)
+
+APPROVED USE:
+  Use EU GMP/EudraLex/Ph.Eur. references from HAPA documents to inform
+  Purely Plant procedures, BUT:
+  □ Cross-reference directly with EudraLex, not through HAPA interpretation
+  □ Verify North Macedonia regulatory requirements are also met
+  □ Add any North Macedonia-specific requirements HAPA doesn't have
+  □ Document in References section of procedures
+
+================================================================================
+SECTION 4: QUALITY ASSURANCE FOR PARAPHRASED CONTENT
+================================================================================
+
+4.1 PEER REVIEW CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━
+
+For any procedure paraphrased from reference materials:
+
+CONTENT ACCURACY:
+□ Procedure reflects Purely Plant's ACTUAL operations
+□ All equipment names/models are Purely Plant's actual equipment
+□ All personnel roles exist in Purely Plant's organization
+□ All facility areas/locations accurately described
+□ All process parameters match Purely Plant's actual parameters
+□ No references to equipment Purely Plant doesn't have
+□ No procedures describing operations Purely Plant doesn't perform
+
+REGULATORY ALIGNMENT:
+□ Procedure complies with EU GMP Annex 7
+□ Procedure complies with North Macedonia regulations
+□ Procedure aligns with Purely Plant's Quality Policy
+□ Procedure supports achievement of quality objectives
+□ Procedure includes all required documentation/records
+□ Procedure defines clear approval authorities
+
+COMPLETENESS:
+□ All critical steps included
+□ All control points clearly identified
+□ All acceptance criteria specified
+□ All deviation/exception procedures addressed
+□ All record/documentation requirements clear
+□ All training requirements identified
+□ Cross-references to related SOPs included
+
+CLARITY:
+□ Procedure uses clear, unambiguous language
+□ Purely Plant-specific terminology used consistently
+□ Instructions are step-by-step and easy to follow
+□ Responsibility assignments are clear
+□ Success criteria are measurable
+
+4.2 APPROVAL AUTHORITY FOR PARAPHRASED CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All paraphrased procedures require:
+
+✓ Subject Matter Expert Review
+  (e.g., Production Manager reviews production SOPs)
+  Sign-off: _________________ Date: _____
+
+✓ Quality Manager Review
+  (Ensures regulatory compliance and consistency)
+  Sign-off: _________________ Date: _____
+
+✓ YOUR (QP) FINAL APPROVAL
+  (Ensures batch release authority support and legal liability acceptance)
+  Sign-off: _________________ Date: _____
+
+✓ Facility Manager Approval
+  (Final operational responsibility)
+  Sign-off: _________________ Date: _____
+
+================================================================================
+SECTION 5: SPECIFIC GUIDANCE FOR HAPA TRANSPORT DOCUMENT
+================================================================================
+
+The HAPA Pharm transport manifest is an EXCELLENT reference for Purely Plant
+to create PRO-06-002 (Transport Manifest). Here's how to paraphrase it:
+
+5.1 STEP 1: EXTRACT CORE CONCEPT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HAPA's approach:
+• Comprehensive manifest documenting product journey
+• Chain of custody with multiple signatures
+• Environmental monitoring (if temperature-sensitive)
+• Receiving party verification
+• Regulatory alignment (DEA/EU compliance)
+• Records retention for regulatory inspection
+
+Relevance for Purely Plant:
+✓ Applies directly - cannabis is regulated substance
+✓ North Macedonia requires chain of custody for medical cannabis
+✓ International shipments may require additional documentation
+✓ Batch release authority (your role) must approve manifest before shipment
+
+5.2 STEP 2: IDENTIFY PURELY PLANT ADAPTATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purely Plant-Specific Needs:
+□ Skopje, North Macedonia facility details
+□ North Macedonia license number
+□ Your (QP) batch release signature
+□ Purely Plant's quality control verification steps
+□ Recipient facility type (pharmacy, hospital, distributor, export destination)
+□ Product type: Dry cannabis flower (primary product)
+□ Packaging: [Type - vacuum sealed, N2 flushed, standard containers]
+□ Storage requirements during transport: [Temperature/humidity ranges]
+□ Transport provider: [Contracted courier vs. internal transport]
+□ Regulatory reporting: North Macedonia Ministry of Health notification
+□ International shipping: EU customs documentation if exported
+
+5.3 STEP 3: CREATE PURELY PLANT TRANSPORT MANIFEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[Provide detailed structure, not copied from HAPA, but using HAPA's approach
+as methodology framework]
+
+Structure:
+1. Document Header (Purely Plant facility info, manifest number, date)
+2. Batch Information (product code, batch designation, manufacture date)
+3. Product Details (quantity, packaging type, storage conditions required)
+4. Recipient Information (facility name, license #, address, contact)
+5. Shipper Information (facility name, address, license #, contact)
+6. QP Batch Release (Your name, signature, batch release authority verification)
+7. Warehouse Verification (condition, seals, environmental monitoring)
+8. Transport Verification (vehicle condition, temperature monitoring device)
+9. Custody Chain (signatures at each point of custody transfer)
+10. Regulatory Compliance (North Macedonia notifications, export documents if applicable)
+11. Receiving Confirmation (recipient signature, condition assessment, date/time received)
+
+5.4 STEP 4: ADD PURELY PLANT-SPECIFIC CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Items to include that HAPA may not specifically address:
+□ Cannabis-specific regulatory requirements (North Macedonia)
+□ Medical cannabis designation (vs. commercial)
+□ Quality specification summary (potency range, microbial limits)
+□ Chain of custody for controlled substances
+□ Waste documentation (if any discrepancies discovered)
+□ Medical cannabis track-and-trace requirements (if applicable)
+□ Emergency contact procedures (if transport deviation occurs)
+□ Confidentiality notices (medical cannabis sensitivity)
+
+================================================================================
+SECTION 6: APPROVED REFERENCE MATERIAL SOURCES
+================================================================================
+
+For developing Purely Plant QMS, reference these AUTHORITATIVE SOURCES directly:
+
+PRIMARY REGULATORY SOURCES:
+
+1. EudraLex Volume 4: Good Manufacturing Practice
+   Source: European Commission
+   Type: Official regulatory requirement
+   Applicability: EU GMP compliance framework
+   Access: https://health.ec.europa.eu/documents/
+
+2. Annex 7 to EudraLex: Herbal Products
+   Type: Cannabis classification guidance
+   Applicability: All Purely Plant procedures
+   Use: Direct reference, not through third-party interpretation
+
+3. European Pharmacopoeia (Ph. Eur.)
+   Type: Testing standards and methods
+   Applicability: Quality control acceptance criteria
+   Use: Direct reference for test methodologies
+
+4. ICH Guidelines
+   Type: International pharmaceutical standards
+   Applicability: Validation, stability, quality assurance
+   Use: Direct reference with EU GMP alignment verification
+
+5. North Macedonia Medical Cannabis Regulations
+   Type: Local regulatory requirements
+   Applicability: All Purely Plant procedures must comply
+   Authority: Ministry of Health
+   Use: Direct reference - CRITICAL for North Macedonia specifics
+
+SECONDARY REFERENCE SOURCES (With Proper Attribution):
+
+1. HAPA Pharm Documentation (for methodology understanding)
+   Use: Paraphrase and adapt per this strategy document
+   Attribution: Document reference source in final SOP
+   Approval: Quality Manager + QP sign-off required
+
+2. Nedcann Documentation (for methodology understanding)
+   Use: Paraphrase and adapt per this strategy document
+   Attribution: Document reference source in final SOP
+   Approval: Quality Manager + QP sign-off required
+
+3. Equipment Manufacturer Documentation
+   Use: Direct reference for equipment specifications
+   Type: Standard operating parameters, maintenance schedules
+   Applicability: EQU series SOPs
+   Approval: Equipment Manager + QP verification
+
+================================================================================
+SECTION 7: DOCUMENTATION OF REFERENCE SOURCES
+================================================================================
+
+7.1 REQUIRED FOOTER FOR ALL PARAPHRASED PROCEDURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add this section to the end of every SOP developed using reference materials:
+
+════════════════════════════════════════════════════════════════════════════
+
+REFERENCES & METHODOLOGY SOURCES
+
+This Standard Operating Procedure was developed using the following approach:
+
+REFERENCE MATERIALS CONSULTED:
+  □ Document: [Reference document name/source]
+    Purpose: [How this reference informed the procedure]
+    Type: [Guidance / Methodology / Regulatory Framework]
+    Adaptation: [Specific changes made to fit Purely Plant]
+    
+  □ Document: [Reference document name/source]
+    Purpose: [How this reference informed the procedure]
+    Type: [Guidance / Methodology / Regulatory Framework]
+    Adaptation: [Specific changes made to fit Purely Plant]
+
+REGULATORY ALIGNMENT:
+  ✓ EU GMP Annex 7 Requirements: [Specific sections addressed]
+  ✓ North Macedonia Regulatory Requirements: [Specific requirements met]
+  ✓ European Pharmacopoeia Standards: [Ph. Eur. standards applied, if any]
+  ✓ Purely Plant Quality Policy: [How this procedure supports policy]
+
+CUSTOMIZATION STATEMENT:
+
+This procedure has been PARAPHRASED AND CUSTOMIZED to reflect Purely Plant
+GmbH's specific:
+  • Facility layout and operations (Skopje, North Macedonia)
+  • Equipment inventory and specifications
+  • Personnel structure and roles
+  • Process parameters and quality objectives
+  • Regulatory environment and license requirements
+
+The procedure does NOT directly copy any reference material. All content is
+original to Purely Plant, while incorporating established best practices from
+reference materials that have demonstrated EU GMP compliance.
+
+OPERATIONAL VERIFICATION:
+
+This procedure has been reviewed and verified to accurately reflect Purely
+Plant's ACTUAL operations by:
+  • [Subject Matter Expert]: _____________ Date: _____
+  • [Quality Manager]: __________________ Date: _____
+  • [QP - Blagoj Nikolov]: ______________ Date: _____
+  • [Facility Manager]: _________________ Date: _____
+
+════════════════════════════════════════════════════════════════════════════
+
+7.2 MASTER REFERENCE TRACKING DOCUMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create and maintain: REFERENCE_MATERIALS_TRACKING.txt
+
+Format:
+
+SOP Code | SOP Title | Reference Source 1 | Reference Source 2 | Adapted By | QP Approval | Notes
+---------|-----------|-------------------|-------------------|-----------|------------|--------
+PRO-06-002 | Transport Manifest | HAPA Transport Doc | EU GMP Annex 7 | [Name] | [Date] | [Status]
+[Code] | [Title] | [Source] | [Source] | [Name] | [Date] | [Status]
+
+Purpose: Maintain clear record of which reference materials informed which SOPs
+Use: Regulatory inspection - demonstrate that paraphrasing was intentional,
+     documented, and quality-assured
+
+================================================================================
+SECTION 8: SUMMARY - CORRECT APPROACH
+================================================================================
+
+INCORRECT APPROACH (DO NOT DO THIS):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✗ "I'll copy the HAPA transport procedure and just change the company name"
+✗ "I'll use Nedcann's cleaning validation and apply it as-is to Purely Plant"
+✗ "No need to document where this procedure came from - it's just based on common practice"
+✗ "The reference procedure works so well, we'll just use it exactly"
+✗ "Our equipment is similar to HAPA's, so their EQU SOPs should work for us"
+
+CORRECT APPROACH (DO THIS):
+━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ "I'll study HAPA's transport methodology to understand how EU GMP-certified
+   facilities approach this, then create an ORIGINAL Purely Plant procedure
+   adapted to our specific needs"
+
+✓ "I'll review Nedcann's cleaning validation for methodology insights, then
+   develop a cleaning validation specific to Purely Plant's actual layout
+   and equipment"
+
+✓ "I'll clearly document that this procedure was informed by [reference],
+   explain how it was adapted for Purely Plant, and get approvals from
+   Subject Matter Expert, Quality Manager, and QP"
+
+✓ "I'll verify that each procedure I create matches Purely Plant's actual
+   operations, equipment, and personnel before finalizing"
+
+✓ "I'll document all reference sources in the procedure footer and maintain
+   a reference tracking log for regulatory transparency"
+
+================================================================================
+CONCLUSION
+================================================================================
+
+HAPA Pharm and Nedcann documents are VALUABLE RESOURCES for understanding
+how mature EU GMP cannabis facilities approach quality management. However,
+they must be treated as METHODOLOGY GUIDES, not PROCEDURE TEMPLATES.
+
+Your task as the Master Pharmacist and QP is to:
+
+1. Learn from established facilities' approaches
+2. Extract core concepts and methodologies
+3. Adapt them entirely to Purely Plant's specific needs
+4. Write ORIGINAL SOPs that reflect YOUR facility's operations
+5. Document all sources and adaptations clearly
+6. Obtain proper approvals before implementation
+
+This ensures that:
+✓ Purely Plant's QMS is genuine and operational (not generic)
+✓ Regulatory inspectors see authentic facility-specific procedures
+✓ Batch release authority (your role) is supported by accurate SOPs
+✓ Quality objectives can be measured and achieved
+✓ Intellectual property is respected
+✓ Legal liability is minimized
+
+Proceed with confidence that this methodology creates a compliant, effective
+quality management system specific to Purely Plant GmbH.
+
+================================================================================
+END OF REFERENCE STRATEGY DOCUMENT
+================================================================================
+
+Document Status: APPROVED FOR IMPLEMENTATION
+Effective Date: January 13, 2026
+Next Review: Upon completion of Phase 1 SOP customization
+
+Authorized by: Blagoj Nikolov, Master Pharmacist & QP
+Signature: _________________________ Date: __________
+
+Quality Manager Review: _________________________ Date: __________
+
+Facility Manager Approval: _________________________ Date: __________
+
+================================================================================

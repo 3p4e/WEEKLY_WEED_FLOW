@@ -1,0 +1,49 @@
+flowchart LR
+    subgraph Agent1["Agent 1: Metadata Collector"]
+        A1_IN[User Form Input]
+        A1_VAL{Validate<br/>Required Fields}
+        A1_OUT[Metadata Object]
+        A1_IN --> A1_VAL
+        A1_VAL -->|Valid| A1_OUT
+        A1_VAL -->|Invalid| A1_IN
+    end
+
+    subgraph Agent2["Agent 2: Introduction Questionnaire"]
+        A2_IN[Metadata + Context]
+        A2_RAG[RAG Search<br/>DB1 Priority]
+        A2_GEN[Generate<br/>Questions]
+        A2_USER[User Answers]
+        A2_OUT[Purpose/Scope]
+        A2_IN --> A2_RAG --> A2_GEN --> A2_USER --> A2_OUT
+    end
+
+    subgraph Agent3["Agent 3: Procedure Questionnaire"]
+        A3_IN[Accumulated Context]
+        A3_RAG[RAG Search<br/>DB2 Priority]
+        A3_GEN[Generate<br/>Questions]
+        A3_USER[User Answers]
+        A3_OUT[Procedure Specs]
+        A3_IN --> A3_RAG --> A3_GEN --> A3_USER --> A3_OUT
+    end
+
+    subgraph Agent4["Agent 4: Compliance Analyzer"]
+        A4_IN[Full Content]
+        A4_SEARCH[Search DB1<br/>Regulatory]
+        A4_MATCH[Match<br/>Requirements]
+        A4_CITE[Generate<br/>Citations]
+        A4_GAP[Identify<br/>Gaps]
+        A4_OUT[Compliance Report]
+        A4_IN --> A4_SEARCH --> A4_MATCH --> A4_CITE --> A4_GAP --> A4_OUT
+    end
+
+    subgraph Agent5["Agent 5: RACI Generator"]
+        A5_IN[Procedure Steps]
+        A5_ROLES[Extract<br/>Roles]
+        A5_MATRIX[Build<br/>Matrix]
+        A5_VAL{Validate<br/>RACI Rules}
+        A5_OUT[RACI Matrix]
+        A5_IN --> A5_ROLES --> A5_MATRIX --> A5_VAL -->|Valid| A5_OUT
+        A5_VAL -->|Invalid| A5_MATRIX
+    end
+
+    Agent1 --> Agent2 --> Agent3 --> Agent4 --> Agent5

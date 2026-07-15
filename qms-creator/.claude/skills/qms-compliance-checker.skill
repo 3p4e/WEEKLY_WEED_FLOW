@@ -1,0 +1,157 @@
+# QMS Compliance Checker
+
+Validate documents against EU GMP requirements and cannabis-specific regulations.
+
+## Activation
+- User requests: "check compliance", "validate document", "audit SOP", "regulatory review", "compliance check"
+
+---
+
+<qms-compliance-checker>
+
+## Instructions
+
+You are validating a QMS document against EU GMP requirements, ICH guidelines, and cannabis-specific regulatory standards.
+
+### PARAMETERS
+
+- **document**: File path or content to review
+- **frameworks**: List of frameworks to check (default: all)
+  - EU_GMP: EudraLex Volume 4
+  - ICH_Q10: Pharmaceutical Quality System
+  - WHO_GACP: Good Agricultural Practices
+  - ANNEX_7: Herbal Medicinal Products
+- **strictness**: lenient | standard | strict (default: standard)
+
+### PHASE 1: DOCUMENT INGESTION
+
+1. Read document content (DOCX, PDF, MD, TXT)
+2. Extract structure and sections
+3. Identify document type (SOP, WI, Policy, Form)
+4. Parse metadata (code, version, dates, department)
+
+### PHASE 2: FRAMEWORK SELECTION
+
+Based on document type, apply frameworks:
+
+| Document Type | Primary Framework | Secondary |
+|---------------|-------------------|-----------|
+| SOP | EU GMP Ch. 4 (Documentation) | ICH Q10 |
+| QC SOP | EU GMP Ch. 6 (Quality Control) | ICH Q2 |
+| Production SOP | EU GMP Ch. 5 (Production) | ICH Q7 |
+| Cultivation SOP | WHO GACP, EU GMP Annex 7 | EUGMP Ch. 3 |
+| Validation | EU GMP Annex 15 | ICH Q9 |
+
+### PHASE 3: COMPLIANCE ANALYSIS
+
+#### Structure Checks
+- [ ] Controlled document header present
+- [ ] Version control implemented
+- [ ] Approval signatures complete
+- [ ] Effective/review dates present
+- [ ] Purpose and Scope sections exist
+- [ ] Procedure steps numbered
+- [ ] RACI or responsibilities defined
+- [ ] Training requirements specified
+- [ ] References listed
+
+#### Content Checks
+- [ ] Regulatory citations accurate and traceable
+- [ ] Cannabis terminology appropriate (pharmaceutical context)
+- [ ] CQAs/CPPs identified (if process SOP)
+- [ ] Data integrity (ALCOA+) addressed
+- [ ] Deviation handling referenced
+- [ ] Record retention specified
+- [ ] Change control referenced
+
+#### Cannabis-Specific Checks
+- [ ] Controlled substance handling addressed
+- [ ] Cannabinoid testing requirements specified
+- [ ] Microbial limits defined (Aspergillus, etc.)
+- [ ] Pesticide/heavy metal controls referenced
+- [ ] Product segregation (THC/CBD) addressed
+- [ ] Supply chain traceability included
+
+### PHASE 4: GAP IDENTIFICATION
+
+For each non-compliant item, record:
+
+```markdown
+| ID | Severity | Framework | Gap Description | Remediation |
+|----|----------|-----------|-----------------|-------------|
+| G-001 | CRITICAL | EUGMP-4.1 | Missing approval signatures | Add signature blocks |
+```
+
+#### Severity Definitions
+- **CRITICAL**: Direct regulatory violation, patient safety risk, inspection failure
+- **MAJOR**: Significant gap affecting GMP compliance, requires action within 30 days
+- **MINOR**: Best practice deviation, documentation improvement, 90-day timeline
+
+### PHASE 5: SCORING
+
+Calculate compliance scores:
+
+```
+Overall Score = (Compliant Items / Total Items) x 100
+
+By Category:
+- Structure: X%
+- Content: X%
+- Cannabis-Specific: X%
+
+By Framework:
+- EU GMP: X%
+- ICH: X%
+- GACP: X%
+```
+
+### OUTPUT FORMAT
+
+```markdown
+# Compliance Review Report
+
+**Document:** {document_code} - {document_title}
+**Review Date:** {date}
+**Frameworks:** {frameworks_checked}
+**Strictness:** {strictness_level}
+
+## Compliance Score: {score}%
+
+| Category | Score | Findings |
+|----------|-------|----------|
+| Structure | {score}% | {count} gaps |
+| Content | {score}% | {count} gaps |
+| Cannabis-Specific | {score}% | {count} gaps |
+
+## Critical Findings (Immediate Action Required)
+{critical_findings_list}
+
+## Major Findings (30-Day Action)
+{major_findings_list}
+
+## Minor Findings (90-Day Action)
+{minor_findings_list}
+
+## Detailed Gap Register
+
+| ID | Severity | Ref | Gap | Remediation | Owner |
+|----|----------|-----|-----|-------------|-------|
+{gap_table}
+
+## Recommendations
+{recommendations}
+
+## Next Steps
+1. Address CRITICAL findings immediately
+2. Create CAPA for MAJOR findings
+3. Schedule review for MINOR items
+4. Re-validate after corrections using `/qms-compliance-checker`
+```
+
+### INTEGRATION
+
+After compliance check, offer to:
+- Generate corrected SOP using `/qms-sop-generator`
+- Run portfolio-wide analysis using `/qms-gap-analysis`
+
+</qms-compliance-checker>

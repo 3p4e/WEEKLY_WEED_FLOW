@@ -1,0 +1,457 @@
+================================================================================
+PURELY PLANT GMBH - EU GMP QMS DOCUMENT REGISTRY
+Medical Cannabis Production Facility - Skopje, North Macedonia
+================================================================================
+Date Created: January 13, 2026
+Last Updated: January 13, 2026
+Document Version: 1.0
+================================================================================
+
+NEW CODING SYSTEM: Master Documents-Documentation & Records-QMS Document-1.0
+Example: QA_00.01_v1-V.1.0 = Quality Assurance / Quality Management / Document 001 / Version 1.0
+
+================================================================================
+CATEGORY CODES:
+================================================================================
+QAS (01-19) = Quality Assurance System
+SAN (20-29) = Sanitation & Hygiene
+PRO (30-49) = Production & Cultivation
+SEC (50-59) = Security
+REC (60-69) = Records Management
+HR  (70-79) = Human Resources
+EQU (80-89) = Equipment Management
+PRE (90-99) = Premises Management
+
+================================================================================
+SECTION 1: QUALITY ASSURANCE (QAS)
+================================================================================
+
+QAS-01: Quality Management & Policy (001-099)
+QA_00.01_v1-V.1.0 | Quality Manual | Master Document | CORE
+QA_00.08_v1-V.1.0 | Quality Policy Statement | Master Document | CORE
+QAS-01-003-V.1.0 | Organization Chart & Structure | Master Document | CORE
+QAS-01-004-V.1.0 | Roles & Responsibilities Matrix | Master Document | CORE
+QAS-01-005-V.1.0 | SOP for Writing SOPs | System SOP | CORE
+
+QAS-02: Documentation Control (100-199)
+QAS-02-001-V.1.0 | SOP Document Management | System SOP | CORE
+QAS-02-002-V.1.0 | SOP Records Management | System SOP | CORE
+QAS-02-003-V.1.0 | Document Control Register | Master Document | CORE
+QAS-02-004-V.1.0 | Document Change Log | Master Document | CORE
+QAS-02-005-V.1.0 | Distribution List | Master Document | CORE
+
+QAS-03: Validation & Qualification (200-299)
+QAS-03-001-V.1.0 | SOP Equipment Qualification | System SOP | CORE
+QAS-03-002-V.1.0 | SOP Computer Software Qualification | System SOP | CORE
+QAS-03-003-V.1.0 | SOP Premises Qualification | System SOP | CORE
+QAS-03-004-V.1.0 | SOP Process Validation | System SOP | CORE
+QAS-03-005-V.1.0 | Validation Master Plan | Master Document | CORE
+QAS-03-006-V.1.0 | Cleaning Validation Protocol | Operational Document | CORE
+
+QAS-04: Risk Management (300-399)
+QAS-04-001-V.1.0 | SOP Risk Management | System SOP | CORE
+QAS-04-002-V.1.0 | Risk Assessment Template (Ishikawa/FMEA) | Form | CORE
+QAS-04-003-V.1.0 | Risk Register | Master Document | CORE
+
+QAS-05: CAPA & Deviations (400-499)
+QAS-05-001-V.1.0 | SOP Corrective & Preventive Actions (CAPA) | System SOP | CORE
+QAS-05-002-V.1.0 | SOP Deviation Handling & Investigation | System SOP | CORE
+QAS-05-003-V.1.0 | Deviation Report Template (Part A & B) | Form | CORE
+QAS-05-004-V.1.0 | CAPA Action Report | Form | CORE
+QAS-05-005-V.1.0 | Deviation Log | Log Template | CORE
+
+QAS-06: Audits & Inspections (500-599)
+QAS-06-001-V.1.0 | SOP Self-Inspection | System SOP | CORE
+QAS-06-002-V.1.0 | SOP Internal Audits | System SOP | CORE
+QAS-06-003-V.1.0 | Self-Inspection Plan & Schedule | Master Document | CORE
+QAS-06-004-V.1.0 | Self-Inspection Report Template | Form | CORE
+QAS-06-005-V.1.0 | Audit Checklist Template | Form | CORE
+
+QAS-07: Product Quality Review (600-699)
+QAS-07-001-V.1.0 | SOP Annual Product Quality Review | System SOP | CORE
+QAS-07-002-V.1.0 | Annual Product Quality Review Form | Form | CORE
+QAS-07-003-V.1.0 | SOP Batch Record Review | System SOP | CORE
+
+QAS-08: Change Control (700-799)
+QAS-08-001-V.1.0 | SOP Change Control | System SOP | CORE
+QAS-08-002-V.1.0 | Change Control Request Form | Form | CORE
+QAS-08-003-V.1.0 | Change Control Records Log | Log Template | CORE
+
+QAS-09: Batch Release & Approval (800-899)
+QAS-09-001-V.1.0 | SOP Batch Release | System SOP | CORE
+QAS-09-002-V.1.0 | Batch Release Checklist | Form | CORE
+QAS-09-003-V.1.0 | Certificate of Compliance (CoC) | Form | CORE
+QAS-09-004-V.1.0 | Certificate of Analysis (CoA) | Form | CORE
+
+QAS-10: Material Management & Release (900-999)
+QAS-10-001-V.1.0 | SOP Material Management & Release | System SOP | CORE
+QAS-10-002-V.1.0 | SOP Receiving & Storage | System SOP | CORE
+QAS-10-003-V.1.0 | SOP Vendor Qualification | System SOP | CORE
+QAS-10-004-V.1.0 | Material Receipt Form | Form | CORE
+QAS-10-005-V.1.0 | Vendor Qualification Checklist | Form | CORE
+
+================================================================================
+SECTION 2: SANITATION & HYGIENE (SAN)
+================================================================================
+
+SAN-01: Cleaning Procedures (001-099)
+SAN-01-001-V.1.0 | SOP Cleaning & Sanitation (GMP Areas) | System SOP | CORE
+SAN-01-002-V.1.0 | SOP Cleaning & Sanitation (GACP Areas) | System SOP | CORE
+SAN-01-003-V.1.0 | Cleaning Work Instructions & Schedule | Operational SOP | CORE
+SAN-01-004-V.1.0 | Sanitation Logbook | Log Template | CORE
+SAN-01-005-V.1.0 | Cleaning Agent Record | Log Template | CORE
+
+SAN-02: Gowning & Material Transfer (100-199)
+SAN-02-001-V.1.0 | SOP Gowning Protocol (GMP - White Zone) | System SOP | CORE
+SAN-02-002-V.1.0 | SOP Gowning Protocol (GACP - Green Zone) | System SOP | CORE
+SAN-02-003-V.1.0 | SOP Material Transfer Procedures | System SOP | CORE
+SAN-02-004-V.1.0 | Gowning Checklist (Internal Staff) | Form | CORE
+SAN-02-005-V.1.0 | Gowning Checklist (Visitors) | Form | CORE
+
+SAN-03: Pest Control (200-299)
+SAN-03-001-V.1.0 | SOP Pest Control Procedures (IPM) | System SOP | CORE
+SAN-03-002-V.1.0 | Pest & Disease Identification Log | Log Template | CORE
+SAN-03-003-V.1.0 | Pesticide Application Log | Log Template | CORE
+SAN-03-004-V.1.0 | Rodent Trap Monitoring Record | Log Template | CORE
+
+SAN-04: Environmental Monitoring (300-399)
+SAN-04-001-V.1.0 | SOP Microbiological Monitoring | System SOP | CORE
+SAN-04-002-V.1.0 | SOP Water Quality Management | System SOP | CORE
+SAN-04-003-V.1.0 | Microbiological Sampling Log | Log Template | CORE
+SAN-04-004-V.1.0 | Water Quality Results Log | Log Template | CORE
+SAN-04-005-V.1.0 | Daily Facility Evaluation Form | Form | CORE
+
+SAN-05: Employee Hygiene (400-499)
+SAN-05-001-V.1.0 | SOP Employee Hygiene Procedure | System SOP | CORE
+SAN-05-002-V.1.0 | SOP Employee Medical Examinations | System SOP | CORE
+SAN-05-003-V.1.0 | Medical Examination Record | Log Template | CORE
+SAN-05-004-V.1.0 | Employee Health Declaration | Form | CORE
+
+================================================================================
+SECTION 3: PRODUCTION & CULTIVATION (PRO)
+================================================================================
+
+PRO-01: Cultivation Processes (001-099)
+PRO-01-001-V.1.0 | SOP Mother Plants Management | Operational SOP | CORE
+PRO-01-002-V.1.0 | SOP Propagation (Cloning & Seeding) | Operational SOP | CORE
+PRO-01-003-V.1.0 | SOP Vegetative Growth Stage | Operational SOP | CORE
+PRO-01-004-V.1.0 | SOP Flowering Growth Stage | Operational SOP | CORE
+PRO-01-005-V.1.0 | Propagation Logbook | Log Template | CORE
+PRO-01-006-V.1.0 | Transplant Logbook | Log Template | CORE
+PRO-01-007-V.1.0 | Cultivation General SOP | Operational SOP | CORE
+PRO-01-008-V.1.0 | Cultivation Methodology | Operational SOP | CORE
+
+PRO-02: Harvesting Procedures (100-199)
+PRO-02-001-V.1.0 | SOP Harvesting Cannabis | Operational SOP | CORE
+PRO-02-002-V.1.0 | Harvest Logbook | Log Template | CORE
+PRO-02-003-V.1.0 | Harvest Waste Log | Log Template | CORE
+PRO-02-004-V.1.0 | Plant Material Transfer Form | Form | CORE
+
+PRO-03: Processing Operations (200-299)
+PRO_03.01_v1-V.1.0 | SOP Processing & Production (GMP) | Operational SOP | CORE
+PRO_03.02_v1-V.1.0 | SOP Drying Procedures | Operational SOP | CORE
+PRO-03-003-V.1.0 | SOP Trimming & Sorting | Operational SOP | CORE
+PRO-03-004-V.1.0 | Trimmed Cannabis Logbook | Log Template | CORE
+PRO-03-005-V.1.0 | Drying Logbook | Log Template | CORE
+PRO-03-006-V.1.0 | Drying Parameters Log (Equipment) | Log Template | CORE
+PRO-03-007-V.1.0 | Production Waste Summary Log | Log Template | CORE
+
+PRO-04: Packaging Procedures (300-399)
+PRO-04-001-V.1.0 | SOP Packaging Procedures | Operational SOP | CORE
+PRO-04-002-V.1.0 | SOP Output Warehouse & Labelling | Operational SOP | CORE
+PRO-04-003-V.1.0 | Packaging Logbook | Log Template | CORE
+PRO-04-004-V.1.0 | Stored Product Logbook | Log Template | CORE
+PRO-04-005-V.1.0 | Product Stock List (Bulk) | Form | CORE
+PRO-04-006-V.1.0 | Product Stock List (Final) | Form | CORE
+
+PRO-05: Waste Management (400-499)
+PRO-05-001-V.1.0 | SOP Cannabis Waste Management | System SOP | CORE
+PRO-05-002-V.1.0 | SOP Waste Disposal Procedures | Operational SOP | CORE
+PRO-05-003-V.1.0 | Cannabis Waste Destruction Form | Form | CORE
+PRO-05-004-V.1.0 | Cannabis Waste Logbook | Log Template | CORE
+PRO-05-005-V.1.0 | Waste Records Log | Log Template | CORE
+
+PRO-06: Distribution & Transport (500-599)
+PRO-06-001-V.1.0 | SOP Wholesale & Transport | System SOP | CORE
+PRO-06-002-V.1.0 | Transport Manifest (Medical Cannabis) | Form | CORE
+PRO-06-003-V.1.0 | Shipment Records Form | Form | CORE
+PRO-06-004-V.1.0 | Delivery Note | Form | CORE
+
+================================================================================
+SECTION 4: SECURITY (SEC)
+================================================================================
+
+SEC-01: Access Control (001-099)
+SEC-01-001-V.1.0 | SOP Security Measures (General) | System SOP | CORE
+SEC-01-002-V.1.0 | SOP Limited Access Areas | System SOP | CORE
+SEC-01-003-V.1.0 | SOP Facility Entry Protocol | System SOP | CORE
+SEC-01-004-V.1.0 | Access Control Logbook | Log Template | CORE
+
+SEC-02: Visitor Management (100-199)
+SEC-02-001-V.1.0 | SOP Visitors Procedures | System SOP | CORE
+SEC-02-002-V.1.0 | Visitor Entry Work Order | Form | CORE
+SEC-02-003-V.1.0 | Visitor Logbook | Log Template | CORE
+
+SEC-03: Security Systems (200-299)
+SEC-03-001-V.1.0 | SOP Security System Operation | System SOP | CORE
+SEC-03-002-V.1.0 | SOP Emergency Actions | System SOP | CORE
+SEC-03-003-V.1.0 | Security Incident Report | Form | CORE
+SEC-03-004-V.1.0 | Security System Logbook | Log Template | CORE
+
+SEC-04: Regulatory Compliance (300-399)
+SEC-04-001-V.1.0 | SOP License Management | System SOP | CORE
+SEC-04-002-V.1.0 | License & Authorization Log | Log Template | CORE
+SEC-04-003-V.1.0 | Chain of Custody Documentation | Form | CORE
+SEC-04-004-V.1.0 | Regulatory Reporting Record | Log Template | CORE
+
+================================================================================
+SECTION 5: RECORDS MANAGEMENT (REC)
+================================================================================
+
+REC-01: Document Control (001-099)
+REC-01-001-V.1.0 | SOP Good Documentation Practice | System SOP | CORE
+REC-01-002-V.1.0 | Master Document List | Master Document | CORE
+REC-01-003-V.1.0 | Document Retrieval from Safe Storage | Form | CORE
+REC-01-004-V.1.0 | Document Distribution List | Master Document | CORE
+
+REC-02: Record Keeping (100-199)
+REC-02-001-V.1.0 | SOP Records Management | System SOP | CORE
+REC-02-002-V.1.0 | SOP Log Book Procedures | Operational SOP | CORE
+REC-02-003-V.1.0 | Record Retention Form | Form | CORE
+REC-02-004-V.1.0 | Sign In/Out Logbook | Log Template | CORE
+REC-02-005-V.1.0 | Transmittal Request Form | Form | CORE
+
+REC-03: Inventory Management (200-299)
+REC-03-001-V.1.0 | SOP Inventory Reconciliation | System SOP | CORE
+REC-03-002-V.1.0 | SOP Plant Tagging | Operational SOP | CORE
+REC-03-003-V.1.0 | SOP Sampling Procedures | System SOP | CORE
+REC-03-004-V.1.0 | Cannabis Products Inventory Log | Log Template | CORE
+REC-03-005-V.1.0 | Equipment Inventory Log | Log Template | CORE
+REC-03-006-V.1.0 | Product-Equipment Loss Log | Log Template | CORE
+REC-03-007-V.1.0 | Sample Logbook | Log Template | CORE
+
+REC-04: Data Integrity (300-399)
+REC-04-001-V.1.0 | SOP Data Integrity | System SOP | CORE
+REC-04-002-V.1.0 | Data Integrity Assessment Checklist | Form | CORE
+
+================================================================================
+SECTION 6: HUMAN RESOURCES (HR)
+================================================================================
+
+HR-01: Training Procedures (001-099)
+HR-01-001-V.1.0 | SOP Training (General) | System SOP | CORE
+HR-01-002-V.1.0 | SOP Training Implementation | Operational SOP | CORE
+HR-01-003-V.1.0 | Training Plan Template | Master Document | CORE
+HR-01-004-V.1.0 | Training Matrix | Master Document | CORE
+HR-01-005-V.1.0 | Training Logbook | Log Template | CORE
+HR-01-006-V.1.0 | Training Record | Form | CORE
+HR-01-007-V.1.0 | Training Evaluation Questionnaire | Form | CORE
+
+HR-02: Personnel Management (100-199)
+HR-02-001-V.1.0 | SOP Personnel Management | System SOP | CORE
+HR-02-002-V.1.0 | SOP Recruitment & Hiring | System SOP | CORE
+HR-02-003-V.1.0 | SOP Personnel Termination | System SOP | CORE
+HR-02-004-V.1.0 | Employee Onboarding Checklist | Form | CORE
+
+HR-03: Health & Safety (200-299)
+HR-03-001-V.1.0 | SOP Employee Health & Safety | System SOP | CORE
+HR-03-002-V.1.0 | SOP Accident/Injury Reporting | System SOP | CORE
+HR-03-003-V.1.0 | Accident Report Form | Form | CORE
+HR-03-004-V.1.0 | Health Declaration Form | Form | CORE
+
+HR-04: Competency Assessment (300-399)
+HR-04-001-V.1.0 | SOP Competency Assessment | System SOP | CORE
+HR-04-002-V.1.0 | Competency Assessment Template | Form | CORE
+HR-04-003-V.1.0 | Practical Training Assessment | Form | CORE
+HR-04-004-V.1.0 | Personnel Qualification Record | Form | CORE
+
+================================================================================
+SECTION 7: EQUIPMENT MANAGEMENT (EQU)
+================================================================================
+
+EQU-01: Equipment Operation (001-099)
+EQU-01-001-V.1.0 | SOP Equipment Operation (General) | System SOP | CORE
+EQU-01-002-V.1.0 | Equipment Logbook Template | Log Template | CORE
+
+EQU-02: Calibration Procedures (100-199)
+EQU-02-001-V.1.0 | SOP Maintenance & Calibration | System SOP | CORE
+EQU-02-002-V.1.0 | Calibration Log (Sensors) | Log Template | CORE
+EQU-02-003-V.1.0 | Maintenance List (Annual) | Master Document | CORE
+
+EQU-03: Maintenance Protocols (200-299)
+EQU-03-001-V.1.0 | Maintenance Logbook | Log Template | CORE
+EQU-03-002-V.1.0 | Spare Parts Record | Log Template | CORE
+EQU-03-003-V.1.0 | Maintenance Report | Form | CORE
+EQU-03-004-V.1.0 | Equipment Status Label (Templates) | Form | CORE
+
+EQU-04: Equipment Qualification (300-399)
+EQU-04-001-V.1.0 | SOP Equipment Qualification | System SOP | CORE
+EQU-04-002-V.1.0 | URS (User Requirement Specification) | Form | CORE
+EQU-04-003-V.1.0 | Qualification Plan Template | Form | CORE
+EQU-04-004-V.1.0 | DQ/IQ/OQ/PQ Templates | Form | CORE
+
+================================================================================
+SECTION 8: PREMISES MANAGEMENT (PRE)
+================================================================================
+
+PRE-01: Facility Operations (001-099)
+PRE-01-001-V.1.0 | SOP Cultivation Facility (GACP) | Operational SOP | CORE
+PRE-01-002-V.1.0 | SOP Growing Media & Nutrients | Operational SOP | CORE
+PRE-01-003-V.1.0 | SOP HVAC System Management | System SOP | CORE
+PRE-01-004-V.1.0 | SOP Chemical Protection | System SOP | CORE
+PRE-01-005-V.1.0 | HVAC System Logbook | Log Template | CORE
+
+PRE-02: Room Management (100-199)
+PRE-02-001-V.1.0 | SOP Room Operations (Rooms 01-09) | Operational SOP | CORE
+PRE-02-002-V.1.0 | SOP Output Warehouse (Room 10) | Operational SOP | CORE
+PRE-02-003-V.1.0 | Facility Evaluation Form | Form | CORE
+
+PRE-03: Utilities Management (200-299)
+PRE-03-001-V.1.0 | SOP Water System Management | System SOP | CORE
+PRE-03-002-V.1.0 | SOP Ozonation & Water Sampling | System SOP | CORE
+PRE-03-003-V.1.0 | Water System Maintenance Log | Log Template | CORE
+
+================================================================================
+SECTION 9: EQUIPMENT-SPECIFIC OPERATING PROCEDURES
+================================================================================
+[Equipment SOPs use existing facility-specific numbering and are managed separately]
+
+Agrimix L System (001)
+Reverse Osmosis System (002)
+CO2 System (003)
+Drying Machine CDS24 (004)
+Lightning Protection System ESEs (005)
+Power Generator - Green Power (006)
+Trimming Machine - MT Tumbler (007)
+Greenhouse Illumination - Flora LED (008)
+HVAC Greenhouse GACP (009)
+HVAC GMP HEPA System (010)
+Security System (011)
+Automatic Packaging System + N2 Delivery (012)
+Manual Packaging Machine (014)
+Bucking Machine - MB Bucker 200 (015)
+Inert Gas Delivery System N2 (016)
+Balance DENSI PC (017)
+Balance DENSI SI (018)
+Humidity Meter KERN (026)
+Data Logger Testo (027)
+Heating & Cooling Unit 1 - Output Warehouse (035)
+Heating & Cooling Unit 2 - Output Warehouse (036)
+Humidifier Rowenta (037)
+Dehumidifier Carrier (038)
+
+================================================================================
+SECTION 10: MASTER DOCUMENTS
+================================================================================
+
+QAS-01.00 | Site Master File (SMF) | Master Document | CORE
+QAS-02.00 | Validation Master Plan (VMP) | Master Document | CORE
+QAS-04.00 | Job Descriptions (JD) | Master Document | CORE
+QAS-05.00 | Quality Management System Overview | Master Document | CORE
+QAS-06.00 | Hygiene Master Plan (HMP) | Master Document | CORE
+
+================================================================================
+MAPPING: Old SOP Codes → New SOP Codes
+================================================================================
+
+Quality Assurance SOPs (QAS):
+  QAS-01.00.00 → QA_00.01_v1 (Quality Manual)
+  QAS-01.00.01 → QAS-01-005 (SOP for Writing SOPs)
+  QAS-01.01.00 → QAS-02-001 (SOP Document Management)
+  QAS-01.02.00 → QAS-10-003 (SOP Vendor Qualification)
+  QAS-01.03.00 → QAS-10-001 (SOP Receiving & Storage)
+  QAS-01.04.00 → QAS-06-001 (SOP Self-Inspection)
+  QAS-01.05.00 → QAS-05-001 (SOP CAPA)
+  QAS-01.06.00 → QAS-05-002 (SOP Deviations)
+  QAS-01.06.01 → QAS-05-004 (SOP Complaints)
+  QAS-01.07.00 → REC-03-001 (Non-compliant Product)
+  QAS-01.08.00 → PRO-05-001 (Product Recall)
+  QAS-01.09.00 → QAS-04-001 (SOP Risk Management)
+  QAS-01.10.00 → QAS-03-004 (SOP Process Validation)
+  QAS-01.11.00 → QAS-03-001 (SOP Equipment Qualification)
+  QAS-01.12.00 → QAS-07-001 (Annual Product Quality Review)
+  QAS-01.13.00 → QAS-07-003 (SOP Batch Record Review)
+  QAS-01.14.00 → QAS-09-001 (SOP Batch Release)
+  QAS-01.15.00 → REC-03-003 (SOP Sampling)
+  QAS-01.16.00 → EQU-02-001 (SOP Maintenance & Calibration)
+  QAS-01.17.00 → REC-04-001 (SOP Data Integrity)
+  QAS-01.18.00 → QAS-03-006 (SOP Stability Study)
+  QAS-01.19.00 → SAN-04-002 (SOP Water Quality Management)
+  QAS-01.20.00 → QAS-06-002 (SOP Internal Audits)
+
+Sanitation SOPs (SAN):
+  SAN-02.01.00 → SAN-01-001 (SOP Cleaning & Sanitation)
+  SAN-02.02.00 → SAN-01-003 (SOP Sanitation Work Instructions)
+  SAN-02.03.00 → SAN-02-001 (SOP Gowning)
+  SAN-02.04.00 → SAN-02-002 (SOP Daily Facility Evaluation)
+  SAN-02.05.00 → SAN-03-001 (SOP Pest Control)
+  SAN-02.06.00 → (Removed - merged with SAN-02-001)
+  SAN-02.07.00 → SAN-04-001 (SOP Microbiological Monitoring)
+  SAN-02.08.00 → SAN-05-001 (SOP Employee Hygiene)
+  SAN-02.09.00 → SAN-05-002 (SOP Employee Medical Examinations)
+  SAN-02.10.00 → SAN-04-002 (SOP Ozonation & Water Sampling)
+
+Production SOPs (PRO):
+  PRO-03.01.00 → PRO-01-001 (SOP Mother Plants)
+  PRO-03.02.00 → PRO-01-002 (SOP Propagation)
+  PRO-03.02.01 → PRO-01-002 (SOP Seeding & Batch Numbering)
+  PRO-03.03.01 → PRO-01-003 (SOP Vegetative Growth)
+  PRO-03.03.02 → PRO-01-004 (SOP Flowering Growth)
+  PRO-03.03.03 → PRO-02-001 (SOP Harvesting)
+  PRO-03.04.00 → PRO_03.01_v1 (SOP Processing GMP)
+  PRO-03.05.00 → PRO-05-001 (SOP Cannabis Waste Management)
+  PRO-03.06.00 → PRO-06-001 (SOP Wholesale & Transport)
+  PRO-03.07.00 → PRO-01-007 (SOP Cultivation General)
+  PRO-03.G.01 → PRO-01-007 (SOP Cultivation General)
+  PRO-03.G.02 → PRO-01-008 (SOP Cultivation Methodology)
+  PRO-03.G.03 → PRO-01-008 (SOP IPM - Integrated Pest Management)
+  PRO-03.G.04 → PRO-01-005 (SOP Growing Media & Nutrients)
+  PRO-03.G.05 → PRE-01-003 (SOP HVAC System)
+  PRO-03.G.06 → PRE-01-004 (SOP Chemical Protection)
+
+Security SOPs (SEC):
+  SEC-04.G.01 → SEC-01-001 (SOP Security Measures)
+  SEC-04.01.00 → SEC-03-002 (SOP Emergency Actions)
+  SEC-04.02.00 → SEC-02-001 (SOP Visitors)
+  SEC-04.03.00 → SEC-01-002 (SOP Limited Access Areas)
+  SEC-04.04.00 → SEC-04-001 (SOP Licenses)
+
+Records SOPs (REC):
+  REC-05.G.00 → REC-01-001 (SOP Good Documentation Practice)
+  REC-05.G.01 → REC-02-001 (SOP Records)
+  REC-05.01.00 → REC-01-002 (SOP Document Management)
+  REC-05.01.01 → REC-01-003 (SOP Procurement)
+  REC-05.02.00 → REC-03-002 (SOP Plant Tagging)
+  REC-05.03.00 → REC-03-001 (SOP Inventory Reconciliation)
+  REC-05.04.00 → REC-02-002 (SOP Log Book Procedures)
+  REC-05.05.00 → REC-02-003 (SOP Summary Report After Harvest)
+
+Human Resources SOPs (HR):
+  HR-06.01.00 → HR-01-001 (SOP Accident/Injury Report)
+  HR-06.02.00 → HR-02-003 (SOP Leaving/Dismissed)
+  HR-06.03.00 → HR-01-001 (SOP Training)
+  HR-06.03.P → HR-01-002 (SOP Training Implementation)
+  HR-06.04.00 → HR-02-001 (SOP Quality Unit Organization)
+
+Equipment SOPs (EQU):
+  EQU-07.01.00 → EQU-01-001 (Agrimix L System)
+  EQU-07.02.00 → EQU-01-001 (Reverse Osmosis)
+  ... [All equipment SOPs follow similar pattern]
+
+Premises SOPs (PRE):
+  PRE-08.01.00 → PRE-02-001 (SOP Room Operations 01-09)
+  PRE-08.02.00 → PRE-02-002 (SOP Output Warehouse)
+  PRE-08.03.00 → PRE-02-003 (SOP Additional Rooms)
+
+================================================================================
+END OF REGISTRY
+================================================================================
+
+Notes:
+- CORE indicates documents essential for initial QMS implementation
+- Version format: Major.Minor (V.1.0, V.1.1, V.2.0, etc.)
+- All documents include facility customization placeholders
+- This registry will be maintained and updated as new documents are created
+- Last page in each document should reference this registry
+
+================================================================================

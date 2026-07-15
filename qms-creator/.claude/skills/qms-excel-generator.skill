@@ -1,0 +1,178 @@
+# QMS Excel Generator
+
+Generate EU GMP compliant spreadsheets, matrices, and data templates.
+
+## Activation
+- User requests: "create spreadsheet", "excel template", "generate matrix", "data template", "log sheet"
+
+---
+
+<qms-excel-generator>
+
+## Instructions
+
+You are generating professional Excel/spreadsheet templates for cannabis pharmaceutical QMS operations.
+
+### TEMPLATE TYPES
+
+| Template | Use Case | Key Features |
+|----------|----------|--------------|
+| Training Matrix | Personnel qualification tracking | Role x Training grid, dates, status |
+| Equipment Log | Maintenance and calibration records | Equipment ID, dates, readings, signatures |
+| Batch Record Template | Manufacturing documentation | Formulas, calculations, checkboxes |
+| Stability Schedule | Stability testing program | Timepoints, conditions, tests |
+| Supplier Register | Approved supplier list | Qualification status, audits, ratings |
+| Deviation Log | Deviation tracking | ID, classification, CAPA linkage |
+| Change Control Log | Change request tracking | Impact assessment, approvals |
+| Calibration Schedule | Instrument calibration planning | Due dates, tolerances, responsible |
+| Environmental Monitoring | Room conditions tracking | Temperature, humidity, particles |
+| Inventory Control | Raw material/product inventory | Lot numbers, quantities, expiry |
+
+### SPREADSHEET STRUCTURE
+
+#### Header Section (Rows 1-5)
+```
+Row 1: Document Title (merged, bold, primary color)
+Row 2: Document Code | Version | Effective Date
+Row 3: Department | Facility
+Row 4: Blank
+Row 5: Column Headers (bold, colored background)
+```
+
+#### Data Section
+- Alternating row colors for readability
+- Data validation dropdowns where applicable
+- Conditional formatting for status columns
+- Protected formulas
+- Input cells highlighted
+
+#### Footer Section
+- Prepared by / Date
+- Reviewed by / Date
+- Page X of Y
+
+### COLUMN SPECIFICATIONS BY TEMPLATE
+
+#### Training Matrix
+| Column | Width | Type | Notes |
+|--------|-------|------|-------|
+| Employee Name | 25 | Text | Required |
+| Employee ID | 12 | Text | Unique |
+| Department | 15 | Dropdown | QA/QC/PRO/LOG |
+| Role | 20 | Text | Job title |
+| Training Topic | 30 | Text | SOP reference |
+| Training Date | 12 | Date | YYYY-MM-DD |
+| Trainer | 20 | Text | Name |
+| Assessment Score | 10 | Number | 0-100% |
+| Status | 12 | Dropdown | Completed/Pending/Overdue |
+| Retraining Due | 12 | Date | +1 or +2 years |
+
+#### Equipment Log
+| Column | Width | Type | Notes |
+|--------|-------|------|-------|
+| Equipment ID | 15 | Text | Asset tag |
+| Equipment Name | 25 | Text | Description |
+| Location | 15 | Text | Room/Area |
+| Activity Type | 15 | Dropdown | Calibration/Maintenance/Cleaning |
+| Date Performed | 12 | Date | YYYY-MM-DD |
+| Performed By | 20 | Text | Name + signature |
+| Result/Reading | 15 | Text/Number | Measurement |
+| Acceptance Criteria | 20 | Text | Limits |
+| Status | 12 | Dropdown | Pass/Fail/NA |
+| Next Due | 12 | Date | Calculated |
+| Comments | 30 | Text | Notes |
+
+#### Environmental Monitoring
+| Column | Width | Type | Notes |
+|--------|-------|------|-------|
+| Date | 12 | Date | YYYY-MM-DD |
+| Time | 10 | Time | HH:MM |
+| Room/Area | 15 | Dropdown | Room list |
+| Temperature (°C) | 12 | Number | 1 decimal |
+| Temp Limits | 15 | Text | Min-Max |
+| Humidity (%RH) | 12 | Number | 1 decimal |
+| RH Limits | 15 | Text | Min-Max |
+| Differential Pressure | 15 | Number | Pa |
+| Particle Count | 15 | Number | /m³ |
+| Recorded By | 15 | Text | Initials |
+| Deviation? | 10 | Dropdown | Yes/No |
+
+### DATA VALIDATION RULES
+
+```
+Status fields: Dropdown list
+Dates: Date format validation
+Numbers: Min/Max range validation
+Required fields: Cannot be blank
+IDs: Unique value validation
+```
+
+### CONDITIONAL FORMATTING
+
+```
+Status = "Overdue" → Red background
+Status = "Pending" → Yellow background
+Status = "Completed" → Green background
+Date < Today (for due dates) → Red text
+Out of specification → Red cell border
+```
+
+### FORMULAS TO INCLUDE
+
+```excel
+# Days until due
+=IF(DueDate="","",DueDate-TODAY())
+
+# Status based on date
+=IF(DueDate<TODAY(),"Overdue",IF(DueDate<TODAY()+30,"Due Soon","OK"))
+
+# Retraining due (2 years from training)
+=DATE(YEAR(TrainingDate)+2,MONTH(TrainingDate),DAY(TrainingDate))
+
+# Pass/Fail based on limits
+=IF(AND(Value>=MinLimit,Value<=MaxLimit),"Pass","Fail")
+```
+
+### OUTPUT FORMAT
+
+Provide as markdown table with notes on Excel implementation:
+
+```markdown
+## {Template Name}
+
+**Document Code:** {code}
+**Version:** 1.0
+**Purpose:** {description}
+
+### Template Structure
+
+| Column | Header | Type | Validation | Notes |
+|--------|--------|------|------------|-------|
+| A | ... | ... | ... | ... |
+
+### Sample Data
+
+| Col A | Col B | Col C | ... |
+|-------|-------|-------|-----|
+| Example 1 | ... | ... | ... |
+| Example 2 | ... | ... | ... |
+
+### Implementation Notes
+- Conditional formatting rules
+- Data validation lists
+- Formula locations
+- Protection settings
+
+### Related Documents
+- {SOP reference}
+- {Form reference}
+```
+
+### INTEGRATION
+
+After generating template structure:
+- Can be converted to actual XLSX using openpyxl/xlsxwriter
+- Link to related SOPs via `/qms-sop-generator`
+- Format for printing via `/qms-document-formatter`
+
+</qms-excel-generator>

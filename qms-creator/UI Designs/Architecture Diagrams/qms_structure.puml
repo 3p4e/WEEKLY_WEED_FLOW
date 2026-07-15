@@ -1,0 +1,72 @@
+@startuml QMS_Document_Structure
+!theme dark
+skinparam linetype ortho
+
+package "QMS Document Families" {
+  class EQU_06 {
+    Equipment Management
+    ---
+    Documents: 1
+  }
+  class HRM_05 {
+    Human Resources
+    ---
+    Documents: 6
+  }
+  class MAT_02 {
+    Material Management
+    ---
+    Documents: 2
+  }
+  class PRO_01 {
+    Cultivation Processes
+    ---
+    Documents: 3
+  }
+  class PRO_03 {
+    Production Operations
+    ---
+    Documents: 3
+  }
+  class PRO_06 {
+    Distribution & Logistics
+    ---
+    Documents: 1
+  }
+  class QA_00 {
+    Quality Management System Core
+    ---
+    Documents: 12
+  }
+  class QCS_01 {
+    QC System & Documentation
+    ---
+    Documents: 10
+  }
+  class QC_01 {
+    Batch Release and Certification
+    ---
+    Documents: 14
+  }
+  class REC_09 {
+    Records Management
+    ---
+    Documents: 1
+  }
+  class RES_10 {
+    Research & Development
+    ---
+    Documents: 1
+  }
+  class SAN_07 {
+    Sanitation & Hygiene
+    ---
+    Documents: 1
+  }
+  class VAL_08 {
+    Validation & Qualification
+    ---
+    Documents: 3
+  }
+}
+@enduml

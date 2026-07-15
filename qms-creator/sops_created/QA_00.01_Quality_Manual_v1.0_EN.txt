@@ -1,0 +1,61 @@
+---
+document_id: "QA_00.01_v1"
+version: "1.0"
+title_mk: "Прирачник за квалитет"
+title_en: "Quality Manual"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "Master Document"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QA_00.01_v1 | **Effective Date:** 15.01.24
+
+---
+
+## Прирачник за квалитет | Quality Manual
+
+### 1. PURPOSE / ЦЕЛ
+
+The Quality Manual defines the Quality Management System (QMS) for Purely Plant GmbH, a medical cannabis cultivation and processing facility. This document provides an overview of the QMS structure, scope, and key processes.
+Целта на овој прирачник е да го дефинира Системот за управување со квалитет (QMS) за Purely Plant GmbH.
+
+### 2. SCOPE / ОПСЕГ
+
+This Quality Manual applies to all activities at Purely Plant GmbH related to the cultivation, processing, testing, and release of medical cannabis products.
+
+### 3. QUALITY POLICY / ПОЛИТИКА ЗА КВАЛИТЕТ
+
+Purely Plant GmbH is committed to:
+- Producing high-quality medical cannabis products
+- Compliance with EU GMP requirements
+- Continuous improvement of processes
+- Protecting patient safety
+
+### 4. ORGANIZATIONAL STRUCTURE / ОРГАНИЗАЦИОНА СТРУКТУРА
+
+Key personnel and their responsibilities are defined in the organizational chart and job descriptions.
+
+### 5. QMS PROCESSES / ПРОЦЕСИ НА QMS
+
+The QMS includes the following key processes:
+- Document Control (QA_00.02)
+- Change Control (QA_00.05)
+- CAPA System (QA_00.06)
+- Deviation Handling (QA_00.07)
+- Self-Inspection (QA_00.08)
+- Training (QA_00.03)
+
+### 6. REFERENCES / РЕФЕРЕНЦИ
+
+- EudraLex Volume 4, Annex 13
+- ISO 9001:2015
+- Macedonian Pharmaceutical Law
+
+### 7. REVISION HISTORY / ИСТОРИЈА НА РЕВИЗИИ
+
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.0 | 15.01.24 | Initial Release |
+[TEMPLATE_VERSION]

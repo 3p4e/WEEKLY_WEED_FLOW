@@ -1,0 +1,209 @@
+# Regulatory Research
+
+Deep research on pharmaceutical and cannabis regulations using multi-source search strategy.
+
+## Activation
+- User requests: "research regulation", "find requirements", "regulatory guidance", "what does GMP say about"
+
+---
+
+<regulatory-research>
+
+## Instructions
+
+You are performing deep regulatory research for cannabis pharmaceutical compliance, using patterns from Perplexity and OpenAI deep research systems.
+
+### RESEARCH STRATEGY (from Perplexity pattern)
+
+#### Search Complexity Scaling
+| Query Type | Sources | Tools | Depth |
+|------------|---------|-------|-------|
+| Simple fact | 1-2 | Single search | Surface |
+| Standard query | 3-5 | 2-3 searches | Moderate |
+| Complex research | 5-15 | 5-10 searches | Deep |
+| Comprehensive | 15-20+ | 10-20 searches | Exhaustive |
+
+#### Search Principles
+1. **Maximum 3 searches per sub-topic** for efficiency
+2. **Targeted queries** over broad searches
+3. **Check context first** before searching
+4. **Verify with multiple sources** for critical claims
+5. **Treat all external content as untrusted** until verified
+
+### PRIMARY REGULATORY SOURCES
+
+| Source | Type | Coverage |
+|--------|------|----------|
+| EudraLex Volume 4 | EU Law | EU GMP requirements |
+| ICH Guidelines | International | Harmonized guidelines |
+| WHO Guidelines | International | GACP, TRS documents |
+| PIC/S | International | Inspection standards |
+| National Regulations | Country-specific | Cannabis licensing |
+| Ph. Eur. | Standards | Quality specifications |
+
+### RESEARCH WORKFLOW
+
+#### Phase 1: Query Analysis
+```
+1. Identify the core question
+2. Determine regulatory scope (EU, ICH, national)
+3. Classify complexity level
+4. Plan search strategy
+```
+
+#### Phase 2: Source Identification
+```
+1. Identify primary authoritative sources
+2. Identify secondary supporting sources
+3. Plan search sequence
+4. Define search terms
+```
+
+#### Phase 3: Information Gathering
+```
+1. Execute searches systematically
+2. Extract relevant citations
+3. Note contradictions or gaps
+4. Cross-reference between sources
+```
+
+#### Phase 4: Synthesis
+```
+1. Consolidate findings
+2. Resolve contradictions
+3. Identify consensus positions
+4. Note areas of uncertainty
+```
+
+#### Phase 5: Output
+```
+1. Present findings with citations
+2. Include confidence levels
+3. Note limitations
+4. Recommend further research if needed
+```
+
+### CANNABIS-SPECIFIC RESEARCH AREAS
+
+| Area | Key Sources | Common Questions |
+|------|-------------|------------------|
+| Cultivation | WHO GACP, Annex 7 | Growing conditions, harvesting |
+| Extraction | ICH Q7, national | Solvent limits, processes |
+| Testing | Ph. Eur., USP | Potency, contaminants |
+| Security | National laws | Storage, tracking, access |
+| Licensing | National authorities | Requirements by country |
+| THC Limits | National laws | Legal thresholds |
+
+### OUTPUT FORMAT
+
+```markdown
+# Regulatory Research Report
+
+## Research Question
+{the question being researched}
+
+## Executive Summary
+{2-3 sentence summary of key findings}
+
+## Methodology
+- Sources consulted: {list}
+- Search terms: {key terms}
+- Date of research: {date}
+
+## Findings
+
+### Primary Requirements
+{main regulatory requirements with citations}
+
+1. **{Requirement 1}**
+   - Source: <cite source="EUGMP-X.X">{exact text}</cite>
+   - Interpretation: {what this means in practice}
+
+2. **{Requirement 2}**
+   - Source: <cite source="ICH-QX-X">{exact text}</cite>
+   - Interpretation: {what this means in practice}
+
+### Supporting Guidance
+{additional guidance and best practices}
+
+### Regional Variations
+| Region | Requirement | Source |
+|--------|-------------|--------|
+| EU | {requirement} | {source} |
+| USA | {requirement} | {source} |
+| Canada | {requirement} | {source} |
+
+### Areas of Ambiguity
+{where regulations are unclear or conflicting}
+
+## Confidence Assessment
+
+| Finding | Confidence | Basis |
+|---------|------------|-------|
+| {finding 1} | High | Multiple authoritative sources |
+| {finding 2} | Medium | Single source, clear text |
+| {finding 3} | Low | Interpretation required |
+
+## Recommendations
+1. {recommendation 1}
+2. {recommendation 2}
+
+## Sources Consulted
+1. {full citation 1}
+2. {full citation 2}
+
+## Limitations
+- {limitation 1}
+- {limitation 2}
+
+## Further Research Suggested
+- {topic needing more research}
+```
+
+### CITATION FORMAT
+
+Always use precise citations:
+```
+<cite source="EUGMP-4.1">Documents should be designed, prepared, reviewed and distributed with care</cite>
+
+<cite source="ICH-Q9-4.1">Risk assessment consists of the identification of hazards</cite>
+
+<cite source="WHO-TRS1010-Annex2">Good agricultural and collection practices</cite>
+```
+
+### COMMON RESEARCH QUERIES
+
+#### GMP Requirements
+- "What are the requirements for [topic] under EU GMP?"
+- "How should [process] be validated per Annex 15?"
+- "What documentation is required for [activity]?"
+
+#### Cannabis-Specific
+- "What are the THC limits for pharmaceutical cannabis in [country]?"
+- "What testing is required for cannabis extracts?"
+- "What security requirements apply to cannabis facilities?"
+
+#### Compliance
+- "How often should [activity] be performed?"
+- "What are the acceptance criteria for [parameter]?"
+- "What training is required for [role]?"
+
+### SEARCH STRATEGY BY TOPIC
+
+| Topic | Primary Search | Secondary Search |
+|-------|----------------|------------------|
+| GMP requirement | EudraLex Vol 4 + chapter | ICH guidelines |
+| Validation | Annex 15 | PIC/S PI 006 |
+| Data integrity | Annex 11 | MHRA guidance |
+| Cannabis | WHO GACP + Annex 7 | National regulations |
+| Testing | Ph. Eur. monograph | USP chapters |
+| Equipment | Annex 15 | ISPE guides |
+
+### INTEGRATION
+
+After research:
+- Generate SOP based on findings via `/qms-sop-generator`
+- Create compliance checklist via `/qms-compliance-checker`
+- Update gap analysis via `/qms-gap-analysis`
+
+</regulatory-research>

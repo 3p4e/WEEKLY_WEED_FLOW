@@ -1,0 +1,105 @@
+---
+document_id: "QAS-00.6_A01"
+version: "1.0"
+title_mk: "Purely Plant GmbH"
+title_en: "Purely Plant GmbH"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QAS-00.6_A01 v.1.0 | **Effective Date:** 15.01.24
+
+---
+
+## Purely Plant GmbH | Purely Plant GmbH
+
+### ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL
+
+| Дејство / Action | Позиција / Position | Име и Презиме / Name & Surname | Датум / Date | Потпис / Signature |
+|---|---|---|---|---|
+| **Подготвено од:** / _Prepared by:_ | Менаџер за Контрола на Квалитет / Quality Control Manager | Ana Dimitrova | __________ | _________________ |
+| **Проверено од:** / _Checked by:_ | Управник на Фацилитет / Facility Manager | Stefan Petrov | __________ | _________________ |
+| **Одобрено од:** / _Approved by:_ | Квалификувано Лице (QP) / Qualified Person (QP) | Blagoj Nikolov | __________ | _________________ |
+
+---
+
+### КОНТРОЛА НА ДОКУМЕНТ | DOCUMENT CONTROL
+
+| Field | Value |
+|---|---|
+| **Оригиналот се чува во:** / _The original is kept & stored in:_ | Quality Assurance Archive - Building A, Room 12 |
+| **Тип на документ:** / _Type of document:_ | SOP |
+| **Овој документ се чува во:** / _This document is kept & stored in:_ | Department Manager's Office |
+| **Тип на копија:** / _Copy type:_ | Controlled |
+
+**Корисник:** / _User:_  ☒ Внатрешен / Internal  ☐ Надворешен / External
+
+**Датум на последна ревизија:** / _Date of last revision:_ 15.01.24
+
+**Ефективен датум на користење:** / _Effective Date of Use:_ 15.01.24
+
+**Датум на валидност / редовна ревизија:** / _Date of validity / planned revision:_ 15.01.25
+
+---
+
+### ИСТОРИЈА НА РЕВИЗИИ | REVISION HISTORY
+
+| Верзија бр. / Version No. | Датум на промена / Date of change | Опис на променета содржина / Description of change |
+|---|---|---|
+| 1.0 | 15.01.24 | Initial Release / Почетна верзија |
+
+---
+
+---
+document_id: "QAS-00.6_A01"
+version: "1.0"
+title_mk: "Purely Plant GmbH"
+title_en: "Purely Plant GmbH"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QAS-00.6_A01 v.1.0 | **Effective Date:** 15.01.24
+
+---
+
+## Purely Plant GmbH | Purely Plant GmbH
+
+### ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL
+
+| Дејство / Action | Позиција / Position | Име и Презиме / Name & Surname | Датум / Date | Потпис / Signature |
+|---|---|---|---|---|
+| **Подготвено од:** / _Prepared by:_ | Менаџер за Контрола на Квалитет / Quality Control Manager | Ana Dimitrova | __________ | _________________ |
+| **Проверено од:** / _Checked by:_ | Управник на Фацилитет / Facility Manager | Stefan Petrov | __________ | _________________ |
+| **Одобрено од:** / _Approved by:_ | Квалификувано Лице (QP) / Qualified Person (QP) | Blagoj Nikolov | __________ | _________________ |
+
+---
+
+### КОНТРОЛА НА ДОКУМЕНТ | 
+================================================================================
+QA_00.06_v1_A01 - CAPA Initiation Form (Template)
+Version: 1.0
+================================================================================
+
+CAPA Number: [AUTO-ASSIGNED]
+Title / Short Description:
+Date Reported:
+Reported By (Name / Dept):
+Immediate Actions Taken (Containment):
+Event Details (What happened?):
+Impact Assessment (Product / Patient / Regulatory):
+Requested Priority: ☐ Critical  ☐ Major  ☐ Minor
+Assigned Owner:
+Proposed Root Cause(s):
+Proposed Corrective Actions (who, what, when):
+Proposed Preventive Actions (who, what, when):
+Required Resources:
+Signatures:
+  Initiator: ____________________ Date: _______
+  QA Reviewer: __________________ Date: _______

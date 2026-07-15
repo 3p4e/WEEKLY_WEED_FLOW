@@ -1,0 +1,217 @@
+# Additional Placeholder Mappings
+# Manual mappings for context-specific placeholders that can be automated
+# These supplement the advanced_mapping.py context-aware resolution
+
+# Coordinates (already in facility_data but using different names)
+LATITUDE: '41.9973'
+LONGITUDE: '21.4280'
+
+# Contact information for secondary authorities
+CONTACT_NAME:
+  regulatory_authority: 'Dr. Ivana Petrov'
+  ministry_of_interior: 'Officer Aleksandar Dimitrov'
+  local_health_authority: 'Dr. Elena Stojanova'
+
+# Dates from regulatory information
+ISSUE_DATE: '2024-01-15'
+EXPIRATION_DATE: '2027-01-15'
+LAST_REVISION_DATE: '2026-01-13'
+
+# Equipment details
+LIGHTING_TYPE: 'Full Spectrum LED 1000W'
+SYSTEM_TYPE:
+  hvac: 'ClimateMax Pro 5000 - Climate Control'
+  irrigation: 'AutoGrow 300 - Automated Irrigation'
+  water: 'PureWater RO-500 - Reverse Osmosis'
+
+# Room specifications
+SIZE_SQ_METERS:
+  total_facility: '2500'
+  reception: '150'
+  propagation: '200'
+  vegetative: '400'
+  flowering_1: '500'
+  flowering_2: '500'
+  drying_curing: '250'
+  processing: '200'
+  packaging: '150'
+  storage_vault: '150'
+
+# Operations details
+ADDITIONAL_OPERATIONS: 'Post-harvest quality testing (in-house moisture and visual inspection)'
+SPECIFY_ANY_EXCLUDED_OPERATIONS: 'Product distribution and retail sales (handled by licensed distributors)'
+
+# Security measures
+SECURITY_MEASURES: |
+  - 24/7 CCTV surveillance with 90-day retention
+  - Access control system with biometric authentication
+  - Secure vault with dual-lock system
+  - Perimeter fencing and motion sensors
+  - On-site security personnel
+  - Visitor log and escort requirements
+
+# Backup systems
+BACKUP_POWER: 'Diesel generator with automatic transfer switch (ATS) - 48-hour fuel capacity'
+BACKUP: 'Daily automated backup at 23:00 CET to off-site cloud storage + local backup server'
+
+# Access control
+SPECIFY_ACCESS_PROCEDURE: 'Restricted access - authorized personnel only with secure login credentials and biometric verification'
+DESCRIBE_ACCESS_CONTROL: 'Multi-tier access control system: Biometric fingerprint + access card + PIN. Access levels assigned by role. All access logged and reviewed monthly by Security Manager.'
+
+# Waste destruction
+DESTRUCTION_PROCEDURE: |
+  Cannabis waste is rendered unrecognizable and unusable by:
+  1. Mixing with non-hazardous waste (coffee grounds, soil) at 50/50 ratio
+  2. Placement in locked waste containers
+  3. Disposal via licensed waste management contractor
+  4. Documented with destruction records (FM-SEC-003)
+  5. Witnessed by Security Manager and documented
+
+# PPE requirements
+PPE_1: 'Lab coat, hairnet, shoe covers'
+PPE_2: 'Disposable gloves, face mask'
+PPE:
+  general: 'Lab coat, hairnet, shoe covers, disposable gloves'
+  processing: 'Lab coat, hairnet, shoe covers, disposable gloves, face mask, safety glasses'
+  cleaning: 'Lab coat, hairnet, shoe covers, chemical-resistant gloves, face shield, apron'
+
+# Retention periods by record type
+RETENTION_PERIODS_BY_RECORD_TYPE:
+  batch_records: '7 years from batch manufacture date'
+  training_records: '7 years from training date'
+  equipment_qualification: 'Life of equipment + 1 year after decommission'
+  calibration_records: 'Life of equipment + 1 year'
+  deviation_reports: '7 years from deviation closure'
+  audit_reports: '7 years from audit date'
+  qms_documents_current: 'Permanent'
+  qms_documents_superseded: '3 years after supersession'
+  environmental_monitoring: '7 years'
+  cleaning_records: '3 years'
+  maintenance_records: 'Life of equipment + 1 year'
+
+# Priority classifications
+HIGH: 'HIGH PRIORITY'
+HIGH_PRIORITY: 'HIGH'
+MEDIUM_PRIORITY: 'MEDIUM'
+LOW: 'LOW PRIORITY'
+CRITICAL: 'CRITICAL'
+CRITICAL_ROLE: 'Critical Role - GMP Essential'
+
+# Status markers
+ASSUMED: 'Assumed - To be verified'
+CONFIRMED: 'Confirmed'
+REQUIRED: 'Required'
+PRIMARY: 'Primary'
+
+# Instrument references (from facility_data)
+INSTRUMENT_1: 'Moisture Content Analyzer (MCA-100)'
+INSTRUMENT_2: 'Digital pH Meter (pH-Pro 200)'
+INSTRUMENT_3: 'Temperature/Humidity Logger (TempLog 500)'
+
+# Generic identifiers for templates
+ID: '[ID-XXX]'
+ID_NUMBER: '[ID-XXX-XXX]'
+NUMBER: '[XXX]'
+CODE: '[CODE-XXX]'
+
+# SOP/Form categories
+SOP_CATEGORY:
+  quality: 'QAS - Quality Assurance'
+  production: 'PRO - Production & Cultivation'
+  sanitation: 'SAN - Sanitation & Hygiene'
+  equipment: 'EQU - Equipment Management'
+  security: 'SEC - Security & Premises'
+  records: 'REC - Records Management'
+  hr: 'HR - Human Resources'
+  pre_approval: 'PRE - Pre-Approval'
+
+CATEGORY:
+  master: 'Master Documents'
+  quality: 'Quality Assurance'
+  sanitation: 'Sanitation & Hygiene'
+  production: 'Production & Cultivation'
+  equipment: 'Equipment Management'
+  security: 'Security & Premises'
+
+SUBCATEGORY:
+  documentation: 'Documentation & Records'
+  personnel: 'Personnel & Training'
+  facilities: 'Facilities & Equipment'
+  operations: 'Operations & Processes'
+
+# Form codes
+FORM_CODE:
+  batch: 'FM-PRO-001'
+  deviation: 'FM-QAS-002'
+  training: 'FM-HR-001'
+  equipment_log: 'FM-EQU-001'
+  calibration: 'FM-EQU-002'
+  cleaning: 'FM-SAN-001'
+  environmental: 'FM-QAS-003'
+
+# Custom objectives
+OBJECTIVE_X: 'Additional quality objectives to be defined based on operational experience'
+CUSTOM_OBJECTIVE:
+  - 'Maintain environmental monitoring within specifications 99% of the time'
+  - 'Complete all equipment calibrations 30 days before due date'
+  - 'Achieve zero critical deviations per quarter'
+  - '100% personnel training completion within 30 days of hire'
+
+# Operational terms
+OPERATION: 'Cannabis cultivation, processing, and packaging operations'
+DOCUMENT: 'QMS Document'
+PLACEHOLDER: '[Placeholder for facility-specific information]'
+
+# Glossary terms (examples)
+TERM_1: 'GMP - Good Manufacturing Practice'
+TERM_2: 'QP - Qualified Person'
+
+# Personnel generic fields (forms)
+FIRST_NAME: '[First Name]'
+LAST_NAME: '[Last Name]'
+JOB_TITLE: '[Job Title]'
+JOB_TITLE_1: '[Primary Job Title]'
+JOB_TITLE_2: '[Secondary Job Title]'
+QUALIFICATIONS: '[Qualifications and Certifications]'
+POSITION_HOLDER_NAME: '[Name of Position Holder]'
+AUTHOR: '[Document Author Name]'
+REVIEWER_NAME: '[Reviewer Name - QA Manager]'
+SIGNATURE: '[Signature]___________________  Date:___________'
+
+# Manager contact templates
+MANAGER_FIRST_NAME: '[Manager First Name]'
+MANAGER_LAST_NAME: '[Manager Last Name]'
+MANAGER_EMAIL: '[manager@purelyplant.mk]'
+MANAGER_PHONE: '[+389 XX XXX XXX]'
+MANAGER_TITLE: '[Manager Title]'
+
+# Time formats
+HHMM: '[HH:MM]'
+YYYYMMDD: '[YYYY-MM-DD]'
+
+# Visual content placeholders
+INSERT_ORGANIZATIONAL_CHART_HERE: '[Organizational chart to be inserted - See facility_data.yaml for personnel structure]'
+
+# Conditional blocks (template syntax examples)
+IF_YOU_HAVE_IN_HOUSE_LAB: 'Section applies if in-house lab exists'
+IF_YOU_USE_CONTRACT_LAB: 'Section applies if using contract laboratory'
+END_IF: 'End of conditional section'
+
+# Template instructions (not actual placeholders)
+BRACKETED: 'Example of bracketed placeholder format'
+BRACKETS: 'Placeholders use square brackets'
+BRACKETED_PLACEHOLDERS: 'Format: [PLACEHOLDER_NAME]'
+LIKE_THIS: '[EXAMPLE_PLACEHOLDER]'
+PLACEHOLDERS: 'All placeholders follow this format'
+INFORMATION_GATHERING: 'Information to be gathered from facility'
+
+# SOP specific
+SOP_TITLE_IN_FULL: '[Full SOP Title - To be defined]'
+SOP_CODE: '[SOP-XX-XXX - Document code]'
+DESCRIBE_PROCESS: '[Detailed process description to be provided]'
+FULL_TITLE: '[Complete Document Title]'
+ACRONYM: '[Document Acronym]'
+
+# Facility-specific content markers
+FACILITY-SPECIFIC: 'Facility-specific information to be added'
+REQUIRED: 'Required field - must be completed'

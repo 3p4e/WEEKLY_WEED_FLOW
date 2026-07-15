@@ -1,0 +1,543 @@
+================================================================================
+PURELY PLANT GMBH QMS TOOLKIT - MASTER FILE INDEX & NAVIGATION
+================================================================================
+
+Version: 1.0
+Created: January 13, 2026
+Purpose: Quick reference to find what you need in the QMS toolkit
+
+================================================================================
+WHAT FILE DO I READ FIRST?
+================================================================================
+
+START HERE:
+→ QMS_README.txt (30-45 minutes)
+  This file explains what's included, how the system works, and the overall
+  approach. Must read to understand the toolkit.
+
+THEN READ:
+→ CUSTOMIZATION_GUIDE/CUSTOMIZATION_GUIDE_Complete.txt (30-45 minutes)
+  This explains how to customize templates for your facility. Critical before
+  you start editing documents.
+
+CURRENT STATUS:
+→ QMS_IMPLEMENTATION_STATUS.txt (15-20 minutes)
+  Shows what's been completed, what needs to be done, and recommended sequence.
+
+================================================================================
+MASTER DOCUMENTS (Read/Customize First)
+================================================================================
+
+Location: /00_MASTER_DOCUMENTS/
+
+QMS_DOCUMENT_REGISTRY.txt
+  Purpose: Complete list of all 100+ QMS documents
+  What it shows: Document codes, titles, versions, relationships
+  When to use: Finding what documents exist
+  Key Info: Mapping of old codes → new codes for your reference
+  Read time: 20-30 minutes
+
+QAS-01-001_Quality_Manual_Template.txt
+  Purpose: Core governance document - establishes your QMS framework
+  What it covers: Quality policy, organization, responsibilities, compliance
+  When to customize: After Facility Profile (3rd customization)
+  Importance: CRITICAL - defines your entire QMS
+  Estimated time to customize: 2-3 hours
+  Must include: Organizational chart, quality objectives, regulatory contacts
+
+QAS-01-003_Facility_Profile_Master_Template.txt
+  Purpose: Single master document with all facility-specific information
+  What it covers: Company name, personnel, equipment, licenses, objectives
+  When to customize: FIRST - within 1-2 hours of starting
+  Importance: CRITICAL - all other documents reference this
+  Estimated time: 1-2 hours
+  Must have: All [BRACKETED] fields completed before proceeding
+
+================================================================================
+CUSTOMIZATION & GUIDANCE (How to Implement)
+================================================================================
+
+Location: /CUSTOMIZATION_GUIDE/
+
+CUSTOMIZATION_GUIDE_Complete.txt
+  Purpose: Step-by-step instructions for customizing all QMS templates
+  Key sections:
+    • Getting Started (preparation checklist)
+    • Placeholder Identification & Replacement (how to customize)
+    • Facility Customization Workflow (step-by-step process)
+    • Document-Specific Notes (special considerations per SOP type)
+    • Testing & Validation (how to verify customization is correct)
+    • Approval & Implementation (getting approvals and rolling out)
+    • Version Control (managing document changes)
+  When to read: Before customizing your first document
+  Critical importance: YES - must follow this process
+  Estimated reading time: 45-60 minutes
+
+Placeholder_Reference.txt
+  Purpose: Quick lookup of common customization placeholders
+  What it includes: List of [FACILITY_NAME], [MANAGER_NAME], etc. placeholders
+  When to use: While customizing documents, to find the right placeholder values
+  How to use: Find and replace tool using placeholders listed here
+  Estimated time: 5 minutes reference
+
+Implementation_Checklist.txt
+  Purpose: Week-by-week checklist of what to customize
+  What it shows: Week 1: Foundation, Week 2-3: Critical SOPs, etc.
+  When to use: To stay on track with your implementation timeline
+  Estimated read time: 10 minutes
+
+================================================================================
+REFERENCE MATERIALS (Background Information)
+================================================================================
+
+Location: /REFERENCE_MATERIALS/
+
+SOP_TEMPLATE_Standard_Format.txt
+  Purpose: Template showing the standard format for all SOPs
+  Key sections:
+    • Document Control (headers, approvals, versions)
+    • Purpose & Scope (what the SOP covers)
+    • Responsibilities (who's responsible)
+    • Procedure (step-by-step instructions)
+    • Quality Checkpoints (how quality is ensured)
+    • Training Requirements (who needs training)
+    • Records & Documentation (what forms to use)
+    • Deviations (what to do if something goes wrong)
+  When to use: As a template for creating/customizing all System SOPs
+  How to use: Copy this template, replace [PLACEHOLDERS], add your content
+  Estimated time to understand: 30-40 minutes
+
+EU_GMP_Addendum_Checklist.txt
+  Purpose: EU GMP requirements checklist for compliance verification
+  What it covers: Annex 7 (Herbal Preparations) requirements
+  When to use: Verifying your SOPs cover all regulatory requirements
+  Estimated read time: 30-40 minutes
+
+Cannabis_Testing_Requirements.txt
+  Purpose: Specific testing standards for medical cannabis
+  What it covers: Cannabinoid testing, microbial limits, pesticide residues,
+                 heavy metals, testing protocols
+  When to use: Setting up your QC testing procedures
+  Estimated read time: 20-30 minutes
+
+Macedonia_Regulatory_Summary.txt
+  Purpose: Summary of North Macedonia regulations
+  What it covers: Licensing requirements, regulatory authorities, compliance
+  When to use: Understanding your regulatory obligations
+  Estimated read time: 15-20 minutes
+
+Document_Coding_System_Explanation.txt
+  Purpose: Detailed explanation of the new document coding system
+  What it shows: Why we changed from old to new system, how it works
+  When to use: Understanding document codes (e.g., QAS-01-001)
+  Estimated read time: 10-15 minutes
+
+FAQ_Common_Questions.txt
+  Purpose: Frequently asked questions about QMS implementation
+  What it covers: Questions about customization, compliance, implementation
+  When to use: If you're stuck or confused about something
+  Estimated read time: 15-20 minutes (or use as reference)
+
+================================================================================
+OPERATIONAL DOCUMENTS (To Be Created)
+================================================================================
+
+These documents will be created following the framework you have.
+They're ready to be customized using the templates and guidance provided.
+
+QUALITY ASSURANCE SOPs (QAS):
+  Location: /01_QUALITY_ASSURANCE/
+  
+  To Customize (from Document Registry):
+  □ QAS-01-001: Quality Management & Policy
+  □ QAS-02-001: Document Management
+  □ QAS-03-001: Validation & Qualification
+  □ QAS-04-001: Risk Management
+  □ QAS-05-001: CAPA & Deviations
+  □ QAS-06-001: Audits & Inspections
+  □ QAS-07-001: Product Quality Review
+  □ QAS-08-001: Change Control
+  □ QAS-09-001: Batch Release & Approval
+  □ QAS-10-001: Material Management & Release
+  
+  Use: SOP_TEMPLATE_Standard_Format.txt as your template
+  Estimated time per SOP: 2-3 hours each
+
+SANITATION & HYGIENE SOPs (SAN):
+  Location: /02_SANITATION_HYGIENE/
+  
+  To Customize:
+  □ SAN-01-001: Cleaning Procedures
+  □ SAN-02-001: Gowning & Material Transfer
+  □ SAN-03-001: Pest Control
+  □ SAN-04-001: Environmental Monitoring
+  □ SAN-05-001: Employee Hygiene
+  
+  Estimated time per SOP: 2-3 hours each
+
+PRODUCTION & CULTIVATION SOPs (PRO):
+  Location: /03_PRODUCTION_CULTIVATION/
+  
+  To Customize:
+  □ PRO-01-001: Cultivation Processes
+  □ PRO-02-001: Harvesting Procedures
+  □ PRO-03-001: Processing Operations
+  □ PRO-04-001: Packaging Procedures
+  □ PRO-05-001: Waste Management
+  □ PRO-06-001: Distribution & Transport
+  
+  Note: These are highly facility-specific
+  Estimated time per SOP: 2-4 hours each (more detailed)
+
+SECURITY SOPs (SEC):
+  Location: /04_SECURITY/
+  
+  To Customize:
+  □ SEC-01-001: Access Control
+  □ SEC-02-001: Visitor Management
+  □ SEC-03-001: Security Systems
+  □ SEC-04-001: Regulatory Compliance
+  
+  Estimated time per SOP: 1.5-2 hours each
+
+RECORDS MANAGEMENT SOPs (REC):
+  Location: /05_RECORDS_MANAGEMENT/
+  
+  To Customize:
+  □ REC-01-001: Document Control
+  □ REC-02-001: Record Keeping
+  □ REC-03-001: Inventory Management
+  □ REC-04-001: Data Integrity
+  
+  Estimated time per SOP: 1.5-2 hours each
+
+HUMAN RESOURCES SOPs (HR):
+  Location: /06_HUMAN_RESOURCES/
+  
+  To Customize:
+  □ HR-01-001: Training Procedures
+  □ HR-02-001: Personnel Management
+  □ HR-03-001: Health & Safety
+  □ HR-04-001: Competency Assessment
+  
+  Estimated time per SOP: 1.5-2 hours each
+
+EQUIPMENT MANAGEMENT SOPs (EQU):
+  Location: /07_EQUIPMENT_MANAGEMENT/
+  
+  To Customize:
+  □ EQU-01-001: Equipment Operation
+  □ EQU-02-001: Calibration Procedures
+  □ EQU-03-001: Maintenance Protocols
+  □ EQU-04-001: Equipment Qualification
+  
+  Plus facility-specific equipment SOPs
+  Estimated time per SOP: 1.5-2.5 hours each
+
+PREMISES MANAGEMENT SOPs (PRE):
+  Location: /08_PREMISES_MANAGEMENT/
+  
+  To Customize:
+  □ PRE-01-001: Facility Operations
+  □ PRE-02-001: Room Management
+  □ PRE-03-001: Utilities Management
+  
+  Estimated time per SOP: 1.5-2 hours each
+
+FORMS & TEMPLATES (30-40 operational forms):
+  Location: /FORMS_TEMPLATES/
+  
+  To Create:
+  □ Batch Production Records
+  □ Environmental Monitoring Logs
+  □ Training Records & Matrices
+  □ Equipment Maintenance Logs
+  □ Testing Certificates
+  □ Security Access Logs
+  □ Personnel Files & Competency Forms
+  □ Waste Documentation
+  □ And more...
+  
+  Estimated time per form: 30-60 minutes each
+
+================================================================================
+QUICK LOOKUP: BY DOCUMENT TYPE
+================================================================================
+
+LOOKING FOR QUALITY PROCEDURES?
+→ 01_QUALITY_ASSURANCE folder
+→ QAS-01: Quality Management & Policy
+→ QAS-02: Documentation Control
+→ QAS-03: Validation & Qualification
+→ QAS-04: Risk Management
+→ QAS-05: CAPA & Deviations
+→ QAS-06: Audits & Inspections
+→ QAS-07: Product Quality Review
+→ QAS-08: Change Control
+→ QAS-09: Batch Release & Approval
+→ QAS-10: Material Management & Release
+
+LOOKING FOR PRODUCTION/GROWING PROCEDURES?
+→ 03_PRODUCTION_CULTIVATION folder
+→ PRO-01: Cultivation Processes
+→ PRO-02: Harvesting Procedures
+→ PRO-03: Processing Operations
+
+LOOKING FOR SANITATION PROCEDURES?
+→ 02_SANITATION_HYGIENE folder
+→ SAN-01: Cleaning Procedures
+→ SAN-02: Gowning & Material Transfer
+→ SAN-03: Pest Control
+→ SAN-04: Environmental Monitoring
+→ SAN-05: Employee Hygiene
+
+LOOKING FOR SAFETY/SECURITY?
+→ 04_SECURITY folder
+→ SEC-01: Access Control
+→ SEC-02: Visitor Management
+→ SEC-03: Security Systems
+
+LOOKING FOR PERSONNEL/TRAINING?
+→ 06_HUMAN_RESOURCES folder
+→ HR-01: Training Procedures
+→ HR-02: Personnel Management
+→ HR-03: Health & Safety
+→ HR-04: Competency Assessment
+
+LOOKING FOR EQUIPMENT?
+→ 07_EQUIPMENT_MANAGEMENT folder
+→ EQU-01: Equipment Operation
+→ EQU-02: Calibration
+→ EQU-03: Maintenance
+→ EQU-04: Qualification
+
+LOOKING FOR DOCUMENT MANAGEMENT?
+→ 05_RECORDS_MANAGEMENT folder
+→ REC-01: Document Control
+→ REC-02: Record Keeping
+→ REC-03: Inventory Management
+→ REC-04: Data Integrity
+
+LOOKING FOR FACILITY MANAGEMENT?
+→ 08_PREMISES_MANAGEMENT folder
+→ PRE-01: Facility Operations
+→ PRE-02: Room Management
+→ PRE-03: Utilities Management
+
+================================================================================
+QUICK LOOKUP: BY ACTIVITY
+================================================================================
+
+I NEED TO CREATE A SOP FOR:
+
+Product Quality Testing
+→ QAS-06-001: Quality Control Testing (in 01_QUALITY_ASSURANCE)
+→ Forms: Batch records, test certificates
+
+Training My Personnel
+→ HR-01-001: Training Procedures (in 06_HUMAN_RESOURCES)
+→ HR-01-004: Training Matrix (form)
+
+Managing Cannabis Waste
+→ PRO-05-001: Waste Management (in 03_PRODUCTION_CULTIVATION)
+→ PRO-05-003: Waste Destruction Form
+
+Handling Problems (Deviations)
+→ QAS-05-002: Deviation Handling (in 01_QUALITY_ASSURANCE)
+→ QAS-05-004: Deviation Report Form
+
+Cleaning & Sanitation
+→ SAN-01-001: Cleaning Procedures (in 02_SANITATION_HYGIENE)
+→ SAN-01-004: Sanitation Logbook
+
+Managing Inventory
+→ REC-03-001: Inventory Management (in 05_RECORDS_MANAGEMENT)
+→ REC-03-004: Inventory Log Form
+
+Equipment Maintenance
+→ EQU-02-001: Calibration Procedures (in 07_EQUIPMENT_MANAGEMENT)
+→ EQU-03-001: Maintenance Protocols
+→ EQU-03-001: Maintenance Logbook
+
+Personnel Security/Access
+→ SEC-01-001: Access Control (in 04_SECURITY)
+→ SEC-01-004: Access Control Logbook
+
+Managing Documents
+→ REC-01-001: Document Control (in 05_RECORDS_MANAGEMENT)
+→ REC-01-002: Document Management (system SOP)
+
+Growing Cannabis (Cultivation)
+→ PRO-01-001: Cultivation Processes (in 03_PRODUCTION_CULTIVATION)
+→ PRO-01-005: Cultivation Logbook
+→ PRE-01-001: Facility Operations (for growing conditions)
+
+Harvesting
+→ PRO-02-001: Harvesting Procedures (in 03_PRODUCTION_CULTIVATION)
+→ PRO-02-002: Harvest Logbook
+
+Processing/Drying
+→ PRO-03-001: Processing Operations (in 03_PRODUCTION_CULTIVATION)
+→ PRO-03-005: Drying Logbook
+
+Packaging
+→ PRO-04-001: Packaging Procedures (in 03_PRODUCTION_CULTIVATION)
+→ PRO-04-003: Packaging Logbook
+
+================================================================================
+DOCUMENT READING ORDER (RECOMMENDED)
+================================================================================
+
+WEEK 1:
+Day 1:  QMS_README.txt (overview)
+Day 2:  QMS_IMPLEMENTATION_STATUS.txt (what's done, what's next)
+Day 3:  CUSTOMIZATION_GUIDE_Complete.txt (how to customize)
+Day 4:  Document_Coding_System_Explanation.txt (understand the codes)
+Day 5:  FAQ_Common_Questions.txt (get answers to common questions)
+
+WEEK 2:
+Day 1-2: QAS-01-001_Quality_Manual_Template.txt
+Day 3-4: QAS-01-003_Facility_Profile_Master_Template.txt
+Day 5:   QMS_DOCUMENT_REGISTRY.txt (full list of documents)
+
+WEEK 3:
+Day 1-2: SOP_TEMPLATE_Standard_Format.txt (learn SOP structure)
+Day 3+:  Begin customizing SOPs in priority order (see Implementation Status)
+
+REFERENCE (As Needed):
+→ EU_GMP_Addendum_Checklist.txt (for compliance verification)
+→ Cannabis_Testing_Requirements.txt (for QC setup)
+→ Macedonia_Regulatory_Summary.txt (for regulatory questions)
+→ Placeholder_Reference.txt (while customizing documents)
+
+================================================================================
+FILE STRUCTURE AT A GLANCE
+================================================================================
+
+Cannabis EU GMP QMS Creator/
+│
+├─ QMS_README.txt ← START HERE
+├─ QMS_IMPLEMENTATION_STATUS.txt ← Shows what's done
+│
+├─ 00_MASTER_DOCUMENTS/
+│  ├─ QMS_DOCUMENT_REGISTRY.txt
+│  ├─ QAS-01-001_Quality_Manual_Template.txt
+│  └─ QAS-01-003_Facility_Profile_Master_Template.txt
+│
+├─ 01_QUALITY_ASSURANCE/ (SOPs to customize)
+├─ 02_SANITATION_HYGIENE/ (SOPs to customize)
+├─ 03_PRODUCTION_CULTIVATION/ (SOPs to customize)
+├─ 04_SECURITY/ (SOPs to customize)
+├─ 05_RECORDS_MANAGEMENT/ (SOPs to customize)
+├─ 06_HUMAN_RESOURCES/ (SOPs to customize)
+├─ 07_EQUIPMENT_MANAGEMENT/ (SOPs to customize)
+├─ 08_PREMISES_MANAGEMENT/ (SOPs to customize)
+│
+├─ FORMS_TEMPLATES/ (30-40 forms to create)
+│
+├─ CUSTOMIZATION_GUIDE/
+│  ├─ CUSTOMIZATION_GUIDE_Complete.txt ← READ 2ND
+│  ├─ Placeholder_Reference.txt
+│  └─ Implementation_Checklist.txt
+│
+└─ REFERENCE_MATERIALS/
+   ├─ SOP_TEMPLATE_Standard_Format.txt ← Template for all SOPs
+   ├─ EU_GMP_Addendum_Checklist.txt
+   ├─ Cannabis_Testing_Requirements.txt
+   ├─ Macedonia_Regulatory_Summary.txt
+   ├─ Document_Coding_System_Explanation.txt
+   └─ FAQ_Common_Questions.txt
+
+================================================================================
+TROUBLESHOOTING: CAN'T FIND SOMETHING?
+================================================================================
+
+If you're looking for:
+
+"A specific SOP"
+→ Search QMS_DOCUMENT_REGISTRY.txt for the SOP ID
+→ Navigate to the folder listed (e.g., 01_QUALITY_ASSURANCE)
+→ File is named [CODE]_[TITLE].txt
+
+"How to customize"
+→ Read CUSTOMIZATION_GUIDE_Complete.txt
+→ Review SOP_TEMPLATE_Standard_Format.txt
+
+"Regulatory requirements"
+→ Check EU_GMP_Addendum_Checklist.txt
+→ Check Cannabis_Testing_Requirements.txt
+→ Check Macedonia_Regulatory_Summary.txt
+
+"How the new codes work"
+→ Read Document_Coding_System_Explanation.txt
+→ Check QMS_DOCUMENT_REGISTRY.txt (first section explains codes)
+
+"Common customization issues"
+→ Check FAQ_Common_Questions.txt
+→ Review CUSTOMIZATION_GUIDE_Complete.txt (Troubleshooting section)
+
+"What to do next"
+→ Check QMS_IMPLEMENTATION_STATUS.txt
+→ Follow Implementation_Checklist.txt
+
+"A form or template"
+→ Check FORMS_TEMPLATES folder
+→ Check annexes of relevant SOPs
+
+"Facility-specific info"
+→ Refer to QAS-01-003 Facility Profile Sheet (once completed)
+
+================================================================================
+ESTIMATED READING TIME BY FILE
+================================================================================
+
+Quick Reference (5-15 minutes):
+  • QMS_IMPLEMENTATION_STATUS.txt
+  • Placeholder_Reference.txt
+  • FAQ_Common_Questions.txt
+  • This file (Master Index)
+
+Short Reading (15-30 minutes):
+  • QMS_README.txt
+  • Document_Coding_System_Explanation.txt
+  • Madagascar_Regulatory_Summary.txt
+
+Medium Reading (30-45 minutes):
+  • CUSTOMIZATION_GUIDE_Complete.txt
+  • EU_GMP_Addendum_Checklist.txt
+  • Cannabis_Testing_Requirements.txt
+
+Longer Reading (45-90 minutes):
+  • SOP_TEMPLATE_Standard_Format.txt
+  • QAS-01-001 Quality Manual Template
+
+Reference (Use as Needed):
+  • QAS-01-003 Facility Profile Master Template
+  • QMS_DOCUMENT_REGISTRY.txt
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Read QMS_README.txt right now (if you haven't already)
+2. Read CUSTOMIZATION_GUIDE_Complete.txt
+3. Open QAS-01-003_Facility_Profile_Master_Template.txt
+4. Start filling in your facility's information
+5. Follow the Implementation_Checklist.txt week by week
+
+Total time to get started: 2-3 hours reading + 1-2 hours completing 
+Facility Profile = Ready to begin!
+
+================================================================================
+END OF MASTER FILE INDEX
+================================================================================
+
+Document: MASTER_INDEX_And_Navigation.txt
+Version: 1.0
+Created: January 13, 2026
+
+This document is designed for easy reference - keep it handy!
+
+Next file to read: QMS_README.txt
+
+================================================================================

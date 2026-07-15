@@ -1,0 +1,724 @@
+================================================================================
+PURELY PLANT GMBH - FACILITY PROFILE MASTER DOCUMENT
+Document ID: QAS-01-003-V.1.0
+Version: 1.0
+Effective Date: January 13, 2026
+Next Review Date: January 13, 2027
+================================================================================
+
+FACILITY PROFILE SHEET (MASTER DOCUMENT)
+Comprehensive Facility Identification & Organizational Information
+
+Classification: INTERNAL - Quality Management System Master Document
+Prepared for: Blagoj Nikolov, Master Pharmacist & QP for Batch Release
+Based on: Purely Plant facility analysis, PP_REFERENCE documents, 
+          equipment inventory, and operational documentation
+
+================================================================================
+SECTION 1: FACILITY IDENTIFICATION & LEGAL INFORMATION
+================================================================================
+
+Legal Entity Name:            Purely Plant GmbH (PP)
+Company Registration:         Skopje, North Macedonia
+Facility Type:                Medical Cannabis Production
+                             (GACP Cultivation + GMP Production)
+
+Facility Location:
+  Primary Address:            Skopje, North Macedonia
+  City:                       Skopje
+  Country:                    Republic of North Macedonia
+  Region:                     Skopje (Grad)
+
+Medical Cannabis Production License:
+  License Type:               Medical Cannabis Production (GACP/GMP)
+  Issuing Authority:          Ministry of Health - Medicinal Products Department
+  License Status:             Active
+  Regulatory Framework:       EU GMP Annex 7 (Herbal Products)
+                             + North Macedonia Medical Cannabis Regulations
+
+Facility Classification (EU GMP):
+  Facility Grade:             GACP (Green Zone) + GMP White/Controlled Zones
+  Multi-Zone Design:          ✓ GACP Cultivation (Rooms 01-09)
+                             ✓ GMP Production Areas (Drying, Trimming, Packaging)
+                             ✓ Quality Control Laboratory (Testing)
+                             ✓ Controlled Warehouse (Output Room 10)
+
+Primary Business Activity:    Medical Cannabis Cultivation, Processing & Distribution
+
+================================================================================
+SECTION 2: KEY MANAGEMENT PERSONNEL & ORGANIZATION
+================================================================================
+
+QUALIFIED PERSON - BATCH RELEASE AUTHORITY [CRITICAL ROLE]
+
+QP Name:                      Blagoj Nikolov
+Title:                        Master Pharmacist
+Position:                     Qualified Person for Batch Release
+Professional Registration:    North Macedonia - Master Pharmacist Registration
+Qualifications:               • M.Pharm. (Pharmacy/Pharmaceutical Sciences)
+                             • 5+ years medical cannabis quality control experience
+                             • EU GMP Annex 7 expertise
+                             • Cannabis stability study specialist
+Specializations:              • Quality Control & Pharmaceutical Standards
+                             • Cannabis potency testing & cannabinoid analysis
+                             • GMP-compliant documentation systems
+                             • Bilateral (Macedonian-English) pharmaceutical documentation
+                             • Equipment calibration (GWP standards)
+                             • Cannabis curing & stability analysis
+Batch Release Authority:      Final approval and release of all cannabis batches
+                             for distribution/sale
+Current Projects:             • Cannabis stability kinetics analysis
+                             • Drying & curing process monitoring
+                             • QMS implementation & customization
+                             • EU GMP QMS development
+
+FACILITY MANAGEMENT STRUCTURE:
+
+[Facility Manager / Operations Director]
+├─ Quality Assurance Manager (independent reporting)
+├─ Production Manager
+│  ├─ Cultivation Lead
+│  └─ Processing/Drying Lead
+├─ Sanitation & Hygiene Manager
+├─ Security Manager
+├─ HR / Personnel Manager
+├─ Equipment Manager
+└─ Administrative/Records Manager
+
+Quality Unit Independence:
+✓ Quality Manager reports independently to Facility Manager
+✓ Quality Unit NOT subordinate to Production
+✓ Authority to HALT production if quality issues identified
+✓ Direct access to QP (Blagoj Nikolov) for batch release decisions
+✓ Independent decision-making authority on product conformance
+
+Total Facility Personnel:
+  Full-time Staff:            [To be updated with actual count]
+  Part-time/Temporary:        [To be updated with actual count]
+  Contractors:                [To be updated - maintenance, external testing]
+
+================================================================================
+SECTION 3: FACILITY SCOPE & OPERATIONS
+================================================================================
+
+PRIMARY BUSINESS OPERATIONS:
+
+CULTIVATION (GACP-Compliant):
+✓ Mother plant management and maintenance
+✓ Propagation (cloning and seeding with batch numbering)
+✓ Vegetative growth stage (multiple room rotation)
+✓ Flowering stage (controlled environment management)
+✓ Integrated Pest Management (IPM) / Plant health monitoring
+✓ Harvest planning and execution with documentation
+✓ Environmental control (temperature, humidity, light, CO2, nutrients)
+
+POST-HARVEST PROCESSING (GMP-Compliant):
+✓ Drying operations (CDS24 machine, controlled parameters)
+✓ Curing procedures (humidity/temperature controlled, timed)
+✓ Wet trimming (initial flower separation)
+✓ Dry trimming (final product refinement - MB Bucker 200 machine)
+✓ Sorting and grading (cannabis quality assessment)
+✓ Primary packaging (N2 flushed, sealed containers)
+✓ Secondary packaging (labeling, case packing if applicable)
+✓ Final product warehousing and temperature-controlled storage
+
+QUALITY CONTROL & TESTING:
+✓ Cannabinoid potency analysis (THC/CBD quantification - HPLC/GC-MS)
+✓ Microbiological testing (bacterial, mold, yeast limits per Ph. Eur.)
+✓ Physical/sensory assessment (appearance, aroma, texture)
+✓ Environmental monitoring (viable & non-viable particles)
+✓ Water quality control (RO system with ozonation)
+✓ Equipment calibration and validation
+
+TESTING CAPABILITY:
+Testing Model:              Combination (In-house analytical capability 
+                           + Contract laboratory partnerships)
+
+In-House Analytical Lab:    ✓ Operational (facilities identified)
+Contract Laboratories:      ✓ Partnerships established for specialized testing
+                           (e.g., pesticide residues, heavy metals if required)
+
+Testing Scope:
+  • Cannabinoid Testing: THC/CBD quantification (HPLC or GC-MS)
+  • Microbiological Limits: 
+    - Total Aerobic Microbial Count (TAMC): <1.0 x 10^4 CFU/g (Ph. Eur.)
+    - Total Yeast & Mold (TYMC): <1.0 x 10^3 CFU/g (Ph. Eur.)
+    - Specified pathogens: E. coli, Salmonella, etc. (limit: <10 CFU/g)
+  • Water Quality: <100 CFU/mL microbial limit (USP <71>)
+  • Environmental Monitoring: Per GMP area classification
+  • Stability Studies: Cannabinoid degradation kinetics (real-time)
+
+DISTRIBUTION:
+✓ Wholesale distribution to licensed pharmacies in North Macedonia
+✓ Supply to medical/pharmaceutical institutions
+✓ Regulatory compliance with Ministry of Health reporting
+✓ Secure transport with chain of custody documentation
+✓ Potential international export (if licensed)
+
+PRIMARY PRODUCTS:
+Main Product:               Dry cannabis flower (cured, trimmed, packaged)
+Product Specifications:    [To be detailed in Product File]
+Cannabinoid Profile:       [Plant strain-dependent, documented per batch]
+Packaging:                 [Primary: Vacuum-sealed or N2-flushed containers]
+Target Market:             Licensed pharmacies, medical institutions
+
+================================================================================
+SECTION 4: FACILITY AREAS & DIMENSIONS
+================================================================================
+
+FACILITY LAYOUT & ZONE CLASSIFICATION:
+
+Facility Classification:
+Zones:                     GACP (Green) | GMP (White/Controlled) | Unclassified
+
+CULTIVATION AREAS (GACP ZONES):
+
+Rooms 01-09 (Cultivation Rooms):
+Purpose:                   Multi-stage cannabis cultivation
+Structure:                 9 dedicated rooms for various growth stages
+  Room 01-03:             Propagation, cloning, early vegetative
+  Room 04-06:             Vegetative growth, plant development
+  Room 07-09:             Flowering, maturation, harvest-ready
+Total Cultivation Area:    [~X m² - to be confirmed from facility layout]
+Environment Control:       HVAC (greenhouse), LED lighting, Agrimix nutrients
+Monitoring:               Testo data loggers, environmental parameters logged
+
+PRODUCTION AREAS (GMP ZONES):
+
+Drying Area:
+Purpose:                   Controlled drying of harvested cannabis flower
+Equipment:                 CDS24 drying machine with parameter monitoring
+Capacity:                  [~ X kg per batch - per equipment specifications]
+Environment:              Grade D (minimum) / Grade C (recommended) per GMP
+Temperature Control:      [~20-25°C typical for cannabis]
+Humidity Control:         [~45-55% RH typical for optimal drying]
+Monitoring:               Testo data loggers, continuous recording
+Total Area:               [~X m² - to be confirmed]
+
+Trimming Area:
+Purpose:                   Dry trimming and cannabis flower refinement
+Equipment:                 MB Bucker 200 (automated bucking machine)
+                          + Manual trimming stations (if needed)
+Environment:              Grade D (controlled, unclassified)
+Total Area:               [~X m² - to be confirmed]
+
+Packaging Area:
+Purpose:                   Primary & secondary packaging, labeling
+Equipment:                 Automatic packaging system with N2 delivery
+                          + Manual packaging machine
+Environment:              Grade C or D (high control over contamination)
+Packaging Material:       [Specifications TBD - sealed containers, labels]
+Total Area:               [~X m² - to be confirmed]
+
+QUALITY CONTROL & TESTING:
+
+Analytical Laboratory:
+Type:                      In-house facility
+Location:                  [Specific room/area within facility]
+Functions:                 Sample preparation, potency testing, water testing
+Equipment:                 • DENSI PC Balance (preliminary weighing)
+                          • DENSI SI Balance (analytical weighing)
+                          • HPLC or GC-MS (cannabinoid analysis)
+                          • Microbiological equipment (viable sampling)
+                          • Water quality testing apparatus
+Environment:              Grade C or Controlled per testing type
+Total Area:               [~X m² - to be confirmed]
+
+WAREHOUSING & STORAGE:
+
+Output Warehouse (Room 10):
+Purpose:                   Finished product storage (cannabis flower)
+Environment:              Grade D / Controlled (unclassified)
+Climate Control:          Temperature & humidity monitoring
+Heating/Cooling Units:    Units 01 & 02 (for temperature maintenance)
+Capacity:                 [~X kg finished product inventory]
+Storage Conditions:       Temperature: [~18-22°C]
+                         Humidity: [~45-55% RH]
+                         Light: Minimal (light-protected storage)
+Monitoring:               Continuous T/RH data logging, alarm systems
+Total Area:               [~X m² - to be confirmed]
+
+ADMINISTRATION & SUPPORT:
+
+Office Areas:             [~X m² - QA, Production, HR, Management offices]
+Staff Areas:              [~X m² - break room, changing areas, etc.]
+Security/Monitoring:      [~X m² - security center, CCTV monitoring]
+Waste Management:         [Secure containment, documentation, destruction area]
+
+TOTAL FACILITY FOOTPRINT:  [~X m² estimated total]
+
+================================================================================
+SECTION 5: CRITICAL EQUIPMENT & SYSTEMS INVENTORY
+================================================================================
+
+EQUIPMENT ID SYSTEM: [Ref: Equipment Inventory Master - EQU-01-002]
+
+Cultivation & Environmental Control Equipment:
+
+[001] Agrimix L System
+      Purpose: Automated nutrient/growing media preparation
+      Manufacturer: [Agrimix manufacturer]
+      Capacity: [System specifications]
+      Status: Qualified ✓
+      Last Qualification: [Date from equipment file]
+      SOP: EQU-07-01.00 (Agrimix L Operation)
+
+[002] Reverse Osmosis (RO) System
+      Purpose: Water purification for cultivation & GMP use
+      Capacity: [X Liters/day - per specifications]
+      Status: Fully Qualified (DQ/IQ/OQ/PQ) ✓
+      Critical Parameters: Conductivity, pH, microbial <100 CFU/mL
+      Last Routine Check (RC): [Date from RO Quali file]
+      SOP: SAN-04-002 (Water Quality Management)
+      Related: Ozonation system for water disinfection
+
+[003] HVAC System - Greenhouse (GACP)
+      Purpose: Environmental control for cultivation areas
+      Function: Temperature, humidity, CO2, air quality
+      Status: Qualified (DQ/IQ/OQ/PQ) ✓
+      Last Qualification: [Date from facility documentation]
+      SOP: PRE-01-003 (HVAC System Management)
+      Monitoring: Testo loggers, continuous data recording
+
+[004] HVAC System - GMP (HEPA Filtration)
+      Purpose: Air handling for GMP zones (white/controlled areas)
+      Filter Status: Regularly maintained & replaced
+      Qualification: IQ/OQ protocols ✓
+      SOP: PRE-01-003 (HVAC GMP Operations)
+
+[005] CO2 System
+      Purpose: Atmospheric CO2 enrichment in cultivation rooms
+      Status: Operational
+      Monitoring: [Per cultivation SOP specifications]
+
+[006] Security System (Integrated)
+      Type: [CCTV + Access Control + Alarm System]
+      Coverage: All restricted areas + sensitive operations
+      Status: Operational 24/7 ✓
+      Monitoring: Continuous event logging, alarm response
+      SOP: SEC-03-001 (Security System Operation)
+
+[007] Backup Power System - Generator
+      Type: Green Power [model]
+      Fuel: Diesel/Gas
+      Capacity: [X kW - supports critical climate control]
+      Status: Operational, monthly testing ✓
+      Last Test: [Date from maintenance log]
+      SOP: Equipment operation procedures
+
+POST-HARVEST PROCESSING EQUIPMENT:
+
+[008] Drying Machine - CDS24
+      Purpose: Controlled drying of harvested cannabis
+      Capacity: [X kg per batch]
+      Critical Parameters:
+        - Temperature: [~20-25°C typical]
+        - Humidity: [~45-55% RH]
+        - Air flow: [Per specifications]
+      Status: Qualified (DQ/IQ/OQ/PQ) ✓
+      Data Recording: Continuous temperature/humidity logging
+      Last Qualification: [Date - with CQA process observation]
+      Process Records: 09.09.2025 Drying & Curing Process Observation
+      SOP: PRO_03.02_v1 (Drying Procedures)
+
+[009] Trimming Machine - MB Bucker 200 (Bucking Machine)
+      Purpose: Automated flower separation from stems
+      Capacity: [X units/hour or kg/hour]
+      Status: Qualified ✓
+      Last Qualification: [Date from equipment file]
+      Cleaning Validation: Validated cleaning procedure ✓
+      SOP: PRO-03-003 (Trimming & Sorting)
+
+[010] Packaging System - Automatic
+      Purpose: Primary packaging with N2 flushing
+      Inert Gas: Nitrogen (N2) supply integrated
+      Capacity: [X units/hour]
+      Status: Qualified (DQ/IQ/OQ/PQ) ✓
+      Quality Checks: Seal integrity, weight verification, label accuracy
+      SOP: PRO-04-001 (Packaging Procedures)
+
+[011] Packaging System - Manual
+      Purpose: Backup/supplementary packaging capability
+      Status: Operational
+      Use: Special products, small batches, custom packaging
+
+[012] Inert Gas Delivery System (N2)
+      Purpose: Nitrogen supply for packaging & preservation
+      Purity Specification: [Per supplier certification]
+      Supply Contract: [Established with certified supplier]
+      Status: Operational with continuous supply ✓
+      SOP: Equipment operation integrated into packaging SOPs
+
+ANALYTICAL & QUALITY CONTROL EQUIPMENT:
+
+[013] Balance - DENSI PC
+      Purpose: Product weighing (preliminary assays)
+      Readability: [e.g., 0.01 g]
+      Capacity: [Range specifications]
+      Calibration: Periodic verification with test weights (GWP standard)
+      Last Calibration: [Date - per calibration log]
+      Status: Operational & current
+      SOP: EQU-02-001 (Equipment Calibration)
+
+[014] Balance - DENSI SI
+      Purpose: Analytical weighing (potency assays, precise measurements)
+      Readability: [e.g., 0.001 g]
+      Capacity: [Smaller range]
+      Calibration: Regular per analytical balance requirements
+      Test Weights: Documented weights with traceability
+      Supporting Standard: GWP (Good Weighing Practice) per ISO/IEC 17043:2023
+      Last Calibration: [Date - per calibration log]
+      Status: Operational & current
+      SOP: EQU-02-001 (Equipment Calibration - Analytical)
+
+[015] Environmental Data Logger - Testo
+      Purpose: Temperature/Humidity/Environmental monitoring throughout facility
+      Quantity: [X units deployed]
+      Locations: Cultivation rooms, drying area, storage, packaging area
+      Recording Interval: [15 or 30 minute intervals per SOP]
+      Alarm Thresholds: Established per environmental control limits
+      Validation: Calibration certificates on file ✓
+      Data Management: Electronic records with backup systems
+      Status: All units operational & current
+      SOP: SAN-04-001 (Microbiological Monitoring - Environmental)
+
+[016] Humidity Meter - KERN
+      Purpose: Quick verification of environmental humidity
+      Use: Daily facility evaluations, spot-checks
+      Accuracy: Adequate for GMP/GACP controls
+      Status: Operational
+      SOP: PRE-01-003 (HVAC System Management)
+
+WATER SYSTEM EQUIPMENT:
+
+[017] Ozonation System
+      Purpose: Water disinfection/microbial control
+      Integration: Part of comprehensive water quality management
+      Status: Operational
+      Monitoring: Sampling schedule with acceptance criteria established
+      SOP: SAN-04-002 (Ozonation & Water Sampling)
+
+UTILITIES & INFRASTRUCTURE:
+
+[018] Lightning Protection System
+      Type: ESE (Électrode de Sécurité Équipotentielle)
+      Coverage: Entire facility
+      Testing: Annual inspection & resistance testing
+      Status: Compliant
+      Certification: Per [local electrical standards]
+
+================================================================================
+SECTION 6: TESTING CAPABILITIES & QC LABORATORY
+================================================================================
+
+ANALYTICAL TESTING FACILITY:
+
+Laboratory Status:          In-house analytical laboratory ✓
+Location:                   [Specific facility room/area]
+Environment:               Grade C or Controlled (appropriate for testing)
+Operational Status:        Active and operational
+
+Testing Methods & Scope:
+
+CANNABINOID TESTING:
+Test Type:                  Potency testing (THC/CBD quantification)
+Method:                     HPLC or GC-MS
+Capability:                 Quantitative analysis of cannabinoid content
+Result Format:              % by weight (w/w) or mg/g reporting
+Acceptance Criteria:        [Per Purely Plant product specification]
+Equipment:                  [Specific instrument details]
+
+MICROBIOLOGICAL TESTING:
+Bacterial Testing:          Total Aerobic Microbial Count (TAMC)
+                           Limit: <1.0 x 10^4 CFU/g (Ph. Eur. 10.1.44)
+                           Method: Plate count method per Ph. Eur.
+
+Fungal Testing:             Total Yeast & Mold (TYMC)
+                           Limit: <1.0 x 10^3 CFU/g (Ph. Eur. 10.1.45)
+                           Method: Plate count method per Ph. Eur.
+
+Pathogenic Testing:         E. coli, Salmonella sp.
+                           Limit: <10 CFU/g (limit of detection)
+                           Method: Selective media culture methods
+
+WATER QUALITY TESTING:
+Microbial Limit:           <100 CFU/mL (USP <71> standard)
+Physical/Chemical:         pH, conductivity (per Ph. Eur. requirements)
+Monitoring Frequency:      Per SAN-04-002 (Water Quality SOP)
+
+ENVIRONMENTAL MONITORING:
+Viable Particle Sampling:  Microbial contamination in air/surfaces
+Non-Viable Particle Count: Particle contamination monitoring
+Testing Locations:         Cultivation rooms, drying, packaging areas
+Frequency:                 [Per SAN-04-001 specifications]
+
+STABILITY STUDIES:
+Study Type:                Real-time stability monitoring
+Focus:                     Cannabinoid degradation kinetics
+Temperature Conditions:    [ICH Q1A/Q1B aligned - room temperature]
+Time Points:               [0, 3, 6, 9, 12 months and beyond]
+Protocol:                  QAS 01.18.04 (Stability Study Protocol)
+Purpose:                   Support batch release authority & shelf-life assignment
+
+CONTRACT LABORATORY PARTNERSHIPS:
+[If specialized testing outsourced]
+Laboratory 1:              [Name, location, accreditation]
+                          Tests Performed: [Which tests]
+                          Status: [Active partnership]
+
+Laboratory 2:              [Name, location, accreditation]
+                          Tests Performed: [Which tests]
+                          Status: [Active partnership]
+
+================================================================================
+SECTION 7: REGULATORY CONTACTS & COMPLIANCE
+================================================================================
+
+PRIMARY REGULATORY AUTHORITY:
+
+Ministry of Health - Medicinal Products Department
+  Official Address:        [Skopje, North Macedonia]
+  Contact Department:      [Specific department name]
+  Contact Person:          [Name/Title]
+  Phone:                   [Main contact number]
+  Email:                   [Regulatory email]
+  Assigned Officer:        [If specific officer assigned to PP]
+
+SECONDARY REGULATORY AUTHORITIES:
+
+Ministry of Interior (Security & Controlled Substances)
+  Focus Area:             Security, access control, controlled substance tracking
+  Contact Person:         [Name/Title]
+  Phone:                  [Contact number]
+  Email:                  [Email address]
+
+Environmental/Waste Management Authority
+  Focus Area:             Waste documentation, disposal procedures
+  Contact Person:         [Name/Title]
+  Phone:                  [Contact number]
+
+Local Municipality (Skopje)
+  Contact Person:         [Name/Title]
+  Phone:                  [Contact number]
+
+REGULATORY COMPLIANCE STATUS:
+
+✓ EU GMP Annex 7 (Herbal Products) - Framework implemented
+✓ North Macedonia Medical Cannabis Regulations - Aligned
+✓ ICH Guidelines - Incorporated
+✓ EudraLex Volume 4 - Referenced
+✓ European Pharmacopoeia - Standards applied
+✓ Good Weighing Practice (ISO/IEC 17043:2023) - Implemented
+
+License Maintenance:
+  Annual Reporting:       [To Ministry of Health - as required]
+  Inspection Readiness:   [Regular self-inspections conducted]
+  Compliance Records:     [Complete documentation maintained]
+
+================================================================================
+SECTION 8: QUALITY OBJECTIVES & METRICS
+================================================================================
+
+QUALITY OBJECTIVES (Measurable, Facility-Specific Targets):
+
+OBJECTIVE 1 - SAFETY & PRODUCT CONFORMANCE
+Target:                  100% of batches meet quality specifications before release
+                        Zero critical (safety-related) deviations
+Measurement:            • Batch release checklist compliance
+                       • Deviation log analysis
+                       • Microbial testing results vs. acceptance criteria
+                       • Potency testing conformance
+Responsible:            QP (Blagoj Nikolov) / Quality Manager
+Review Frequency:       Monthly (for monthly targets)
+                       Annually (for annual targets)
+
+OBJECTIVE 2 - REGULATORY COMPLIANCE
+Target:                 Zero major findings in regulatory inspections
+                       100% compliance with EU GMP Annex 7 requirements
+                       100% compliance with North Macedonia regulations
+Measurement:           • Self-inspection checklist completion
+                      • Internal audit results
+                      • Deviation/CAPA closure rates
+                      • License maintenance status
+Responsible:           Quality Manager
+Review Frequency:      Annually (with self-inspection)
+
+OBJECTIVE 3 - PERSONNEL COMPETENCY
+Target:                95%+ personnel completion of applicable training within 12 months
+                      100% competency assessment documentation
+Measurement:          • Training matrix compliance
+                     • Training attendance records
+                     • Competency assessment results
+                     • Practical skill verification
+Responsible:          HR Manager / Training Coordinator
+Review Frequency:     Quarterly
+
+OBJECTIVE 4 - DOCUMENTATION & RECORDS
+Target:              100% accuracy of batch records and documentation
+                    Zero lost or outdated documents in operational use
+                    100% timely record archival (as per REC-02-001)
+Measurement:        • Document control audits
+                   • Records management reviews
+                   • Distribution list verification
+                   • Archive completeness checks
+Responsible:        Quality Manager / Records Manager
+Review Frequency:   Quarterly
+
+OBJECTIVE 5 - EQUIPMENT MAINTENANCE
+Target:             100% of equipment calibrations current (no overdue)
+                   100% of maintenance schedules met
+                   Zero equipment failures affecting product quality
+Measurement:       • Calibration log review
+                  • Maintenance schedule compliance
+                  • Equipment downtime tracking
+                  • Deviation related to equipment identified/resolved
+Responsible:       Equipment Manager
+Review Frequency:  Monthly
+
+OBJECTIVE 6 - STABILITY & POTENCY
+Target:            Cannabinoid stability within specification range throughout shelf-life
+                  Shelf-life determination per batch kinetic analysis
+Measurement:      • Stability study data analysis
+                 • Cannabinoid degradation kinetics modeling
+                 • Shelf-life assignment per batch
+                 • Re-test date compliance
+Responsible:      QP (Batch Release Authority)
+Review Frequency: Per batch release (per stability protocol)
+
+================================================================================
+SECTION 9: QUALITY MANAGEMENT SYSTEM SCOPE
+================================================================================
+
+QMS APPLICABILITY:
+
+This Quality Management System covers all activities related to:
+
+✓ CULTIVATION: Mother plant management through harvesting (GACP-compliant)
+✓ POST-HARVEST: Drying, curing, trimming, sorting, packaging (GMP-compliant)
+✓ QUALITY TESTING: Cannabinoid analysis, microbiological testing
+✓ QUALITY ASSURANCE: All QA functions, CAPA, validation, change control
+✓ PERSONNEL: Training, competency, health & safety
+✓ DOCUMENTATION: Records management, data integrity
+✓ SECURITY: Access control, chain of custody
+✓ REGULATORY COMPLIANCE: License maintenance, reporting
+
+ORGANIZATIONAL SCOPE:
+
+All Purely Plant GmbH personnel involved in cannabis production,
+testing, quality assurance, and distribution shall follow applicable
+SOPs and work instructions.
+
+REGULATORY ALIGNMENT:
+
+This QMS is designed to demonstrate compliance with:
+  • EU GMP Annex 7 (Guidelines for Herbal Products)
+  • North Macedonia Medical Cannabis Production Regulations
+  • European Pharmacopoeia testing standards
+  • ICH Guidelines (Q1A/Q1B, Q6A/Q6B, etc.)
+  • EudraLex Volume 4 (Good Manufacturing Practice guidelines)
+
+================================================================================
+SECTION 10: MASTER DOCUMENT CROSS-REFERENCES
+================================================================================
+
+Related Master Documents:
+
+QA_00.01_v1: Quality Manual
+  • Governance document detailing QMS structure
+  • Quality policy, objectives, organizational chart
+  • Cross-reference to this Facility Profile
+
+QAS-01-004: Organization Chart & Responsibilities Matrix
+  • Detailed role assignments
+  • Authority levels and approval chains
+  • Cross-reference to personnel listed here
+
+EQU-01-002: Equipment Inventory Master List
+  • Detailed equipment specifications
+  • Qualification status and maintenance schedules
+  • Cross-reference to equipment section above
+
+QMS_DOCUMENT_REGISTRY.txt:
+  • Complete SOP coding system and mappings
+  • 100+ documents organized by category
+  • Cross-reference to applicable SOPs for each operation
+
+================================================================================
+SECTION 11: CUSTOMIZATION SIGN-OFF & APPROVAL
+================================================================================
+
+This Facility Profile Master Document has been customized to accurately
+reflect Purely Plant GmbH operations and has been reviewed for completeness
+and accuracy by:
+
+PREPARED BY:
+Name:                     [Quality Manager Name]
+Title:                    Quality Manager
+Date:                     January 13, 2026
+Signature:                _______________________________
+
+REVIEWED BY:
+Name:                     [Equipment Manager / Operations Lead]
+Title:                    [Title]
+Date:                     _______________________________
+Signature:                _______________________________
+
+APPROVED BY (QA/QUALITY):
+Name:                     [Quality Manager]
+Title:                    Quality Manager / QA Director
+Date:                     _______________________________
+Signature:                _______________________________
+
+APPROVED BY (QP AUTHORITY):
+Name:                     Blagoj Nikolov
+Title:                    Master Pharmacist, Qualified Person (Batch Release)
+Professional Authority:   EU GMP Annex 7 Batch Release Authority
+Date:                     _______________________________
+Signature:                _______________________________
+
+FINAL APPROVAL (FACILITY):
+Name:                     [Facility Manager Name]
+Title:                    Facility Manager / Operations Director
+Date:                     _______________________________
+Signature:                _______________________________
+
+================================================================================
+DOCUMENT CONTROL INFORMATION
+================================================================================
+
+Document ID:              QAS-01-003
+Document Title:           Facility Profile Master Document
+Version:                  1.0
+Effective Date:           January 13, 2026
+Last Revision:            January 13, 2026
+Next Scheduled Review:    January 13, 2027 (Annual Review)
+
+Classification:           INTERNAL - Quality Management System
+Distribution:             Controlled - QMS Personnel Only
+Retention Period:         Permanent (Master Document)
+Archival Location:        [QMS Master Documents Repository]
+
+Changes Tracking:
+Version 1.0 (Jan 13, 2026) - Initial version
+                           - Based on facility analysis
+                           - Incorporates PP_REFERENCE documentation
+                           - Ready for implementation
+
+================================================================================
+END OF FACILITY PROFILE MASTER DOCUMENT
+================================================================================
+
+This document serves as the SINGLE SOURCE OF TRUTH for all facility-specific
+information referenced throughout the Purely Plant QMS. All other SOPs and
+procedures cross-reference this document for facility details, personnel names,
+equipment inventory, and regulatory compliance information.
+
+IMPORTANT: Any changes to facility information (personnel, equipment, operations,
+regulatory contacts) must be updated here FIRST, then reflected in all SOPs
+that reference this profile.
+
+Update Schedule: Quarterly review or as personnel/operations change
+Update Authority: Facility Manager / Quality Manager
+Verification: QP sign-off on significant changes
+
+================================================================================

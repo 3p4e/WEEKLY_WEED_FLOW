@@ -1,0 +1,38 @@
+---
+document_id: "QCS_01.01_v1"
+version: "1.0"
+title_mk: "Преглед за ослободување на серија"
+title_en: "Batch Release Review"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QCS_01.01_v1 | **Effective Date:** 15.01.24
+
+---
+
+## Преглед за ослободување на серија | Batch Release Review
+
+### 1. PURPOSE / ЦЕЛ
+
+This procedure defines the process for reviewing batch documentation prior to QC release approval.
+Целта на оваа процедура е да ја дефинира процедурата за преглед на документацијата пред одобрување на QC.
+
+### 2. SCOPE / ОПСЕГ
+
+Applies to all batch release reviews at Purely Plant GmbH.
+
+### 3. PROCEDURE / ПРОЦЕДУРА
+
+1. Review batch documentation
+2. Verify QC test results
+3. Confirm compliance with specifications
+4. Approve or reject batch for release
+
+### 4. REFERENCES / РЕФЕРЕНЦИ
+
+- QC_01.01 (Batch Release)
+[TEMPLATE_VERSION]

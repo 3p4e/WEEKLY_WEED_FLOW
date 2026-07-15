@@ -1,0 +1,544 @@
+# SOP Content Templates Library
+# Version: 2.0 (Externalized from ContentGenerator)
+# Purpose: Flexible, versioned templates for dynamic SOP generation
+# Last Updated: 2026-01-23
+
+# Template Metadata
+metadata:
+  version: "2.0"
+  last_updated: "2026-01-23"
+  description: "Externalized SOP templates supporting EU GMP, ICH guidelines, and cannabis-specific requirements"
+  supported_languages: ["en", "mk"]
+  template_types:
+    - purpose
+    - scope
+    - responsibilities
+    - procedure
+    - documentation
+    - training
+    - references
+    - definitions
+    - annexes
+
+# PURPOSE SECTION TEMPLATES
+templates:
+  purpose:
+    # Standard Purpose Template
+    standard: |
+      ## 1. PURPOSE
+
+      This Standard Operating Procedure (SOP) establishes {purpose_description}
+      in compliance with {regulatory_frameworks} to ensure {quality_objectives}.
+
+      The procedure aims to:
+      {objectives_list}
+
+      This SOP supports the Quality Management System by {qms_support}.
+
+    # Enhanced Purpose Template (with Risk Context)
+    risk_focused: |
+      ## 1. PURPOSE
+
+      This Standard Operating Procedure (SOP) establishes {purpose_description}
+      to manage critical process parameters and minimize identified risks in compliance
+      with {regulatory_frameworks}.
+
+      ### 1.1 Quality Objectives
+      This procedure ensures:
+      {quality_objectives_detailed}
+
+      ### 1.2 Risk Mitigation
+      This SOP addresses the following key risks:
+      {identified_risks}
+
+      ### 1.3 Expected Outcomes
+      {expected_outcomes}
+
+    # Cannabis-Specific Purpose Template
+    cannabis: |
+      ## 1. PURPOSE
+
+      This Standard Operating Procedure (SOP) establishes {purpose_description}
+      for cannabis {cannabis_product_type} in compliance with {regulatory_frameworks},
+      GACP guidelines, and cannabis-specific quality requirements.
+
+      The procedure ensures:
+      {objectives_list}
+
+      ### 1.1 Cannabinoid Compliance
+      This procedure maintains cannabinoid profiles within regulatory limits:
+      - THC Content: {thc_limit}
+      - CBD Profile: {cbd_specification}
+      - Other Cannabinoids: {other_cannabinoids}
+
+      This SOP supports the Quality Management System by {qms_support}.
+
+  # SCOPE SECTION TEMPLATES
+  scope:
+    # Standard Scope Template
+    standard: |
+      ## 2. SCOPE
+
+      ### 2.1 Applicability
+      This procedure applies to {applicable_areas} and covers {covered_activities}.
+
+      ### 2.2 Exclusions
+      This procedure does not apply to {exclusions}.
+
+      ### 2.3 Interfaces
+      This SOP interfaces with:
+      {interface_list}
+
+    # Detailed Scope with Environmental Conditions
+    environmental: |
+      ## 2. SCOPE
+
+      ### 2.1 Applicability
+      This procedure applies to {applicable_areas} under the following environmental conditions:
+      - Temperature Range: {temperature_range}
+      - Humidity Range: {humidity_range}
+      - Light Conditions: {light_conditions}
+
+      ### 2.2 Activities Covered
+      {covered_activities}
+
+      ### 2.3 Exclusions and Limitations
+      {exclusions}
+
+      ### 2.4 Related Procedures
+      {interface_list}
+
+    # Cannabis Cultivation Scope
+    cultivation: |
+      ## 2. SCOPE
+
+      ### 2.1 Applicability
+      This procedure applies to all cannabis cultivation activities in {facility_location}
+      covering {cultivation_area_sqm} m² of growing space.
+
+      ### 2.2 Product Types Covered
+      {cannabis_varieties}
+
+      ### 2.3 Growing Methods
+      {growing_methods}
+
+      ### 2.4 Environmental Parameters
+      - Temperature: {temp_range}
+      - Relative Humidity: {humidity_range}
+      - Light: {light_spectrum}
+      - CO2 Level: {co2_range}
+
+      ### 2.5 Related SOPs
+      {interface_list}
+
+  # RESPONSIBILITIES SECTION TEMPLATES
+  responsibilities:
+    # Standard Role-Based Template
+    standard: |
+      ## 3. RESPONSIBILITIES
+
+      ### 3.1 {role_1}
+      - {responsibility_1_1}
+      - {responsibility_1_2}
+      - {responsibility_1_3}
+
+      ### 3.2 {role_2}
+      - {responsibility_2_1}
+      - {responsibility_2_2}
+      - {responsibility_2_3}
+
+      ### 3.3 Quality Assurance
+      - Review and approve all {qa_review_items}
+      - Ensure compliance with {qa_compliance_items}
+      - Maintain {qa_maintain_items}
+
+    # Matrix-Based Responsibility Assignment
+    matrix: |
+      ## 3. RESPONSIBILITIES
+
+      The following matrix defines responsibilities across organizational roles:
+
+      {responsibility_matrix}
+
+      ### Key Definitions:
+      - **R** = Responsible (Performs the activity)
+      - **A** = Accountable (Approves/Authorizes)
+      - **C** = Consulted (Provides input/expertise)
+      - **I** = Informed (Receives updates)
+
+    # Cannabis-Specific Role Template
+    cannabis: |
+      ## 3. RESPONSIBILITIES
+
+      ### 3.1 Cannabis Operations Manager
+      - Oversee all cannabis {operation_type} activities
+      - Ensure compliance with GACP and local cannabis regulations
+      - Monitor cannabinoid profile specifications
+      - Manage deviation handling for cannabis-specific parameters
+      - {additional_responsibility_1}
+
+      ### 3.2 Grower/Cultivation Technician
+      - Execute cultivation procedures according to approved schedules
+      - Monitor plant health and cannabinoid development
+      - Record environmental conditions (temperature, humidity, light, CO2)
+      - Report any variations from specifications immediately
+      - {additional_responsibility_2}
+
+      ### 3.3 Quality Control Analyst
+      - Perform cannabinoid testing (HPLC/GC-MS) per approved methods
+      - Monitor microbial contamination and pesticide residues
+      - Verify THC/CBD compliance pre-harvest
+      - Approve products for further processing
+      - {additional_responsibility_3}
+
+      ### 3.4 Quality Assurance
+      - Audit cannabis operations for GMP/GACP compliance
+      - Review cannabinoid test results and release documentation
+      - Maintain regulatory documentation and inspection readiness
+      - {additional_responsibility_4}
+
+  # PROCEDURE SECTION TEMPLATES
+  procedure:
+    # Standard Multi-Step Procedure
+    standard: |
+      ## 4. PROCEDURE
+
+      ### 4.1 Prerequisites
+      Before beginning this procedure, ensure:
+      {prerequisites_list}
+
+      ### 4.2 Process Steps
+
+      #### 4.2.1 {step_1_title}
+      {step_1_description}
+
+      **Critical Parameters:**
+      {step_1_parameters}
+
+      **Documentation:**
+      {step_1_documentation}
+
+      #### 4.2.2 {step_2_title}
+      {step_2_description}
+
+      **Quality Checks:**
+      {step_2_quality_checks}
+
+      ### 4.3 In-Process Controls
+      {in_process_controls}
+
+      ### 4.4 Completion Criteria
+      The process is complete when:
+      {completion_criteria}
+
+    # Cannabis Harvest Procedure
+    cannabis_harvest: |
+      ## 4. PROCEDURE: CANNABIS HARVEST
+
+      ### 4.1 Pre-Harvest Preparations
+      {pre_harvest_steps}
+
+      ### 4.2 Harvest Execution
+
+      #### 4.2.1 Plant Assessment
+      - Visual inspection for plant maturity and cannabinoid development
+      - Estimated cannabinoid content based on trichome color
+      - Assessment of pest/disease status
+
+      #### 4.2.2 Harvest Timing
+      Harvest only when plant meets the following criteria:
+      {harvest_maturity_criteria}
+
+      #### 4.2.3 Harvesting Steps
+      {harvesting_steps}
+
+      ### 4.3 Post-Harvest Quality Checks
+      - Weigh harvested material and record
+      - Sample for cannabinoid analysis (HPLC/GC-MS)
+      - Assess for contamination (visual inspection)
+      - Chain-of-custody documentation
+
+      ### 4.4 Drying and Curing Conditions
+      - Temperature: {drying_temperature}
+      - Relative Humidity: {drying_humidity}
+      - Duration: {drying_duration}
+      - Light Conditions: {drying_light}
+
+    # Quality Control Testing Procedure
+    qc_testing: |
+      ## 4. PROCEDURE: QUALITY CONTROL TESTING
+
+      ### 4.1 Test Request and Sample Receipt
+      {test_request_steps}
+
+      ### 4.2 Sample Preparation
+      {sample_prep_steps}
+
+      ### 4.3 Testing Methods and Acceptance Criteria
+
+      {testing_methods_list}
+
+      ### 4.4 Results Analysis and Interpretation
+      {results_analysis_steps}
+
+      ### 4.5 Report Generation and Approval
+      - QC analyst prepares test report
+      - Supervisor reviews for accuracy and completeness
+      - Quality Assurance approves results
+      - Release decision documented
+
+  # DOCUMENTATION SECTION TEMPLATES
+  documentation:
+    # Standard Documentation Requirements
+    standard: |
+      ## 7. DOCUMENTATION REQUIREMENTS
+
+      ### 7.1 Batch Records
+      Complete batch records must include:
+      - Date and time of all activities
+      - Operator identification and signatures
+      - All process parameters and measurements
+      - Any deviations and investigations
+
+      ### 7.2 Electronic Records
+      Electronic records must comply with 21 CFR Part 11:
+      {part11_requirements}
+
+      ### 7.3 Record Retention
+      All records must be retained for {retention_period} in accordance with the Document Control SOP.
+
+    # Cannabis-Specific Documentation
+    cannabis: |
+      ## 7. DOCUMENTATION REQUIREMENTS
+
+      ### 7.1 Cultivation Records
+      Cultivation batch records must include:
+      - Daily environmental monitoring (temperature, humidity, CO2, light)
+      - Plant growth stage observations and photos
+      - Nutrient/water additions and adjustments
+      - Pest/disease observations and treatments
+      - Expected cannabinoid development timeline
+
+      ### 7.2 Cannabinoid Testing Records
+      Quality control records must document:
+      - Sample identification and chain-of-custody
+      - Test method used (HPLC/GC-MS)
+      - Individual cannabinoid results (THC, CBD, etc.)
+      - Pass/Fail against regulatory limits
+      - Analyst and reviewer signatures
+
+      ### 7.3 Harvest and Drying Records
+      - Harvest date and harvested weight
+      - Plant condition assessment
+      - Drying conditions (daily temperature/humidity logs)
+      - Curing observations
+      - Final product weight and cannabinoid verification
+
+      ### 7.4 Record Retention and Cannabis Compliance
+      - All records retained for {retention_period}
+      - Compliance with cannabis regulatory tracking requirements
+      - Annual review for GACP/GMP alignment
+
+  # TRAINING SECTION TEMPLATES
+  training:
+    # Standard Training Requirements
+    standard: |
+      ## 8. TRAINING REQUIREMENTS
+
+      ### 8.1 Initial Training
+      Personnel must complete the following training modules:
+      {training_modules_list}
+
+      ### 8.2 Practical Demonstration
+      Personnel must demonstrate competency by:
+      {demonstration_criteria}
+
+      ### 8.3 Refresher Training
+      Refresher training is required:
+      - Annually for all personnel
+      - When procedures are significantly changed
+      - When deviations indicate training gaps
+
+    # Cannabis Operations Training
+    cannabis: |
+      ## 8. TRAINING REQUIREMENTS
+
+      ### 8.1 Initial Cannabis Operations Training
+      All cannabis cultivation and QC personnel must complete:
+
+      #### 8.1.1 General Cannabis Modules
+      - Cannabis plant biology and growth stages
+      - Cannabinoid biochemistry (THC, CBD, other cannabinoids)
+      - Cannabis-specific regulations (GACP, local cannabis laws)
+      - Contamination prevention in cannabis operations
+
+      #### 8.1.2 Role-Specific Training
+      {role_specific_training}
+
+      #### 8.1.3 Equipment and Analytical Training
+      - HPLC/GC-MS operation for cannabinoid analysis
+      - Environmental monitoring equipment
+      - Pest/disease identification in cannabis plants
+
+      ### 8.2 Competency Demonstration
+      Personnel must demonstrate they can:
+      {competency_requirements}
+
+      ### 8.3 Ongoing Training and Development
+      - Annual refresher on cannabis regulations and best practices
+      - Quarterly updates on new cannabinoid testing methods
+      - Training on any changes to cannabis compliance requirements
+
+  # REFERENCES SECTION TEMPLATES
+  references:
+    # Standard References
+    standard: |
+      ## 5. REFERENCES
+
+      ### 5.1 Regulatory References
+      {regulatory_references}
+
+      ### 5.2 Internal Documents
+      {internal_references}
+
+      ### 5.3 Industry Standards
+      {industry_standards}
+
+    # Cannabis-Specific References
+    cannabis: |
+      ## 5. REFERENCES
+
+      ### 5.1 Regulatory References
+
+      #### International Standards
+      - EudraLex Volume 4 - EU Good Manufacturing Practice
+      - ICH Q7 - Quality Overall Summary (Cannabis Application)
+      - WHO Guidelines on Good Agricultural and Collection Practices for Medicinal Plants
+      - GACP Guidelines for Cannabis cultivation
+
+      #### Cannabis-Specific Regulations
+      {cannabis_regulatory_refs}
+
+      ### 5.2 Scientific and Technical References
+      - Cannabinoid analysis standards (ISO methods)
+      - Cannabis testing best practices
+      {scientific_references}
+
+      ### 5.3 Internal Documents
+      {internal_references}
+
+  # DEFINITIONS SECTION TEMPLATES
+  definitions:
+    # Standard Definitions
+    standard: |
+      ## 6. DEFINITIONS AND ABBREVIATIONS
+
+      ### 6.1 Definitions
+      {definitions_list}
+
+      ### 6.2 Abbreviations
+      {abbreviations_list}
+
+    # Cannabis-Specific Definitions
+    cannabis: |
+      ## 6. DEFINITIONS AND ABBREVIATIONS
+
+      ### 6.1 Cannabis-Specific Definitions
+
+      - **Cannabinoid**: Naturally occurring organic compounds found in cannabis plants
+      - **THC (Tetrahydrocannabinol)**: Primary psychoactive cannabinoid
+      - **CBD (Cannabidiol)**: Non-psychoactive cannabinoid with therapeutic properties
+      - **THCA/CBDA**: Non-decarboxylated precursors to THC/CBD
+      - **Trichome**: Crystal-like structures containing cannabinoids and terpenes
+      - **Cultivar**: Cannabis plant variety with specific genetic characteristics
+      - **Phenotype**: Observable plant characteristics resulting from genetics + environment
+      - **In-Process Control (IPC)**: Cannabinoid testing during cultivation/drying
+      - **Release Testing**: Final cannabinoid verification before product approval
+
+      ### 6.2 Abbreviations
+      {abbreviations_list}
+
+  # ANNEXES SECTION TEMPLATES
+  annexes:
+    # Standard Annexes List
+    standard: |
+      ## 9. ANNEXES
+
+      The following annexes are referenced in this SOP:
+
+      {annexes_list}
+
+    # Cannabis-Specific Annexes
+    cannabis: |
+      ## 9. ANNEXES
+
+      ### Referenced Annexes
+      {annexes_list}
+
+      ### Cannabis-Specific Supporting Documents
+      - **Annex A**: Cannabis Cannabinoid Content Specification Chart
+      - **Annex B**: HPLC/GC-MS Test Method for Cannabinoid Analysis
+      - **Annex C**: Environmental Monitoring and Control Ranges
+      - **Annex D**: Pest and Disease Identification Guide for Cannabis
+      - **Annex E**: Cannabis Harvest Maturity Assessment Chart
+      - **Annex F**: THC/CBD Compliance Decision Tree
+
+# TEMPLATE VERSIONS AND CHANGELOG
+versions:
+  "1.0":
+    date: "2025-01-20"
+    description: "Initial hardcoded templates"
+    status: "deprecated"
+
+  "2.0":
+    date: "2026-01-23"
+    description: "Externalized templates supporting flexible generation, cannabis-specific variants, and enhanced quality"
+    status: "active"
+    changes:
+      - Extracted templates from ContentGenerator class
+      - Added cannabis-specific template variants
+      - Added risk-focused and environmental templates
+      - Improved template structure and documentation
+      - Added template versioning and changelog
+
+# TEMPLATE SELECTION GUIDANCE
+selection_rules:
+  purpose:
+    - Use "standard" for most SOPs
+    - Use "risk_focused" when risk assessment is critical
+    - Use "cannabis" for cannabis cultivation, processing, or QC SOPs
+
+  scope:
+    - Use "standard" for most SOPs
+    - Use "environmental" when environmental controls are critical
+    - Use "cultivation" for cannabis cultivation SOPs
+
+  responsibilities:
+    - Use "standard" for most SOPs
+    - Use "matrix" for complex cross-functional procedures
+    - Use "cannabis" for cannabis-specific operations
+
+  procedure:
+    - Use "standard" for general procedures
+    - Use "cannabis_harvest" for harvest procedures
+    - Use "qc_testing" for quality control test procedures
+
+  documentation:
+    - Use "standard" for most SOPs
+    - Use "cannabis" for cannabis cultivation/QC SOPs
+
+  training:
+    - Use "standard" for general SOPs
+    - Use "cannabis" for cannabis-specific roles
+
+  references:
+    - Use "standard" for most SOPs
+    - Use "cannabis" for cannabis-specific SOPs
+
+  definitions:
+    - Use "standard" for most SOPs
+    - Use "cannabis" for cannabis cultivation/QC SOPs
+
+  annexes:
+    - Use "standard" for most SOPs
+    - Use "cannabis" for cannabis-specific SOPs

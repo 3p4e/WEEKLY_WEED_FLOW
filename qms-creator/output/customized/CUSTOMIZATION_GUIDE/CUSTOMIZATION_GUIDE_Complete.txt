@@ -1,0 +1,618 @@
+================================================================================
+CUSTOMIZATION GUIDE FOR PURELY PLANT GMBH QMS TEMPLATES
+================================================================================
+
+Version: 1.0
+Created: January 13, 2026
+Purpose: Step-by-step guide for customizing EU GMP cannabis QMS templates 
+         to your facility's specific operations
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. GETTING STARTED
+2. PLACEHOLDER IDENTIFICATION & REPLACEMENT
+3. FACILITY CUSTOMIZATION WORKFLOW
+4. DOCUMENT-SPECIFIC CUSTOMIZATION NOTES
+5. TESTING & VALIDATION
+6. APPROVAL & IMPLEMENTATION
+7. TROUBLESHOOTING & SUPPORT
+8. VERSION CONTROL FOR CUSTOMIZED DOCUMENTS
+
+================================================================================
+1. GETTING STARTED
+================================================================================
+
+WHAT'S INCLUDED IN THE TEMPLATE PACKAGE:
+
+Your QMS template package contains:
+
+✓ Master Documents (Quality Manual, Facility Profile, Organizational Templates)
+✓ System SOPs (Governance procedures - Quality, Sanitation, Production, Security, etc.)
+✓ Operational SOPs (Step-by-step procedures for specific activities)
+✓ Forms & Templates (Batch records, logs, certificates, checklists)
+✓ Customization Guide (This document)
+✓ Document Registry (Complete list of all documents)
+✓ Implementation Checklist (What to do first)
+
+PREPARATION CHECKLIST:
+
+Before you begin customizing, gather the following information:
+
+□ Company legal name, registration number, facility address
+□ Names and qualifications of key personnel (Facility Manager, QA Manager, 
+  Production Manager, Security Manager, HR Manager, etc.)
+□ License number and regulatory contact information
+□ Description of your facility layout and operations
+□ List of equipment and testing capabilities
+□ Personnel training schedule and requirements
+□ Existing operating procedures (if any)
+□ Regulatory authority contact details
+
+RECOMMENDED WORKFLOW:
+
+1. Start with MASTER DOCUMENTS first (Quality Manual, Facility Profile)
+2. Then SYSTEM SOPs (Quality, Documentation, Training, Validation)
+3. Then OPERATIONAL SOPs (Cultivation, Production, Testing)
+4. Finally FORMS & TEMPLATES (Logs, records, certificates)
+
+WHY? Master documents and system SOPs define the framework; operational 
+procedures and forms implement the system.
+
+================================================================================
+2. PLACEHOLDER IDENTIFICATION & REPLACEMENT
+================================================================================
+
+WHAT ARE PLACEHOLDERS?
+
+Placeholders are facility-specific fields marked with [SQUARE BRACKETS AND 
+CAPITAL LETTERS]. They indicate where YOUR facility information goes.
+
+TYPES OF PLACEHOLDERS:
+
+Type 1: REQUIRED Single-Value Placeholders
+Format: Purely Plant Medical Cannabis Production Facility, Stefan Petrov, +389 70 123 456
+Action: Replace with single facility-specific value
+Example: 
+  BEFORE: "Facility Name: Purely Plant Medical Cannabis Production Facility"
+  AFTER:  "Facility Name: Purely Plant GmbH"
+
+Type 2: OPTIONAL Conditional Placeholders
+Format: Section applies if in-house lab exists ... End of conditional section
+Action: DELETE the entire section if it doesn't apply to you
+Example:
+  Original: "We conduct testing Section applies if in-house lab exists in our laboratory 
+            End of conditional section Section applies if using contract laboratory through an external laboratory 
+            End of conditional section"
+  If using contract lab only: "We conduct testing through an external laboratory"
+
+Type 3: LIST/ARRAY PLACEHOLDERS
+Format: Zero critical deviations per quarter, 100% batch release compliance with specifications, 95%+ personnel training completion rate
+Action: Replace with your facility's actual items
+Example:
+  BEFORE: "Quality Objectives: Zero critical deviations per quarter, 100% batch release compliance with specifications, 95%+ personnel training completion rate"
+  AFTER:  "Quality Objectives: Zero critical deviations, 100% training 
+           completion, regulatory compliance"
+
+Type 4: CHECKBOX PLACEHOLDERS
+Format: ☐ Cannabis cultivation, processing, and packaging operations
+Action: Check the box (☑) if applicable; delete rows that don't apply
+Example:
+  ☑ Cultivation (Mother plants, cloning, vegetative growth)
+  ☐ Testing Services for External Clients
+  ☑ Packaging & Labeling
+
+PLACEHOLDER CHECKLIST:
+
+Print this document and use it to track customization progress:
+
+Document: _________________________
+Reviewed by: ________________ Date: _______
+Placeholders Found: __________
+Placeholders Completed: __________
+
+═══════════════════════════════════════════════════════════════════════════
+
+PLACEHOLDER REFERENCE: COMMON PLACEHOLDERS & VALUES
+
+Purely Plant Medical Cannabis Production Facility                    → Purely Plant GmbH (or your company name)
+123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia                 → Street address (e.g., "123 Industrial Park Rd")
+Skopje                    → Skopje, North Macedonia
+Skopje Region                  → R. Macedonia / Skopje (if different from city)
+MK-MED-CANNABIS-2024-001                   → Your medical cannabis license number
+2024-01-15                       → License issued date (DD/MM/YYYY)
+2027-01-15                  → License expiration date
+Ministry of Health of North Macedonia             → Ministry of Health (Or specific department)
+MK-REG-2024-001              → Company registration number
+
+Stefan Petrov / [First Name] [Last Name]     → Name of person in that role
+[Manager Title] / Quality Manager          → Job title (e.g., "Operations Director")
+[+389 XX XXX XXX] / +389 70 123 456   → Contact phone number
+[manager@purelyplant.mk] / blagoj.nikolov@purelyplant.mk  → Contact email address
+[Qualifications and Certifications]                   → Educational/professional qualifications
+
+2026-01-22 / 2026-02-01          → Current date (use consistent format: DD/MM/YYYY)
+2027-02-01                 → 12 months from effective date
+2026-01-13               → Date document was last updated
+2026-01-22 06:57:09                     → Same as last revision date
+
+                 → How long records are kept (e.g., "5 years")
+Quality Assurance Office, Server Room                 → Where documents are stored
+Dedicated Archive Room (Climate Controlled)                 → Long-term storage location
+Additional quality objectives to be defined based on operational experience                      → Your facility's quality objective
+2500                   → Facility area in square meters
+[Equipment Name] / ClimateMax Pro 5000 - Climate Control   → Specific equipment model/type you use
+Post-harvest quality testing (in-house moisture and visual inspection)            → Any operations beyond standard cannabis production
+
+═══════════════════════════════════════════════════════════════════════════
+
+FIND & REPLACE TOOL USAGE:
+
+For large batches of customization, use your word processor's Find & Replace:
+
+1. Open QMS_DOCUMENT_REGISTRY.txt
+2. For each document you customize:
+   a. Open the document template
+   b. Use Find & Replace (Ctrl+H in most applications)
+   c. Search for: Purely Plant Medical Cannabis Production Facility
+   d. Replace with: Purely Plant GmbH
+   e. Repeat for other facility-specific placeholders
+
+This will save hours compared to manual editing.
+
+================================================================================
+3. FACILITY CUSTOMIZATION WORKFLOW
+================================================================================
+
+STEP 1: CREATE YOUR FACILITY PROFILE (Most Important!)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Open: QAS-01-003_Facility_Profile_Master_Template.txt
+2. Complete ALL bracketed fields [EXAMPLE_PLACEHOLDER]
+3. Include:
+   - Facility name, address, license information
+   - Names and contact info for all key personnel
+   - Scope of operations (cultivation, production, testing, etc.)
+   - Critical equipment list
+   - Regulatory contacts
+4. Have it signed by Facility Manager and Quality Manager
+5. KEEP THIS DOCUMENT ACCESSIBLE - you'll reference it constantly
+
+This single document becomes the source of truth for all facility-specific info.
+
+STEP 2: CUSTOMIZE MASTER DOCUMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Start with these 3-4 master documents:
+
+a) Quality Manual (QAS-01-001)
+   - Replace all facility information placeholders
+   - Insert actual organizational chart
+   - Update management contact information
+   - Insert your quality policy and objectives
+   - Customize regulatory contacts
+   Estimated time: 2-3 hours
+   Difficulty: Medium
+
+b) Organization Chart & Roles (QAS-01-004)
+   - Create organizational hierarchy specific to your facility
+   - Define reporting lines
+   - Specify roles and responsibilities for your key personnel
+   - Customize as needed for your team structure
+   Estimated time: 1-2 hours
+   Difficulty: Low-Medium
+
+c) Document Registry (QMS_DOCUMENT_REGISTRY.txt)
+   - This is already adapted for the new coding system
+   - Verify all document types match your operations
+   - Remove any document types that don't apply
+   - Add any additional facility-specific procedures
+   Estimated time: 1-2 hours
+   Difficulty: Low
+
+STEP 3: CUSTOMIZE SYSTEM SOPs
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Choose SOPs by importance (Core SOPs first):
+
+TIER 1 (Critical - Must Do First):
+  □ QAS-02-001: Document Management
+  □ QAS-03-004: Process Validation
+  □ QAS-05-002: Deviation Handling
+  □ QAS-09-001: Batch Release
+  □ SAN-01-001: Cleaning & Sanitation
+  □ PRO-01-001: Cultivation Procedures
+  □ REC-02-001: Records Management
+  □ HR-01-001: Training
+
+TIER 2 (Important):
+  □ All other QAS, SAN, PRO, REC, HR SOPs
+  □ SEC SOPs
+  □ EQU-02-001: Calibration & Maintenance
+
+TIER 3 (Operational Details):
+  □ Equipment-specific operating procedures
+  □ Room-specific operating procedures
+  □ Detailed work instructions
+
+For EACH SOP:
+1. Review the template
+2. Identify ALL placeholders [EXAMPLE_PLACEHOLDER]
+3. Replace with facility-specific values
+4. Customize procedures to match YOUR facility's actual processes
+5. Update version number if you make substantial changes
+6. Have reviewed by subject-matter expert (e.g., Production Manager for 
+   production procedures)
+7. Obtain approval signature
+8. Date the document
+
+STEP 4: CUSTOMIZE FORMS & TEMPLATES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Forms require less customization but are critical for day-to-day operations:
+
+Priority Order:
+1. Batch Production Records (Core forms)
+2. Environmental Monitoring Logs
+3. Training Records
+4. Equipment Maintenance Logs
+5. Testing Records
+6. Waste Disposal Forms
+7. Other operational forms
+
+For EACH FORM:
+1. Replace facility name and license info
+2. Customize fields as needed
+3. Add facility-specific instructions
+4. Print test copies
+5. Get feedback from users
+6. Finalize and approve
+
+================================================================================
+4. DOCUMENT-SPECIFIC CUSTOMIZATION NOTES
+================================================================================
+
+QUALITY MANUAL (QAS-01-001)
+Key Sections to Customize:
+  • Facility description and scope
+  • Management structure and contact info
+  • Quality policy and objectives (very important!)
+  • Roles and responsibilities
+  • Regulatory framework and authority contacts
+  • Document retention periods (based on YOUR requirements)
+
+Red Flags to Watch:
+  • Ensure quality policy reflects YOUR facility's actual commitment
+  • Verify all regulatory contacts are current
+  • Ensure roles/responsibilities match your actual organization
+
+VALIDATION MASTER PLAN (QAS-03-005)
+Key Sections to Customize:
+  • List of equipment that requires qualification
+  • Timeline for validation activities
+  • Responsible persons and approval chain
+  • Scope of validation (what's included/excluded)
+
+Note: Validation is technically complex - consider engaging a consultant if new to GMP
+
+SYSTEM SOPs (e.g., Quality, Documentation, Validation)
+Key Sections to Customize:
+  • Responsibility assignments
+  • Specific processes as they occur at YOUR facility
+  • Approval requirements and signatures
+  • Document references (update to new code system)
+  • Forms you'll actually use
+
+Common Mistakes:
+  • Copying procedures verbatim without customizing for your facility
+  • Not updating document cross-references to new codes
+  • Forgetting to assign specific people responsible
+  • Not accounting for differences between small and large facilities
+
+OPERATIONAL SOPs (Cultivation, Production, Testing)
+Key Sections to Customize:
+  • Step-by-step procedures EXACTLY as conducted at your facility
+  • Specific equipment, techniques, and parameters you use
+  • Environmental conditions (temperature, humidity, light)
+  • Safety procedures specific to your facility
+  • Waste disposal procedures
+
+Critical: These must be factually accurate! Personnel will follow these SOPs daily.
+
+FORMS & TEMPLATES (Logs, Records, Certificates)
+Minimal Customization Needed:
+  • Replace Purely Plant Medical Cannabis Production Facility with your company name
+  • Customize for equipment you actually have
+  • Add facility-specific information fields
+  • Customize signature blocks based on approval chain
+
+Testing: Print test versions and have end-users provide feedback before finalizing
+
+================================================================================
+5. TESTING & VALIDATION
+================================================================================
+
+BEFORE IMPLEMENTATION: Validate Your Customized Documents
+
+STEP 1: Quality Review
+─────────────────────
+For each customized document, ask:
+□ Are all placeholders completed with actual values?
+□ Does the document accurately reflect our facility's operations?
+□ Are all procedures practical and workable?
+□ Are all signatures and dates present?
+□ Are cross-references updated to new document codes?
+□ Is the document readable and well-formatted?
+
+Reviewer: ________________  Date: _______
+
+STEP 2: End-User Review
+───────────────────────
+Have the people who will actually USE the document review it:
+
+For Production SOPs: Show to Production Manager and line workers
+For Training SOPs: Show to HR Manager and trainers
+For Forms: Have actual users fill out test copies
+For Equipment SOPs: Have equipment operators review
+
+Questions to ask:
+- Is this procedure clear?
+- Is it missing any important steps?
+- Are there parts that don't match how we actually do it?
+- Would a new employee understand this?
+
+Feedback incorporated by: ________________  Date: _______
+
+STEP 3: Technical Review
+────────────────────────
+Have Quality Assurance review for:
+□ Compliance with EU GMP requirements
+□ Alignment with other QMS documents
+□ Adequate control points and checkpoints
+□ Appropriate documentation and record-keeping
+□ Safety considerations addressed
+□ Environmental/regulatory compliance
+
+QA Review: ________________  Date: _______
+
+STEP 4: Legal/Regulatory Review
+────────────────────────────────
+If possible, have regulatory counsel or consultant review for:
+□ Regulatory compliance
+□ Alignment with license conditions
+□ Regulatory documentation requirements met
+
+Legal Review: ________________  Date: _______
+
+STEP 5: Pilot Implementation (Optional but Recommended)
+────────────────────────────────────────────────────────
+For critical SOPs, consider pilot implementation:
+
+1. Select a small pilot group (e.g., one shift, one production area)
+2. Implement the SOP with that group for a trial period (2-4 weeks)
+3. Collect feedback on:
+   - Clarity and comprehensiveness
+   - Practicality and workability
+   - Compliance with EU GMP requirements
+4. Make necessary adjustments
+5. Roll out facility-wide
+
+Pilot Group: ________________  Dates: _______  Issues Found: ________
+Adjustments Made: ________________________________________
+
+================================================================================
+6. APPROVAL & IMPLEMENTATION
+================================================================================
+
+APPROVAL SIGN-OFF
+
+Once customized documents have been reviewed and tested, they require formal 
+approval before implementation.
+
+APPROVAL CHAIN (Standard):
+
+1. Document Creator/Originator
+   Signature: ________________  Date: _______
+   (Confirms document accuracy and completeness)
+
+2. Department Manager / Subject Matter Expert
+   Signature: ________________  Date: _______
+   (Confirms operational accuracy)
+
+3. Quality Assurance Manager
+   Signature: ________________  Date: _______
+   (Confirms GMP compliance)
+
+4. Facility Manager / Director
+   Signature: ________________  Date: _______
+   (Final authorization for implementation)
+
+IMPLEMENTATION STEPS
+
+Once approved:
+
+1. Print master controlled copies
+   - Number each copy (e.g., "CONTROLLED COPY #1 of 3")
+   - Mark with controlled copy stamp
+   - Record in Master Document List
+
+2. Distribute to relevant personnel
+   - Maintain distribution list (who has which copy)
+   - Require signed acknowledgment of receipt
+   - Train on new procedures before implementation
+
+3. Archive superseded versions
+   - Mark with date of supersession
+   - Store in archive location
+   - Note in document version history
+
+4. Post implementation notice
+   - Notify all personnel of new procedure
+   - Schedule training on updated procedures
+   - Conduct meetings to explain changes
+
+5. Monitor compliance
+   - Observe first 2-4 weeks of implementation
+   - Collect feedback from users
+   - Address any issues or questions
+   - Document any deviations
+
+Implementation Sign-Off:
+
+Document ID: ________________
+Document Title: ______________________________
+Approved Version: ____  Effective Date: _______
+All signatures obtained: ☐ Yes  ☐ No
+
+Facility Manager: ________________  Date: _______
+
+================================================================================
+7. TROUBLESHOOTING & SUPPORT
+================================================================================
+
+COMMON CUSTOMIZATION ISSUES & SOLUTIONS
+
+Issue 1: "There are too many placeholders - where do I start?"
+→ Start with FACILITY PROFILE SHEET first. This single document becomes your 
+  reference, so fill it out completely. Then reference it for all other documents.
+
+Issue 2: "Some procedures in the templates don't match our actual operations"
+→ CORRECT THE PROCEDURE! The templates are generic - you should customize every 
+  procedure to match YOUR facility's actual processes. This is required for GMP 
+  compliance and personnel to follow procedures correctly.
+
+Issue 3: "I'm not sure if we have adequate approval signatures"
+→ Minimum: Document Creator → Department Manager → Quality Manager → Facility Manager
+  You can add additional approvals as needed. Define your approval chain in 
+  the Quality Manual and use it consistently.
+
+Issue 4: "What if we need to change a procedure after approval?"
+→ Use CHANGE CONTROL process (SOP-QAS-08). All changes to approved procedures 
+  must go through change control, documented, and re-approved.
+
+Issue 5: "Who should review equipment-specific procedures?"
+→ Equipment operators, maintenance technicians, and the equipment manufacturer's 
+  documentation. Ensure procedures match manufacturer recommendations.
+
+Issue 6: "How do we handle procedures for equipment we don't have?"
+→ DELETE those documents or clearly mark them as "Not Applicable" with a change 
+  control record explaining why they were removed.
+
+WHEN TO SEEK PROFESSIONAL HELP
+
+Consider engaging a GMP consultant if:
+✓ You're new to EU GMP compliance
+✓ You need validation protocols
+✓ You're uncertain about regulatory requirements
+✓ You need help with complex procedures
+✓ You're preparing for a regulatory inspection
+
+===============================================================================
+8. VERSION CONTROL FOR CUSTOMIZED DOCUMENTS
+================================================================================
+
+VERSION NUMBERING SYSTEM
+
+Format: V.Major.Minor
+Examples: V.1.0, V.1.1, V.2.0, V.3.2
+
+When to Increment:
+
+V.1.0 → V.1.1 (Minor version change)
+  - Typo or formatting corrections
+  - Small clarifications that don't change procedure
+  - Update of contact information or non-critical details
+
+V.1.1 → V.2.0 (Major version change)
+  - Significant procedure changes
+  - Changes in responsibility or approval chains
+  - Changes to regulatory requirements
+  - Changes that require personnel retraining
+
+VERSION TRACKING
+
+Maintain a VERSION HISTORY section in each document:
+
+Version | Date       | Description          | Changed By        | Approved By
+--------|------------|----------------------|-------------------|---------------
+1.0     | 01/01/2026 | Initial customization | Blagoj Nikolov       | Stefan Petrov
+1.1     | 15/02/2026 | Updated contact info  | Blagoj Nikolov       | Stefan Petrov
+2.0     | 01/06/2026 | Procedure revision    | Blagoj Nikolov       | Stefan Petrov
+
+COMMUNICATING CHANGES
+
+When you update a document:
+1. Note the version change in the header
+2. Highlight what changed (use Track Changes in Word if available)
+3. Notify affected personnel
+4. Conduct training on new procedures (if Version 2.0+)
+5. Maintain archive copy of previous version
+6. Update cross-references in related documents
+
+================================================================================
+QUICK START CHECKLIST
+================================================================================
+
+☐ WEEK 1: Create Facility Profile
+  □ Gather all facility information
+  □ Complete Facility Profile Sheet (QAS-01-003)
+  □ Get signatures from Facility Manager & QA Manager
+  
+☐ WEEK 2-3: Customize Master Documents
+  □ Quality Manual (QAS-01-001)
+  □ Organizational Chart (QAS-01-004)
+  □ Document Registry (QMS_DOCUMENT_REGISTRY.txt)
+  
+☐ WEEK 4-6: Customize Critical System SOPs
+  □ Document Management (QAS-02-001)
+  □ Deviation Handling (QAS-05-002)
+  □ Batch Release (QAS-09-001)
+  □ Cleaning & Sanitation (SAN-01-001)
+  □ Training (HR-01-001)
+  
+☐ WEEK 7-10: Customize Operational SOPs
+  □ Cultivation procedures (PRO-01-XXX)
+  □ Production procedures (PRO-03-XXX)
+  □ Testing procedures (QAS-XXX)
+  □ Others based on YOUR operations
+  
+☐ WEEK 11-12: Customize Forms & Implement
+  □ Batch records
+  □ Environmental logs
+  □ Training records
+  □ Other operational forms
+  □ Conduct full system review
+  □ Obtain all approvals
+  □ Implement facility-wide
+
+================================================================================
+SUPPORT & QUESTIONS
+================================================================================
+
+For questions about:
+
+✓ EU GMP compliance:        Contact regulatory consultant or EU authority
+✓ Cannabis-specific regs:   Contact North Macedonia Ministry of Health
+✓ Document customization:   Refer to this guide and template instructions
+✓ QMS implementation:       Contact your Quality Assurance Manager
+✓ Personnel training:       Contact your HR Manager
+✓ Equipment procedures:     Consult equipment manuals and operators
+
+Document Manager Contact: ________________  Phone: ________________
+
+================================================================================
+END OF CUSTOMIZATION GUIDE
+================================================================================
+
+Congratulations on beginning your EU GMP QMS implementation! 
+This is a significant undertaking - pace yourself, engage your team, 
+and celebrate milestones along the way.
+
+Remember: The goal is not just to create documents, but to establish a 
+working Quality Management System that your team understands and follows 
+every day to produce safe, compliant medical cannabis.
+
+Version: 1.0 | Created: January 13, 2026 | Document ID: CUST-GUIDE-001
+
+================================================================================

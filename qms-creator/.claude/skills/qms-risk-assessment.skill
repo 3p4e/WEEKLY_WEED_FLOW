@@ -1,0 +1,144 @@
+# QMS Risk Assessment
+
+Generate ICH Q9-compliant risk assessments using FMEA or HACCP methodologies.
+
+## Activation
+- User requests: "risk assessment", "FMEA", "HACCP", "QRM", "quality risk management", "hazard analysis"
+
+---
+
+<qms-risk-assessment>
+
+## Instructions
+
+You are generating an ICH Q9-compliant risk assessment for a cannabis pharmaceutical process using FMEA (Failure Mode and Effects Analysis) or HACCP (Hazard Analysis Critical Control Points).
+
+### PARAMETERS
+
+- **process_name**: Name of process to assess
+- **methodology**: FMEA | HACCP | Combined (default: FMEA)
+- **scope**: Process boundaries and steps
+- **team_members**: Optional assessment participants
+
+### METHODOLOGY SELECTION
+
+| Use Case | Recommended Method |
+|----------|-------------------|
+| Manufacturing processes | FMEA |
+| Food safety/contamination | HACCP |
+| Cultivation/harvesting | HACCP |
+| Equipment qualification | FMEA |
+| Cleaning validation | Combined |
+| Supply chain | HACCP |
+
+### PHASE 1: PROCESS UNDERSTANDING
+
+1. Define process boundaries
+2. List all process steps
+3. Identify Critical Quality Attributes (CQAs)
+4. Identify Critical Process Parameters (CPPs)
+5. Document inputs and outputs
+
+### PHASE 2: RISK IDENTIFICATION
+
+#### For FMEA
+Identify failure modes by category:
+- **Equipment**: Malfunction, calibration drift, breakdown
+- **Materials**: Out-of-spec, contamination, degradation
+- **Method**: Procedure deviation, timing errors, sequence errors
+- **Environment**: Temperature, humidity, contamination
+- **Personnel**: Training gaps, human error, fatigue
+
+#### For HACCP
+Identify hazards by type:
+- **Biological**: Microbial (Aspergillus, E. coli, Salmonella, yeasts/molds)
+- **Chemical**: Pesticides, heavy metals, solvents, cross-contamination
+- **Physical**: Foreign particles, glass, metal fragments
+
+#### Cannabis-Specific Hazards
+- Cannabinoid potency variations (THC/CBD ratio shifts)
+- Terpene degradation
+- Mycotoxin contamination (aflatoxins)
+- Pesticide residue carryover
+- Heavy metal accumulation (Pb, Cd, Hg, As)
+- Cross-contamination between THC and CBD products
+- Improper drying/curing leading to mold
+- Extraction solvent residues
+
+### PHASE 3: RISK EVALUATION
+
+#### FMEA Scoring (1-5 Scale)
+
+**Severity (S):**
+| Score | Definition | Example |
+|-------|------------|---------|
+| 5 | Catastrophic | Patient harm, recall |
+| 4 | Major | Batch rejection, regulatory finding |
+| 3 | Moderate | Rework required, OOS result |
+| 2 | Minor | Documentation error, minor deviation |
+| 1 | Negligible | No impact on quality |
+
+**Occurrence (O):**
+| Score | Definition | Frequency |
+|-------|------------|-----------|
+| 5 | Very High | > 1 per week |
+| 4 | High | 1 per month |
+| 3 | Moderate | 1 per quarter |
+| 2 | Low | 1 per year |
+| 1 | Remote | < 1 per year |
+
+**Detection (D):**
+| Score | Definition | Control |
+|-------|------------|---------|
+| 5 | No detection | No controls exist |
+| 4 | Low | Manual inspection only |
+| 3 | Moderate | Periodic testing |
+| 2 | High | In-process controls |
+| 1 | Very High | 100% automated testing |
+
+**Risk Priority Number (RPN) = S x O x D**
+
+| RPN Range | Risk Level | Action Required |
+|-----------|------------|-----------------|
+| 80-125 | HIGH | Immediate mitigation required |
+| 40-79 | MEDIUM | Mitigation plan within 30 days |
+| < 40 | LOW | Monitor and review annually |
+
+### PHASE 4: RISK CONTROL
+
+For HIGH and MEDIUM risks, define:
+1. Control measure (preventive or detective)
+2. Responsible person/department
+3. Implementation timeline
+4. Verification method
+5. Residual risk after controls
+
+### OUTPUT FORMAT - FMEA
+
+```markdown
+# Risk Assessment Report: {process_name}
+
+**Methodology:** FMEA per ICH Q9
+**Date:** {date}
+**Team:** {team_members}
+
+## Executive Summary
+- Total Risks: {count}
+- HIGH: {count} | MEDIUM: {count} | LOW: {count}
+
+## FMEA Analysis
+
+| ID | Step | Failure Mode | Effect | S | Cause | O | Controls | D | RPN | Level |
+|----|------|--------------|--------|---|-------|---|----------|---|-----|-------|
+| R-001 | ... | ... | ... | 4 | ... | 3 | ... | 2 | 24 | LOW |
+
+## Risk Control Plan
+| Risk ID | Action | Owner | Due Date | Status |
+|---------|--------|-------|----------|--------|
+
+## Regulatory References
+- <cite source="ICH-Q9-4">Risk assessment principles</cite>
+- <cite source="EUGMP-ANNEX20">Quality risk management</cite>
+```
+
+</qms-risk-assessment>

@@ -1,0 +1,192 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      # Runs the root unit tests (pytest.ini testpaths). The suites under
+      # CONTENT_CREATOR_FRAMEWORK/tests are integration tests that need a
+      # live Letta server and skip themselves when none is reachable.
+      - name: Run backend tests
+        run: |
+          pytest tests CONTENT_CREATOR_FRAMEWORK/tests -v --cov=CONTENT_CREATOR_FRAMEWORK --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  frontend-lint:
+    name: Frontend Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'qms-ui-v2/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: qms-ui-v2
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: qms-ui-v2
+        run: npm run lint
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'qms-ui-v2/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: qms-ui-v2
+        run: npm ci
+
+      # No test runner is configured yet in qms-ui-v2; the TypeScript
+      # build (tsc -b && vite build) is the current verification gate.
+      - name: Type-check and build
+        working-directory: qms-ui-v2
+        run: npm run build
+
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-lint, frontend-tests]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          tags: |
+            qms-api:${{ github.sha }}
+            qms-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: false
+          tags: |
+            qms-ui:${{ github.sha }}
+            qms-ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        # Upload requires GitHub code scanning to be available on the repo;
+        # don't fail the whole job when it isn't.
+        continue-on-error: true
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Run safety check (Python dependencies)
+        run: |
+          pip install safety
+          safety check --json || true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'qms-ui-v2/package-lock.json'
+
+      - name: Run npm audit (JavaScript dependencies)
+        working-directory: qms-ui-v2
+        run: npm audit --audit-level=moderate || true
+
+  lint-commits:
+    name: Lint Commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          # Check that commit messages follow conventional commits pattern
+          git log --format=%B origin/main..HEAD | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore)(\(.+\))?:" || echo "Warning: Commit messages should follow Conventional Commits format"

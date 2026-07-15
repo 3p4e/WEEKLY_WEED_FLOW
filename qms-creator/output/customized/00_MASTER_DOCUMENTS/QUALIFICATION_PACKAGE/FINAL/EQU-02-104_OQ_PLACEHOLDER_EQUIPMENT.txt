@@ -1,0 +1,119 @@
+Document Code: EQU-02-104
+Title: Operational Qualification (OQ) — [Name of Equipment]
+Revision: 00 (Draft)
+Effective Date: TO BE POPULATED
+Owner: [Engineering / QA]
+Approver: [QA Manager]
+Change History:
+Rev | Date | Author | Description
+00  | -    | -      | Initial draft generated from DQ/URS
+
+Purpose:
+To provide documented evidence that the [Equipment Name] and its subsystems function according to design specifications across defined operating ranges without product.
+
+Scope:
+OQ verifies control logic, alarms, safety interlocks, control setpoints, HMI functions, data logging, and routine operational sequences as defined in the DQ and URS.
+
+OQ Test Protocols (detailed):
+
+Test ID: OQ-001
+Title: Control System & HMI — User Access and Audit Trail
+Objective: Verify user accounts, role-based access, password policies, session timeout, and secure, non-editable audit trails.
+Procedure:
+ - Verify presence of Operator, Supervisor, and Administrator accounts; record account names used for testing.
+ - Test login and logout for each role; record timestamps and session IDs.
+ - Attempt to edit an audit trail entry (should be blocked) and record the system response.
+ - Generate a series of operator actions (setpoint changes, acknowledgements, parameter adjustments) and export event log.
+Acceptance Criteria:
+ - All roles can login/log out as expected and have expected menu access.
+ - Audit trail entries are time-stamped, linked to user ID, non-editable, and exportable to a human-readable format (PDF/CSV).
+ - Any attempt to edit an audit trail is rejected and logged. Pass/Fail recorded in test log.
+Records: Signed test log, screenshots, exported audit trail file.
+
+Test ID: OQ-002
+Title: Alarm Handling and HMI Behavior
+Objective: Verify alarm generation, notification, acknowledgement, and escalation logic.
+Procedure:
+ - Simulate each defined alarm (e.g., high temperature, low flow, sensor fault) and confirm alarm appears on HMI.
+ - Acknowledge alarm and verify acknowledgement is recorded in the audit trail with user ID and timestamp.
+ - Verify alarm escalation behavior (if configured) and any notification messages (email/SMS) if applicable.
+Acceptance Criteria:
+ - Each alarm is generated as defined, visible on HMI, and acknowledgement recorded with user and timestamp.
+ - Escalation behaves per configuration. Pass/Fail recorded.
+Records: Alarm event logs, HMI screenshots, acknowledgement entries in audit trail.
+
+Test ID: OQ-003
+Title: Emergency Stop and Safety Interlock Tests
+Objective: Verify E-stop and safety interlocks operate and return to a safe state; confirm restart logic.
+Procedure:
+ - Trigger Emergency Stop (E-STOP) and confirm moving parts stop and power is isolated per design.
+ - Verify that safety interlocks (e.g., doors, guards) produce the required safe-state responses.
+ - Attempt restart per documented procedure and verify controlled restart behavior.
+Acceptance Criteria:
+ - System immediately goes to safe state on E-STOP; interlocks trigger expected fail-safe behavior.
+ - Restart requires authorized action and follows documented sequence. Pass/Fail recorded.
+Records: Test log with timestamps, witness initials, before/after photos if applicable.
+
+Test ID: OQ-004
+Title: Process Control — Worst-Case Setpoint Testing
+Objective: Confirm the system controls critical parameters across defined operating ranges and remains stable at setpoints.
+Procedure:
+ - Identify critical parameters from DQ/URS (e.g., temperature: LOW PRIORITY to HIGH PRIORITY, flow: LOW PRIORITY to HIGH PRIORITY).
+ - Perform ramp tests from nominal to boundary setpoints (low and high), record response time and maximum overshoot, and measure steady-state deviation for 30 minutes at each boundary.
+ - For water systems: include intentional setpoint challenges for conductivity and pH; collect samples per ANNEX A01 and submit for analysis per ANNEX A03 (physico-chemical and microbiological methods as applicable).
+ - Repeat each ramp test three times to assess reproducibility.
+Acceptance Criteria:
+ - Response time and overshoot within DQ/URS-specified limits (placeholders filled later). Steady-state deviation within acceptance criteria.
+ - Water-specific acceptance: Conductivity and pH shall be within limits specified in ANNEX A03 when measured at steady state; microbiological limits verified during PQ and per ANNEX A03. Repeats show consistency. Pass/Fail recorded.
+Records: Process logs, graph plots, measured values table, sampled COC and lab reports, deviation calculations.
+
+Test ID: OQ-005
+Title: PID Tuning and Control Stability
+Objective: Verify PID loop stability and response for critical control loops.
+Procedure:
+ - Introduce controlled step changes at nominal and measure settling time, oscillation, and steady-state error.
+ - Adjust PID parameters per manufacturer guidance and optimize for stability without sustained oscillation.
+Acceptance Criteria:
+ - Settling times and stability metrics meet DQ acceptance criteria; no sustained oscillation observed. Pass/Fail recorded.
+Records: Test log, tuning parameter records, response graphs.
+
+Test ID: OQ-006
+Title: Instrument Calibration Verification
+Objective: Verify all critical measuring points are calibrated and functional per calibration schedule.
+Procedure:
+ - Review calibration certificates and verify calibration dates.
+ - Perform functional checks using calibrated reference instruments (e.g., calibrated thermometer, pressure gauge) and record measured values.
+ - For water quality instruments (conductivity meter, pH meter): verify calibration against traceable standards and perform verification checks using certified reference materials. Ensure instruments used for sampling are calibrated per ANNEX A03 requirements.
+Acceptance Criteria:
+ - All critical instruments have valid certificates; functional checks within tolerance.
+ - Water quality instruments: calibration verified per ANNEX A03 (e.g., conductivity meter calibrated to 4.3 µS/cm standard for PW, pH meter calibrated to buffers 4.0, 7.0, 10.0). Any out-of-tolerance result recorded as Deficiency. Pass/Fail recorded.
+Records: Calibration certificates, functional check records, instrument serial numbers, reference material certificates.
+
+Test ID: OQ-007
+Title: Data Integrity and CSV Checks
+Objective: Verify secure data export, checksum or signed exports, and that electronic records are retrievable and unaltered.
+Procedure:
+ - Export defined datasets (e.g., 24-hour process log) and verify export contains consistent timestamps and no missing records.
+ - Perform intentional file tamper attempt (on a copy) to validate detection workflow.
+Acceptance Criteria:
+ - Exports complete, timestamps consistent, and tamper detection mechanisms flag modified files. Pass/Fail recorded.
+Records: Exported files, checksum/verification results.
+
+Test ID: OQ-008
+Title: FAT/SAT Crossover Verification
+Objective: Reconcile supplier FAT/SAT results with site OQ tests and leverage results where applicable.
+Procedure:
+ - Review supplier FAT/SAT reports and identify tests that can be accepted without repetition.
+ - Re-run any critical tests onsite which were not executed or documented during FAT/SAT.
+Acceptance Criteria:
+ - Test mapping and acceptance documented; any deviations recorded and risk-assessed. Pass/Fail recorded.
+Records: FAT/SAT report extracts, mapping table, witness signatures.
+
+General Acceptance Criteria and Logging
+ - Each test has a discrete PASS/FAIL result with measured values recorded.
+ - Any Fail results produce a Deficiency Log entry (Annex 08) and an RA if required.
+ - All test records signed/initialed and archived with attachments.
+
+--- END OQ ---
+
+--- END OQ ---

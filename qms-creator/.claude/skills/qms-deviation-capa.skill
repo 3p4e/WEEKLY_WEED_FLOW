@@ -1,0 +1,300 @@
+# QMS Deviation and CAPA Manager
+
+Generate EU GMP compliant deviation reports and CAPA documentation.
+
+## Activation
+- User requests: "deviation", "CAPA", "corrective action", "preventive action", "non-conformance", "OOS", "OOT"
+
+---
+
+<qms-deviation-capa>
+
+## Instructions
+
+You are generating EU GMP compliant deviation and CAPA documentation for cannabis pharmaceutical operations.
+
+### EU GMP REQUIREMENTS
+
+- <cite source="EUGMP-1.4viii">Deviations are reported, investigated and documented</cite>
+- <cite source="EUGMP-1.4ix">Corrective and preventive actions (CAPA) are implemented</cite>
+- <cite source="EUGMP-8.3">Non-conforming products must be clearly identified and segregated</cite>
+- <cite source="ICH-Q10-3.2">CAPA system is a key enabler of the pharmaceutical quality system</cite>
+
+### DOCUMENT TYPES
+
+| Type | Purpose | Trigger |
+|------|---------|---------|
+| Deviation Report | Document unexpected event | Any deviation from procedure |
+| OOS Investigation | Out of Specification result | Lab result outside limits |
+| OOT Investigation | Out of Trend result | Trending towards limits |
+| CAPA | Corrective/Preventive Action | Root cause identified |
+| Effectiveness Check | Verify CAPA worked | After CAPA implementation |
+
+### DEVIATION CLASSIFICATION
+
+| Class | Definition | Examples | Timeline |
+|-------|------------|----------|----------|
+| **Critical** | Patient safety risk, recall potential | Contamination, potency failure, mislabeling | Immediate escalation, 24h initial report |
+| **Major** | GMP non-compliance, batch impact | Process deviation, equipment failure, OOS | 48h initial report |
+| **Minor** | Documentation error, no product impact | Typo, missed signature, timing deviation | 5 days initial report |
+
+### DEVIATION REPORT STRUCTURE
+
+```markdown
+# Deviation Report
+
+## 1. Deviation Identification
+
+| Field | Entry |
+|-------|-------|
+| Deviation Number | DEV-{YYYY}-{###} |
+| Date Discovered | {date} |
+| Time Discovered | {time} |
+| Discovered By | {name} |
+| Department | {dept} |
+| Area/Room | {location} |
+
+## 2. Deviation Description
+
+**What happened?** (Be specific - who, what, when, where)
+{detailed description}
+
+**What should have happened?** (Reference SOP/specification)
+{expected state per SOP-XXX Section X}
+
+**Products/Batches Affected:**
+| Batch Number | Product | Stage | Quantity |
+|--------------|---------|-------|----------|
+| {batch} | {product} | {stage} | {qty} |
+
+## 3. Immediate Actions Taken
+
+| Action | Performed By | Date/Time |
+|--------|--------------|-----------|
+| Product quarantined | {name} | {datetime} |
+| Area secured | {name} | {datetime} |
+| {other actions} | {name} | {datetime} |
+
+## 4. Initial Classification
+
+**Classification:** ☐ Critical ☐ Major ☐ Minor
+
+**Justification:**
+{why this classification}
+
+**Approved By:** __________ (QA) **Date:** _____
+
+## 5. Root Cause Investigation
+
+### 5.1 Investigation Team
+| Name | Role | Department |
+|------|------|------------|
+| {name} | Lead Investigator | QA |
+| {name} | SME | {dept} |
+
+### 5.2 Timeline of Events
+| Time | Event | Source |
+|------|-------|--------|
+| {time} | {event} | {batch record/log} |
+
+### 5.3 Possible Causes (Ishikawa/5 Why)
+
+**Man (Personnel):**
+- Training gap?
+- Human error?
+- Fatigue/distraction?
+
+**Machine (Equipment):**
+- Malfunction?
+- Calibration?
+- Maintenance?
+
+**Method (Process):**
+- SOP unclear?
+- Process not robust?
+- Inadequate controls?
+
+**Material:**
+- Out of spec?
+- Degradation?
+- Wrong material?
+
+**Environment:**
+- Temperature?
+- Humidity?
+- Contamination?
+
+### 5.4 Root Cause Determination
+
+**Most Probable Root Cause:**
+{identified root cause}
+
+**Evidence Supporting Root Cause:**
+{data, interviews, records}
+
+**Contributing Factors:**
+{other factors}
+
+## 6. Impact Assessment
+
+### Product Impact
+☐ No impact - batch acceptable
+☐ Rework required
+☐ Batch rejected
+☐ Further testing required
+☐ Field alert/recall required
+
+### Regulatory Impact
+☐ No regulatory impact
+☐ Notify authority required
+☐ Update registration required
+
+### Other Batches
+☐ No other batches affected
+☐ Review of {n} batches required
+
+## 7. CAPA Required?
+
+☐ Yes - CAPA Number: CAPA-{YYYY}-{###}
+☐ No - Justification: {isolated incident, no systemic issue}
+
+## 8. Closure
+
+**Deviation Closed By:** __________ **Date:** _____
+**QA Approval:** __________ **Date:** _____
+```
+
+### CAPA STRUCTURE
+
+```markdown
+# Corrective and Preventive Action (CAPA)
+
+## 1. CAPA Identification
+
+| Field | Entry |
+|-------|-------|
+| CAPA Number | CAPA-{YYYY}-{###} |
+| Source | DEV-{YYYY}-{###} / Audit Finding / Complaint |
+| Date Opened | {date} |
+| Priority | ☐ High ☐ Medium ☐ Low |
+| Target Completion | {date} |
+| CAPA Owner | {name} |
+
+## 2. Problem Statement
+
+**Issue:**
+{clear description of the problem}
+
+**Root Cause:**
+{from investigation or 5-Why analysis}
+
+## 3. Corrective Actions (Fix the immediate problem)
+
+| # | Action | Owner | Due Date | Status |
+|---|--------|-------|----------|--------|
+| CA-1 | {action} | {name} | {date} | ☐ Open ☐ Complete |
+| CA-2 | {action} | {name} | {date} | ☐ Open ☐ Complete |
+
+## 4. Preventive Actions (Prevent recurrence)
+
+| # | Action | Owner | Due Date | Status |
+|---|--------|-------|----------|--------|
+| PA-1 | {action} | {name} | {date} | ☐ Open ☐ Complete |
+| PA-2 | {action} | {name} | {date} | ☐ Open ☐ Complete |
+
+### Common Preventive Actions
+- SOP revision (include reference)
+- Training/retraining
+- Equipment modification
+- Process change
+- Monitoring enhancement
+- Alert limits adjustment
+
+## 5. Implementation Evidence
+
+| Action | Evidence | Verified By | Date |
+|--------|----------|-------------|------|
+| CA-1 | {document/record} | {name} | {date} |
+| PA-1 | {document/record} | {name} | {date} |
+
+## 6. Effectiveness Check
+
+**Effectiveness Check Due:** {date + 90 days}
+
+**Criteria for Effectiveness:**
+- No recurrence of same deviation
+- {specific measurable criteria}
+
+### Effectiveness Review
+
+**Review Date:** {date}
+**Reviewed By:** {name}
+
+| Criterion | Evidence | Effective? |
+|-----------|----------|------------|
+| No recurrence | Deviation log review | ☐ Yes ☐ No |
+| {criterion} | {evidence} | ☐ Yes ☐ No |
+
+**Overall CAPA Effective?** ☐ Yes ☐ No
+
+If No: ☐ Extend CAPA ☐ Open new CAPA
+
+## 7. CAPA Closure
+
+**CAPA Closed By:** __________ **Date:** _____
+**QA Approval:** __________ **Date:** _____
+```
+
+### OOS INVESTIGATION (Laboratory)
+
+```markdown
+# OOS Investigation
+
+**OOS Number:** OOS-{YYYY}-{###}
+**Product:** {product}
+**Batch:** {batch}
+**Test:** {test name}
+**Specification:** {limit}
+**Result:** {result}
+
+## Phase I - Laboratory Investigation (within 3 days)
+
+### Analyst Interview
+- Sample handled correctly? ☐ Yes ☐ No
+- Method followed correctly? ☐ Yes ☐ No
+- Calculations correct? ☐ Yes ☐ No
+
+### Review Checklist
+| Check | Result | Comments |
+|-------|--------|----------|
+| Sample integrity | ☐ OK ☐ Issue | |
+| Instrument calibration | ☐ OK ☐ Issue | |
+| Reagent/standards | ☐ OK ☐ Issue | |
+| System suitability | ☐ OK ☐ Issue | |
+
+### Phase I Conclusion
+☐ Laboratory error identified - invalidate result, retest
+☐ No laboratory error - proceed to Phase II
+
+## Phase II - Full Investigation (if no lab error)
+
+{Include batch record review, process review, trend analysis}
+
+### Phase II Conclusion
+☐ Assignable cause found - {cause}
+☐ No assignable cause - result confirmed OOS
+```
+
+### CANNABIS-SPECIFIC DEVIATIONS
+
+Common cannabis-related deviations to consider:
+- Cannabinoid potency outside specification
+- Residual solvent exceedance
+- Microbial contamination
+- Pesticide detection
+- Heavy metal exceedance
+- THC/CBD ratio deviation
+- Security breach
+- Inventory reconciliation discrepancy
+
+</qms-deviation-capa>

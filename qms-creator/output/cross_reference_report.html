@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cross-Reference Validation Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .stat-box {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-box.good {
+            background: #d4edda;
+            border: 2px solid #28a745;
+        }
+        .stat-box.warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+        .stat-box.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+        }
+        .stat-number {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th {
+            background: #3498db;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .good { color: #28a745; }
+        .warning { color: #ffc107; }
+        .error { color: #dc3545; }
+        .reference-list {
+            list-style: none;
+            padding: 0;
+        }
+        .reference-list li {
+            padding: 5px 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Cross-Reference Validation Report</h1>
+        <p><strong>Generated:</strong> 2026-01-15 17:18:54</p>
+        <p><strong>Cannabis EU GMP QMS Creator</strong> - Purely Plant GmbH</p>
+
+        <div class="summary">
+            <div class="stat-box good">
+                <div class="stat-label">Total Documents</div>
+                <div class="stat-number">33</div>
+            </div>
+            <div class="stat-box error">
+                <div class="stat-label">Broken SOP References</div>
+                <div class="stat-number">117</div>
+            </div>
+            <div class="stat-box warning">
+                <div class="stat-label">Orphaned Documents</div>
+                <div class="stat-number">18</div>
+            </div>
+            <div class="stat-box warning">
+                <div class="stat-label">Circular References</div>
+                <div class="stat-number">13</div>
+            </div>
+        </div>
+
+        <h2>📊 Reference Statistics</h2>
+        <table>
+            <tr>
+                <th>Reference Type</th>
+                <th>Unique IDs Found</th>
+                <th>Total References</th>
+            </tr>
+            <tr>
+                <td>SOP Documents</td>
+                <td>33</td>
+                <td>308</td>
+            </tr>
+            <tr>
+                <td>Forms</td>
+                <td>1</td>
+                <td>9</td>
+            </tr>
+            <tr>
+                <td>Equipment</td>
+                <td>0</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>Rooms</td>
+                <td>4</td>
+                <td>7</td>
+            </tr>
+        </table>
+
+        <h2 class="error">⚠️ Broken SOP References</h2>
+        <table>
+            <tr>
+                <th>Source Document</th>
+                <th>Missing Reference</th>
+                <th>Issue</th>
+            </tr>
+
+            <tr>
+                <td>QC_01.01_v1</td>
+                <td class="error">PRO_03.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>QC_01.01_v1</td>
+                <td class="error">PRO_03.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.09_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.09_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.10_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.10_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.10_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.10_v1</td>
+                <td class="error">VAL_08.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.10_v1</td>
+                <td class="error">QAS-00-001</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.11_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_01.11_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_03.03_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_03.03_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_03.03_v1</td>
+                <td class="error">QAS-00-001</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_06.01_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_06.01_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>PRO_06.01_v1</td>
+                <td class="error">QAS-00-001</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>QA_00.02_A02_v1</td>
+                <td class="error">SAN_07.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>QA_00.02_A02_v1</td>
+                <td class="error">EQU_06.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+
+            <tr>
+                <td>QA_00.02_A02_v1</td>
+                <td class="error">HRM_05.01_v1</td>
+                <td>SOP not found</td>
+            </tr>
+        </table>
+
+        <h2 class="warning">📄 Orphaned Documents (Not Referenced)</h2>
+        <ul class="reference-list">
+            <li>QA_00.06_A01_v1</li>
+            <li>QA_00.02_A02_v1</li>
+            <li>QA_00.02_A04_v1</li>
+            <li>PRO_03.03_v1</li>
+            <li>PRO_01.09_v1</li>
+            <li>QA_00.02_A01_v1</li>
+            <li>QA_00.06_A02_v1</li>
+            <li>RES_10.01_v1</li>
+            <li>QA_00.05_A01_v1</li>
+            <li>QA_00.05_A02_v1</li>
+            <li>PRO_03.02_v1</li>
+            <li>QA_00.04_v1</li>
+            <li>QA_00.02_A03_v1</li>
+            <li>PRO_01.11_v1</li>
+            <li>QCS_01.02_v1</li>
+            <li>QA_00.06_A03_v1</li>
+            <li>PRO_06.01_v1</li>
+            <li>QA_00.05_A03_v1</li>
+        </ul>
+
+        <h2>🔝 Most Referenced Documents</h2>
+        <table>
+            <tr>
+                <th>Document ID</th>
+                <th>Referenced By</th>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.02_v1</strong></td>
+                <td>39 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.05_v1</strong></td>
+                <td>33 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.07_v1</strong></td>
+                <td>30 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.01_v1</strong></td>
+                <td>28 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.06_v1</strong></td>
+                <td>28 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>HRM_05.01_v1</strong></td>
+                <td>25 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QAS-00-001</strong></td>
+                <td>7 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>EQU_06.01_v1</strong></td>
+                <td>7 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>VAL_08.01_v1</strong></td>
+                <td>6 documents</td>
+            </tr>
+
+            <tr>
+                <td><strong>QA_00.03_v1</strong></td>
+                <td>5 documents</td>
+            </tr>
+        </table>
+
+        <div class="footer">
+            <p>Cannabis EU GMP QMS Creator - Automation System v1.0</p>
+            <p>Purely Plant GmbH - Skopje, North Macedonia</p>
+        </div>
+    </div>
+</body>
+</html>

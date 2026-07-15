@@ -1,0 +1,121 @@
+{
+    "frameworks": {
+        "EUDRALEX_VOL4": {
+            "name": "EudraLex Volume 4 - EU GMP",
+            "chapters": {
+                "1": "Quality Management",
+                "2": "Personnel",
+                "3": "Premises and Equipment",
+                "4": "Documentation",
+                "5": "Production",
+                "6": "Quality Control",
+                "7": "Outsourced Activities",
+                "8": "Complaints and Product Recall",
+                "9": "Self Inspection"
+            },
+            "key_requirements": [
+                "Written procedures for all critical operations",
+                "Qualified personnel with defined responsibilities",
+                "Validated processes and equipment",
+                "Complete batch documentation and traceability",
+                "Quality control testing and release procedures",
+                "Change control system for all GMP aspects",
+                "Complaint handling and recall system"
+            ]
+        },
+        "ICH_Q7": {
+            "name": "ICH Q7 - GMP for APIs",
+            "sections": {
+                "10": "Introduction",
+                "11": "Quality Management",
+                "12": "Personnel",
+                "13": "Buildings and Facilities",
+                "14": "Process Equipment",
+                "15": "Documentation and Records",
+                "16": "Materials Management",
+                "17": "Production and In-Process Controls",
+                "18": "Packaging and Labeling",
+                "19": "Storage and Distribution",
+                "20": "Laboratory Controls"
+            },
+            "cannabis_specific": [
+                "Cultivation as starting material",
+                "Harvest timing criticality",
+                "Drying and curing controls",
+                "Cannabinoid profile stability",
+                "Contamination prevention (pesticides, heavy metals, microbial)",
+                "Batch definition for harvests"
+            ]
+        },
+        "ICH_Q9": {
+            "name": "ICH Q9 - Quality Risk Management",
+            "principles": [
+                "Risk evaluation based on scientific knowledge",
+                "Risk management effort commensurate with risk level",
+                "Documentation of risk assessment process",
+                "Review of risk assessments periodically"
+            ],
+            "tools": [
+                "FMEA - Failure Mode Effects Analysis",
+                "HAZOP - Hazard and Operability Studies",
+                "Risk Ranking and Filtering",
+                "Ishikawa/Fishbone Diagrams"
+            ]
+        },
+        "WHO_GMP": {
+            "name": "WHO GMP Guidelines",
+            "botanical_requirements": [
+                "GACP compliance for cultivation",
+                "Botanical identification and authentication",
+                "Contamination and adulteration prevention",
+                "Environmental impact considerations",
+                "Sustainability of collection"
+            ]
+        },
+        "GACP": {
+            "name": "Good Agricultural and Collection Practices",
+            "key_areas": [
+                "Seeds and propagation material",
+                "Cultivation site selection",
+                "Cultivation and harvest",
+                "Primary processing",
+                "Packaging and storage",
+                "Personnel and equipment",
+                "Documentation",
+                "Quality assurance"
+            ]
+        }
+    },
+    "mappings": {
+        "cultivation": [
+            "GACP",
+            "WHO_GMP",
+            "EUDRALEX_VOL4"
+        ],
+        "quality_control": [
+            "EUDRALEX_VOL4",
+            "ICH_Q7",
+            "WHO_GMP"
+        ],
+        "production": [
+            "EUDRALEX_VOL4",
+            "ICH_Q7"
+        ],
+        "risk_management": [
+            "ICH_Q9",
+            "EUDRALEX_VOL4"
+        ],
+        "equipment": [
+            "EUDRALEX_VOL4",
+            "ICH_Q7"
+        ],
+        "documentation": [
+            "EUDRALEX_VOL4",
+            "ICH_Q7"
+        ],
+        "training": [
+            "EUDRALEX_VOL4",
+            "ICH_Q7"
+        ]
+    }
+}

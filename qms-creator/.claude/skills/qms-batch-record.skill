@@ -1,0 +1,201 @@
+# QMS Batch Record Generator
+
+Generate EU GMP compliant Master Batch Records (MBR) and Batch Production Records (BPR).
+
+## Activation
+- User requests: "batch record", "MBR", "BPR", "manufacturing record", "production record"
+
+---
+
+<qms-batch-record>
+
+## Instructions
+
+You are generating EU GMP compliant batch records for cannabis pharmaceutical manufacturing.
+
+### DOCUMENT TYPES
+
+| Type | Purpose | When Used |
+|------|---------|-----------|
+| Master Batch Record (MBR) | Template/master document | Approved for production |
+| Batch Production Record (BPR) | Executed record for specific batch | During manufacturing |
+| Packaging Batch Record | Packaging operations | During packaging |
+
+### EU GMP REQUIREMENTS (Chapter 4.18-4.21)
+
+Batch records must include:
+- <cite source="EUGMP-4.18">Name of product and batch number</cite>
+- <cite source="EUGMP-4.18">Dates and times of start/completion</cite>
+- <cite source="EUGMP-4.18">Identification of operators</cite>
+- <cite source="EUGMP-4.18">Relevant equipment identified</cite>
+- <cite source="EUGMP-4.19">Materials used with quantities</cite>
+- <cite source="EUGMP-4.20">In-process controls with results</cite>
+- <cite source="EUGMP-4.21">Yield at different stages</cite>
+
+### BATCH RECORD STRUCTURE
+
+#### Section 1: Header Information
+```markdown
+## 1. Batch Record Header
+
+| Field | Value | Verification |
+|-------|-------|--------------|
+| Product Name | {name} | |
+| Product Code | {code} | |
+| Batch Number | {batch_no} | |
+| Batch Size | {size} {unit} | |
+| Manufacturing Date | {date} | |
+| Expiry Date | {expiry} | |
+| MBR Reference | {mbr_code} Version {ver} | |
+```
+
+#### Section 2: Bill of Materials
+```markdown
+## 2. Bill of Materials
+
+| Item | Material Code | Material Name | Required Qty | Unit | Actual Qty | Lot No. | Verified By |
+|------|---------------|---------------|--------------|------|------------|---------|-------------|
+| 1 | RM-001 | Cannabis Extract | 1000.0 | g | _____ | _____ | _____ |
+| 2 | RM-002 | MCT Oil | 5000.0 | mL | _____ | _____ | _____ |
+| 3 | PM-001 | Amber Bottles 30mL | 200 | pcs | _____ | _____ | _____ |
+
+**Tolerance:** ±2% for active ingredients, ±5% for excipients
+```
+
+#### Section 3: Equipment List
+```markdown
+## 3. Equipment
+
+| Equipment | ID/Asset No. | Calibration Due | Clean Status | Verified By |
+|-----------|--------------|-----------------|--------------|-------------|
+| Balance | BAL-001 | {date} | ☐ Clean | _____ |
+| Mixer | MIX-001 | {date} | ☐ Clean | _____ |
+| Filling Machine | FIL-001 | {date} | ☐ Clean | _____ |
+
+**Line Clearance Verified By:** __________ **Date:** __________
+```
+
+#### Section 4: Manufacturing Instructions
+```markdown
+## 4. Manufacturing Instructions
+
+### 4.1 Pre-Production Checks
+| Check | Specification | Result | Performed By | Verified By |
+|-------|---------------|--------|--------------|-------------|
+| Room temperature | 18-25°C | _____ °C | _____ | _____ |
+| Room humidity | 30-65% RH | _____ % | _____ | _____ |
+| Line clearance | No previous product | ☐ Yes ☐ No | _____ | _____ |
+
+### 4.2 Weighing/Dispensing
+| Step | Instruction | Target | Actual | Time | Operator | Verifier |
+|------|-------------|--------|--------|------|----------|----------|
+| 4.2.1 | Tare container on balance | 0.00 g | _____ | _____ | _____ | _____ |
+| 4.2.2 | Weigh Cannabis Extract | 1000.0 ±20 g | _____ | _____ | _____ | _____ |
+| 4.2.3 | Record lot number | Lot: _________ | | | | |
+
+### 4.3 Compounding
+| Step | Instruction | Parameter | Actual | Time | Operator |
+|------|-------------|-----------|--------|------|----------|
+| 4.3.1 | Transfer extract to mixer | - | ☐ Done | _____ | _____ |
+| 4.3.2 | Add MCT oil slowly | 5000 mL | _____ mL | _____ | _____ |
+| 4.3.3 | Mix at low speed | 100 rpm, 10 min | _____ rpm, _____ min | _____ | _____ |
+| 4.3.4 | Increase to high speed | 500 rpm, 30 min | _____ rpm, _____ min | _____ | _____ |
+| 4.3.5 | Sample for IPC | - | Sample ID: _____ | _____ | _____ |
+```
+
+#### Section 5: In-Process Controls
+```markdown
+## 5. In-Process Controls (IPC)
+
+| Test | Specification | Method | Result | Pass/Fail | Tested By |
+|------|---------------|--------|--------|-----------|-----------|
+| Appearance | Clear amber liquid | Visual | _____ | ☐ P ☐ F | _____ |
+| Homogeneity | Uniform | Visual | _____ | ☐ P ☐ F | _____ |
+| CBD Content | 95-105% of label | HPLC | _____ mg/mL | ☐ P ☐ F | _____ |
+| THC Content | <0.2% | HPLC | _____ % | ☐ P ☐ F | _____ |
+
+**IPC Decision:** ☐ Proceed to filling ☐ Hold for QA review
+**Authorized By:** __________ **Date:** __________
+```
+
+#### Section 6: Filling Operations
+```markdown
+## 6. Filling
+
+| Parameter | Target | Actual | Verified |
+|-----------|--------|--------|----------|
+| Fill volume | 30.0 ±0.5 mL | _____ mL | _____ |
+| Fill weight | 28.5 ±0.5 g | _____ g | _____ |
+
+**Fill Weight Checks (every 15 min):**
+| Time | Weight 1 | Weight 2 | Weight 3 | Average | Pass/Fail | Operator |
+|------|----------|----------|----------|---------|-----------|----------|
+| _____ | _____ | _____ | _____ | _____ | ☐ P ☐ F | _____ |
+```
+
+#### Section 7: Yield Reconciliation
+```markdown
+## 7. Yield Reconciliation
+
+| Stage | Theoretical | Actual | Yield % | Acceptable Range |
+|-------|-------------|--------|---------|------------------|
+| Compounding | 6000 mL | _____ mL | _____ % | 98-102% |
+| After filling | 200 units | _____ units | _____ % | 95-100% |
+| Rejected units | 0 | _____ | - | <2% |
+
+**Total Yield:** _____ %
+**Yield Acceptable:** ☐ Yes ☐ No (if No, initiate deviation)
+```
+
+#### Section 8: Batch Disposition
+```markdown
+## 8. Batch Review and Disposition
+
+### Production Review
+| Reviewer | Signature | Date | Comments |
+|----------|-----------|------|----------|
+| Production Supervisor | __________ | _____ | |
+| QA Reviewer | __________ | _____ | |
+
+### Deviations During Batch
+| Deviation No. | Description | Impact | Resolution |
+|---------------|-------------|--------|------------|
+| _____ | _____ | _____ | _____ |
+
+### Final Disposition
+☐ **APPROVED** for release
+☐ **REJECTED** - Reason: _____
+☐ **QUARANTINE** pending investigation
+
+**Authorized Person:** __________ **Date:** __________
+```
+
+### CANNABIS-SPECIFIC REQUIREMENTS
+
+Include these cannabis-specific sections:
+
+1. **Cannabinoid Content Tracking**
+   - Input cannabinoid content (COA from supplier)
+   - Calculated target concentration
+   - IPC and final product testing
+
+2. **Controlled Substance Reconciliation**
+   - THC input quantity
+   - THC in finished product
+   - THC in waste/samples
+   - Full reconciliation required
+
+3. **Product Segregation Verification**
+   - Confirmation no THC/CBD cross-contamination
+   - Dedicated equipment or validated cleaning
+
+### OUTPUT FORMAT
+
+Generate complete batch record in markdown with:
+- All sections filled with appropriate blanks
+- Checkboxes for verifications
+- Tables for data entry
+- Signature lines
+- Cannabis-specific tracking
+
+</qms-batch-record>

@@ -1,0 +1,36 @@
+sequenceDiagram
+    participant User
+    participant API
+    participant Agent2 as Agent 2 (Intro)
+    participant Agent3 as Agent 3 (Proc)
+    participant Agent4 as Agent 4 (Comp)
+    participant DB1 as DB1 (Regulatory)
+    participant DB2 as DB2 (Operational)
+    participant Ollama as Ollama Embeddings
+
+    User->>API: Start SOP Generation
+    API->>Agent2: Initialize with Metadata
+
+    Note over Agent2,DB1: Regulatory Context Search
+    Agent2->>Ollama: Embed query
+    Ollama-->>Agent2: Query vector
+    Agent2->>DB1: Vector search (regulatory)
+    DB1-->>Agent2: Regulatory passages
+    Agent2->>DB2: Vector search (examples)
+    DB2-->>Agent2: Operational examples
+    Agent2-->>User: Context-aware questions
+
+    User->>Agent3: Submit answers
+    Note over Agent3,DB2: Operational Examples Search
+    Agent3->>Ollama: Embed query
+    Ollama-->>Agent3: Query vector
+    Agent3->>DB2: Vector search (priority)
+    DB2-->>Agent3: Template examples
+    Agent3-->>User: Procedure questions
+
+    User->>Agent4: Submit procedure
+    Note over Agent4,DB1: Compliance Validation
+    Agent4->>DB1: Search regulatory requirements
+    DB1-->>Agent4: Applicable regulations
+    Agent4->>Agent4: Match & validate
+    Agent4-->>API: Compliance report

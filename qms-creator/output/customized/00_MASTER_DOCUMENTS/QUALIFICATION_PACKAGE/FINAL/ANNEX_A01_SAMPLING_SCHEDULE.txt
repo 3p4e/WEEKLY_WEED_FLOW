@@ -1,0 +1,24 @@
+Annex A01 — Annual Water Sampling Schedule (Draft)
+
+Document header: QMS code: ANNEX-A01 | Title: Sampling Schedule — Water Quality | Version: V0.1 | Prepared by: [Name]
+
+Table: Sampling Locations and Plan
+
+| SL Code | Sampling Location (Name)                | Zone        | Matrix | Frequency        | Tests/Analyses                            | Responsible | Notes |
+|---------|-----------------------------------------|-------------|--------|------------------|-------------------------------------------|-------------|-------|
+| RO001   | RO Main Tank faucet                      | Green Zone  | RO     | Daily / As noted | Conductivity, pH, TBC, E. coli, P. aeruginosa, TOC (when scheduled) | QC         | Purge and ozonation step before sampling as per SOP |
+| RO002   | Trimming Room faucet                     | White Zone  | PW/RO  | Daily / PQ runs  | Conductivity, pH, TBC                       | QC         | Use sterile micro bottle w/ thiosulfate for micro samples |
+| RO003   | Drying Room faucet                       | White Zone  | PW/RO  | Daily / PQ runs  | Conductivity, pH, TBC                       | QC         | |
+| RO004   | Lab / Utility point (TOC sampling tap)   | Utility/Lab | PW     | Monthly / TOC    | TOC, conductivity, pH                       | QC         | TOC sample: 100 mL container, acidify if >2h delay |
+| RO999   | [Other sampling point — add SL codes]     | [Zone]      | [Type] | [Frequency]      | [Tests]                                    | [Owner]    | [Notes]
+
+Notes:
+- Microbiological sample handling: 2–8°C transport; deliver to contracted lab ≤ 6 h. Use sterile containers (0.5–1 L) with sodium thiosulfate for chlorine neutralization where applicable.
+- Physico-chemical samples: rinse bottles 3×, store at ambient or per method; pH measurements to be performed per lab instruction (pH test result expiry: 2 h for some methods).
+- Sampling point sanitisation: flame metal faucets 30–60s, cool 30–60s, do NOT re-flush after sanitisation for microbiological samples (see SOP A08).
+- Sampling ID format: [Facility]-[SL Code]-[YYYY-MM-DD]-[HH:MM]-[MIC/PHC] (e.g., PP-RO002-20250115-0830-MIC)
+
+Attachment: annual calendar with scheduled sample dates (to be populated from facility annual testing plan).
+
+Change history:
+- V0.1 draft — populated with PQ/ SOP extracted locations and frequencies (prepared from extracted sources) — [date] [author]

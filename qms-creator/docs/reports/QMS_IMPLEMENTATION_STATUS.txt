@@ -1,0 +1,507 @@
+================================================================================
+PURELY PLANT GMBH QMS TOOLKIT - IMPLEMENTATION STATUS
+================================================================================
+
+Date: January 13, 2026
+Status: Phase 1 - Foundation Framework Complete
+
+================================================================================
+WHAT HAS BEEN COMPLETED (✓)
+================================================================================
+
+✓ FOLDER STRUCTURE (100% complete)
+  ✓ 00_MASTER_DOCUMENTS/
+  ✓ 01_QUALITY_ASSURANCE/
+  ✓ 02_SANITATION_HYGIENE/
+  ✓ 03_PRODUCTION_CULTIVATION/
+  ✓ 04_SECURITY/
+  ✓ 05_RECORDS_MANAGEMENT/
+  ✓ 06_HUMAN_RESOURCES/
+  ✓ 07_EQUIPMENT_MANAGEMENT/
+  ✓ 08_PREMISES_MANAGEMENT/
+  ✓ FORMS_TEMPLATES/
+  ✓ CUSTOMIZATION_GUIDE/
+  ✓ REFERENCE_MATERIALS/
+
+✓ MASTER DOCUMENTS & FRAMEWORK (80% complete)
+  ✓ QMS_DOCUMENT_REGISTRY.txt - Complete mapping of 100+ documents
+  ✓ QAS-01-001: Quality Manual Template
+  ✓ QAS-01-003: Facility Profile Master Template
+  ✓ NEW DOCUMENT CODING SYSTEM - Standardized, scalable approach
+
+✓ CUSTOMIZATION RESOURCES (100% complete)
+  ✓ CUSTOMIZATION_GUIDE_Complete.txt - Comprehensive how-to guide
+  ✓ QMS_README.txt - Getting started guide
+  ✓ SOP_TEMPLATE_Standard_Format.txt - Standard SOP template
+
+✓ DOCUMENTATION FRAMEWORK
+  ✓ Clear document hierarchy (Quality Manual → System SOPs → Work Instructions)
+  ✓ Placeholder system for facility customization
+  ✓ Version control methodology
+  ✓ Approval chain documentation
+  ✓ Distribution tracking process
+
+================================================================================
+WHAT'S READY FOR YOUR CUSTOMIZATION (Next Steps)
+================================================================================
+
+PRIORITY 1 (COMPLETE FIRST - 1-2 weeks):
+
+□ 1. CUSTOMIZE YOUR FACILITY PROFILE SHEET
+    File: 00_MASTER_DOCUMENTS/QAS-01-003_Facility_Profile_Master_Template.txt
+    Time: 1-2 hours
+    Importance: CRITICAL - This is your reference for all other documents
+    
+□ 2. CUSTOMIZE YOUR QUALITY MANUAL  
+    File: 00_MASTER_DOCUMENTS/QAS-01-001_Quality_Manual_Template.txt
+    Time: 2-3 hours
+    Importance: CRITICAL - Establishes your QMS framework & policy
+    
+□ 3. CREATE ORGANIZATION CHART & ROLES DOCUMENT
+    Reference: QMS_DOCUMENT_REGISTRY.txt (QAS-01-004)
+    Time: 1-2 hours
+    Importance: HIGH - Defines responsibility structure
+
+PRIORITY 2 (COMPLETE NEXT - 3-4 weeks):
+
+□ 4. CUSTOMIZE CRITICAL SYSTEM SOPs (one per day, ~2 hours each)
+    Required SOPs:
+      □ QAS-02-001: Document Management (How you manage procedures)
+      □ QAS-05-002: Deviation Handling (How you handle problems)
+      □ QAS-09-001: Batch Release (How you approve products)
+      □ SAN-01-001: Cleaning & Sanitation (Sanitation procedures)
+      □ HR-01-001: Training (Personnel training program)
+      □ REC-02-001: Records Management (Record keeping)
+      □ SAN-04-002: Water Quality Management (If applicable)
+      □ PRO-01-001: Cultivation Procedures (Core production)
+    
+    Use Template: REFERENCE_MATERIALS/SOP_TEMPLATE_Standard_Format.txt
+
+PRIORITY 3 (COMPLETE AFTER - 5-8 weeks):
+
+□ 5. CUSTOMIZE OPERATIONAL SOPs
+    ~15-20 additional SOPs covering:
+      □ Specific cultivation techniques
+      □ Harvesting procedures
+      □ Processing & packaging
+      □ Testing & quality control
+      □ Equipment operation
+      □ Personnel health & safety
+      □ See QMS_DOCUMENT_REGISTRY.txt for complete list
+
+□ 6. CREATE FORMS & TEMPLATES
+    ~30-40 operational forms:
+      □ Batch production records
+      □ Environmental monitoring logs
+      □ Training records
+      □ Equipment maintenance logs
+      □ Testing certificates
+      □ Security access logs
+      □ Waste documentation
+
+PRIORITY 4 (COMPLETE LAST - 9-12 weeks):
+
+□ 7. COMPILE MASTER INDEX & CROSS-REFERENCES
+    □ Document navigation map
+    □ Process flow diagrams
+    □ Cross-reference matrix
+    □ Regulatory compliance checklist
+
+□ 8. CONDUCT REVIEW & TESTING
+    □ Final QA review of all documents
+    □ End-user feedback on procedures
+    □ Testing & refinement
+    □ Approval sign-offs
+
+□ 9. TRAINING & IMPLEMENTATION
+    □ Facility-wide training on QMS
+    □ Personnel training on specific procedures
+    □ Pilot implementation of key procedures
+    □ Full facility roll-out
+
+================================================================================
+KEY FILES TO START WITH
+================================================================================
+
+1. READ FIRST:
+   📄 QMS_README.txt
+   → Overview of what's included and why
+   → Expected implementation timeline
+   → Quick start checklist
+   
+2. READ NEXT:
+   📄 CUSTOMIZATION_GUIDE/CUSTOMIZATION_GUIDE_Complete.txt
+   → How to customize templates for your facility
+   → Common placeholder types
+   → Step-by-step workflow
+   
+3. CUSTOMIZE FIRST:
+   📄 00_MASTER_DOCUMENTS/QAS-01-003_Facility_Profile_Master_Template.txt
+   → Your facility's master information
+   → Used by all other documents
+   
+4. USE AS REFERENCE:
+   📄 00_MASTER_DOCUMENTS/QMS_DOCUMENT_REGISTRY.txt
+   → What documents exist
+   → New coding system explanation
+   → Mapping of old codes to new codes
+   
+5. FOLLOW THE TEMPLATE:
+   📄 REFERENCE_MATERIALS/SOP_TEMPLATE_Standard_Format.txt
+   → Standard format for all SOPs
+   → Section-by-section guidance
+   → Shows what to include in each SOP
+
+================================================================================
+NEW DOCUMENT CODING SYSTEM EXPLANATION
+================================================================================
+
+Why a New System?
+
+Your old system (QAS-01.00.00) was good for your facility, but it had some 
+limitations:
+  - Three-digit subcategories ran out of space
+  - Difficult to organize related documents together
+  - Limited room for future expansion
+
+New System:
+
+Format: [CATEGORY]-[SUBCATEGORY]-[DOCUMENT]-V.X.X
+Example: QAS-01-001-V.1.0
+
+Benefits:
+  ✓ Scalable: 999 documents per subcategory (unlimited growth)
+  ✓ Organized: Related documents grouped by subcategory
+  ✓ Logical: Clear hierarchy makes navigation easy
+  ✓ Consistent: Same format for all 100+ documents
+  ✓ Future-proof: Room for expansion as your facility grows
+
+Categories:
+  QAS (Quality Assurance)      HR  (Human Resources)
+  SAN (Sanitation)             EQU (Equipment)
+  PRO (Production)             PRE (Premises)
+  SEC (Security)
+  REC (Records)
+
+Subcategories:
+  01 = Main function (e.g., QAS-01 = Quality Management & Policy)
+  02 = Related function (e.g., QAS-02 = Documentation Control)
+  03 = Next related (e.g., QAS-03 = Validation & Qualification)
+  And so on...
+
+Full Explanation: See QMS_DOCUMENT_REGISTRY.txt (first section)
+
+================================================================================
+CUSTOMIZATION WORKFLOW (RECOMMENDED SEQUENCE)
+================================================================================
+
+WEEK 1-2: Foundation
+
+Day 1-2:   Read README and Customization Guide
+Day 3-5:   Complete Facility Profile Sheet (QAS-01-003)
+           • Fill in ALL facility information
+           • Get manager signatures
+           • This becomes your reference document
+Day 6-7:   Customize Quality Manual (QAS-01-001)
+           • Use Facility Profile information
+           • Write facility-specific quality policy
+           • Create organizational chart
+           • Get approvals
+Day 8-10:  Review Document Registry and identify SOPs you need
+           • Determine which operations you have
+           • Mark which SOPs you'll customize
+
+WEEK 3-6: Critical System SOPs
+
+Day 1:     QAS-02-001 - Document Management
+Day 2:     QAS-05-002 - Deviation Handling  
+Day 3:     QAS-09-001 - Batch Release
+Day 4:     SAN-01-001 - Cleaning & Sanitation
+Day 5:     HR-01-001 - Training
+Day 6:     REC-02-001 - Records Management
+Days 7+:   Additional system SOPs based on your operations
+
+For EACH SOP:
+  1. Copy the SOP_TEMPLATE_Standard_Format.txt
+  2. Replace all placeholders with facility-specific info
+  3. Customize procedures to match YOUR actual operations
+  4. Have reviewed by department manager
+  5. Get QA approval
+  6. Get facility manager sign-off
+  7. File in appropriate folder
+  8. Train personnel
+
+WEEK 7-10: Operational SOPs & Forms
+
+Complete remaining SOPs covering:
+  • Cultivation specifics
+  • Processing operations
+  • Testing procedures
+  • Equipment operation
+  • Personnel procedures
+  • Security procedures
+
+Create operational forms covering:
+  • Batch records
+  • Log books
+  • Certificates
+  • Reports
+  • Checklists
+
+WEEK 11-12: Final Review & Implementation
+
+  • Conduct comprehensive QA review of all documents
+  • Collect end-user feedback
+  • Make final adjustments
+  • Obtain all final approvals
+  • Distribute to all personnel
+  • Conduct facility-wide training
+  • Begin operational implementation
+  • Monitor compliance
+
+================================================================================
+WHAT COMES NEXT (We're Preparing Templates For)
+================================================================================
+
+The following will be created following this same framework:
+
+□ COMPLETE SYSTEM SOPs (Tier 1 Priority)
+  Quality Assurance, Documentation, Validation, Risk Management,
+  CAPA/Deviations, Audits, Batch Release, Material Management
+  
+□ SANITATION SOPs (Tier 1 Priority)
+  Cleaning, Gowning, Pest Control, Environmental Monitoring, Hygiene
+  
+□ PRODUCTION/CULTIVATION SOPs (Tier 1 Priority)
+  Mother Plants, Propagation, Vegetative Growth, Flowering, Harvesting,
+  Processing, Packaging, Waste Management, Distribution
+  
+□ SECURITY SOPs (Tier 2)
+  Access Control, Visitor Management, Security Systems, Emergency Procedures
+  
+□ RECORDS SOPs (Tier 2)
+  Document Control, Record Keeping, Inventory Management, Data Integrity
+  
+□ HR SOPs (Tier 2)
+  Training, Personnel Management, Health & Safety, Competency Assessment
+  
+□ EQUIPMENT SOPs (Tier 3)
+  Equipment Operation, Calibration, Maintenance, Qualification
+  
+□ PREMISES SOPs (Tier 3)
+  Room Operations, Utilities Management, Facility Maintenance
+
+□ 30+ OPERATIONAL FORMS & TEMPLATES
+  Batch records, logs, certificates, checklists, reports
+
+□ REFERENCE MATERIALS
+  EU GMP Requirements, Cannabis Testing Standards,
+  Macedonia Regulations, FAQ, Process Diagrams
+
+================================================================================
+ESTIMATED EFFORT & TIMELINE
+================================================================================
+
+RAPID IMPLEMENTATION (4-6 weeks):
+  • Focus on essential documents only
+  • Less customization detail
+  • Faster approval process
+  • Risk: May miss important procedures
+  • Good for: Emergency licensing situations
+
+STANDARD IMPLEMENTATION (8-12 weeks):
+  • Comprehensive document customization
+  • Complete procedure coverage
+  • Thorough testing before implementation
+  • Risk: Takes longer but more complete
+  • Recommended: Best practice
+
+THOROUGH IMPLEMENTATION (12-16 weeks):
+  • Maximum customization and optimization
+  • Extensive testing and validation
+  • Detailed training program
+  • Risk: Takes longest but most robust
+  • Recommended: For large facilities or complex operations
+
+ONGOING MAINTENANCE:
+  • Annual review of all documents (1-2 weeks)
+  • Changes as operations evolve (ongoing, as needed)
+  • Personnel training updates (quarterly)
+  • Regulatory compliance verification (quarterly)
+
+================================================================================
+RESOURCE REQUIREMENTS
+================================================================================
+
+PERSONNEL:
+
+Quality Manager / Document Manager:
+  • 30-40% of time for 3-4 months during implementation
+  • Primary coordinator and approver
+
+Production/Department Managers:
+  • 10-20% of time for customizing their specific procedures
+  • Subject matter expertise on actual operations
+
+HR Manager:
+  • 10-15% of time for training SOP development and execution
+
+All Personnel:
+  • Time for training on new procedures
+  • Time to follow procedures correctly after implementation
+
+EXTERNAL RESOURCES (Optional but Recommended):
+
+GMP Consultant:
+  • 40-80 hours for guidance on EU GMP compliance
+  • Review of procedures for regulatory alignment
+  • Estimated cost: €2,000-5,000
+
+Regulatory Consultant:
+  • 20-40 hours for North Macedonia regulatory guidance
+  • Licensing application support
+  • Estimated cost: €1,000-3,000
+
+MATERIALS:
+
+✓ Printing: Paper for controlled document copies
+✓ Storage: File system or software for document control
+✓ Software: Word processor, PDF reader (you likely have these)
+✓ Optional: Document management software (for larger facilities)
+
+================================================================================
+SUCCESS METRICS
+================================================================================
+
+You'll know the QMS is successful when:
+
+Document Metrics:
+  ✓ All priority documents customized and approved
+  ✓ Version history shows regular reviews
+  ✓ Distribution list shows all personnel have copies
+  ✓ Cross-references are accurate and current
+
+Operational Metrics:
+  ✓ Personnel can explain their SOP procedures
+  ✓ Batch records are complete and signed
+  ✓ No deviations due to unclear procedures
+  ✓ Process yields are consistent
+  ✓ Quality results meet specifications
+
+Compliance Metrics:
+  ✓ Regulatory authority approves facility operations
+  ✓ Internal audits show minimal findings
+  ✓ License renewal approved without major issues
+  ✓ No critical non-conformances in inspections
+
+Safety & Culture Metrics:
+  ✓ Personnel understand quality is important
+  ✓ Deviations are reported and investigated
+  ✓ Suggestions for improvement are welcomed
+  ✓ No safety incidents related to procedures
+
+================================================================================
+SUPPORT & RESOURCES
+================================================================================
+
+INCLUDED IN TOOLKIT:
+
+✓ QMS_README.txt - Getting started guide
+✓ CUSTOMIZATION_GUIDE - How to customize templates
+✓ SOP_TEMPLATE - Standard SOP format
+✓ DOCUMENT_REGISTRY - List of all 100+ documents
+✓ QUALITY_MANUAL_TEMPLATE - Your governance framework
+✓ FACILITY_PROFILE_TEMPLATE - Your facility baseline
+
+EXTERNAL RESOURCES TO CONSIDER:
+
+Online Resources:
+  • European Medicines Agency (EMA) - EU GMP guidance
+  • European Pharmacopoeia (Ph. Eur.) - Testing standards
+  • North Macedonia Ministry of Health - Regulatory requirements
+
+Professional Help:
+  • GMP Consultants
+  • Cannabis industry experts
+  • Regulatory affairs specialists
+
+Industry Standards:
+  • EU GMP Annex 7 (Herbal Preparations)
+  • Good Agricultural Practice (GACP) standards
+  • Cannabis testing laboratory standards
+
+Peer Learning:
+  • Other certified cannabis facilities (if able to network)
+  • Industry associations and conferences
+  • Regulatory authority guidance meetings
+
+================================================================================
+NEXT IMMEDIATE ACTION
+================================================================================
+
+👉 NEXT STEP: Read CUSTOMIZATION_GUIDE_Complete.txt
+
+This document explains:
+  • How to use placeholders
+  • How to customize templates
+  • Common customization mistakes to avoid
+  • Step-by-step workflow for implementation
+
+Then proceed to complete your Facility Profile Sheet.
+
+================================================================================
+CONTACT FOR QUESTIONS
+================================================================================
+
+For questions about:
+
+□ This toolkit and how to use it
+  → Review: QMS_README.txt & CUSTOMIZATION_GUIDE_Complete.txt
+
+□ Customizing documents for your facility
+  → Review: CUSTOMIZATION_GUIDE_Complete.txt
+  → Consult: Your Quality Manager or Document Manager
+
+□ EU GMP compliance
+  → Reference: REFERENCE_MATERIALS folder
+  → Consider: Hiring a GMP consultant
+
+□ Cannabis-specific requirements
+  → Reference: Cannabis_Testing_Requirements.txt
+  → Consider: Industry consultant specializing in cannabis
+
+□ North Macedonia regulatory requirements
+  → Contact: Ministry of Health Medicinal Products Department
+  → Consider: Local regulatory consultant
+
+================================================================================
+FINAL THOUGHTS
+================================================================================
+
+Building a comprehensive Quality Management System is a substantial undertaking,
+but it's essential for:
+
+→ Producing safe, high-quality medical cannabis
+→ Meeting regulatory requirements for your license
+→ Protecting your facility's reputation
+→ Documenting your processes clearly
+→ Preparing for regulatory inspections
+→ Training and guiding your team
+
+Take it one step at a time. Involve your team. Review, refine, and improve
+as you learn. Remember: the goal is not perfect documents, but a working
+QMS that your team understands and follows every day.
+
+You have a solid foundation to build on. Let's get started!
+
+================================================================================
+END OF IMPLEMENTATION STATUS
+================================================================================
+
+Document: QMS_IMPLEMENTATION_STATUS.txt
+Version: 1.0
+Created: January 13, 2026
+
+NEXT FILE TO READ: CUSTOMIZATION_GUIDE/CUSTOMIZATION_GUIDE_Complete.txt
+
+================================================================================

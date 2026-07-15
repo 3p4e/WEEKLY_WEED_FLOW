@@ -1,0 +1,1041 @@
+families:
+  QAS_01:
+    name_en: Quality Management System Core
+    name_mk: Јадро на системот за управување со квалитет
+    description: Fundamental QMS procedures and cross-departmental standards.
+    sops:
+      QA_00.01:
+        title_en: Quality Manual
+        title_mk: Прирачник за квалитет
+        original_id: QAS-01-001
+      QA_00.02:
+        title_en: Document Control
+        title_mk: Контрола на документи
+        original_id: QAS-00-002
+        annexes:
+          QA_00.02_A01:
+            title_en: Document Templates
+            title_mk: Шаблони за документи
+          QA_00.02_A02:
+            title_en: Approval Matrix
+            title_mk: Матрица за одобрување
+          QA_00.02_A03:
+            title_en: Change Request Form
+            title_mk: Образец за барање за промена
+          QA_00.02_A04:
+            title_en: Obsolete Handling
+            title_mk: Ракување со застарени документи
+      QA_00.05:
+        title_en: Change Control
+        title_mk: Контрола на промени
+        original_id: QAS-00-005
+        annexes:
+          QA_00.05_A01:
+            title_en: Change Control Request Form
+            title_mk: Образец за барање за контрола на промени
+          QA_00.05_A02:
+            title_en: Risk Assessment Templates
+            title_mk: Шаблони за проценка на ризик
+          QA_00.05_A03:
+            title_en: Impact Assessment Form
+            title_mk: Образец за проценка на влијание
+      QA_00.06:
+        title_en: Corrective and Preventive Action (CAPA) System
+        title_mk: Систем за корективни и превентивни мерки (CAPA)
+        original_id: QAS-00-006
+        annexes:
+          QA_00.06_A01:
+            title_en: CAPA Initiation Form
+            title_mk: Образец за иницирање на CAPA
+          QA_00.06_A02:
+            title_en: CAPA Action Plan
+            title_mk: CAPA Акционен план
+          QA_00.06_A03:
+            title_en: CAPA Effectiveness Check
+            title_mk: Проверка на ефикасноста на CAPA
+      QA_00.03:
+        title_en: Training (General)
+        title_mk: Обука (Општо)
+        original_id: QAS-00-003
+      QA_00.07:
+        title_en: Deviation Handling & Investigation
+        title_mk: Ракување и истрага на девијации
+        original_id: QAS-00-007
+      QA_00.08:
+        title_en: Self-Inspection
+        title_mk: Самопроверка
+        original_id: QAS-01-002
+      QA_00.04:
+        title_en: Memorandum Control and Management
+        title_mk: Контрола и управување со меморандуми
+        original_id: QAS-DOC-MEM-001
+        annexes:
+          QA_00.04_A01:
+            title_en: General Memorandum Template
+            title_mk: Образец за меморандум
+          QA_00.04_A02:
+            title_en: Document Distribution Record
+            title_mk: Евиденција за распределба на документ
+          QA_00.04_A03:
+            title_en: Memorandum Issuance List
+            title_mk: Евиденција за издавање меморандуми
+          QA_00.04_A04:
+            title_en: Memorandum Receipt List
+            title_mk: Евиденција за прием на меморандуми
+      QA_00.12:
+        title_en: Site Master File
+        title_mk: Главен фајл на локација
+        original_id: QAS-00-004
+      QA_00.13:
+        title_en: Product Quality Review
+        title_mk: Преглед на квалитет на производ
+        original_id: QAS-00-008
+      QA_00.14:
+        title_en: Management Review
+        title_mk: Преглед на раководство
+        original_id: QAS-01-003
+      QA_00.15:
+        title_en: Document Retention
+        title_mk: Задржување на документи
+        original_id: QAS-03-001
+      QC_01.01:
+        title_en: Batch Release
+        title_mk: Ослободување на серија
+        original_id: QC-01-001
+        annexes:
+          QC_01.01_A01:
+            title_en: Batch Release Assessment Form
+            title_mk: Образец за проценка на ослободување на серија
+          QC_01.01_A02:
+            title_en: Batch Release Checklist
+            title_mk: Чеклиста за ослободување на серија
+          QC_01.01_A03:
+            title_en: QP Release Certification Form
+            title_mk: Образец за QP сертификација за ослободување
+          QC_01.01_A04:
+            title_en: Batch Release Archival Checklist
+            title_mk: Чеклиста за архивирање на ослободување на серија
+          QC_01.01_A05:
+            title_en: Deviation Investigation Template
+            title_mk: Шаблон за истрага на девијации
+      QC_01.02:
+        title_en: Sampling Procedures
+        title_mk: Процедури за земање примероци
+        original_id: QCS-QC-SAM-001
+      QC_01.03:
+        title_en: Out-of-Expected Results (OOx) Investigation and Handling
+        title_mk: Истрага и ракување со резултати надвор од очекуваните
+        original_id: QCS-QC-OOS-001
+      QC_01.04:
+        title_en: Specifications Management
+        title_mk: Управување со спецификации
+        original_id: QCS-QC-SPEC-001
+      QC_01.05:
+        title_en: Laboratory Organization
+        title_mk: Организација на лабораторија
+        original_id: QCS-QC-LAB-001
+      QC_01.06:
+        title_en: QC Documentation GDP
+        title_mk: Документација за QC GDP
+        original_id: QCS-QC-DOC-001
+      QC_01.07:
+        title_en: Sampling Plan
+        title_mk: План за земање примероци
+        original_id: QCS-01-001
+      QC_01.08:
+        title_en: Cannabinoid Testing (HPLC)
+        title_mk: Тестирање на канабиноиди (HPLC)
+        original_id: QCS-01-002
+      QC_01.09:
+        title_en: Microbial Testing
+        title_mk: Микробиолошко тестирање
+        original_id: QCS-01-003
+      QC_01.10:
+        title_en: Heavy Metals Testing
+        title_mk: Тестирање на тешки метали
+        original_id: QCS-01-004
+      QC_01.11:
+        title_en: Pesticide Residue Testing
+        title_mk: Тестирање на остатоци од пестициди
+        original_id: QCS-01-005
+      QC_01.12:
+        title_en: Moisture Content Determination
+        title_mk: Определување на содржина на влага
+        original_id: QCS-01-006
+      QC_01.13:
+        title_en: Laboratory Sample Management
+        title_mk: Управување со лабораториски примероци
+        original_id: QC-01-002
+      QC_01.14:
+        title_en: Method Validation
+        title_mk: Валидација на метод
+        original_id: QC-01-003
+  PRO_03:
+    name_en: Production Operations
+    name_mk: Производствени операции
+    description: Standard operating procedures for production and cultivation.
+    sops:
+      PRO_03.01:
+        title_en: Production Standard Operating Procedure
+        title_mk: Стандардна оперативна процедура за производство
+        original_id: PRO-03-001
+      PRO_03.02:
+        title_en: Drying Procedures
+        title_mk: Процедури за сушење
+        original_id: PRO-03-002
+      PRO_03.03:
+        title_en: Facility Drying Procedures
+        title_mk: Процедури за сушење во објект
+        original_id: PRO-FACI-DRY-001
+      PRO_01.09:
+        title_en: Cannabis Flower Curing Process Monitoring
+        title_mk: Мониторинг на процесот на созревање на цветот на конопот
+        original_id: PRO-CULT-CUR-001
+      PRO_01.10:
+        title_en: Plant Health Monitoring
+        title_mk: Мониторинг на здравјето на растенијата
+        original_id: PRO-CULT-PHM-001
+      PRO_01.11:
+        title_en: Placeholder Cultivation SOP
+        title_mk: Пополнителна култивација SOP
+        original_id: PRO-CULT-XXX-001
+      PRO_06.01:
+        title_en: Transportation of Finished Products
+        title_mk: Транспорт на готови производи
+        original_id: PRO-LOG-TRN-001
+  MAT_02:
+    name_en: Material Management
+    name_mk: Управување со материјали
+    description: Procedures for material receipt, storage, and handling.
+    sops:
+      MAT_02.04:
+        title_en: Material Receipt Form
+        title_mk: Образец за прием на материјали
+        original_id: MAT-00-004
+      MAT_02.01:
+        title_en: Analytical Methods Validation
+        title_mk: Валидација на аналитички методи
+        original_id: MAT-00-002
+  HRM_06:
+    name_en: Human Resources
+    name_mk: Човечки ресурси
+    description: Procedures for personnel training, hygiene, and management.
+    sops:
+      HRM_05.01:
+        title_en: Training (General)
+        title_mk: Обука (Општо)
+        original_id: HRM-00-001
+      HRM_05.05:
+        title_en: Employee Hygiene Procedure
+        title_mk: Процедура за хигиена на вработените
+        original_id: HRM-00-005
+      HRM_05.02:
+        title_en: Personnel Qualification
+        title_mk: Квалификација на персонал
+        original_id: HRM-01-001
+      HRM_05.04:
+        title_en: GMP Training Program
+        title_mk: GMP програм за обука
+        original_id: HRM-02-002
+      HRM_05.06:
+        title_en: Visitor Management
+        title_mk: Управување со посетители
+        original_id: HRM-03-001
+      HRM_05.07:
+        title_en: Gowning Procedures
+        title_mk: Процедури за облекување
+        original_id: HRM-03-002
+  EQU_07:
+    name_en: Equipment Management
+    name_mk: Управување со опрема
+    description: Procedures for equipment operation, maintenance, and calibration.
+    sops:
+      EQU_06.01:
+        title_en: Equipment Operation (General)
+        title_mk: Работа со опрема (Општо)
+        original_id: EQU-00-001
+  SAN_02:
+    name_en: Sanitation & Hygiene
+    name_mk: Санитација и хигиена
+    description: Procedures for cleaning and sanitation.
+    sops:
+      SAN_07.01:
+        title_en: Cleaning & Sanitation (GMP Areas)
+        title_mk: Чистење и санитација (GMP области)
+        original_id: SAN-00-001
+  VAL_08:
+    name_en: Validation & Qualification
+    name_mk: Валидација и квалификација
+    description: Procedures for validation and qualification.
+    sops:
+      VAL_08.01:
+        title_en: Validation Master Plan
+        title_mk: Главен план за валидација
+        original_id: VAL-00-001
+      VAL_08.08:
+        title_en: Cleaning Validation Protocol
+        title_mk: Протокол за валидација на чистење
+        original_id: VAL-00-008
+      VAL_08.02:
+        title_en: Process Validation
+        title_mk: Валидација на процес
+        original_id: VAL-01-001
+  QCS_01:
+    name_en: QC System & Documentation
+    name_mk: QC Систем и документација
+    description: Quality Control system procedures and documentation standards.
+    sops:
+      QCS_01.01:
+        title_en: Batch Release Review
+        title_mk: Преглед за ослободување на серија
+        original_id: QCS-00-003
+      QCS_01.02:
+        title_en: Batch Release Review Detailed
+        title_mk: Детални преглед за ослободување на серија
+        original_id: QCS-QC-BRR-001
+      QCS_01.03:
+        title_en: Quality Control Master Plan
+        title_mk: Главен план за контрола на квалитет
+        original_id: QCS-00-001
+      QCS_01.04:
+        title_en: Out-of-Specification Investigations
+        title_mk: Истраги надвор од спецификации
+        original_id: QCS-02-001
+      QCS_01.05:
+        title_en: Reference Standards Management
+        title_mk: Управување со референтни стандарди
+        original_id: QCS-02-002
+      QCS_01.06:
+        title_en: Laboratory Equipment Calibration
+        title_mk: Калибрација на лабораториска опрема
+        original_id: QCS-02-003
+      QCS_01.07:
+        title_en: Laboratory Safety
+        title_mk: Лабораториска безбедност
+        original_id: QCS-03-001
+      QCS_01.08:
+        title_en: Laboratory Waste Disposal
+        title_mk: Отстранување на лабораториски отпад
+        original_id: QCS-03-002
+      QCS_01.09:
+        title_en: Analytical Methods
+        title_mk: Аналитички методи
+        original_id: QCS-QC-MET-001
+      QCS_01.10:
+        title_en: Reference Standards
+        title_mk: Референтни стандарди
+        original_id: QCS-QC-RS-001
+  REC_05:
+    name_en: Records Management
+    name_mk: Управување со записи
+    description: Procedures for record keeping and data integrity.
+    sops:
+      REC_09.01:
+        title_en: Records Management
+        title_mk: Управување со записи
+        original_id: REC-00-001
+  RES_10:
+    name_en: Research & Development
+    name_mk: Истражување и развој
+    description: Procedures for research, development, and innovation.
+    sops:
+      RES_10.01:
+        title_en: Phenotyping and Characterization
+        title_mk: Фенотипизирање и карактеризација
+        original_id: RES-RND-PHE-001
+file_mapping:
+  sops_created/QAS-00-002_Document_Control_v1.0_EN.md: QAS_01.02_v1
+  sops_created/QAS-00-002_A01_Document_Templates_v1.0_EN.md: QAS_01.02_A01_v1
+  sops_created/QAS-00-002_A02_Approval_Matrix_v1.0_EN.md: QAS_01.02_A02_v1
+  sops_created/QAS-00-002_A03_Change_Request_Form_v1.0_EN.md: QAS_01.02_A03_v1
+  sops_created/QAS-00-002_A04_Obsolete_Handling_v1.0_EN.md: QAS_01.02_A04_v1
+  sops_created/QAS-00-005_Change_Control_v1.0_EN.md: QAS_01.05_v1
+  sops_created/QAS-00-005_A01_Change_Control_Request_Form_v1.0_EN.md: QAS_01.05_A01_v1
+  sops_created/QAS-00-005_A02_Risk_Assessment_Templates_v1.0_EN.md: QAS_01.05_A02_v1
+  sops_created/QAS-00-005_A03_Impact_Assessment_Form_v1.0_EN.md: QAS_01.05_A03_v1
+  00_MASTER_DOCUMENTS/QAS-01-001_Quality_Manual_Template.txt: QAS_01.01_v1
+  01_QUALITY_ASSURANCE/QAS-00-006_CAPA_System_SOP_v1.0_EN.md: QAS_01.06_v1
+  01_QUALITY_ASSURANCE/QAS-00-006_A01_CAPA_Initiation_Form_v1.0_EN.md: QAS_01.06_A01_v1
+  01_QUALITY_ASSURANCE/QAS-00-006_A02_CAPA_Action_Plan_v1.0_EN.md: QAS_01.06_A02_v1
+  01_QUALITY_ASSURANCE/QAS-00-006_A03_CAPA_Effectiveness_Check_v1.0_EN.md: QAS_01.06_A03_v1
+  04_QUALITY_TESTING/QC-01-001_Batch_Release_v1.0_EN.md: QAS_01.01_v1
+  04_QUALITY_TESTING/QC-01-001_A01_Batch_Release_Assessment_Form_v1.0_EN.md: QAS_01.01_A01_v1
+  04_QUALITY_TESTING/QC-01-001_A02_Batch_Release_Checklist_v1.0_EN.md: QAS_01.01_A02_v1
+  04_QUALITY_TESTING/QC-01-001_A03_QP_Release_Certification_Form_v1.0_EN.md: QAS_01.01_A03_v1
+  04_QUALITY_TESTING/QC-01-001_A04_Batch_Release_Archival_Checklist_v1.0_EN.md: QAS_01.01_A04_v1
+  04_QUALITY_TESTING/QC-01-001_A05_Deviation_Investigation_Template_v1.0_EN.md: QAS_01.01_A05_v1
+  sops_created/QCS-QC-OOS-001_OOx_Investigation_Detailed_v1.0_EN.md: QAS_01.03_v1
+  sops_created/QCS-QC-SAM-001_Sampling_Procedures_v1.0_EN.md: QAS_01.02_v1
+  sops_created/QCS-QC-SPEC-001_Specifications_Management_v1.0_EN.md: QAS_01.04_v1
+  sops_created/QCS-QC-LAB-001_Laboratory_Organization_v1.0_EN.md: QAS_01.05_v1
+  sops_created/QCS-QC-DOC-001_QC_Documentation_GDP_v1.0_EN.md: QAS_01.06_v1
+  sops_created/PRO-CULT-CUR-001_Formatted_v1.0_EN.md: PRO_03.09_v1
+  sops_created/PRO-CULT-PHM-001_Formatted_v1.0_EN.md: PRO_03.10_v1
+  sops_created/PRO-CULT-XXX-001_Formatted_v1.0_EN.md: PRO_03.11_v1
+  sops_created/PRO-LOG-TRN-001_Formatted_v1.0_EN.md: PRO_03.01_v1
+  sops_created/PRO-FACI-DRY-001_Formatted_v1.0_EN.md: PRO_03.03_v1
+  01_QUALITY_ASSURANCE/QA_00.04_Memorandum_Control_Management_v1.0_EN.md: QAS_01.04_v1
+  01_QUALITY_ASSURANCE/QA_00.04_A01_General_Memorandum_v1.0_EN.md: QAS_01.04_A01_v1
+  01_QUALITY_ASSURANCE/QA_00.04_A02_Distribution_Record_v1.0_EN.md: QAS_01.04_A02_v1
+  01_QUALITY_ASSURANCE/QA_00.04_A03_Memorandum_Issuance_List_v1.0_EN.md: QAS_01.04_A03_v1
+  01_QUALITY_ASSURANCE/QA_00.04_A04_Memorandum_Receipt_List_v1.0_EN.md: QAS_01.04_A04_v1
+  sops_created/RES-RND-PHE-001_Formatted_v1.0_EN.md: RES_10.01_v1
+  sops_created/QCS-QC-BRR-001_Formatted_v1.0_EN.md: QCS_01.02_v1
+document_status:
+  EQU_07.01_Equipment_Operation:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.01_Personnel_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.05_Employee_Hygiene:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  MAT_02.04_Material_Receipt_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PP_QA_SOP_006:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.09_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.10_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.10_Plant_Health_Monitoring_Detailed:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.11_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.02_Drying_Procedures:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.03_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  PRO_03.01_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_Quality_Manual:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_A01_Document_Templates:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_A02_Approval_Matrix:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_A03_Change_Request_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_A04_Obsolete_Handling:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_Document_Control:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.03_Training:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_A01_General_Memorandum:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_A02_Distribution_Record:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_A03_Memorandum_Issuance_List:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_A04_Memorandum_Receipt_List:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_Memorandum_Control_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.05_A01_Change_Control_Request_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.05_A02_Risk_Assessment_Templates:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.05_A03_Impact_Assessment_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.05_Change_Control:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A01_CAPA_Initiation_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A01_CAPA_Request_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A02_CAPA_Action_Plan:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A02_RCA_Templates:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A03_CAPA_Effectiveness_Check:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_A03_Effectiveness_Review:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_CAPA_System:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_CAPA_System_SOP:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.07_Deviations:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.08_Self_Inspection:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QCS_01.01_Batch_Release_Review:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QCS_01.02_Batch_Release_Review_Detailed:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QCS_01.02_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_A01_Batch_Release_Assessment_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_A02_Batch_Release_Checklist:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_A03_QP_Release_Certification_Form:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_A04_Batch_Release_Archival_Checklist:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_A05_Deviation_Investigation_Template:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.01_Batch_Release:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.02_Sampling_Procedures:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.03_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.03_OOx_Investigation_Detailed:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.04_Specifications_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.05_Laboratory_Organization:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.06_QC_Documentation_GDP:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  REC_05.01_Records_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  RES_10.01_Formatted:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  SAN_02.01_Cleaning_Sanitation:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  VAL_08.01_Validation_Master_Plan:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  VAL_08.08_Cleaning_Validation:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.02_Personnel_Qualification:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.04_GMP_Training_Program:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.06_Visitor_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  HRM_06.07_Gowning_Procedures:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  MAT_02.01_Analytical_Methods_Validation:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.12_Site_Master_File:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.13_Product_Quality_Review:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.14_Management_Review:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.15_Document_Retention_Policy:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.07_Sampling_Plan:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.08_Cannabinoid_Testing_HPLC:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.09_Microbial_Limit_Testing:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.10_Heavy_Metals_Testing:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.11_Pesticide_Residue_Testing:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.12_Moisture_Content_Determination:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.13_Laboratory_Sample_Management:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  QAS_01.14_Method_Validation_Protocol:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  VAL_08.02_Process_Validation_Protocol:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  BATCH_RECORD_TEMPLATE:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  CLEANING_RECORD:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  ENVIRONMENTAL_MONITORING_FORM:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+  EQUIPMENT_LOGBOOK:
+    status: completed
+    completion_date: '2026-01-22'
+    version: '1.0'
+    formats:
+      markdown: true
+      docx: false
+      pdf: false
+completion_summary:
+  total_documents_in_registry: 77
+  completed_documents: 81
+  completion_percentage: 105.2
+  last_updated: '2026-01-22'
+  formats_available:
+  - markdown
+  - docx
+  - pdf

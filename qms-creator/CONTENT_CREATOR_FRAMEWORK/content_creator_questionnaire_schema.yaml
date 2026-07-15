@@ -1,0 +1,510 @@
+# Content Creator Skill - Enhanced Questionnaire Schema
+# Version: 2.0
+# Purpose: Comprehensive information gathering for SOP/document generation
+# Format: YAML with yes/no/explain options
+
+metadata:
+  schema_version: "2.0"
+  created_date: "2025-01-20"
+  purpose: "Multi-level questionnaire for pharmaceutical QMS document creation"
+  compliance_frameworks:
+    - "EudraLex Volume 4"
+    - "ICH Q7, Q8, Q9, Q10"
+    - "WHO GMP"
+    - "USP <1224>, <1225>, <1226>"
+
+document_identification:
+  sop_name:
+    type: text
+    required: true
+    description: "Full name of the SOP/document"
+
+  sop_number:
+    type: text
+    required: true
+    pattern: "^[A-Z]{2}-\\d{2}-\\d{3}-V\\.\\d+\\.\\d+$"
+    description: "Document ID (e.g., QC-01-001-V.1.0)"
+
+  document_type:
+    type: select
+    required: true
+    options:
+      - "Standard Operating Procedure (SOP)"
+      - "Work Instruction (WI)"
+      - "Form/Template"
+      - "Policy"
+      - "Guideline"
+      - "Protocol"
+      - "Report Template"
+
+  target_audience:
+    type: multiselect
+    required: true
+    options:
+      - "Operator"
+      - "Supervisor"
+      - "QA Personnel"
+      - "QC Analyst"
+      - "Management"
+      - "Qualified Person (QP)"
+      - "All Personnel"
+
+# SECTION 1: SCOPE & APPLICABILITY
+scope_questions:
+  - id: q1_1
+    text: "Does this SOP apply to all production areas?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_no: "List specific areas/departments where this applies"
+      if_na: "Provide explanation"
+      type: text
+      max_length: 500
+
+  - id: q1_2
+    text: "Are there specific product types this SOP covers?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List product types (e.g., dried flower, extracts, oils)"
+      type: text
+      max_length: 500
+
+  - id: q1_3
+    text: "Does this SOP interface with other SOPs?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List related SOP numbers and describe interfaces"
+      type: text
+      max_length: 1000
+
+# SECTION 2: REGULATORY REQUIREMENTS
+regulatory_questions:
+  - id: q2_1
+    text: "Is this SOP required by EU GMP regulations?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify EudraLex volume, chapter, and section"
+      type: text
+      max_length: 500
+
+  - id: q2_2
+    text: "Does this SOP address ICH guidelines?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List applicable ICH guidelines (Q7, Q8, Q9, Q10, etc.)"
+      type: multiselect
+      options:
+        - "ICH Q7 - GMP for APIs"
+        - "ICH Q8 - Pharmaceutical Development"
+        - "ICH Q9 - Quality Risk Management"
+        - "ICH Q10 - Pharmaceutical Quality System"
+        - "ICH Q11 - Development and Manufacture"
+        - "ICH Q12 - Lifecycle Management"
+        - "Other (specify)"
+
+  - id: q2_3
+    text: "Are there national (Macedonian) specific requirements?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify MALMED or other national requirements"
+      type: text
+      max_length: 500
+
+# SECTION 3: QUALITY ATTRIBUTES & CONTROLS
+quality_questions:
+  - id: q3_1
+    text: "Does this process have Critical Quality Attributes (CQAs)?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List all CQAs and their acceptance criteria"
+      type: table
+      columns:
+        - "CQA Name"
+        - "Specification/Limit"
+        - "Testing Method"
+        - "Frequency"
+
+  - id: q3_2
+    text: "Are there Critical Process Parameters (CPPs) to monitor?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define CPPs and control strategies"
+      type: table
+      columns:
+        - "CPP Name"
+        - "Operating Range"
+        - "Monitoring Method"
+        - "Action if OOS"
+
+  - id: q3_3
+    text: "Does this process require in-process controls?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Describe in-process control points"
+      type: text
+      max_length: 1000
+
+# SECTION 4: EQUIPMENT & MATERIALS
+equipment_questions:
+  - id: q4_1
+    text: "Does this SOP require specific equipment?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List equipment with qualification status"
+      type: table
+      columns:
+        - "Equipment Name"
+        - "Equipment ID"
+        - "Qualification Status (IQ/OQ/PQ)"
+        - "Calibration Required (Y/N)"
+
+  - id: q4_2
+    text: "Are there special material requirements?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify materials and grade requirements"
+      type: table
+      columns:
+        - "Material Name"
+        - "Grade/Specification"
+        - "Storage Conditions"
+        - "Supplier Requirements"
+
+  - id: q4_3
+    text: "Is personal protective equipment (PPE) required?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List required PPE by area/activity"
+      type: multiselect
+      options:
+        - "Lab coat"
+        - "Safety glasses"
+        - "Nitrile gloves"
+        - "Hair net"
+        - "Beard cover"
+        - "Shoe covers"
+        - "Face mask"
+        - "Full gowning suite"
+        - "Other (specify)"
+
+# SECTION 5: DOCUMENTATION & RECORDS
+documentation_questions:
+  - id: q5_1
+    text: "Does this SOP generate batch records?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Describe batch record requirements"
+      type: text
+      max_length: 1000
+
+  - id: q5_2
+    text: "Are electronic records/signatures involved?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify 21 CFR Part 11 compliance requirements"
+      type: multiselect
+      options:
+        - "Audit trail required"
+        - "Electronic signatures"
+        - "Access controls"
+        - "Data integrity checks"
+        - "Backup requirements"
+
+  - id: q5_3
+    text: "What is the record retention period?"
+    type: select
+    required: true
+    options:
+      - "1 year"
+      - "3 years"
+      - "5 years"
+      - "7 years"
+      - "10 years"
+      - "Product shelf life + 1 year"
+      - "Other (specify)"
+
+# SECTION 6: TRAINING & QUALIFICATION
+training_questions:
+  - id: q6_1
+    text: "Does this SOP require specialized training?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define training requirements"
+      type: table
+      columns:
+        - "Training Module"
+        - "Duration"
+        - "Frequency"
+        - "Assessment Method"
+
+  - id: q6_2
+    text: "Is practical demonstration required?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Describe practical assessment criteria"
+      type: text
+      max_length: 500
+
+  - id: q6_3
+    text: "Are there prerequisite qualifications?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "List prerequisites (education, experience, other SOPs)"
+      type: text
+      max_length: 500
+
+# SECTION 7: DEVIATIONS & CHANGES
+deviation_questions:
+  - id: q7_1
+    text: "Can planned deviations be allowed?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define approval requirements for planned deviations"
+      type: text
+      max_length: 500
+
+  - id: q7_2
+    text: "Does this SOP link to change control?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify change control categories and approval levels"
+      type: multiselect
+      options:
+        - "Minor change - QA approval"
+        - "Major change - QP approval"
+        - "Critical change - Regulatory notification"
+
+  - id: q7_3
+    text: "Are there specific OOS/OOT procedures?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Reference applicable OOS/OOT SOP numbers"
+      type: text
+      max_length: 200
+
+# SECTION 8: RISK MANAGEMENT
+risk_questions:
+  - id: q8_1
+    text: "Has a risk assessment been performed?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Summarize key risks and mitigation measures"
+      type: table
+      columns:
+        - "Risk Description"
+        - "Severity (1-5)"
+        - "Probability (1-5)"
+        - "Mitigation Strategy"
+
+  - id: q8_2
+    text: "Are there contamination/cross-contamination risks?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Describe prevention measures"
+      type: text
+      max_length: 1000
+
+  - id: q8_3
+    text: "Does this process handle controlled substances?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define security and accountability measures"
+      type: text
+      max_length: 1000
+
+# SECTION 9: PROCESS SPECIFIC
+process_specific_questions:
+  - id: q9_1
+    text: "Are there specific environmental conditions?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define environmental requirements"
+      type: table
+      columns:
+        - "Parameter"
+        - "Specification"
+        - "Monitoring Frequency"
+        - "Recording Method"
+
+  - id: q9_2
+    text: "Is this a GMP critical process?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Define GMP criticality and impact on product quality"
+      type: text
+      max_length: 500
+
+  - id: q9_3
+    text: "Does this process require validation?"
+    type: checkbox
+    options:
+      - "Yes"
+      - "No"
+      - "N/A - Explain below"
+    follow_up:
+      if_yes: "Specify validation approach (prospective/concurrent/retrospective)"
+      type: select
+      options:
+        - "Prospective validation"
+        - "Concurrent validation"
+        - "Retrospective validation"
+        - "Continuous process verification"
+
+# SECTION 10: USER DEFINED QUESTIONS
+user_defined_questions:
+  - id: custom_1
+    text: "[User defined question 1]"
+    type: text
+    required: false
+    max_length: 500
+
+  - id: custom_2
+    text: "[User defined question 2]"
+    type: text
+    required: false
+    max_length: 500
+
+  - id: custom_3
+    text: "[User defined question 3]"
+    type: text
+    required: false
+    max_length: 500
+
+  - id: custom_4
+    text: "[User defined question 4]"
+    type: text
+    required: false
+    max_length: 500
+
+  - id: custom_5
+    text: "[User defined question 5]"
+    type: text
+    required: false
+    max_length: 500
+
+# OUTPUT CONFIGURATION
+output_config:
+  tone:
+    - "Professional"
+    - "Academic"
+    - "Explanatory"
+    - "Operator-friendly"
+
+  vocabulary_level:
+    type: select
+    options:
+      - "Basic operator (simple terms)"
+      - "Experienced operator (standard terms)"
+      - "Technical specialist (advanced terms)"
+      - "Management/QP (comprehensive terms)"
+
+  include_rationale:
+    type: boolean
+    default: true
+    description: "Include explanatory text for requirements"
+
+  bilingual_output:
+    type: boolean
+    default: true
+    languages:
+      - "English"
+      - "Macedonian"

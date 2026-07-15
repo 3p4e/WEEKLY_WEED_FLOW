@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMS Interactive Dashboard - Cannabis EU GMP</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--gray-800);
+        }
+
+        .dashboard {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            background: white;
+            border-radius: 24px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--gray-500);
+            font-size: 1rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+        }
+
+        .stat-card.success::before {
+            background: linear-gradient(180deg, var(--success) 0%, #059669 100%);
+        }
+
+        .stat-card.warning::before {
+            background: linear-gradient(180deg, var(--warning) 0%, #d97706 100%);
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--gray-100);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 1rem;
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--gray-500);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .stat-progress {
+            margin-top: 1.5rem;
+        }
+
+        .progress-bar {
+            background: var(--gray-200);
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+            transition: width 0.5s ease;
+            position: relative;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
+                transparent
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* Visualization Tabs */
+        .viz-container {
+            background: white;
+            border-radius: 24px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--gray-200);
+            padding-bottom: 1rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--gray-600);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab:hover {
+            background: var(--gray-100);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Visualizations */
+        #sunburst, #force-graph, #tree-map, #progress-matrix {
+            width: 100%;
+            height: 600px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 12px;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 250px;
+        }
+
+        .tooltip.show {
+            opacity: 1;
+        }
+
+        /* Family Cards Grid */
+        .families-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .family-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 2px solid var(--gray-200);
+            transition: all 0.3s ease;
+        }
+
+        .family-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .family-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .family-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--gray-800);
+        }
+
+        .family-code {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            font-family: 'Courier New', monospace;
+            background: var(--gray-100);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .family-percentage {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .family-stats {
+            display: flex;
+            justify-content: space-between;
+            margin: 1rem 0 0.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .documents-list {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--gray-200);
+        }
+
+        .doc-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        .doc-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .doc-status.created {
+            background: var(--success);
+        }
+
+        .doc-status.planned {
+            background: var(--gray-400);
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 2rem;
+            padding: 1rem;
+            background: var(--gray-100);
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+            }
+
+            .families-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <h1>🏥 Cannabis EU GMP QMS Dashboard</h1>
+            <p class="subtitle">Real-time Document Hierarchy & Progress Tracking</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card success">
+                <div class="stat-icon">✅</div>
+                <div class="stat-value" id="created-count">39</div>
+                <div class="stat-label">Documents Created</div>
+                <div class="stat-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="created-progress" style="width: 53%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card warning">
+                <div class="stat-icon">📋</div>
+                <div class="stat-value" id="planned-count">34</div>
+                <div class="stat-label">Documents Planned</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value" id="progress-percentage">53%</div>
+                <div class="stat-label">Overall Progress</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">📁</div>
+                <div class="stat-value">13</div>
+                <div class="stat-label">Document Families</div>
+            </div>
+        </div>
+
+        <div class="viz-container">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('sunburst')">
+                    <span>☀️</span> Sunburst Chart
+                </button>
+                <button class="tab" onclick="showTab('force')">
+                    <span>🔗</span> Network Graph
+                </button>
+                <button class="tab" onclick="showTab('treemap')">
+                    <span>📊</span> Treemap
+                </button>
+                <button class="tab" onclick="showTab('matrix')">
+                    <span>📈</span> Progress Matrix
+                </button>
+            </div>
+
+            <div id="sunburst" class="tab-content active">
+                <!-- Sunburst visualization will be rendered here -->
+            </div>
+
+            <div id="force" class="tab-content">
+                <div id="force-graph"></div>
+            </div>
+
+            <div id="treemap" class="tab-content">
+                <div id="tree-map"></div>
+            </div>
+
+            <div id="matrix" class="tab-content">
+                <div id="progress-matrix"></div>
+            </div>
+        </div>
+
+        <div class="viz-container">
+            <h2 style="font-size: 1.5rem; margin-bottom: 1.5rem;">Document Families Overview</h2>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: var(--success)"></div>
+                    <span>Created</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: var(--warning)"></div>
+                    <span>In Progress</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: var(--gray-400)"></div>
+                    <span>Planned</span>
+                </div>
+            </div>
+
+            <div class="families-grid" id="families-grid">
+                <!-- Family cards will be dynamically generated -->
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip"></div>
+
+    <script>
+        // QMS Data Structure
+        const qmsData = {
+            name: "QMS",
+            children: [
+                {
+                    name: "QA_00: Quality System Core",
+                    value: 22,
+                    created: 18,
+                    children: [
+                        { name: "Document Control", value: 1, status: "created" },
+                        { name: "Change Control", value: 1, status: "created" },
+                        { name: "CAPA System", value: 1, status: "created" },
+                        { name: "Training", value: 1, status: "created" },
+                        { name: "Quality Manual", value: 1, status: "created" },
+                        { name: "Deviation Handling", value: 1, status: "created" },
+                        { name: "Self-Inspection", value: 1, status: "created" },
+                        { name: "Site Master File", value: 1, status: "planned" },
+                        { name: "Product Quality Review", value: 1, status: "planned" },
+                        { name: "Management Review", value: 1, status: "planned" },
+                        { name: "Document Retention", value: 1, status: "planned" }
+                    ]
+                },
+                {
+                    name: "QC_01: Batch Release",
+                    value: 19,
+                    created: 7,
+                    children: [
+                        { name: "Batch Release", value: 1, status: "created" },
+                        { name: "Sampling Procedures", value: 1, status: "created" },
+                        { name: "OOx Investigation", value: 1, status: "created" },
+                        { name: "Specifications", value: 1, status: "created" },
+                        { name: "Laboratory Organization", value: 1, status: "created" },
+                        { name: "QC Documentation", value: 1, status: "created" },
+                        { name: "Sampling Plan", value: 1, status: "planned" },
+                        { name: "Cannabinoid Testing", value: 1, status: "planned" },
+                        { name: "Microbial Testing", value: 1, status: "planned" },
+                        { name: "Heavy Metals Testing", value: 1, status: "planned" },
+                        { name: "Pesticide Testing", value: 1, status: "planned" }
+                    ]
+                },
+                {
+                    name: "PRO_01: Cultivation",
+                    value: 3,
+                    created: 3,
+                    children: [
+                        { name: "Curing Process", value: 1, status: "created" },
+                        { name: "Plant Health", value: 1, status: "created" },
+                        { name: "Cultivation SOP", value: 1, status: "created" }
+                    ]
+                },
+                {
+                    name: "PRO_03: Production",
+                    value: 3,
+                    created: 2,
+                    children: [
+                        { name: "Production SOP", value: 1, status: "planned" },
+                        { name: "Drying Procedures", value: 1, status: "created" },
+                        { name: "Facility Drying", value: 1, status: "created" }
+                    ]
+                },
+                {
+                    name: "HRM_05: Human Resources",
+                    value: 6,
+                    created: 2,
+                    children: [
+                        { name: "Training", value: 1, status: "created" },
+                        { name: "Personnel Qualification", value: 1, status: "planned" },
+                        { name: "GMP Training", value: 1, status: "planned" },
+                        { name: "Employee Hygiene", value: 1, status: "created" },
+                        { name: "Visitor Management", value: 1, status: "planned" },
+                        { name: "Gowning Procedures", value: 1, status: "planned" }
+                    ]
+                },
+                {
+                    name: "VAL_08: Validation",
+                    value: 3,
+                    created: 0,
+                    children: [
+                        { name: "Validation Master Plan", value: 1, status: "planned" },
+                        { name: "Process Validation", value: 1, status: "planned" },
+                        { name: "Cleaning Validation", value: 1, status: "planned" }
+                    ]
+                }
+            ]
+        };
+
+        // Create Sunburst Chart
+        function createSunburst() {
+            const width = 700;
+            const height = 600;
+            const radius = Math.min(width, height) / 2;
+
+            const color = d3.scaleOrdinal()
+                .domain(["created", "planned", "in_progress"])
+                .range(["#10b981", "#9ca3af", "#f59e0b"]);
+
+            const partition = d3.partition()
+                .size([2 * Math.PI, radius]);
+
+            const arc = d3.arc()
+                .startAngle(d => d.x0)
+                .endAngle(d => d.x1)
+                .innerRadius(d => d.y0)
+                .outerRadius(d => d.y1);
+
+            const svg = d3.select("#sunburst")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width / 2},${height / 2})`);
+
+            const root = d3.hierarchy(qmsData)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+
+            const nodes = partition(root).descendants();
+
+            const path = svg.selectAll("path")
+                .data(nodes)
+                .enter().append("path")
+                .attr("d", arc)
+                .style("fill", d => {
+                    if (d.depth === 0) return "#667eea";
+                    if (d.depth === 1) {
+                        const created = d.data.created || 0;
+                        const total = d.data.value || 1;
+                        const percentage = created / total;
+                        if (percentage === 1) return "#10b981";
+                        if (percentage > 0.5) return "#f59e0b";
+                        return "#9ca3af";
+                    }
+                    return d.data.status === "created" ? "#10b981" : "#e5e7eb";
+                })
+                .style("stroke", "#fff")
+                .style("stroke-width", 2)
+                .style("cursor", "pointer")
+                .on("mouseover", function(event, d) {
+                    const tooltip = document.querySelector('.tooltip');
+                    tooltip.innerHTML = `
+                        <strong>${d.data.name}</strong><br>
+                        ${d.depth === 1 ? `Created: ${d.data.created || 0}/${d.data.value || 0}` : `Status: ${d.data.status || 'N/A'}`}
+                    `;
+                    tooltip.style.left = event.pageX + 10 + 'px';
+                    tooltip.style.top = event.pageY + 10 + 'px';
+                    tooltip.classList.add('show');
+                })
+                .on("mouseout", function() {
+                    document.querySelector('.tooltip').classList.remove('show');
+                });
+
+            // Add center text
+            svg.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-size", "24px")
+                .style("font-weight", "600")
+                .text("QMS");
+        }
+
+        // Create Force-Directed Graph
+        function createForceGraph() {
+            const width = 900;
+            const height = 600;
+
+            const svg = d3.select("#force-graph")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // Convert hierarchy to nodes and links
+            const nodes = [];
+            const links = [];
+
+            function processNode(node, parent = null) {
+                const newNode = {
+                    id: node.name,
+                    group: node.depth || 0,
+                    radius: Math.sqrt(node.value || 1) * 5,
+                    status: node.status || (node.created === node.value ? "created" : "partial")
+                };
+                nodes.push(newNode);
+
+                if (parent) {
+                    links.push({ source: parent.name, target: node.name });
+                }
+
+                if (node.children) {
+                    node.children.forEach(child => processNode(child, node));
+                }
+            }
+
+            processNode(qmsData);
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(50))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .style("stroke", "#999")
+                .style("stroke-opacity", 0.6)
+                .style("stroke-width", 1);
+
+            const node = svg.append("g")
+                .selectAll("circle")
+                .data(nodes)
+                .enter().append("circle")
+                .attr("r", d => d.radius)
+                .style("fill", d => {
+                    if (d.status === "created") return "#10b981";
+                    if (d.status === "partial") return "#f59e0b";
+                    return "#9ca3af";
+                })
+                .style("stroke", "#fff")
+                .style("stroke-width", 2)
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            });
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        // Create Treemap
+        function createTreemap() {
+            const width = 900;
+            const height = 600;
+
+            const treemap = d3.treemap()
+                .size([width, height])
+                .padding(2);
+
+            const root = d3.hierarchy(qmsData)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+
+            treemap(root);
+
+            const svg = d3.select("#tree-map")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const leaf = svg.selectAll("g")
+                .data(root.leaves())
+                .enter().append("g")
+                .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+            leaf.append("rect")
+                .attr("width", d => d.x1 - d.x0)
+                .attr("height", d => d.y1 - d.y0)
+                .style("fill", d => d.data.status === "created" ? "#10b981" : "#e5e7eb")
+                .style("stroke", "#fff")
+                .style("stroke-width", 2);
+
+            leaf.append("text")
+                .attr("x", 4)
+                .attr("y", 20)
+                .text(d => d.data.name.split(":")[0])
+                .style("font-size", "11px")
+                .style("fill", d => d.data.status === "created" ? "white" : "#374151");
+        }
+
+        // Create Progress Matrix
+        function createProgressMatrix() {
+            const families = [
+                { name: "QA_00", total: 22, created: 18 },
+                { name: "QC_01", total: 19, created: 7 },
+                { name: "PRO_01", total: 3, created: 3 },
+                { name: "PRO_03", total: 3, created: 2 },
+                { name: "HRM_05", total: 6, created: 2 },
+                { name: "VAL_08", total: 3, created: 0 },
+                { name: "MAT_02", total: 2, created: 1 },
+                { name: "EQU_06", total: 1, created: 1 },
+                { name: "SAN_07", total: 1, created: 1 },
+                { name: "REC_09", total: 1, created: 1 },
+                { name: "RES_10", total: 1, created: 1 },
+                { name: "PRO_06", total: 1, created: 1 },
+                { name: "QCS_01", total: 10, created: 1 }
+            ];
+
+            const container = document.getElementById('progress-matrix');
+            container.innerHTML = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; padding: 2rem;">';
+
+            families.forEach(family => {
+                const percentage = (family.created / family.total * 100).toFixed(0);
+                const color = percentage == 100 ? '#10b981' : percentage > 50 ? '#f59e0b' : '#9ca3af';
+
+                container.innerHTML += `
+                    <div style="background: white; border: 2px solid ${color}; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <div style="font-weight: 600; margin-bottom: 0.5rem;">${family.name}</div>
+                        <div style="font-size: 2rem; font-weight: 700; color: ${color};">${percentage}%</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">
+                            ${family.created}/${family.total} docs
+                        </div>
+                        <div style="height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 0.5rem;">
+                            <div style="height: 100%; width: ${percentage}%; background: ${color}; border-radius: 2px;"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML += '</div>';
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => tab.classList.remove('active'));
+            contents.forEach(content => content.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+
+            // Initialize visualizations on first view
+            if (tabName === 'force' && !document.querySelector('#force-graph svg')) {
+                createForceGraph();
+            } else if (tabName === 'treemap' && !document.querySelector('#tree-map svg')) {
+                createTreemap();
+            } else if (tabName === 'matrix' && document.getElementById('progress-matrix').innerHTML === '') {
+                createProgressMatrix();

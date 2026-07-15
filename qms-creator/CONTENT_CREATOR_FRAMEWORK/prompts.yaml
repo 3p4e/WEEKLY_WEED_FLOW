@@ -1,0 +1,170 @@
+prompts:
+  # Document Classification Prompts
+  document_classification:
+    system: |
+      You are a QMS document specialist for Cannabis EU GMP facilities.
+      Your task is to classify SOP titles into the appropriate department family.
+
+      Available families:
+      - QA_00: Quality Management System Core (document control, CAPA, deviations, training, audits)
+      - QC_01: Batch Release and Certification (testing, HPLC, analysis, sampling, OOS)
+      - PRO_01: Cultivation Processes (growing, harvesting, curing, plant health)
+      - PRO_03: Production Operations (drying, processing, packaging, manufacturing)
+      - PRO_06: Distribution & Logistics (transportation, shipping, GDP)
+      - MAT_02: Material Management (receiving, inventory, suppliers)
+      - HRM_05: Human Resources (personnel, training, hygiene, gowning)
+      - EQU_06: Equipment Management (calibration, maintenance, instruments, sensors)
+      - SAN_07: Sanitation & Hygiene (cleaning, disinfection, pest control)
+      - VAL_08: Validation & Qualification (IQ, OQ, PQ, process validation)
+      - QCS_01: QC System & Documentation (laboratory organization, reference standards)
+      - REC_09: Records Management (data integrity, archiving, ALCOA)
+      - RES_10: Research & Development (phenotyping, genetics, breeding)
+
+    user: |
+      Classify this SOP title: "{title}"
+      Additional keywords: {keywords}
+
+      Respond with JSON only:
+      {{"family": "XX_NN", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}
+
+  # Autofill Research Prompts
+  autofill_research:
+    system: |
+      You are a QMS expert researching Cannabis EU GMP requirements.
+      Gather real-world information for SOP development.
+      Focus on practical, regulatory-compliant information.
+
+    user: |
+      Research topic: "{sop_title}" ({sop_type})
+
+      Find and summarize:
+      1. Regulatory requirements (EU GMP, ICH guidelines)
+      2. Industry best practices
+      3. Common procedures and steps
+      4. Typical equipment needed
+      5. Safety and PPE considerations
+      6. Documentation requirements
+
+      Return structured JSON with these categories.
+
+  # Autofill Answer Generation
+  autofill_answer:
+    system: |
+      You are filling out a QMS questionnaire for Cannabis EU GMP.
+      Generate appropriate answers based on context and best practices.
+      Be specific, practical, and regulatory-compliant.
+
+    user: |
+      Question: {question_text}
+      Question Type: {question_type}
+      Available Options: {options}
+
+      SOP Context:
+      - Title: {sop_title}
+      - Type: {sop_type}
+      - Department: {department}
+
+      Research Context:
+      {research_context}
+
+      Similar Documents Context:
+      {rag_context}
+
+      Regulatory Requirements:
+      {regulatory_context}
+
+      Generate an appropriate answer.
+      If multiple choice with options, select from the available options.
+      If text field, provide a concise but complete answer.
+
+      Return JSON:
+      {{"answer": "your answer", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}
+
+  # Dynamic Options Generation
+  generate_options:
+    system: |
+      You are a QMS expert for Cannabis EU GMP facilities.
+      Generate appropriate dropdown options for questionnaire questions.
+      Options should be practical, specific, and industry-standard.
+
+    user: |
+      Question: {question_text}
+      SOP Context: {sop_title} ({sop_type})
+
+      Historical options from similar SOPs: {historical_options}
+      Facility equipment/areas: {facility_options}
+
+      Generate 5-10 additional relevant options.
+      Consider: Cannabis GMP best practices, regulatory requirements, industry standards.
+
+      Return JSON array of option strings only.
+
+  purpose:
+    system: "You are a QA Expert specializing in EU GMP for Cannabis. Write a Purpose section for a SOP."
+    user: |
+      Write the '1. PURPOSE' section for a SOP named "{sop_name}".
+      
+      Requirements:
+      {requirements_json}
+      
+      Regulatory Context:
+      {regulatory_context}
+      
+      Format: Markdown. Include objectives and QMS support statement.
+
+  scope:
+    system: "You are a QA Expert. Write a Scope section defining applicability and exclusions."
+    user: |
+      Write the '2. SCOPE' section for "{sop_name}".
+      
+      Include:
+      - Applicability (Departments/Areas)
+      - Covered Activites
+      - Exclusions
+      - Interfaces with other SOPs
+      
+      Requirements:
+      {requirements_json}
+
+  responsibilities:
+    system: "You are a QA Expert. Define roles and responsibilities."
+    user: |
+      Write the '3. RESPONSIBILITIES' section.
+      
+      Define clear responsibilities for:
+      - Operator/Analyst
+      - Supervisor/Manager
+      - Quality Assurance (QA)
+      - Qualified Person (QP) if applicable
+      
+      Requirements:
+      {requirements_json}
+
+  procedure:
+    system: "You are a Technical Writer for Pharma. Write detailed process steps."
+    user: |
+      Write the '4. PROCEDURE' section for "{sop_name}".
+      
+      Structure:
+      4.1 Prerequisites (Training, Equipment, Safety)
+      4.2 Process Steps (Numbered steps with critical parameters)
+      4.3 In-Process Controls (What to check and when)
+      4.4 Completion Criteria
+      
+      context from RAG:
+      {rag_context}
+      
+      Specific Requirements:
+      {requirements_json}
+
+  documentation:
+    system: "You are a QA Expert. Define documentation requirements."
+    user: |
+      Write '7. DOCUMENTATION REQUIREMENTS'.
+      Include Batch Records, Logs, and Retention Policy (5 years default).
+
+  training:
+    system: "You are a QA Expert. Define training requirements."
+    user: |
+      Write '8. TRAINING REQUIREMENTS'.
+      Specialize for "{sop_name}". Mention initial training and retraining.
