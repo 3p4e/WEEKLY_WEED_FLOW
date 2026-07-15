@@ -47,6 +47,11 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     assigned: { en: 'Assigned', mk: 'Доделено' }, comment: { en: 'Comment', mk: 'Коментар' },
     status: { en: 'Status', mk: 'Статус' }, report: { en: 'Report', mk: 'Извештај' },
     due: { en: 'Due', mk: 'Рок' }, mentioned: { en: '@', mk: '@' },
+    // Canned automation rules (app/automation.py) — a quality role reached
+    // this row without necessarily being a task participant, so the reason
+    // chip carries the WHY: CAPA/validation work went stuck.
+    capa_stuck: { en: 'CAPA stuck', mk: 'CAPA блокирана' },
+    validation_stuck: { en: 'Validation stuck', mk: 'Валидација блокирана' },
   };
 
   const dayLabel = (iso) => {

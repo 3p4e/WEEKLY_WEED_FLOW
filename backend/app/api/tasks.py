@@ -14,6 +14,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.automation import canned_recipients
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
 from app.notify import emit, participants
@@ -534,8 +535,15 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         if "status" in patch and prev_status != row["status"]:
             try:
                 who = await participants(c, task_id)
+                # Canned automation recipients go FIRST: emit()'s recipient
+                # dedup keeps the first (user_id, reason) pair it sees, so a
+                # quality manager who is also a participant still gets the
+                # more specific "capa_stuck"/"validation_stuck" reason
+                # instead of the generic "status" one.
+                canned = await canned_recipients(user, row["task_type"], row["status"])
+                recipients = canned + [(u, "status") for u in who]
                 await emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
-                           recipients=[(u, "status") for u in who], task_id=task_id,
+                           recipients=recipients, task_id=task_id,
                            department_id=row["department_id"],
                            params={"title": row["title"], "old": prev_status, "new": row["status"]})
             except Exception:

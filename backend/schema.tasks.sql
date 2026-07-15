@@ -279,7 +279,7 @@ CREATE TABLE public.notifications (
     read_at timestamp with time zone,
     done_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text])))
+    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text, 'capa_stuck'::text, 'validation_stuck'::text])))
 );
 
 ALTER TABLE ONLY public.notifications FORCE ROW LEVEL SECURITY;
