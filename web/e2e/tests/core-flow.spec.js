@@ -35,7 +35,9 @@ test('login, create a task, cycle its status, assign a teammate, logout', async 
   await test.step('assign a teammate', async () => {
     await card.locator('.card-title').click(); // expand the card
     await expect(card.locator('.collab-sec')).toBeVisible({ timeout: 10_000 });
-    await card.locator('select[id^="assign-"]').selectOption({ label: creds.teammate_name });
+    // the assignee picker is a popup chooser (chooser.js), not a native <select>
+    await card.locator('button[id^="assign-"][id$="-btn"]').click();
+    await page.locator('#gf-chooser .sel-row', { hasText: creds.teammate_name }).click();
     await card.getByTitle('Assign').click();
     await expect(card.locator('.dep-chip', { hasText: creds.teammate_name })).toBeVisible({ timeout: 10_000 });
   });

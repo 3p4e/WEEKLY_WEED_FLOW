@@ -522,12 +522,12 @@ GF.WWF._renderDocPanel = () => {
       border:1px solid var(--line,rgba(43,232,160,.12));border-radius:99px;padding:3px 10px">
       ${d ? `<span class="dept-dot" style="background:${d.color};margin-right:5px"></span>${GF.esc(GF.depName(d.id))}` : AL('Your department', 'Вашиот оддел')}</span>`;
   } else if (elevated) {
-    const opts = [`<option value="">${AL('Org-wide', 'Цела организација')}</option>`]
-      .concat((GF.DEPTS || []).map(d =>
-        `<option value="${d.id}" ${ds.deptId === d.id ? 'selected' : ''}>${GF.esc(GF.depName(d.id))}</option>`)).join('');
-    deptCtl = `<select onchange="GF.WWF.setDocDept(this.value)" title="${AL('Document scope', 'Опсег на документот')}"
-      style="font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line,rgba(43,232,160,.12));
-      border-radius:7px;background:var(--surface-2,#102219);color:var(--ink,#DDF3E9)">${opts}</select>`;
+    deptCtl = GF.selectField('doc-dept-sel', {
+      value: ds.deptId || '', inline: true, title: AL('Document scope', 'Опсег на документот'),
+      options: [{ v: '', label: AL('Org-wide', 'Цела организација') }]
+        .concat((GF.DEPTS || []).map(d => ({ v: d.id, label: GF.depName(d.id), color: d.color }))),
+      onPick: (v) => GF.WWF.setDocDept(v),
+    });
   }
   // Per-department submission strip on the ORG-WIDE panel: executives see at
   // a glance which departments haven't submitted before locking the org-wide

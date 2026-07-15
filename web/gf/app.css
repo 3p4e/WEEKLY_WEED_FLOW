@@ -833,3 +833,4 @@ body.demo-on .main{padding-bottom:56px}
 .af-prev-card{border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
 .af-prev-title{font-size:14px;font-weight:600;margin-bottom:6px}
 .af-prev-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--ink-3)}
+.sel-btn.sel-inline{width:auto;padding:7px 10px;font-size:13px}

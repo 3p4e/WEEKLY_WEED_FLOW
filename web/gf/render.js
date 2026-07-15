@@ -161,11 +161,11 @@ GF.render = {
     const nxt = GF.weekTasks(nextId);
     // Tags filter: every tag on this week's tasks, filtered client-side.
     const allTags = [...new Set(GF.weekTasks(GF.state.selWeek).flatMap(t => t.tags || []))].sort();
-    const tagFilter = (allTags.length || GF.state.tagFilter) ? `
-      <select id="tag-filter" class="tag-filter" onchange="GF.setTagFilter(this.value)">
-        <option value="">${GF.t('all_tags')}</option>
-        ${allTags.map(tg => `<option value="${GF.esc(tg)}" ${GF.state.tagFilter === tg ? 'selected' : ''}>#${GF.esc(tg)}</option>`).join('')}
-      </select>` : '';
+    const tagFilter = (allTags.length || GF.state.tagFilter) ? GF.selectField('tag-filter', {
+      value: GF.state.tagFilter || '', inline: true, title: GF.t('all_tags'),
+      options: [{ v: '', label: GF.t('all_tags') }].concat(allTags.map(tg => ({ v: tg, label: '#' + tg }))),
+      onPick: (v) => GF.setTagFilter(v),
+    }) : '';
     GF.$('panels').innerHTML = `
       <div class="panel">
         <div class="panel-head">

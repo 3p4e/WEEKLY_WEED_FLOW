@@ -52,11 +52,12 @@ GF.WWF.renderCollabInner = (t) => {
   let assignRow = '';
   if (manage) {
     const have = new Set(c.assignees.map(a => a.user_id));
-    const opts = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id) && !GF.PEOPLE[id].inactive)
-      .map(id => `<option value="${id}">${GF.esc(GF.PEOPLE[id].name)}</option>`).join('');
-    assignRow = opts ? `
+    const people = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id) && !GF.PEOPLE[id].inactive);
+    assignRow = people.length ? `
       <div class="note-input" style="margin-top:6px">
-        <select id="assign-${t.id}" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px">${opts}</select>
+        <span style="flex:1;min-width:0">${GF.selectField('assign-' + t.id, {
+          value: people[0], title: AL('Assign', 'Додели'), searchable: true,
+          options: people.map(id => ({ v: id, label: GF.PEOPLE[id].name, sub: GF.roleLabel ? GF.roleLabel(GF.PEOPLE[id].role) : undefined })) })}</span>
         <button class="mini-btn" style="color:var(--blue)" title="${AL('Assign', 'Додели')}" onclick="GF.WWF.doAssign('${t.id}')">${GF.icon('plus')}</button>
       </div>` : '';
   }

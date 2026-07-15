@@ -120,12 +120,12 @@ GF.WWF.renderAudit = () => {
   }
 
   // filters
-  const tableOpts = `<option value="">${AL('All tables', 'Сите табели')}</option>` +
-    (st.tables || []).map(t => `<option value="${GF.esc(t.table_name)}" ${f.table_name === t.table_name ? 'selected' : ''}>${GF.esc(t.table_name)} (${t.count})</option>`).join('');
-  const actOpts = `<option value="">${AL('All actions', 'Сите дејства')}</option>` +
-    Object.keys(ACT).map(a => `<option value="${a}" ${f.action === a ? 'selected' : ''}>${AL(ACT[a].en, ACT[a].mk)}</option>`).join('');
-  const srcOpts = `<option value="">${AL('Both chains', 'Двата синџири')}</option>` +
-    Object.keys(AUDIT_SOURCES).map(s => `<option value="${s}" ${f.source === s ? 'selected' : ''}>${AL(AUDIT_SOURCES[s].en, AUDIT_SOURCES[s].mk)}</option>`).join('');
+  const tableOptions = [{ v: '', label: AL('All tables', 'Сите табели') }]
+    .concat((st.tables || []).map(t => ({ v: t.table_name, label: `${t.table_name} (${t.count})` })));
+  const actOptions = [{ v: '', label: AL('All actions', 'Сите дејства') }]
+    .concat(Object.keys(ACT).map(a => ({ v: a, label: AL(ACT[a].en, ACT[a].mk) })));
+  const srcOptions = [{ v: '', label: AL('Both chains', 'Двата синџири') }]
+    .concat(Object.keys(AUDIT_SOURCES).map(s => ({ v: s, label: AL(AUDIT_SOURCES[s].en, AUDIT_SOURCES[s].mk) })));
 
   const toolbar = `
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:6px 4px 16px">
@@ -134,9 +134,12 @@ GF.WWF.renderAudit = () => {
         ${badge}
       </div>
       <div style="flex:1"></div>
-      <select id="audit-f-source" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${srcOpts}</select>
-      <select id="audit-f-table" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${tableOpts}</select>
-      <select id="audit-f-action" onchange="GF.WWF.applyAuditFilter()" class="audit-select" style="padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink);font-size:13px">${actOpts}</select>
+      ${GF.selectField('audit-f-source', { value: f.source || '', inline: true, title: AL('Chain', 'Синџир'),
+        options: srcOptions, onPick: () => GF.WWF.applyAuditFilter() })}
+      ${GF.selectField('audit-f-table', { value: f.table_name || '', inline: true, searchable: true, title: AL('Table', 'Табела'),
+        options: tableOptions, onPick: () => GF.WWF.applyAuditFilter() })}
+      ${GF.selectField('audit-f-action', { value: f.action || '', inline: true, title: AL('Action', 'Дејство'),
+        options: actOptions, onPick: () => GF.WWF.applyAuditFilter() })}
       <button class="btn btn-sm" onclick="GF.WWF.loadAudit({reset:true})">${GF.icon('clock')}${AL('Refresh', 'Освежи')}</button>
     </div>`;
 

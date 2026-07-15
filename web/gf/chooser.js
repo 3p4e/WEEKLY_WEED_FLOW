@@ -28,7 +28,7 @@ window.GF = window.GF || {};
     REG[id] = cfg;
     const v = cfg.value != null ? String(cfg.value) : '';
     return `<input type="hidden" id="${id}" value="${GF.esc(v)}">`
-      + `<button type="button" class="sel-btn" id="${id}-btn"${cfg.disabled ? ' disabled' : ''}`
+      + `<button type="button" class="sel-btn${cfg.inline ? ' sel-inline' : ''}" id="${id}-btn"${cfg.disabled ? ' disabled' : ''}`
       + ` onclick="GF.openChooser('${id}')" aria-haspopup="listbox">`
       + `<span class="sel-cur">${GF.esc(label(cfg, v))}</span>${GF.icon('chevD', 'icon sel-caret')}</button>`;
   };
