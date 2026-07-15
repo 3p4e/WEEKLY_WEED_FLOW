@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
+from app.notify import emit, participants
 from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
@@ -349,6 +350,15 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             )
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
+        # Feed-only awareness (NO recipients): creation never notifies —
+        # Slack/Linear defaults — but the shared activity stream shows it,
+        # which is what makes exec-created work visible to the org.
+        try:
+            await emit(c, user, verb="created", object_type="task", object_id=row["id"],
+                       recipients=[], task_id=row["id"], department_id=row["department_id"],
+                       params={"title": row["title"]})
+        except Exception:
+            pass
     return dict(row)
 
 
@@ -511,6 +521,17 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
             nxt = await _materialize_recurrence(c, row)
             if nxt:
                 out["next_instance"] = nxt
+        # Status-change awareness: participants (creator/owner/assignees/
+        # commenters) get notified; the actor never is (emit guards that).
+        if "status" in patch and prev_status != row["status"]:
+            try:
+                who = await participants(c, task_id)
+                await emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
+                           recipients=[(u, "status") for u in who], task_id=task_id,
+                           department_id=row["department_id"],
+                           params={"title": row["title"], "old": prev_status, "new": row["status"]})
+            except Exception:
+                pass
     return out
 
 

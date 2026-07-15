@@ -15,6 +15,7 @@ from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
 from app.deps import require_password_set
 from app.roles import ELEVATED_ROLES
+from app.notify import emit, participants
 from app.roster import display_name, roster
 
 router = APIRouter(tags=["collab"])
@@ -78,6 +79,17 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             "INSERT INTO task_comments(org_id, task_id, user_id, content) "
             "VALUES ($1,$2,$3,$4) RETURNING id, created_at",
             user["org_id"], task_id, user["id"], content)
+        # Notify everyone with a participation stake (creator/owner/assignees/
+        # prior commenters), never the author (emit guards that).
+        try:
+            t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
+            who = await participants(c, task_id)
+            await emit(c, user, verb="commented", object_type="task", object_id=task_id,
+                       recipients=[(u, "comment") for u in who], task_id=task_id,
+                       department_id=t["department_id"] if t else None,
+                       params={"title": (t["title"] if t else ""), "preview": content[:80]})
+        except Exception:
+            pass
     return {"id": str(r["id"]), "user_id": str(user["id"]),
             "author": user["full_name"] or user["username"], "content": content,
             "created_at": r["created_at"].isoformat()}
@@ -127,6 +139,16 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
                 task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
         except Exception as e:  # unique violation etc.
             raise HTTPException(400, f"Could not assign: {type(e).__name__}")
+        # Awareness (best-effort): the assignee gets an inbox notification;
+        # the event also feeds the shared activity stream.
+        try:
+            t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
+            await emit(c, user, verb="assigned", object_type="task", object_id=task_id,
+                       recipients=[(body.user_id, "assigned")], task_id=task_id,
+                       department_id=t["department_id"] if t else None,
+                       params={"title": (t["title"] if t else "")})
+        except Exception:
+            pass
     return {"ok": True}
 
 
@@ -159,4 +181,14 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
         await c.execute(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], task_id, user["id"], note)
+        # The assigner/owner learns the assignment was accepted or declined.
+        try:
+            t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
+            who = await participants(c, task_id)
+            await emit(c, user, verb="ack", object_type="task", object_id=task_id,
+                       recipients=[(u, "status") for u in who], task_id=task_id,
+                       department_id=t["department_id"] if t else None,
+                       params={"title": (t["title"] if t else ""), "accepted": body.accepted})
+        except Exception:
+            pass
     return {"ok": True, "accepted": body.accepted}

@@ -29,10 +29,11 @@ from app.api.ai import _letta_message
 from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
-from app.db import rls
+from app.db import rls, rls_users
 from app.deps import dept_scope, is_dept_scoped_role, require_role
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
+from app.notify import emit
 from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
@@ -912,6 +913,23 @@ async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED
             " WHERE id=$1 AND status='draft' RETURNING *", doc_id, user["id"])
         if row is None:
             raise HTTPException(404, "Document not found")
+        # report_locked → that dept's manager(s) + org-wide execs/QP (never
+        # the locker; emit guards self-notify). Best-effort.
+        try:
+            async with rls_users(user) as uc:
+                profs = await uc.fetch(
+                    "SELECT id, role, department_id FROM profiles"
+                    " WHERE org_id=$1 AND is_deleted=false AND is_active=true", user["org_id"])
+            execs = {"OWNER", "CEO", "COO", "QP"}
+            rcpts = [(str(pr["id"]), "report") for pr in profs
+                     if pr["role"] in execs
+                     or (row["department_id"] and pr["department_id"] == row["department_id"]
+                         and pr["role"].endswith("_MGR"))]
+            await emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
+                       recipients=rcpts, department_id=row["department_id"],
+                       params={"kind": row["kind"], "week_start": str(row["week_start"])})
+        except Exception:
+            pass
     return _doc_row(row)
 
 

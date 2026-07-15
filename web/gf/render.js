@@ -63,6 +63,8 @@ GF.render = {
     // not yet ready) in the selected week. 0 → no badge renders.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
       .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
+    const unreadN = (GF.WWF && GF.WWF._notif && GF.WWF._notif.unread) || 0;
+    nav.push(['inbox', 'inbox', 'bell', unreadN]);
     nav.push(
       ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
       ['calendar', 'calendar', 'calendar'],

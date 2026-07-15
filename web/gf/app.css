@@ -834,3 +834,20 @@ body.demo-on .main{padding-bottom:56px}
 .af-prev-title{font-size:14px;font-weight:600;margin-bottom:6px}
 .af-prev-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--ink-3)}
 .sel-btn.sel-inline{width:auto;padding:7px 10px;font-size:13px}
+
+/* ── Inbox / activity feed (notifications-view.js) ─────────────────────── */
+.ntf-bar{display:flex;align-items:center;gap:8px;margin:6px 4px 10px}
+.ntf-list{display:flex;flex-direction:column;gap:6px;max-width:860px}
+.ntf-day{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:10px 4px 2px}
+.ntf{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--glass-border);
+  border-left:3px solid var(--primary);border-radius:10px;background:var(--surface-2);cursor:pointer}
+.ntf.unread{background:var(--primary-soft)}
+.ntf.unread .ntf-tt::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--primary);margin-right:7px;box-shadow:0 0 8px var(--primary)}
+.ntf-feed{cursor:default;border-left-color:var(--glass-border)}
+.ntf-b{flex:1;min-width:0}
+.ntf-tt{font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.ntf-meta{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--ink-3);margin-top:2px}
+.ntf-reason{border:1px solid var(--glass-border);border-radius:99px;padding:1px 8px}
+.ntf-done{flex:none}
+.ntf-empty{padding:40px;text-align:center;color:var(--ink-3)}

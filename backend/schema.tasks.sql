@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
+\restrict ol3wdBnAe4YdsA5eCcHgIuJ6xczbuI2NWeJDgRchF5zGPxeisRq1CdlzR8gbx4X
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -224,6 +224,26 @@ ALTER TABLE ONLY public.departments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    actor_id uuid NOT NULL,
+    verb text NOT NULL,
+    object_type text NOT NULL,
+    object_id text NOT NULL,
+    task_id uuid,
+    department_id uuid,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.events FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: handoffs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -243,6 +263,26 @@ CREATE TABLE public.handoffs (
 );
 
 ALTER TABLE ONLY public.handoffs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    recipient_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    reason text NOT NULL,
+    coalesce_key text NOT NULL,
+    read_at timestamp with time zone,
+    done_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text])))
+);
+
+ALTER TABLE ONLY public.notifications FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -474,11 +514,27 @@ ALTER TABLE ONLY public.departments
 
 
 --
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: handoffs handoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.handoffs
     ADD CONSTRAINT handoffs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
 
 
 --
@@ -549,6 +605,41 @@ CREATE UNIQUE INDEX ai_agent_bindings_org_scope_uniq ON public.ai_agent_bindings
 --
 
 CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, record_id);
+
+
+--
+-- Name: events_org_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX events_org_created_idx ON public.events USING btree (org_id, created_at DESC);
+
+
+--
+-- Name: events_org_dept_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX events_org_dept_created_idx ON public.events USING btree (org_id, department_id, created_at DESC);
+
+
+--
+-- Name: notifications_coalesce_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX notifications_coalesce_idx ON public.notifications USING btree (recipient_id, coalesce_key) WHERE ((read_at IS NULL) AND (done_at IS NULL));
+
+
+--
+-- Name: notifications_recipient_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notifications_recipient_created_idx ON public.notifications USING btree (recipient_id, created_at DESC);
+
+
+--
+-- Name: notifications_unread_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notifications_unread_idx ON public.notifications USING btree (recipient_id) WHERE ((read_at IS NULL) AND (done_at IS NULL));
 
 
 --
@@ -747,6 +838,14 @@ ALTER TABLE ONLY public.handoffs
 
 
 --
+-- Name: notifications notifications_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE CASCADE;
+
+
+--
 -- Name: task_assignees task_assignees_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -855,10 +954,57 @@ ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: events events_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY events_insert ON public.events FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: events events_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY events_read ON public.events FOR SELECT USING ((org_id = app.current_org_id()));
+
+
+--
 -- Name: handoffs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.handoffs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: notifications notif_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_insert ON public.notifications FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: notifications notif_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_select ON public.notifications FOR SELECT USING (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id())));
+
+
+--
+-- Name: notifications notif_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_update ON public.notifications FOR UPDATE USING (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id()))) WITH CHECK (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id())));
+
+
+--
+-- Name: notifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: ai_agent_bindings org_isolation; Type: POLICY; Schema: public; Owner: -
@@ -1022,5 +1168,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
+\unrestrict ol3wdBnAe4YdsA5eCcHgIuJ6xczbuI2NWeJDgRchF5zGPxeisRq1CdlzR8gbx4X
 
