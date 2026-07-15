@@ -82,7 +82,8 @@ async def main():
     print(json.dumps({
         "org_id": str(org_id), "username": username, "password": password,
         "teammate_name": teammate_name,
-        "operator_username": operator_username, "department_id": str(dept_id),
+        "operator_username": operator_username, "operator_id": str(operator_id),
+        "department_id": str(dept_id),
     }))
 
 

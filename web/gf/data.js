@@ -74,6 +74,8 @@ GF.I18N = {
     exec_overview:'Executive', exec_sub:'Cross-department overview, one screen',
     dept_home:'My Department',
     facility_map:'Facility', facility_sub:'Plants by room, strain and phase',
+    approvals:'Approvals', approvals_sub:'Everything waiting on a decision',
+    my_day:'My Day', my_day_sub:'Your tasks and acknowledgments for today',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -109,6 +111,8 @@ GF.I18N = {
     exec_overview:'Раководство', exec_sub:'Меѓуодделски преглед на еден екран',
     dept_home:'Мојот оддел',
     facility_map:'Капацитет', facility_sub:'Растенија по соба, сорта и фаза',
+    approvals:'Одобрувања', approvals_sub:'Сè што чека одлука',
+    my_day:'Мојот ден', my_day_sub:'Вашите задачи и потврди за денес',
   },
 };
 
