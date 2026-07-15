@@ -57,8 +57,14 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
         onclick="event.stopPropagation();GF.WWF.notifDone('${n.id}')">${GF.icon('check', 'icon')}</button>
     </div>`;
 
+  // Timeline dot colour by verb class (mockup .mw-feed): completions and
+  // locks read "ok", stuck-ish state changes "warn", everything else accent.
+  const dotKind = (e) => e.verb === 'report_locked' || e.verb === 'acknowledged' ? 'ok'
+    : e.verb === 'status_changed' ? ((e.params || {}).new === 'completed' ? 'ok' : 'warn') : '';
+
   const feedRow = (e) => `
     <div class="ntf ntf-feed">
+      <div class="ntf-rail"><span class="ntf-fdot ${dotKind(e)}"></span></div>
       <div class="ntf-b"><div class="ntf-tt">${GF.esc(sentence(e))}</div>
         <div class="ntf-meta"><span class="ntf-ts">${GF.esc(e.created_at.slice(11, 16))}</span>
           ${e.department_id && GF.depName ? `<span class="ntf-reason">${GF.esc(GF.depAbbr(e.department_id) || '')}</span>` : ''}</div></div>

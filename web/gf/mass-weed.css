@@ -305,3 +305,52 @@
 @media (prefers-reduced-motion: reduce){
   :root[data-theme^="mass-weed"] .tp-fill::after{animation:none}
 }
+
+/* ═══ Component fill, pass 2 — stepper, feed, stat-cards, checkboxes,
+   accordion sections (each consumed by shipped markup) ═══ */
+
+/* .mw-stepper — active step gets the plasma ring, done bars glow. */
+:root[data-theme^="mass-weed"] .mw-step__n{font-family:var(--font-display)}
+:root[data-theme^="mass-weed"] .mw-step.active .mw-step__n{
+  box-shadow:0 0 12px rgba(var(--accent-rgb),.5)}
+:root[data-theme^="mass-weed"] .mw-step__bar.done{
+  box-shadow:0 0 6px color-mix(in srgb,var(--green) 50%,transparent)}
+:root[data-theme^="mass-weed"] .mw-step__l{letter-spacing:.09em}
+
+/* .mw-feed — glowing timeline dots. */
+:root[data-theme^="mass-weed"] .ntf-fdot{box-shadow:0 0 8px var(--primary)}
+:root[data-theme^="mass-weed"] .ntf-fdot.ok{box-shadow:0 0 8px var(--green)}
+:root[data-theme^="mass-weed"] .ntf-fdot.warn{box-shadow:0 0 8px var(--amber)}
+
+/* .mw-stat-card — dashboard + exec KPI tiles: chamfered corner, condensed
+   numerals, micro uppercase labels. */
+:root[data-theme^="mass-weed"] .kpi,
+:root[data-theme^="mass-weed"] .ekpi{
+  border-radius:0;clip-path:polygon(11px 0,100% 0,100% 100%,0 100%,0 11px);
+  background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.16)}
+:root[data-theme^="mass-weed"] .kpi-v,
+:root[data-theme^="mass-weed"] .ekpi-v{
+  font-family:var(--font-num);letter-spacing:0;
+  text-shadow:0 0 16px rgba(var(--accent-rgb),.35)}
+:root[data-theme^="mass-weed"] .kpi-l,
+:root[data-theme^="mass-weed"] .ekpi-l{
+  text-transform:uppercase;letter-spacing:.11em;font-size:10px;color:var(--ink-3)}
+
+/* .mw-check — task checkboxes: chamfered box, cyan-gradient fill + glow when
+   done (the icon inside stays the app's check SVG). */
+:root[data-theme^="mass-weed"] .check{
+  border-radius:0;clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+  border:none;box-shadow:inset 0 0 0 2px rgba(var(--accent-rgb),.4);background:rgba(4,14,28,.35)}
+:root[data-theme="mass-weed-light"] .check{background:rgba(255,255,255,.5)}
+:root[data-theme^="mass-weed"] .check.done{
+  background:linear-gradient(180deg,var(--primary-hover),var(--primary));
+  box-shadow:0 0 10px rgba(var(--accent-rgb),.6)}
+
+/* .mw-acc — executive-report department sections: notched corner, condensed
+   uppercase headers, accent edge when open. */
+:root[data-theme^="mass-weed"] .xr-sec{
+  border-radius:0;clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px))}
+:root[data-theme^="mass-weed"] .xr-sec-head b{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.05em;font-size:14px}
+:root[data-theme^="mass-weed"] .xr-sec.open{
+  box-shadow:inset 2px 0 0 var(--primary), inset 0 0 24px rgba(var(--accent-rgb),.06)}

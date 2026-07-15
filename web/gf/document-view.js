@@ -360,6 +360,23 @@ GF.WWF._docMetricsHtml = (m) => {
   </div>`;
 };
 
+/* Document lifecycle stepper (mockup .mw-stepper): Compile → Review → Lock.
+   Pure display — the buttons beside it stay the only write path. Skipped for
+   custom-range previews (they live outside the stored-week lifecycle). */
+GF.WWF._docStepper = (state) => {
+  const steps = [
+    [AL('Compile', 'Состави'), state !== 'none'],
+    [AL('Review', 'Преглед'), state === 'locked'],
+    [AL('Lock', 'Заклучи'), state === 'locked'],
+  ];
+  const activeIdx = state === 'none' ? 0 : state === 'draft' ? 1 : -1;
+  return `<div class="mw-stepper">${steps.map(([l, done], i) => `
+    ${i ? `<span class="mw-step__bar${done ? ' done' : ''}"></span>` : ''}
+    <span class="mw-step${done ? ' done' : ''}${i === activeIdx ? ' active' : ''}">
+      <span class="mw-step__n">${done ? '✓' : i + 1}</span><span class="mw-step__l">${l}</span></span>`).join('')}
+  </div>`;
+};
+
 GF.WWF._renderDocPanel = () => {
   const el = GF.$('report-doc'); if (!el) return;
   const ds = GF.WWF._doc, st = GF.WWF._report;
@@ -395,7 +412,8 @@ GF.WWF._renderDocPanel = () => {
       <button class="btn btn-sm" onclick="GF.WWF.loadDocument()">${AL('Retry', 'Обиди се повторно')}</button>
     </div>`;
   } else if (!ds.data) {
-    body = `<div style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    body = `<div style="padding:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      ${GF.WWF._docStepper('none')}
       <span style="color:var(--ink-3);font-size:13px">${AL('No document compiled for this week yet.', 'Сè уште нема составен документ за оваа недела.')}</span>
       ${elevated ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.compileDocument()">${AL('Compile document', 'Состави документ')}</button>` : ''}
     </div>`;
@@ -487,6 +505,7 @@ GF.WWF._renderDocPanel = () => {
                                 : AL('Week ribbon — logged work by SOP', 'Неделна лента — работа по СОП');
     body = `<div style="padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        ${isPreview ? '' : GF.WWF._docStepper(locked ? 'locked' : 'draft')}
         ${chip}
         <span style="font-size:12px;color:var(--ink-3)">${(c.tasks || []).length} ${AL('tasks', 'задачи')} · ${(c.ribbon || []).length} ${AL('logged sessions', 'сесии')}</span>
         <div style="flex:1"></div>

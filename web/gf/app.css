@@ -887,3 +887,27 @@ body.demo-on .main{padding-bottom:56px}
 .pl-range::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;
   background:var(--primary);box-shadow:0 0 8px var(--primary-soft);cursor:pointer}
 .pl-val{font:700 13px var(--mono);color:var(--ink);min-width:44px;text-align:right}
+
+/* ── Lifecycle stepper (mockup .mw-stepper): Compile → Review → Lock on the
+   document panel. Token-based → all themes; mass-weed adds the glow. */
+.mw-stepper{display:inline-flex;align-items:center;flex-wrap:wrap;row-gap:4px}
+.mw-step{display:inline-flex;align-items:center;gap:7px}
+.mw-step__n{width:24px;height:24px;flex:none;display:grid;place-items:center;
+  font:700 12px var(--mono);border-radius:50%;color:var(--ink-3);
+  border:1.5px solid var(--line);background:var(--surface-2)}
+.mw-step__l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.mw-step.done .mw-step__n{color:var(--green);border-color:var(--green)}
+.mw-step.done .mw-step__l{color:var(--ink-2)}
+.mw-step.active .mw-step__n{color:var(--text-on-primary);background:var(--primary);border-color:var(--primary)}
+.mw-step.active .mw-step__l{color:var(--primary);font-weight:700}
+.mw-step__bar{width:26px;height:2px;margin:0 8px;background:var(--line);flex:none}
+.mw-step__bar.done{background:var(--green)}
+
+/* ── Activity feed timeline (mockup .mw-feed): rail + status dot per event,
+   with a connecting line between events in the same day group. */
+.ntf-rail{position:relative;flex:none;width:10px;display:flex;justify-content:center}
+.ntf-fdot{width:9px;height:9px;border-radius:50%;background:var(--primary);margin-top:5px;z-index:1;flex:none}
+.ntf-fdot.ok{background:var(--green)}
+.ntf-fdot.warn{background:var(--amber)}
+.ntf-feed{display:flex;gap:11px}
+.ntf-feed + .ntf-feed .ntf-rail::before{content:"";position:absolute;top:-14px;height:16px;width:1px;background:var(--line)}
