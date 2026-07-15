@@ -96,6 +96,7 @@ GF.API = {
   notifReadAll()       { return this._req('POST', '/notifications/read-all'); },
   notifDone(id)        { return this._req('POST', '/notifications/' + id + '/done'); },
   facility()               { return this._req('GET', '/facility'); },
+  analytics(weeks = 8)     { return this._req('GET', '/reports/analytics?weeks=' + weeks); },
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
   facilityAddRoom(b)       { return this._req('POST', '/facility/rooms', b); },
   facilityAddBatch(b)      { return this._req('POST', '/facility/batches', b); },

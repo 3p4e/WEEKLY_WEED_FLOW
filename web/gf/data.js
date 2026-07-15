@@ -76,6 +76,7 @@ GF.I18N = {
     facility_map:'Facility', facility_sub:'Plants by room, strain and phase',
     approvals:'Approvals', approvals_sub:'Everything waiting on a decision',
     my_day:'My Day', my_day_sub:'Your tasks and acknowledgments for today',
+    analytics:'Analytics', analytics_sub:'Trends across weeks — throughput, on-time delivery, activity',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -113,6 +114,7 @@ GF.I18N = {
     facility_map:'Капацитет', facility_sub:'Растенија по соба, сорта и фаза',
     approvals:'Одобрувања', approvals_sub:'Сè што чека одлука',
     my_day:'Мојот ден', my_day_sub:'Вашите задачи и потврди за денес',
+    analytics:'Аналитика', analytics_sub:'Трендови низ неделите — проток, навременост, активност',
   },
 };
 
