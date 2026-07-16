@@ -752,8 +752,25 @@ kvm4-runner): `/health` 200; `/reports/audit-prep` → **401** (route deployed +
 auth-guarded, NOT 404) both with and without `?programs=`; a bogus route → 404
 (confirms the 401 is real routing, not a catch-all); frontend serves SW
 `wwf-shell-v3.39.0`, `gf/auditprep-view.js` (8.7 KB), the `auditprep` i18n keys,
-and the `index.html` script include. **Prod (`wwf_app`) untouched** — promotion is
-owner-gated (the standing rule); the promotion recipe = build `v54`/`v76` off this
-branch + `docker compose up -d --no-deps backend frontend` on `/opt/stacks/wwf_app`
-(no migration). CI red = same GitHub workflow-startup infra failure (all 7 jobs
-died in ~5s); merged/verified on the local gate + live wwf_mass smoke, as #23–#34.
+and the `index.html` script include. CI red = same GitHub workflow-startup infra
+failure (all 7 jobs died in ~5s); merged/verified on the local gate + live
+wwf_mass smoke, as #23–#34.
+
+**✅ Promoted to PRODUCTION (`wwf_app`) 2026-07-16, on the owner's explicit go.**
+Image-only, **no migration** (the endpoint is a pure read over existing `tasks.tags`).
+Backup-first: pre-promotion `pg_dump -Fc` of the prod tasks DB
+(`/tmp/wwf_tasks_pre_v54_*.dump`, 3 MB) + baseline 556 live task rows recorded.
+Bumped `/opt/stacks/wwf_app/compose.yaml` **backend `v53`→`v54`** + **frontend
+`v74`→`v76`** and recreated only those two (`docker compose up -d --no-deps backend
+frontend`). The **`scheduler` was deliberately left on `v53`** — identical code
+minus the unused audit-prep route, and 2026-07-16 is its Thursday weekly-digest
+fire day, so the singleton was not disturbed (it converges to `v54` on its next
+natural recreate). DocEngine (`v3`) + both DBs untouched. **Live prod smoke green:**
+`/health` 200; existing `/tasks`·`/reports/weekly`·`/reports/analytics` 401
+(intact + guarded); new `/reports/audit-prep` → **401** (deployed, not 404); bogus
+route 404; **556 live tasks unchanged** (data intact); frontend serves SW
+`wwf-shell-v3.39.0` + `gf/auditprep-view.js`. Frontend `v76` also carries the
+qms-registry "retired — use Document Studio" panel (from PR #33, which had never
+been promoted) — the intended cosmetic improvement; prod functions as before.
+**Rollback** = revert the two image tags to `v53`/`v74` + `docker compose up -d
+--no-deps backend frontend` (no DB step, since no migration).

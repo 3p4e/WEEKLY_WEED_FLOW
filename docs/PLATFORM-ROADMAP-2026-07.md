@@ -50,7 +50,7 @@ prod promotion (§8) — plus a few deferred low-priority QC leaves.
 
 | Environment | Backend | Frontend | tasks-DB | Extra services | Notes |
 |---|---|---|---|---|---|
-| **Production** `wwf_app` (`https://wwf…hstgr.cloud`) | **v53** | **v74** | alembic **0027** | `growflow-docengine:v3` | The 25-user live system. **Cut over 2026-07-16** to the full unified stack (TMS + QC LIMS U1–U6 + certificate pipeline U1–U4 + DocEngine). Migrations 0017–0027 applied additively (existing task data intact); pre-cutover DB dump taken. Live-smoked: existing task/report flows + new QC read/write + DocEngine wiring all green. |
+| **Production** `wwf_app` (`https://wwf…hstgr.cloud`) | **v54** | **v76** | alembic **0027** | `growflow-docengine:v3` | The 25-user live system. **Cut over 2026-07-16** to the full unified stack (TMS + QC LIMS U1–U6 + certificate pipeline U1–U4 + DocEngine). Migrations 0017–0027 applied additively (existing task data intact); pre-cutover DB dump taken. Live-smoked green. **+ SUMA audit-prep tracker promoted 2026-07-16** (backend v53→v54 / frontend v74→v76, **no migration** — pure read over `tasks.tags`; scheduler left on v53; 556 tasks intact; live-smoked). |
 | **Test** `wwf_mass` (`https://wwf-mass…`) | **v53** | **v74** | alembic **0027** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U6** + the full certificate pipeline (Phase 3 **U1–U4**) all live + live-smoked, **+ a Phase 4 hardening pass** over the QC surface. Migrations 0017–0027 applied. |
 
 **Standing rule (owner, non-negotiable):** every upgrade deploys to **wwf_mass
