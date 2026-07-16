@@ -673,5 +673,30 @@ Rollback path if needed: revert the three images to `v39`/`v63` — the additive
 migrations are harmless to leave in place, and the pre-cutover dumps restore the
 DB. The QMS **registry** federation (`qms-api`) was intentionally NOT promoted;
 `QMS_API_KEY` is unset on prod so `/qms/documents`-style registry reads degrade
-gracefully (503) while the DocEngine Studio path works — the qms-api shell
-retirement is tracked separately.
+gracefully (503) while the DocEngine Studio path works.
+
+### ✅ qms-api (Phase-1 QMS registry) retired — lighter retirement (2026-07-16)
+
+The Phase-1 `qms-api` federation was the **strangler-façade** stopgap for a QMS
+document registry (docs/UNIFICATION-ANALYSIS §7). A mapping exercise found its
+registry read-path to be low-value and internally inconsistent (three data
+sources trapped in the container's image/volumes; `/api/document-families`
+served a hardcoded constant), and prod already ran fine without it. Rather than
+re-implement a messy legacy read-path, it was **formally retired** (owner
+decision):
+
+- **wwf_mass:** `QMS_API_KEY` blanked, the `qms-api` service removed from
+  `compose.yaml`, the `wwf-mass-qms-api` container dropped, `backend` recreated.
+  The registry/knowledge proxy now answers a clean 503; the frontend (v75, SW
+  `wwf-shell-v3.38.0`) shows an honest **"SOP Registry retired — use Document
+  Studio"** panel instead of a raw error. **DocEngine Studio remains the live
+  QMS surface.** Verified: `/qms/documents`·`/qms/stats`·`/qms/rag-query` → 503;
+  `/qms/studio/questionnaires` → 200; `/qc/*` + `/tasks` unaffected.
+- **prod:** already ran without `qms-api` (never promoted) — no infra change;
+  promoting frontend v75 later would swap its registry-tab message to the
+  retired panel (optional cosmetic; prod functions as-is).
+- **Letta sprawl resolved:** retiring `qms-api` removed the source of the
+  `GMP *` agent duplication. After a `letta` DB snapshot (`pg_dump -Fc`,
+  198 MB), the **45 orphaned `GMP *` agents were deleted** (107 → 62 agents;
+  the DocEngine `gf_*` fleet of 8 and the `planner-*`/`wwf_*` agents untouched).
+  See `docs/LETTA-OPS-BACKLOG.md`.

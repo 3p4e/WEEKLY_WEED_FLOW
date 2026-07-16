@@ -75,6 +75,13 @@
     if (st.searching) {
       body = `<div class="mw-skel" style="height:64px;margin-bottom:8px"></div>
               <div class="mw-skel" style="height:64px"></div>`;
+    } else if (st.error && /unavailable|503/i.test(st.error)) {
+      // Legacy knowledge search (qms-api rag-query) retired — honest state.
+      body = `<div class="panel" style="padding:16px">
+        <div class="ana-pt" style="margin:0 0 6px">${AL('Knowledge search retired', 'Пребарувањето на знаење е повлечено')}</div>
+        <div class="ana-note">${AL(
+          'The legacy QMS knowledge search has been retired. Use Document Studio for document authoring and regulatory checks.',
+          'Наследеното пребарување на QMS знаење е повлечено. Користете го Студиото за документи за креирање и регулаторни проверки.')}</div></div>`;
     } else if (st.error) {
       body = `<div class="panel" style="padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span>
