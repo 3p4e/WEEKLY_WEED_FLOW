@@ -1,5 +1,16 @@
 # Status — delivered vs. the full WWF/SUMA spec
 
+> **⚠️ This file documents the ORIGINAL task-tracker foundation only.** The
+> platform has since expanded far beyond it (DocEngine, next-gen TMS, a full
+> QC LIMS module, and a certificate pipeline). For current, authoritative
+> completion status see **[`PLATFORM-ROADMAP-2026-07.md`](PLATFORM-ROADMAP-2026-07.md)**
+> (the single source of truth for sequencing) and **[`DEPLOY.md`](DEPLOY.md)**
+> (live image tags + migrations + smoke records). Quick snapshot (2026-07-16):
+> **wwf_mass** (test) runs backend `v51` / frontend `v72` / tasks-DB alembic
+> `0025` — DocEngine + TMS T1–T4 + QC LIMS U1–U5 + certificate pipeline
+> (Phase 3 U1–U3), all live-smoked. **Production** is unchanged at frontend
+> `v63` / alembic `0016` — every new module is owner-gated and test-only.
+
 A **deployed, working task-tracker**: the GrowFlow UI wired to a real FastAPI
 backend over Postgres (RLS), running on KVM4 behind Traefik at
 `https://wwf.srv1231216.hstgr.cloud`. The full [`SPEC.md`](SPEC.md) (React/TS
