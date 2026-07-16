@@ -35,3 +35,8 @@ test_accounts.local.json
 
 # Local demo-video recordings (delivered via Google Drive, never committed)
 .demo-videos/
+
+# DocEngine (Python service)
+docengine/__pycache__/
+docengine/**/__pycache__/
+docengine/.pytest_cache/

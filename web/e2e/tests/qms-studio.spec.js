@@ -40,4 +40,14 @@ test('QMS Studio zone: rail group, both views, graceful unavailable state', asyn
     await expect(page.locator('#view-root, main, body').first())
       .toContainText('QMS service unavailable', { timeout: 15_000 });
   });
+
+  await test.step('Create (DocEngine wizard) renders and degrades gracefully', async () => {
+    // no docengine container locally → proxy answers 503 "DocEngine unavailable";
+    // the wizard must surface it with a retry, never a blank screen.
+    await expect(page.locator('[data-nav="qmsstudio"]')).toBeVisible();
+    await page.locator('[data-nav="qmsstudio"]').click();
+    await expect(page.locator('#view-root, main, body').first())
+      .toContainText('DocEngine unavailable', { timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /retry|обиди/i })).toBeVisible();
+  });
 });

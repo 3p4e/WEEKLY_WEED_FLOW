@@ -246,3 +246,55 @@ promotion is exactly:
 Note: the `qms-api` container in the `/opt/stacks/letta` project is an
 unrelated April prototype (18KB main.py) — not this service, not touched by
 this deployment; cleanup candidate at unification Phase 4.
+
+## GrowFlow DocEngine (dedicated document AI service)
+
+New internal service `docengine` (`docengine/`, image `growflow-docengine:vN`)
+— a dedicated FastAPI service powered by Letta with an additive `gf_*` agent
+fleet. It adopts the pp-document-suite formatting engine COMPLETELY (canon:
+`docs/DOCENGINE-CANON-2026-07.md`) and merges the questionnaire-driven
+SOP/Annex authoring workflow with per-section regulatory checks. Every
+produced document is gated on `pp_verify`'s `RESULT: PASS` — a failing build
+is deleted server-side and never reaches the API. **Never published**; its
+only client is the platform backend's `/qms/studio/*` proxy routes (same
+X-API-Key server-side injection pattern as `qms-api`).
+
+Compose service (added to the stack's compose.yaml):
+
+```yaml
+  docengine:
+    image: growflow-docengine:v1
+    environment:
+      DOCENGINE_API_KEY: ${DOCENGINE_API_KEY}
+      DOCENGINE_DATABASE_URL: postgresql://...@wwf-tasks-db:5432/wwf_tasks  # docengine schema
+      LETTA_BASE_URL: http://host.docker.internal:8283
+      LETTA_API_KEY: ${LETTA_API_KEY}
+      GOTENBERG_URL: http://gotenberg:3000
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - docengine_out:/data/docengine-out
+    networks: [internal]
+```
+
+Backend env (app.env): `DOCENGINE_URL=http://docengine:8000` and
+`DOCENGINE_API_KEY=<same secret as the service's DOCENGINE_API_KEY>`. An
+EMPTY key disables it cleanly — `/qms/studio/*` answers 503 "DocEngine
+unavailable" and the Create view shows the labeled unavailable state with a
+retry, same UX contract as QMS Studio Phase 1.
+
+Role gates (enforced server-side in `backend/app/api/qms.py`, UI only
+mirrors them): reading questionnaires/documents = any elevated role; STARTING
+a workflow or a direct build (authoring a controlled document) = `ADMIN`,
+`OWNER`, `QP`, `QA_MGR` only.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**, same governance as QMS Studio Phase 1:
+production promotion only after the owner's tests + explicit approval.
+Promotion mirrors the qms-api steps above (add the compose service + two env
+vars, `docker compose up -d docengine && docker compose up -d --no-deps
+backend frontend` with already-verified tags, then verify a full
+questionnaire→SOP round trip produces a PASS .docx with the house header,
+citations from the real DB1/DB3 sources, and that the authoring gate holds
+for a non-QA/QP manager account).

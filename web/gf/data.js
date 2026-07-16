@@ -79,6 +79,7 @@ GF.I18N = {
     analytics:'Analytics', analytics_sub:'Trends across weeks — throughput, on-time delivery, activity',
     sop_registry:'SOP Registry', sop_registry_sub:'The QMS document registry — codes, status, versions, downloads',
     knowledge:'Knowledge', knowledge_sub:'Search the regulatory corpus and the facility document base',
+    doc_create:'Create', doc_create_sub:'Questionnaire → AI agent fleet → regulatory check → verified controlled document',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -119,6 +120,7 @@ GF.I18N = {
     analytics:'Аналитика', analytics_sub:'Трендови низ неделите — проток, навременост, активност',
     sop_registry:'Регистар на СОП', sop_registry_sub:'QMS регистар на документи — кодови, статус, верзии, преземања',
     knowledge:'Знаење', knowledge_sub:'Пребарување на регулаторниот корпус и документите на капацитетот',
+    doc_create:'Креирај', doc_create_sub:'Прашалник → флота АИ агенти → регулаторна проверка → верификуван контролиран документ',
   },
 };
 
