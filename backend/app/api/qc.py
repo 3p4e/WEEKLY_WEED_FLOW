@@ -19,6 +19,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app import docengine
 from app.db import rls
 from app.deps import require_role
 from app.notify import emit
@@ -503,6 +504,11 @@ class ResultIn(BaseModel):
     lower_limit: float | None = None
     upper_limit: float | None = None
     result_date: date | None = None
+    # provenance — the source iCoA/eCoA this result was transcribed from; the
+    # COQ maps every line back to its source document (unknown stays blank).
+    source_document_code: str | None = Field(default=None, max_length=120)
+    source_document_date: date | None = None
+    source_institution: str | None = Field(default=None, max_length=200)
 
 
 def _coa_out(r: dict) -> dict:
@@ -516,6 +522,8 @@ def _coa_out(r: dict) -> dict:
         "analyst_id": str(r["analyst_id"]) if r["analyst_id"] else None,
         "reviewer_id": str(r["reviewer_id"]) if r["reviewer_id"] else None,
         "approver_id": str(r["approver_id"]) if r["approver_id"] else None,
+        "coq_document_id": r["coq_document_id"],
+        "coq_generated_at": r["coq_generated_at"].isoformat() if r["coq_generated_at"] else None,
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -531,6 +539,10 @@ def _result_out(r: dict) -> dict:
         "complies": r["complies"], "status": r["status"],
         "analyst_id": str(r["analyst_id"]) if r["analyst_id"] else None,
         "result_date": r["result_date"].isoformat() if r["result_date"] else None,
+        "source_document_code": r["source_document_code"],
+        "source_document_date":
+            r["source_document_date"].isoformat() if r["source_document_date"] else None,
+        "source_institution": r["source_institution"],
     }
 
 
@@ -618,10 +630,11 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
         row = await c.fetchrow(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
             " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
-            " result_date, created_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::date,$12) RETURNING *",
+            " result_date, source_document_code, source_document_date, source_institution, created_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$12) RETURNING *",
             user["org_id"], coa_id, body.parameter_id, body.test_name, body.result_value,
-            body.result_numeric, body.unit, lo, hi, complies, status, user["id"], body.result_date)
+            body.result_numeric, body.unit, lo, hi, complies, status, user["id"], body.result_date,
+            body.source_document_code, body.source_document_date, body.source_institution)
         # OOS hook: a failing result quarantines the linked sample.
         if complies is False and coa["sample_id"]:
             smp = await c.fetchrow("SELECT id, status FROM qc_samples WHERE id=$1", coa["sample_id"])
@@ -684,6 +697,128 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             f"UPDATE qc_certificates SET {', '.join(fields)}, updated_at=now()"
             f" WHERE id=${len(args)} RETURNING *", *args)
     return _coa_out(dict(row))
+
+
+# ── Certificate of Quality (COQ) generation — Phase 3 U1 ────────────────────
+# A COQ is a RELEASED qc_certificate rendered to a bilingual house-style .docx
+# by the DocEngine (POST /build → pp_verify RESULT: PASS gate). TWO gates apply:
+# a DATA gate here — every result must comply; a FAIL or an unmeasured value
+# blocks, so a conformant COQ is never fabricated for a non-conforming or
+# incomplete batch (GxP) — and the DocEngine's own house-style PASS gate.
+# Issuing a COQ is a Qualified-Person act.
+def _coq_client(timeout: float = 20.0):
+    """The seam the COQ tests monkeypatch (mirrors qms.py's _de_client)."""
+    return docengine.de_client(timeout)
+
+
+def _coq_cell(s) -> str:
+    """Sanitize a value for a DocEngine table/heading cell — strip the grammar
+    separators (| heading split, ||| column split, ~~ MK/EN split)."""
+    if s is None:
+        return ""
+    return str(s).replace("|||", "/").replace("~~", "-").replace("|", "/")
+
+
+def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list) -> str:
+    """Assemble the Certificate of Quality as DocEngine bilingual Markdown
+    (doctype: FORM → the annex renderer: navy banners, [[FORM:grid]] metadata,
+    [[TABLE]] results). Every result line carries its source document. House
+    wording is 'MK GMP Certified Facility' (never 'EU GMP'); no value is
+    fabricated — an unknown result renders '—'."""
+    c = _coq_cell
+    material = f"{spec.get('material_name_mk') or ''} / {spec.get('material_name_en') or spec.get('material_code') or ''}"
+    decision = coa.get("decision") or ""
+    v_mk = "СЕРИЈАТА ЗАДОВОЛУВА" if decision == "PASS" else "СЕРИЈАТА НЕ ЗАДОВОЛУВА"
+    v_en = "This batch CONFORMS" if decision == "PASS" else "This batch does NOT conform"
+    head = ("<!--HEADERDATA\n"
+            "doctype: FORM\n"
+            f"code: {c(coa['coa_number'])}\n"
+            "version: 01\n"
+            "mk_title: Сертификат за квалитет\n"
+            "en_title: Certificate of Quality\n"
+            "-->\n\n")
+    title = "# Сертификат за квалитет|Certificate of Quality\n\n"
+    def frow(mk, en, val):
+        return f"{mk}~~{en} ||| {c(val)}\n"
+    grid = ("[[FORM:grid]]\n"
+            + frow("Број на сертификат", "Certificate number", coa["coa_number"])
+            + frow("Серија", "Batch", coa["batch_id"])
+            + frow("Материјал", "Material", material)
+            + frow("Спецификација", "Specification", spec.get("spec_id"))
+            + frow("Датум на извештај", "Report date", coa.get("report_date") or "")
+            + frow("Извор (лабораторија)", "Source lab", coa.get("source_lab") or "")
+            + frow("Одлука", "Disposition", f"{v_mk} / {v_en}")
+            + "[[/FORM]]\n\n")
+    tbl = ("[[TABLE:data]]\n"
+           "Тест~~Test ||| Метод~~Method ||| Граници~~Acceptance ||| "
+           "Резултат~~Result ||| Статус~~Status ||| Извор~~Source\n")
+    for r in results:
+        p = params_by_id.get(str(r.get("parameter_id"))) or {}
+        lo, hi = r.get("lower_limit"), r.get("upper_limit")
+        limits = "—" if lo is None and hi is None else \
+            f"{'' if lo is None else lo} … {'' if hi is None else hi}"
+        val = r.get("result_value") or ("" if r.get("result_numeric") is None
+                                        else str(r["result_numeric"]))
+        val = (f"{val} {r.get('unit') or ''}").strip() or "—"
+        st = {True: "PASS", False: "OOS"}.get(r.get("complies"), "—")
+        src = r.get("source_document_code") or r.get("source_institution") \
+            or coa.get("source_lab") or "—"
+        tbl += (f"{c(r.get('test_name'))} ||| {c(p.get('test_method') or '')} ||| "
+                f"{c(limits)} ||| {c(val)} ||| {st} ||| {c(src)}\n")
+    tbl += "[[/TABLE]]\n\n"
+    conform = f"**{v_mk}** според одобрената спецификација.|||**{v_en}** against the approved specification.\n\n"
+    footer = "МК ГМП сертифицирано постројение|||MK GMP Certified Facility\n"
+    return head + title + grid + tbl + conform + footer
+
+
+@router.post("/certificates/{coa_id}/coq", status_code=201)
+async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_QP_ROLES))):
+    """Render a Certificate of Quality (.docx) from a RELEASED certificate via
+    the DocEngine's PASS-gated formatter. Data gate: every result must comply
+    (a FAIL or unmeasured result blocks). Certifying is a QP act."""
+    async with rls(user) as c:
+        coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
+        if coa is None:
+            raise HTTPException(404, "Certificate not found")
+        if coa["status"] != "RELEASED":
+            raise HTTPException(409, "A COQ is issued only from a RELEASED certificate")
+        spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
+                                coa["specification_id"])
+        params = await c.fetch(
+            "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", coa["specification_id"])
+        results = await c.fetch(
+            "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+    if not results:
+        raise HTTPException(409, "The certificate has no results to certify")
+    # GxP data gate: never issue a conformant COQ over a FAIL or an unmeasured
+    # (complies is None → 'unknown') result.
+    unmet = [r for r in results if r["complies"] is not True]
+    if unmet:
+        raise HTTPException(
+            409, f"{len(unmet)} result(s) do not comply or are unmeasured — cannot certify")
+    params_by_id = {str(p["id"]): dict(p) for p in params}
+    md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id,
+                       [dict(r) for r in results])
+    # DocEngine build (house-style PASS gate). A pp_verify FAIL surfaces as 422.
+    build = (await docengine.de_forward(
+        "POST", "/build",
+        {"markdown": md, "out_name": coa["coa_number"],
+         "meta": {"code": coa["coa_number"], "title_mk": "Сертификат за квалитет",
+                  "title_en": "Certificate of Quality", "version": "01"}},
+        timeout=120.0, client_factory=_coq_client)).json()
+    doc_id = build.get("document_id")
+    async with rls(user) as c:
+        await c.execute(
+            "UPDATE qc_certificates SET coq_document_id=$1, coq_generated_at=now(),"
+            " updated_by=$2, updated_at=now() WHERE id=$3", doc_id, user["id"], coa_id)
+        try:
+            await emit(c, user, verb="coq_generated", object_type="qc_certificate",
+                       object_id=coa_id, recipients=[],
+                       params={"coa_number": coa["coa_number"], "document_id": doc_id})
+        except Exception:
+            pass
+    return {"coa_number": coa["coa_number"], "document_id": doc_id,
+            "verify": build.get("verify"), "bytes": build.get("bytes")}
 
 
 # ════════════════════════════════════════════════════════════════════════════

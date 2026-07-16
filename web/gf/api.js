@@ -125,6 +125,7 @@ GF.API = {
   qcCreateCoa(b)           { return this._req('POST', '/qc/certificates', b); },
   qcPatchCoa(id, b)        { return this._req('PATCH', '/qc/certificates/' + id, b); },
   qcAddResult(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/results', b); },
+  qcGenerateCoq(id)        { return this._req('POST', '/qc/certificates/' + id + '/coq'); },
 
   qcOos(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/oos' + (u?'?'+u:'')); },
   qcOosOne(id)             { return this._req('GET', '/qc/oos/' + id); },

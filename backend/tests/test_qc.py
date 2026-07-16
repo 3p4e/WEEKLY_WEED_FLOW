@@ -546,3 +546,131 @@ async def test_oos_role_gating(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     assert (await client.get("/qc/oos", headers=cu_h)).status_code == 200          # elevated read
     assert (await client.post("/qc/oos", json={"batch_id": "B"}, headers=cu_h)).status_code == 403
+
+
+# ── Phase 3 U1 — Certificate of Quality (COQ) generation ────────────────────
+from app.api import qc as _qc_mod          # noqa: E402
+from app.config import settings as _settings  # noqa: E402
+
+
+class _FakeDE:
+    """Stands in for the DocEngine httpx client — records the markdown it was
+    asked to build so the assembler can be asserted, returns a canned build."""
+    last_markdown = None
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def request(self, method, path, json=None, **kw):
+        _FakeDE.last_markdown = (json or {}).get("markdown")
+
+        class _R:
+            status_code = 200
+
+            def __init__(self, d):
+                self._d = d
+
+            def json(self):
+                return self._d
+        if isinstance(self._resp, Exception):
+            raise self._resp
+        return _R(self._resp)
+
+
+def _stub_de(monkeypatch, resp):
+    monkeypatch.setattr(_settings, "docengine_api_key", "test-de-key")
+    monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _FakeDE(resp))
+
+
+async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None):
+    """A CoA driven to RELEASED with the given results. Header user is the
+    analyst; qp_headers reviews (must differ from analyst) → approves → releases."""
+    spec = await _spec(client, headers, material=material)
+    await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                      json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                            "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                            "upper_limit": 30.0}, headers=headers)
+    coa = await _coa(client, headers, spec["id"], batch="B-COQ")
+    for r in (results or [{"test_name": "Total THC", "result_numeric": 22.0,
+                           "lower_limit": 10.0, "upper_limit": 30.0, "unit": "%",
+                           "source_document_code": "ECOA-LAB-001"}]):
+        assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                                  json=r, headers=headers)).status_code == 201
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp_headers)).status_code == 200, tgt
+    return coa
+
+
+async def test_coq_generates_from_released_cert(client, admin_headers, monkeypatch):
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-1", "verify": "RESULT: PASS", "bytes": 4096})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp)
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["document_id"] == "DE-COQ-1" and r.json()["verify"] == "RESULT: PASS"
+    # the doc id is persisted on the cert for re-download/audit
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert detail["coa"]["coq_document_id"] == "DE-COQ-1" and detail["coa"]["coq_generated_at"]
+    # the assembled markdown is bilingual, GMP-worded, and never says "EU GMP"
+    md = _FakeDE.last_markdown
+    assert "Certificate of Quality" in md and "Сертификат за квалитет" in md
+    assert "MK GMP Certified Facility" in md and "EU GMP" not in md
+    assert "ECOA-LAB-001" in md          # every line maps back to its source doc
+
+
+async def test_coq_only_from_released(client, admin_headers, monkeypatch):
+    _stub_de(monkeypatch, {"document_id": "X"})
+    spec = await _spec(client, admin_headers, material="COQ-DRAFT")
+    coa = await _coa(client, admin_headers, spec["id"])
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409          # DRAFT cert cannot be certified
+
+
+async def test_coq_blocks_on_noncompliant_result(client, admin_headers, monkeypatch):
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    # a failing result → the batch does not conform → COQ refused (never fabricated)
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-FAIL",
+                              results=[{"test_name": "Water", "result_numeric": 15.0,
+                                        "upper_limit": 10.0}])
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "comply" in r.json()["detail"]
+
+
+async def test_coq_is_qp_gated(client, admin_headers, monkeypatch):
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-2", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-ROLE")
+    _, qc_mgr = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=qc_mgr)).status_code == 403   # QC mgr cannot certify
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=qp)).status_code == 201        # QP can
+
+
+async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
+    """A DocEngine pp_verify FAIL must reach the caller as 422 — never a
+    silently-shipped certificate."""
+    import httpx as _httpx
+    _stub_de(monkeypatch, None)
+    # make the fake DE raise a 4xx by returning a 422-shaped response
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-VF")
+
+    class _Fail(_FakeDE):
+        async def request(self, method, path, json=None, **kw):
+            class _R:
+                status_code = 422
+                def json(self):
+                    return {"detail": {"verify": "RESULT: FAIL", "error": "verify FAILED"}}
+            return _R()
+    monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _Fail(None))
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 422 and r.json()["detail"]["verify"] == "RESULT: FAIL"
