@@ -162,3 +162,39 @@ async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
     # idempotent within the day: a second run emits nothing new
     again = await run_for_org(admin, today)
     assert again == {"due_soon": 0, "overdue": 0}
+
+
+# ── TMS T2: reason-filter regex kept in lockstep with the DB CHECK ──────────
+async def test_inbox_reason_filter_accepts_capa_and_validation_stuck(client, admin_headers):
+    """Regression: migration 0016 widened notifications.reason's CHECK to
+    include capa_stuck/validation_stuck for the canned automation rules, but
+    the /notifications query-param validator's regex was never updated —
+    filtering by either value 422'd even though the DB (and automation.py)
+    both accept them."""
+    for reason in ("capa_stuck", "validation_stuck", "assigned", "due", "report"):
+        r = await client.get(f"/notifications?reason={reason}", headers=admin_headers)
+        assert r.status_code == 200, (reason, r.text)
+    r = await client.get("/notifications?reason=not_a_real_reason", headers=admin_headers)
+    assert r.status_code == 422
+
+
+# ── TMS T2: in-app team digest ──────────────────────────────────────────────
+async def test_digest_counts_recent_events_by_verb(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "Digest smoke task"}, headers=admin_headers)
+    assert r.status_code == 201
+    task_id = r.json()["id"]
+    await client.patch(f"/tasks/{task_id}", json={"status": "ongoing"}, headers=admin_headers)
+
+    daily = (await client.get("/notifications/digest?window=daily", headers=admin_headers)).json()
+    assert daily["window"] == "daily"
+    verbs = {v["verb"] for v in daily["by_verb"]}
+    assert "created" in verbs and "status_changed" in verbs
+    assert daily["total"] >= 2
+    assert any(e["task_id"] == task_id for e in daily["recent"])
+
+    weekly = (await client.get("/notifications/digest?window=weekly", headers=admin_headers)).json()
+    assert weekly["window"] == "weekly"
+    assert weekly["total"] >= daily["total"]  # weekly window is a superset
+
+    r = await client.get("/notifications/digest?window=monthly", headers=admin_headers)
+    assert r.status_code == 422

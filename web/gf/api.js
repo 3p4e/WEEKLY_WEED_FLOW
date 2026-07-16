@@ -91,6 +91,7 @@ GF.API = {
   updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
   resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
   notifications(q)     { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/notifications' + (u?'?'+u:'')); },
+  notifDigest(window)  { return this._req('GET', '/notifications/digest?window=' + (window || 'daily')); },
   notifUnread()        { return this._req('GET', '/notifications/unread-count'); },
   notifRead(id)        { return this._req('POST', '/notifications/' + id + '/read'); },
   notifReadAll()       { return this._req('POST', '/notifications/read-all'); },
