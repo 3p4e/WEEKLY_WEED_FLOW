@@ -640,5 +640,38 @@ input. Local gate: full backend suite **364 passed** (+4 hardening regressions),
 (no status), a bad SFR/RQS `sample_id`, and an over-cap chunk batch each return
 **422** (previously 500 / dangling), while a valid result still posts 201.
 
-Prod promotion of the whole QC LIMS + certificate pipeline is one owner-gated
-decision (recipe above); wwf_app remains untouched at alembic `0016`.
+### ✅ Production cutover — DONE (wwf_app → v53 / v74 / alembic 0027, 2026-07-16)
+
+On the owner's explicit go, the full validated wwf_mass stack was promoted to
+production (`wwf_app`, the live 25-user system), bringing prod from
+v39 / v63 / alembic `0016` up to the unified platform:
+
+1. **Backup first** — fresh `pg_dump -Fc` of both prod DBs
+   (`/opt/stacks/wwf_app/backups/pre-cutover-{tasks,users}-20260716181747.dump`;
+   tasks 2.9 MB) on top of the automated `wwf-db-backup` sidecar + offsite rclone.
+2. **Migrations 0017→0027** applied to prod `wwf_tasks` via a one-off `docker run`
+   off `v53` with the postgres-superuser async URL — all **additive** (11
+   migrations: TMS `0017`, QC LIMS `0018`–`0027`). Verified afterwards: head
+   `0027`, 20 QC tables, **existing 556 task rows intact**, grants present.
+3. **DocEngine added** to the prod stack (`wwf-docengine`, image
+   `growflow-docengine:v3`, own `docengine.env`, `internal` network) so COQ
+   generation works. One-time grant needed on first boot:
+   `GRANT CREATE ON DATABASE wwf_tasks TO app_admin` (the engine creates its own
+   schema — same as wwf_mass). Backend `app.env` gained `DOCENGINE_URL` +
+   `DOCENGINE_API_KEY`.
+4. **Images bumped**: backend + scheduler `v39`→`v53`, frontend `v63`→`v74`;
+   `docker compose up -d`. (`compose.yaml`/`app.env` backed up as
+   `*.bak.pre-cutover-v39`.)
+5. **Live smoke** (real `tt.qc.mgr` on `https://wwf.srv1231216.hstgr.cloud`):
+   **existing** flows still green (`/tasks`, `/departments`, `/reports/analytics`
+   all 200 — the 25-user system is unaffected); **new** QC read+write green
+   (`/qc/specifications` 200; created `PP-SPEC-2026-0001` then deleted the smoke
+   spec — sequences/audit/RLS/grants all work on prod); **DocEngine** reachable
+   (`/qms/studio/questionnaires` 200; engine `db:true, letta:true`).
+
+Rollback path if needed: revert the three images to `v39`/`v63` — the additive
+migrations are harmless to leave in place, and the pre-cutover dumps restore the
+DB. The QMS **registry** federation (`qms-api`) was intentionally NOT promoted;
+`QMS_API_KEY` is unset on prod so `/qms/documents`-style registry reads degrade
+gracefully (503) while the DocEngine Studio path works — the qms-api shell
+retirement is tracked separately.

@@ -50,7 +50,7 @@ prod promotion (§8) — plus a few deferred low-priority QC leaves.
 
 | Environment | Backend | Frontend | tasks-DB | Extra services | Notes |
 |---|---|---|---|---|---|
-| **Production** `wwf_app` (`https://…hstgr.cloud`) | v39 | v63 | alembic **0016** | — | The 25-user live system. No DocEngine, no QMS Studio, no TMS, no QC LIMS — **all new work is test-only** and owner-gated. |
+| **Production** `wwf_app` (`https://wwf…hstgr.cloud`) | **v53** | **v74** | alembic **0027** | `growflow-docengine:v3` | The 25-user live system. **Cut over 2026-07-16** to the full unified stack (TMS + QC LIMS U1–U6 + certificate pipeline U1–U4 + DocEngine). Migrations 0017–0027 applied additively (existing task data intact); pre-cutover DB dump taken. Live-smoked: existing task/report flows + new QC read/write + DocEngine wiring all green. |
 | **Test** `wwf_mass` (`https://wwf-mass…`) | **v53** | **v74** | alembic **0027** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U6** + the full certificate pipeline (Phase 3 **U1–U4**) all live + live-smoked, **+ a Phase 4 hardening pass** over the QC surface. Migrations 0017–0027 applied. |
 
 **Standing rule (owner, non-negotiable):** every upgrade deploys to **wwf_mass
@@ -232,11 +232,18 @@ write-side FK-validation class (unknown/cross-org ids now 422 instead of a raw
 and frontend robustness (null-guarded transport forms, displayed water
 parameters, escaped retrieval numerics). Nav coherence was verified (all seven
 QC views register uniquely under the QMS-Studio group — no defect). See
-`docs/DEPLOY.md` → "Phase 4 hardening". **Still owner-gated / open:** consolidate
-the retired Phase-1 `qms-api` shell, unify the nav zones fully, the Letta ops
-backlog (`docs/LETTA-OPS-BACKLOG.md`), and the **staged owner-approved promotion
-of each landed module to prod** — which begins only with the owner's acceptance
-tests on wwf_mass and an explicit go for the first prod promotion.
+`docs/DEPLOY.md` → "Phase 4 hardening". Nav coherence was verified (all seven
+QC views register uniquely under the QMS-Studio group — no defect).
+
+**✅ Production cutover DONE (2026-07-16):** on the owner's explicit go, the full
+validated stack was promoted to `wwf_app` (the live 25-user system) — backend
+`v53` / frontend `v74` / migrations 0017–0027 (additive; existing data intact) +
+the `growflow-docengine` container. Backup-first, live-smoked (existing task
+flows + new QC + DocEngine all green). See `docs/DEPLOY.md` → "Production
+cutover". **Still open:** retire the Phase-1 `qms-api` shell (prod already runs
+without it — registry reads degrade gracefully; a full move of the registry
+read-path onto the DocEngine remains), and the Letta ops backlog
+(`docs/LETTA-OPS-BACKLOG.md`, against the ~54 live agents).
 
 ---
 
