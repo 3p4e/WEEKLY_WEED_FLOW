@@ -31,9 +31,50 @@ SOP_SECTIONS = [
 
 _MD_FENCE = re.compile(r"^```[a-zA-Z]*\n|\n```$", re.M)
 
+# Conversational lead-ins a stateful agent sometimes emits BEFORE the document
+# body despite being told "body only" (observed live: "Looking at the persona
+# description more carefully... Let me align..."). These must never reach the
+# .docx. Matched case-insensitively at the very start of a line.
+_PREAMBLE = re.compile(
+    r"^(looking at|let me|here('s| is)|here are|i'll|i will|i have|i've|based on( the)?|"
+    r"as (requested|instructed|per)|sure[,!]|certainly|okay|alright|below is|the following|"
+    r"this is (my|the)|note:|understood|of course|great[,!]|let's|now,? (let|i))\b",
+    re.I,
+)
+# The first structural token of a real document body: a Markdown heading or a
+# form/table marker. Everything an annex author says before this is commentary.
+_STRUCT = re.compile(r"^\s*(#{1,6}\s|\[\[(FORM|TABLE))", re.M)
+
 
 def _strip_fences(text: str) -> str:
     return _MD_FENCE.sub("", text or "").strip()
+
+
+def _clean_section(text: str, structured: bool = False) -> str:
+    """Strip code fences AND any leading agent commentary from a section body.
+
+    structured=True (annex/form bodies, which always contain a heading or a
+    [[FORM]]/[[TABLE]] marker): drop everything before the first structural
+    token — anything prior is preamble. structured=False (SOP prose sections,
+    legitimately plain text with no heading): only peel conversational lead-in
+    lines off the top, so real prose is never lost."""
+    t = _strip_fences(text)
+    if not t:
+        return t
+    if structured:
+        m = _STRUCT.search(t)
+        if m:
+            return t[m.start():].strip()
+    # peel leading conversational lines (and the blank lines between them)
+    lines = t.split("\n")
+    i = 0
+    while i < len(lines):
+        s = lines[i].strip()
+        if s == "" or _PREAMBLE.match(s):
+            i += 1
+            continue
+        break
+    return "\n".join(lines[i:]).strip() or t
 
 
 def _brief(questionnaire_key: str, answers: dict) -> str:
@@ -92,21 +133,26 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     f"Draft ONLY section {num} {mk}|{en} of the SOP "
                     f"'{meta['title_mk']} | {meta['title_en']}' (code {meta['code']}). "
                     f"Content brief:\n{brief}\n\n"
-                    "Return bilingual Markdown body only (no heading line, no fences). "
+                    "Return ONLY the bilingual Markdown body — no heading line, no code "
+                    "fences, and NO commentary, preamble, or explanation of what you are "
+                    "doing. Your entire reply is inserted verbatim into the document. "
                     "Unknown facility specifics stay as blank fields.",
                 )
-                sections.append({"num": num, "mk": mk, "en": en, "content": _strip_fences(text)})
+                sections.append({"num": num, "mk": mk, "en": en, "content": _clean_section(text)})
                 await db.job_update(job_id, stage=f"generate {num}")
         else:
             text = await client.send_message(
                 agents["gf_annex_author"],
                 f"Design the {doctype} '{meta['title_mk']} | {meta['title_en']}' "
                 f"(code {meta['code']}). Content brief:\n{brief}\n\n"
-                "Return bilingual Markdown body only, using [[FORM:grid]] for the "
-                "metadata block and [[TABLE]] for data grids. Blank write-in values.",
+                "Return ONLY the bilingual Markdown body, using [[FORM:grid]] for the "
+                "metadata block and [[TABLE]] for data grids. Blank write-in values. "
+                "NO commentary, preamble, or explanation — your entire reply is inserted "
+                "verbatim into the document.",
             )
             sections.append(
-                {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT", "content": _strip_fences(text)}
+                {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
+                 "content": _clean_section(text, structured=True)}
             )
 
         # ---- per-section regulatory check ----
