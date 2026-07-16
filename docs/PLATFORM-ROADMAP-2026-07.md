@@ -260,6 +260,20 @@ no-action (heterogeneous but all-functional, creation friction already resolved)
 shared server); master-key rotation ⏸ hold (no compromise trigger; 5-consumer
 coordinated swap touching prod). Nothing here warrants execution now.
 
+**SUMA/ISO17verSUMA corpus assimilated (2026-07-16).** The 3 owner repo variants
+(`WEEKLY_SUMA_ISO17_v2` canonical / `suma-platform` history / `01_TASKMASTA_ISO17025`
+legacy) were deep-analysed. Finding: **SUMA is the ancestor of WWF/GrowFlow**
+(`docs/SPEC.md` = "WWF / SUMA") — its task model, roles, workflow, ALCOA+ audit,
+and exec dashboard are already surpassed by the platform. The one genuinely-absent,
+SUMA-defining delta — the executive **GMP audit-prep readiness** tracker — was
+assimilated natively as a **pure read layer over `tasks.tags`** (`GET /reports/
+audit-prep` + the bilingual "Audit readiness" view; no migration). Kept a *planning
+aid*, not a controlled record (two-zone scope). Cosmetic SUMA schema (e-sigs, report
+versioning) dropped — superseded by the DocEngine. Deferred follow-on: activating
+the inert `tasks.workflow_state` into a manager submit→approve/reject sign-off + QP-
+remark block (a migration-bearing, GxP-scope-sensitive increment). See
+`docs/DEPLOY.md` → "SUMA assimilation".
+
 ---
 
 ## 7. Risk register & open decisions

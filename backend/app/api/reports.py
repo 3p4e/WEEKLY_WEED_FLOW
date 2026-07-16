@@ -363,3 +363,164 @@ async def analytics(
         "departments": departments,
         "task_types": [{"task_type": r["task_type"], "count": r["n"]} for r in types],
     }
+
+
+# Canonical GMP audit-preparation programs, tracked as task TAGS (not dedicated
+# tables) — the SUMA/ISO17verSUMA ADR-001 decision, assimilated here: SOP and
+# audit-prep work is just tagged tasks, and filtering by tag gives a dedicated
+# readiness view without new schema. Overridable per call via ?programs=.
+_AUDIT_PROGRAMS = ("MK-GMP", "EU-GMP", "SOP-writing")
+# tasks.days carries Mon..Sun tokens (see tasks.py _DAY_TOKENS); this fixes the
+# display/rollup order so "busiest day" is deterministic and week-ordered.
+_DOW = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+@router.get("/audit-prep")
+async def audit_prep(
+    programs: str | None = Query(None, description="comma-separated tag names; defaults to the GMP set"),
+    department_id: str | None = None,
+    user: dict = Depends(require_password_set),
+):
+    """GMP audit-preparation readiness — assimilated from the SUMA executive
+    dashboard's "GMP & SOP Preparation Tracker" + "Audit Preparation Timeline".
+
+    Per-program completion over tasks tagged MK-GMP / EU-GMP / SOP-writing
+    (configurable via ?programs=), a due-date milestone timeline, and planning
+    telemetry (status distribution, busiest scheduled day, outcome-traceability
+    sanity check). This is a PLANNING aid over the existing tasks.tags facet —
+    NOT a controlled record; the QMS/DocEngine zone owns audit deliverables
+    (per SUMA ADR-001 §2 and docs/SCOPE.md's two-zone statement).
+
+    Dept-scoped managers are pinned to their own department exactly like
+    /reports/analytics; base USER is refused.
+    """
+    if user["role"] == "USER":
+        raise HTTPException(status_code=403, detail="Managers and executives only")
+    if programs:
+        progs = [p.strip() for p in programs.split(",") if p.strip()]
+        if len(progs) > 12:
+            raise HTTPException(status_code=422, detail="programs: at most 12")
+        if any(len(p) > 64 for p in progs):
+            raise HTTPException(status_code=422, detail="programs: each at most 64 chars")
+    else:
+        progs = list(_AUDIT_PROGRAMS)
+    if not progs:
+        progs = list(_AUDIT_PROGRAMS)
+
+    today = date.today()
+    # Dept-scoped managers are forced to their department; execs/QP/ADMIN keep
+    # free choice — same rule as /reports/weekly and /reports/analytics.
+    scope = dept_scope(user)
+    if scope:
+        department_id = scope
+    dept = department_id  # local alias for the per-query clauses below
+
+    async with rls(user) as c:
+        # Per-program readiness. unnest($1) LEFT JOIN tasks so a program with
+        # zero matching tasks still returns a row (total 0) rather than
+        # silently vanishing from the tracker. $2=today (overdue), $3=dept.
+        prog_rows = await c.fetch(
+            "SELECT p.prog,"
+            " count(t.id) AS total,"
+            " count(t.id) FILTER (WHERE t.status='completed') AS completed,"
+            " count(t.id) FILTER (WHERE t.status='ongoing') AS ongoing,"
+            " count(t.id) FILTER (WHERE t.status='review') AS review,"
+            " count(t.id) FILTER (WHERE t.status='stuck') AS stuck,"
+            " count(t.id) FILTER (WHERE t.status='postponed') AS postponed,"
+            " count(t.id) FILTER (WHERE t.status='pending') AS pending,"
+            " count(t.id) FILTER (WHERE t.status<>'completed' AND t.due_date IS NOT NULL"
+            "   AND t.due_date < $2) AS overdue"
+            " FROM unnest($1::text[]) AS p(prog)"
+            " LEFT JOIN tasks t ON p.prog = ANY(t.tags)"
+            "   AND t.is_deleted=false AND t.is_archived=false"
+            + (" AND t.department_id = $3::uuid" if dept else "") +
+            " GROUP BY p.prog",
+            progs, today, *([dept] if dept else []))
+
+        # Milestone timeline — every program-tagged task carrying a due_date,
+        # soonest first. $1=programs, $2=dept. overdue computed in Python.
+        tl_rows = await c.fetch(
+            "SELECT t.id, t.title, t.status, t.due_date, t.tags, t.department_id"
+            " FROM tasks t"
+            " WHERE t.is_deleted=false AND t.is_archived=false"
+            "   AND t.due_date IS NOT NULL AND t.tags && $1::text[]"
+            + (" AND t.department_id = $2::uuid" if dept else "") +
+            " ORDER BY t.due_date, t.created_at LIMIT 200",
+            progs, *([dept] if dept else []))
+
+        # Status distribution across the whole audit-prep task set.
+        status_rows = await c.fetch(
+            "SELECT t.status, count(*) AS n FROM tasks t"
+            " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
+            + (" AND t.department_id = $2::uuid" if dept else "") +
+            " GROUP BY t.status",
+            progs, *([dept] if dept else []))
+
+        # Busiest scheduled day — unnest the days[] tags over the audit-prep set.
+        day_rows = await c.fetch(
+            "SELECT d AS day, count(*) AS n FROM tasks t, unnest(t.days) AS d"
+            " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
+            + (" AND t.department_id = $2::uuid" if dept else "") +
+            " GROUP BY d",
+            progs, *([dept] if dept else []))
+
+        # Outcome-traceability sanity check — completed audit-prep tasks that
+        # carry an outcome vs those left blank. A PLANNING nudge (SUMA's
+        # "Outcome Traceability" / detectAnomalies), explicitly not a GMP gate.
+        trace = await c.fetchrow(
+            "SELECT count(*) AS completed,"
+            " count(*) FILTER (WHERE t.outcome IS NOT NULL AND btrim(t.outcome) <> '') AS with_outcome"
+            " FROM tasks t"
+            " WHERE t.is_deleted=false AND t.is_archived=false"
+            "   AND t.status='completed' AND t.tags && $1::text[]"
+            + (" AND t.department_id = $2::uuid" if dept else ""),
+            progs, *([dept] if dept else []))
+
+    by_prog = {r["prog"]: r for r in prog_rows}
+    programs_out = []
+    for p in progs:
+        r = by_prog.get(p)
+        total = r["total"] if r else 0
+        done = r["completed"] if r else 0
+        programs_out.append({
+            "program": p, "total": total, "completed": done,
+            "ongoing": r["ongoing"] if r else 0, "review": r["review"] if r else 0,
+            "stuck": r["stuck"] if r else 0, "postponed": r["postponed"] if r else 0,
+            "pending": r["pending"] if r else 0, "overdue": r["overdue"] if r else 0,
+            "completion_rate": round(done / total, 4) if total else 0.0,
+        })
+
+    prog_set = set(progs)
+    timeline = [{
+        "id": str(r["id"]), "title": r["title"], "status": r["status"],
+        "due_date": r["due_date"].isoformat(),
+        "overdue": r["status"] != "completed" and r["due_date"] < today,
+        "programs": [t for t in (r["tags"] or []) if t in prog_set],
+    } for r in tl_rows]
+
+    status_distribution = {r["status"]: r["n"] for r in status_rows}
+    day_distribution = {d: 0 for d in _DOW}
+    for r in day_rows:
+        if r["day"] in day_distribution:
+            day_distribution[r["day"]] = r["n"]
+    busiest = max(_DOW, key=lambda d: day_distribution[d])
+    busiest_day = ({"day": busiest, "count": day_distribution[busiest]}
+                   if day_distribution[busiest] else None)
+
+    comp = trace["completed"] if trace else 0
+    with_o = trace["with_outcome"] if trace else 0
+    traceability = {
+        "completed": comp, "with_outcome": with_o, "without_outcome": comp - with_o,
+        "rate": round(with_o / comp, 4) if comp else 0.0,
+    }
+
+    return {
+        "as_of": today.isoformat(),
+        "department_id": str(department_id) if department_id else None,
+        "programs": programs_out,
+        "timeline": timeline,
+        "status_distribution": status_distribution,
+        "day_distribution": day_distribution,
+        "busiest_day": busiest_day,
+        "traceability": traceability,
+    }
