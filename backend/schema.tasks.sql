@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
+\restrict 857qahbcOqUrW60hi0h4XeqcOM4QLeJxrZNpS0lDf6UbJEv9HZOecee4WfEM0Sw
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -353,6 +353,115 @@ CREATE SEQUENCE public.qc_coa_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
+
+
+--
+-- Name: qc_oos_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_oos_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_oos_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_oos_notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    oos_id uuid NOT NULL,
+    part text NOT NULL,
+    recipients jsonb DEFAULT '[]'::jsonb NOT NULL,
+    message text,
+    acknowledged boolean DEFAULT false NOT NULL,
+    acknowledged_at timestamp with time zone,
+    sent_by_id uuid,
+    sent_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_oos_notifications_part_check CHECK ((part = ANY (ARRAY['A'::text, 'B'::text, 'C'::text, 'D'::text])))
+);
+
+ALTER TABLE ONLY public.qc_oos_notifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_oos_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_oos_records (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    oos_number text NOT NULL,
+    result_id uuid,
+    sample_id uuid,
+    batch_id text NOT NULL,
+    material_code text,
+    test_name text,
+    method_ref text,
+    specification_value text,
+    obtained_value text,
+    oos_type text DEFAULT 'OOS'::text NOT NULL,
+    risk_level text,
+    phase text DEFAULT 'I'::text NOT NULL,
+    status text DEFAULT 'OPEN'::text NOT NULL,
+    detection_date date,
+    detected_by_id uuid,
+    timeline_deadline date,
+    lab_investigation_result text,
+    lab_error boolean DEFAULT false NOT NULL,
+    invalidated boolean DEFAULT false NOT NULL,
+    retest_result text,
+    phase_i_completed_at timestamp with time zone,
+    phase_i_completed_by_id uuid,
+    root_cause_category text,
+    root_cause_description text,
+    impact_assessment text,
+    capa_reference text,
+    effectiveness_check_date date,
+    effectiveness_check_result text,
+    phase_ii_completed_at timestamp with time zone,
+    phase_ii_completed_by_id uuid,
+    disposition text,
+    disposition_reason text,
+    qp_approved_at timestamp with time zone,
+    qp_approved_by_id uuid,
+    closed_at timestamp with time zone,
+    closed_by_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_oos_records_disposition_check CHECK (((disposition IS NULL) OR (disposition = ANY (ARRAY['RELEASE'::text, 'REJECT'::text, 'REPROCESS'::text, 'RETAIN'::text])))),
+    CONSTRAINT qc_oos_records_phase_check CHECK ((phase = ANY (ARRAY['I'::text, 'II'::text]))),
+    CONSTRAINT qc_oos_records_risk_check CHECK (((risk_level IS NULL) OR (risk_level = ANY (ARRAY['HIGH'::text, 'MEDIUM'::text, 'LOW'::text])))),
+    CONSTRAINT qc_oos_records_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'PHASE_I'::text, 'PHASE_II'::text, 'CLOSED'::text]))),
+    CONSTRAINT qc_oos_records_type_check CHECK ((oos_type = ANY (ARRAY['OOS'::text, 'OOT'::text, 'OOE'::text, 'OOC'::text])))
+);
+
+ALTER TABLE ONLY public.qc_oos_records FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_oos_register; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_oos_register (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    oos_id uuid NOT NULL,
+    action text NOT NULL,
+    actor_id uuid,
+    details text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_oos_register FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -853,6 +962,38 @@ ALTER TABLE ONLY public.qc_certificates
 
 
 --
+-- Name: qc_oos_notifications qc_oos_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_notifications
+    ADD CONSTRAINT qc_oos_notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_oos_records qc_oos_records_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_records
+    ADD CONSTRAINT qc_oos_records_number_key UNIQUE (org_id, oos_number);
+
+
+--
+-- Name: qc_oos_records qc_oos_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_records
+    ADD CONSTRAINT qc_oos_records_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_oos_register qc_oos_register_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_register
+    ADD CONSTRAINT qc_oos_register_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_results qc_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1083,6 +1224,34 @@ CREATE INDEX qc_certificates_spec_idx ON public.qc_certificates USING btree (org
 
 
 --
+-- Name: qc_oos_notifications_oos_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_oos_notifications_oos_idx ON public.qc_oos_notifications USING btree (org_id, oos_id);
+
+
+--
+-- Name: qc_oos_records_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_oos_records_batch_idx ON public.qc_oos_records USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_oos_records_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_oos_records_status_idx ON public.qc_oos_records USING btree (org_id, status);
+
+
+--
+-- Name: qc_oos_register_oos_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_oos_register_oos_idx ON public.qc_oos_register USING btree (org_id, oos_id);
+
+
+--
 -- Name: qc_results_coa_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1279,6 +1448,27 @@ CREATE TRIGGER audit_qc_certificates AFTER INSERT OR DELETE OR UPDATE ON public.
 
 
 --
+-- Name: qc_oos_notifications audit_qc_oos_notifications; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_oos_notifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_oos_notifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_oos_records audit_qc_oos_records; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_oos_records AFTER INSERT OR DELETE OR UPDATE ON public.qc_oos_records FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_oos_register audit_qc_oos_register; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_oos_register AFTER INSERT OR DELETE OR UPDATE ON public.qc_oos_register FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_results audit_qc_results; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1433,6 +1623,38 @@ ALTER TABLE ONLY public.qc_certificates
 
 ALTER TABLE ONLY public.qc_certificates
     ADD CONSTRAINT qc_certificates_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_oos_notifications qc_oos_notifications_oos_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_notifications
+    ADD CONSTRAINT qc_oos_notifications_oos_fkey FOREIGN KEY (oos_id) REFERENCES public.qc_oos_records(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_oos_records qc_oos_records_result_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_records
+    ADD CONSTRAINT qc_oos_records_result_fkey FOREIGN KEY (result_id) REFERENCES public.qc_results(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_oos_records qc_oos_records_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_records
+    ADD CONSTRAINT qc_oos_records_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_oos_register qc_oos_register_oos_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_oos_register
+    ADD CONSTRAINT qc_oos_register_oos_fkey FOREIGN KEY (oos_id) REFERENCES public.qc_oos_records(id) ON DELETE CASCADE;
 
 
 --
@@ -1702,6 +1924,27 @@ CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.curre
 
 
 --
+-- Name: qc_oos_notifications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_oos_notifications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_oos_records org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_oos_records USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_oos_register org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_oos_register USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_results org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1796,6 +2039,24 @@ CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_o
 --
 
 ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_oos_notifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_oos_notifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_oos_records; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_oos_records ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_oos_register; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_oos_register ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_results; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1931,5 +2192,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
+\unrestrict 857qahbcOqUrW60hi0h4XeqcOM4QLeJxrZNpS0lDf6UbJEv9HZOecee4WfEM0Sw
 

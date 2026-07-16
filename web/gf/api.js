@@ -125,6 +125,15 @@ GF.API = {
   qcCreateCoa(b)           { return this._req('POST', '/qc/certificates', b); },
   qcPatchCoa(id, b)        { return this._req('PATCH', '/qc/certificates/' + id, b); },
   qcAddResult(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/results', b); },
+
+  qcOos(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/oos' + (u?'?'+u:'')); },
+  qcOosOne(id)             { return this._req('GET', '/qc/oos/' + id); },
+  qcCreateOos(b)           { return this._req('POST', '/qc/oos', b); },
+  qcPatchOos(id, b)        { return this._req('PATCH', '/qc/oos/' + id, b); },
+  qcAddOosRegister(id, b)  { return this._req('POST', '/qc/oos/' + id + '/register', b); },
+  qcAddOosNotify(id, b)    { return this._req('POST', '/qc/oos/' + id + '/notifications', b); },
+  qcAckOosNotify(id, nid)  { return this._req('POST', '/qc/oos/' + id + '/notifications/' + nid + '/ack'); },
+  qcCapa(q)                { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/capa' + (u?'?'+u:'')); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },
