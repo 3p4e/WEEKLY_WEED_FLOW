@@ -370,14 +370,15 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
 
 T4 (this polish pass) is the last increment before that promotion gate.
 
-## QC LIMS module (Phase 2 U1–U4 + Phase 3 U1–U3, native rebuild)
+## QC LIMS module (Phase 2 U1–U5 + Phase 3 U1–U3, native rebuild)
 
 Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
 facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
 `audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
-backend `v50` / frontend `v71` / migrations `0018`–`0024` (tasks DB head). The
-Phase-3 certificate pipeline is now complete end-to-end: **CoA in (U2) →
-certificate → COQ out (U1), verified (U3)**.
+backend `v51` / frontend `v72` / migrations `0018`–`0025` (tasks DB head). The
+Phase-3 certificate pipeline is complete end-to-end: **CoA in (U2) →
+certificate → COQ out (U1), verified (U3)**; U5 adds the field-to-lab custody
+cluster (ALCOA++).
 
 - **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
   INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
@@ -393,6 +394,16 @@ certificate → COQ out (U1), verified (U3)**.
   PHASE_I→PHASE_II→CLOSED) + append-only `qc_oos_register` +
   `qc_oos_notifications` (migration 0021); CAPA is a read-time view over OOS
   (no separate table). Close + disposition are QP-only.
+- **U5 — custody cluster (field-to-lab traceability, ALCOA++).**
+  `qc_sampling_requests` (RQS, `PP-RQS-YYYY-NNNN`; OPEN→REGISTERED→IN_PROGRESS→
+  COMPLETED/CANCELLED; a 24-hour QC registration window per PP-QC-SOP-017 is
+  tracked — `registration_deadline` + a computed `registration_window_met`) +
+  `qc_sample_field_records` (SFR, `PP-SFR-YYYY-NNNN`; field location/GPS,
+  `barrel_numbers` jsonb, destination, transport times; CREATED→IN_FIELD→
+  COMPLETED/CANCELLED) + `qc_chain_of_custody` (per-sample handoff log; from/to
+  user+location, reason, `transfer_type` FIELD_TO_LAB/LAB_INTERNAL/
+  LAB_TO_DISPOSAL/STABILITY_TRANSFER; CASCADE child of the sample, append-only)
+  — migration 0025. Frontend `qccustody-view.js` ("QC custody").
 - **P3-U1 — Certificate of Quality (COQ) generation.** `POST
   /qc/certificates/{id}/coq` renders a RELEASED certificate to a bilingual
   house-style `.docx` through the DocEngine (migration 0022 adds per-result
@@ -437,9 +448,9 @@ certificate → COQ out (U1), verified (U3)**.
 Router `backend/app/api/qc.py` (prefix `/qc`), registered in `main.py`.
 Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` / `qccoa-view.js`
 (with the "Generate COQ" + COQ `.docx`/PDF download controls, shown to a QP
-on a RELEASED cert) / `qcoos-view.js` / `qcecoa-view.js` ("QC eCOA intake"),
-wired into `index.html` + the SW precache list (`wwf-shell-v3.33.0`), under
-the QMS Studio nav group.
+on a RELEASED cert) / `qcoos-view.js` / `qcecoa-view.js` ("QC eCOA intake") /
+`qccustody-view.js` ("QC custody"), wired into `index.html` + the SW precache
+list (`wwf-shell-v3.35.0`), under the QMS Studio nav group.
 
 **Bug found + fixed during the wwf_mass live smoke (backend v46):**
 `effective_date`/`sampling_date`/`report_date`/`result_date` were typed
@@ -452,7 +463,7 @@ a regression test (`test_date_fields_accept_real_iso_dates`) covering all
 four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
 `v46` before this smoke passed — `v45` was never left running.
 
-### Migrations 0018–0024
+### Migrations 0018–0025
 
 0018–0020 (additive, same shape as 0015/0017): `qc_spec_id_seq`/
 `qc_sampling_plan_id_seq`/`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human
@@ -465,7 +476,9 @@ on `qc_results` and `coq_document_id`/`coq_generated_at` on `qc_certificates`
 (no new tables; new columns inherit the existing table grants). **0023** adds
 the eCOA-ingestion cluster (`qc_coa_documents`/`qc_coa_extractions`/
 `qc_field_placeholders` + `qc_ecoa_id_seq`), same facility canon. **0024** adds
-`qc_coa_verifications` (the U3 reconciliation record), same canon. Verified:
+`qc_coa_verifications` (the U3 reconciliation record). **0025** adds the U5
+custody cluster (`qc_sampling_requests`/`qc_sample_field_records`/
+`qc_chain_of_custody` + `qc_rqs_id_seq`/`qc_sfr_id_seq`), same canon. Verified:
 upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from alembic head
 with zero drift (checked against a locally stood-up PG16 two-DB cluster).
 
@@ -524,12 +537,21 @@ mismatches 0) → a hand-built (non-promoted) certificate has no source →
 `verify` → **DISCREPANCY** (1 mismatch, reason "value, verdict") → the
 verification history preserves both runs `[DISCREPANCY, VERIFIED]`.
 
+**U5 custody-cluster live smoke (wwf_mass, backend v51 / frontend v72,
+2026-07-16).** With a real `tt.qc.mgr` token: an RQS (`PP-RQS-2026-0001`) OPEN
+with the 24-hour deadline set → register within the window (`REGISTERED`,
+`registration_window_met=true`) → assign (`IN_PROGRESS`) → complete
+(`COMPLETED`); an illegal OPEN→COMPLETED transition on a second RQS → 409; an
+SFR (`PP-SFR-2026-0001`) with jsonb `barrel_numbers` driven CREATED→IN_FIELD→
+COMPLETED; a sample's chain of custody logged twice (`FIELD_TO_LAB`,
+`STABILITY_TRANSFER`) and listed back, a bad `transfer_type` rejected (422).
+
 Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
-1. Apply migrations 0018–0024 to prod's `wwf_tasks` (`alembic -n tasks
-   upgrade head`; 0022–0024 need the superuser async URL — see the note above).
-2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v50`+, NOT
+1. Apply migrations 0018–0025 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head`; 0022–0025 need the superuser async URL — see the note above).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v51`+, NOT
    `v45` — see the date-field fix above) and frontend to the verified tag
-   (`v71`+). Prod must also run the `growflow-docengine` container (already
+   (`v72`+). Prod must also run the `growflow-docengine` container (already
    on wwf_mass) for COQ generation, with `DOCENGINE_URL`/`DOCENGINE_API_KEY`
    set on the backend.
 3. `docker compose up -d --no-deps backend frontend`.
@@ -537,7 +559,8 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
    the RELEASED-cert → COQ round trip above, against prod data, with real
    accounts.
 
-**Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop) on wwf_mass.
-Remaining QC backlog (deferred Phase-2 units + optional RAG Q&A over ingested
-CoAs) is tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of the
-whole QC LIMS + certificate pipeline is one owner-gated decision.
+**Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop) and the
+custody cluster (U5) is in, all on wwf_mass. Remaining QC backlog (the
+water/stability/transport JSONB leaves + optional RAG Q&A over ingested CoAs)
+is tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of the whole
+QC LIMS + certificate pipeline is one owner-gated decision.

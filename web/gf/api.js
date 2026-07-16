@@ -147,6 +147,17 @@ GF.API = {
   qcPatchPlaceholder(id, b){ return this._req('PATCH', '/qc/coa-placeholders/' + id, b); },
   qcVerifyCert(id)         { return this._req('POST', '/qc/certificates/' + id + '/verify'); },
   qcVerifications(id)      { return this._req('GET', '/qc/certificates/' + id + '/verifications'); },
+  // Custody cluster (U5) — sampling requests (RQS), field records (SFR), chain of custody
+  qcRqs(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-requests' + (u?'?'+u:'')); },
+  qcRqsOne(id)             { return this._req('GET', '/qc/sampling-requests/' + id); },
+  qcCreateRqs(b)           { return this._req('POST', '/qc/sampling-requests', b); },
+  qcPatchRqs(id, b)        { return this._req('PATCH', '/qc/sampling-requests/' + id, b); },
+  qcSfr(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/field-records' + (u?'?'+u:'')); },
+  qcSfrOne(id)             { return this._req('GET', '/qc/field-records/' + id); },
+  qcCreateSfr(b)           { return this._req('POST', '/qc/field-records', b); },
+  qcPatchSfr(id, b)        { return this._req('PATCH', '/qc/field-records/' + id, b); },
+  qcCustody(sampleId)      { return this._req('GET', '/qc/samples/' + sampleId + '/custody'); },
+  qcAddCustody(sampleId, b){ return this._req('POST', '/qc/samples/' + sampleId + '/custody', b); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },

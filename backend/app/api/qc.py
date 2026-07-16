@@ -14,7 +14,7 @@ stored NULL for a human to fill. Every table is audited by the shared
 hash-chained trigger. Human ids are `PP-SPEC-YYYY-NNNN`, stamped server-side
 from a Postgres sequence so the audit trail attributes the number.
 """
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -1675,3 +1675,313 @@ async def verify_certificate(coa_id: str, user: dict = Depends(require_role(*_WR
         except Exception:
             pass
     return _verify_out(dict(row))
+
+
+# ── Custody cluster (U5) — sampling requests (RQS) + field records (SFR) + ───
+# chain of custody. Field-to-lab traceability (ALCOA++). A department raises an
+# RQS; QC registers it within a 24-hour window (PP-QC-SOP-017), assigns, and
+# completes it (producing a sample). Field sampling is captured on an SFR
+# (barrels, destination, transport times). Every custody handoff of a sample is
+# appended to the chain of custody.
+_RQS_STATUSES = ("OPEN", "REGISTERED", "IN_PROGRESS", "COMPLETED", "CANCELLED")
+_RQS_TRANSITIONS = {
+    "OPEN": {"REGISTERED", "CANCELLED"},
+    "REGISTERED": {"IN_PROGRESS", "CANCELLED"},
+    "IN_PROGRESS": {"COMPLETED", "CANCELLED"},
+    "COMPLETED": set(), "CANCELLED": set(),
+}
+_SFR_STATUSES = ("CREATED", "IN_FIELD", "COMPLETED", "CANCELLED")
+_SFR_TRANSITIONS = {
+    "CREATED": {"IN_FIELD", "CANCELLED"},
+    "IN_FIELD": {"COMPLETED", "CANCELLED"},
+    "COMPLETED": set(), "CANCELLED": set(),
+}
+_TRANSFER_TYPES = ("FIELD_TO_LAB", "LAB_INTERNAL", "LAB_TO_DISPOSAL", "STABILITY_TRANSFER")
+
+
+def _iso(v):
+    return v.isoformat() if v is not None else None
+
+
+class RqsIn(BaseModel):
+    material_code: str = Field(max_length=120)
+    material_name_en: str | None = Field(default=None, max_length=300)
+    material_name_mk: str | None = Field(default=None, max_length=300)
+    batch_id: str | None = Field(default=None, max_length=120)
+    originating_department: str = Field(max_length=120)
+    assigned_sp_type: str | None = Field(default=None, max_length=20)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class RqsPatch(BaseModel):
+    status: str | None = None                     # guarded lifecycle transition
+    assigned_sp_type: str | None = Field(default=None, max_length=20)
+    assigned_to_id: str | None = None
+    sample_id: str | None = None
+    cancellation_reason: str | None = Field(default=None, max_length=1000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class SfrIn(BaseModel):
+    rqs_id: str | None = None
+    sampling_location: str = Field(max_length=300)
+    sampling_coordinates: str | None = Field(default=None, max_length=120)
+    barrel_numbers: list = Field(default_factory=list)
+    num_containers: int | None = None
+    destination_facility: str = Field(max_length=300)
+    destination_location: str | None = Field(default=None, max_length=300)
+    planned_departure: datetime | None = None
+    planned_arrival: datetime | None = None
+    sampled_by_id: str | None = None
+    escort_id: str | None = None
+    sample_id: str | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class SfrPatch(BaseModel):
+    status: str | None = None
+    actual_departure: datetime | None = None
+    actual_arrival: datetime | None = None
+    received_by_id: str | None = None
+    sample_id: str | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class CustodyIn(BaseModel):
+    from_user_id: str | None = None
+    to_user_id: str | None = None
+    from_location: str | None = Field(default=None, max_length=300)
+    to_location: str | None = Field(default=None, max_length=300)
+    transfer_reason: str | None = Field(default=None, max_length=1000)
+    transfer_type: str | None = None
+    sfr_id: str | None = None
+
+
+def _rqs_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "rqs_number": r["rqs_number"], "material_code": r["material_code"],
+        "material_name_en": r["material_name_en"], "material_name_mk": r["material_name_mk"],
+        "batch_id": r["batch_id"], "originating_department": r["originating_department"],
+        "assigned_sp_type": r["assigned_sp_type"], "status": r["status"],
+        "requested_at": _iso(r["requested_at"]), "registered_at": _iso(r["registered_at"]),
+        "registration_deadline": _iso(r["registration_deadline"]),
+        "registration_window_met": r["registration_window_met"],
+        "assigned_to_id": str(r["assigned_to_id"]) if r["assigned_to_id"] else None,
+        "assigned_at": _iso(r["assigned_at"]), "completed_at": _iso(r["completed_at"]),
+        "sample_id": str(r["sample_id"]) if r["sample_id"] else None,
+        "cancellation_reason": r["cancellation_reason"], "notes": r["notes"],
+    }
+
+
+def _sfr_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "sfr_number": r["sfr_number"],
+        "rqs_id": str(r["rqs_id"]) if r["rqs_id"] else None,
+        "sampling_location": r["sampling_location"], "sampling_coordinates": r["sampling_coordinates"],
+        "barrel_numbers": r["barrel_numbers"], "num_containers": r["num_containers"],
+        "destination_facility": r["destination_facility"], "destination_location": r["destination_location"],
+        "planned_departure": _iso(r["planned_departure"]), "actual_departure": _iso(r["actual_departure"]),
+        "planned_arrival": _iso(r["planned_arrival"]), "actual_arrival": _iso(r["actual_arrival"]),
+        "status": r["status"],
+        "sampled_by_id": str(r["sampled_by_id"]) if r["sampled_by_id"] else None,
+        "escort_id": str(r["escort_id"]) if r["escort_id"] else None,
+        "received_by_id": str(r["received_by_id"]) if r["received_by_id"] else None,
+        "sample_id": str(r["sample_id"]) if r["sample_id"] else None, "notes": r["notes"],
+    }
+
+
+def _custody_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "sample_id": str(r["sample_id"]),
+        "from_user_id": str(r["from_user_id"]) if r["from_user_id"] else None,
+        "to_user_id": str(r["to_user_id"]) if r["to_user_id"] else None,
+        "transferred_at": _iso(r["transferred_at"]),
+        "from_location": r["from_location"], "to_location": r["to_location"],
+        "transfer_reason": r["transfer_reason"], "transfer_type": r["transfer_type"],
+        "sfr_id": str(r["sfr_id"]) if r["sfr_id"] else None,
+    }
+
+
+# ── Sampling requests (RQS) ──────────────────────────────────────────────────
+@router.get("/sampling-requests")
+async def list_rqs(status: str | None = None, batch_id: str | None = None,
+                   user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    if batch_id:
+        args.append(batch_id); clauses.append(f"batch_id=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(f"SELECT * FROM qc_sampling_requests{where} ORDER BY created_at DESC", *args)
+    return [_rqs_out(dict(r)) for r in rows]
+
+
+@router.get("/sampling-requests/{rqs_id}")
+async def get_rqs(rqs_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        row = await c.fetchrow("SELECT * FROM qc_sampling_requests WHERE id=$1", rqs_id)
+        if row is None:
+            raise HTTPException(404, "Sampling request not found")
+    return _rqs_out(dict(row))
+
+
+@router.post("/sampling-requests", status_code=201)
+async def create_rqs(body: RqsIn, user: dict = Depends(require_role(*_WRITERS))):
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "INSERT INTO qc_sampling_requests(org_id, rqs_number, material_code, material_name_en,"
+            " material_name_mk, batch_id, originating_department, assigned_sp_type, notes,"
+            " requested_by_id, registration_deadline, created_by, updated_by)"
+            " VALUES ($1, 'PP-RQS-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_rqs_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6,$7,$8,$9, now() + interval '24 hours', $9,$9) RETURNING *",
+            user["org_id"], body.material_code, body.material_name_en, body.material_name_mk,
+            body.batch_id, body.originating_department, body.assigned_sp_type, body.notes, user["id"])
+    return _rqs_out(dict(row))
+
+
+@router.patch("/sampling-requests/{rqs_id}")
+async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_role(*_WRITERS))):
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        cur = await c.fetchrow(
+            "SELECT status, registration_deadline FROM qc_sampling_requests WHERE id=$1", rqs_id)
+        if cur is None:
+            raise HTTPException(404, "Sampling request not found")
+        fields, args = [], []
+        if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
+            target = patch["status"]
+            if target not in _RQS_STATUSES:
+                raise HTTPException(422, "Unknown status")
+            if target not in _RQS_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+            args.append(target); fields.append(f"status=${len(args)}")
+            if target == "REGISTERED":
+                args.append(user["id"]); fields.append(f"registered_by_id=${len(args)}")
+                fields.append("registered_at=now()")
+                # window met iff QC registered on/before the 24-hour deadline
+                fields.append("registration_window_met=(now() <= registration_deadline)")
+            elif target == "IN_PROGRESS":
+                fields.append("assigned_at=now()")
+                if not patch.get("assigned_to_id"):
+                    args.append(user["id"]); fields.append(f"assigned_to_id=${len(args)}")
+            elif target == "COMPLETED":
+                fields.append("completed_at=now()")
+            elif target == "CANCELLED":
+                args.append(user["id"]); fields.append(f"cancelled_by_id=${len(args)}")
+                fields.append("cancelled_at=now()")
+        _NULLABLE = {"assigned_sp_type", "cancellation_reason", "notes", "assigned_to_id", "sample_id"}
+        for col in ("assigned_sp_type", "assigned_to_id", "sample_id", "cancellation_reason", "notes"):
+            if col in patch and (patch[col] is not None or col in _NULLABLE):
+                args.append(patch[col]); fields.append(f"{col}=${len(args)}")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(rqs_id)
+        row = await c.fetchrow(
+            f"UPDATE qc_sampling_requests SET {', '.join(fields)}, updated_at=now()"
+            f" WHERE id=${len(args)} RETURNING *", *args)
+    return _rqs_out(dict(row))
+
+
+# ── Sample field records (SFR) ───────────────────────────────────────────────
+@router.get("/field-records")
+async def list_sfr(status: str | None = None, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(f"SELECT * FROM qc_sample_field_records{where} ORDER BY created_at DESC", *args)
+    return [_sfr_out(dict(r)) for r in rows]
+
+
+@router.get("/field-records/{sfr_id}")
+async def get_sfr(sfr_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        row = await c.fetchrow("SELECT * FROM qc_sample_field_records WHERE id=$1", sfr_id)
+        if row is None:
+            raise HTTPException(404, "Field record not found")
+    return _sfr_out(dict(row))
+
+
+@router.post("/field-records", status_code=201)
+async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS))):
+    async with rls(user) as c:
+        if body.rqs_id:
+            if await c.fetchrow("SELECT id FROM qc_sampling_requests WHERE id=$1", body.rqs_id) is None:
+                raise HTTPException(422, "Unknown sampling request")
+        row = await c.fetchrow(
+            "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
+            " sampling_coordinates, barrel_numbers, num_containers, destination_facility,"
+            " destination_location, planned_departure, planned_arrival, sampled_by_id, escort_id,"
+            " sample_id, notes, created_by, updated_by)"
+            " VALUES ($1, 'PP-SFR-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_sfr_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15) RETURNING *",
+            user["org_id"], body.rqs_id, body.sampling_location, body.sampling_coordinates,
+            body.barrel_numbers, body.num_containers, body.destination_facility,
+            body.destination_location, body.planned_departure, body.planned_arrival,
+            body.sampled_by_id, body.escort_id, body.sample_id, body.notes, user["id"])
+    return _sfr_out(dict(row))
+
+
+@router.patch("/field-records/{sfr_id}")
+async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_role(*_WRITERS))):
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_sample_field_records WHERE id=$1", sfr_id)
+        if cur is None:
+            raise HTTPException(404, "Field record not found")
+        fields, args = [], []
+        if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
+            target = patch["status"]
+            if target not in _SFR_STATUSES:
+                raise HTTPException(422, "Unknown status")
+            if target not in _SFR_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+            args.append(target); fields.append(f"status=${len(args)}")
+        _NULLABLE = {"received_by_id", "sample_id", "notes"}
+        for col in ("actual_departure", "actual_arrival", "received_by_id", "sample_id", "notes"):
+            if col in patch and (patch[col] is not None or col in _NULLABLE):
+                args.append(patch[col]); fields.append(f"{col}=${len(args)}")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(sfr_id)
+        row = await c.fetchrow(
+            f"UPDATE qc_sample_field_records SET {', '.join(fields)}, updated_at=now()"
+            f" WHERE id=${len(args)} RETURNING *", *args)
+    return _sfr_out(dict(row))
+
+
+# ── Chain of custody (per-sample, append-only) ───────────────────────────────
+@router.get("/samples/{sample_id}/custody")
+async def list_custody(sample_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", sample_id) is None:
+            raise HTTPException(404, "Sample not found")
+        rows = await c.fetch(
+            "SELECT * FROM qc_chain_of_custody WHERE sample_id=$1 ORDER BY transferred_at", sample_id)
+    return [_custody_out(dict(r)) for r in rows]
+
+
+@router.post("/samples/{sample_id}/custody", status_code=201)
+async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(require_role(*_WRITERS))):
+    if body.transfer_type is not None and body.transfer_type not in _TRANSFER_TYPES:
+        raise HTTPException(422, f"transfer_type must be one of: {', '.join(_TRANSFER_TYPES)}")
+    async with rls(user) as c:
+        if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", sample_id) is None:
+            raise HTTPException(404, "Sample not found")
+        if body.sfr_id:
+            if await c.fetchrow("SELECT id FROM qc_sample_field_records WHERE id=$1", body.sfr_id) is None:
+                raise HTTPException(422, "Unknown field record")
+        row = await c.fetchrow(
+            "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id,"
+            " from_location, to_location, transfer_reason, transfer_type, sfr_id, created_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
+            user["org_id"], sample_id, body.from_user_id or user["id"], body.to_user_id,
+            body.from_location, body.to_location, body.transfer_reason, body.transfer_type,
+            body.sfr_id, user["id"])
+    return _custody_out(dict(row))
