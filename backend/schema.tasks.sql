@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 857qahbcOqUrW60hi0h4XeqcOM4QLeJxrZNpS0lDf6UbJEv9HZOecee4WfEM0Sw
+\restrict wQmFQAczNbSy4AyGhj6Qh6l6hTrM0uDVcXV6MhRPOPwrJOLW3GbFnmBQHNWZZXb
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -334,6 +334,8 @@ CREATE TABLE public.qc_certificates (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    coq_document_id text,
+    coq_generated_at timestamp with time zone,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
     CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text])))
@@ -486,6 +488,9 @@ CREATE TABLE public.qc_results (
     result_date date,
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    source_document_code text,
+    source_document_date date,
+    source_institution text,
     CONSTRAINT qc_results_status_check CHECK ((status = ANY (ARRAY['pass'::text, 'fail'::text, 'marginal'::text, 'unknown'::text])))
 );
 
@@ -2192,5 +2197,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 857qahbcOqUrW60hi0h4XeqcOM4QLeJxrZNpS0lDf6UbJEv9HZOecee4WfEM0Sw
+\unrestrict wQmFQAczNbSy4AyGhj6Qh6l6hTrM0uDVcXV6MhRPOPwrJOLW3GbFnmBQHNWZZXb
 

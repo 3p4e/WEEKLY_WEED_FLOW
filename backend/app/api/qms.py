@@ -19,6 +19,7 @@ import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
 
+from app import docengine
 from app.config import settings
 from app.deps import require_password_set
 
@@ -141,7 +142,7 @@ async def download(path: str, user: dict = Depends(_require_elevated)):
 # with the hard `RESULT: PASS` gate. Same façade pattern: internal container,
 # key injected here, explicit endpoint surface only.
 
-_DE_UNAVAILABLE = "DocEngine unavailable"
+_DE_UNAVAILABLE = docengine.DE_UNAVAILABLE
 # Controlled-document AUTHORING is a quality function: QP, QA manager, ADMIN
 # (and OWNER — the site's top authority). Reading stays at elevated.
 _AUTHOR_ROLES = ("ADMIN", "OWNER", "QP", "QA_MGR")
@@ -156,33 +157,15 @@ def _require_author(user: dict = Depends(_require_elevated)) -> dict:
 
 def _de_client(timeout: float = 20.0) -> httpx.AsyncClient:
     """DocEngine upstream client; separate hook for tests to monkeypatch."""
-    return httpx.AsyncClient(
-        base_url=settings.docengine_url,
-        headers={"X-API-Key": settings.docengine_api_key},
-        timeout=httpx.Timeout(timeout),
-    )
+    return docengine.de_client(timeout)
 
 
 async def _de_forward(method: str, path: str, json_body: dict | None = None,
                       timeout: float = 20.0) -> httpx.Response:
-    if not settings.docengine_api_key:
-        raise HTTPException(status_code=503, detail=_DE_UNAVAILABLE)
-    try:
-        async with _de_client(timeout) as c:
-            r = await c.request(method, path, json=json_body)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=503, detail=_DE_UNAVAILABLE)
-    if r.status_code >= 500:
-        raise HTTPException(status_code=503, detail=_DE_UNAVAILABLE)
-    if r.status_code >= 400:
-        # surface the DocEngine's own detail (e.g. the verify FAIL report)
-        detail = "DocEngine request failed"
-        try:
-            detail = r.json().get("detail", detail)
-        except Exception:
-            pass
-        raise HTTPException(status_code=r.status_code, detail=detail)
-    return r
+    # Delegates to the shared client but keeps `_de_client` as the seam the
+    # proxy tests monkeypatch (resolved at call time via the module global).
+    return await docengine.de_forward(method, path, json_body, timeout,
+                                      client_factory=_de_client)
 
 
 @router.get("/studio/questionnaires")

@@ -100,6 +100,29 @@
     await _reload(id);
   };
 
+  // Certificate of Quality — render a released cert to a house-style .docx via
+  // the DocEngine (PASS-gated); QP-only (mirrors the backend gate).
+  GF.WWF.qcCoaGenerateCoq = async (id) => {
+    try {
+      await GF.API.qcGenerateCoq(id);
+      GF.toast(AL('Certificate of Quality generated', 'Сертификат за квалитет генериран'));
+    } catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
+  GF.WWF.qcCoaDlCoq = async (docId, kind) => {
+    const url = kind === 'pdf' ? GF.API.studioPdfUrl(docId) : GF.API.studioDocxUrl(docId);
+    try {
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + GF.API.token } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = docId + (kind === 'pdf' ? '.pdf' : '.docx');
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { GF.toast(e.message, 'error'); }
+  };
+
   GF.WWF.qcCoaCreate = async () => {
     const mk = (i) => (document.getElementById(i) || {}).value || '';
     const batch_id = mk('qco-batch').trim(), specification_id = mk('qco-spec');
@@ -182,6 +205,11 @@
         ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>` : ''}
         ${c.status !== 'DRAFT' && c.status !== 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
+      </div>` : ''}
+      ${c.status === 'RELEASED' && canQP() ? `<div class="qms-dl" style="margin-top:8px">
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaGenerateCoq('${c.id}')">${AL('Generate COQ', 'Генерирај COQ')}</button>
+        ${c.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','docx')">${AL('COQ .docx', 'COQ .docx')}</button>
+          <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','pdf')">${AL('COQ PDF', 'COQ PDF')}</button>` : ''}
       </div>` : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test results', 'Тест резултати')}</div>
       ${resultRows(d)}
