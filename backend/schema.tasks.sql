@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict wQmFQAczNbSy4AyGhj6Qh6l6hTrM0uDVcXV6MhRPOPwrJOLW3GbFnmBQHNWZZXb
+\restrict w6fIgMX6WfvocnL2FxmQOJPk7uFwKoHNHRr2eVqkkd57k1bnTBKTfYYQez6njm8
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -345,6 +345,68 @@ ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_coa_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coa_documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    doc_number text NOT NULL,
+    source_institution text,
+    batch_id text NOT NULL,
+    material_code text,
+    specification_id uuid,
+    sample_id uuid,
+    original_filename text,
+    mime_type text,
+    storage_ref text,
+    page_count integer,
+    report_date date,
+    status text DEFAULT 'UPLOADED'::text NOT NULL,
+    promoted_coa_id uuid,
+    notes text,
+    uploaded_by uuid,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_coa_documents_status_check CHECK ((status = ANY (ARRAY['UPLOADED'::text, 'EXTRACTED'::text, 'REVIEWED'::text, 'PROMOTED'::text, 'REJECTED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_coa_documents FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coa_extractions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coa_extractions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    raw_label text NOT NULL,
+    raw_value text,
+    numeric_value double precision,
+    unit text,
+    parameter_id uuid,
+    test_name text,
+    lower_limit double precision,
+    upper_limit double precision,
+    complies boolean,
+    grade_status text DEFAULT 'unmapped'::text NOT NULL,
+    confidence double precision,
+    source_page integer,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_coa_extractions_grade_check CHECK ((grade_status = ANY (ARRAY['unmapped'::text, 'graded'::text, 'unknown'::text])))
+);
+
+ALTER TABLE ONLY public.qc_coa_extractions FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_coa_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -355,6 +417,45 @@ CREATE SEQUENCE public.qc_coa_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
+
+
+--
+-- Name: qc_ecoa_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_ecoa_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_field_placeholders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_field_placeholders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    raw_label text NOT NULL,
+    normalized_label text NOT NULL,
+    occurrences integer DEFAULT 1 NOT NULL,
+    suggested_test_name text,
+    mapped_parameter_id uuid,
+    status text DEFAULT 'OPEN'::text NOT NULL,
+    first_seen_document_id uuid,
+    resolved_by uuid,
+    resolved_at timestamp with time zone,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_field_placeholders_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'MAPPED'::text, 'IGNORED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_field_placeholders FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -967,6 +1068,46 @@ ALTER TABLE ONLY public.qc_certificates
 
 
 --
+-- Name: qc_coa_documents qc_coa_documents_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_number_key UNIQUE (org_id, doc_number);
+
+
+--
+-- Name: qc_coa_documents qc_coa_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_coa_extractions qc_coa_extractions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_extractions
+    ADD CONSTRAINT qc_coa_extractions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_field_placeholders qc_field_placeholders_label_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_field_placeholders
+    ADD CONSTRAINT qc_field_placeholders_label_key UNIQUE (org_id, normalized_label);
+
+
+--
+-- Name: qc_field_placeholders qc_field_placeholders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_field_placeholders
+    ADD CONSTRAINT qc_field_placeholders_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_oos_notifications qc_oos_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1229,6 +1370,34 @@ CREATE INDEX qc_certificates_spec_idx ON public.qc_certificates USING btree (org
 
 
 --
+-- Name: qc_coa_documents_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_documents_batch_idx ON public.qc_coa_documents USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_coa_documents_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_documents_status_idx ON public.qc_coa_documents USING btree (org_id, status);
+
+
+--
+-- Name: qc_coa_extractions_document_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_extractions_document_idx ON public.qc_coa_extractions USING btree (org_id, document_id);
+
+
+--
+-- Name: qc_field_placeholders_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_field_placeholders_status_idx ON public.qc_field_placeholders USING btree (org_id, status);
+
+
+--
 -- Name: qc_oos_notifications_oos_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1453,6 +1622,27 @@ CREATE TRIGGER audit_qc_certificates AFTER INSERT OR DELETE OR UPDATE ON public.
 
 
 --
+-- Name: qc_coa_documents audit_qc_coa_documents; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coa_documents AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_documents FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_coa_extractions audit_qc_coa_extractions; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coa_extractions AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_extractions FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_field_placeholders audit_qc_field_placeholders; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_field_placeholders AFTER INSERT OR DELETE OR UPDATE ON public.qc_field_placeholders FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_oos_notifications audit_qc_oos_notifications; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1628,6 +1818,62 @@ ALTER TABLE ONLY public.qc_certificates
 
 ALTER TABLE ONLY public.qc_certificates
     ADD CONSTRAINT qc_certificates_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_coa_documents qc_coa_documents_promoted_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_promoted_fkey FOREIGN KEY (promoted_coa_id) REFERENCES public.qc_certificates(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coa_documents qc_coa_documents_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coa_documents qc_coa_documents_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coa_extractions qc_coa_extractions_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_extractions
+    ADD CONSTRAINT qc_coa_extractions_document_fkey FOREIGN KEY (document_id) REFERENCES public.qc_coa_documents(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coa_extractions qc_coa_extractions_parameter_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_extractions
+    ADD CONSTRAINT qc_coa_extractions_parameter_fkey FOREIGN KEY (parameter_id) REFERENCES public.qc_spec_parameters(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_field_placeholders qc_field_placeholders_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_field_placeholders
+    ADD CONSTRAINT qc_field_placeholders_document_fkey FOREIGN KEY (first_seen_document_id) REFERENCES public.qc_coa_documents(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_field_placeholders qc_field_placeholders_parameter_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_field_placeholders
+    ADD CONSTRAINT qc_field_placeholders_parameter_fkey FOREIGN KEY (mapped_parameter_id) REFERENCES public.qc_spec_parameters(id) ON DELETE SET NULL;
 
 
 --
@@ -1929,6 +2175,27 @@ CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.curre
 
 
 --
+-- Name: qc_coa_documents org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coa_documents USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_coa_extractions org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coa_extractions USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_field_placeholders org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_field_placeholders USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_oos_notifications org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2044,6 +2311,24 @@ CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_o
 --
 
 ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coa_documents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coa_documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coa_extractions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coa_extractions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_field_placeholders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_field_placeholders ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_oos_notifications; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2197,5 +2482,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict wQmFQAczNbSy4AyGhj6Qh6l6hTrM0uDVcXV6MhRPOPwrJOLW3GbFnmBQHNWZZXb
+\unrestrict w6fIgMX6WfvocnL2FxmQOJPk7uFwKoHNHRr2eVqkkd57k1bnTBKTfYYQez6njm8
 
