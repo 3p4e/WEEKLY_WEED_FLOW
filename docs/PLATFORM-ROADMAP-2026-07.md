@@ -252,9 +252,13 @@ Letta-agent duplication; after a `letta` DB snapshot, the **45 orphaned `GMP *`
 agents were deleted (107 → 62)**. See `docs/DEPLOY.md` → "qms-api … retired" and
 `docs/LETTA-OPS-BACKLOG.md`.
 
-**Still open (owner-directed, each its own confirmed op):** the remaining Letta
-ops items — 0.16→0.17 upgrade, master-key rotation, PQ1 re-embed, provider-enum
-normalization (`docs/LETTA-OPS-BACKLOG.md`).
+**Letta ops backlog — all items now triaged (2026-07-16, `docs/LETTA-OPS-BACKLOG.md`):**
+agent sprawl ✅ resolved (107→62); PQ1 re-embed ✅ no-action (isolated on a
+single-source agent — no dimension conflict); provider-enum normalization ✅
+no-action (heterogeneous but all-functional, creation friction already resolved);
+0.16→0.17 upgrade ⏸ hold (no driver; prod DocEngine + scheduler depend on this
+shared server); master-key rotation ⏸ hold (no compromise trigger; 5-consumer
+coordinated swap touching prod). Nothing here warrants execution now.
 
 ---
 
