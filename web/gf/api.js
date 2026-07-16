@@ -128,8 +128,15 @@ GF.API = {
     return this._req('GET', '/tasks' + (p ? '?' + p : ''));
   },
   getTask(id)          { return this._req('GET', '/tasks/' + id); },
+  taskTree(q = {})     { const p = new URLSearchParams(q).toString(); return this._req('GET', '/tasks/tree' + (p ? '?' + p : '')); },
   createTask(t)        { return this._req('POST', '/tasks', t); },
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
+  // TMS T1 — dependency graph (blocker edges) + cross-department handoffs
+  addDependency(id, dependsOn) { return this._req('POST', '/tasks/' + id + '/dependencies', { depends_on_task_id: dependsOn }); },
+  deleteDependency(id, depId)  { return this._req('DELETE', '/tasks/' + id + '/dependencies/' + depId); },
+  handoffs(id)                 { return this._req('GET', '/tasks/' + id + '/handoffs'); },
+  proposeHandoff(id, toDeptId, note) { return this._req('POST', '/tasks/' + id + '/handoffs', { to_dept_id: toDeptId, note: note || null }); },
+  resolveHandoff(handoffId, status)  { return this._req('POST', '/handoffs/' + handoffId + '/resolve', { status }); },
   addProgress(id, p)   { return this._req('POST', '/tasks/' + id + '/progress', p); },
   ai(fn, payload)      { return this._req('POST', '/ai/' + fn, payload || {}); },
   bilingual(body)      { return this._req('POST', '/intake/bilingual', body); },
