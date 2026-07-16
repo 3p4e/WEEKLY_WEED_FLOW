@@ -742,5 +742,18 @@ cosmetic schema-only in SUMA, and superseded by the DocEngine + two-zone scope.
 **Local gate:** new `backend/tests/test_audit_prep.py` (8 tests: role gate, per-
 programme rollup incl. zero-task programme, `programs=` bounds, timeline ordering
 + overdue, traceability, busiest-day, dept-scope) — green against a local PG16
-two-DB cluster; `node --check` clean on all changed JS. `_a0` SUMA snapshots stay
-in scratchpad (analysis fixtures), not committed.
+two-DB cluster; full backend suite **371 passed**; `node --check` clean on all
+changed JS. `_a0` SUMA snapshots stay in scratchpad (analysis fixtures), not
+committed.
+
+**Deployed to wwf_mass ONLY** (backend `v54` / frontend `v76`, **no migration** —
+pure read). DocEngine (`v3`) + both DBs untouched. **Live smoke green** (via the
+kvm4-runner): `/health` 200; `/reports/audit-prep` → **401** (route deployed +
+auth-guarded, NOT 404) both with and without `?programs=`; a bogus route → 404
+(confirms the 401 is real routing, not a catch-all); frontend serves SW
+`wwf-shell-v3.39.0`, `gf/auditprep-view.js` (8.7 KB), the `auditprep` i18n keys,
+and the `index.html` script include. **Prod (`wwf_app`) untouched** — promotion is
+owner-gated (the standing rule); the promotion recipe = build `v54`/`v76` off this
+branch + `docker compose up -d --no-deps backend frontend` on `/opt/stacks/wwf_app`
+(no migration). CI red = same GitHub workflow-startup infra failure (all 7 jobs
+died in ~5s); merged/verified on the local gate + live wwf_mass smoke, as #23–#34.
