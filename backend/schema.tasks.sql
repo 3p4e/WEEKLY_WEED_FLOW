@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1rkdvxVyVLRTjvQ1dSILaH9GEnG9ay2yrz21Aynkmnl4GgBtwKa9FPBOmakWrRJ
+\restrict 69QzBK6xmzmqIVjxYseGauqJSR6hJtTk7ZEczO8NaKNdjb76wM86tIrg4RtS3Ll
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -367,6 +367,23 @@ ALTER TABLE ONLY public.task_comments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: task_dependencies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.task_dependencies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    depends_on_task_id uuid NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT task_dependencies_no_self CHECK ((task_id <> depends_on_task_id))
+);
+
+ALTER TABLE ONLY public.task_dependencies FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: task_links; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -440,7 +457,9 @@ CREATE TABLE public.tasks (
     external_ref text,
     attributes jsonb DEFAULT '{}'::jsonb NOT NULL,
     progress smallint DEFAULT 0 NOT NULL,
+    node_kind text DEFAULT 'task'::text NOT NULL,
     CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
+    CONSTRAINT tasks_node_kind_check CHECK ((node_kind = ANY (ARRAY['task'::text, 'annex'::text, 'step'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress >= 0) AND (progress <= 100))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text]))),
     CONSTRAINT tasks_task_type_check CHECK ((task_type = ANY (ARRAY['capa'::text, 'sop'::text, 'validation'::text, 'document'::text, 'lab'::text, 'meeting'::text, 'admin'::text, 'other'::text])))
@@ -626,6 +645,22 @@ ALTER TABLE ONLY public.task_comments
 
 
 --
+-- Name: task_dependencies task_dependencies_edge_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_edge_key UNIQUE (task_id, depends_on_task_id);
+
+
+--
+-- Name: task_dependencies task_dependencies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: task_links task_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -719,6 +754,13 @@ CREATE INDEX notifications_unread_idx ON public.notifications USING btree (recip
 --
 
 CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org_id, room_id) WHERE is_active;
+
+
+--
+-- Name: task_dependencies_dep_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX task_dependencies_dep_idx ON public.task_dependencies USING btree (org_id, depends_on_task_id);
 
 
 --
@@ -855,6 +897,13 @@ CREATE TRIGGER audit_rooms AFTER INSERT OR DELETE OR UPDATE ON public.rooms FOR 
 
 
 --
+-- Name: task_dependencies audit_task_dependencies; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_dependencies AFTER INSERT OR DELETE OR UPDATE ON public.task_dependencies FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: task_progress audit_task_prog; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -960,6 +1009,22 @@ ALTER TABLE ONLY public.task_assignees
 
 ALTER TABLE ONLY public.task_comments
     ADD CONSTRAINT task_comments_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: task_dependencies task_dependencies_dep_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_dep_fkey FOREIGN KEY (depends_on_task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: task_dependencies task_dependencies_task_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_task_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
 
 
 --
@@ -1171,6 +1236,13 @@ CREATE POLICY org_isolation ON public.task_comments USING ((org_id = app.current
 
 
 --
+-- Name: task_dependencies org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.task_dependencies USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: task_links org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1214,6 +1286,12 @@ ALTER TABLE public.task_assignees ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: task_dependencies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.task_dependencies ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_links; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1295,5 +1373,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 1rkdvxVyVLRTjvQ1dSILaH9GEnG9ay2yrz21Aynkmnl4GgBtwKa9FPBOmakWrRJ
+\unrestrict 69QzBK6xmzmqIVjxYseGauqJSR6hJtTk7ZEczO8NaKNdjb76wM86tIrg4RtS3Ll
 

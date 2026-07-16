@@ -198,3 +198,44 @@ async def test_non_owner_non_assignee_cannot_unassign_others(client, admin_heade
     r = await client.delete(f"/tasks/{task_id}/assignees/{assignee2['id']}",
                              headers={"Authorization": f"Bearer {assignee1_token}"})
     assert r.status_code == 403
+
+
+# ── TMS T1: cross-department handoff lifecycle ──────────────────────────────
+async def test_handoff_propose_and_accept_moves_department(client, admin_headers):
+    d_from = (await client.post("/departments", json={"code": "ho_from", "name": "HO From"},
+                                headers=admin_headers)).json()
+    d_to = (await client.post("/departments", json={"code": "ho_to", "name": "HO To"},
+                              headers=admin_headers)).json()
+    task = (await client.post("/tasks", json={"title": "Transfer me", "department_id": d_from["id"]},
+                              headers=admin_headers)).json()
+    tid = task["id"]
+    # propose a handoff to the other department
+    r = await client.post(f"/tasks/{tid}/handoffs",
+                          json={"to_dept_id": d_to["id"], "note": "please take over"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    handoff = r.json()
+    assert handoff["status"] == "proposed" and str(handoff["to_dept_id"]) == d_to["id"]
+    # it shows up in the task's handoff list
+    lst = (await client.get(f"/tasks/{tid}/handoffs", headers=admin_headers)).json()
+    assert len(lst) == 1 and lst[0]["id"] == handoff["id"]
+    # accepting it re-homes the task into the target department
+    r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "accepted"},
+                          headers=admin_headers)
+    assert r.status_code == 200, r.text
+    moved = (await client.get(f"/tasks/{tid}", headers=admin_headers)).json()["task"]
+    assert str(moved["department_id"]) == d_to["id"]
+    # a resolved handoff cannot be resolved again
+    r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "rejected"},
+                          headers=admin_headers)
+    assert r.status_code == 409
+
+
+async def test_handoff_to_same_department_rejected(client, admin_headers):
+    d = (await client.post("/departments", json={"code": "ho_same", "name": "HO Same"},
+                           headers=admin_headers)).json()
+    task = (await client.post("/tasks", json={"title": "x", "department_id": d["id"]},
+                              headers=admin_headers)).json()
+    r = await client.post(f"/tasks/{task['id']}/handoffs", json={"to_dept_id": d["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422

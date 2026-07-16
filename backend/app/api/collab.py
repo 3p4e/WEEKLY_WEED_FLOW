@@ -223,3 +223,105 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
         except Exception:
             pass
     return {"ok": True, "accepted": body.accepted}
+
+
+# ── Cross-department handoffs ───────────────────────────────────────────────
+# The handoffs table has always existed (schema.tasks.sql, 4-state lifecycle);
+# T1 surfaces it. Proposing a handoff pings the TARGET department's head so the
+# receiving side actually learns about it; accepting it re-homes the task into
+# that department (which also makes it visible to that department's board).
+class HandoffIn(BaseModel):
+    to_dept_id: str
+    note: str | None = None
+
+
+class HandoffResolve(BaseModel):
+    status: str  # accepted | rejected | cancelled
+
+
+@router.post("/tasks/{task_id}/handoffs", status_code=201)
+async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(require_password_set)):
+    async with rls(user) as c:
+        t = await c.fetchrow(
+            "SELECT id, title, department_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found")
+        await _assert_scope_visible(c, task_id, user)
+        dst = await c.fetchrow(
+            "SELECT id, name, head_user_id FROM departments WHERE id=$1 AND is_active=true", body.to_dept_id)
+        if dst is None:
+            raise HTTPException(422, "Unknown target department")
+        if t["department_id"] and str(t["department_id"]) == str(body.to_dept_id):
+            raise HTTPException(422, "Task is already in that department")
+        row = await c.fetchrow(
+            "INSERT INTO handoffs(org_id, task_id, from_dept_id, to_dept_id, requested_by, note)"
+            " VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+            user["org_id"], task_id, t["department_id"], body.to_dept_id, user["id"], body.note)
+        await c.execute(
+            "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
+            user["org_id"], task_id, user["id"], f"↪ Handoff proposed to {dst['name']}")
+        # Ping the receiving department's head + the task's own participants.
+        try:
+            recips = [(u, "status") for u in await participants(c, task_id)]
+            if dst["head_user_id"]:
+                recips.append((dst["head_user_id"], "status"))
+            await emit(c, user, verb="handoff", object_type="task", object_id=task_id,
+                       recipients=recips, task_id=task_id, department_id=body.to_dept_id,
+                       params={"title": t["title"], "to_dept": dst["name"]})
+        except Exception:
+            pass
+    return dict(row)
+
+
+@router.get("/tasks/{task_id}/handoffs")
+async def list_handoffs(task_id: str, user: dict = Depends(require_password_set)):
+    async with rls(user) as c:
+        await _task_or_404(c, task_id)
+        await _assert_scope_visible(c, task_id, user)
+        rows = await c.fetch("SELECT * FROM handoffs WHERE task_id=$1 ORDER BY created_at DESC", task_id)
+    return [dict(r) for r in rows]
+
+
+@router.post("/handoffs/{handoff_id}/resolve")
+async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = Depends(require_password_set)):
+    """accepted → the task moves into the target department; rejected/cancelled
+    just close the request. Only an elevated role, the target department's
+    head, or (for cancel) the original requester may resolve."""
+    if body.status not in ("accepted", "rejected", "cancelled"):
+        raise HTTPException(422, "status must be accepted, rejected, or cancelled")
+    async with rls(user) as c:
+        h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1", handoff_id)
+        if h is None:
+            raise HTTPException(404, "Handoff not found")
+        if h["status"] != "proposed":
+            raise HTTPException(409, f"Handoff already {h['status']}")
+        await _assert_scope_visible(c, str(h["task_id"]), user)
+        dst = await c.fetchrow("SELECT head_user_id FROM departments WHERE id=$1", h["to_dept_id"])
+        is_head = dst is not None and str(dst["head_user_id"] or "") == str(user["id"])
+        is_requester = str(h["requested_by"]) == str(user["id"])
+        allowed = user["role"] in _ELEVATED or is_head or (body.status == "cancelled" and is_requester)
+        if not allowed:
+            raise HTTPException(403, "Not permitted to resolve this handoff")
+        await c.execute(
+            "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now() WHERE id=$3",
+            body.status, user["id"], handoff_id)
+        if body.status == "accepted":
+            await c.execute(
+                "UPDATE tasks SET department_id=$1, updated_at=now() WHERE id=$2",
+                h["to_dept_id"], h["task_id"])
+        t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", h["task_id"])
+        verb_txt = {"accepted": "✓ Handoff accepted", "rejected": "✗ Handoff rejected",
+                    "cancelled": "⊘ Handoff cancelled"}[body.status]
+        await c.execute(
+            "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
+            user["org_id"], h["task_id"], user["id"], verb_txt)
+        try:
+            recips = [(u, "status") for u in await participants(c, str(h["task_id"]))]
+            recips.append((h["requested_by"], "status"))
+            await emit(c, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
+                       recipients=recips, task_id=h["task_id"],
+                       department_id=t["department_id"] if t else None,
+                       params={"title": (t["title"] if t else ""), "status": body.status})
+        except Exception:
+            pass
+    return {"ok": True, "status": body.status}

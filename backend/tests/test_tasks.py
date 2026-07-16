@@ -373,3 +373,59 @@ async def test_tags_bounds_rejected_with_422(client, admin_headers):
     assert r.status_code == 422, r.text
     r = await client.post("/tasks", json={"title": "T3", "tags": ["ok", "fine"]}, headers=admin_headers)
     assert r.status_code == 201, r.text
+
+
+# ── TMS T1: node_kind, dependency graph, task tree ──────────────────────────
+async def test_node_kind_defaults_and_roundtrips(client, admin_headers):
+    r = await client.post("/tasks", json={"title": "plain"}, headers=admin_headers)
+    assert r.status_code == 201 and r.json()["node_kind"] == "task"
+    r = await client.post("/tasks", json={"title": "annex node", "node_kind": "annex"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["node_kind"] == "annex"
+    tid = r.json()["id"]
+    r = await client.patch(f"/tasks/{tid}", json={"node_kind": "step"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["node_kind"] == "step"
+    # invalid node_kind is rejected by the enum
+    r = await client.post("/tasks", json={"title": "bad", "node_kind": "bogus"}, headers=admin_headers)
+    assert r.status_code == 422
+
+
+async def test_dependency_add_list_and_cycle_guard(client, admin_headers):
+    a = (await client.post("/tasks", json={"title": "A"}, headers=admin_headers)).json()["id"]
+    b = (await client.post("/tasks", json={"title": "B"}, headers=admin_headers)).json()["id"]
+    # A is blocked by B
+    r = await client.post(f"/tasks/{a}/dependencies", json={"depends_on_task_id": b},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    detail = (await client.get(f"/tasks/{a}", headers=admin_headers)).json()
+    assert [d["id"] for d in detail["blocked_by"]] == [b]
+    # reverse view: B blocks A
+    rev = (await client.get(f"/tasks/{b}", headers=admin_headers)).json()
+    assert [d["id"] for d in rev["blocks"]] == [a]
+    # a cycle (B depends on A) must be rejected
+    r = await client.post(f"/tasks/{b}/dependencies", json={"depends_on_task_id": a},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+    # self-dependency rejected
+    r = await client.post(f"/tasks/{a}/dependencies", json={"depends_on_task_id": a},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # delete the edge
+    r = await client.delete(f"/tasks/{a}/dependencies/{b}", headers=admin_headers)
+    assert r.status_code == 200
+    detail = (await client.get(f"/tasks/{a}", headers=admin_headers)).json()
+    assert detail["blocked_by"] == []
+
+
+async def test_task_tree_returns_hierarchy(client, admin_headers):
+    parent = (await client.post("/tasks", json={"title": "SOP", "node_kind": "task"},
+                                headers=admin_headers)).json()["id"]
+    child = (await client.post("/tasks", json={"title": "annex", "node_kind": "annex",
+                                               "parent_id": parent}, headers=admin_headers)).json()["id"]
+    tree = (await client.get("/tasks/tree", headers=admin_headers)).json()
+    ids = {n["id"]: n for n in tree}
+    assert parent in ids and child in ids
+    assert ids[child]["parent_id"] == parent
+    assert ids[child]["node_kind"] == "annex"
+    # 'tree' must not be captured as a task id (route ordering)
+    assert all(n["id"] != "tree" for n in tree)
