@@ -1046,3 +1046,64 @@ async def test_coa_qa_read_gated_index_write_gated(client, admin_headers):
     # a plain USER is below the elevated read gate
     assert (await client.post("/qc/coa-qa", json={"question": "thc"}, headers=user_headers)).status_code == 403
     assert (await client.post(f"/qc/coa-documents/{doc['id']}/chunks", json={"chunks": ["x"]}, headers=user_headers)).status_code == 403
+
+
+# ── Phase 4 hardening — write-side FK validation (422 not 500) + terminal locks ──
+_FAKE_UUID = "00000000-0000-0000-0000-0000000000ff"
+
+
+async def test_add_result_rejects_unknown_and_cross_spec_parameter(client, admin_headers):
+    # unknown parameter id → 422 (not a raw FK 500)
+    specA, paramA = await _ecoa_spec_with_param(client, admin_headers, material="HARD-A")
+    coaA = await _coa(client, admin_headers, specA["id"], batch="B-HARD-A")
+    r = await client.post(f"/qc/certificates/{coaA['id']}/results",
+                          json={"test_name": "x", "parameter_id": _FAKE_UUID}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    # a parameter from ANOTHER spec → 422 (can't cite a cross-spec parameter)
+    specB = await _spec(client, admin_headers, material="HARD-B")
+    coaB = await _coa(client, admin_headers, specB["id"], batch="B-HARD-B")
+    r = await client.post(f"/qc/certificates/{coaB['id']}/results",
+                          json={"test_name": "Total THC", "parameter_id": paramA["id"]}, headers=admin_headers)
+    assert r.status_code == 422 and "specification" in r.json()["detail"].lower(), r.text
+
+
+async def test_placeholder_rejects_unknown_parameter_without_status(client, admin_headers):
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="HARD-PH")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-HARD-PH")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Odd Label", "numeric_value": 1.0}]}, headers=admin_headers)
+    ph = [p for p in (await client.get("/qc/coa-placeholders", headers=admin_headers)).json()
+          if p["raw_label"] == "Odd Label"][0]
+    # a bad mapped_parameter_id with NO status change must still 422 (was a 500)
+    r = await client.patch(f"/qc/coa-placeholders/{ph['id']}",
+                           json={"mapped_parameter_id": _FAKE_UUID}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_sfr_rqs_reject_unknown_sample(client, admin_headers):
+    # create_sfr with a bad sample_id → 422 (not a raw FK 500)
+    r = await client.post("/qc/field-records",
+                          json={"sampling_location": "GH", "destination_facility": "QC Lab",
+                                "sample_id": _FAKE_UUID}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    # update_rqs / update_sfr with a bad sample_id → 422
+    rqs = await _rqs(client, admin_headers, batch_id="B-HARD-RQS")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                           json={"sample_id": _FAKE_UUID}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    sfr = (await client.post("/qc/field-records",
+                             json={"sampling_location": "GH2", "destination_facility": "QC Lab"},
+                             headers=admin_headers)).json()
+    r = await client.patch(f"/qc/field-records/{sfr['id']}",
+                           json={"sample_id": _FAKE_UUID}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+
+async def test_batch_size_caps(client, admin_headers):
+    doc = await _ecoa_doc(client, admin_headers, batch="B-HARD-CAP")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/chunks",
+                          json={"chunks": ["x"] * 2001}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "x"}] * 501}, headers=admin_headers)
+    assert r.status_code == 422, r.text

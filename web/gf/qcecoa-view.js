@@ -221,7 +221,7 @@
             <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaAsk('${doc.id}')">${AL('Ask', 'Прашај')}</button>
           </div>
           ${qa ? (qa.grounded
-            ? `<div style="margin-top:8px">${qa.passages.map(p => `<div class="qms-row" style="flex-direction:column;align-items:flex-start;gap:2px"><span class="ana-note mono">[${GF.esc(p.doc_number)}#${p.chunk_index}] · ${p.score}</span><span>${GF.esc(p.content)}</span></div>`).join('')}</div>`
+            ? `<div style="margin-top:8px">${qa.passages.map(p => `<div class="qms-row" style="flex-direction:column;align-items:flex-start;gap:2px"><span class="ana-note mono">[${GF.esc(p.doc_number)}#${GF.esc(String(p.chunk_index))}] · ${GF.esc(String(p.score))}</span><span>${GF.esc(p.content)}</span></div>`).join('')}</div>`
             : `<div class="ana-note" style="margin-top:8px">${AL('No matching passages — nothing to ground an answer on.', 'Нема совпаѓачки пасуси — нема на што да се заснова одговорот.')}</div>`) : ''}
         </div>`;
       })()}
@@ -257,7 +257,7 @@
            <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaMapPlaceholder('${p.id}')">${AL('Map', 'Мапирај')}</button>`
         : '';
       return `<div class="qms-row" style="flex-wrap:wrap;gap:6px">
-        <span class="qms-title">${GF.esc(p.raw_label)} <span class="ana-note">×${p.occurrences}</span></span>
+        <span class="qms-title">${GF.esc(p.raw_label)} <span class="ana-note">×${GF.esc(String(p.occurrences))}</span></span>
         ${canWrite() ? `<select onchange="GF.WWF.qcEcoaPickSpec('${p.id}', this.value)"><option value="">${AL('spec…', 'спец…')}</option>${specOpts}</select>${paramSel}
         <button class="btn btn-sm" onclick="GF.WWF.qcEcoaIgnorePlaceholder('${p.id}')">${AL('Ignore', 'Игнорирај')}</button>` : ''}
       </div>`;

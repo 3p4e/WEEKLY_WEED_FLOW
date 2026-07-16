@@ -611,19 +611,26 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
     a sample that is still in a testable state, the sample is quarantined (the
     OOS hook). Results may only be entered while the CoA is DRAFT."""
     async with rls(user) as c:
-        coa = await c.fetchrow("SELECT id, status, sample_id FROM qc_certificates WHERE id=$1", coa_id)
+        coa = await c.fetchrow(
+            "SELECT id, status, sample_id, specification_id FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
             raise HTTPException(404, "Certificate not found")
         if coa["status"] != "DRAFT":
             raise HTTPException(409, "Results may only be entered while the CoA is DRAFT")
         lo, hi = body.lower_limit, body.upper_limit
-        # If a spec parameter is cited and limits weren't supplied, snapshot the
+        # A cited spec parameter must exist and belong to THIS certificate's
+        # specification (an unknown or cross-spec/cross-org id must 422, never a
+        # dangling FK / 500). When cited and limits weren't supplied, snapshot the
         # parameter's limits (the spec is the single source of truth).
-        if body.parameter_id and lo is None and hi is None:
+        if body.parameter_id:
             p = await c.fetchrow(
-                "SELECT lower_limit, upper_limit, unit FROM qc_spec_parameters WHERE id=$1",
+                "SELECT spec_id, lower_limit, upper_limit, unit FROM qc_spec_parameters WHERE id=$1",
                 body.parameter_id)
-            if p is not None:
+            if p is None:
+                raise HTTPException(422, "Unknown spec parameter")
+            if coa["specification_id"] is not None and p["spec_id"] != coa["specification_id"]:
+                raise HTTPException(422, "Parameter does not belong to this certificate's specification")
+            if lo is None and hi is None:
                 lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
                 hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
         complies, status = _evaluate(body.result_numeric, lo, hi)
@@ -808,9 +815,14 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_QP_ROLES
         timeout=120.0, client_factory=_coq_client)).json()
     doc_id = build.get("document_id")
     async with rls(user) as c:
-        await c.execute(
+        # Re-assert RELEASED when stamping the artifact — the certificate could
+        # have transitioned during the (up-to-120s) DocEngine build (TOCTOU).
+        stamped = await c.fetchrow(
             "UPDATE qc_certificates SET coq_document_id=$1, coq_generated_at=now(),"
-            " updated_by=$2, updated_at=now() WHERE id=$3", doc_id, user["id"], coa_id)
+            " updated_by=$2, updated_at=now() WHERE id=$3 AND status='RELEASED' RETURNING id",
+            doc_id, user["id"], coa_id)
+        if stamped is None:
+            raise HTTPException(409, "Certificate is no longer RELEASED — COQ not recorded")
         try:
             await emit(c, user, verb="coq_generated", object_type="qc_certificate",
                        object_id=coa_id, recipients=[],
@@ -1222,7 +1234,9 @@ class ExtractionIn(BaseModel):
 
 
 class ExtractionsIn(BaseModel):
-    items: list[ExtractionIn]
+    # Cap the batch so one request can't drive an unbounded INSERT loop inside a
+    # single transaction (holds a connection open); a real CoA has far fewer rows.
+    items: list[ExtractionIn] = Field(max_length=500)
 
 
 class ExtractionPatch(BaseModel):
@@ -1511,9 +1525,12 @@ async def update_placeholder(ph_id: str, body: PlaceholderPatch,
         target = patch.get("status")
         if target is not None and target not in _PLACEHOLDER_STATUSES:
             raise HTTPException(422, "status must be OPEN, MAPPED or IGNORED")
-        if target == "MAPPED":
-            if not patch.get("mapped_parameter_id"):
-                raise HTTPException(422, "MAPPED requires mapped_parameter_id")
+        if target == "MAPPED" and not patch.get("mapped_parameter_id"):
+            raise HTTPException(422, "MAPPED requires mapped_parameter_id")
+        # Validate the referenced parameter whenever it is supplied (not only on a
+        # MAPPED transition), so a bad/cross-org id 422s instead of hitting a raw
+        # FK violation (500) or persisting a dangling reference.
+        if patch.get("mapped_parameter_id"):
             if await c.fetchrow("SELECT id FROM qc_spec_parameters WHERE id=$1",
                                 patch["mapped_parameter_id"]) is None:
                 raise HTTPException(422, "Unknown parameter")
@@ -1849,6 +1866,9 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
             "SELECT status, registration_deadline FROM qc_sampling_requests WHERE id=$1", rqs_id)
         if cur is None:
             raise HTTPException(404, "Sampling request not found")
+        if patch.get("sample_id"):
+            if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
+                raise HTTPException(422, "Unknown sample")
         fields, args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -1912,6 +1932,9 @@ async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS)))
         if body.rqs_id:
             if await c.fetchrow("SELECT id FROM qc_sampling_requests WHERE id=$1", body.rqs_id) is None:
                 raise HTTPException(422, "Unknown sampling request")
+        if body.sample_id:
+            if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
+                raise HTTPException(422, "Unknown sample")
         row = await c.fetchrow(
             "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
             " sampling_coordinates, barrel_numbers, num_containers, destination_facility,"
@@ -1934,6 +1957,9 @@ async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_r
         cur = await c.fetchrow("SELECT status FROM qc_sample_field_records WHERE id=$1", sfr_id)
         if cur is None:
             raise HTTPException(404, "Field record not found")
+        if patch.get("sample_id"):
+            if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
+                raise HTTPException(422, "Unknown sample")
         fields, args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -2244,7 +2270,9 @@ async def update_transport(tid: str, body: TransportPatch, user: dict = Depends(
 # never invents an answer. Semantic synthesis (if wanted) is the DocEngine /
 # Letta fleet's job over these cited passages, not fabricated here.
 class ChunksIn(BaseModel):
-    chunks: list = Field(default_factory=list)   # list[str] or list[{content, chunk_index?}]
+    # list[str] or list[{content, chunk_index?}]; capped so one (re)index can't
+    # drive an unbounded INSERT loop in a single transaction.
+    chunks: list = Field(default_factory=list, max_length=2000)
 
 
 class QaIn(BaseModel):
