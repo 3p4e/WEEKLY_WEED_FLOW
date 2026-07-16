@@ -179,14 +179,26 @@ deployed, and live-verified against real auth + real data on wwf_mass
 **Exit:** awaiting the owner's tests + explicit approval to promote to prod
 (`docs/DEPLOY.md` "Task-Management System v2" section has the exact steps).
 
-### Phase 2 — QC LIMS module
+### Phase 2 — QC LIMS module — IN PROGRESS (U1–U3 on wwf_mass, 2026-07-16)
 Assimilate the QC-domain corpus (`qc-lims-ao` primary + `QC_LIMS_APP` +
 `QC_APP` + `cannabis-sample-tracker`) into ONE native module: sample lifecycle
 (sample→test→result→OOS→CoA→release), specifications, stability, water QC,
 sampling requests, Annex-11 audit. Regulatory authority where prototype and SOPs
-disagree = **approved QCSOP 001–024** (Drive `1oPEIlNTWMutZIineO6Pb…`). Own
-delta-analysis + plan when it starts. **Depends on:** DocEngine (controlled
-forms/CoA), TMS (lifecycle patterns).
+disagree = **approved QCSOP 001–024** (Drive `1oPEIlNTWMutZIineO6Pb…`).
+**Depends on:** DocEngine (controlled forms/CoA), TMS (lifecycle patterns).
+
+**U1 (specifications) + U2 (samples/lifecycle) + U3 (CoA/results) are built,
+tested, and deployed to wwf_mass** (backend v46 / frontend v67, migrations
+0018–0020) — see `docs/DEPLOY.md`'s "QC LIMS module" section for the
+migration/router/view breakdown, the date-field bug found and fixed during
+the live smoke, and the prod-promotion recipe. Prod promotion is
+owner-gated, pending explicit approval.
+
+**Next increment:** the deferred units — OOS + CAPA (migration 0021: two-phase
+investigation records; CAPA as a read-time view over OOS per the prototype's
+`api/capa.py` derivation, not a separate table, unless the owner wants it
+persisted), the custody cluster (chain_of_custody/SFR/RQS), and the
+water/stability/transport JSONB leaves.
 
 ### Phase 3 — Certificate pipeline (CoA in → COQ out)
 Reconcile `CoA_TRACK` + `COQ_GEN` + the QC-LIMS CoA parts into **one**

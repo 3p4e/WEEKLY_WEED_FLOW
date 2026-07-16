@@ -369,3 +369,77 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
    catalog entries.
 
 T4 (this polish pass) is the last increment before that promotion gate.
+
+## QC LIMS module (Phase 2, native rebuild, U1–U3)
+
+Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
+facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
+`audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
+backend `v46` / frontend `v67` / migrations `0018`–`0020` (tasks DB head).
+
+- **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
+  INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
+  `qc_spec_parameters` (acceptance criteria, locked once past authoring).
+- **U2 — Samples.** `qc_sampling_plans` + `qc_samples` (aggregate root,
+  self-FK genealogy, 10-state lifecycle incl. QUARANTINE).
+- **U3 — CoA + results.** `qc_certificates` (DRAFT→REVIEWED→APPROVED→
+  RELEASED, decision PASS/FAIL) + `qc_results` (auto-evaluated `complies`;
+  a failing result quarantines the linked sample — the OOS hook). GxP
+  guardrails: RELEASE/APPROVE are QP-only (`_QP_ROLES`); the DRAFT→REVIEWED
+  transition rejects if the reviewer is the same person as the analyst.
+
+Router `backend/app/api/qc.py` (17 endpoints, prefix `/qc`), registered in
+`main.py`. Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` /
+`qccoa-view.js`, wired into `index.html` + the SW precache list, under the
+QMS Studio nav group.
+
+**Bug found + fixed during the wwf_mass live smoke (backend v46):**
+`effective_date`/`sampling_date`/`report_date`/`result_date` were typed
+`str` in the Pydantic models but bound against an explicit `::date` SQL
+cast — asyncpg requires a real `date` object for that cast, so any request
+supplying an actual date value 500'd. No existing test exercised a non-null
+value for any of the four fields. Fixed by typing all four `date | None`
+(FastAPI/Pydantic parses the ISO string before it reaches asyncpg); added
+a regression test (`test_date_fields_accept_real_iso_dates`) covering all
+four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
+`v46` before this smoke passed — `v45` was never left running.
+
+### Migrations 0018–0020
+
+Additive, same shape as 0015/0017: `qc_spec_id_seq`/`qc_sampling_plan_id_seq`/
+`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human ids `PP-<TYPE>-YYYY-NNNN`),
+FORCE/ENABLE RLS + `org_isolation` + `audit_<tbl>` trigger on every table,
+guarded GRANT block extended to the new sequences. Verified: upgrades/
+downgrades cleanly, `schema.tasks.sql` regenerated from alembic head with
+zero drift (CI's `migrations` job — green on PR #23).
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**; same governance as every other
+unification-era feature. Local gate: full backend suite (323 tests, incl.
+25 in `test_qc.py`) passes locally against real Postgres with the date-field
+fix applied — no regressions; CI also green on PR #23 for the pre-fix
+commit (schema-drift, e2e, security scan); `node --check` clean on the
+three QC views. Live-
+verified on wwf_mass with real `tt.qc.mgr` (QC_MGR) / `tt.qp` (QP) tokens:
+a spec created with a real `effective_date` and driven to ACTIVE, a sample
+registered with a real `sampling_date`, a CoA issued with a real
+`report_date` linking both, a passing result (sample untouched) and a
+failing result (sample auto-QUARANTINE) each with a real `result_date`,
+QC_MGR blocked (403) from CoA REVIEWED (self-review) and APPROVED (QP-only),
+QP succeeding (200) on both.
+
+Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
+1. Apply migrations 0018–0020 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head` — same recipe as every prior migration).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v46`+, NOT
+   `v45` — see the date-field fix above) and frontend to the verified tag
+   (`v67`+).
+3. `docker compose up -d --no-deps backend frontend`.
+4. Verify: the same spec→sample→CoA→pass/fail-result→quarantine round trip
+   above, against prod data, with real accounts.
+
+**Next increment (not yet built):** the deferred Phase-2 units — OOS +
+CAPA (migration 0021), the custody cluster (chain_of_custody/SFR/RQS), and
+the water/stability/transport JSONB leaves — per
+`docs/PLATFORM-ROADMAP-2026-07.md`.
