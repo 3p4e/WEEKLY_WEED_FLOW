@@ -163,4 +163,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         await db.job_update(job_id, status="failed", error=f"letta: {e}")
     except Exception as e:  # noqa: BLE001 — job must record any failure
         log.exception("job %s failed", job_id)
-        await db.job_update(job_id, status="failed", error=str(e)[:500])
+        # Some exceptions (notably httpx.ReadTimeout) stringify to "" — always
+        # record the type name so the job row never shows a blank error.
+        detail = str(e).strip() or repr(e)
+        await db.job_update(job_id, status="failed", error=f"{type(e).__name__}: {detail}"[:500])

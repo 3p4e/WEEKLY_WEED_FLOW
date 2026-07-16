@@ -40,3 +40,4 @@ test_accounts.local.json
 docengine/__pycache__/
 docengine/**/__pycache__/
 docengine/.pytest_cache/
+docengine/.venv/

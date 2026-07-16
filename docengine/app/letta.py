@@ -21,10 +21,16 @@ class LettaClient:
     """Async Letta v1 REST client. All fleet mutations are ADDITIVE and
     namespaced gf_* — existing agents are never modified (handover caution)."""
 
-    def __init__(self, base: str | None = None, key: str | None = None, timeout: float = 120.0):
+    def __init__(self, base: str | None = None, key: str | None = None, timeout: httpx.Timeout | None = None):
         self.base = (base if base is not None else settings.letta_base).rstrip("/")
         self.key = key if key is not None else settings.letta_key
-        self.timeout = timeout
+        # Short connect (fail fast if the server is down) + long read (one
+        # agent generation can take minutes). A single float would force the
+        # generous read window onto the connect step too.
+        self.timeout = timeout or httpx.Timeout(
+            settings.letta_read_timeout,
+            connect=settings.letta_connect_timeout,
+        )
 
     @property
     def configured(self) -> bool:

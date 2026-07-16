@@ -16,6 +16,11 @@ class Settings:
     # Letta (direct REST — the Rust MCP bridge has a known decode bug).
     letta_base: str = os.environ.get("LETTA_BASE_URL", "").rstrip("/")
     letta_key: str = os.environ.get("LETTA_API_KEY", "")
+    # A stateful-agent generation can take minutes; the read timeout must cover
+    # ONE agent turn (the pipeline makes ~11 sequential calls, each polled as a
+    # background job). Connect stays short so an unreachable server fails fast.
+    letta_read_timeout: float = float(os.environ.get("LETTA_READ_TIMEOUT", "300"))
+    letta_connect_timeout: float = float(os.environ.get("LETTA_CONNECT_TIMEOUT", "15"))
 
     # Postgres for workflow state (fixes the per-worker in-memory bug class).
     # e.g. postgresql://docengine:...@wwf-tasks-db:5432/wwf_tasks
