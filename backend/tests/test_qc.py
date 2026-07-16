@@ -27,6 +27,34 @@ async def test_create_list_get_specification(client, admin_headers):
     assert r.json()["parameters"] == []
 
 
+async def test_date_fields_accept_real_iso_dates(client, admin_headers):
+    """effective_date/sampling_date/report_date/result_date are bound with an
+    explicit ::date cast — asyncpg rejects that cast unless given a real date
+    object, so a Pydantic field typed str (rather than date) 500s the moment
+    a real value is supplied. Every creation path is exercised here with an
+    actual ISO date, not just the all-null defaults the other tests use."""
+    spec = await _spec(client, admin_headers, material="DATE-MAT", effective_date="2026-07-01")
+    assert spec["effective_date"] == "2026-07-01"
+    r = await client.patch(f"/qc/specifications/{spec['id']}", json={"effective_date": "2026-08-01"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["effective_date"] == "2026-08-01"
+
+    sample = await _sample(client, admin_headers, batch="B-DATE", sampling_date="2026-07-02")
+    assert sample["sampling_date"] == "2026-07-02"
+
+    coa = await _coa(client, admin_headers, spec["id"], report_date="2026-07-03")
+    assert coa["report_date"] == "2026-07-03"
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"report_date": "2026-08-03"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["report_date"] == "2026-08-03"
+
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Moisture", "result_numeric": 8.0,
+                                "lower_limit": 5.0, "upper_limit": 12.0, "result_date": "2026-07-04"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["result_date"] == "2026-07-04"
+
+
 async def test_role_gating(client, admin_headers):
     spec = await _spec(client, admin_headers, material="ROLE-MAT")
     # base USER: no read

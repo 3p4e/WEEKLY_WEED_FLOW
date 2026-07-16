@@ -14,6 +14,8 @@ stored NULL for a human to fill. Every table is audited by the shared
 hash-chained trigger. Human ids are `PP-SPEC-YYYY-NNNN`, stamped server-side
 from a Postgres sequence so the audit trail attributes the number.
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -60,7 +62,7 @@ class SpecIn(BaseModel):
     material_name_en: str = Field(max_length=300)
     material_name_mk: str | None = Field(default=None, max_length=300)
     version: int = Field(default=1, ge=1, le=999)
-    effective_date: str | None = None            # ISO date
+    effective_date: date | None = None
     thc_grade: str | None = None
     thc_acceptance_min: float | None = None
     thc_acceptance_max: float | None = None
@@ -70,7 +72,7 @@ class SpecIn(BaseModel):
 class SpecPatch(BaseModel):
     material_name_en: str | None = Field(default=None, max_length=300)
     material_name_mk: str | None = Field(default=None, max_length=300)
-    effective_date: str | None = None
+    effective_date: date | None = None
     thc_grade: str | None = None
     thc_acceptance_min: float | None = None
     thc_acceptance_max: float | None = None
@@ -297,7 +299,7 @@ class SampleIn(BaseModel):
     sample_type: str | None = Field(default=None, max_length=60)
     material_name_en: str | None = Field(default=None, max_length=300)
     material_name_mk: str | None = Field(default=None, max_length=300)
-    sampling_date: str | None = None            # ISO date
+    sampling_date: date | None = None
     location: str | None = Field(default=None, max_length=200)
     quantity: float | None = None
     quantity_unit: str | None = Field(default=None, max_length=40)
@@ -479,14 +481,14 @@ class CoaIn(BaseModel):
     specification_id: str
     sample_id: str | None = None
     cert_type: str = "ICOA"
-    report_date: str | None = None
+    report_date: date | None = None
     source_lab: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=4000)
 
 
 class CoaPatch(BaseModel):
     source_lab: str | None = Field(default=None, max_length=200)
-    report_date: str | None = None
+    report_date: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
     status: str | None = None            # guarded lifecycle transition
     decision: str | None = None          # PASS | FAIL
@@ -500,7 +502,7 @@ class ResultIn(BaseModel):
     unit: str | None = Field(default=None, max_length=60)
     lower_limit: float | None = None
     upper_limit: float | None = None
-    result_date: str | None = None
+    result_date: date | None = None
 
 
 def _coa_out(r: dict) -> dict:
