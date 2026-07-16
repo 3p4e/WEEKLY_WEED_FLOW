@@ -310,3 +310,62 @@ backend frontend` with already-verified tags, then verify a full
 questionnaire→SOP round trip produces a PASS .docx with the house header,
 citations from the real DB1/DB3 sources, and that the authoring gate holds
 for a non-QA/QP manager account).
+
+## Task-Management System v2 (TMS T1–T3, unification Phase 1 priority #1)
+
+Owner-priority-#1 upgrade to the task-management core, built additively on
+the existing model (no rebuild — see the delta analysis in
+`docs/PLATFORM-ROADMAP-2026-07.md` §3/§6 Phase 1). Currently on
+**wwf_mass only**: backend v44 / frontend v66 / migration 0017.
+
+- **T1 — task tree + dependency graph + handoffs.** `tasks.node_kind`
+  (task|annex|step, additive column) + new `task_dependencies` table (a
+  real blocker graph — WWF previously had only free-text `blocker_reason`)
+  + `GET /tasks/tree` + `POST/DELETE /tasks/{id}/dependencies` (recursive
+  cycle guard) + surfaced the pre-existing `handoffs` table via
+  `POST /tasks/{id}/handoffs` / `POST /handoffs/{id}/resolve` (accept
+  re-homes the task's department).
+- **T2 — in-app team digest.** `GET /notifications/digest?window=daily|weekly`
+  over the `events` table, same dept/org-wide scoping as `/activity`. Also
+  fixed a stale regex bug: migration 0016 widened `notifications.reason`'s
+  CHECK to include `capa_stuck`/`validation_stuck` but the `/notifications`
+  query-param validator was never updated. Emailed digests and
+  quiet-hours-gated push are explicitly deferred (no SMTP / push channel
+  exists yet — see `docs/RESEARCH-NOTIFICATIONS-2026-07.md`'s own v2 path).
+- **T3 — AI-native planning.** Two new entries in the existing data-driven
+  AI catalog (`app/api/ai.py` — a capability is a `CATALOG` entry + an
+  admin-bound Letta agent via `/ai/bindings`, no new endpoint):
+  `workload_balance`, `next_week_plan` (on-demand version of the
+  `weekly_snapshot.py` scheduled reasoning). `dependency_advisor` now
+  accepts `context.task_id` to ground on that task's family (itself +
+  parent + siblings) instead of the whole corpus — pairs the existing
+  advisory function with T1's real graph. Advisory only; no auto-apply.
+
+### Migration 0017
+
+Additive: `tasks.node_kind` column + `task_dependencies` table (own RLS
+policy + hash-chained audit trigger + guarded grants, same shape as 0015).
+Verified: upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from
+alembic head with zero drift.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**; same governance as every other
+unification-era feature. Local gate: 298 backend tests pass, node --check
+clean, zero schema-tasks.sql drift. Live-verified on wwf_mass with a real
+auth token and real data for every T1/T2/T3 piece (tree, cycle-rejecting
+dependency add, handoff accept re-homing a task, digest counts, catalog
+functions degrading gracefully when unbound).
+
+Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
+1. Apply migration 0017 to prod's `wwf_tasks` (superuser `TASKS_MIGRATION_DATABASE_URL`,
+   `alembic -n tasks upgrade head` — same recipe as every prior migration).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v44`+) and
+   frontend to the verified tag (`v66`+).
+3. `docker compose up -d --no-deps backend frontend`.
+4. Verify: `/tasks/tree` returns real data, a dependency add+cycle-reject
+   round-trips, a handoff accept moves a task's department, the digest
+   endpoint returns non-error counts, `/ai/functions` lists the two new
+   catalog entries.
+
+T4 (this polish pass) is the last increment before that promotion gate.
