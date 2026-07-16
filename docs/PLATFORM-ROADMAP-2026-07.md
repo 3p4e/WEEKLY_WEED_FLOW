@@ -240,10 +240,21 @@ validated stack was promoted to `wwf_app` (the live 25-user system) — backend
 `v53` / frontend `v74` / migrations 0017–0027 (additive; existing data intact) +
 the `growflow-docengine` container. Backup-first, live-smoked (existing task
 flows + new QC + DocEngine all green). See `docs/DEPLOY.md` → "Production
-cutover". **Still open:** retire the Phase-1 `qms-api` shell (prod already runs
-without it — registry reads degrade gracefully; a full move of the registry
-read-path onto the DocEngine remains), and the Letta ops backlog
-(`docs/LETTA-OPS-BACKLOG.md`, against the ~54 live agents).
+cutover".
+
+**✅ qms-api retired + Letta sprawl resolved (2026-07-16):** the low-value,
+internally-inconsistent Phase-1 `qms-api` registry was **formally retired**
+(owner chose the lighter path over re-implementing it) — removed from wwf_mass
+(`QMS_API_KEY` blanked, container dropped); the registry/knowledge tabs now show
+an honest "retired — use Document Studio" panel (frontend v75). DocEngine Studio
+is the sole live QMS surface. Retiring it removed the source of the `GMP *`
+Letta-agent duplication; after a `letta` DB snapshot, the **45 orphaned `GMP *`
+agents were deleted (107 → 62)**. See `docs/DEPLOY.md` → "qms-api … retired" and
+`docs/LETTA-OPS-BACKLOG.md`.
+
+**Still open (owner-directed, each its own confirmed op):** the remaining Letta
+ops items — 0.16→0.17 upgrade, master-key rotation, PQ1 re-embed, provider-enum
+normalization (`docs/LETTA-OPS-BACKLOG.md`).
 
 ---
 
