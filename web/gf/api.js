@@ -145,6 +145,8 @@ GF.API = {
   qcPromoteCoaDoc(id)      { return this._req('POST', '/qc/coa-documents/' + id + '/promote'); },
   qcPlaceholders(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/coa-placeholders' + (u?'?'+u:'')); },
   qcPatchPlaceholder(id, b){ return this._req('PATCH', '/qc/coa-placeholders/' + id, b); },
+  qcVerifyCert(id)         { return this._req('POST', '/qc/certificates/' + id + '/verify'); },
+  qcVerifications(id)      { return this._req('GET', '/qc/certificates/' + id + '/verifications'); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },

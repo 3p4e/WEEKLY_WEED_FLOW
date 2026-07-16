@@ -370,12 +370,14 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
 
 T4 (this polish pass) is the last increment before that promotion gate.
 
-## QC LIMS module (Phase 2 U1–U4 + Phase 3 U1–U2, native rebuild)
+## QC LIMS module (Phase 2 U1–U4 + Phase 3 U1–U3, native rebuild)
 
 Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
 facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
 `audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
-backend `v49` / frontend `v70` / migrations `0018`–`0023` (tasks DB head).
+backend `v50` / frontend `v71` / migrations `0018`–`0024` (tasks DB head). The
+Phase-3 certificate pipeline is now complete end-to-end: **CoA in (U2) →
+certificate → COQ out (U1), verified (U3)**.
 
 - **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
   INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
@@ -418,6 +420,19 @@ backend `v49` / frontend `v70` / migrations `0018`–`0023` (tasks DB head).
   server never fabricates a value; unmapped/unmeasured fields are queued or
   left blank, never guessed; PROMOTED is reachable only through the promote
   endpoint. Frontend `qcecoa-view.js` ("QC eCOA intake").
+- **P3-U3 — verify loop (source reconciliation).** `POST
+  /qc/certificates/{id}/verify` reconciles a certificate promoted from an
+  ingested eCoA (U2) against its source document — every promoted `qc_result`
+  is matched by spec parameter to the `qc_coa_extraction` it came from and the
+  numeric value / `complies` verdict / limits are compared. The outcome is
+  written to `qc_coa_verifications` (migration 0024) as an auditable GxP second
+  check: `verdict` VERIFIED / DISCREPANCY, a per-line `details` jsonb, and
+  `verified_by`/`verified_at`; a new run is a new row so the history is
+  preserved. Nothing is recomputed or silently corrected — a mismatch is
+  surfaced (`GET .../verifications` lists prior runs). 409 if the certificate
+  was not promoted from an eCoA. Surfaced in `qcecoa-view.js` as a "Verify vs
+  source" button + verdict on a PROMOTED document. (RAG Q&A over ingested CoAs
+  is deferred — the DocEngine's Letta fleet already owns retrieval.)
 
 Router `backend/app/api/qc.py` (prefix `/qc`), registered in `main.py`.
 Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` / `qccoa-view.js`
@@ -437,7 +452,7 @@ a regression test (`test_date_fields_accept_real_iso_dates`) covering all
 four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
 `v46` before this smoke passed — `v45` was never left running.
 
-### Migrations 0018–0023
+### Migrations 0018–0024
 
 0018–0020 (additive, same shape as 0015/0017): `qc_spec_id_seq`/
 `qc_sampling_plan_id_seq`/`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human
@@ -449,9 +464,10 @@ additive `source_document_code`/`source_document_date`/`source_institution`
 on `qc_results` and `coq_document_id`/`coq_generated_at` on `qc_certificates`
 (no new tables; new columns inherit the existing table grants). **0023** adds
 the eCOA-ingestion cluster (`qc_coa_documents`/`qc_coa_extractions`/
-`qc_field_placeholders` + `qc_ecoa_id_seq`), same facility canon. Verified:
+`qc_field_placeholders` + `qc_ecoa_id_seq`), same facility canon. **0024** adds
+`qc_coa_verifications` (the U3 reconciliation record), same canon. Verified:
 upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from alembic head
-with zero drift.
+with zero drift (checked against a locally stood-up PG16 two-DB cluster).
 
 > **Applying 0022/0023 on a host** — the tasks alembic env uses an *async* engine
 > and `alembic_version` is owned by the `postgres` superuser (app_admin is
@@ -500,12 +516,20 @@ carrying `source_document_code=PP-ECOA-2026-0001` + `source_institution`
 PROMOTED with `promoted_coa_id` set. This closes the CoA-in → certificate →
 (U1) COQ-out pipeline end-to-end.
 
+**P3-U3 verify-loop live smoke (wwf_mass, backend v50 / frontend v71,
+2026-07-16).** With a real `tt.qc.mgr` token: promote an ingested eCoA into a
+certificate (`PP-COA-2026-0004`) → `verify` → **VERIFIED** (checked 1,
+mismatches 0) → a hand-built (non-promoted) certificate has no source →
+`verify` refused (409) → re-grade the source extraction so it disagrees →
+`verify` → **DISCREPANCY** (1 mismatch, reason "value, verdict") → the
+verification history preserves both runs `[DISCREPANCY, VERIFIED]`.
+
 Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
-1. Apply migrations 0018–0023 to prod's `wwf_tasks` (`alembic -n tasks
-   upgrade head`; 0022/0023 need the superuser async URL — see the note above).
-2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v49`+, NOT
+1. Apply migrations 0018–0024 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head`; 0022–0024 need the superuser async URL — see the note above).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v50`+, NOT
    `v45` — see the date-field fix above) and frontend to the verified tag
-   (`v70`+). Prod must also run the `growflow-docengine` container (already
+   (`v71`+). Prod must also run the `growflow-docengine` container (already
    on wwf_mass) for COQ generation, with `DOCENGINE_URL`/`DOCENGINE_API_KEY`
    set on the backend.
 3. `docker compose up -d --no-deps backend frontend`.
@@ -513,7 +537,7 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
    the RELEASED-cert → COQ round trip above, against prod data, with real
    accounts.
 
-**Next increment (Phase 3 U3, not yet built):** the verify loop — RAG Q&A
-over ingested CoAs / reconciliation of promoted results against the source
-document, closing the certificate pipeline (consolidating CoA_TRACK /
-COQ_GEN / Kade onto the DocEngine) — see `docs/PLATFORM-ROADMAP-2026-07.md`.
+**Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop) on wwf_mass.
+Remaining QC backlog (deferred Phase-2 units + optional RAG Q&A over ingested
+CoAs) is tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of the
+whole QC LIMS + certificate pipeline is one owner-gated decision.
