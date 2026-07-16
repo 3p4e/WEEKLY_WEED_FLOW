@@ -86,6 +86,7 @@ GF.I18N = {
     qc_oos:'QC OOS & CAPA', qc_oos_sub:'Out-of-specification investigations — two-phase flow, QP disposition, and the derived CAPA register',
     qc_ecoa:'QC eCOA intake', qc_ecoa_sub:'Ingest incoming Certificates of Analysis — transcribe, grade against spec, discover new fields, promote into a certificate',
     qc_custody:'QC custody', qc_custody_sub:'Sampling requests (24h window), field sample records, and the ALCOA++ chain of custody — field-to-lab traceability',
+    qc_leaves:'QC water/stability', qc_leaves_sub:'Water quality results, the stability programme, and external-lab sample transports with their annex forms',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -133,6 +134,7 @@ GF.I18N = {
     qc_oos:'КК OOS и CAPA', qc_oos_sub:'Истраги надвор од спецификација — двофазен тек, диспозиција од КЛ, и изведен CAPA регистар',
     qc_ecoa:'КК eCOA внес', qc_ecoa_sub:'Внес на дојдовни сертификати за анализа — пренеси, оцени според спец., откриј нови полиња, промовирај во сертификат',
     qc_custody:'КК чување', qc_custody_sub:'Барања за мостри (24ч прозорец), теренски записи, и ALCOA++ ланец на чување — следливост од терен до лабораторија',
+    qc_leaves:'КК вода/стабилност', qc_leaves_sub:'Резултати за квалитет на вода, програма за стабилност, и транспорти на мостри до надворешна лабораторија со анекс-форми',
   },
 };
 

@@ -158,6 +158,20 @@ GF.API = {
   qcPatchSfr(id, b)        { return this._req('PATCH', '/qc/field-records/' + id, b); },
   qcCustody(sampleId)      { return this._req('GET', '/qc/samples/' + sampleId + '/custody'); },
   qcAddCustody(sampleId, b){ return this._req('POST', '/qc/samples/' + sampleId + '/custody', b); },
+  // QC leaves (U6) — water / stability / transport
+  qcWater(q)               { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/water-tests' + (u?'?'+u:'')); },
+  qcCreateWater(b)         { return this._req('POST', '/qc/water-tests', b); },
+  qcPatchWater(id, b)      { return this._req('PATCH', '/qc/water-tests/' + id, b); },
+  qcStability(q)           { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/stability-studies' + (u?'?'+u:'')); },
+  qcCreateStability(b)     { return this._req('POST', '/qc/stability-studies', b); },
+  qcPatchStability(id, b)  { return this._req('PATCH', '/qc/stability-studies/' + id, b); },
+  qcTransports(q)          { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/transports' + (u?'?'+u:'')); },
+  qcCreateTransport(b)     { return this._req('POST', '/qc/transports', b); },
+  qcPatchTransport(id, b)  { return this._req('PATCH', '/qc/transports/' + id, b); },
+  // CoA RAG Q&A (P3-U4)
+  qcCoaChunks(docId)       { return this._req('GET', '/qc/coa-documents/' + docId + '/chunks'); },
+  qcIndexCoaChunks(docId, chunks) { return this._req('POST', '/qc/coa-documents/' + docId + '/chunks', { chunks }); },
+  qcCoaQa(b)               { return this._req('POST', '/qc/coa-qa', b); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },

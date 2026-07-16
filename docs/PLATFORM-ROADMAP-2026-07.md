@@ -51,7 +51,7 @@ prod promotion (§8) — plus a few deferred low-priority QC leaves.
 | Environment | Backend | Frontend | tasks-DB | Extra services | Notes |
 |---|---|---|---|---|---|
 | **Production** `wwf_app` (`https://…hstgr.cloud`) | v39 | v63 | alembic **0016** | — | The 25-user live system. No DocEngine, no QMS Studio, no TMS, no QC LIMS — **all new work is test-only** and owner-gated. |
-| **Test** `wwf_mass` (`https://wwf-mass…`) | **v51** | **v72** | alembic **0025** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U5** + the full certificate pipeline (Phase 3 **U1–U3**) all live + live-smoked. Migrations 0017–0025 applied. |
+| **Test** `wwf_mass` (`https://wwf-mass…`) | **v52** | **v73** | alembic **0027** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U6** + the full certificate pipeline (Phase 3 **U1–U4**) all live + live-smoked. Migrations 0017–0027 applied. |
 
 **Standing rule (owner, non-negotiable):** every upgrade deploys to **wwf_mass
 only**; production is promoted **solely** after the owner's own tests +
@@ -181,7 +181,7 @@ deployed, and live-verified against real auth + real data on wwf_mass
 **Exit:** awaiting the owner's tests + explicit approval to promote to prod
 (`docs/DEPLOY.md` "Task-Management System v2" section has the exact steps).
 
-### Phase 2 — QC LIMS module ✅ *(U1–U5 on wwf_mass, 2026-07-16)*
+### Phase 2 — QC LIMS module ✅ *(U1–U6 on wwf_mass, 2026-07-16)*
 Assimilate the QC-domain corpus (`qc-lims-ao` primary + `QC_LIMS_APP` +
 `QC_APP` + `cannabis-sample-tracker`) into ONE native module: sample lifecycle
 (sample→test→result→OOS→CoA→release), specifications, sampling requests, custody,
@@ -189,25 +189,23 @@ Annex-11 audit. Regulatory authority where prototype and SOPs disagree =
 **approved QCSOP 001–024** (Drive `1oPEIlNTWMutZIineO6Pb…`).
 **Depends on:** DocEngine (controlled forms/CoA), TMS (lifecycle patterns).
 
-Five units built, tested, and deployed to wwf_mass (migrations 0018–0025) —
+Six units built, tested, and deployed to wwf_mass (migrations 0018–0026) —
 see `docs/DEPLOY.md`'s "QC LIMS module" section for the full breakdown:
 - **U1** specifications (0018), **U2** samples + lifecycle/genealogy (0019),
   **U3** CoA + test results with the auto-quarantine hook (0020),
 - **U4** OOS investigations + CAPA (0021),
 - **U5** custody cluster — sampling requests (RQS, 24h window) + field records
-  (SFR) + chain of custody (0025).
+  (SFR) + chain of custody (0025),
+- **U6** the three standalone JSONB leaves — `qc_water_tests` /
+  `qc_stability_studies` / `qc_sample_transports` (0026), no cross-dependencies.
 
-Prod promotion is owner-gated, pending explicit approval.
-
-**Remaining (deferred, low-priority standalone leaves):** `water_tests`,
-`stability_studies`, `sample_transports` — JSONB-leaf tables from the prototype
-with no cross-dependencies; buildable as one small additive migration when the
-owner wants them.
+The QC-LIMS domain rebuild is now feature-complete against the `qc-lims-ao`
+prototype. Prod promotion is owner-gated, pending explicit approval.
 
 ### Phase 3 — Certificate pipeline (CoA in → COQ out) ✅ *(complete on wwf_mass, 2026-07-16)*
 `CoA_TRACK` + `COQ_GEN` + the QC-LIMS CoA parts reconciled into **one**
 extract→verify→generate pipeline on the DocEngine core — built once, **not** two
-separate services. Three units (migrations 0022–0024):
+separate services. Four units (migrations 0022–0024, 0027):
 - **U1 — COQ out** (0022): `POST /qc/certificates/{id}/coq` renders a RELEASED
   certificate to a PASS-gated bilingual `.docx` Certificate of Quality via the
   DocEngine; QP-gated + a GxP data gate (every result must comply).
@@ -217,9 +215,12 @@ separate services. Three units (migrations 0022–0024):
   certificate + results carrying source provenance.
 - **U3 — verify loop** (0024): reconcile a promoted certificate against its
   source eCoA; auditable `qc_coa_verifications` record (VERIFIED/DISCREPANCY).
-Full flow live-verified end-to-end. **Remaining (deferred):** RAG Q&A over
-ingested CoAs (a `qc_coa_chunks` embeddings table — the DocEngine's Letta fleet
-already owns retrieval; not a concrete need yet).
+- **U4 — retrieval Q&A** (0027): `qc_coa_chunks` (Postgres FTS `tsvector` + GIN)
+  with `POST /coa-qa` returning **cited** passages as a grounded answer — an
+  app-local, records-zone retrieval over ingested CoAs that never fabricates a
+  synthesis (no match → `grounded=false`, empty answer). Free-form document
+  authoring still belongs to the DocEngine's Letta fleet.
+Full flow live-verified end-to-end.
 
 ### Phase 4 — Cross-cutting hardening + production cutover — NOT STARTED (owner-gated)
 Consolidate the retired Phase-1 `qms-api` shell, unify the nav zones, full
@@ -246,25 +247,24 @@ wwf_mass and an explicit go for the first prod promotion.
 
 ## 8. Immediate next actions (updated 2026-07-16)
 
-Phases 0–3 are **complete on wwf_mass** and the QC LIMS module carries U1–U5.
-The remaining work is **owner-gated**, not engineering-blocked:
+Phases 0–3 are **complete on wwf_mass** and the QC LIMS module is now
+feature-complete (U1–U6 + the full certificate pipeline U1–U4). The remaining
+work is **owner-gated** or hardening, not net-new features:
 
 1. **Owner acceptance on wwf_mass → prod promotion.** The single biggest
    outstanding decision. Everything built this cycle (DocEngine, TMS, QC LIMS
-   U1–U5, the certificate pipeline) sits on wwf_mass only; prod is at alembic
-   `0016`. `docs/DEPLOY.md` carries the exact promotion recipe + verified image
-   tags (backend `v51`+, frontend `v72`+, migrations 0018–0025).
-2. **Optional small QC leaves** (owner's call): the `water_tests` /
-   `stability_studies` / `sample_transports` JSONB tables — one additive
-   migration, no dependencies.
-3. **Phase 4 hardening** — begins on the owner's go (nav-zone unify, retire the
-   `qms-api` shell once the registry read-path fully moves to the DocEngine,
-   security/audit pass, Letta ops backlog).
-4. **Infra:** GitHub Actions CI has been failing at the workflow-startup level
+   U1–U6, the certificate pipeline U1–U4) sits on wwf_mass only; prod is at
+   alembic `0016`. `docs/DEPLOY.md` carries the exact promotion recipe + verified
+   image tags (backend `v52`+, frontend `v73`+, migrations 0018–0027).
+2. **Phase 4 hardening** — the next engineering increment (nav-zone unify, retire
+   the `qms-api` shell once the registry read-path fully moves to the DocEngine,
+   a security/correctness pass over the QC + certificate surface, doc
+   consolidation, Letta ops backlog).
+3. **Infra:** GitHub Actions CI has been failing at the workflow-startup level
    (all jobs die in seconds, no logs; a quota/billing or runner issue, not a
    code failure) — needs an owner-side re-run / Actions-minutes check. Merges
-   this cycle relied on the local gate (up to 353 backend tests) + live smokes.
-5. Keep this document current as each phase lands.
+   this cycle relied on the local gate (up to 360 backend tests) + live smokes.
+4. Keep this document current as each phase lands.
 
 ---
 
