@@ -110,6 +110,16 @@
         <div class="mw-skel" style="height:220px"></div>`;
     }
     if (st.error) {
+      // The legacy SOP registry (qms-api) has been retired — its proxy answers a
+      // 503 "unavailable". Show that as an honest retired state, not a retryable
+      // error. Controlled-document authoring lives in Document Studio now.
+      if (/unavailable|503/i.test(st.error)) {
+        return head + zone + `<div class="panel" style="padding:16px">
+          <div class="ana-pt" style="margin:0 0 6px">${AL('SOP Registry retired', 'Регистарот на СОП е повлечен')}</div>
+          <div class="ana-note">${AL(
+            'The legacy SOP registry has been retired. Create and manage controlled documents in Document Studio.',
+            'Наследениот регистар на СОП е повлечен. Креирајте и управувајте со контролирани документи во Студиото за документи.')}</div></div>`;
+      }
       return head + zone + `<div class="panel" style="padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span>
         <button class="btn btn-sm" onclick="GF.WWF.loadQmsRegistry()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
