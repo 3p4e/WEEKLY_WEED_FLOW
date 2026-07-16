@@ -160,17 +160,24 @@ Dedicated Letta doc-AI service; pp-document-suite adopted completely;
 questionnaire→SOP/annex pipeline; hard PASS gate; deployed + live-verified on
 wwf_mass. Remaining: owner acceptance → prod.
 
-### Phase 1 — Task-Management System (priority #1) 🔄 *(in progress)*
-The owner's explicit #1-to-production. Four increments, each test-gated:
-- **T1** *(built + committed)* — node-kind task tree, dependency graph
-  (blocker/critical-path), cross-department handoff lifecycle. *Next action:
-  deploy to wwf_mass (migration 0017 + backend/frontend) + live smoke.*
-- **T2** — Notifications v2: digests ("what did my team do"), quiet hours +
-  batching, richer per-role inbox filters, optional Web Push.
-- **T3** — AI-native planning: Letta auto next-week plan, workload balancing,
-  task suggestions from the weekly snapshot (reuses the DocEngine fleet pattern).
-- **T4** — Polish + harden → clean production cut of the whole TMS.
-**Exit:** owner accepts the TMS on wwf_mass → promote to prod.
+### Phase 1 — Task-Management System (priority #1) ✅ *(complete on wwf_mass)*
+The owner's explicit #1-to-production. All four increments built, tested,
+deployed, and live-verified against real auth + real data on wwf_mass
+(backend v44 / frontend v66 / migration 0017):
+- **T1** — node-kind task tree, dependency graph with a cycle guard, and the
+  pre-existing `handoffs` table surfaced as a full propose/accept lifecycle.
+- **T2** — in-app "what did my team do" digest + a real stale-regex bug fix
+  in the notifications inbox filter. Emailed digests / quiet-hours push
+  explicitly deferred (no SMTP/push channel exists — see
+  docs/RESEARCH-NOTIFICATIONS-2026-07.md's own v2 path); building either now
+  would be unenforceable dead code.
+- **T3** — AI-native planning reusing the existing data-driven agent catalog
+  (`app/api/ai.py`): `workload_balance` + `next_week_plan` catalog entries,
+  and `dependency_advisor` scoped to a single task's family.
+- **T4** — full gate: 298/298 backend tests, zero schema drift, DEPLOY.md
+  promotion checklist.
+**Exit:** awaiting the owner's tests + explicit approval to promote to prod
+(`docs/DEPLOY.md` "Task-Management System v2" section has the exact steps).
 
 ### Phase 2 — QC LIMS module
 Assimilate the QC-domain corpus (`qc-lims-ao` primary + `QC_LIMS_APP` +
