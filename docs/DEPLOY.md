@@ -370,15 +370,15 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
 
 T4 (this polish pass) is the last increment before that promotion gate.
 
-## QC LIMS module (Phase 2 U1–U5 + Phase 3 U1–U3, native rebuild)
+## QC LIMS module (Phase 2 U1–U6 + Phase 3 U1–U4, native rebuild)
 
 Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
 facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
 `audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
-backend `v51` / frontend `v72` / migrations `0018`–`0025` (tasks DB head). The
+backend `v52` / frontend `v73` / migrations `0018`–`0027` (tasks DB head). The
 Phase-3 certificate pipeline is complete end-to-end: **CoA in (U2) →
-certificate → COQ out (U1), verified (U3)**; U5 adds the field-to-lab custody
-cluster (ALCOA++).
+certificate → COQ out (U1), verified (U3), retrieval Q&A (U4)**; U5 adds the
+field-to-lab custody cluster (ALCOA++), U6 the three standalone JSONB leaves.
 
 - **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
   INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
@@ -404,6 +404,18 @@ cluster (ALCOA++).
   user+location, reason, `transfer_type` FIELD_TO_LAB/LAB_INTERNAL/
   LAB_TO_DISPOSAL/STABILITY_TRANSFER; CASCADE child of the sample, append-only)
   — migration 0025. Frontend `qccustody-view.js` ("QC custody").
+- **U6 — water / stability / transport leaves (standalone JSONB records).**
+  Three independent QC registers that reference no other QC table (migration
+  0026): `qc_water_tests` (`PP-WT-YYYY-NNNN`; `grade` TW/BW/TR/RO, `parameters`
+  jsonb, `passed`/`ooe`, `result_date`), `qc_stability_studies` (`PP-STB-…`;
+  `study_type` LT/ACC/INT, `batches` jsonb, IN_PROGRESS→CLOSED carrying a
+  `shelf_life` on close, protocol/schedule/report refs), and
+  `qc_sample_transports` (`PP-TRN-…`; free-text `sample_id`/`batch_id` refs,
+  `external_lab`, `tests` jsonb, draft→in_transit→received, the annex-form
+  booleans SAR/MOIA/TMCOC/COO/FIN, `tracking`). Guarded PATCH via a shared
+  `_patch_update(patch, nullable, date_cols)` helper (date columns typed
+  `date | None`; jsonb through the global codec). Frontend `qcleaves-view.js`
+  ("QC water/stability", three tabs). Writers-gated, never fabricates a value.
 - **P3-U1 — Certificate of Quality (COQ) generation.** `POST
   /qc/certificates/{id}/coq` renders a RELEASED certificate to a bilingual
   house-style `.docx` through the DocEngine (migration 0022 adds per-result
@@ -442,15 +454,31 @@ cluster (ALCOA++).
   preserved. Nothing is recomputed or silently corrected — a mismatch is
   surfaced (`GET .../verifications` lists prior runs). 409 if the certificate
   was not promoted from an eCoA. Surfaced in `qcecoa-view.js` as a "Verify vs
-  source" button + verdict on a PROMOTED document. (RAG Q&A over ingested CoAs
-  is deferred — the DocEngine's Letta fleet already owns retrieval.)
+  source" button + verdict on a PROMOTED document.
+- **P3-U4 — retrieval Q&A over ingested CoAs (in-app FTS, no external RAG).**
+  `qc_coa_chunks` (migration 0027) stores a document's text passages with a
+  Postgres `tsvector` generated column (`to_tsvector('english', content)`) + a
+  GIN index. `POST /coa-documents/{id}/chunks` (re)indexes a document's chunks
+  — the write deletes then re-inserts, so re-indexing is idempotent; `GET`
+  lists them. `POST /coa-qa` retrieves the top-ranked passages for a question
+  (`websearch_to_tsquery` + `ts_rank`), org-scoped by RLS and optionally
+  document-scoped, and returns them **cited** (`[doc_number#chunk_index]`) as
+  the grounded answer. GxP: the answer is assembled strictly from the retrieved
+  passages — **never a fabricated synthesis**; no match returns
+  `grounded=false` with an empty answer. `websearch_to_tsquery` uses AND
+  semantics across query terms (a term absent from the corpus yields no match),
+  which is the conservative behaviour for a records zone — better a blank than
+  a loose match. Surfaced in `qcecoa-view.js` as an "Ask the CoA" panel. This
+  is app-local retrieval over structured records; the DocEngine's Letta fleet
+  still owns free-form document authoring.
 
 Router `backend/app/api/qc.py` (prefix `/qc`), registered in `main.py`.
 Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` / `qccoa-view.js`
 (with the "Generate COQ" + COQ `.docx`/PDF download controls, shown to a QP
-on a RELEASED cert) / `qcoos-view.js` / `qcecoa-view.js` ("QC eCOA intake") /
-`qccustody-view.js` ("QC custody"), wired into `index.html` + the SW precache
-list (`wwf-shell-v3.35.0`), under the QMS Studio nav group.
+on a RELEASED cert) / `qcoos-view.js` / `qcecoa-view.js` ("QC eCOA intake", with the U4 "Ask the CoA"
+retrieval panel) / `qccustody-view.js` ("QC custody") / `qcleaves-view.js`
+("QC water/stability"), wired into `index.html` + the SW precache list
+(`wwf-shell-v3.36.0`), under the QMS Studio nav group.
 
 **Bug found + fixed during the wwf_mass live smoke (backend v46):**
 `effective_date`/`sampling_date`/`report_date`/`result_date` were typed
@@ -463,7 +491,7 @@ a regression test (`test_date_fields_accept_real_iso_dates`) covering all
 four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
 `v46` before this smoke passed — `v45` was never left running.
 
-### Migrations 0018–0025
+### Migrations 0018–0027
 
 0018–0020 (additive, same shape as 0015/0017): `qc_spec_id_seq`/
 `qc_sampling_plan_id_seq`/`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human
@@ -478,11 +506,16 @@ the eCOA-ingestion cluster (`qc_coa_documents`/`qc_coa_extractions`/
 `qc_field_placeholders` + `qc_ecoa_id_seq`), same facility canon. **0024** adds
 `qc_coa_verifications` (the U3 reconciliation record). **0025** adds the U5
 custody cluster (`qc_sampling_requests`/`qc_sample_field_records`/
-`qc_chain_of_custody` + `qc_rqs_id_seq`/`qc_sfr_id_seq`), same canon. Verified:
-upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from alembic head
-with zero drift (checked against a locally stood-up PG16 two-DB cluster).
+`qc_chain_of_custody` + `qc_rqs_id_seq`/`qc_sfr_id_seq`), same canon. **0026**
+adds the three U6 leaves (`qc_water_tests`/`qc_stability_studies`/
+`qc_sample_transports` + `qc_wt_id_seq`/`qc_stb_id_seq`/`qc_trn_id_seq`), same
+canon. **0027** adds `qc_coa_chunks` (the U4 retrieval store) — a `tsvector`
+generated column + GIN index, FK CASCADE off `qc_coa_documents`, same
+RLS/audit/GRANT canon. Verified: upgrades/downgrades cleanly, `schema.tasks.sql`
+regenerated from alembic head with zero drift (checked against a locally
+stood-up PG16 two-DB cluster).
 
-> **Applying 0022/0023 on a host** — the tasks alembic env uses an *async* engine
+> **Applying 0022+ on a host** — the tasks alembic env uses an *async* engine
 > and `alembic_version` is owned by the `postgres` superuser (app_admin is
 > DML-only), so run it with a superuser async URL:
 > `TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:…@wwf-<stack>-db-tasks:5432/wwf_tasks
@@ -546,12 +579,25 @@ SFR (`PP-SFR-2026-0001`) with jsonb `barrel_numbers` driven CREATED→IN_FIELD�
 COMPLETED; a sample's chain of custody logged twice (`FIELD_TO_LAB`,
 `STABILITY_TRANSFER`) and listed back, a bad `transfer_type` rejected (422).
 
+**U6 leaves + P3-U4 retrieval live smoke (wwf_mass, backend v52 / frontend v73,
+2026-07-16).** With a real `tt.qc.mgr` token: a water test (`PP-WT-2026-0001`,
+grade RO) created with a jsonb `parameters` block that round-tripped, patched
+`passed=false` + an `ooe` note, a bad `grade` rejected (422); a stability study
+(`PP-STB-2026-0001`, type LT) with jsonb `batches` driven IN_PROGRESS→CLOSED
+carrying a `shelf_life`, a bad `study_type` rejected (422); a sample transport
+(`PP-TRN-2026-0001`) with a jsonb `tests` list driven draft→in_transit (annex
+forms `sar`+`coo` set) →received, a bad `status` rejected (422). For U4: an
+eCoA (`PP-ECOA-2026-0004`) registered, 4 text chunks indexed then **re-indexed
+idempotently (still 4)**, a document-scoped question retrieved a **cited**
+passage (`grounded=true`), and a gibberish question returned `grounded=false`
+with an **empty answer — never fabricated**.
+
 Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
-1. Apply migrations 0018–0025 to prod's `wwf_tasks` (`alembic -n tasks
-   upgrade head`; 0022–0025 need the superuser async URL — see the note above).
-2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v51`+, NOT
+1. Apply migrations 0018–0027 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head`; 0022–0027 need the superuser async URL — see the note above).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v52`+, NOT
    `v45` — see the date-field fix above) and frontend to the verified tag
-   (`v72`+). Prod must also run the `growflow-docengine` container (already
+   (`v73`+). Prod must also run the `growflow-docengine` container (already
    on wwf_mass) for COQ generation, with `DOCENGINE_URL`/`DOCENGINE_API_KEY`
    set on the backend.
 3. `docker compose up -d --no-deps backend frontend`.
@@ -559,8 +605,10 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
    the RELEASED-cert → COQ round trip above, against prod data, with real
    accounts.
 
-**Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop) and the
-custody cluster (U5) is in, all on wwf_mass. Remaining QC backlog (the
-water/stability/transport JSONB leaves + optional RAG Q&A over ingested CoAs)
-is tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of the whole
-QC LIMS + certificate pipeline is one owner-gated decision.
+**Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop, U4 retrieval
+Q&A) and both the custody cluster (U5) and the water/stability/transport leaves
+(U6) are in, all on wwf_mass — the QC-LIMS domain rebuild is now feature-complete
+against the `qc-lims-ao` prototype. What remains is **Phase 4 hardening**
+(security/correctness review of the QC + certificate surface, nav polish, doc
+consolidation), tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of
+the whole QC LIMS + certificate pipeline is one owner-gated decision.
