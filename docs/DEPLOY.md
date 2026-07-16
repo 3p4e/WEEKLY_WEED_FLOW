@@ -270,12 +270,24 @@ Compose service (added to the stack's compose.yaml):
       LETTA_BASE_URL: http://host.docker.internal:8283
       LETTA_API_KEY: ${LETTA_API_KEY}
       GOTENBERG_URL: http://gotenberg:3000
+      # A stateful-agent generation can take minutes; the read timeout covers
+      # ONE agent turn (the pipeline makes ~11 sequential calls per SOP as a
+      # polled background job). Connect stays short so a down server fails fast.
+      LETTA_READ_TIMEOUT: "300"     # optional; default 300s
+      LETTA_CONNECT_TIMEOUT: "15"   # optional; default 15s
     extra_hosts:
       - host.docker.internal:host-gateway
     volumes:
       - docengine_out:/data/docengine-out
     networks: [internal]
 ```
+
+The workflow-state schema lives in the `wwf_tasks` DB under a dedicated
+`docengine` schema, auto-created at startup. This requires the service's DB
+role to hold `CREATE ON DATABASE wwf_tasks` (granted once per stack:
+`GRANT CREATE ON DATABASE wwf_tasks TO app_admin;`). Without it the service
+still boots and serves `/health`, `/questionnaires`, and direct `/build`, but
+`/workflows` answers 503 "DocEngine storage unavailable".
 
 Backend env (app.env): `DOCENGINE_URL=http://docengine:8000` and
 `DOCENGINE_API_KEY=<same secret as the service's DOCENGINE_API_KEY>`. An
