@@ -454,3 +454,231 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
             f"UPDATE qc_samples SET {', '.join(fields)}, updated_at=now()"
             f" WHERE id=${len(args)} RETURNING *", *args)
     return _sample_out(dict(row))
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# QC LIMS U3 — certificates of analysis + test results (certification cluster)
+# ════════════════════════════════════════════════════════════════════════════
+_COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED")
+_CERT_TYPES = ("ICOA", "ECOA", "COQ", "WATER", "OTHER")
+# CoA lifecycle: author → second-person review → QP approve → release.
+_COA_TRANSITIONS = {
+    "DRAFT": {"REVIEWED"},
+    "REVIEWED": {"APPROVED", "DRAFT"},   # kick back to DRAFT on review findings
+    "APPROVED": {"RELEASED"},
+    "RELEASED": set(),
+}
+# Approve + release the certificate — Qualified-Person decisions (Annex 16).
+_COA_QP_TARGETS = {"APPROVED", "RELEASED"}
+# A sample in one of these states is quarantined when a result fails.
+_QUARANTINABLE = {"IN_TEST", "TESTED", "RECEIVED", "COLLECTED"}
+
+
+class CoaIn(BaseModel):
+    batch_id: str = Field(max_length=120)
+    specification_id: str
+    sample_id: str | None = None
+    cert_type: str = "ICOA"
+    report_date: str | None = None
+    source_lab: str | None = Field(default=None, max_length=200)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class CoaPatch(BaseModel):
+    source_lab: str | None = Field(default=None, max_length=200)
+    report_date: str | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+    status: str | None = None            # guarded lifecycle transition
+    decision: str | None = None          # PASS | FAIL
+
+
+class ResultIn(BaseModel):
+    parameter_id: str | None = None
+    test_name: str = Field(max_length=300)
+    result_value: str | None = Field(default=None, max_length=200)
+    result_numeric: float | None = None
+    unit: str | None = Field(default=None, max_length=60)
+    lower_limit: float | None = None
+    upper_limit: float | None = None
+    result_date: str | None = None
+
+
+def _coa_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "coa_number": r["coa_number"], "batch_id": r["batch_id"],
+        "specification_id": str(r["specification_id"]),
+        "sample_id": str(r["sample_id"]) if r["sample_id"] else None,
+        "report_date": r["report_date"].isoformat() if r["report_date"] else None,
+        "status": r["status"], "decision": r["decision"], "cert_type": r["cert_type"],
+        "source_lab": r["source_lab"],
+        "analyst_id": str(r["analyst_id"]) if r["analyst_id"] else None,
+        "reviewer_id": str(r["reviewer_id"]) if r["reviewer_id"] else None,
+        "approver_id": str(r["approver_id"]) if r["approver_id"] else None,
+        "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
+    }
+
+
+def _result_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "parameter_id": str(r["parameter_id"]) if r["parameter_id"] else None,
+        "test_name": r["test_name"], "result_value": r["result_value"],
+        "result_numeric": float(r["result_numeric"]) if r["result_numeric"] is not None else None,
+        "unit": r["unit"],
+        "lower_limit": float(r["lower_limit"]) if r["lower_limit"] is not None else None,
+        "upper_limit": float(r["upper_limit"]) if r["upper_limit"] is not None else None,
+        "complies": r["complies"], "status": r["status"],
+        "analyst_id": str(r["analyst_id"]) if r["analyst_id"] else None,
+        "result_date": r["result_date"].isoformat() if r["result_date"] else None,
+    }
+
+
+def _evaluate(value: float | None, lo: float | None, hi: float | None):
+    """Return (complies, status). Unknown when there's no numeric value to
+    judge — GxP: we never invent a verdict for a missing measurement."""
+    if value is None:
+        return None, "unknown"
+    ok = (lo is None or value >= lo) and (hi is None or value <= hi)
+    return ok, ("pass" if ok else "fail")
+
+
+# ── Certificates of analysis ────────────────────────────────────────────────
+@router.get("/certificates")
+async def list_coas(batch_id: str | None = None, status: str | None = None,
+                    user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if batch_id:
+        args.append(batch_id); clauses.append(f"batch_id=${len(args)}")
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(f"SELECT * FROM qc_certificates{where} ORDER BY created_at DESC", *args)
+    return [_coa_out(dict(r)) for r in rows]
+
+
+@router.get("/certificates/{coa_id}")
+async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
+        if coa is None:
+            raise HTTPException(404, "Certificate not found")
+        results = await c.fetch(
+            "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+    return {"coa": _coa_out(dict(coa)), "results": [_result_out(dict(r)) for r in results]}
+
+
+@router.post("/certificates", status_code=201)
+async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS))):
+    if body.cert_type not in _CERT_TYPES:
+        raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
+    async with rls(user) as c:
+        spec = await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id)
+        if spec is None:
+            raise HTTPException(422, "Unknown specification")
+        if body.sample_id:
+            s = await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id)
+            if s is None:
+                raise HTTPException(422, "Unknown sample")
+        row = await c.fetchrow(
+            "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
+            " cert_type, report_date, source_lab, notes, analyst_id, created_by, updated_by)"
+            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6::date,$7,$8,$9,$9,$9) RETURNING *",
+            user["org_id"], body.batch_id, body.specification_id, body.sample_id, body.cert_type,
+            body.report_date, body.source_lab, body.notes, user["id"])
+    return _coa_out(dict(row))
+
+
+@router.post("/certificates/{coa_id}/results", status_code=201)
+async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_role(*_WRITERS))):
+    """Record a measured result. `complies` is computed from the numeric value
+    vs the limits — never typed by hand. If the result FAILS and the CoA links
+    a sample that is still in a testable state, the sample is quarantined (the
+    OOS hook). Results may only be entered while the CoA is DRAFT."""
+    async with rls(user) as c:
+        coa = await c.fetchrow("SELECT id, status, sample_id FROM qc_certificates WHERE id=$1", coa_id)
+        if coa is None:
+            raise HTTPException(404, "Certificate not found")
+        if coa["status"] != "DRAFT":
+            raise HTTPException(409, "Results may only be entered while the CoA is DRAFT")
+        lo, hi = body.lower_limit, body.upper_limit
+        # If a spec parameter is cited and limits weren't supplied, snapshot the
+        # parameter's limits (the spec is the single source of truth).
+        if body.parameter_id and lo is None and hi is None:
+            p = await c.fetchrow(
+                "SELECT lower_limit, upper_limit, unit FROM qc_spec_parameters WHERE id=$1",
+                body.parameter_id)
+            if p is not None:
+                lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
+                hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
+        complies, status = _evaluate(body.result_numeric, lo, hi)
+        row = await c.fetchrow(
+            "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
+            " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
+            " result_date, created_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::date,$12) RETURNING *",
+            user["org_id"], coa_id, body.parameter_id, body.test_name, body.result_value,
+            body.result_numeric, body.unit, lo, hi, complies, status, user["id"], body.result_date)
+        # OOS hook: a failing result quarantines the linked sample.
+        if complies is False and coa["sample_id"]:
+            smp = await c.fetchrow("SELECT id, status FROM qc_samples WHERE id=$1", coa["sample_id"])
+            if smp is not None and smp["status"] in _QUARANTINABLE:
+                await c.execute(
+                    "UPDATE qc_samples SET status='QUARANTINE', updated_by=$1, updated_at=now() WHERE id=$2",
+                    user["id"], coa["sample_id"])
+                try:
+                    await emit(c, user, verb="sample_quarantined", object_type="qc_sample",
+                               object_id=coa["sample_id"], recipients=[],
+                               params={"test_name": body.test_name})
+                except Exception:
+                    pass
+    return _result_out(dict(row))
+
+
+@router.patch("/certificates/{coa_id}")
+async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_role(*_WRITERS))):
+    patch = body.model_dump(exclude_unset=True)
+    if "decision" in patch and patch["decision"] is not None and patch["decision"] not in ("PASS", "FAIL"):
+        raise HTTPException(422, "decision must be PASS or FAIL")
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status, analyst_id FROM qc_certificates WHERE id=$1", coa_id)
+        if cur is None:
+            raise HTTPException(404, "Certificate not found")
+        extra_sql, extra_args = [], []
+        if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
+            target = patch["status"]
+            if target not in _COA_STATUSES:
+                raise HTTPException(422, "Unknown status")
+            if target not in _COA_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+            if target in _COA_QP_TARGETS and user["role"] not in _QP_ROLES:
+                raise HTTPException(403, f"{target} is a Qualified-Person decision")
+            # GxP second-person review: the reviewer must not be the analyst who
+            # entered the results.
+            if target == "REVIEWED":
+                if cur["analyst_id"] and str(cur["analyst_id"]) == str(user["id"]):
+                    raise HTTPException(403, "The reviewer must be a different person than the analyst")
+                extra_args.append(user["id"]); extra_sql.append(f"reviewer_id=${'PLACEHOLDER'}")
+            if target == "APPROVED":
+                extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
+        fields, args = [], []
+        _NULLABLE = {"source_lab", "report_date", "notes", "decision"}
+        for col, val in patch.items():
+            if val is None and col not in _NULLABLE:
+                continue
+            if col == "report_date":
+                args.append(val); fields.append(f"{col}=${len(args)}::date")
+            else:
+                args.append(val); fields.append(f"{col}=${len(args)}")
+        # splice reviewer_id/approver_id stamps with correct positional params
+        for frag, val in zip(extra_sql, extra_args):
+            args.append(val); fields.append(frag.replace("PLACEHOLDER", str(len(args))))
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(coa_id)
+        row = await c.fetchrow(
+            f"UPDATE qc_certificates SET {', '.join(fields)}, updated_at=now()"
+            f" WHERE id=${len(args)} RETURNING *", *args)
+    return _coa_out(dict(row))

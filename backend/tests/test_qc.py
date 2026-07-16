@@ -207,3 +207,173 @@ async def test_sampling_plan_create_and_list(client, admin_headers):
     r = await client.post("/qc/sampling-plans",
                           json={"material_code": "X", "sampling_frequency": "HOURLY"}, headers=admin_headers)
     assert r.status_code == 422
+
+
+# ── QC LIMS U3 — certificates of analysis + test results ────────────────────
+async def _coa(client, headers, spec_id, batch="B-COA-1", **extra):
+    body = {"batch_id": batch, "specification_id": spec_id, **extra}
+    r = await client.post("/qc/certificates", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_create_and_get_coa(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="COA-MAT")
+    coa = await _coa(client, admin_headers, spec["id"])
+    assert coa["coa_number"].startswith("PP-COA-") and coa["status"] == "DRAFT"
+    assert coa["cert_type"] == "ICOA" and coa["specification_id"] == spec["id"]
+    r = await client.get("/qc/certificates", headers=admin_headers)
+    assert r.status_code == 200 and any(x["id"] == coa["id"] for x in r.json())
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert detail["coa"]["id"] == coa["id"] and detail["results"] == []
+
+
+async def test_result_auto_evaluates_complies(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="EVAL-MAT")
+    coa = await _coa(client, admin_headers, spec["id"])
+    # in-spec numeric → complies True, status pass
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Total THC", "result_numeric": 22.0,
+                                "lower_limit": 18.0, "upper_limit": 30.0, "unit": "%"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is True and r.json()["status"] == "pass"
+    # out-of-spec numeric → complies False, status fail
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Water", "result_numeric": 15.0, "upper_limit": 10.0},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is False and r.json()["status"] == "fail"
+    # no numeric measurement → complies null, status unknown (never fabricated)
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Appearance", "result_value": "Compliant"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is None and r.json()["status"] == "unknown"
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert len(detail["results"]) == 3
+
+
+async def test_result_snapshots_parameter_limits(client, admin_headers):
+    """When a result cites a spec parameter and supplies no limits, it snapshots
+    the parameter's limits — the specification is the single source of truth."""
+    spec = await _spec(client, admin_headers, material="SNAP-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "unit": "%",
+                                "lower_limit": 18.0, "upper_limit": 30.0}, headers=admin_headers)
+    param_id = p.json()["id"]
+    coa = await _coa(client, admin_headers, spec["id"])
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Total THC", "parameter_id": param_id,
+                                "result_numeric": 40.0}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["lower_limit"] == 18.0 and body["upper_limit"] == 30.0
+    assert body["complies"] is False   # 40 > 30
+
+
+async def test_failing_result_quarantines_linked_sample(client, admin_headers):
+    """OOS hook: a failing result on a CoA that links a still-testable sample
+    flags that sample QUARANTINE."""
+    spec = await _spec(client, admin_headers, material="OOS-MAT")
+    s = await _sample(client, admin_headers, batch="B-OOS")
+    for tgt in ("RECEIVED", "IN_TEST"):
+        assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-OOS", sample_id=s["id"])
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Total Aerobic Count", "result_numeric": 5000.0,
+                                "upper_limit": 1000.0}, headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is False
+    detail = (await client.get(f"/qc/samples/{s['id']}", headers=admin_headers)).json()
+    assert detail["sample"]["status"] == "QUARANTINE"
+
+
+async def test_passing_result_leaves_sample_untouched(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="OK-MAT")
+    s = await _sample(client, admin_headers, batch="B-OK")
+    assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": "RECEIVED"},
+                               headers=admin_headers)).status_code == 200
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-OK", sample_id=s["id"])
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Water", "result_numeric": 5.0, "upper_limit": 10.0},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is True
+    detail = (await client.get(f"/qc/samples/{s['id']}", headers=admin_headers)).json()
+    assert detail["sample"]["status"] == "RECEIVED"   # untouched
+
+
+async def test_coa_reviewer_must_differ_from_analyst(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="REV-MAT")
+    coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin
+    # same person cannot review their own CoA (GxP second-person review)
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                           headers=admin_headers)
+    assert r.status_code == 403, r.text
+    # a different qualified person may
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"}, headers=qc_h)
+    assert r.status_code == 200 and r.json()["status"] == "REVIEWED"
+    assert r.json()["reviewer_id"] is not None
+
+
+async def test_coa_approve_release_qp_gated(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="QPG-MAT")
+    coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qc_h)).status_code == 200
+    # QC_MGR cannot APPROVE (Qualified-Person decision)
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qc_h)
+    assert r.status_code == 403, r.text
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
+                               headers=qp_h)).status_code == 200
+    # QC_MGR cannot RELEASE; QP can
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"},
+                               headers=qc_h)).status_code == 403
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=qp_h)
+    assert r.status_code == 200 and r.json()["status"] == "RELEASED" and r.json()["approver_id"] is not None
+
+
+async def test_results_only_in_draft(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="LOCK-MAT")
+    coa = await _coa(client, admin_headers, spec["id"])
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qc_h)).status_code == 200
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Late", "result_numeric": 1.0}, headers=admin_headers)
+    assert r.status_code == 409, r.text
+
+
+async def test_coa_bad_refs_and_illegal_transition(client, admin_headers):
+    _ZERO = "00000000-0000-0000-0000-000000000000"
+    # unknown specification → 422
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B", "specification_id": _ZERO}, headers=admin_headers)
+    assert r.status_code == 422
+    spec = await _spec(client, admin_headers, material="BADREF-MAT")
+    # unknown sample → 422
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B", "specification_id": spec["id"], "sample_id": _ZERO},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # bad cert_type → 422
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B", "specification_id": spec["id"], "cert_type": "BOGUS"},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # illegal lifecycle jump DRAFT -> APPROVED → 409 (transition guard beats role check)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-JUMP")
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=admin_headers)
+    assert r.status_code == 409
+
+
+async def test_coa_role_gating(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="COAROLE-MAT")
+    await _coa(client, admin_headers, spec["id"])
+    _, user_h = await _actor(client, admin_headers, "USER")
+    assert (await client.get("/qc/certificates", headers=user_h)).status_code == 403
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    assert (await client.get("/qc/certificates", headers=cu_h)).status_code == 200   # elevated read
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B", "specification_id": spec["id"]}, headers=cu_h)
+    assert r.status_code == 403   # non-QC manager cannot write

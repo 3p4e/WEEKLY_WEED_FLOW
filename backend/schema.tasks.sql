@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xErainK0rPL1bE2ezOhWF4f17plX6swgC6XmlXrazdIgyN1gYapcdbxprrEGo0R
+\restrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -308,6 +308,79 @@ CREATE TABLE public.plant_batches (
 );
 
 ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_certificates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_certificates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coa_number text NOT NULL,
+    batch_id text NOT NULL,
+    specification_id uuid NOT NULL,
+    sample_id uuid,
+    report_date date,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    decision text,
+    cert_type text DEFAULT 'ICOA'::text NOT NULL,
+    source_lab text,
+    analyst_id uuid,
+    reviewer_id uuid,
+    approver_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
+    CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
+    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coa_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_coa_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_results (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coa_id uuid NOT NULL,
+    parameter_id uuid,
+    test_name text NOT NULL,
+    result_value text,
+    result_numeric numeric,
+    unit text,
+    lower_limit numeric,
+    upper_limit numeric,
+    complies boolean,
+    status text DEFAULT 'unknown'::text NOT NULL,
+    analyst_id uuid,
+    verified_by_id uuid,
+    result_date date,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_results_status_check CHECK ((status = ANY (ARRAY['pass'::text, 'fail'::text, 'marginal'::text, 'unknown'::text])))
+);
+
+ALTER TABLE ONLY public.qc_results FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -764,6 +837,30 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: qc_certificates qc_certificates_coa_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_coa_number_key UNIQUE (org_id, coa_number);
+
+
+--
+-- Name: qc_certificates qc_certificates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_results qc_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_samples qc_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -972,6 +1069,27 @@ CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org
 
 
 --
+-- Name: qc_certificates_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_certificates_batch_idx ON public.qc_certificates USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_certificates_spec_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_certificates_spec_idx ON public.qc_certificates USING btree (org_id, specification_id);
+
+
+--
+-- Name: qc_results_coa_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_results_coa_idx ON public.qc_results USING btree (org_id, coa_id);
+
+
+--
 -- Name: qc_samples_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1154,6 +1272,20 @@ CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.pl
 
 
 --
+-- Name: qc_certificates audit_qc_certificates; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_certificates AFTER INSERT OR DELETE OR UPDATE ON public.qc_certificates FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_results audit_qc_results; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_results AFTER INSERT OR DELETE OR UPDATE ON public.qc_results FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_samples audit_qc_samples; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1285,6 +1417,38 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.plant_batches
     ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_certificates qc_certificates_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_certificates qc_certificates_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_results qc_results_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_coa_fkey FOREIGN KEY (coa_id) REFERENCES public.qc_certificates(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_results qc_results_param_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_param_fkey FOREIGN KEY (parameter_id) REFERENCES public.qc_spec_parameters(id) ON DELETE SET NULL;
 
 
 --
@@ -1531,6 +1695,20 @@ CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current
 
 
 --
+-- Name: qc_certificates org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_results org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_results USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_samples org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1612,6 +1790,18 @@ ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: qc_certificates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_results; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_results ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_samples; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1741,5 +1931,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xErainK0rPL1bE2ezOhWF4f17plX6swgC6XmlXrazdIgyN1gYapcdbxprrEGo0R
+\unrestrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
 

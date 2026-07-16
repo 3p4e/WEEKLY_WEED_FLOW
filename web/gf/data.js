@@ -82,6 +82,7 @@ GF.I18N = {
     doc_create:'Create', doc_create_sub:'Questionnaire → AI agent fleet → regulatory check → verified controlled document',
     qc_specs:'QC Specifications', qc_specs_sub:'Controlled acceptance criteria per material — versions, lifecycle, test limits',
     qc_samples:'QC Samples', qc_samples_sub:'Physical samples — collection, custody lifecycle, genealogy, release',
+    qc_coas:'QC Certificates', qc_coas_sub:'Certificates of analysis — results judged against the specification, review, release',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -125,6 +126,7 @@ GF.I18N = {
     doc_create:'Креирај', doc_create_sub:'Прашалник → флота АИ агенти → регулаторна проверка → верификуван контролиран документ',
     qc_specs:'КК Спецификации', qc_specs_sub:'Контролирани критериуми за прифаќање по материјал — верзии, животен циклус, граници',
     qc_samples:'КК Примероци', qc_samples_sub:'Физички примероци — земање, животен циклус на чување, генеалогија, ослободување',
+    qc_coas:'КК Сертификати', qc_coas_sub:'Сертификати за анализа — резултати оценети според спецификацијата, преглед, ослободување',
   },
 };
 

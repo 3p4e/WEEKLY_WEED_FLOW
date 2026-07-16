@@ -119,6 +119,12 @@ GF.API = {
   qcPatchSample(id, b)     { return this._req('PATCH', '/qc/samples/' + id, b); },
   qcSamplingPlans(q)       { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-plans' + (u?'?'+u:'')); },
   qcCreateSamplingPlan(b)  { return this._req('POST', '/qc/sampling-plans', b); },
+  // QC LIMS — certificates of analysis + test results (U3)
+  qcCoas(q)                { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/certificates' + (u?'?'+u:'')); },
+  qcCoa(id)                { return this._req('GET', '/qc/certificates/' + id); },
+  qcCreateCoa(b)           { return this._req('POST', '/qc/certificates', b); },
+  qcPatchCoa(id, b)        { return this._req('PATCH', '/qc/certificates/' + id, b); },
+  qcAddResult(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/results', b); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },
