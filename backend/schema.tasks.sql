@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict v0hQfrmFbWClcxJKq4BGJCPmsbVdThpMoKhJxpz8W3jsmkrYXdUraQZkLAk56aQ
+\restrict HPfceeJIPCoJrTfFUWPq1mPVFGzzvUXWa8SW7cV4rhdBWMBJEIk98lBXCsRzRfH
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -369,6 +369,24 @@ ALTER TABLE ONLY public.qc_chain_of_custody FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_coa_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coa_chunks (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    chunk_index integer DEFAULT 0 NOT NULL,
+    content text NOT NULL,
+    tsv tsvector GENERATED ALWAYS AS (to_tsvector('english'::regconfig, COALESCE(content, ''::text))) STORED,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_coa_chunks FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_coa_documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -706,6 +724,38 @@ CREATE SEQUENCE public.qc_sample_id_seq
 
 
 --
+-- Name: qc_sample_transports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_sample_transports (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    transport_id text NOT NULL,
+    sample_id text NOT NULL,
+    batch_id text,
+    external_lab text,
+    tests jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    form_sar boolean DEFAULT false NOT NULL,
+    form_moia boolean DEFAULT false NOT NULL,
+    form_tmcoc boolean DEFAULT false NOT NULL,
+    form_coo boolean DEFAULT false NOT NULL,
+    form_fin boolean DEFAULT false NOT NULL,
+    shipped_date date,
+    expected_date date,
+    tracking text,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_sample_transports_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'in_transit'::text, 'received'::text])))
+);
+
+ALTER TABLE ONLY public.qc_sample_transports FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_samples; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -893,6 +943,101 @@ CREATE TABLE public.qc_specifications (
 );
 
 ALTER TABLE ONLY public.qc_specifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_stability_studies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_stability_studies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    study_id text NOT NULL,
+    study_type text NOT NULL,
+    material_code text NOT NULL,
+    material_name_en text,
+    material_name_mk text,
+    batches jsonb DEFAULT '[]'::jsonb NOT NULL,
+    started date,
+    status text DEFAULT 'IN_PROGRESS'::text NOT NULL,
+    protocol text,
+    schedule text,
+    report text,
+    shelf_life text,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_stability_studies_status_check CHECK ((status = ANY (ARRAY['IN_PROGRESS'::text, 'CLOSED'::text]))),
+    CONSTRAINT qc_stability_studies_type_check CHECK ((study_type = ANY (ARRAY['LT'::text, 'ACC'::text, 'INT'::text])))
+);
+
+ALTER TABLE ONLY public.qc_stability_studies FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_stb_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_stb_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_trn_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_trn_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_water_tests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_water_tests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    water_test_id text NOT NULL,
+    result_date date,
+    location text NOT NULL,
+    grade text NOT NULL,
+    parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
+    passed boolean DEFAULT true NOT NULL,
+    ooe text,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_water_tests_grade_check CHECK ((grade = ANY (ARRAY['TW'::text, 'BW'::text, 'TR'::text, 'RO'::text])))
+);
+
+ALTER TABLE ONLY public.qc_water_tests FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_wt_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_wt_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -1222,6 +1367,14 @@ ALTER TABLE ONLY public.qc_chain_of_custody
 
 
 --
+-- Name: qc_coa_chunks qc_coa_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_chunks
+    ADD CONSTRAINT qc_coa_chunks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_coa_documents qc_coa_documents_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1326,6 +1479,22 @@ ALTER TABLE ONLY public.qc_sample_field_records
 
 
 --
+-- Name: qc_sample_transports qc_sample_transports_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_transports
+    ADD CONSTRAINT qc_sample_transports_number_key UNIQUE (org_id, transport_id);
+
+
+--
+-- Name: qc_sample_transports qc_sample_transports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_transports
+    ADD CONSTRAINT qc_sample_transports_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_samples qc_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1403,6 +1572,38 @@ ALTER TABLE ONLY public.qc_specifications
 
 ALTER TABLE ONLY public.qc_specifications
     ADD CONSTRAINT qc_specifications_spec_id_key UNIQUE (org_id, spec_id);
+
+
+--
+-- Name: qc_stability_studies qc_stability_studies_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_stability_studies
+    ADD CONSTRAINT qc_stability_studies_number_key UNIQUE (org_id, study_id);
+
+
+--
+-- Name: qc_stability_studies qc_stability_studies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_stability_studies
+    ADD CONSTRAINT qc_stability_studies_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_water_tests qc_water_tests_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_water_tests
+    ADD CONSTRAINT qc_water_tests_number_key UNIQUE (org_id, water_test_id);
+
+
+--
+-- Name: qc_water_tests qc_water_tests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_water_tests
+    ADD CONSTRAINT qc_water_tests_pkey PRIMARY KEY (id);
 
 
 --
@@ -1571,6 +1772,20 @@ CREATE INDEX qc_chain_of_custody_sample_idx ON public.qc_chain_of_custody USING 
 
 
 --
+-- Name: qc_coa_chunks_doc_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_chunks_doc_idx ON public.qc_coa_chunks USING btree (org_id, document_id);
+
+
+--
+-- Name: qc_coa_chunks_tsv_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_chunks_tsv_idx ON public.qc_coa_chunks USING gin (tsv);
+
+
+--
 -- Name: qc_coa_documents_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1648,6 +1863,13 @@ CREATE INDEX qc_sample_field_records_status_idx ON public.qc_sample_field_record
 
 
 --
+-- Name: qc_sample_transports_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sample_transports_status_idx ON public.qc_sample_transports USING btree (org_id, status);
+
+
+--
 -- Name: qc_samples_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1708,6 +1930,20 @@ CREATE INDEX qc_specifications_material_idx ON public.qc_specifications USING bt
 --
 
 CREATE UNIQUE INDEX qc_specifications_one_active_idx ON public.qc_specifications USING btree (org_id, material_code) WHERE (status = 'ACTIVE'::text);
+
+
+--
+-- Name: qc_stability_studies_mat_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_stability_studies_mat_idx ON public.qc_stability_studies USING btree (org_id, material_code);
+
+
+--
+-- Name: qc_water_tests_loc_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_water_tests_loc_idx ON public.qc_water_tests USING btree (org_id, location);
 
 
 --
@@ -1858,6 +2094,13 @@ CREATE TRIGGER audit_qc_chain_of_custody AFTER INSERT OR DELETE OR UPDATE ON pub
 
 
 --
+-- Name: qc_coa_chunks audit_qc_coa_chunks; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coa_chunks AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_chunks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_coa_documents audit_qc_coa_documents; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1921,6 +2164,13 @@ CREATE TRIGGER audit_qc_sample_field_records AFTER INSERT OR DELETE OR UPDATE ON
 
 
 --
+-- Name: qc_sample_transports audit_qc_sample_transports; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_sample_transports AFTER INSERT OR DELETE OR UPDATE ON public.qc_sample_transports FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_samples audit_qc_samples; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1953,6 +2203,20 @@ CREATE TRIGGER audit_qc_spec_parameters AFTER INSERT OR DELETE OR UPDATE ON publ
 --
 
 CREATE TRIGGER audit_qc_specifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_specifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_stability_studies audit_qc_stability_studies; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_stability_studies AFTER INSERT OR DELETE OR UPDATE ON public.qc_stability_studies FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_water_tests audit_qc_water_tests; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_water_tests AFTER INSERT OR DELETE OR UPDATE ON public.qc_water_tests FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2091,6 +2355,14 @@ ALTER TABLE ONLY public.qc_chain_of_custody
 
 ALTER TABLE ONLY public.qc_chain_of_custody
     ADD CONSTRAINT qc_chain_of_custody_sfr_fkey FOREIGN KEY (sfr_id) REFERENCES public.qc_sample_field_records(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coa_chunks qc_coa_chunks_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_chunks
+    ADD CONSTRAINT qc_coa_chunks_document_fkey FOREIGN KEY (document_id) REFERENCES public.qc_coa_documents(id) ON DELETE CASCADE;
 
 
 --
@@ -2495,6 +2767,13 @@ CREATE POLICY org_isolation ON public.qc_chain_of_custody USING ((org_id = app.c
 
 
 --
+-- Name: qc_coa_chunks org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coa_chunks USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_coa_documents org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2558,6 +2837,13 @@ CREATE POLICY org_isolation ON public.qc_sample_field_records USING ((org_id = a
 
 
 --
+-- Name: qc_sample_transports org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_sample_transports USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_samples org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2590,6 +2876,20 @@ CREATE POLICY org_isolation ON public.qc_spec_parameters USING ((org_id = app.cu
 --
 
 CREATE POLICY org_isolation ON public.qc_specifications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_stability_studies org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_stability_studies USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_water_tests org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_water_tests USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -2660,6 +2960,12 @@ ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.qc_chain_of_custody ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_coa_chunks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coa_chunks ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_coa_documents; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2714,6 +3020,12 @@ ALTER TABLE public.qc_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.qc_sample_field_records ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_sample_transports; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_sample_transports ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_samples; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2742,6 +3054,18 @@ ALTER TABLE public.qc_spec_parameters ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_specifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_stability_studies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_stability_studies ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_water_tests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_water_tests ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2847,5 +3171,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict v0hQfrmFbWClcxJKq4BGJCPmsbVdThpMoKhJxpz8W3jsmkrYXdUraQZkLAk56aQ
+\unrestrict HPfceeJIPCoJrTfFUWPq1mPVFGzzvUXWa8SW7cV4rhdBWMBJEIk98lBXCsRzRfH
 

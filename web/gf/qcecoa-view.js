@@ -14,7 +14,7 @@
 
 (function () {
   GF.WWF._qcecoa = { docs: null, sel: null, detail: null, ph: null,
-                     specs: null, mapParams: {}, verify: {}, q: '', status: '', tab: 'docs',
+                     specs: null, mapParams: {}, verify: {}, qa: {}, q: '', status: '', tab: 'docs',
                      loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -129,6 +129,24 @@
     GF.render.all();
   };
 
+  // RAG Q&A over the ingested CoA text (P3-U4).
+  GF.WWF.qcEcoaIndexChunks = async (docId) => {
+    const raw = ((document.getElementById('qec-chunks-' + docId) || {}).value || '').trim();
+    if (!raw) return GF.toast(AL('Paste the CoA text first', 'Прво залепете го текстот'), 'error');
+    // split into chunks on blank lines
+    const chunks = raw.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+    try { const r = await GF.API.qcIndexCoaChunks(docId, chunks); GF.toast(AL('Indexed', 'Индексирано') + ': ' + r.indexed); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
+  GF.WWF.qcEcoaAsk = async (docId) => {
+    const question = ((document.getElementById('qec-q-' + docId) || {}).value || '').trim();
+    if (!question) return;
+    try { GF.WWF._qcecoa.qa[docId] = await GF.API.qcCoaQa({ question, document_id: docId }); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
+
   // Placeholder queue — map a discovered label to a spec parameter or ignore it.
   GF.WWF.qcEcoaPickSpec = async (phId, specId) => {
     const st = GF.WWF._qcecoa;
@@ -192,6 +210,21 @@
         </div>` +
         (v && v.mismatches ? `<div class="ana-note" style="margin-top:4px">${v.details.filter(d => !d.match).map(d => GF.esc((d.test_name || '') + ': ' + (d.reason || 'mismatch'))).join(' · ')}</div>` : '');
       })() : ''}
+      ${(() => {
+        const qa = GF.WWF._qcecoa.qa[doc.id];
+        return `<div class="ana-panel" style="margin-top:10px;padding:10px">
+          <div class="ana-pt" style="margin-bottom:6px">${AL('Ask the CoA (retrieval Q&A)', 'Прашај го CoA (пребарување)')}</div>
+          ${canWrite() ? `<textarea id="qec-chunks-${doc.id}" rows="3" style="width:100%" placeholder="${AL('Paste CoA text — blank line separates passages, then Index', 'Залепете текст од CoA — празен ред дели пасуси, потоа Индексирај')}"></textarea>
+          <button class="btn btn-sm" style="margin:6px 0" onclick="GF.WWF.qcEcoaIndexChunks('${doc.id}')">${AL('Index passages', 'Индексирај пасуси')}</button>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input id="qec-q-${doc.id}" placeholder="${AL('Ask a question…', 'Постави прашање…')}" style="flex:1">
+            <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaAsk('${doc.id}')">${AL('Ask', 'Прашај')}</button>
+          </div>
+          ${qa ? (qa.grounded
+            ? `<div style="margin-top:8px">${qa.passages.map(p => `<div class="qms-row" style="flex-direction:column;align-items:flex-start;gap:2px"><span class="ana-note mono">[${GF.esc(p.doc_number)}#${p.chunk_index}] · ${p.score}</span><span>${GF.esc(p.content)}</span></div>`).join('')}</div>`
+            : `<div class="ana-note" style="margin-top:8px">${AL('No matching passages — nothing to ground an answer on.', 'Нема совпаѓачки пасуси — нема на што да се заснова одговорот.')}</div>`) : ''}
+        </div>`;
+      })()}
     </div>`;
   };
 

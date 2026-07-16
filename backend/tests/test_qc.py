@@ -946,3 +946,103 @@ async def test_custody_cluster_is_write_gated(client, admin_headers):
     r = await client.post("/qc/sampling-requests",
                           json={"material_code": "X", "originating_department": "Y"}, headers=user_headers)
     assert r.status_code == 403
+
+
+# ── QC-U6 — water / stability / transport leaves ────────────────────────────
+async def test_water_test_crud(client, admin_headers):
+    r = await client.post("/qc/water-tests", json={
+        "location": "RO_F97_001", "grade": "RO", "result_date": "2026-07-16",
+        "parameters": {"pH": 6.8, "Conductivity": 1.1, "TOC": 0.3}, "passed": True}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    wt = r.json()
+    assert wt["water_test_id"].startswith("PP-WT-") and wt["grade"] == "RO"
+    assert wt["parameters"]["pH"] == 6.8 and wt["passed"] is True
+    r = await client.patch(f"/qc/water-tests/{wt['id']}", json={"passed": False, "ooe": "TOC drift"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["passed"] is False and r.json()["ooe"] == "TOC drift"
+    lst = (await client.get("/qc/water-tests?location=RO_F97_001", headers=admin_headers)).json()
+    assert any(x["id"] == wt["id"] for x in lst)
+    # bad grade rejected
+    r = await client.post("/qc/water-tests", json={"location": "X", "grade": "ZZ"}, headers=admin_headers)
+    assert r.status_code == 422
+
+
+async def test_stability_study_lifecycle(client, admin_headers):
+    r = await client.post("/qc/stability-studies", json={
+        "study_type": "LT", "material_code": "TD1-DF400", "material_name_en": "Flos",
+        "material_name_mk": "Цвет", "batches": ["B-1", "B-2"], "started": "2026-01-01"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    st = r.json()
+    assert st["study_id"].startswith("PP-STB-") and st["study_type"] == "LT" and st["status"] == "IN_PROGRESS"
+    assert st["batches"] == ["B-1", "B-2"]
+    r = await client.patch(f"/qc/stability-studies/{st['id']}",
+                           json={"status": "CLOSED", "shelf_life": "24 months", "report": "REP-01"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "CLOSED" and r.json()["shelf_life"] == "24 months"
+    # bad type / status rejected
+    assert (await client.post("/qc/stability-studies", json={"study_type": "XX", "material_code": "M"}, headers=admin_headers)).status_code == 422
+    assert (await client.patch(f"/qc/stability-studies/{st['id']}", json={"status": "BOGUS"}, headers=admin_headers)).status_code == 422
+
+
+async def test_sample_transport_forms(client, admin_headers):
+    r = await client.post("/qc/transports", json={
+        "sample_id": "PP-SMP-2026-0001", "batch_id": "B-9", "external_lab": "EuroLab",
+        "tests": ["THC", "Pesticides"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    tr = r.json()
+    assert tr["transport_id"].startswith("PP-TRN-") and tr["status"] == "draft"
+    assert tr["tests"] == ["THC", "Pesticides"] and tr["forms"]["sar"] is False
+    r = await client.patch(f"/qc/transports/{tr['id']}",
+                           json={"status": "in_transit", "form_sar": True, "form_tmcoc": True,
+                                 "tracking": "DHL-123", "shipped_date": "2026-07-16"}, headers=admin_headers)
+    assert r.status_code == 200
+    tr2 = r.json()
+    assert tr2["status"] == "in_transit" and tr2["forms"]["sar"] is True and tr2["forms"]["tmcoc"] is True
+    assert tr2["tracking"] == "DHL-123"
+    assert (await client.patch(f"/qc/transports/{tr['id']}", json={"status": "beamed"}, headers=admin_headers)).status_code == 422
+
+
+async def test_qc_leaves_write_gated(client, admin_headers):
+    _, user_headers = await _actor(client, admin_headers, "USER")
+    assert (await client.post("/qc/water-tests", json={"location": "X", "grade": "RO"}, headers=user_headers)).status_code == 403
+    assert (await client.post("/qc/stability-studies", json={"study_type": "LT", "material_code": "M"}, headers=user_headers)).status_code == 403
+    assert (await client.post("/qc/transports", json={"sample_id": "S"}, headers=user_headers)).status_code == 403
+
+
+# ── P3-U4 — RAG Q&A over ingested CoAs ──────────────────────────────────────
+async def test_coa_chunks_index_and_qa(client, admin_headers):
+    doc = await _ecoa_doc(client, admin_headers, batch="B-RAG")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/chunks", json={"chunks": [
+        "Total THC content was determined by HPLC to be 22.4 percent.",
+        "Heavy metals: lead below 0.5 ppm, cadmium not detected.",
+        "Microbial limits: total aerobic count within pharmacopoeia specification."]}, headers=admin_headers)
+    assert r.status_code == 201 and r.json()["indexed"] == 3
+    # retrieval finds the relevant passage and cites it
+    r = await client.post("/qc/coa-qa", json={"question": "what was the THC content?"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    qa = r.json()
+    assert qa["grounded"] is True and qa["passages"]
+    top = qa["passages"][0]
+    assert "THC" in top["content"] and top["doc_number"] == doc["doc_number"]
+    assert top["doc_number"] in qa["answer"]                # the answer cites its source
+    # document-scoped retrieval
+    r2 = await client.post("/qc/coa-qa", json={"question": "heavy metals lead", "document_id": doc["id"]}, headers=admin_headers)
+    assert r2.json()["passages"][0]["content"].startswith("Heavy metals")
+    # re-index is idempotent (replaces)
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/chunks", json={"chunks": ["Only one chunk now."]}, headers=admin_headers)
+    assert r.json()["indexed"] == 1
+    assert len((await client.get(f"/qc/coa-documents/{doc['id']}/chunks", headers=admin_headers)).json()) == 1
+
+
+async def test_coa_qa_no_match_is_grounded_false(client, admin_headers):
+    doc = await _ecoa_doc(client, admin_headers, batch="B-RAG-EMPTY")
+    await client.post(f"/qc/coa-documents/{doc['id']}/chunks",
+                      json={"chunks": ["Total THC content 22 percent."]}, headers=admin_headers)
+    r = await client.post("/qc/coa-qa", json={"question": "xyzzy quux nonexistent term"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["grounded"] is False and r.json()["answer"] == ""
+
+
+async def test_coa_qa_read_gated_index_write_gated(client, admin_headers):
+    doc = await _ecoa_doc(client, admin_headers, batch="B-RAG-GATE")
+    _, user_headers = await _actor(client, admin_headers, "USER")
+    # a plain USER is below the elevated read gate
+    assert (await client.post("/qc/coa-qa", json={"question": "thc"}, headers=user_headers)).status_code == 403
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/chunks", json={"chunks": ["x"]}, headers=user_headers)).status_code == 403
