@@ -52,8 +52,12 @@ ops tool. That does NOT change the scope above — it makes the boundary a
 structural property of the platform:
 
 - **Operations zone** (everything this document already describes): tasks,
-  weekly reports, facility board, analytics, notifications. Non-GMP,
-  informational, unchanged.
+  weekly reports, facility board, analytics, notifications, and the **GMP
+  audit-prep readiness tracker** (`/reports/audit-prep`, the "Audit readiness"
+  view — MK-GMP/EU-GMP/SOP-writing progress over task tags). Non-GMP,
+  informational, unchanged. The audit-prep tracker in particular is a *planning
+  aid* over tagged tasks — a pointer to preparation work, never the controlled
+  audit record, which lives in the QMS zone.
 - **QMS Studio zone** (the `/qms/*` surface and its views, labeled as such
   in the UI): the window onto the QMS document world — SOP registry,
   knowledge search, and in later phases the authoring pipeline. This zone

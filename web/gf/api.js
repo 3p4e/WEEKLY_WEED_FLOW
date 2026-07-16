@@ -98,6 +98,7 @@ GF.API = {
   notifDone(id)        { return this._req('POST', '/notifications/' + id + '/done'); },
   facility()               { return this._req('GET', '/facility'); },
   analytics(weeks = 8)     { return this._req('GET', '/reports/analytics?weeks=' + weeks); },
+  auditPrep(programs)      { return this._req('GET', '/reports/audit-prep' + (programs ? '?programs=' + encodeURIComponent(programs) : '')); },
   qmsStats()               { return this._req('GET', '/qms/stats'); },
   qmsDocuments()           { return this._req('GET', '/qms/documents'); },
   qmsDocument(code)        { return this._req('GET', '/qms/documents/' + encodeURIComponent(code)); },

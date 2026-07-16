@@ -700,3 +700,47 @@ decision):
   198 MB), the **45 orphaned `GMP *` agents were deleted** (107 → 62 agents;
   the DocEngine `gf_*` fleet of 8 and the `planner-*`/`wwf_*` agents untouched).
   See `docs/LETTA-OPS-BACKLOG.md`.
+
+## SUMA assimilation — GMP Audit-Prep Readiness tracker (2026-07-16)
+
+The **SUMA / ISO17verSUMA** corpus (3 owner repo variants: `WEEKLY_SUMA_ISO17_v2`
+canonical, `suma-platform` dev-history, `01_TASKMASTA_ISO17025` legacy HTML +
+exec-report pipeline) was analysed in depth. Finding: **SUMA is the direct
+ancestor of WWF/GrowFlow** — `docs/SPEC.md` is titled *"WWF / SUMA"* — so its
+task model, roles, approval workflow, ALCOA+ audit, and executive dashboard are
+already assimilated and surpassed by the platform (two-DB RLS, hash-chained
+audit, offline PWA, DocEngine, QC LIMS). A read-only delta map (three analysis
+agents over the SUMA snapshots + the live `backend/app` + `web/gf`) isolated the
+**one genuinely-absent, SUMA-defining capability worth porting**: the executive
+**GMP audit-preparation readiness** view (SUMA's "GMP & SOP Preparation Tracker"
++ "Audit Preparation Timeline"). e-signatures / report-versioning were dropped —
+cosmetic schema-only in SUMA, and superseded by the DocEngine + two-zone scope.
+
+**What shipped (pure read layer — NO migration, NO schema change):**
+- **`GET /reports/audit-prep`** (`backend/app/api/reports.py`) — over the existing
+  `tasks.tags` facet: per-programme (`MK-GMP` / `EU-GMP` / `SOP-writing`, or
+  `?programs=`) rollup (total / completed / ongoing / stuck / pending / overdue +
+  completion rate), a due-date **milestone timeline** with an overdue flag, and
+  planning telemetry (`status_distribution`, `busiest_day` from `tasks.days`, and
+  an **outcome-traceability** check = completed tasks missing an `outcome`).
+  Elevated-only (base `USER` → 403); dept-scoped managers pinned to their own
+  department exactly like `/reports/analytics`.
+- **`web/gf/auditprep-view.js`** ("Audit readiness") — bilingual full-page view
+  (nav beside Analytics, guard = above-USER), reusing the `ana-*` CSS. Readiness
+  KPIs + per-programme progress bars + the milestone timeline. `api.js` +
+  `data.js` i18n; SW `wwf-shell-v3.39.0`.
+- **Scope guard:** this is a **planning aid, not a controlled record** — the tags
+  are a *pointer* to audit-prep work; the QMS/DocEngine zone owns the controlled
+  audit deliverables (per SUMA ADR-001 §2 + `docs/SCOPE.md`'s two-zone note). The
+  view and endpoint say so in-UI.
+- **Deferred (documented follow-on):** the heavier SUMA v2 coordination layer —
+  activating the inert `tasks.workflow_state` into a manager submit→approve/reject
+  sign-off + a QP-remark approval block. Backend/DB-only + frontend-less even in
+  SUMA's own `suma-platform`, and GxP-scope-sensitive; a separate migration-bearing
+  increment, not bolted on here.
+
+**Local gate:** new `backend/tests/test_audit_prep.py` (8 tests: role gate, per-
+programme rollup incl. zero-task programme, `programs=` bounds, timeline ordering
++ overdue, traceability, busiest-day, dept-scope) — green against a local PG16
+two-DB cluster; `node --check` clean on all changed JS. `_a0` SUMA snapshots stay
+in scratchpad (analysis fixtures), not committed.
