@@ -409,3 +409,140 @@ async def test_coa_role_gating(client, admin_headers):
     r = await client.post("/qc/certificates",
                           json={"batch_id": "B", "specification_id": spec["id"]}, headers=cu_h)
     assert r.status_code == 403   # non-QC manager cannot write
+
+
+# ── QC LIMS U4 — OOS investigations + CAPA ──────────────────────────────────
+async def _oos(client, headers, batch="B-OOS-1", **extra):
+    body = {"batch_id": batch, "oos_type": "OOS", "test_name": "Total THC", **extra}
+    r = await client.post("/qc/oos", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_create_list_get_oos(client, admin_headers):
+    oos = await _oos(client, admin_headers)
+    assert oos["oos_number"].startswith("PP-OOS-") and oos["status"] == "OPEN" and oos["phase"] == "I"
+    r = await client.get("/qc/oos", headers=admin_headers)
+    assert r.status_code == 200 and any(x["id"] == oos["id"] for x in r.json())
+    detail = (await client.get(f"/qc/oos/{oos['id']}", headers=admin_headers)).json()
+    assert detail["oos"]["id"] == oos["id"]
+    # the create stamps an append-only "opened" register event
+    assert [e["action"] for e in detail["register"]] == ["opened"]
+    assert detail["notifications"] == []
+
+
+async def test_oos_lifecycle_and_qp_close_gate(client, admin_headers):
+    oos = await _oos(client, admin_headers, batch="B-LC")
+    # OPEN -> PHASE_I -> PHASE_II by the QC manager
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    oos = (await client.post("/qc/oos", json={"batch_id": "B-LC2", "test_name": "Water"},
+                             headers=qc_h)).json()
+    for tgt in ("PHASE_I", "PHASE_II"):
+        r = await client.patch(f"/qc/oos/{oos['id']}", json={"status": tgt}, headers=qc_h)
+        assert r.status_code == 200 and r.json()["status"] == tgt
+    # CLOSE is a QP decision — QC manager is refused, QP allowed
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"},
+                               headers=qc_h)).status_code == 403
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"}, headers=qp_h)
+    assert r.status_code == 200 and r.json()["status"] == "CLOSED"
+    assert r.json()["closed_at"] is not None
+    # register recorded each transition
+    detail = (await client.get(f"/qc/oos/{oos['id']}", headers=qp_h)).json()
+    actions = [e["action"] for e in detail["register"]]
+    assert "opened" in actions and any(a.startswith("status:PHASE_II->CLOSED") for a in actions)
+
+
+async def test_oos_illegal_transition_and_bad_enums(client, admin_headers):
+    oos = await _oos(client, admin_headers, batch="B-BAD")
+    # OPEN -> PHASE_II skips Phase I
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "PHASE_II"},
+                               headers=admin_headers)).status_code == 409
+    # unknown enum values
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "BOGUS"},
+                               headers=admin_headers)).status_code == 422
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"risk_level": "SEVERE"},
+                               headers=admin_headers)).status_code == 422
+    assert (await client.post("/qc/oos", json={"batch_id": "B", "oos_type": "NOPE"},
+                              headers=admin_headers)).status_code == 422
+
+
+async def test_oos_disposition_is_qp_gated(client, admin_headers):
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    oos = (await client.post("/qc/oos", json={"batch_id": "B-DISP"}, headers=qc_h)).json()
+    # QC manager cannot set a batch disposition
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"disposition": "REJECT",
+            "disposition_reason": "confirmed OOS"}, headers=qc_h)).status_code == 403
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/oos/{oos['id']}", json={"disposition": "REJECT",
+                           "disposition_reason": "confirmed OOS"}, headers=qp_h)
+    assert r.status_code == 200 and r.json()["disposition"] == "REJECT"
+
+
+async def test_oos_register_is_append_only_endpoint(client, admin_headers):
+    oos = await _oos(client, admin_headers, batch="B-REG")
+    r = await client.post(f"/qc/oos/{oos['id']}/register",
+                          json={"action": "sample_retested", "details": "retest within spec"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["action"] == "sample_retested"
+    detail = (await client.get(f"/qc/oos/{oos['id']}", headers=admin_headers)).json()
+    assert [e["action"] for e in detail["register"]] == ["opened", "sample_retested"]
+
+
+async def test_oos_notifications_and_ack(client, admin_headers):
+    oos = await _oos(client, admin_headers, batch="B-NOTIF")
+    r = await client.post(f"/qc/oos/{oos['id']}/notifications",
+                          json={"part": "A", "recipients": ["qa@x", "qp@x"], "message": "OOS Part A"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["acknowledged"] is False
+    assert r.json()["recipients"] == ["qa@x", "qp@x"]
+    notif_id = r.json()["id"]
+    assert (await client.post("/qc/oos/%s/notifications" % oos["id"], json={"part": "Z"},
+                              headers=admin_headers)).status_code == 422   # bad part
+    r = await client.post(f"/qc/oos/{oos['id']}/notifications/{notif_id}/ack", headers=admin_headers)
+    assert r.status_code == 200 and r.json()["acknowledged"] is True and r.json()["acknowledged_at"]
+
+
+async def test_capa_derived_from_oos(client, admin_headers):
+    # fresh OOS → CAPA OPEN
+    oos = await _oos(client, admin_headers, batch="B-CAPA")
+    capa = (await client.get("/qc/capa", headers=admin_headers)).json()
+    mine = next(x for x in capa if x["oos_id"] == oos["id"])
+    assert mine["status"] == "OPEN" and mine["id"] == f"CAPA-{oos['oos_number']}"
+    # add a root cause → IN_PROGRESS
+    await client.patch(f"/qc/oos/{oos['id']}",
+                       json={"root_cause_description": "miscalibrated balance"}, headers=admin_headers)
+    mine = next(x for x in (await client.get("/qc/capa", headers=admin_headers)).json()
+                if x["oos_id"] == oos["id"])
+    assert mine["status"] == "IN_PROGRESS" and mine["title"] == "miscalibrated balance"
+    # effectiveness check recorded → EFFECTIVE; status filter works
+    await client.patch(f"/qc/oos/{oos['id']}",
+                       json={"effectiveness_check_date": "2026-07-10",
+                             "effectiveness_check_result": "verified"}, headers=admin_headers)
+    eff = (await client.get("/qc/capa?status=EFFECTIVE", headers=admin_headers)).json()
+    assert any(x["oos_id"] == oos["id"] for x in eff)
+
+
+async def test_oos_bad_refs_and_date_fields(client, admin_headers):
+    _ZERO = "00000000-0000-0000-0000-000000000000"
+    assert (await client.post("/qc/oos", json={"batch_id": "B", "result_id": _ZERO},
+                              headers=admin_headers)).status_code == 422
+    assert (await client.post("/qc/oos", json={"batch_id": "B", "sample_id": _ZERO},
+                              headers=admin_headers)).status_code == 422
+    # real ISO dates on every date field (guards the ::date/str asyncpg class of bug)
+    oos = await _oos(client, admin_headers, batch="B-DATES",
+                     detection_date="2026-07-01", timeline_deadline="2026-07-08")
+    assert oos["detection_date"] == "2026-07-01" and oos["timeline_deadline"] == "2026-07-08"
+    r = await client.patch(f"/qc/oos/{oos['id']}",
+                           json={"effectiveness_check_date": "2026-07-20"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["effectiveness_check_date"] == "2026-07-20"
+
+
+async def test_oos_role_gating(client, admin_headers):
+    await _oos(client, admin_headers, batch="B-ROLE")
+    _, user_h = await _actor(client, admin_headers, "USER")
+    assert (await client.get("/qc/oos", headers=user_h)).status_code == 403
+    assert (await client.get("/qc/capa", headers=user_h)).status_code == 403
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    assert (await client.get("/qc/oos", headers=cu_h)).status_code == 200          # elevated read
+    assert (await client.post("/qc/oos", json={"batch_id": "B"}, headers=cu_h)).status_code == 403
