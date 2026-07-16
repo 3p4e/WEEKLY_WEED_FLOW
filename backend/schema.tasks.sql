@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict bE2WedD8DvhvUIf5EWDM7q7qNaXr5cUzMKBJR5nVXGcEUCXlKfN3KO4Fa795hEY
+\restrict v0hQfrmFbWClcxJKq4BGJCPmsbVdThpMoKhJxpz8W3jsmkrYXdUraQZkLAk56aQ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -345,6 +345,30 @@ ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_chain_of_custody; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_chain_of_custody (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    sample_id uuid NOT NULL,
+    from_user_id uuid,
+    to_user_id uuid,
+    transferred_at timestamp with time zone DEFAULT now() NOT NULL,
+    from_location text,
+    to_location text,
+    transfer_reason text,
+    transfer_type text,
+    sfr_id uuid,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_chain_of_custody_type_check CHECK (((transfer_type IS NULL) OR (transfer_type = ANY (ARRAY['FIELD_TO_LAB'::text, 'LAB_INTERNAL'::text, 'LAB_TO_DISPOSAL'::text, 'STABILITY_TRANSFER'::text]))))
+);
+
+ALTER TABLE ONLY public.qc_chain_of_custody FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_coa_documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -621,6 +645,54 @@ ALTER TABLE ONLY public.qc_results FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_rqs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_rqs_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_sample_field_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_sample_field_records (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    sfr_number text NOT NULL,
+    rqs_id uuid,
+    sampling_location text NOT NULL,
+    sampling_coordinates text,
+    barrel_numbers jsonb DEFAULT '[]'::jsonb NOT NULL,
+    num_containers integer,
+    destination_facility text NOT NULL,
+    destination_location text,
+    planned_departure timestamp with time zone,
+    actual_departure timestamp with time zone,
+    planned_arrival timestamp with time zone,
+    actual_arrival timestamp with time zone,
+    status text DEFAULT 'CREATED'::text NOT NULL,
+    sampled_by_id uuid,
+    escort_id uuid,
+    received_by_id uuid,
+    sample_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_sample_field_records_status_check CHECK ((status = ANY (ARRAY['CREATED'::text, 'IN_FIELD'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_sample_field_records FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_sample_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -700,6 +772,58 @@ CREATE TABLE public.qc_sampling_plans (
 );
 
 ALTER TABLE ONLY public.qc_sampling_plans FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sampling_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_sampling_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    rqs_number text NOT NULL,
+    material_code text NOT NULL,
+    material_name_en text,
+    material_name_mk text,
+    batch_id text,
+    originating_department text NOT NULL,
+    requested_by_id uuid,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    assigned_sp_type text,
+    status text DEFAULT 'OPEN'::text NOT NULL,
+    registered_by_id uuid,
+    registered_at timestamp with time zone,
+    registration_deadline timestamp with time zone,
+    registration_window_met boolean,
+    assigned_to_id uuid,
+    assigned_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    sample_id uuid,
+    cancelled_by_id uuid,
+    cancelled_at timestamp with time zone,
+    cancellation_reason text,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_sampling_requests_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'REGISTERED'::text, 'IN_PROGRESS'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_sampling_requests FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sfr_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_sfr_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -1090,6 +1214,14 @@ ALTER TABLE ONLY public.qc_certificates
 
 
 --
+-- Name: qc_chain_of_custody qc_chain_of_custody_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_chain_of_custody
+    ADD CONSTRAINT qc_chain_of_custody_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_coa_documents qc_coa_documents_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1178,6 +1310,22 @@ ALTER TABLE ONLY public.qc_results
 
 
 --
+-- Name: qc_sample_field_records qc_sample_field_records_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_field_records
+    ADD CONSTRAINT qc_sample_field_records_number_key UNIQUE (org_id, sfr_number);
+
+
+--
+-- Name: qc_sample_field_records qc_sample_field_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_field_records
+    ADD CONSTRAINT qc_sample_field_records_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_samples qc_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1207,6 +1355,22 @@ ALTER TABLE ONLY public.qc_sampling_plans
 
 ALTER TABLE ONLY public.qc_sampling_plans
     ADD CONSTRAINT qc_sampling_plans_plan_id_key UNIQUE (org_id, plan_id);
+
+
+--
+-- Name: qc_sampling_requests qc_sampling_requests_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_requests
+    ADD CONSTRAINT qc_sampling_requests_number_key UNIQUE (org_id, rqs_number);
+
+
+--
+-- Name: qc_sampling_requests qc_sampling_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_requests
+    ADD CONSTRAINT qc_sampling_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -1400,6 +1564,13 @@ CREATE INDEX qc_certificates_spec_idx ON public.qc_certificates USING btree (org
 
 
 --
+-- Name: qc_chain_of_custody_sample_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_chain_of_custody_sample_idx ON public.qc_chain_of_custody USING btree (org_id, sample_id);
+
+
+--
 -- Name: qc_coa_documents_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1470,6 +1641,13 @@ CREATE INDEX qc_results_coa_idx ON public.qc_results USING btree (org_id, coa_id
 
 
 --
+-- Name: qc_sample_field_records_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sample_field_records_status_idx ON public.qc_sample_field_records USING btree (org_id, status);
+
+
+--
 -- Name: qc_samples_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1495,6 +1673,20 @@ CREATE INDEX qc_samples_status_idx ON public.qc_samples USING btree (org_id, sta
 --
 
 CREATE INDEX qc_sampling_plans_material_idx ON public.qc_sampling_plans USING btree (org_id, material_code) WHERE active;
+
+
+--
+-- Name: qc_sampling_requests_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sampling_requests_batch_idx ON public.qc_sampling_requests USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_sampling_requests_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sampling_requests_status_idx ON public.qc_sampling_requests USING btree (org_id, status);
 
 
 --
@@ -1659,6 +1851,13 @@ CREATE TRIGGER audit_qc_certificates AFTER INSERT OR DELETE OR UPDATE ON public.
 
 
 --
+-- Name: qc_chain_of_custody audit_qc_chain_of_custody; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_chain_of_custody AFTER INSERT OR DELETE OR UPDATE ON public.qc_chain_of_custody FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_coa_documents audit_qc_coa_documents; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1715,6 +1914,13 @@ CREATE TRIGGER audit_qc_results AFTER INSERT OR DELETE OR UPDATE ON public.qc_re
 
 
 --
+-- Name: qc_sample_field_records audit_qc_sample_field_records; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_sample_field_records AFTER INSERT OR DELETE OR UPDATE ON public.qc_sample_field_records FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_samples audit_qc_samples; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1726,6 +1932,13 @@ CREATE TRIGGER audit_qc_samples AFTER INSERT OR DELETE OR UPDATE ON public.qc_sa
 --
 
 CREATE TRIGGER audit_qc_sampling_plans AFTER INSERT OR DELETE OR UPDATE ON public.qc_sampling_plans FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_sampling_requests audit_qc_sampling_requests; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_sampling_requests AFTER INSERT OR DELETE OR UPDATE ON public.qc_sampling_requests FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -1865,6 +2078,22 @@ ALTER TABLE ONLY public.qc_certificates
 
 
 --
+-- Name: qc_chain_of_custody qc_chain_of_custody_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_chain_of_custody
+    ADD CONSTRAINT qc_chain_of_custody_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_chain_of_custody qc_chain_of_custody_sfr_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_chain_of_custody
+    ADD CONSTRAINT qc_chain_of_custody_sfr_fkey FOREIGN KEY (sfr_id) REFERENCES public.qc_sample_field_records(id) ON DELETE SET NULL;
+
+
+--
 -- Name: qc_coa_documents qc_coa_documents_promoted_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1985,6 +2214,22 @@ ALTER TABLE ONLY public.qc_results
 
 
 --
+-- Name: qc_sample_field_records qc_sample_field_records_rqs_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_field_records
+    ADD CONSTRAINT qc_sample_field_records_rqs_fkey FOREIGN KEY (rqs_id) REFERENCES public.qc_sampling_requests(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_sample_field_records qc_sample_field_records_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sample_field_records
+    ADD CONSTRAINT qc_sample_field_records_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
 -- Name: qc_samples qc_samples_parent_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1998,6 +2243,14 @@ ALTER TABLE ONLY public.qc_samples
 
 ALTER TABLE ONLY public.qc_samples
     ADD CONSTRAINT qc_samples_plan_fkey FOREIGN KEY (sampling_plan_id) REFERENCES public.qc_sampling_plans(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_sampling_requests qc_sampling_requests_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_requests
+    ADD CONSTRAINT qc_sampling_requests_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
 
 
 --
@@ -2235,6 +2488,13 @@ CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.curre
 
 
 --
+-- Name: qc_chain_of_custody org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_chain_of_custody USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_coa_documents org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2291,6 +2551,13 @@ CREATE POLICY org_isolation ON public.qc_results USING ((org_id = app.current_or
 
 
 --
+-- Name: qc_sample_field_records org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_sample_field_records USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_samples org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2302,6 +2569,13 @@ CREATE POLICY org_isolation ON public.qc_samples USING ((org_id = app.current_or
 --
 
 CREATE POLICY org_isolation ON public.qc_sampling_plans USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_sampling_requests org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_sampling_requests USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -2380,6 +2654,12 @@ CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_o
 ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_chain_of_custody; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_chain_of_custody ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_coa_documents; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2428,6 +2708,12 @@ ALTER TABLE public.qc_oos_register ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.qc_results ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_sample_field_records; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_sample_field_records ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_samples; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2438,6 +2724,12 @@ ALTER TABLE public.qc_samples ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_sampling_plans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_sampling_requests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_sampling_requests ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_spec_parameters; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2555,5 +2847,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict bE2WedD8DvhvUIf5EWDM7q7qNaXr5cUzMKBJR5nVXGcEUCXlKfN3KO4Fa795hEY
+\unrestrict v0hQfrmFbWClcxJKq4BGJCPmsbVdThpMoKhJxpz8W3jsmkrYXdUraQZkLAk56aQ
 

@@ -876,3 +876,73 @@ async def test_verify_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post(f"/qc/certificates/{coa_id}/verify", headers=user_headers)
     assert r.status_code == 403
+
+
+# ── QC-U5 — custody cluster (RQS + SFR + chain of custody) ──────────────────
+async def _rqs(client, headers, **extra):
+    body = {"material_code": "CANN-FLOS-D", "originating_department": "Production", **extra}
+    r = await client.post("/qc/sampling-requests", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_rqs_lifecycle_and_24h_window(client, admin_headers):
+    rqs = await _rqs(client, admin_headers, batch_id="B-RQS-1")
+    assert rqs["rqs_number"].startswith("PP-RQS-") and rqs["status"] == "OPEN"
+    assert rqs["registration_deadline"] is not None  # requested_at + 24h
+    # register within the window → REGISTERED, window met
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "REGISTERED"
+    assert r.json()["registration_window_met"] is True and r.json()["registered_at"]
+    # assign → IN_PROGRESS (defaults assignee to the actor), then complete
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "IN_PROGRESS"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["assigned_to_id"] and r.json()["assigned_at"]
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "COMPLETED"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["completed_at"]
+
+
+async def test_rqs_illegal_transition(client, admin_headers):
+    rqs = await _rqs(client, admin_headers, batch_id="B-RQS-BAD")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "COMPLETED"}, headers=admin_headers)
+    assert r.status_code == 409  # OPEN -> COMPLETED not allowed
+
+
+async def test_sfr_create_and_lifecycle(client, admin_headers):
+    rqs = await _rqs(client, admin_headers, batch_id="B-SFR-1")
+    r = await client.post("/qc/field-records", json={
+        "rqs_id": rqs["id"], "sampling_location": "Greenhouse 3",
+        "sampling_coordinates": "41.99,21.43", "barrel_numbers": ["B-01", "B-02"],
+        "num_containers": 2, "destination_facility": "QC Lab",
+        "planned_departure": "2026-07-16T08:00:00Z"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    sfr = r.json()
+    assert sfr["sfr_number"].startswith("PP-SFR-") and sfr["status"] == "CREATED"
+    assert sfr["barrel_numbers"] == ["B-01", "B-02"] and sfr["num_containers"] == 2
+    assert sfr["rqs_id"] == rqs["id"]
+    for tgt in ("IN_FIELD", "COMPLETED"):
+        r = await client.patch(f"/qc/field-records/{sfr['id']}", json={"status": tgt}, headers=admin_headers)
+        assert r.status_code == 200 and r.json()["status"] == tgt, tgt
+
+
+async def test_chain_of_custody_append_and_list(client, admin_headers):
+    sample = await _sample(client, admin_headers, batch="B-CUST-1")
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "to_location": "QC Lab - Cabinet A", "transfer_reason": "Testing",
+        "transfer_type": "FIELD_TO_LAB"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["from_user_id"]  # defaults to the acting user
+    lst = (await client.get(f"/qc/samples/{sample['id']}/custody", headers=admin_headers)).json()
+    assert len(lst) == 1 and lst[0]["transfer_type"] == "FIELD_TO_LAB"
+    # bad transfer_type rejected; missing sample 404
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={"transfer_type": "TELEPORT"}, headers=admin_headers)
+    assert r.status_code == 422
+    import uuid as _uuid
+    r = await client.post(f"/qc/samples/{_uuid.uuid4()}/custody", json={}, headers=admin_headers)
+    assert r.status_code == 404
+
+
+async def test_custody_cluster_is_write_gated(client, admin_headers):
+    _, user_headers = await _actor(client, admin_headers, "USER")
+    r = await client.post("/qc/sampling-requests",
+                          json={"material_code": "X", "originating_department": "Y"}, headers=user_headers)
+    assert r.status_code == 403

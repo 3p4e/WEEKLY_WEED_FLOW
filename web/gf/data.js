@@ -85,6 +85,7 @@ GF.I18N = {
     qc_coas:'QC Certificates', qc_coas_sub:'Certificates of analysis — results judged against the specification, review, release',
     qc_oos:'QC OOS & CAPA', qc_oos_sub:'Out-of-specification investigations — two-phase flow, QP disposition, and the derived CAPA register',
     qc_ecoa:'QC eCOA intake', qc_ecoa_sub:'Ingest incoming Certificates of Analysis — transcribe, grade against spec, discover new fields, promote into a certificate',
+    qc_custody:'QC custody', qc_custody_sub:'Sampling requests (24h window), field sample records, and the ALCOA++ chain of custody — field-to-lab traceability',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -131,6 +132,7 @@ GF.I18N = {
     qc_coas:'КК Сертификати', qc_coas_sub:'Сертификати за анализа — резултати оценети според спецификацијата, преглед, ослободување',
     qc_oos:'КК OOS и CAPA', qc_oos_sub:'Истраги надвор од спецификација — двофазен тек, диспозиција од КЛ, и изведен CAPA регистар',
     qc_ecoa:'КК eCOA внес', qc_ecoa_sub:'Внес на дојдовни сертификати за анализа — пренеси, оцени според спец., откриј нови полиња, промовирај во сертификат',
+    qc_custody:'КК чување', qc_custody_sub:'Барања за мостри (24ч прозорец), теренски записи, и ALCOA++ ланец на чување — следливост од терен до лабораторија',
   },
 };
 
