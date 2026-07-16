@@ -206,9 +206,13 @@ async def test_sample_genealogy(client, admin_headers):
     assert child["parent_id"] == parent["id"]
     detail = (await client.get(f"/qc/samples/{parent['id']}", headers=admin_headers)).json()
     assert [k["id"] for k in detail["children"]] == [child["id"]]
-    # unknown parent rejected
+    # unknown parent rejected. Flip the last hex digit to a guaranteed-
+    # different, still-valid UUID (don't just append "0" — if the real id
+    # already ends in "0" that reproduces the existing parent and the create
+    # wrongly succeeds).
+    missing_parent = parent["id"][:-1] + ("1" if parent["id"][-1] == "0" else "0")
     r = await client.post("/qc/samples",
-                          json={"batch_id": "B-X", "material_code": "M", "parent_id": parent["id"][:-1] + "0"},
+                          json={"batch_id": "B-X", "material_code": "M", "parent_id": missing_parent},
                           headers=admin_headers)
     assert r.status_code in (422, 404)
 
