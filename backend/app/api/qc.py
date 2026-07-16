@@ -1159,3 +1159,431 @@ async def list_capa(status: str | None = None, user: dict = Depends(require_role
     if status:
         capa = [x for x in capa if x["status"] == status]
     return capa
+
+
+# ── eCOA ingestion (Phase 3 U2 — the "CoA in" half of the pipeline) ─────────
+# A supplier / contract-lab CoA (a PDF) is registered, its fields transcribed
+# into `qc_coa_extractions`, GRADED by the server against the material spec,
+# unknown labels queued in `qc_field_placeholders` for a human, and a reviewed
+# document PROMOTED into a native DRAFT qc_certificate + qc_results (U3) — which
+# then flows on to the U1 COQ. GxP: the server never invents a value; an
+# unmapped label is queued (never guessed or dropped); an unmeasured value stays
+# NULL / `complies` unknown. Transcription itself is done upstream (an LLM or a
+# human); this module is the system of record, the grader, and the promoter.
+_DOC_STATUSES = ("UPLOADED", "EXTRACTED", "REVIEWED", "PROMOTED", "REJECTED")
+_PLACEHOLDER_STATUSES = ("OPEN", "MAPPED", "IGNORED")
+_DOC_TRANSITIONS = {
+    "UPLOADED": {"EXTRACTED", "REJECTED"},
+    "EXTRACTED": {"REVIEWED", "REJECTED"},
+    "REVIEWED": {"PROMOTED", "REJECTED"},
+    "PROMOTED": set(),
+    "REJECTED": set(),
+}
+
+
+def _norm_label(s: str | None) -> str:
+    """Canonical form of a field label for cross-document matching / dedup:
+    whitespace-collapsed, lowercased. Deliberately conservative — a human maps
+    anything this doesn't catch, we never fuzzy-guess a GMP field."""
+    return " ".join((s or "").split()).lower()
+
+
+class CoaDocIn(BaseModel):
+    batch_id: str = Field(max_length=200)
+    source_institution: str | None = Field(default=None, max_length=200)
+    material_code: str | None = Field(default=None, max_length=120)
+    specification_id: str | None = None
+    sample_id: str | None = None
+    original_filename: str | None = Field(default=None, max_length=400)
+    mime_type: str | None = Field(default=None, max_length=120)
+    storage_ref: str | None = Field(default=None, max_length=1000)
+    page_count: int | None = None
+    report_date: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class CoaDocPatch(BaseModel):
+    source_institution: str | None = Field(default=None, max_length=200)
+    material_code: str | None = Field(default=None, max_length=120)
+    specification_id: str | None = None
+    sample_id: str | None = None
+    report_date: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+    status: str | None = None            # guarded lifecycle transition
+
+
+class ExtractionIn(BaseModel):
+    raw_label: str = Field(max_length=400)
+    raw_value: str | None = Field(default=None, max_length=400)
+    numeric_value: float | None = None
+    unit: str | None = Field(default=None, max_length=60)
+    confidence: float | None = None
+    source_page: int | None = None
+
+
+class ExtractionsIn(BaseModel):
+    items: list[ExtractionIn]
+
+
+class ExtractionPatch(BaseModel):
+    parameter_id: str | None = None
+    numeric_value: float | None = None
+    unit: str | None = Field(default=None, max_length=60)
+    test_name: str | None = Field(default=None, max_length=300)
+
+
+class PlaceholderPatch(BaseModel):
+    status: str | None = None                     # MAPPED | IGNORED
+    mapped_parameter_id: str | None = None
+    suggested_test_name: str | None = Field(default=None, max_length=300)
+
+
+def _ecoa_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "doc_number": r["doc_number"], "batch_id": r["batch_id"],
+        "source_institution": r["source_institution"], "material_code": r["material_code"],
+        "specification_id": str(r["specification_id"]) if r["specification_id"] else None,
+        "sample_id": str(r["sample_id"]) if r["sample_id"] else None,
+        "original_filename": r["original_filename"], "mime_type": r["mime_type"],
+        "storage_ref": r["storage_ref"], "page_count": r["page_count"],
+        "report_date": r["report_date"].isoformat() if r["report_date"] else None,
+        "status": r["status"],
+        "promoted_coa_id": str(r["promoted_coa_id"]) if r["promoted_coa_id"] else None,
+        "notes": r["notes"],
+        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+    }
+
+
+def _extract_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "document_id": str(r["document_id"]), "raw_label": r["raw_label"],
+        "raw_value": r["raw_value"], "numeric_value": r["numeric_value"], "unit": r["unit"],
+        "parameter_id": str(r["parameter_id"]) if r["parameter_id"] else None,
+        "test_name": r["test_name"], "lower_limit": r["lower_limit"], "upper_limit": r["upper_limit"],
+        "complies": r["complies"], "grade_status": r["grade_status"],
+        "confidence": r["confidence"], "source_page": r["source_page"],
+    }
+
+
+def _placeholder_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "raw_label": r["raw_label"], "normalized_label": r["normalized_label"],
+        "occurrences": r["occurrences"], "suggested_test_name": r["suggested_test_name"],
+        "mapped_parameter_id": str(r["mapped_parameter_id"]) if r["mapped_parameter_id"] else None,
+        "status": r["status"],
+        "first_seen_document_id": str(r["first_seen_document_id"]) if r["first_seen_document_id"] else None,
+    }
+
+
+@router.get("/coa-documents")
+async def list_coa_documents(status: str | None = None, batch_id: str | None = None,
+                             user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    if batch_id:
+        args.append(batch_id); clauses.append(f"batch_id=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            f"SELECT * FROM qc_coa_documents{where} ORDER BY created_at DESC", *args)
+    return [_ecoa_out(dict(r)) for r in rows]
+
+
+@router.get("/coa-documents/{doc_id}")
+async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
+        if doc is None:
+            raise HTTPException(404, "eCoA document not found")
+        rows = await c.fetch(
+            "SELECT * FROM qc_coa_extractions WHERE document_id=$1 ORDER BY created_at", doc_id)
+    return {"document": _ecoa_out(dict(doc)),
+            "extractions": [_extract_out(dict(r)) for r in rows]}
+
+
+@router.post("/coa-documents", status_code=201)
+async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(*_WRITERS))):
+    async with rls(user) as c:
+        if body.specification_id:
+            if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
+                raise HTTPException(422, "Unknown specification")
+        if body.sample_id:
+            if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
+                raise HTTPException(422, "Unknown sample")
+        row = await c.fetchrow(
+            "INSERT INTO qc_coa_documents(org_id, doc_number, source_institution, batch_id,"
+            " material_code, specification_id, sample_id, original_filename, mime_type,"
+            " storage_ref, page_count, report_date, notes, uploaded_by, created_by, updated_by)"
+            " VALUES ($1, 'PP-ECOA-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_ecoa_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$13,$13) RETURNING *",
+            user["org_id"], body.source_institution, body.batch_id, body.material_code,
+            body.specification_id, body.sample_id, body.original_filename, body.mime_type,
+            body.storage_ref, body.page_count, body.report_date, body.notes, user["id"])
+    return _ecoa_out(dict(row))
+
+
+@router.patch("/coa-documents/{doc_id}")
+async def update_coa_document(doc_id: str, body: CoaDocPatch,
+                              user: dict = Depends(require_role(*_WRITERS))):
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
+        if cur is None:
+            raise HTTPException(404, "eCoA document not found")
+        if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
+            target = patch["status"]
+            if target not in _DOC_STATUSES:
+                raise HTTPException(422, "Unknown status")
+            # PROMOTED is reached only via the promote endpoint (it must mint a
+            # certificate) — never by a bare status PATCH.
+            if target == "PROMOTED":
+                raise HTTPException(409, "Use POST /coa-documents/{id}/promote to promote")
+            if target not in _DOC_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+        if body.specification_id:
+            if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
+                raise HTTPException(422, "Unknown specification")
+        fields, args = [], []
+        _NULLABLE = {"source_institution", "material_code", "specification_id", "sample_id",
+                     "report_date", "notes"}
+        for col, val in patch.items():
+            if val is None and col not in _NULLABLE:
+                continue
+            if col == "report_date":
+                args.append(val); fields.append(f"{col}=${len(args)}::date")
+            else:
+                args.append(val); fields.append(f"{col}=${len(args)}")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(doc_id)
+        row = await c.fetchrow(
+            f"UPDATE qc_coa_documents SET {', '.join(fields)}, updated_at=now()"
+            f" WHERE id=${len(args)} RETURNING *", *args)
+    return _ecoa_out(dict(row))
+
+
+@router.post("/coa-documents/{doc_id}/extractions", status_code=201)
+async def submit_extractions(doc_id: str, body: ExtractionsIn,
+                             user: dict = Depends(require_role(*_WRITERS))):
+    """Bulk-submit the transcribed fields for a document. Each field is
+    auto-mapped to a spec parameter (by an existing human mapping, then by
+    name), server-graded against that parameter's limits, and — when no
+    mapping is found — queued in `qc_field_placeholders` for a human. Sets the
+    document status to EXTRACTED."""
+    async with rls(user) as c:
+        doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
+        if doc is None:
+            raise HTTPException(404, "eCoA document not found")
+        if doc["status"] in ("PROMOTED", "REJECTED"):
+            raise HTTPException(409, f"Document is {doc['status']} — extractions are closed")
+        # candidate parameters: the doc's spec, matched by canonical name…
+        by_name: dict[str, dict] = {}
+        if doc["specification_id"]:
+            for p in await c.fetch(
+                    "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", doc["specification_id"]):
+                pd = dict(p)
+                for key in (pd.get("test_name_en"), pd.get("test_name_mk")):
+                    n = _norm_label(key)
+                    if n:
+                        by_name.setdefault(n, pd)
+        # …plus any label a human has already mapped (org-wide, cross-document).
+        ph_rows = await c.fetch(
+            "SELECT normalized_label, mapped_parameter_id FROM qc_field_placeholders"
+            " WHERE status='MAPPED' AND mapped_parameter_id IS NOT NULL")
+        mapped_by_label = {r["normalized_label"]: r["mapped_parameter_id"] for r in ph_rows}
+        param_by_id: dict[str, dict] = {}
+        if mapped_by_label:
+            for p in await c.fetch(
+                    "SELECT * FROM qc_spec_parameters WHERE id = ANY($1::uuid[])",
+                    list(mapped_by_label.values())):
+                param_by_id[str(p["id"])] = dict(p)
+
+        out, unmapped = [], 0
+        for item in body.items:
+            nlabel = _norm_label(item.raw_label)
+            param = None
+            if nlabel in mapped_by_label:
+                param = param_by_id.get(str(mapped_by_label[nlabel]))
+            if param is None:
+                param = by_name.get(nlabel)
+            if param is not None:
+                lo, hi = param.get("lower_limit"), param.get("upper_limit")
+                complies, _ = _evaluate(item.numeric_value, lo, hi)
+                grade = "graded" if item.numeric_value is not None else "unknown"
+                test_name = param.get("test_name_en") or param.get("test_name_mk")
+                pid = param["id"]
+            else:
+                lo = hi = complies = None
+                grade, test_name, pid = "unmapped", None, None
+                unmapped += 1
+                # adaptive discovery: surface the unknown label for a human,
+                # deduped per org, occurrences counted.
+                await c.execute(
+                    "INSERT INTO qc_field_placeholders(org_id, raw_label, normalized_label,"
+                    " suggested_test_name, first_seen_document_id, created_by, updated_by)"
+                    " VALUES ($1,$2,$3,$4,$5,$6,$6)"
+                    " ON CONFLICT (org_id, normalized_label) DO UPDATE"
+                    "   SET occurrences = qc_field_placeholders.occurrences + 1, updated_at=now()",
+                    user["org_id"], item.raw_label, nlabel, item.raw_label, doc_id, user["id"])
+            row = await c.fetchrow(
+                "INSERT INTO qc_coa_extractions(org_id, document_id, raw_label, raw_value,"
+                " numeric_value, unit, parameter_id, test_name, lower_limit, upper_limit,"
+                " complies, grade_status, confidence, source_page, created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15) RETURNING *",
+                user["org_id"], doc_id, item.raw_label, item.raw_value, item.numeric_value,
+                item.unit, pid, test_name, lo, hi, complies, grade, item.confidence,
+                item.source_page, user["id"])
+            out.append(_extract_out(dict(row)))
+        if doc["status"] == "UPLOADED":
+            await c.execute(
+                "UPDATE qc_coa_documents SET status='EXTRACTED', updated_by=$1, updated_at=now()"
+                " WHERE id=$2", user["id"], doc_id)
+    return {"extractions": out, "count": len(out), "unmapped": unmapped}
+
+
+@router.patch("/coa-documents/{doc_id}/extractions/{eid}")
+async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
+                            user: dict = Depends(require_role(*_WRITERS))):
+    """Reviewer fix: map an extraction to a spec parameter (re-grades against
+    that parameter's limits) and/or correct the value/unit."""
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        cur = await c.fetchrow(
+            "SELECT * FROM qc_coa_extractions WHERE id=$1 AND document_id=$2", eid, doc_id)
+        if cur is None:
+            raise HTTPException(404, "Extraction not found")
+        row = dict(cur)
+        numeric = patch["numeric_value"] if "numeric_value" in patch else row["numeric_value"]
+        pid = row["parameter_id"]
+        lo, hi, test_name = row["lower_limit"], row["upper_limit"], row["test_name"]
+        if "parameter_id" in patch:
+            pid = patch["parameter_id"]
+            if pid:
+                p = await c.fetchrow("SELECT * FROM qc_spec_parameters WHERE id=$1", pid)
+                if p is None:
+                    raise HTTPException(422, "Unknown parameter")
+                lo, hi = p["lower_limit"], p["upper_limit"]
+                test_name = patch.get("test_name") or p["test_name_en"] or p["test_name_mk"]
+            else:
+                lo = hi = None
+        if "test_name" in patch and patch["test_name"]:
+            test_name = patch["test_name"]
+        unit = patch["unit"] if "unit" in patch else row["unit"]
+        if pid:
+            complies, _ = _evaluate(numeric, lo, hi)
+            grade = "graded" if numeric is not None else "unknown"
+        else:
+            complies, grade = None, "unmapped"
+        row = await c.fetchrow(
+            "UPDATE qc_coa_extractions SET parameter_id=$1, test_name=$2, numeric_value=$3,"
+            " unit=$4, lower_limit=$5, upper_limit=$6, complies=$7, grade_status=$8,"
+            " updated_by=$9, updated_at=now() WHERE id=$10 AND document_id=$11 RETURNING *",
+            pid, test_name, numeric, unit, lo, hi, complies, grade, user["id"], eid, doc_id)
+    return _extract_out(dict(row))
+
+
+@router.get("/coa-placeholders")
+async def list_placeholders(status: str | None = None,
+                            user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            f"SELECT * FROM qc_field_placeholders{where} ORDER BY occurrences DESC, created_at", *args)
+    return [_placeholder_out(dict(r)) for r in rows]
+
+
+@router.patch("/coa-placeholders/{ph_id}")
+async def update_placeholder(ph_id: str, body: PlaceholderPatch,
+                             user: dict = Depends(require_role(*_WRITERS))):
+    """Resolve a discovered field: MAP it to a spec parameter (future CoAs then
+    auto-map that label) or IGNORE it."""
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_field_placeholders WHERE id=$1", ph_id)
+        if cur is None:
+            raise HTTPException(404, "Placeholder not found")
+        target = patch.get("status")
+        if target is not None and target not in _PLACEHOLDER_STATUSES:
+            raise HTTPException(422, "status must be OPEN, MAPPED or IGNORED")
+        if target == "MAPPED":
+            if not patch.get("mapped_parameter_id"):
+                raise HTTPException(422, "MAPPED requires mapped_parameter_id")
+            if await c.fetchrow("SELECT id FROM qc_spec_parameters WHERE id=$1",
+                                patch["mapped_parameter_id"]) is None:
+                raise HTTPException(422, "Unknown parameter")
+        fields, args = [], []
+        for col in ("status", "mapped_parameter_id", "suggested_test_name"):
+            if col in patch:
+                args.append(patch[col]); fields.append(f"{col}=${len(args)}")
+        if target in ("MAPPED", "IGNORED"):
+            args.append(user["id"]); fields.append(f"resolved_by=${len(args)}")
+            fields.append("resolved_at=now()")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(ph_id)
+        row = await c.fetchrow(
+            f"UPDATE qc_field_placeholders SET {', '.join(fields)}, updated_at=now()"
+            f" WHERE id=${len(args)} RETURNING *", *args)
+    return _placeholder_out(dict(row))
+
+
+@router.post("/coa-documents/{doc_id}/promote", status_code=201)
+async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_WRITERS))):
+    """Promote a reviewed eCoA into a native DRAFT qc_certificate + qc_results
+    (U3). One result per MAPPED extraction, each carrying its source document
+    (feeds the U1 COQ's per-line provenance). Unmapped extractions are left in
+    the review queue and reported — never fabricated into a result."""
+    async with rls(user) as c:
+        doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
+        if doc is None:
+            raise HTTPException(404, "eCoA document not found")
+        if doc["status"] not in ("EXTRACTED", "REVIEWED"):
+            raise HTTPException(409, "Only an EXTRACTED or REVIEWED document can be promoted")
+        if doc["promoted_coa_id"]:
+            raise HTTPException(409, "Document already promoted")
+        if not doc["specification_id"]:
+            raise HTTPException(409, "Promotion needs a specification to certify against")
+        rows = await c.fetch(
+            "SELECT * FROM qc_coa_extractions WHERE document_id=$1 ORDER BY created_at", doc_id)
+        mapped = [dict(r) for r in rows if r["parameter_id"] is not None]
+        if not mapped:
+            raise HTTPException(409, "No mapped results to promote — map the discovered fields first")
+        coa = await c.fetchrow(
+            "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
+            " cert_type, report_date, source_lab, notes, analyst_id, created_by, updated_by)"
+            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,'ECOA',$5::date,$6,$7,$8,$8,$8) RETURNING *",
+            user["org_id"], doc["batch_id"], doc["specification_id"], doc["sample_id"],
+            doc["report_date"], doc["source_institution"],
+            f"Promoted from {doc['doc_number']}", user["id"])
+        for m in mapped:
+            _, st = _evaluate(m["numeric_value"], m["lower_limit"], m["upper_limit"])
+            await c.execute(
+                "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
+                " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
+                " source_document_code, source_institution, created_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$12)",
+                user["org_id"], coa["id"], m["parameter_id"],
+                m["test_name"] or m["raw_label"], m["raw_value"], m["numeric_value"], m["unit"],
+                m["lower_limit"], m["upper_limit"], m["complies"], st, user["id"],
+                doc["doc_number"], doc["source_institution"])
+        await c.execute(
+            "UPDATE qc_coa_documents SET status='PROMOTED', promoted_coa_id=$1,"
+            " updated_by=$2, updated_at=now() WHERE id=$3", coa["id"], user["id"], doc_id)
+        try:
+            await emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
+                       object_id=doc_id, recipients=[],
+                       params={"doc_number": doc["doc_number"], "coa_number": coa["coa_number"],
+                               "results": len(mapped)})
+        except Exception:
+            pass
+    return {"coa_id": str(coa["id"]), "coa_number": coa["coa_number"],
+            "results_created": len(mapped), "skipped_unmapped": len(rows) - len(mapped)}

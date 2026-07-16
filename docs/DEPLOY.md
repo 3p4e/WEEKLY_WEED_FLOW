@@ -370,12 +370,12 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
 
 T4 (this polish pass) is the last increment before that promotion gate.
 
-## QC LIMS module (Phase 2 U1–U4 + Phase 3 U1, native rebuild)
+## QC LIMS module (Phase 2 U1–U4 + Phase 3 U1–U2, native rebuild)
 
 Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
 facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
 `audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
-backend `v48` / frontend `v69` / migrations `0018`–`0022` (tasks DB head).
+backend `v49` / frontend `v70` / migrations `0018`–`0023` (tasks DB head).
 
 - **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
   INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
@@ -403,12 +403,28 @@ backend `v48` / frontend `v69` / migrations `0018`–`0022` (tasks DB head).
   a FAIL surfaces as 422). Issuing a COQ is a Qualified-Person act
   (`require_role(*_QP_ROLES)`). The DocEngine client is single-sourced in
   `backend/app/docengine.py` (shared with the `/qms/studio/*` proxy).
+- **P3-U2 — eCOA / CoA ingestion (the "CoA in" half).** `qc_coa_documents`
+  spine (`PP-ECOA-YYYY-NNNN`; status UPLOADED→EXTRACTED→REVIEWED→PROMOTED/
+  REJECTED) + `qc_coa_extractions` staging + `qc_field_placeholders` adaptive
+  discovery queue (migration 0023). An incoming supplier / contract-lab CoA is
+  registered, its fields transcribed and **server-graded against the material
+  spec** (`POST /coa-documents/{id}/extractions` auto-maps a raw label to a
+  spec parameter by an existing human mapping then by name, grades `complies`
+  against the limits, and queues unknown labels); a human maps a discovered
+  label once (`PATCH /coa-placeholders/{id}`) → future CoAs with that label
+  auto-map; `POST /coa-documents/{id}/promote` mints a **DRAFT `ECOA`
+  certificate + `qc_results`**, each carrying `source_document_code`/
+  `source_institution` — feeding the U1 COQ's per-line provenance. GxP: the
+  server never fabricates a value; unmapped/unmeasured fields are queued or
+  left blank, never guessed; PROMOTED is reachable only through the promote
+  endpoint. Frontend `qcecoa-view.js` ("QC eCOA intake").
 
 Router `backend/app/api/qc.py` (prefix `/qc`), registered in `main.py`.
 Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` / `qccoa-view.js`
 (with the "Generate COQ" + COQ `.docx`/PDF download controls, shown to a QP
-on a RELEASED cert) / `qcoos-view.js`, wired into `index.html` + the SW
-precache list (`wwf-shell-v3.32.0`), under the QMS Studio nav group.
+on a RELEASED cert) / `qcoos-view.js` / `qcecoa-view.js` ("QC eCOA intake"),
+wired into `index.html` + the SW precache list (`wwf-shell-v3.33.0`), under
+the QMS Studio nav group.
 
 **Bug found + fixed during the wwf_mass live smoke (backend v46):**
 `effective_date`/`sampling_date`/`report_date`/`result_date` were typed
@@ -421,7 +437,7 @@ a regression test (`test_date_fields_accept_real_iso_dates`) covering all
 four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
 `v46` before this smoke passed — `v45` was never left running.
 
-### Migrations 0018–0022
+### Migrations 0018–0023
 
 0018–0020 (additive, same shape as 0015/0017): `qc_spec_id_seq`/
 `qc_sampling_plan_id_seq`/`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human
@@ -431,11 +447,13 @@ sequences. 0021 adds the OOS cluster (`qc_oos_records`/`qc_oos_register`/
 `qc_oos_notifications` + `qc_oos_id_seq`). **0022** is column-only —
 additive `source_document_code`/`source_document_date`/`source_institution`
 on `qc_results` and `coq_document_id`/`coq_generated_at` on `qc_certificates`
-(no new tables; new columns inherit the existing table grants). Verified:
+(no new tables; new columns inherit the existing table grants). **0023** adds
+the eCOA-ingestion cluster (`qc_coa_documents`/`qc_coa_extractions`/
+`qc_field_placeholders` + `qc_ecoa_id_seq`), same facility canon. Verified:
 upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from alembic head
 with zero drift.
 
-> **Applying 0022 on a host** — the tasks alembic env uses an *async* engine
+> **Applying 0022/0023 on a host** — the tasks alembic env uses an *async* engine
 > and `alembic_version` is owned by the `postgres` superuser (app_admin is
 > DML-only), so run it with a superuser async URL:
 > `TASKS_MIGRATION_DATABASE_URL=postgresql+asyncpg://postgres:…@wwf-<stack>-db-tasks:5432/wwf_tasks
@@ -469,12 +487,25 @@ a real `document_id`, `RESULT: PASS`, and a 57,907-byte `.docx` (5 paragraphs
 persisted on the certificate. Prod (`wwf_app`) untouched — its tasks DB is at
 alembic `0016` and has none of the QC tables.
 
+**P3-U2 eCOA-ingestion live smoke (wwf_mass, backend v49 / frontend v70,
+2026-07-16).** With a real `tt.qc.mgr` token: a spec with two parameters →
+register an incoming eCoA (`PP-ECOA-2026-0001`) → transcribe two fields
+(`Total THC` auto-mapped by name → **graded PASS**; `Metals (Pb)` an unknown
+label → **unmapped**, count 2 / unmapped 1) → the unknown label appears in the
+discovery queue → map it to the Heavy-Metals parameter → **a new eCoA with the
+same label auto-maps + grades** (adaptive discovery loop) → promote the first
+document → a **DRAFT `ECOA` certificate `PP-COA-2026-0003`** with one result
+carrying `source_document_code=PP-ECOA-2026-0001` + `source_institution`
+(1 unmapped correctly **skipped**, never fabricated); the document moved to
+PROMOTED with `promoted_coa_id` set. This closes the CoA-in → certificate →
+(U1) COQ-out pipeline end-to-end.
+
 Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
-1. Apply migrations 0018–0022 to prod's `wwf_tasks` (`alembic -n tasks
-   upgrade head`; 0022 needs the superuser async URL — see the note above).
-2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v48`+, NOT
+1. Apply migrations 0018–0023 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head`; 0022/0023 need the superuser async URL — see the note above).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v49`+, NOT
    `v45` — see the date-field fix above) and frontend to the verified tag
-   (`v69`+). Prod must also run the `growflow-docengine` container (already
+   (`v70`+). Prod must also run the `growflow-docengine` container (already
    on wwf_mass) for COQ generation, with `DOCENGINE_URL`/`DOCENGINE_API_KEY`
    set on the backend.
 3. `docker compose up -d --no-deps backend frontend`.
@@ -482,10 +513,7 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
    the RELEASED-cert → COQ round trip above, against prod data, with real
    accounts.
 
-**Next increment (Phase 3 U2, not yet built):** eCOA PDF ingestion — a
-`qc_coa_documents` spine + `qc_coa_extractions` staging + a
-`qc_field_placeholders` review queue (adaptive field discovery as new lab
-formats arrive), promoting graded extractions into `qc_certificates`/
-`qc_results`. This is the CoA-in half of the Phase-3 certificate pipeline
-(consolidating CoA_TRACK / COQ_GEN / Kade onto the DocEngine) — see
-`docs/PLATFORM-ROADMAP-2026-07.md`.
+**Next increment (Phase 3 U3, not yet built):** the verify loop — RAG Q&A
+over ingested CoAs / reconciliation of promoted results against the source
+document, closing the certificate pipeline (consolidating CoA_TRACK /
+COQ_GEN / Kade onto the DocEngine) — see `docs/PLATFORM-ROADMAP-2026-07.md`.

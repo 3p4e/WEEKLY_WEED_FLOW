@@ -674,3 +674,142 @@ async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
     monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _Fail(None))
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 422 and r.json()["detail"]["verify"] == "RESULT: FAIL"
+
+
+# ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
+async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
+    spec = await _spec(client, headers, material=material)
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=headers)
+    assert p.status_code == 201, p.text
+    return spec, p.json()
+
+
+async def _ecoa_doc(client, headers, spec_id=None, batch="B-ECOA-1", **extra):
+    body = {"batch_id": batch, "source_institution": "Contract Lab GmbH", **extra}
+    if spec_id:
+        body["specification_id"] = spec_id
+    r = await client.post("/qc/coa-documents", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_ecoa_register_grades_and_discovers(client, admin_headers):
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-GRADE")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"])
+    assert doc["doc_number"].startswith("PP-ECOA-") and doc["status"] == "UPLOADED"
+    # one matching field (graded) + one unknown label (queued for a human)
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [
+                              {"raw_label": "Total THC", "numeric_value": 22.0, "unit": "%"},
+                              {"raw_label": "Mystery Assay", "raw_value": "42", "numeric_value": 42.0},
+                          ]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["count"] == 2 and body["unmapped"] == 1
+    ex = {e["raw_label"]: e for e in body["extractions"]}
+    assert ex["Total THC"]["grade_status"] == "graded" and ex["Total THC"]["complies"] is True
+    assert ex["Mystery Assay"]["grade_status"] == "unmapped" and ex["Mystery Assay"]["complies"] is None
+    # the document advanced to EXTRACTED
+    d = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()
+    assert d["document"]["status"] == "EXTRACTED"
+    # the unknown label is now in the discovery queue
+    ph = (await client.get("/qc/coa-placeholders", headers=admin_headers)).json()
+    assert any(p["raw_label"] == "Mystery Assay" and p["status"] == "OPEN" for p in ph)
+
+
+async def test_ecoa_unmeasured_is_unknown_not_fabricated(client, admin_headers):
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-UNK")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-UNK")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Total THC", "raw_value": "not reported"}]},
+                          headers=admin_headers)
+    e = r.json()["extractions"][0]
+    # mapped to the parameter, but no numeric value → unknown, never a verdict
+    assert e["grade_status"] == "unknown" and e["complies"] is None
+
+
+async def test_ecoa_placeholder_map_enables_auto_map(client, admin_headers):
+    spec, param = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-MAP")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-MAP-1")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "THC (total)", "numeric_value": 20.0}]},
+                      headers=admin_headers)
+    ph = [p for p in (await client.get("/qc/coa-placeholders", headers=admin_headers)).json()
+          if p["raw_label"] == "THC (total)"][0]
+    # a human maps the discovered label to the Total-THC parameter
+    m = await client.patch(f"/qc/coa-placeholders/{ph['id']}",
+                           json={"status": "MAPPED", "mapped_parameter_id": param["id"]},
+                           headers=admin_headers)
+    assert m.status_code == 200 and m.json()["status"] == "MAPPED"
+    # a NEW document with the same label now auto-maps + grades
+    doc2 = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-MAP-2")
+    r = await client.post(f"/qc/coa-documents/{doc2['id']}/extractions",
+                          json={"items": [{"raw_label": "THC (total)", "numeric_value": 25.0}]},
+                          headers=admin_headers)
+    e = r.json()["extractions"][0]
+    assert e["grade_status"] == "graded" and e["complies"] is True and e["parameter_id"] == param["id"]
+
+
+async def test_ecoa_promote_creates_certificate_with_provenance(client, admin_headers):
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-PROMO")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-PROMO")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [
+                          {"raw_label": "Total THC", "numeric_value": 22.0, "unit": "%"},
+                          {"raw_label": "Unknown Field", "numeric_value": 1.0},
+                      ]}, headers=admin_headers)
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    out = r.json()
+    assert out["results_created"] == 1 and out["skipped_unmapped"] == 1
+    # the minted certificate is a DRAFT ECOA carrying the source doc on its result
+    coa = (await client.get(f"/qc/certificates/{out['coa_id']}", headers=admin_headers)).json()
+    assert coa["coa"]["status"] == "DRAFT" and coa["coa"]["cert_type"] == "ECOA"
+    assert coa["results"][0]["source_document_code"] == doc["doc_number"]
+    assert coa["results"][0]["complies"] is True
+    # the document is now PROMOTED and points at the certificate
+    d = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()
+    assert d["document"]["status"] == "PROMOTED" and d["document"]["promoted_coa_id"] == out["coa_id"]
+
+
+async def test_ecoa_promote_needs_spec_and_mapped_results(client, admin_headers):
+    # no spec → cannot certify
+    doc = await _ecoa_doc(client, admin_headers, batch="B-NOSPEC")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Whatever", "numeric_value": 1.0}]},
+                      headers=admin_headers)
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=admin_headers)
+    assert r.status_code == 409
+    # spec but only unmapped fields → nothing to promote
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-NOMAP")
+    doc2 = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-NOMAP")
+    await client.post(f"/qc/coa-documents/{doc2['id']}/extractions",
+                      json={"items": [{"raw_label": "Alien Test", "numeric_value": 1.0}]},
+                      headers=admin_headers)
+    r = await client.post(f"/qc/coa-documents/{doc2['id']}/promote", headers=admin_headers)
+    assert r.status_code == 409
+
+
+async def test_ecoa_promote_via_patch_is_refused(client, admin_headers):
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-PATCH")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-PATCH")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0}]},
+                      headers=admin_headers)
+    # PROMOTED must go through the promote endpoint (it mints a certificate)
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "PROMOTED"},
+                           headers=admin_headers)
+    assert r.status_code == 409
+    # a legal transition is fine
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "REVIEWED"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "REVIEWED"
+
+
+async def test_ecoa_is_write_gated(client, admin_headers):
+    _, user_headers = await _actor(client, admin_headers, "USER")
+    r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)
+    assert r.status_code == 403

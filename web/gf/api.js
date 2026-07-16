@@ -135,6 +135,16 @@ GF.API = {
   qcAddOosNotify(id, b)    { return this._req('POST', '/qc/oos/' + id + '/notifications', b); },
   qcAckOosNotify(id, nid)  { return this._req('POST', '/qc/oos/' + id + '/notifications/' + nid + '/ack'); },
   qcCapa(q)                { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/capa' + (u?'?'+u:'')); },
+  // eCOA ingestion (Phase 3 U2) — CoA in → grade → promote → certificate
+  qcCoaDocs(q)             { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/coa-documents' + (u?'?'+u:'')); },
+  qcCoaDoc(id)             { return this._req('GET', '/qc/coa-documents/' + id); },
+  qcCreateCoaDoc(b)        { return this._req('POST', '/qc/coa-documents', b); },
+  qcPatchCoaDoc(id, b)     { return this._req('PATCH', '/qc/coa-documents/' + id, b); },
+  qcSubmitExtractions(id, items) { return this._req('POST', '/qc/coa-documents/' + id + '/extractions', { items }); },
+  qcPatchExtraction(id, eid, b)  { return this._req('PATCH', '/qc/coa-documents/' + id + '/extractions/' + eid, b); },
+  qcPromoteCoaDoc(id)      { return this._req('POST', '/qc/coa-documents/' + id + '/promote'); },
+  qcPlaceholders(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/coa-placeholders' + (u?'?'+u:'')); },
+  qcPatchPlaceholder(id, b){ return this._req('PATCH', '/qc/coa-placeholders/' + id, b); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },
