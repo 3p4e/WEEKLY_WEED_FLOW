@@ -375,7 +375,7 @@ T4 (this polish pass) is the last increment before that promotion gate.
 Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
 facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
 `audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
-backend `v52` / frontend `v73` / migrations `0018`–`0027` (tasks DB head). The
+backend `v53` / frontend `v74` / migrations `0018`–`0027` (tasks DB head). The
 Phase-3 certificate pipeline is complete end-to-end: **CoA in (U2) →
 certificate → COQ out (U1), verified (U3), retrieval Q&A (U4)**; U5 adds the
 field-to-lab custody cluster (ALCOA++), U6 the three standalone JSONB leaves.
@@ -608,7 +608,37 @@ Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
 **Phase 3 is complete** (U1 COQ-out, U2 CoA-in, U3 verify loop, U4 retrieval
 Q&A) and both the custody cluster (U5) and the water/stability/transport leaves
 (U6) are in, all on wwf_mass — the QC-LIMS domain rebuild is now feature-complete
-against the `qc-lims-ao` prototype. What remains is **Phase 4 hardening**
-(security/correctness review of the QC + certificate surface, nav polish, doc
-consolidation), tracked in `docs/PLATFORM-ROADMAP-2026-07.md`; prod promotion of
-the whole QC LIMS + certificate pipeline is one owner-gated decision.
+against the `qc-lims-ao` prototype.
+
+### Phase 4 hardening (backend v53 / frontend v74, 2026-07-16)
+
+A code-only hardening pass over the whole QC + certificate surface (no schema
+change). An adversarial backend + frontend review confirmed the foundations
+clean — authorization gating, SQL-injection safety (every dynamic clause uses
+hardcoded identifiers + bound params), transaction atomicity (`rls()` opens a
+transaction, so multi-statement writes commit-or-roll-back together), jsonb/date
+handling, enum/state guards, and the second-person (reviewer ≠ analyst) check.
+The fixes close a class of **write-side FK-validation asymmetries** that
+returned a raw 500 (and could persist a dangling cross-org reference) instead of
+a clean 422: `add_result` now checks the cited spec parameter exists AND belongs
+to the certificate's own specification; `update_placeholder` validates
+`mapped_parameter_id` whenever supplied (not only on a MAPPED transition);
+`create_sfr`/`update_rqs`/`update_sfr` validate `sample_id` like their sibling
+creates. Plus: `generate_coq` re-asserts the certificate is still RELEASED when
+stamping the artifact after the (≤120 s) DocEngine build (TOCTOU), and the
+`chunks`/`items` batch inputs are length-capped so one request can't drive an
+unbounded INSERT loop in a single transaction. Frontend: the transport row's
+nested annex-form access is null-guarded (one malformed row no longer blanks the
+Transport tab) and the water-test jsonb `parameters` are now displayed (they were
+captured but never shown); the retrieval passages' numerics are escaped
+(defense-in-depth). **Deliberately NOT changed:** eCoA documents/extractions stay
+editable after PROMOTED — the U3 verify loop is the intended control that
+*detects* post-promotion source divergence, so a hard freeze would remove its
+input. Local gate: full backend suite **364 passed** (+4 hardening regressions),
+`node --check` clean, SW `wwf-shell-v3.37.0`. Live-smoked on wwf_mass with a real
+`tt.qc.mgr` token: a bad `parameter_id`, a bad placeholder `mapped_parameter_id`
+(no status), a bad SFR/RQS `sample_id`, and an over-cap chunk batch each return
+**422** (previously 500 / dangling), while a valid result still posts 201.
+
+Prod promotion of the whole QC LIMS + certificate pipeline is one owner-gated
+decision (recipe above); wwf_app remains untouched at alembic `0016`.

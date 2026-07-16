@@ -84,11 +84,16 @@
     const st = GF.WWF._qcl, q = st.q.trim().toLowerCase();
     const rows = (st.water || []).filter(w => !q || (w.location || '').toLowerCase().includes(q) || (w.water_test_id || '').toLowerCase().includes(q));
     if (!rows.length) return `<div class="ana-note">${GF.t('no_tasks')}</div>`;
-    return `<table class="qcp-table"><thead><tr><th>ID</th><th>${AL('Location', 'Локација')}</th><th>${AL('Grade', 'Класа')}</th><th>${AL('Date', 'Датум')}</th><th>${AL('Result', 'Резултат')}</th></tr></thead><tbody>${
-      rows.map(w => `<tr><td class="mono">${GF.esc(w.water_test_id)}</td><td>${GF.esc(w.location)}</td><td>${GF.esc(w.grade)}</td>
+    return `<table class="qcp-table"><thead><tr><th>ID</th><th>${AL('Location', 'Локација')}</th><th>${AL('Grade', 'Класа')}</th><th>${AL('Date', 'Датум')}</th><th>${AL('Parameters', 'Параметри')}</th><th>${AL('Result', 'Резултат')}</th></tr></thead><tbody>${
+      rows.map(w => {
+        const P = w.parameters || {};
+        const pstr = Object.keys(P).map(k => GF.esc(k + ': ' + P[k])).join(' · ');
+        return `<tr><td class="mono">${GF.esc(w.water_test_id)}</td><td>${GF.esc(w.location)}</td><td>${GF.esc(w.grade)}</td>
         <td class="mono">${GF.esc(w.result_date || '—')}</td>
+        <td class="ana-note">${pstr || '—'}</td>
         <td>${w.passed ? chip('PASS', 'var(--green)') : chip('OOE' + (w.ooe ? ' · ' + GF.esc(w.ooe) : ''), 'var(--red)')}
-        ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qclToggleWater('${w.id}',${w.passed})">${AL('flip', 'смени')}</button>` : ''}</td></tr>`).join('')
+        ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qclToggleWater('${w.id}',${w.passed})">${AL('flip', 'смени')}</button>` : ''}</td></tr>`;
+      }).join('')
     }</tbody></table>`;
   };
   const stabList = () => {
@@ -107,13 +112,16 @@
     const rows = (st.trn || []).filter(t => !q || (t.sample_id || '').toLowerCase().includes(q) || (t.transport_id || '').toLowerCase().includes(q));
     if (!rows.length) return `<div class="ana-note">${GF.t('no_tasks')}</div>`;
     const FORMS = ['sar', 'moia', 'tmcoc', 'coo', 'fin'];
-    return rows.map(t => `<div class="qms-row" style="flex-wrap:wrap;gap:6px">
+    return rows.map(t => {
+      const F = t.forms || {};
+      return `<div class="qms-row" style="flex-wrap:wrap;gap:6px">
       <span class="mono qms-code">${GF.esc(t.transport_id)}</span>
       <span class="qms-title">${GF.esc(t.sample_id)} <span class="ana-note">→ ${GF.esc(t.external_lab || '?')}${(t.tests && t.tests.length) ? ' · ' + GF.esc(t.tests.join(', ')) : ''}</span></span>
       ${chip(t.status, TRN_ST[t.status] || 'var(--ink-3)')}
-      <span style="display:flex;gap:3px">${FORMS.map(f => `<span class="chip-opt" style="cursor:${canWrite() ? 'pointer' : 'default'};border-color:${t.forms[f] ? 'var(--green)' : 'var(--ink-4)'};color:${t.forms[f] ? 'var(--green)' : 'var(--ink-3)'}" ${canWrite() ? `onclick="GF.WWF.qclToggleForm('${t.id}','${f}',${t.forms[f]})"` : ''}>${f.toUpperCase()}</span>`).join('')}</span>
+      <span style="display:flex;gap:3px">${FORMS.map(f => `<span class="chip-opt" style="cursor:${canWrite() ? 'pointer' : 'default'};border-color:${F[f] ? 'var(--green)' : 'var(--ink-4)'};color:${F[f] ? 'var(--green)' : 'var(--ink-3)'}" ${canWrite() ? `onclick="GF.WWF.qclToggleForm('${t.id}','${f}',${!!F[f]})"` : ''}>${f.toUpperCase()}</span>`).join('')}</span>
       ${canWrite() && TRN_NEXT[t.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qclAdvanceTrn('${t.id}','${TRN_NEXT[t.status]}')">→ ${GF.esc(TRN_NEXT[t.status])}</button>` : ''}
-    </div>`).join('');
+    </div>`;
+    }).join('');
   };
 
   GF.views.qcleaves = () => {

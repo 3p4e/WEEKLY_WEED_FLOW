@@ -51,7 +51,7 @@ prod promotion (§8) — plus a few deferred low-priority QC leaves.
 | Environment | Backend | Frontend | tasks-DB | Extra services | Notes |
 |---|---|---|---|---|---|
 | **Production** `wwf_app` (`https://…hstgr.cloud`) | v39 | v63 | alembic **0016** | — | The 25-user live system. No DocEngine, no QMS Studio, no TMS, no QC LIMS — **all new work is test-only** and owner-gated. |
-| **Test** `wwf_mass` (`https://wwf-mass…`) | **v52** | **v73** | alembic **0027** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U6** + the full certificate pipeline (Phase 3 **U1–U4**) all live + live-smoked. Migrations 0017–0027 applied. |
+| **Test** `wwf_mass` (`https://wwf-mass…`) | **v53** | **v74** | alembic **0027** | `qms-api:v1`, `growflow-docengine:v3` | DocEngine + TMS (T1–T4) + QC LIMS **U1–U6** + the full certificate pipeline (Phase 3 **U1–U4**) all live + live-smoked, **+ a Phase 4 hardening pass** over the QC surface. Migrations 0017–0027 applied. |
 
 **Standing rule (owner, non-negotiable):** every upgrade deploys to **wwf_mass
 only**; production is promoted **solely** after the owner's own tests +
@@ -222,12 +222,21 @@ separate services. Four units (migrations 0022–0024, 0027):
   authoring still belongs to the DocEngine's Letta fleet.
 Full flow live-verified end-to-end.
 
-### Phase 4 — Cross-cutting hardening + production cutover — NOT STARTED (owner-gated)
-Consolidate the retired Phase-1 `qms-api` shell, unify the nav zones, full
-security/audit pass, Letta ops backlog (`docs/LETTA-OPS-BACKLOG.md`), and the
-staged owner-approved promotion of each landed module to prod. **This phase is
-the owner's decision to open** — it begins with the owner's acceptance tests on
-wwf_mass and an explicit go for the first prod promotion.
+### Phase 4 — Cross-cutting hardening + production cutover — IN PROGRESS (owner-gated cutover)
+A first **hardening pass over the QC + certificate surface is done on wwf_mass**
+(backend v53 / frontend v74, 2026-07-16): an adversarial backend + frontend
+review (authz, SQL-injection, transaction atomicity, jsonb/date, enum guards,
+second-person review all verified clean) plus a batch of fixes closing a
+write-side FK-validation class (unknown/cross-org ids now 422 instead of a raw
+500 / dangling reference), a `generate_coq` TOCTOU re-assert, batch-size caps,
+and frontend robustness (null-guarded transport forms, displayed water
+parameters, escaped retrieval numerics). Nav coherence was verified (all seven
+QC views register uniquely under the QMS-Studio group — no defect). See
+`docs/DEPLOY.md` → "Phase 4 hardening". **Still owner-gated / open:** consolidate
+the retired Phase-1 `qms-api` shell, unify the nav zones fully, the Letta ops
+backlog (`docs/LETTA-OPS-BACKLOG.md`), and the **staged owner-approved promotion
+of each landed module to prod** — which begins only with the owner's acceptance
+tests on wwf_mass and an explicit go for the first prod promotion.
 
 ---
 
