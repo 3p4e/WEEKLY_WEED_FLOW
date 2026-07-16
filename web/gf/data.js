@@ -80,6 +80,7 @@ GF.I18N = {
     sop_registry:'SOP Registry', sop_registry_sub:'The QMS document registry — codes, status, versions, downloads',
     knowledge:'Knowledge', knowledge_sub:'Search the regulatory corpus and the facility document base',
     doc_create:'Create', doc_create_sub:'Questionnaire → AI agent fleet → regulatory check → verified controlled document',
+    qc_specs:'QC Specifications', qc_specs_sub:'Controlled acceptance criteria per material — versions, lifecycle, test limits',
   },
   mk: {
     my_week:'Моја недела', calendar:'Календар', workload:'Оптовареност', board:'Табла', timeline:'Времеплов', coordination:'Координација', dashboard:'Контролна табла',
@@ -121,6 +122,7 @@ GF.I18N = {
     sop_registry:'Регистар на СОП', sop_registry_sub:'QMS регистар на документи — кодови, статус, верзии, преземања',
     knowledge:'Знаење', knowledge_sub:'Пребарување на регулаторниот корпус и документите на капацитетот',
     doc_create:'Креирај', doc_create_sub:'Прашалник → флота АИ агенти → регулаторна проверка → верификуван контролиран документ',
+    qc_specs:'КК Спецификации', qc_specs_sub:'Контролирани критериуми за прифаќање по материјал — верзии, животен циклус, граници',
   },
 };
 

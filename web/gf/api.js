@@ -105,6 +105,13 @@ GF.API = {
   qmsFamilies()            { return this._req('GET', '/qms/families'); },
   qmsRagQuery(body)        { return this._req('POST', '/qms/rag-query', body); },
   qmsDownloadUrl(path)     { return '/qms/download/' + path.split('/').map(encodeURIComponent).join('/'); },
+  // QC LIMS — specifications (U1)
+  qcSpecs(q)               { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/specifications' + (u?'?'+u:'')); },
+  qcSpec(id)               { return this._req('GET', '/qc/specifications/' + id); },
+  qcCreateSpec(b)          { return this._req('POST', '/qc/specifications', b); },
+  qcPatchSpec(id, b)       { return this._req('PATCH', '/qc/specifications/' + id, b); },
+  qcAddSpecParam(id, b)    { return this._req('POST', '/qc/specifications/' + id + '/parameters', b); },
+  qcDeleteSpecParam(id, pid){ return this._req('DELETE', '/qc/specifications/' + id + '/parameters/' + pid); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },

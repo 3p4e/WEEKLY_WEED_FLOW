@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 69QzBK6xmzmqIVjxYseGauqJSR6hJtTk7ZEczO8NaKNdjb76wM86tIrg4RtS3Ll
+\restrict xyvQffCAMrmkZ9i2VMFDh8AwGKgL5308l0Z1pdpJtfMEcGgNXsJokaRizjnMMYz
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -311,6 +311,75 @@ ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_spec_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_spec_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_spec_parameters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_spec_parameters (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    spec_id uuid NOT NULL,
+    test_name_en text NOT NULL,
+    test_name_mk text,
+    test_method text,
+    spec_type text,
+    lower_limit numeric,
+    upper_limit numeric,
+    unit text,
+    pharmacopoeia_ref text,
+    test_location text,
+    sorting_order integer DEFAULT 0 NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_spec_parameters FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_specifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_specifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    spec_id text NOT NULL,
+    material_code text NOT NULL,
+    material_name_en text NOT NULL,
+    material_name_mk text,
+    version integer DEFAULT 1 NOT NULL,
+    effective_date date,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    thc_grade text,
+    thc_acceptance_min numeric,
+    thc_acceptance_max numeric,
+    notes text,
+    approved_by uuid,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_specifications_status_check CHECK ((status = ANY (ARRAY['INITIATED'::text, 'DRAFT'::text, 'QC_REVIEW'::text, 'QA_APPROVED'::text, 'NUMBERED'::text, 'TRAINED'::text, 'ACTIVE'::text, 'UNDER_CHANGE'::text, 'SUPERSEDED'::text, 'WITHDRAWN'::text]))),
+    CONSTRAINT qc_specifications_thc_grade_check CHECK (((thc_grade IS NULL) OR (thc_grade = ANY (ARRAY['GRADE_I'::text, 'GRADE_II'::text, 'GRADE_III'::text, 'GRADE_IV'::text, 'GRADE_V'::text])))),
+    CONSTRAINT qc_specifications_version_check CHECK ((version >= 1))
+);
+
+ALTER TABLE ONLY public.qc_specifications FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: rooms; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -613,6 +682,38 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: qc_spec_parameters qc_spec_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_specifications qc_specifications_material_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_material_version_key UNIQUE (org_id, material_code, version);
+
+
+--
+-- Name: qc_specifications qc_specifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_specifications qc_specifications_spec_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_spec_id_key UNIQUE (org_id, spec_id);
+
+
+--
 -- Name: rooms rooms_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -757,6 +858,27 @@ CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org
 
 
 --
+-- Name: qc_spec_parameters_spec_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_spec_parameters_spec_idx ON public.qc_spec_parameters USING btree (org_id, spec_id);
+
+
+--
+-- Name: qc_specifications_material_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_specifications_material_idx ON public.qc_specifications USING btree (org_id, material_code);
+
+
+--
+-- Name: qc_specifications_one_active_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_specifications_one_active_idx ON public.qc_specifications USING btree (org_id, material_code) WHERE (status = 'ACTIVE'::text);
+
+
+--
 -- Name: task_dependencies_dep_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -890,6 +1012,20 @@ CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.pl
 
 
 --
+-- Name: qc_spec_parameters audit_qc_spec_parameters; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_spec_parameters AFTER INSERT OR DELETE OR UPDATE ON public.qc_spec_parameters FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_specifications audit_qc_specifications; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_specifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_specifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: rooms audit_rooms; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -993,6 +1129,14 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.plant_batches
     ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_spec_parameters qc_spec_parameters_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_spec_fkey FOREIGN KEY (spec_id) REFERENCES public.qc_specifications(id) ON DELETE CASCADE;
 
 
 --
@@ -1215,6 +1359,20 @@ CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current
 
 
 --
+-- Name: qc_spec_parameters org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_spec_parameters USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_specifications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_specifications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: rooms org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1268,6 +1426,18 @@ ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: qc_spec_parameters; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_spec_parameters ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_specifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_specifications ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1373,5 +1543,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 69QzBK6xmzmqIVjxYseGauqJSR6hJtTk7ZEczO8NaKNdjb76wM86tIrg4RtS3Ll
+\unrestrict xyvQffCAMrmkZ9i2VMFDh8AwGKgL5308l0Z1pdpJtfMEcGgNXsJokaRizjnMMYz
 
