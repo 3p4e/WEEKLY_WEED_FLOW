@@ -445,3 +445,49 @@
 .wl-chip:hover{color:var(--ink);border-color:var(--primary)}
 .wl-none{font-size:11.5px;color:var(--ink-4)}
 @media (max-width:880px){.wl-row{grid-template-columns:1fr;gap:8px}}
+
+/* ── Analytics view ── */
+.ana-head { display:flex; gap:6px; margin-bottom:12px; }
+.ana-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+.ana-tile { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+.ana-tl { font-size:12px; color:var(--ink-3); margin-bottom:4px; }
+.ana-tv { font-size:26px; font-weight:600; color:var(--ink); }
+.ana-ts { font-size:12px; color:var(--ink-2); margin-top:2px; }
+.ana-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
+.ana-panel { padding:14px 16px; }
+.ana-pt { font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
+.ana-panel svg { width:100%; height:auto; display:block; }
+.ana-grid { stroke:var(--line); stroke-width:1; }
+.ana-tick { font-size:9px; fill:var(--ink-3); font-family:inherit; }
+.ana-cap { font-size:10px; fill:var(--ink-2); font-weight:600; font-family:inherit; }
+.ana-legend { display:flex; gap:14px; margin-top:8px; font-size:12px; color:var(--ink-2); }
+.ana-legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+.ana-note { font-size:12px; color:var(--ink-3); margin-top:8px; }
+.ana-row { display:grid; grid-template-columns:minmax(90px,130px) 1fr 34px auto; gap:8px; align-items:center; padding:4px 0; }
+.ana-rl { font-size:12.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ana-hb { height:14px; background:var(--surface-2); border-radius:0 4px 4px 0; overflow:hidden; }
+.ana-hb-f { height:100%; background:var(--ch-a); border-radius:0 4px 4px 0; }
+.ana-rv { font-size:12.5px; color:var(--ink); font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
+.ana-rx { display:flex; gap:10px; font-size:11.5px; color:var(--ink-2); white-space:nowrap; }
+.ana-rx .fs-dot { margin-right:4px; }
+
+/* ── QMS Studio views ── */
+.qms-zone { font-size:12px; color:var(--ink-3); border:1px solid var(--line);
+  border-left:3px solid var(--violet); border-radius:8px; padding:8px 12px; margin-bottom:12px; }
+.qms-search { background:var(--surface-2); border:1px solid var(--line); border-radius:8px;
+  color:var(--ink); padding:8px 12px; font-size:13px; min-width:200px; }
+.qms-list { display:flex; flex-direction:column; }
+.qms-row { display:flex; gap:10px; align-items:center; padding:9px 8px; border-bottom:1px solid var(--line);
+  cursor:pointer; border-radius:6px; }
+.qms-row:hover { background:var(--surface-2); }
+.qms-row.on { background:var(--surface-2); }
+.qms-code { font-size:12px; color:var(--ink-2); flex:none; min-width:96px; }
+.qms-title { flex:1; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qms-detail { background:var(--surface-2); border-radius:0 0 8px 8px; padding:12px 14px; margin-bottom:6px; }
+.qms-dgrid { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:12.5px;
+  color:var(--ink-3); margin-bottom:10px; }
+.qms-dgrid b { color:var(--ink); font-weight:500; }
+.qms-dl { display:flex; gap:8px; flex-wrap:wrap; }
+.qms-hit { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.qms-hit-h { display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+.qms-hit-b { font-size:13px; color:var(--ink-2); line-height:1.5; }

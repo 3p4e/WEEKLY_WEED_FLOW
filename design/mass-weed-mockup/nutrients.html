@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Nutrient Dosing</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .doserow{ display:grid; grid-template-columns:1.1fr 1fr; gap:16px; margin-bottom:16px; }
+  .res__big{ display:flex; gap:26px; align-items:center; margin-bottom:18px; }
+  .res__tank{ width:96px; height:150px; flex:none; position:relative; border:2px solid rgba(94,200,240,.35); border-radius:8px 8px 12px 12px; overflow:hidden; background:rgba(11,20,32,.6); }
+  .res__liq{ position:absolute; left:0; right:0; bottom:0; background:linear-gradient(180deg,rgba(94,200,240,.55),rgba(58,159,212,.75)); box-shadow:inset 0 4px 12px rgba(160,230,255,.5); transition:height .6s; }
+  .res__liq::before{ content:''; position:absolute; top:0; left:0; right:0; height:6px; background:rgba(180,240,255,.8); }
+  .res__pct{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'Saira Condensed',sans-serif; font-size:30px; font-weight:700; color:var(--mw-ink); text-shadow:0 0 8px rgba(0,0,0,.6); }
+  .res__meta{ flex:1; }
+  .readout{ display:flex; gap:14px; margin-bottom:14px; }
+  .ro{ flex:1; background:rgba(58,159,212,.07); border:1px solid rgba(94,200,240,.16); padding:12px 14px; clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px); }
+  .ro__lab{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); }
+  .ro__val{ font-family:'Saira Condensed',sans-serif; font-size:30px; font-weight:700; color:var(--mw-ink); line-height:1; margin-top:4px; }
+  .ro__val small{ font-size:13px; color:var(--mw-text-dim); font-weight:400; }
+  .ro--ok .ro__val{ color:var(--mw-stat-hi); }
+  .ro--warn .ro__val{ color:var(--mw-stat-mid); }
+  .mix{ display:flex; flex-direction:column; gap:11px; }
+  .part{ display:flex; align-items:center; gap:12px; }
+  .part__nm{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mw-text-dim); width:120px; flex:none; }
+  .part__track{ flex:1; height:8px; background:rgba(58,159,212,.14); clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); overflow:hidden; }
+  .part__fill{ height:100%; box-shadow:0 0 8px rgba(94,200,240,.4); }
+  .part__ml{ font-family:'Saira Condensed',sans-serif; font-size:14px; font-weight:600; color:var(--mw-ink); width:74px; text-align:right; flex:none; }
+  .sched{ width:100%; border-collapse:collapse; }
+  .sched th{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); text-align:left; padding:8px 10px; border-bottom:1px solid rgba(94,200,240,.2); }
+  .sched td{ font-size:13px; color:var(--mw-ink); padding:10px; border-bottom:1px solid rgba(94,200,240,.08); }
+  .sched tr.is-now td{ background:rgba(94,200,240,.09); }
+  .sched .ph{ font-family:'Saira Condensed',sans-serif; font-weight:600; }
+  .nowtag{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-void); background:var(--mw-cyan-bright); padding:2px 7px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); margin-left:8px; }
+  .modes{ display:flex; gap:8px; margin-bottom:16px; }
+  .mode{ font-family:'Saira Condensed',sans-serif; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--mw-text-dim); background:rgba(58,159,212,.08); border:1px solid rgba(94,200,240,.18); padding:7px 18px; cursor:pointer; clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); transition:all .15s; }
+  .mode:hover{ color:var(--mw-ink); border-color:var(--mw-cyan-bright); }
+  .mode.is-active{ color:var(--mw-void); background:var(--mw-cyan-bright); border-color:var(--mw-cyan-bright); box-shadow:0 0 14px rgba(94,200,240,.4); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Nutrient Dosing">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html" class="is-active">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Nutrient Dosing</h1><span class="mw-rule"></span></div>
+
+  <div class="modes">
+    <span class="mw-label" style="align-self:center;margin-right:4px;">Feed Program</span>
+    <button class="mode" data-m="veg">Vegetative</button>
+    <button class="mode is-active" data-m="flower">Flower</button>
+    <button class="mode" data-m="flush">Flush</button>
+  </div>
+
+  <div class="doserow">
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:14px;">Reservoir · Zone Flower A</div>
+      <div class="res__big">
+        <div class="res__tank"><div class="res__liq" id="liq" style="height:72%"></div><div class="res__pct" id="tankpct">72%</div></div>
+        <div class="res__meta">
+          <div class="readout" style="flex-direction:column;gap:10px;">
+            <div class="ro ro--ok" style="width:100%;box-sizing:border-box;"><div class="ro__lab">EC / PPM</div><div class="ro__val" id="ec">1.8 <small>mS · 900 ppm</small></div></div>
+            <div class="ro ro--ok" style="width:100%;box-sizing:border-box;"><div class="ro__lab">pH</div><div class="ro__val" id="ph">5.9</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="readout">
+        <div class="ro"><div class="ro__lab">Water Temp</div><div class="ro__val">19.4<small>°C</small></div></div>
+        <div class="ro"><div class="ro__lab">Volume</div><div class="ro__val">540<small>L</small></div></div>
+        <div class="ro ro--warn"><div class="ro__lab">Refill In</div><div class="ro__val">2<small>d</small></div></div>
+      </div>
+    </div>
+
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:16px;">Mix Formula <span id="mixmode" style="color:var(--mw-cyan-bright);">· Flower</span></div>
+      <div class="mix" id="mix"></div>
+    </div>
+  </div>
+
+  <div class="mw-panel">
+    <div class="mw-label" style="margin-bottom:12px;">Feed Schedule · 7-Day</div>
+    <table class="sched">
+      <thead><tr><th>Day</th><th>Phase</th><th>EC Target</th><th>pH</th><th>Volume</th><th>Status</th></tr></thead>
+      <tbody id="schedbody"></tbody>
+    </table>
+  </div>
+</div>
+</div>
+<script>
+  const formulas={
+    veg:{ec:'1.4',ppm:'700',ph:'6.0',tag:'Vegetative',parts:[
+      ['Grow A',420,'#5ec8f0'],['Grow B',420,'#3a9fd4'],['Cal-Mag',180,'#a879e0'],['Root Boost',90,'#3fe0a0'],['Silica',60,'#e0c060']]},
+    flower:{ec:'1.8',ppm:'900',ph:'5.9',tag:'Flower',parts:[
+      ['Bloom A',480,'#5ec8f0'],['Bloom B',480,'#3a9fd4'],['PK Boost',260,'#e06a6a'],['Cal-Mag',150,'#a879e0'],['Silica',60,'#e0c060']]},
+    flush:{ec:'0.2',ppm:'100',ph:'6.1',tag:'Flush',parts:[
+      ['RO Water',960,'#5ec8f0'],['Flush Agent',120,'#3fe0a0'],['pH Down',20,'#e06a6a']]}
+  };
+  function renderMix(m){
+    const f=formulas[m];
+    const max=Math.max(...f.parts.map(p=>p[1]));
+    document.getElementById('mix').innerHTML=f.parts.map(p=>`
+      <div class="part"><span class="part__nm">${p[0]}</span>
+        <div class="part__track"><div class="part__fill" style="width:${(p[1]/max*100).toFixed(0)}%;background:linear-gradient(90deg,${p[2]}88,${p[2]})"></div></div>
+        <span class="part__ml">${p[1]} ml</span></div>`).join('');
+    document.getElementById('ec').innerHTML=`${f.ec} <small>mS · ${f.ppm} ppm</small>`;
+    document.getElementById('ph').textContent=f.ph;
+    document.getElementById('mixmode').textContent='· '+f.tag;
+  }
+  const sched=[
+    ['Mon','Flower W5','1.8','5.9','540 L','done'],
+    ['Tue','Flower W5','1.8','5.9','520 L','done'],
+    ['Wed','Flower W5','1.9','5.8','540 L','now'],
+    ['Thu','Flower W5','1.9','5.8','540 L','next'],
+    ['Fri','Flower W6','2.0','5.8','560 L','next'],
+    ['Sat','Flower W6','2.0','5.9','560 L','next'],
+    ['Sun','Flower W6','1.9','5.9','540 L','next']
+  ];
+  const stt={done:['var(--mw-stat-hi)','Logged'],now:['var(--mw-cyan-bright)','Dosing'],next:['var(--mw-text-dim)','Queued']};
+  document.getElementById('schedbody').innerHTML=sched.map(r=>`
+    <tr class="${r[5]==='now'?'is-now':''}">
+      <td class="ph">${r[0]}</td><td>${r[1]}</td><td>${r[2]} mS</td><td>${r[3]}</td><td>${r[4]}</td>
+      <td style="color:${stt[r[5]][0]};font-weight:600;">${stt[r[5]][1]}${r[5]==='now'?'<span class="nowtag">Live</span>':''}</td>
+    </tr>`).join('');
+  renderMix('flower');
+  document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.mode').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active'); renderMix(b.dataset.m);
+  }));
+  // live jitter on EC/pH
+  setInterval(()=>{
+    const liq=document.getElementById('liq');
+    const cur=parseFloat(liq.style.height);
+    const nv=Math.max(68,Math.min(74,cur+(Math.random()-.5)));
+    liq.style.height=nv.toFixed(0)+'%';
+    document.getElementById('tankpct').textContent=nv.toFixed(0)+'%';
+  },2200);
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

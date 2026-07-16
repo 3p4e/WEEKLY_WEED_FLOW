@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cannabis EU GMP QMS Facility Data Schema",
+  "description": "Validation schema for facility_data.yaml",
+  "type": "object",
+  "required": ["company", "regulatory", "personnel", "equipment", "facilities", "operations"],
+  "properties": {
+    "company": {
+      "type": "object",
+      "required": ["legal_entity_name", "facility_name", "address"],
+      "properties": {
+        "legal_entity_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Legal name of the company entity"
+        },
+        "registration_number": {
+          "type": "string",
+          "description": "Company registration number"
+        },
+        "facility_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the production facility"
+        },
+        "address": {
+          "type": "object",
+          "required": ["city", "country"],
+          "properties": {
+            "street": {"type": "string"},
+            "city": {"type": "string", "minLength": 1},
+            "region": {"type": "string"},
+            "postal_code": {"type": "string"},
+            "country": {"type": "string", "minLength": 1},
+            "latitude": {"type": "string"},
+            "longitude": {"type": "string"}
+          }
+        }
+      }
+    },
+    "regulatory": {
+      "type": "object",
+      "required": ["regulatory_authority"],
+      "properties": {
+        "medical_cannabis_license": {
+          "type": "object",
+          "properties": {
+            "license_number": {"type": "string"},
+            "issue_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "expiration_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          }
+        },
+        "regulatory_authority": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "contact_name": {"type": "string"},
+            "phone": {"type": "string"},
+            "email": {"type": "string", "format": "email"}
+          }
+        }
+      }
+    },
+    "personnel": {
+      "type": "object",
+      "required": ["qualified_person"],
+      "properties": {
+        "qualified_person": {
+          "type": "object",
+          "required": ["first_name", "last_name", "title"],
+          "properties": {
+            "first_name": {"type": "string", "minLength": 1},
+            "last_name": {"type": "string", "minLength": 1},
+            "title": {"type": "string", "minLength": 1},
+            "qualifications": {"type": "string"},
+            "phone": {"type": "string"},
+            "email": {"type": "string"}
+          }
+        }
+      }
+    },
+    "equipment": {
+      "type": "object",
+      "description": "Equipment inventory"
+    },
+    "facilities": {
+      "type": "object",
+      "description": "Facility rooms and areas"
+    },
+    "operations": {
+      "type": "object",
+      "description": "Operational scope and objectives"
+    }
+  }
+}

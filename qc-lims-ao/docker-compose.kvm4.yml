@@ -1,0 +1,34 @@
+# Production overlay for the KVM4 host. Publishes the SPA through the shared
+# Traefik reverse proxy (HTTPS + Let's Encrypt) and attaches the backend to the
+# shared AI network. Use together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.kvm4.yml --env-file .env up -d
+#
+# Override via .env: APP_HOST, TRAEFIK_NETWORK, AI_NETWORK, TRAEFIK_CERTRESOLVER.
+
+services:
+  backend:
+    networks:
+      - internal
+      - kpm_shared
+      - ai_shared
+
+  frontend:
+    networks:
+      - internal
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik_network}"
+      - "traefik.http.routers.qc-lims-ao1.entrypoints=websecure"
+      - "traefik.http.routers.qc-lims-ao1.rule=Host(`${APP_HOST:-qclims.srv1231216.hstgr.cloud}`)"
+      - "traefik.http.routers.qc-lims-ao1.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.qc-lims-ao1.loadbalancer.server.port=80"
+
+networks:
+  ai_shared:
+    external: true
+    name: ${AI_NETWORK:-shared}
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik_network}

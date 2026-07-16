@@ -7,8 +7,31 @@ GF.avatar = (id, size = 28, ring) => {
     font-size:${size * 0.38}px${ring ? `;box-shadow:0 0 0 2px #060F0B,0 0 0 4px ${p.bg}40` : ''}">${GF.esc(p.init)}</div>`;
 };
 GF.avatars = (ids, size = 26) => `<div class="avatars">${ids.map(i => GF.avatar(i, size)).join('')}</div>`;
-GF.progress = (t) => ({ done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0);
+// Explicit completion (tasks.progress, set from the worklog panel) wins over
+// the old status heuristic; the heuristic remains the fallback for tasks
+// nobody has scored yet (and for demo-mode tasks that have no progressPct).
+GF.progress = (t) => {
+  if (t.status === 'done') return 100;
+  if (Number.isFinite(t.progressPct) && t.progressPct > 0) return t.progressPct;
+  return { done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0;
+};
 GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:'whout', irr:'prod', whin:'prod', maint:'irr' };
+
+// The Mass Weed status pill opens an explicit picker (mockup interaction)
+// instead of blind-cycling through the six states. Falls back to the cycle
+// when chooser.js hasn't loaded (never happens in the shipped shell).
+GF.STATUS_COLORS = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)',
+                     stuck:'var(--red)', postponed:'var(--amber)', done:'var(--green)' };
+GF.pickStatus = (id) => {
+  const t = GF.task(id); if (!t) return;
+  if (!GF.can('status', t)) return GF.denyToast();
+  if (!GF.choose) return GF.cycleStatus(id);
+  GF.choose({
+    title: GF.t('change_status'), value: t.status,
+    options: GF.STATUS_ORDER.map(s => ({ v: s, label: GF.statusLabel(s), color: GF.STATUS_COLORS[s] })),
+    onPick: (v) => { if (v !== t.status && GF.setStatus(id, v)) { GF.render.panels(); GF.render.telemetry(); } },
+  });
+};
 
 GF.render = {
   all() {
@@ -54,26 +77,45 @@ GF.render = {
   },
 
   sidebar() {
-    const nav = [];
-    // Executives get an exec-only Overview at the top of the nav; department
-    // members get their department home; everyone keeps the standard views.
-    if (GF.isExec && GF.isExec()) nav.push(['exec', 'exec_overview', 'layers']);
-    if (GF.hasDeptHome && GF.hasDeptHome()) nav.push(['depthome', 'dept_home', 'home']);
+    // Grouped rail per the owner's mockup (nav.js: Operations / Manager /
+    // System). Items keep their existing visibility rules — groups only
+    // organize, never hide. data-nav anchors let the full-page views
+    // (_registerFullPageView) insert themselves into the right group.
     // Coordination badge = pending cross-department handoffs (handoff tasks
     // not yet ready) in the selected week. 0 → no badge renders.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
       .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
-    nav.push(
-      ['mywork', 'my_week', 'check'], ['board', 'board', 'grid'], ['timeline', 'timeline', 'timeline'],
-      ['calendar', 'calendar', 'calendar'],
-      ['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user'],
-    );
+    const unreadN = (GF.WWF && GF.WWF._notif && GF.WWF._notif.unread) || 0;
+    const ops = [];
+    if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
+    ops.push(['mywork', 'my_week', 'check'], ['board', 'board', 'grid'],
+             ['timeline', 'timeline', 'timeline'], ['calendar', 'calendar', 'calendar']);
+    const mgr = [];
+    if (GF.isExec && GF.isExec()) mgr.push(['exec', 'exec_overview', 'layers']);
+    mgr.push(['coord', 'coordination', 'at', coordPending], ['dash', 'dashboard', 'trend'], ['team', 'team', 'user']);
     // Workload balancing is a coordination tool — managers/execs only.
-    if (GF.can('team')) nav.push(['workload', 'workload', 'clock']);
-    GF.$('nav').innerHTML = nav.map(([id, key, ic, badge]) => `
-      <div class="nav-item ${id === GF.state.view ? 'active' : ''}" onclick="GF.setView('${id}')">
+    if (GF.can('team')) mgr.push(['workload', 'workload', 'clock']);
+    const sys = [['inbox', 'inbox', 'bell', unreadN]];
+    const item = ([id, key, ic, badge]) => `
+      <div class="nav-item ${id === GF.state.view ? 'active' : ''}" data-nav="${id}" onclick="GF.setView('${id}')">
         ${GF.icon(ic)}<span>${GF.t(key)}</span>${badge ? `<span class="nav-badge">${badge}</span>` : ''}
-      </div>`).join('');
+      </div>`;
+    const group = (lbl, items) => items.length
+      ? `<div class="nav-group">${lbl}</div>` + items.map(item).join('') : '';
+    // QMS Studio zone (unification Phase 1 — docs/UNIFICATION-ANALYSIS-2026-07.md):
+    // an empty labeled group whose hidden end-marker anchors the QMS views
+    // registered via _registerFullPageView({insertBefore:'qms-end'}). Only
+    // rendered for roles above base USER — same gate as the views themselves —
+    // so operators never see an empty group label.
+    const role = (GF.API && GF.API.user || {}).role;
+    const qmsGroup = role && role !== 'USER'
+      ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
+         <div data-nav="qms-end" style="display:none"></div>` : '';
+    GF.$('nav').innerHTML =
+      group(AL('Operations', 'Операции'), ops)
+      + group(AL('Management', 'Менаџмент'), mgr)
+      + qmsGroup
+      + group(AL('System', 'Систем'), sys);
 
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};
@@ -161,11 +203,11 @@ GF.render = {
     const nxt = GF.weekTasks(nextId);
     // Tags filter: every tag on this week's tasks, filtered client-side.
     const allTags = [...new Set(GF.weekTasks(GF.state.selWeek).flatMap(t => t.tags || []))].sort();
-    const tagFilter = (allTags.length || GF.state.tagFilter) ? `
-      <select id="tag-filter" class="tag-filter" onchange="GF.setTagFilter(this.value)">
-        <option value="">${GF.t('all_tags')}</option>
-        ${allTags.map(tg => `<option value="${GF.esc(tg)}" ${GF.state.tagFilter === tg ? 'selected' : ''}>#${GF.esc(tg)}</option>`).join('')}
-      </select>` : '';
+    const tagFilter = (allTags.length || GF.state.tagFilter) ? GF.selectField('tag-filter', {
+      value: GF.state.tagFilter || '', inline: true, title: GF.t('all_tags'),
+      options: [{ v: '', label: GF.t('all_tags') }].concat(allTags.map(tg => ({ v: tg, label: '#' + tg }))),
+      onPick: (v) => GF.setTagFilter(v),
+    }) : '';
     GF.$('panels').innerHTML = `
       <div class="panel">
         <div class="panel-head">
@@ -210,9 +252,17 @@ GF.render = {
     // The subtask counter is the tree toggle: themes expand into their
     // documents (and documents into versions) as indented rows below the card.
     const treeOpen = GF.state.treeOpen && GF.state.treeOpen.has(t.id);
+    // Parent progress ring (mockup .mw-ring, mini): fraction of sub-tasks
+    // completed, tinted by the department colour.
+    const subPct = t.subCount > 0 ? Math.round((t.subDone || 0) / t.subCount * 100) : 0;
     const subProg = t.subCount > 0 ? `<span class="sub-prog tree-toggle${treeOpen ? ' open' : ''}" title="${GF.t('subtasks')}"
-      onclick="event.stopPropagation();GF.toggleTree('${t.id}')">${GF.icon(treeOpen ? 'chevD' : 'chevR', 'icon')}${t.subDone || 0}/${t.subCount}</span>` : '';
-    const sessHours = t.sessionHours > 0 ? `<span class="sess-hours" title="${GF.t('log_work')}">${GF.icon('clock', 'icon')}${t.sessionHours}h</span>` : '';
+      onclick="event.stopPropagation();GF.toggleTree('${t.id}')">${GF.icon(treeOpen ? 'chevD' : 'chevR', 'icon')}
+      <span class="ring-mini" style="--p:${subPct};--col:${d.color}"></span>${t.subDone || 0}/${t.subCount}</span>` : '';
+    // All sub-tasks done but the parent isn't: SUGGEST completion, never
+    // enforce it (the parent may have work of its own left).
+    const subHint = (t.subCount > 0 && t.subDone === t.subCount && t.status !== 'done' && GF.can('status', t))
+      ? `<button class="subdone-hint" title="${GF.t('subtasks')}: ${t.subDone}/${t.subCount}"
+           onclick="event.stopPropagation();GF.toggleDone('${t.id}')">✓ ${GF.t('mark_done')}?</button>` : '';
     const tagChips = (t.tags || []).map(tg => `<span class="tag-chip">#${GF.esc(tg)}</span>`).join('');
     const attrChips = GF.attrChips ? GF.attrChips(t) : '';
     const head = `
@@ -223,12 +273,12 @@ GF.render = {
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
-            ${refCode}${typeChip}${dueBadge}${subProg}${sessHours}${attrChips}${tagChips}</div>
+            ${refCode}${typeChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
         </div>
         <div class="card-side">
           <div class="daytags">${daytags}</div>
           ${GF.avatars([t.owner, ...(t.helpers || [])], 26)}
-          <span class="pill s-${t.status}" onclick="event.stopPropagation();GF.cycleStatus('${t.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(t.status)}</span>
+          <span class="pill s-${t.status}" title="${GF.t('change_status')}" onclick="event.stopPropagation();GF.pickStatus('${t.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(t.status)}</span>
           <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
         </div>
         ${GF.icon('chevD', 'icon chev-card')}
@@ -303,11 +353,16 @@ GF.render = {
         : `<span class="tree-dot s-${c.status}"></span>`;
       return `
       <div class="tree-row s-${c.status}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${c.id}')">
+        <button class="check ${c.status === 'done' ? 'done' : ''}" title="${GF.t('mark_done') || 'Done'}"
+          onclick="event.stopPropagation();GF.toggleDone('${c.id}')">${c.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
         ${toggle}
         <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
         ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
-        ${c.sessionHours > 0 ? `<span class="sess-hours">${GF.icon('clock', 'icon')}${c.sessionHours}h</span>` : ''}
-        <span class="pill s-${c.status}" style="pointer-events:none"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
+        ${(() => { const p = GF.progress(c); return p > 0 ? `<span class="tree-prog" title="${GF.t('completion')}: ${p}%">
+          <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="width:${p}%"></span></span>
+          <span class="tp-val">${p}%</span></span>` : ''; })()}
+        <span class="pill s-${c.status}" title="${GF.t('change_status') || 'Change status'}"
+          onclick="event.stopPropagation();GF.pickStatus('${c.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
         <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
       </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
     }).join('');

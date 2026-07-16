@@ -1,0 +1,605 @@
+================================================================================
+SYSTEM SOP TEMPLATE - USE THIS STRUCTURE FOR ALL SOPs
+================================================================================
+
+This document shows the standardized template structure for all System SOPs.
+Copy this template, customize it, and follow this format for consistency.
+
+================================================================================
+QAS - Quality Assurance-[SOP-XX-XXX - To be specified]-[SOP-XX-XXX - To be specified]
+[SOP TITLE IN FULL]
+Version: [X.X]
+================================================================================
+
+DOCUMENT CONTROL SECTION
+(Fill this in first - it appears on every page)
+
+Document ID:               Master Documents-Documentation & Records-[XXX]-V.X.X
+Document Type:             System SOP / Operational SOP / [TYPE]
+Document Title:            [Complete Document Title]
+Applicable Facility:       Purely Plant Medical Cannabis Production Facility
+Scope:                     [What this SOP covers - one sentence]
+Classification:            CONFIDENTIAL - INTERNAL USE ONLY
+
+Version Control:
+  Version Number:          V.1.0
+  Created Date:            2026-01-22
+  Effective Date:          2026-01-22
+  Last Revision Date:      2026-01-22
+  Next Review Date:        [DATE + 12 months]
+
+Approval Chain:
+  Document Originator:     Blagoj Nikolov, Quality Manager
+                          Signature: ________________  Date: _______
+
+  Department Manager:      Stefan Petrov, Quality Manager
+                          Signature: ________________  Date: _______
+
+  Quality Assurance:       Ana Dimitrova, Quality Manager
+                          Signature: ________________  Date: _______
+
+  Facility Manager:        Stefan Petrov, Quality Manager
+                          Signature: ________________  Date: _______
+
+Distribution Status:       CONTROLLED COPY #___ of ___
+Archival Location:         Skopje
+
+================================================================================
+AMENDMENT HISTORY
+================================================================================
+
+Version  Date          Description of Change          Changed By      Approved By
+------  -----------  --------------------------------  ---------------  ---------------
+1.0     2026-01-22       Initial Document Release        [Document Author Name]         Stefan Petrov
+[1.1]   2026-01-22       [Minor changes/clarifications]  [Document Author Name]         Stefan Petrov
+[2.0]   2026-01-22       [Major procedure revision]      [Document Author Name]         Stefan Petrov
+
+================================================================================
+SECTION 1: PURPOSE & SCOPE
+================================================================================
+
+1.1 PURPOSE
+
+The purpose of this SOP is to establish the procedures for [DESCRIBE THE MAIN 
+ACTIVITY OR FUNCTION]. This procedure ensures that [DESCRIBE THE DESIRED 
+OUTCOME - e.g., products meet quality standards, personnel are properly trained, 
+equipment operates safely, etc.].
+
+This SOP applies to:
+  • [WHO is affected - e.g., "All Quality Assurance personnel"]
+  • [WHAT activities - e.g., "All product quality testing activities"]
+  • [WHERE - e.g., "At Purely Plant Medical Cannabis Production Facility facility in Skopje"]
+  • [WHEN - e.g., "During regular production and whenever required"]
+
+Regulatory Alignment:
+  ✓ EU GMP Annex 7 (Herbal Preparations) - [Section reference]
+  ✓ North Macedonia Medical Cannabis Regulations - [Specific requirement]
+  ✓ International Standard [if applicable]
+
+1.2 SCOPE
+
+This SOP covers the following activities:
+  • [Activity 1]
+  • [Activity 2]
+  • [Activity 3]
+
+INCLUSIONS:
+  ✓ [What IS included in this procedure]
+  ✓ [What IS included in this procedure]
+
+EXCLUSIONS:
+  ✗ [What is NOT included - reference other SOP if applicable]
+  ✗ [What is NOT included - reference other SOP if applicable]
+
+1.3 APPLICABILITY
+
+Personnel Required to Follow This Procedure:
+  • [Specific job title 1]
+  • [Specific job title 2]
+  • [All personnel in this department]
+
+Facilities/Operations:
+  • [Specific area/operation 1]
+  • [Specific area/operation 2]
+
+Time Period:
+  • [Whenever this activity occurs] / [Specific time period]
+  • [Frequency - e.g., "Daily", "During each production batch", "Quarterly review"]
+
+================================================================================
+SECTION 2: RESPONSIBILITIES
+================================================================================
+
+2.1 PRIMARY RESPONSIBLE PERSON(S)
+
+[Primary Job Title] - PRIMARY RESPONSIBILITY
+  Name:           [Name of Position Holder]
+  Title:          [Job Title]
+  Contact:        +389 70 123 456 / blagoj.nikolov@purelyplant.mk
+  Responsibilities:
+    • Overall accountability for this procedure
+    • Ensuring procedure is followed correctly
+    • Training personnel on this procedure
+    • Investigating deviations
+    • Coordinating improvements
+
+[Secondary Job Title] - SUPPORTING ROLE
+  Name:           [Name of Position Holder]
+  Title:          [Job Title]
+  Responsibilities:
+    • [Specific responsibility]
+    • [Specific responsibility]
+
+2.2 APPROVAL & OVERSIGHT RESPONSIBILITY
+
+Quality Assurance Manager:
+  • Reviews this SOP annually or when significant changes occur
+  • Approves any changes to the procedure
+  • Ensures compliance during audits and inspections
+  • Oversees deviation investigation if procedure not followed
+
+Facility Manager:
+  • Final authorization for procedure changes
+  • Ensures adequate resources for implementation
+  • Reviews compliance in management reviews
+
+2.3 COMPLIANCE RESPONSIBILITY
+
+ALL PERSONNEL in this facility have individual responsibility to:
+  ✓ Understand this procedure
+  ✓ Follow it correctly every time
+  ✓ Report deviations or concerns
+  ✓ Participate in required training
+  ✓ Support continuous improvement
+
+================================================================================
+SECTION 3: DEFINITIONS & ABBREVIATIONS
+================================================================================
+
+Key Terms (Explain any specialized terms used in this SOP):
+
+GMP - Good Manufacturing Practice: [Definition in 1-2 sentences]
+
+QP - Qualified Person: [Definition in 1-2 sentences]
+
+[Document Acronym]: [Full name - what it stands for]
+
+Quality Management System (QMS): The documented system of procedures, 
+  responsibilities, and records that ensures consistent product quality and 
+  regulatory compliance.
+
+Batch: A specific quantity of product produced in a single production run, 
+  identified by a unique batch number.
+
+Deviation: Any departure from approved procedures, specifications, or quality 
+  standards.
+
+See Also: For complete QMS definitions, refer to the Quality Manual (QAS-01-001)
+
+================================================================================
+SECTION 4: PROCEDURE / STEP-BY-STEP INSTRUCTIONS
+================================================================================
+
+[This is the heart of the SOP - describes HOW the work is actually done]
+
+4.1 PREREQUISITES / PREPARATION
+
+Before beginning this procedure, verify the following:
+
+☐ [Condition 1 that must be met]
+  □ How to verify: [Describe how to check this]
+  □ If not met: [What to do if condition not met]
+
+☐ [Condition 2 that must be met]
+  □ How to verify: [Describe how to check this]
+  □ If not met: [What to do if condition not met]
+
+☐ [Condition 3 that must be met]
+  □ How to verify: [Describe how to check this]
+  □ If not met: [What to do if condition not met]
+
+Required Materials/Equipment:
+  • [Item 1] - [Location where available] - [Quantity needed]
+  • [Item 2] - [Location where available] - [Quantity needed]
+  • [Item 3] - [Location where available] - [Quantity needed]
+
+Required Documentation:
+  • [Form 1] - See Annex 1
+  • [Form 2] - See Annex 2
+
+Relevant SOPs to Review First:
+  • [Related SOP reference]
+  • [Related SOP reference]
+
+4.2 MAIN PROCEDURE
+
+[Describe the procedure in clear, numbered steps]
+
+STEP 1: [Title of first step]
+  Responsible Person: [Job title]
+  Time Required: [Estimated time]
+  
+  Action:
+    1. [Specific action 1 - be detailed and specific]
+    2. [Specific action 2]
+    3. [Specific action 3]
+  
+  Success Criteria (How do you know you did it correctly?):
+    ✓ [Observable outcome 1]
+    ✓ [Observable outcome 2]
+  
+  Documentation Required:
+    → Record in [Form name] - See Annex [X]
+    → Sign and date
+  
+  If Problem Occurs:
+    ⚠ [Problem 1]: [Solution]
+    ⚠ [Problem 2]: [Solution]
+
+STEP 2: [Title of second step]
+  Responsible Person: [Job title]
+  Time Required: [Estimated time]
+  
+  Action:
+    1. [Specific action]
+    2. [Specific action]
+  
+  Success Criteria:
+    ✓ [Observable outcome]
+  
+  Documentation Required:
+    → [Form name]
+  
+  If Problem Occurs:
+    ⚠ [Problem]: [Solution]
+
+[Continue with STEP 3, 4, 5, etc. as needed]
+
+4.3 COMPLETION / CLOSE-OUT
+
+When all steps are complete:
+
+☐ All documentation is complete and signed
+☐ All required records are filled out
+☐ [Specific condition 1 is met]
+☐ [Specific condition 2 is met]
+☐ No deviations or concerns were noted
+
+Final Sign-Off:
+  Completed By: ________________  Date: _______  Time: _______
+               (Signature)        (Print Name)
+
+  Reviewed By: ________________  Date: _______
+              (Supervisor)
+
+================================================================================
+SECTION 5: QUALITY CONTROL CHECKPOINTS
+================================================================================
+
+This section ensures quality is maintained during execution of the procedure:
+
+Quality Checkpoint #1: [What is being checked?]
+  □ When: [At what step in procedure?]
+  □ Who checks: [Job title of person checking]
+  □ How to check: [Specific method/criteria]
+  □ Acceptance criteria: [What's acceptable? What's not?]
+  □ If fails: [What action to take - Usually mark as defective/deviate]
+  □ Record: [Where recorded - Form/Log]
+
+Quality Checkpoint #2: [What is being checked?]
+  □ When: [At what step in procedure?]
+  □ Who checks: [Job title]
+  □ How to check: [Specific method/criteria]
+  □ Acceptance criteria: [What's acceptable?]
+  □ If fails: [What action to take]
+  □ Record: [Where recorded]
+
+Quality Checkpoint #3: [Additional checkpoints as needed]
+
+================================================================================
+SECTION 6: SAFETY & ENVIRONMENTAL CONSIDERATIONS
+================================================================================
+
+6.1 PERSONNEL SAFETY
+
+Potential Hazards Associated with This Procedure:
+  ⚠ [Safety hazard 1] - Risk of: [Describe risk]
+    Mitigation: [How to prevent] / PPE: [Personal protective equipment needed]
+  
+  ⚠ [Safety hazard 2] - Risk of: [Describe risk]
+    Mitigation: [How to prevent] / PPE: [What to wear]
+
+Required Personal Protective Equipment (PPE):
+  • [PPE 1] - When to wear: [Specific situations]
+  • [PPE 2] - When to wear: [Specific situations]
+
+First Aid / Emergency Response:
+  In case of [specific incident]: [What to do]
+  Contact: Emergency - [Phone]  Medical: [Hospital phone]
+
+6.2 ENVIRONMENTAL PROTECTION
+
+Waste Generated by This Procedure:
+  • [Waste type 1] - Disposal: [How to dispose] - See SOP [Reference]
+  • [Waste type 2] - Disposal: [How to dispose] - See SOP [Reference]
+
+Environmental Impact Considerations:
+  • [Consideration 1]
+  • [Consideration 2]
+
+================================================================================
+SECTION 7: DEVIATIONS / PROBLEM-SOLVING
+================================================================================
+
+7.1 WHAT CONSTITUTES A DEVIATION?
+
+A deviation is any departure from this procedure, including:
+  • Not following steps in order
+  • Using different materials or equipment
+  • Not obtaining required signatures
+  • Skipping quality checkpoints
+  • Obtaining incorrect results
+
+7.2 HOW TO HANDLE A DEVIATION
+
+If a deviation occurs during this procedure:
+
+STEP 1: STOP the procedure immediately
+  • Do not proceed if something is wrong
+  • Do not attempt to cover it up
+
+STEP 2: DOCUMENT what happened
+  • Write down what went wrong
+  • Note when it happened
+  • Identify who was involved
+  • Describe the deviation clearly
+
+STEP 3: NOTIFY your supervisor immediately
+  • Inform [Job title] of the deviation
+  • Provide written documentation
+  • Do not release any product affected
+
+STEP 4: COMPLETE a Deviation Report
+  • Use Form: [Reference deviation report form]
+  • Submit to: Quality Assurance Manager
+  • Attach documentation
+
+STEP 5: INVESTIGATION & CORRECTIVE ACTION
+  • Quality Assurance will investigate
+  • Root cause will be determined
+  • Corrective action will be assigned
+  • Follow-up verification will confirm effectiveness
+
+For detailed CAPA procedures, see: QAS-05-002 (CAPA SOP)
+
+7.3 COMMON PROBLEMS & SOLUTIONS
+
+Problem 1: [Describe specific problem that might occur]
+  Root Cause: [Why might this happen?]
+  Solution: [What to do about it]
+  Prevention: [How to prevent it in future]
+
+Problem 2: [Describe specific problem]
+  Root Cause: [Why?]
+  Solution: [What to do?]
+  Prevention: [How to prevent?]
+
+================================================================================
+SECTION 8: TRAINING REQUIREMENTS
+================================================================================
+
+8.1 WHO NEEDS TO BE TRAINED?
+
+Personnel Required to Complete Training:
+  • [Job title 1]
+  • [Job title 2]
+  • [All facility personnel? Or specific area?]
+
+When Must Training Be Completed?
+  ☑ Before first performing this task
+  ☑ When procedure is updated (Version 2.0+)
+  ☑ During annual refresher training
+  ☑ When external audit requires
+
+8.2 TRAINING CONTENT
+
+Training must cover:
+  ✓ Understanding WHY this procedure is important
+  ✓ Understanding WHAT the expected outcomes are
+  ✓ Walking through HOW to perform each step
+  ✓ Understanding SAFETY and quality requirements
+  ✓ Reviewing COMMON PROBLEMS and solutions
+  ✓ Q&A and questions
+
+8.3 TRAINING VERIFICATION
+
+How do we know personnel are trained?
+  □ Written/Practical Test: [Describe test - pass/fail criteria]
+  □ Demonstration: [Describe what person must demonstrate]
+  □ Checklist Review: [Review against procedure checklist]
+
+Training Records:
+  • All training must be documented in HR training matrix (HR-01-004)
+  • Training records signed by trainer and trainee
+  • Retained in personnel files for [X] years
+
+See Also: HR-01-001 (Training SOP)
+
+================================================================================
+SECTION 9: RECORDS & DOCUMENTATION
+================================================================================
+
+9.1 FORMS ASSOCIATED WITH THIS PROCEDURE
+
+All completed records must be maintained per SOP-REC-02-001 (Records Management)
+
+Form 1: [Form Name]
+  Document ID: [ID-XXX-XXX]
+  Used For: [Describe purpose]
+  Completed By: [Job title]
+  Signed By: [Approver]
+  Retention: [How long kept - e.g., "5 years"]
+  See Annex [X]
+
+Form 2: [Form Name]
+  Document ID: [ID-XXX-XXX]
+  Used For: [Describe purpose]
+  Completed By: [Job title]
+  Signed By: [Approver]
+  Retention: [How long kept]
+  See Annex [X]
+
+9.2 RECORD STORAGE & ARCHIVAL
+
+Completed Records Are Stored At:
+  • Primary Location: [Storage location]
+  • Backup Location: [Backup location]
+  • Archive Location: [Long-term storage]
+  • Responsible Person: [Records Manager]
+
+Retention Period: [How long records are kept]
+Retrieval Process: [How to get records when needed]
+Destruction Process: [How records are destroyed after retention period]
+
+For detailed procedures, see: REC-02-001 (Records Management SOP)
+
+================================================================================
+SECTION 10: RELATED DOCUMENTS & CROSS-REFERENCES
+================================================================================
+
+Documents Referenced in This SOP:
+
+Quality Manual:
+  → QAS-01-001: Quality Manual (Overall quality policy & framework)
+
+Related System SOPs:
+  → [SOP-XX-XXX - Document code]: [Title] (Describes related process)
+  → [SOP-XX-XXX - Document code]: [Title] (Describes related process)
+
+Related Operational SOPs:
+  → [SOP-XX-XXX - Document code]: [Title] (Detailed work instructions)
+  → [SOP-XX-XXX - Document code]: [Title] (Related detailed procedures)
+
+Forms & Templates:
+  → FM-PRO-001: [Title] (See Annex 1)
+  → FM-PRO-001: [Title] (See Annex 2)
+
+Supporting Documents:
+  → QAS-01-003: Facility Profile (Facility-specific information)
+  → QMS_DOCUMENT_REGISTRY: Master list of all documents
+  → Equipment manuals: [If equipment-specific SOP]
+
+Regulatory References:
+  → EU GMP Annex 7 (Herbal Preparations) - [Section number]
+  → Ph. Eur. [Section if applicable] - [Specific requirement]
+  → North Macedonia Medical Cannabis Regulations - [Section number]
+
+================================================================================
+SECTION 11: REVISION NOTES FOR NEXT REVIEW
+================================================================================
+
+[To be completed annually during document review]
+
+Review Date: 2026-01-22
+Reviewed By: [Reviewer Name - QA Manager], Quality Manager
+
+Changes Needed?
+☐ No changes needed - procedure is current and effective
+☐ Minor revisions needed (Version 1.1):
+    Description: [What needs minor update?]
+    
+☐ Major revision needed (Version 2.0):
+    Description: [What significant change needed?]
+    Reason: [Why the change is necessary]
+
+Next Review Date: [DATE + 12 months from this review]
+
+================================================================================
+SECTION 12: APPROVAL & AUTHORIZATION
+================================================================================
+
+This SOP is approved and authorized for implementation facility-wide.
+
+Document Originator:     
+  Signature: ____________________________
+  Printed Name: ____________________________
+  Title: ____________________________
+  Date: ____________________________
+
+Department Manager (QA, Production, etc.):
+  Signature: ____________________________
+  Printed Name: ____________________________
+  Title: ____________________________
+  Date: ____________________________
+
+Quality Assurance Manager:
+  Signature: ____________________________
+  Printed Name: ____________________________
+  Title: ____________________________
+  Date: ____________________________
+
+Facility Manager (Final Authority):
+  Signature: ____________________________
+  Printed Name: ____________________________
+  Title: ____________________________
+  Date: ____________________________
+
+EFFECTIVE DATE: ____________________________
+This document is valid from the date shown above and supersedes all previous 
+versions dated before this date.
+
+All previous versions are archived at: Dedicated Archive Room (Climate Controlled)
+
+================================================================================
+DISTRIBUTION RECORD
+================================================================================
+
+CONTROLLED COPY DISTRIBUTION TRACKING
+
+Copy #  Assigned To              Location                Date Received
+------  -----------------------  -------------------  ----------------
+1       [NAME/TITLE]            Skopje           2026-01-22
+2       [NAME/TITLE]            Skopje           2026-01-22
+3       [NAME/TITLE]            Skopje           2026-01-22
+4       Archive/Records          Dedicated Archive Room (Climate Controlled)   2026-01-22
+
+Uncontrolled copies available for printing by:
+  [Specify who can print uncontrolled copies]
+  All uncontrolled copies must be marked: "UNCONTROLLED COPY"
+
+================================================================================
+ANNEXES / ATTACHMENTS
+================================================================================
+
+Annex 1: [Form Name] - [Description]
+  → Document ID: [ID-XXX]
+  → When Used: [When in the procedure]
+  → Completed By: [Job title]
+
+Annex 2: [Form Name] - [Description]
+  → Document ID: [ID-XXX]
+  → When Used: [When in the procedure]
+  → Completed By: [Job title]
+
+Annex 3: [Detailed Work Instructions if lengthy]
+Annex 4: [Equipment List/Specifications if applicable]
+Annex 5: [Additional supporting documentation]
+
+================================================================================
+END OF SOP TEMPLATE
+================================================================================
+
+Document ID: TEMPLATE-SOP
+Version: 1.0
+Reference: QMS_DOCUMENT_REGISTRY.txt
+
+When creating a new SOP:
+1. Copy this template
+2. Replace ALL [BRACKETED PLACEHOLDERS] with actual content
+3. Delete sections that don't apply
+4. Add specific steps for your procedure
+5. Include relevant annexes/forms
+6. Obtain required approvals
+7. File in appropriate folder (01_QUALITY_ASSURANCE, etc.)
+
+================================================================================

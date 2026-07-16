@@ -71,6 +71,7 @@ GF.WWF.transform = (t) => ({
   attrs: t.attributes || {},
   sessionHours: t.session_hours != null ? Number(t.session_hours) : 0,
   subCount: Number(t.subtask_count || 0), subDone: Number(t.subtask_done_count || 0),
+  progressPct: t.progress != null ? Number(t.progress) : 0,
 });
 
 GF.WWF.weekIndex = (t) => {
@@ -288,6 +289,9 @@ GF.WWF.install = () => {
     try {
       const resp = await GF.API.updateTask(id, { status: S_OUT[t.status] || 'pending' });
       if (resp && resp.completed_date !== undefined) t.completed_date = resp.completed_date;
+      // Completion forward-fills progress=100 server-side — mirror it so the
+      // local bar doesn't lag until the next full reload.
+      if (resp && resp.progress !== undefined) t.progressPct = Number(resp.progress);
       // Completing a recurring task auto-creates its next instance server-side.
       if (t.status === 'done' && resp && resp.next_instance) {
         GF.state.tasks.push(GF.WWF.transform(resp.next_instance));
@@ -318,14 +322,15 @@ GF.WWF.install = () => {
     const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
     const deptId = GF.$('add-dept').value;
     const wk = GF.calendar.weeks[GF._addWeek] || GF.calendar.weeks[GF.calendar.todayId];
-    const estRaw = parseFloat(GF.$('add-est')?.value);
-    // >= 0, not > 0: a deliberate zero-hour estimate is a value, not "no estimate".
-    const estHours = Number.isFinite(estRaw) && estRaw >= 0 ? estRaw : null;
     // v2 fields (due date, typology, recurrence)
     const dueDate = GF.$('add-due')?.value || null;
     const refCode = (GF.$('add-ref')?.value || '').trim() || null;
     const recFreq = GF.$('add-rec')?.value || '';
     const recurrence = recFreq ? { freq: recFreq, interval: 1 } : null;
+    // Comma-separated free tags; bounded client-side to the backend's 422
+    // limits (≤32 tags, ≤64 chars each) so a long paste degrades gracefully.
+    const tags = (GF.$('add-tags')?.value || '').split(',')
+      .map(s => s.trim()).filter(Boolean).slice(0, 32).map(s => s.slice(0, 64));
 
     // Bilingual on Save: every task the app creates/edits is stored bilingual
     // "Македонски | English" regardless of the language it was typed in. A brief
@@ -349,9 +354,9 @@ GF.WWF.install = () => {
           // column, so updating only department_id leaves the two out of sync.
           department_id: deptId, department: (GF.dep(deptId)||{}).name || null,
           days: days.length?days:[GF.todayDay],
-          estimated_hours: estHours, due_date: dueDate,
+          due_date: dueDate,
           task_type: GF.$('add-type')?.value || 'other', reference_code: refCode,
-          recurrence,
+          recurrence, tags,
           // Whole-object replace; collect starts from the task's existing
           // attributes so keys outside the current dept template survive.
           attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId, (t && t.attrs) || {}) : undefined,
@@ -411,9 +416,8 @@ GF.WWF.install = () => {
         title: biTitle, description: biDesc, status:'pending', priority: P_OUT[GF.$('add-pr').value]||'normal',
         department_id: deptId, department:(GF.dep(deptId)||{}).name, week_id: wk && wk.realId,
         week_start: wk ? GF.localDateStr(wk.start) : null, days: days.length?days:[GF.todayDay],
-        estimated_hours: estHours,
         due_date: dueDate, task_type: GF.$('add-type')?.value || 'other',
-        reference_code: refCode, recurrence, parent_id: GF._addParent || null,
+        reference_code: refCode, recurrence, tags, parent_id: GF._addParent || null,
         attributes: GF.collectDeptAttrs ? GF.collectDeptAttrs(deptId) : undefined,
       });
       if (GF._addParent) {
@@ -656,15 +660,16 @@ GF.WWF.install = () => {
       const agents = (ag && ag.agents) || [];
       const bindByFn = {}; (binds || []).forEach(b => { bindByFn[b.function_key] = b; });
       const catalog = (fns && fns.catalog) || {};
-      const opts = (sel) => ['<option value="">' + AL('— none —', '— ништо —') + '</option>']
-        .concat(agents.map(a => `<option value="${GF.esc(a.id)}" ${a.id === sel ? 'selected' : ''}>${GF.esc(a.name || a.id)}</option>`)).join('');
+      const agentOptions = [{ v: '', label: AL('— none —', '— ништо —') }]
+        .concat(agents.map(a => ({ v: a.id, label: a.name || a.id })));
       const rows = Object.keys(catalog).map(fn => {
         const b = bindByFn[fn] || {};
         return `<div class="ai-bind">
           <div class="ai-bind-h"><b>${GF.esc(fn)}</b>
             <label class="ai-bind-on"><input type="checkbox" ${b.is_active ? 'checked' : ''} onchange="GF.WWF.saveBinding('${fn}')"> ${AL('Active', 'Активно')}</label></div>
           <div class="set-hint">${GF.esc(catalog[fn])}</div>
-          <select id="ai-sel-${fn}" onchange="GF.WWF.saveBinding('${fn}')">${opts(b.letta_agent_id)}</select></div>`;
+          ${GF.selectField('ai-sel-' + fn, { value: b.letta_agent_id || '', title: fn, searchable: true,
+            options: agentOptions, onPick: () => GF.WWF.saveBinding(fn) })}</div>`;
       }).join('');
       box.innerHTML = agents.length ? rows : `<div class="set-msg">${AL('No Letta agents found.', 'Нема пронајдени Letta агенти.')}</div>`;
     } catch (e) {
@@ -755,15 +760,12 @@ GF.openUser = (id) => {
   // department. The backend _can_manage enforces both regardless.
   const roleKeys = iAmAdmin ? Object.keys(GF.ROLES).filter(r => r !== 'admin') : ['operator'];
   const curRole = editing ? (p.role || 'operator') : 'operator';
-  const roleOpts = roleKeys.map(r =>
-    `<option value="${r}" ${r===curRole?'selected':''}>${GF.esc(GF.roleLabel(r))}</option>`).join('');
+  const roleOptions = roleKeys.map(r => ({ v: r, label: GF.roleLabel(r) }));
   const curDept = editing ? p.dept : me.department_id;
   // Explicit "None" so cross-org roles (Owner / CEO / COO / QP) can be assigned
   // no department right from the picker, instead of the row silently vanishing.
-  const deptOpts = `<option value="" ${curDept ? '' : 'selected'}>${AL('None — no department', '— Без оддел —')}</option>`
-    + GF.DEPTS.map(d =>
-    `<option value="${d.id}" ${String(d.id)===String(curDept)?'selected':''}>${GF.esc(GF.depName(d.id))}</option>`).join('');
-  const deptLocked = iAmAdmin ? '' : 'disabled';
+  const deptOptions = [{ v: '', label: AL('None — no department', '— Без оддел —') }]
+    .concat(GF.DEPTS.map(d => ({ v: String(d.id), label: GF.depName(d.id), color: d.color })));
   GF.$('user-title').textContent = editing ? GF.t('edit_user') : GF.t('add_user');
   const usernameRow = editing
     ? `<div class="field"><label>Username</label><div style="font:700 15px ui-monospace,monospace;color:var(--ink-2)">${GF.esc(p.username || '')}</div></div>`
@@ -776,8 +778,11 @@ GF.openUser = (id) => {
   GF.$('user-body').innerHTML = `
     <div class="field"><label>${GF.t('full_name')}</label><input id="u-name" value="${editing ? GF.esc(p.name || '') : ''}" placeholder="e.g. Ana Nikolova"></div>
     ${usernameRow}
-    <div class="field"><label>${GF.t('role')}</label><select id="u-role" ${iAmAdmin?'':'disabled'} onchange="GF._userRoleChange(this.value)">${roleOpts}</select></div>
-    <div class="field" id="u-dept-row"><label>${GF.t('dept_label')}</label><select id="u-dept" ${deptLocked}>${deptOpts}</select></div>
+    <div class="field"><label>${GF.t('role')}</label>${GF.selectField('u-role', {
+      value: curRole, disabled: !iAmAdmin, title: GF.t('role'), options: roleOptions,
+      onPick: (v) => GF._userRoleChange(v) })}</div>
+    <div class="field" id="u-dept-row"><label>${GF.t('dept_label')}</label>${GF.selectField('u-dept', {
+      value: curDept ? String(curDept) : '', disabled: !iAmAdmin, title: GF.t('dept_label'), options: deptOptions })}</div>
     <div id="u-nodept-note" style="display:none;font-size:12px;color:var(--ink-3);padding:2px 0 8px">${AL('Cross-org role — no department assignment', 'Меѓусекторска улога — без оддел')}</div>
     <div class="field"><label>${AL('Title (optional)', 'Титула (изборно)')}</label><input id="u-fn" value="${editing ? GF.esc(p.fn || '') : ''}" placeholder="e.g. Head of QC"></div>
     ${footNote}`;
@@ -791,7 +796,7 @@ GF._userRoleChange = (roleKey) => {
   // Keep the department picker visible for every role now that "None" is a real
   // option; for cross-org roles just default it to None and show the hint.
   if (note) note.style.display = cross ? '' : 'none';
-  if (cross && sel) sel.value = '';
+  if (cross && sel) { sel.value = ''; if (GF.syncSelect) GF.syncSelect('u-dept'); }
 };
 
 GF.WWF.resetUserPw = async (id) => {

@@ -1,0 +1,219 @@
+# QMS Audit Checklist Generator
+
+Generate EU GMP compliant audit checklists for internal audits and inspection preparation.
+
+## Activation
+- User requests: "audit checklist", "self-inspection", "internal audit", "inspection prep", "GMP audit"
+
+---
+
+<qms-audit-checklist>
+
+## Instructions
+
+You are generating EU GMP compliant audit checklists for cannabis pharmaceutical facilities.
+
+### EU GMP REQUIREMENTS (Chapter 9)
+
+- <cite source="EUGMP-9.1">Self-inspections should be conducted to monitor compliance with GMP</cite>
+- <cite source="EUGMP-9.2">All matters affecting product quality should be examined</cite>
+- <cite source="EUGMP-9.3">Records shall be made and corrective actions implemented</cite>
+
+### AUDIT TYPES
+
+| Type | Scope | Frequency | Duration |
+|------|-------|-----------|----------|
+| Full GMP Audit | All areas | Annual | 3-5 days |
+| Focused Audit | Specific area | As needed | 1-2 days |
+| Supplier Audit | Vendor qualification | Per risk | 1-2 days |
+| Process Audit | Specific process | Quarterly | 0.5-1 day |
+| For-Cause Audit | Investigation | As triggered | Variable |
+| Pre-Inspection | Regulatory prep | Before inspection | 2-3 days |
+
+### AUDIT CHECKLIST STRUCTURE
+
+```markdown
+# Audit Checklist: {Audit Type}
+
+## Audit Information
+
+| Field | Entry |
+|-------|-------|
+| Audit Number | AUD-{YYYY}-{###} |
+| Audit Type | {type} |
+| Audit Date(s) | {date range} |
+| Auditor(s) | {names} |
+| Area(s) Audited | {areas} |
+| Auditee | {name/dept} |
+
+## Audit Scope
+{description of what is being audited}
+
+## References
+- EU GMP EudraLex Volume 4
+- Facility SOPs
+- Previous audit reports
+```
+
+### CHECKLIST BY EU GMP CHAPTER
+
+#### Chapter 1: Pharmaceutical Quality System
+```markdown
+## 1. Pharmaceutical Quality System
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 1.1 | Is there a documented Quality Policy? | 1.1 | Quality Manual | ☐C ☐NC ☐O | |
+| 1.2 | Is the Quality Manual current and approved? | 1.1 | Approval signatures | ☐C ☐NC ☐O | |
+| 1.3 | Are quality objectives defined and measured? | 1.1 | Quality metrics | ☐C ☐NC ☐O | |
+| 1.4 | Is there a system for managing outsourced activities? | 1.2 | Contracts, QTAs | ☐C ☐NC ☐O | |
+| 1.5 | Is management review conducted regularly? | 1.4 | Meeting minutes | ☐C ☐NC ☐O | |
+| 1.6 | Are CAPA processes in place and effective? | 1.4 | CAPA records | ☐C ☐NC ☐O | |
+
+**Legend:** C = Compliant, NC = Non-Compliant, O = Observation
+```
+
+#### Chapter 2: Personnel
+```markdown
+## 2. Personnel
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 2.1 | Is there an organizational chart? | 2.2 | Current org chart | ☐C ☐NC ☐O | |
+| 2.2 | Are key personnel (QP, Prod Head, QC Head) designated? | 2.3-2.5 | Job descriptions | ☐C ☐NC ☐O | |
+| 2.3 | Is the QP qualified per Annex 16? | 2.4 | QP qualifications | ☐C ☐NC ☐O | |
+| 2.4 | Are job descriptions current for all GMP roles? | 2.6 | Job descriptions | ☐C ☐NC ☐O | |
+| 2.5 | Is initial GMP training provided to all staff? | 2.8 | Training records | ☐C ☐NC ☐O | |
+| 2.6 | Is there ongoing GMP training? | 2.9 | Training matrix | ☐C ☐NC ☐O | |
+| 2.7 | Are training records maintained? | 2.11 | Training files | ☐C ☐NC ☐O | |
+| 2.8 | Are hygiene programs in place? | 2.13-2.17 | Hygiene SOPs | ☐C ☐NC ☐O | |
+| 2.9 | Is appropriate gowning used? | 2.16 | Observation | ☐C ☐NC ☐O | |
+```
+
+#### Chapter 3: Premises and Equipment
+```markdown
+## 3. Premises and Equipment
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 3.1 | Are premises designed to prevent contamination? | 3.1 | Facility design | ☐C ☐NC ☐O | |
+| 3.2 | Is there adequate lighting, temperature, humidity control? | 3.4 | Monitoring records | ☐C ☐NC ☐O | |
+| 3.3 | Are production areas segregated? | 3.6 | Layout | ☐C ☐NC ☐O | |
+| 3.4 | Is there pest control program? | 3.4 | Pest control records | ☐C ☐NC ☐O | |
+| 3.5 | Are weighing areas adequately designed? | 3.14 | Area design | ☐C ☐NC ☐O | |
+| 3.6 | Are storage areas adequate and controlled? | 3.18-3.24 | Temp records | ☐C ☐NC ☐O | |
+| 3.7 | Is equipment designed for intended use? | 3.34 | Equipment specs | ☐C ☐NC ☐O | |
+| 3.8 | Are equipment surfaces non-reactive? | 3.39 | Material certs | ☐C ☐NC ☐O | |
+| 3.9 | Is there equipment qualification (IQ/OQ/PQ)? | 3.34 | Qualification records | ☐C ☐NC ☐O | |
+| 3.10 | Is calibration program in place? | 3.41 | Calibration records | ☐C ☐NC ☐O | |
+| 3.11 | Is cleaning validated? | 3.36 | Cleaning validation | ☐C ☐NC ☐O | |
+```
+
+#### Chapter 4: Documentation
+```markdown
+## 4. Documentation
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 4.1 | Is there a document control SOP? | 4.1 | SOP | ☐C ☐NC ☐O | |
+| 4.2 | Are documents approved before use? | 4.3 | Approval records | ☐C ☐NC ☐O | |
+| 4.3 | Are documents regularly reviewed? | 4.3 | Review records | ☐C ☐NC ☐O | |
+| 4.4 | Is only current version available? | 4.4 | Document check | ☐C ☐NC ☐O | |
+| 4.5 | Are records legible and indelible? | 4.7-4.8 | Sample records | ☐C ☐NC ☐O | |
+| 4.6 | Are corrections made properly? | 4.9 | Sample records | ☐C ☐NC ☐O | |
+| 4.7 | Are electronic records compliant? | 4.9, Annex 11 | System validation | ☐C ☐NC ☐O | |
+| 4.8 | Is data integrity assured (ALCOA+)? | 4.1 | DI assessment | ☐C ☐NC ☐O | |
+| 4.9 | Are specifications current and approved? | 4.11-4.15 | Specifications | ☐C ☐NC ☐O | |
+| 4.10 | Are batch records complete? | 4.17-4.21 | Sample batch records | ☐C ☐NC ☐O | |
+```
+
+#### Chapter 5: Production
+```markdown
+## 5. Production
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 5.1 | Is production performed per approved procedures? | 5.1 | SOPs, batch records | ☐C ☐NC ☐O | |
+| 5.2 | Is cross-contamination prevented? | 5.18-5.20 | Controls | ☐C ☐NC ☐O | |
+| 5.3 | Is line clearance performed? | 5.12 | Line clearance forms | ☐C ☐NC ☐O | |
+| 5.4 | Are in-process controls performed? | 5.28-5.29 | IPC records | ☐C ☐NC ☐O | |
+| 5.5 | Is yield reconciliation performed? | 5.8 | Batch records | ☐C ☐NC ☐O | |
+| 5.6 | Is reprocessing controlled and approved? | 5.63-5.65 | Reprocessing records | ☐C ☐NC ☐O | |
+```
+
+#### Chapter 6: Quality Control
+```markdown
+## 6. Quality Control
+
+| # | Question | EU GMP Ref | Evidence Required | Finding | Comments |
+|---|----------|------------|-------------------|---------|----------|
+| 6.1 | Is QC independent from Production? | 6.1 | Org chart | ☐C ☐NC ☐O | |
+| 6.2 | Are sampling procedures documented? | 6.11-6.14 | Sampling SOPs | ☐C ☐NC ☐O | |
+| 6.3 | Are test methods validated? | 6.15 | Method validation | ☐C ☐NC ☐O | |
+| 6.4 | Are reference standards qualified? | 6.20-6.21 | Reference standard logs | ☐C ☐NC ☐O | |
+| 6.5 | Is there stability program? | 6.25-6.28 | Stability protocol | ☐C ☐NC ☐O | |
+| 6.6 | Are OOS results investigated? | 6.32-6.34 | OOS records | ☐C ☐NC ☐O | |
+```
+
+### CANNABIS-SPECIFIC CHECKLIST
+
+```markdown
+## Cannabis-Specific Requirements (Annex 7 + Controlled Substance)
+
+| # | Question | Reference | Evidence Required | Finding | Comments |
+|---|----------|-----------|-------------------|---------|----------|
+| CS-1 | Is controlled substance license current? | National Law | License | ☐C ☐NC ☐O | |
+| CS-2 | Is there security for cannabis storage? | National Law | Security assessment | ☐C ☐NC ☐O | |
+| CS-3 | Are access controls in place? | National Law | Access logs | ☐C ☐NC ☐O | |
+| CS-4 | Is inventory reconciliation performed? | National Law | Reconciliation records | ☐C ☐NC ☐O | |
+| CS-5 | Is THC content tested and within limits? | National Law | COAs | ☐C ☐NC ☐O | |
+| CS-6 | Is CBD content verified? | Spec | COAs | ☐C ☐NC ☐O | |
+| CS-7 | Are pesticide residues tested? | Ph. Eur. | Test records | ☐C ☐NC ☐O | |
+| CS-8 | Are heavy metals tested? | Ph. Eur. | Test records | ☐C ☐NC ☐O | |
+| CS-9 | Is microbial testing performed? | Ph. Eur. | Test records | ☐C ☐NC ☐O | |
+| CS-10 | Is product segregation maintained (THC/CBD)? | GMP | Controls | ☐C ☐NC ☐O | |
+| CS-11 | Is traceability maintained seed-to-sale? | National Law | Tracking records | ☐C ☐NC ☐O | |
+```
+
+### AUDIT SUMMARY TEMPLATE
+
+```markdown
+## Audit Summary
+
+### Findings Summary
+| Category | Total Items | Compliant | Non-Compliant | Observations |
+|----------|-------------|-----------|---------------|--------------|
+| Chapter 1 | {n} | {n} | {n} | {n} |
+| Chapter 2 | {n} | {n} | {n} | {n} |
+| ... | | | | |
+| **Total** | {n} | {n} | {n} | {n} |
+
+### Non-Conformances Identified
+| NC # | Area | Finding | Classification | Root Cause | CAPA Required |
+|------|------|---------|----------------|------------|---------------|
+| NC-001 | {area} | {finding} | Major/Minor | {cause} | ☐ Yes ☐ No |
+
+### Observations
+| Obs # | Area | Observation | Recommendation |
+|-------|------|-------------|----------------|
+| OBS-001 | {area} | {observation} | {recommendation} |
+
+### Audit Conclusion
+{Overall assessment and recommendations}
+
+### Audit Team Signatures
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Lead Auditor | | | |
+| Auditor | | | |
+| Auditee Representative | | | |
+```
+
+### INTEGRATION
+
+After audit:
+- Create CAPAs via `/qms-deviation-capa`
+- Track findings in gap analysis via `/qms-gap-analysis`
+- Update training via `/qms-training-matrix`
+
+</qms-audit-checklist>

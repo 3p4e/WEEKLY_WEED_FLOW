@@ -43,3 +43,24 @@ If that changes in the future — if WWF is ever meant to hold or evidence a
 GMP-relevant record directly — this document is the place to update, and the
 §7 gap analysis in the architecture review is the checklist for what full
 validation would require.
+
+## One roof, two zones (unification, 2026-07)
+
+With the GrowFlow platform unification (`docs/UNIFICATION-ANALYSIS-2026-07.md`)
+the QMS Creator's capabilities arrive under the same login and URL as the
+ops tool. That does NOT change the scope above — it makes the boundary a
+structural property of the platform:
+
+- **Operations zone** (everything this document already describes): tasks,
+  weekly reports, facility board, analytics, notifications. Non-GMP,
+  informational, unchanged.
+- **QMS Studio zone** (the `/qms/*` surface and its views, labeled as such
+  in the UI): the window onto the QMS document world — SOP registry,
+  knowledge search, and in later phases the authoring pipeline. This zone
+  is where the *authoritative* QMS documents live and is kept on its own
+  service and (from Phase 2) its own database with its own lifecycle.
+
+Cross-zone references remain **pointers only** — an ops task references an
+SOP by its code (`reference_code`), exactly as before; nothing in the ops
+zone becomes a QMS record by association, and nothing in the QMS zone
+depends on ops data for its record-keeping claims.

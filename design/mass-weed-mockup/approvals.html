@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Approvals</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .tabs{ display:flex; gap:0; margin-bottom:16px; }
+  .tab{ padding:10px 20px; font-size:13px; font-family:var(--mw-font); color:var(--mw-text-dim); background:rgba(6,20,40,.4); cursor:pointer;
+    box-shadow:inset 0 -2px 0 transparent; transition:all .12s; letter-spacing:.03em; }
+  .tab:hover{ color:var(--mw-text); }
+  .tab.on{ color:var(--mw-cyan-bright); box-shadow:inset 0 -2px 0 var(--mw-cyan); background:rgba(58,159,212,.08); }
+  .tab .c{ font-family:var(--mw-font-cond); margin-left:6px; color:var(--mw-text-faint); } .tab.on .c{ color:var(--mw-cyan); }
+
+  .appr{ display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center; padding:15px 18px; margin-bottom:10px; transition:box-shadow .12s ease; }
+  .appr:hover{ box-shadow:inset 0 0 0 1.5px rgba(94,200,240,.35); }
+  .appr__ic{ width:42px; height:42px; flex:none; display:flex; align-items:center; justify-content:center;
+    clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .appr__ic svg{ width:20px; height:20px; }
+  .ic-coa{ background:rgba(108,240,90,.14); } .ic-coa svg{ fill:var(--mw-stat-hi); }
+  .ic-dev{ background:rgba(239,77,77,.14); } .ic-dev svg{ fill:var(--mw-stat-lo); }
+  .ic-order{ background:rgba(58,159,212,.14); } .ic-order svg{ fill:var(--mw-cyan-bright); }
+  .ic-po{ background:rgba(236,236,74,.14); } .ic-po svg{ fill:var(--mw-stat-mid); }
+  .appr__t{ font-size:14.5px; color:var(--mw-ink); font-weight:600; }
+  .appr__sub{ font-size:12px; color:var(--mw-text-dim); margin-top:3px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .appr__req{ display:inline-flex; align-items:center; gap:6px; }
+  .av{ width:20px; height:20px; border-radius:50%; background:linear-gradient(135deg,var(--mw-cyan),rgba(16,48,80,.9)); color:var(--mw-void);
+    font-family:var(--mw-font-cond); font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .appr__act{ display:flex; gap:8px; align-items:center; }
+  .appr__amt{ font-family:var(--mw-font-cond); font-size:16px; font-weight:700; color:var(--mw-ink); margin-right:6px; }
+  .btn-appr,.btn-rej{ width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none;
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); transition:all .12s; }
+  .btn-appr{ background:rgba(108,240,90,.16); box-shadow:inset 0 0 0 1px rgba(108,240,90,.4); }
+  .btn-appr:hover{ background:rgba(108,240,90,.3); }
+  .btn-appr svg{ width:16px; height:16px; fill:var(--mw-stat-hi); }
+  .btn-rej{ background:rgba(239,77,77,.12); box-shadow:inset 0 0 0 1px rgba(239,77,77,.4); }
+  .btn-rej:hover{ background:rgba(239,77,77,.26); }
+  .btn-rej svg{ width:14px; height:14px; fill:var(--mw-stat-lo); }
+  .resolved{ opacity:.5; }
+  .resolved .appr__act{ pointer-events:none; }
+  .stamp{ font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:5px 12px;
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .stamp--ok{ color:var(--mw-stat-hi); background:rgba(108,240,90,.14); }
+  .stamp--no{ color:var(--mw-stat-lo); background:rgba(239,77,77,.14); }
+  .age{ font-size:11px; color:var(--mw-text-faint); }
+  .empty{ text-align:center; color:var(--mw-text-faint); padding:44px 0; }
+  .bulk{ display:flex; align-items:center; justify-content:space-between; padding:11px 16px; margin-bottom:12px;
+    background:rgba(58,159,212,.08); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Approvals Queue">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="approvals.html" class="is-active">Approvals</a>
+    <a href="reports.html">Reports</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Approvals &amp; Sign-Off</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Pending</div><div class="mw-kpi__val mw-kpi__val--amber" id="k-pend">—</div><div class="mw-kpi__delta">awaiting you</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Approved Today</div><div class="mw-kpi__val mw-kpi__val--green" id="k-appr">0</div><div class="mw-kpi__delta">signed off</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Rejected</div><div class="mw-kpi__val" id="k-rej">0</div><div class="mw-kpi__delta">sent back</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Avg Response</div><div class="mw-kpi__val">2.4h</div><div class="mw-kpi__delta">this week</div></div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="bulk" id="bulk" style="display:none;">
+    <span style="font-size:12px;color:var(--mw-text-dim);">Approve all low-risk items in one action</span>
+    <button class="mw-btn mw-btn--primary" onclick="approveAll()">✓ Approve All Pending</button>
+  </div>
+  <div id="list"></div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  const CHK='<svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.4-1.4z"/></svg>';
+  const X='<svg viewBox="0 0 24 24"><path d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg>';
+  const ICG={
+    coa:'<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm8 1.5V8h4.5zM8 13l2 2 4-4 1 1-5 5-3-3z"/></svg>',
+    dev:'<svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 5l7.5 13h-15L12 7zm-1 4v4h2v-4zm0 6v2h2v-2z"/></svg>',
+    order:'<svg viewBox="0 0 24 24"><path d="M7 4h13l-1.5 9H8.5L7 4zm0 0L6 2H2m5 18a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zm9 0a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0z"/></svg>',
+    po:'<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zm0 4H4V6h16zM6 10h6v2H6zm0 4h10v2H6z"/></svg>',
+  };
+  const ITEMS=[
+    {id:1,kind:'coa',icls:'ic-coa',t:'COA Release — Batch F-24 (Gorilla Glue #4)',sub:'Potency 24.1% THC · All contaminants pass',req:'LT',reqn:'L. T\u2019Soni',age:'12m ago',risk:'low'},
+    {id:2,kind:'dev',icls:'ic-dev',t:'Deviation — Extraction pressure spike',sub:'Live resin run · Major severity',req:'TK',reqn:'T. Krios',age:'40m ago',risk:'high'},
+    {id:3,kind:'order',icls:'ic-order',t:'Order #MW-3182 — Nova Dispensary',sub:'42 kg flower · Credit terms Net-30',req:'AS',reqn:'A. Shepard',age:'1h ago',amt:'$186K',risk:'med'},
+    {id:4,kind:'po',icls:'ic-po',t:'Purchase Order — Nutrient restock',sub:'Res B base + Cal-Mag · 12 units',req:'MS',reqn:'M. Solus',age:'2h ago',amt:'$4.2K',risk:'low'},
+    {id:5,kind:'coa',icls:'ic-coa',t:'COA Release — Batch F-23 (Blue Dream)',sub:'Potency 19.8% THC · All pass',req:'LT',reqn:'L. T\u2019Soni',age:'3h ago',risk:'low'},
+    {id:6,kind:'order',icls:'ic-order',t:'Order #MW-3179 — Element Retail',sub:'18 kg pre-roll · Prepaid',req:'AS',reqn:'A. Shepard',age:'4h ago',amt:'$72K',risk:'low'},
+    {id:7,kind:'dev',icls:'ic-dev',t:'Deviation — RH excursion Flower B',sub:'RH 68% for 40min · Minor severity',req:'GV',reqn:'G. Vakarian',age:'5h ago',risk:'med'},
+  ];
+  const state={}; ITEMS.forEach(i=>state[i.id]='pending');
+  let TAB='pending';
+  const TABS=[['pending','Pending'],['approved','Approved'],['rejected','Rejected']];
+  const RISKTAG={low:'mw-tag--lo',med:'mw-tag--mid',high:'mw-tag--hi'};
+
+  function counts(){ const c={pending:0,approved:0,rejected:0}; Object.values(state).forEach(s=>c[s]++); return c; }
+  function drawTabs(){
+    const c=counts();
+    document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>
+      `<div class="tab ${k===TAB?'on':''}" onclick="TAB='${k}';drawTabs();render()">${l}<span class="c">${c[k]}</span></div>`).join('');
+    document.getElementById('k-pend').textContent=c.pending;
+    document.getElementById('k-appr').textContent=c.approved;
+    document.getElementById('k-rej').textContent=c.rejected;
+    document.getElementById('bulk').style.display = (TAB==='pending'&&c.pending>0)?'flex':'none';
+  }
+  function render(){
+    const rows=ITEMS.filter(i=>state[i.id]===TAB);
+    if(!rows.length){ document.getElementById('list').innerHTML=`<div class="empty">No ${TAB} items.</div>`; return; }
+    document.getElementById('list').innerHTML=rows.map(i=>{
+      const resolved=state[i.id]!=='pending';
+      return `<div class="mw-panel appr ${resolved?'resolved':''}">
+        <div class="appr__ic ${i.icls}">${ICG[i.kind]}</div>
+        <div><div class="appr__t">${i.t}</div>
+          <div class="appr__sub">
+            <span class="mw-tag ${RISKTAG[i.risk]}">${i.risk} risk</span>
+            <span>${i.sub}</span>
+            <span class="appr__req"><span class="av">${i.req}</span>${i.reqn}</span>
+            <span class="age">· ${i.age}</span>
+          </div></div>
+        <div class="appr__act">
+          ${i.amt?`<span class="appr__amt">${i.amt}</span>`:''}
+          ${resolved
+            ? `<span class="stamp ${state[i.id]==='approved'?'stamp--ok':'stamp--no'}">${state[i.id]==='approved'?'✓ Signed':'✕ Sent back'}</span>`
+            : `<button class="btn-rej" title="Reject" onclick="setState(${i.id},'rejected')">${X}</button>
+               <button class="btn-appr" title="Approve" onclick="setState(${i.id},'approved')">${CHK}</button>`}
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function setState(id,s){ state[id]=s; drawTabs(); render(); }
+  function approveAll(){ ITEMS.forEach(i=>{ if(state[i.id]==='pending') state[i.id]='approved'; }); drawTabs(); render(); }
+  drawTabs(); render();
+</script>
+</body>
+</html>

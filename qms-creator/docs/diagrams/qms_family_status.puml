@@ -1,0 +1,113 @@
+@startuml QMS_Family_Status_Overview
+!theme dark
+skinparam backgroundColor #1a1a1a
+skinparam textBackgroundColor #222222
+
+title QMS Document Families - Status Overview
+note right: Generated 2026-01-15 15:25:07
+
+card EQU_06 {
+  **Equipment Management**
+  ---
+  Procedures for equipment operation, maintenance, and calibration.
+  ---
+  Progress: 1/1 (100%)
+}
+
+card HRM_05 {
+  **Human Resources**
+  ---
+  Procedures for personnel training, hygiene, and management.
+  ---
+  Progress: 2/6 (33%)
+}
+
+card MAT_02 {
+  **Material Management**
+  ---
+  Procedures for material receipt, storage, and handling.
+  ---
+  Progress: 1/2 (50%)
+}
+
+card PRO_01 {
+  **Cultivation Processes**
+  ---
+  Procedures for cannabis cultivation activities.
+  ---
+  Progress: 3/3 (100%)
+}
+
+card PRO_03 {
+  **Production Operations**
+  ---
+  Standard operating procedures for production and cultivation.
+  ---
+  Progress: 2/3 (67%)
+}
+
+card PRO_06 {
+  **Distribution & Logistics**
+  ---
+  Procedures for distribution, transportation, and logistics.
+  ---
+  Progress: 1/1 (100%)
+}
+
+card QA_00 {
+  **Quality Management System Core**
+  ---
+  Fundamental QMS procedures and cross-departmental standards.
+  ---
+  Progress: 18/22 (82%)
+}
+
+card QCS_01 {
+  **QC System & Documentation**
+  ---
+  Quality Control system procedures and documentation standards.
+  ---
+  Progress: 1/10 (10%)
+}
+
+card QC_01 {
+  **Batch Release and Certification**
+  ---
+  Procedures for testing, reviewing, and certifying medicinal cannabis batches.
+  ---
+  Progress: 7/19 (37%)
+}
+
+card REC_09 {
+  **Records Management**
+  ---
+  Procedures for record keeping and data integrity.
+  ---
+  Progress: 1/1 (100%)
+}
+
+card RES_10 {
+  **Research & Development**
+  ---
+  Procedures for research, development, and innovation.
+  ---
+  Progress: 1/1 (100%)
+}
+
+card SAN_07 {
+  **Sanitation & Hygiene**
+  ---
+  Procedures for cleaning and sanitation.
+  ---
+  Progress: 1/1 (100%)
+}
+
+card VAL_08 {
+  **Validation & Qualification**
+  ---
+  Procedures for validation and qualification.
+  ---
+  Progress: 0/3 (0%)
+}
+
+@enduml

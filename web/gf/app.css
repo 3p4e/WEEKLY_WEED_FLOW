@@ -69,6 +69,10 @@
   --amber-soft: rgba(199,154,84,.18);
   --violet: #9B7BE8;
   --violet-soft: rgba(155,123,232,.18);
+  /* Chart series tokens (analytics) — pair validated for CVD + normal-vision
+     separation on this theme's surface; the light theme overrides below. */
+  --ch-a: #9B7BE8;
+  --ch-b: #1CA56F;
   --teal: #2FD9D9;
   --teal-soft: rgba(47,217,217,.16);
 
@@ -133,6 +137,7 @@
   --red: #C22A3B; --red-700: #8F1D2C; --red-soft: rgba(194,42,59,.13); --red-fg: #A32335;
   --amber: #8A6423; --amber-fg: #6B4E1A; --amber-soft: rgba(138,100,35,.14);
   --violet: #6B4FCB; --violet-soft: rgba(107,79,203,.13);
+  --ch-a: #6B4FCB; --ch-b: #06793F;
   --teal: #0F6F76; --teal-soft: rgba(15,111,118,.14);
   --glass-bg: rgba(236,248,242,.60); --glass-border: rgba(14,70,42,.14); --glass-blur: blur(20px);
   --sh-1: 0 1px 2px rgba(16,40,30,.05), inset 0 0 0 1px rgba(255,255,255,.6);
@@ -797,3 +802,212 @@ body.demo-on .main{padding-bottom:56px}
 .tree-edit{opacity:0;transition:opacity .12s}
 .tree-row:hover .tree-edit{opacity:1}
 @media (max-width:760px){.tree-range{display:none}.tree-edit{opacity:1}}
+
+/* ── Popup chooser (chooser.js) — replaces native <select> app-wide ────── */
+.sel-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  border:1px solid var(--glass-border);border-radius:9px;padding:10px 12px;font-size:14px;
+  background:var(--surface-2);color:var(--ink);cursor:pointer;text-align:left;font-family:inherit}
+.sel-btn:focus{outline:none;border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.sel-btn:disabled{opacity:.55;cursor:not-allowed}
+.sel-btn .sel-cur{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel-caret{flex:none;opacity:.6}
+.sel-modal{max-width:420px}
+.sel-search{width:100%;border:1px solid var(--glass-border);border-radius:9px;padding:9px 12px;
+  font-size:14px;background:var(--surface-2);color:var(--ink);outline:none;margin-bottom:10px}
+.sel-search:focus{border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.sel-list{display:flex;flex-direction:column;gap:2px;max-height:52vh;overflow-y:auto}
+.sel-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;
+  border-radius:8px;background:none;color:var(--ink);font-size:14px;font-family:inherit;
+  cursor:pointer;text-align:left;min-height:42px}
+.sel-row:hover,.sel-row.hover{background:var(--primary-soft)}
+.sel-row.on{background:var(--primary-soft);font-weight:600}
+.sel-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.sel-lbl{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.sel-sub{font-size:11.5px;color:var(--ink-3);font-weight:400}
+.sel-ck{flex:none;color:var(--primary)}
+.sel-empty{padding:18px;text-align:center;color:var(--ink-3);font-size:13px}
+
+/* ── Add-modal department-fields well (mockup af-modal .af-block) ──────── */
+.af-block{border:1px solid var(--glass-border);border-radius:10px;padding:12px;margin-bottom:12px;
+  background:color-mix(in srgb, var(--dept-acc, var(--primary)) 7%, var(--surface-2))}
+.af-block-hd{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--ink-3);margin-bottom:10px}
+.af-block-hd .dot{width:8px;height:8px;border-radius:50%;background:var(--dept-acc, var(--primary));flex:none}
+.af-prev{margin-top:12px}
+.af-prev-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:6px}
+.af-prev-card{border:1px solid var(--glass-border);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.af-prev-title{font-size:14px;font-weight:600;margin-bottom:6px}
+.af-prev-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--ink-3)}
+.sel-btn.sel-inline{width:auto;padding:7px 10px;font-size:13px}
+
+/* ── Inbox / activity feed (notifications-view.js) ─────────────────────── */
+.ntf-bar{display:flex;align-items:center;gap:8px;margin:6px 4px 10px}
+.ntf-list{display:flex;flex-direction:column;gap:6px;max-width:860px}
+.ntf-day{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:10px 4px 2px}
+.ntf{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--glass-border);
+  border-left:3px solid var(--primary);border-radius:10px;background:var(--surface-2);cursor:pointer}
+.ntf.unread{background:var(--primary-soft)}
+.ntf.unread .ntf-tt::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--primary);margin-right:7px;box-shadow:0 0 8px var(--primary)}
+.ntf-feed{cursor:default;border-left-color:var(--glass-border)}
+.ntf-b{flex:1;min-width:0}
+.ntf-tt{font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.ntf-meta{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--ink-3);margin-top:2px}
+.ntf-reason{border:1px solid var(--glass-border);border-radius:99px;padding:1px 8px}
+.ntf-done{flex:none}
+.ntf-empty{padding:40px;text-align:center;color:var(--ink-3)}
+
+/* ── Completion progress (tasks.progress) ─────────────────────────────────
+   ring-mini: parent card ring = sub-tasks done fraction (conic, --p 0..100,
+   --col dept colour). tree-prog: per-subtask completion bar in tree rows.
+   pl-*: the worklog modal's completion control (quick-set + slider), from
+   the Mass Weed mockup's log-progress panel. Token-based → all themes. */
+.ring-mini{--p:0;--col:var(--primary);width:15px;height:15px;border-radius:50%;flex:none;
+  display:inline-block;vertical-align:-3px;position:relative;
+  background:conic-gradient(var(--col) calc(var(--p)*1%), var(--surface-3) 0)}
+.ring-mini::before{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--surface)}
+.subdone-hint{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 9px;cursor:pointer;
+  font:600 11px var(--font);color:var(--green-fg,var(--green));background:var(--green-soft);
+  border:1px solid var(--green);border-radius:11px;white-space:nowrap}
+.subdone-hint:hover{filter:brightness(1.15)}
+.tree-prog{display:inline-flex;align-items:center;gap:6px;flex:none}
+.tp-track{width:52px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--line-2)}
+.tp-fill{display:block;height:100%;border-radius:3px;transition:width .4s cubic-bezier(.2,.7,.3,1)}
+.tp-fill.hi{background:var(--green)}
+.tp-fill.mid{background:var(--amber)}
+.tp-fill.lo{background:var(--red)}
+.tp-val{font:600 11px var(--mono);color:var(--ink-2);min-width:32px}
+.pl-quick{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:2px 0 10px}
+.pl-q{font:600 11px var(--font);letter-spacing:.05em;color:var(--ink-2);cursor:pointer;
+  background:var(--surface-2);border:none;box-shadow:inset 0 0 0 1px var(--line);
+  padding:7px 0;border-radius:var(--r-sm,4px)}
+.pl-q:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--border-strong)}
+.pl-q.on{color:var(--text-on-primary);font-weight:700;background:var(--primary);
+  box-shadow:0 0 12px -2px var(--primary)}
+.pl-range{-webkit-appearance:none;appearance:none;flex:1;height:6px;border-radius:3px;
+  background:var(--surface-3);outline:none;margin:4px 0 8px;cursor:pointer}
+.pl-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 8px var(--primary-soft),0 0 0 1px var(--border-strong);cursor:pointer}
+.pl-range::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 8px var(--primary-soft);cursor:pointer}
+.pl-val{font:700 13px var(--mono);color:var(--ink);min-width:44px;text-align:right}
+
+/* ── Lifecycle stepper (mockup .mw-stepper): Compile → Review → Lock on the
+   document panel. Token-based → all themes; mass-weed adds the glow. */
+.mw-stepper{display:inline-flex;align-items:center;flex-wrap:wrap;row-gap:4px}
+.mw-step{display:inline-flex;align-items:center;gap:7px}
+.mw-step__n{width:24px;height:24px;flex:none;display:grid;place-items:center;
+  font:700 12px var(--mono);border-radius:50%;color:var(--ink-3);
+  border:1.5px solid var(--line);background:var(--surface-2)}
+.mw-step__l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.mw-step.done .mw-step__n{color:var(--green);border-color:var(--green)}
+.mw-step.done .mw-step__l{color:var(--ink-2)}
+.mw-step.active .mw-step__n{color:var(--text-on-primary);background:var(--primary);border-color:var(--primary)}
+.mw-step.active .mw-step__l{color:var(--primary);font-weight:700}
+.mw-step__bar{width:26px;height:2px;margin:0 8px;background:var(--line);flex:none}
+.mw-step__bar.done{background:var(--green)}
+
+/* ── Activity feed timeline (mockup .mw-feed): rail + status dot per event,
+   with a connecting line between events in the same day group. */
+.ntf-rail{position:relative;flex:none;width:10px;display:flex;justify-content:center}
+.ntf-fdot{width:9px;height:9px;border-radius:50%;background:var(--primary);margin-top:5px;z-index:1;flex:none}
+.ntf-fdot.ok{background:var(--green)}
+.ntf-fdot.warn{background:var(--amber)}
+.ntf-feed{display:flex;gap:11px}
+.ntf-feed + .ntf-feed .ntf-rail::before{content:"";position:absolute;top:-14px;height:16px;width:1px;background:var(--line)}
+
+/* ── Pass-3 library components (owner's ui-elements.html + nav.js rail) ──── */
+/* nav rail group labels (mockup grouped rail: Operations / Management / System) */
+.nav-group{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--ink-4);padding:12px 14px 4px}
+.nav-group:first-child{padding-top:2px}
+
+/* .mw-gauge — semicircular completion gauge (dashboard). Arc gradient and
+   needle rotation are inline (value-dependent); geometry lives here. */
+.mw-gauge{position:relative;width:140px;height:78px;overflow:hidden;margin:4px auto 12px}
+.mw-gauge__arc{position:absolute;top:0;left:0;width:140px;height:140px;border-radius:50%}
+.mw-gauge__arc::after{content:"";position:absolute;inset:16px;border-radius:50%;background:var(--surface)}
+.mw-gauge__needle{position:absolute;bottom:0;left:50%;width:2px;height:58px;background:var(--ink-2);
+  transform-origin:bottom center;transition:transform .5s cubic-bezier(.2,.8,.3,1);z-index:2}
+.mw-gauge__val{position:absolute;bottom:2px;left:0;right:0;text-align:center;
+  font:700 17px var(--mono);color:var(--ink);z-index:3}
+
+/* .mw-pager — cursor-pagination controls (audit load-more, inbox load-older) */
+.mw-pager{display:inline-flex;gap:5px}
+.mw-pager button{min-width:32px;height:32px;padding:0 14px;font:600 13px var(--font);
+  color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);cursor:pointer;
+  border-radius:var(--r-sm,4px);transition:all .14s ease}
+.mw-pager button:hover{color:var(--primary);border-color:var(--border-strong)}
+.mw-pager button:disabled{opacity:.35;cursor:not-allowed}
+
+/* .mw-crumbs — breadcrumb trail (subtask worklog: parent › child) */
+.mw-crumbs{display:flex;align-items:center;gap:8px;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.07em;min-width:0}
+.mw-crumbs a{color:var(--ink-3);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mw-crumbs a:hover{color:var(--primary)}
+.mw-crumbs .sep{color:var(--ink-4);flex:none}
+.mw-crumbs .cur{color:var(--primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* .mw-spinner — loading indicator replacing bare "Loading…" text */
+@keyframes mwSpin{to{transform:rotate(360deg)}}
+.mw-spinner{width:28px;height:28px;flex:none;border-radius:50%;
+  border:3px solid var(--line);border-top-color:var(--primary);animation:mwSpin .8s linear infinite}
+.mw-spinner--sm{width:16px;height:16px;border-width:2px}
+.wl-loading{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-3);padding:6px 0}
+
+/* .mw-skel — shimmer placeholder rows (inbox first load) */
+@keyframes mwShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.mw-skel{background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:mwShimmer 1.4s ease-in-out infinite;border-radius:var(--r-md,6px)}
+
+/* .mw-progress--striped — animated stripes on ACTIVE work: completion bars
+   of tasks currently "Working on it" signal live effort. */
+@keyframes mwStripe{to{background-position:24px 0}}
+.tree-row.s-working .tp-fill,
+.card.s-working .card-actions .track > span{
+  background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.16) 0,rgba(255,255,255,.16) 6px,transparent 6px,transparent 12px);
+  animation:mwStripe 1s linear infinite}
+
+@media (prefers-reduced-motion: reduce){
+  .mw-spinner{animation-duration:1.6s}
+  .mw-skel{animation:none}
+  .tree-row.s-working .tp-fill,.card.s-working .card-actions .track > span{animation:none}
+}
+
+/* ── Facility board (owner's facility.html): room cells + strain rows ───── */
+.fac-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.fac-room{display:flex;flex-direction:column;min-height:120px;padding:12px 14px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  transition:border-color .16s ease,box-shadow .16s ease}
+.fac-room:hover{border-color:var(--border-strong);box-shadow:var(--sh-1)}
+.fac-room-hd{display:flex;align-items:baseline;gap:8px}
+.fr-nm{font-weight:800;font-size:14px;color:var(--ink);flex:1;min-width:0}
+.fr-kind{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-3);border:1px solid var(--line);border-radius:99px;padding:1px 8px;white-space:nowrap}
+.fr-big{display:flex;align-items:baseline;gap:6px;margin:8px 0 6px}
+.fr-n{font:800 26px var(--mono);line-height:1;color:var(--ink)}
+.fr-u{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4)}
+.fac-strains{display:flex;flex-direction:column;gap:3px;margin-top:auto}
+.fac-strain{display:flex;align-items:center;gap:7px;font-size:12px;min-width:0}
+.fs-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.fs-nm{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fs-n{font:700 12px var(--mono);color:var(--ink)}
+.fs-ph{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  margin-left:auto;white-space:nowrap}
+.fr-empty{font-size:12px;color:var(--ink-4);font-style:italic}
+
+/* ── Approvals + My Day rows ─────────────────────────────────────────────── */
+.apv-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2);cursor:pointer}
+.apv-row:last-child{border-bottom:none}
+.apv-b{flex:1;min-width:0}
+.apv-t{font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apv-sub{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.md-task{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2)}
+.md-task:last-child{border-bottom:none}
+.md-task.is-done .md-t{text-decoration:line-through;color:var(--ink-3)}
+.md-b{flex:1;min-width:0;cursor:pointer}
+.md-t{font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md-m{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.md-due{display:inline-flex;align-items:center;gap:4px}
+.md-due.overdue{color:var(--red-fg,var(--red));font-weight:700}

@@ -21,7 +21,7 @@ function windowSaturday() {
   return `${sat.getFullYear()}-${p(sat.getMonth() + 1)}-${p(sat.getDate())}`;
 }
 
-test('due date + type at creation, weekend work session shows up in the report hours table', async ({ page }) => {
+test('due date + type at creation, weekend session logged; report renders WITHOUT hour metrics', async ({ page }) => {
   const taskTitle = `Worklog task ${Date.now()}`;
   const sat = windowSaturday();
 
@@ -31,7 +31,9 @@ test('due date + type at creation, weekend work session shows up in the report h
     await page.getByRole('button', { name: /new task/i }).click();
     await page.locator('#add-title').fill(taskTitle);
     await page.locator('#add-due').fill(sat);
-    await page.locator('#add-type').selectOption('lab');
+    // task type is a popup chooser (chooser.js), not a native <select>
+    await page.locator('#add-type-btn').click();
+    await page.locator('#gf-chooser .sel-row[data-v="lab"]').click();
     await page.getByRole('button', { name: 'Create task' }).click();
     await expect(page.locator('.card-title', { hasText: taskTitle })).toBeVisible({ timeout: 10_000 });
   });
@@ -61,11 +63,28 @@ test('due date + type at creation, weekend work session shows up in the report h
     await modal.locator('.btn-ghost').click();               // close the modal
   });
 
-  await test.step('the report view shows the hours in the weekend bucket', async () => {
+  await test.step('set completion % from the worklog panel', async () => {
+    await card.getByRole('button', { name: /log work/i }).click();
+    const modal = page.locator('#worklog-modal');
+    await expect(modal).toBeVisible();
+    // quick-set 75% → persists (PATCH progress) and re-renders with the value
+    await modal.locator('.pl-q', { hasText: '75%' }).click();
+    await expect(modal.locator('#wl-pct-val')).toHaveText('75%', { timeout: 15_000 });
+    await expect(modal.locator('.pl-q.on')).toHaveText('75%');
+    // 100% surfaces the never-enforced "mark done?" suggestion
+    await modal.locator('.pl-q', { hasText: '100%' }).click();
+    await expect(modal.locator('.subdone-hint')).toBeVisible({ timeout: 15_000 });
+    await modal.locator('.btn-ghost').click();
+    // the card's completion bar now reads the explicit percent
+    await expect(card.locator('.card-actions .mono')).toHaveText('100%');
+  });
+
+  await test.step('the report view renders and the hours table is GONE (removed app-wide)', async () => {
     await page.locator('[data-nav="report"]').click();
-    const hours = page.locator('#report-hours');
-    await expect(hours).toBeVisible({ timeout: 15_000 });
-    await expect(hours).toContainText('E2E Admin');          // seeded full_name
-    await expect(hours.locator('td.hb-weekend.nonzero').first()).toContainText('2.5');
+    // the report body renders (activity band region or summary cards present)
+    await expect(page.locator('#report-view')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#report-view')).toContainText(taskTitle, { timeout: 15_000 });
+    // the per-person hours table was removed with the rest of the hour metrics
+    await expect(page.locator('#report-hours')).toHaveCount(0);
   });
 });

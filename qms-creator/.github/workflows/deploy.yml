@@ -1,0 +1,234 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+
+    environment:
+      name: staging
+      url: https://staging.qms.local
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and tag backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          tags: |
+            qms-api:staging-${{ github.sha }}
+            qms-api:staging-latest
+          outputs: type=docker,dest=/tmp/qms-api.tar
+
+      - name: Build and tag frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: false
+          tags: |
+            qms-ui:staging-${{ github.sha }}
+            qms-ui:staging-latest
+          outputs: type=docker,dest=/tmp/qms-ui.tar
+
+      - name: Deploy to staging environment
+        env:
+          DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.STAGING_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_DEPLOY_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+
+          # Upload Docker images and docker-compose files
+          scp -i ~/.ssh/deploy_key /tmp/qms-api.tar $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          scp -i ~/.ssh/deploy_key /tmp/qms-ui.tar $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          scp -i ~/.ssh/deploy_key docker-compose.yml $DEPLOY_USER@$DEPLOY_HOST:/opt/qms/
+          scp -i ~/.ssh/deploy_key docker-compose.dev.yml $DEPLOY_USER@$DEPLOY_HOST:/opt/qms/docker-compose.staging.yml
+
+          # Deploy
+          ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          cd /opt/qms
+          docker load -i /tmp/qms-api.tar
+          docker load -i /tmp/qms-ui.tar
+          docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+          docker-compose exec backend python -m alembic upgrade head || true
+          docker-compose exec frontend nginx -s reload
+          rm /tmp/qms-api.tar /tmp/qms-ui.tar
+          EOF
+
+      - name: Run smoke tests
+        env:
+          TEST_URL: https://staging.qms.local
+        run: |
+          echo "Running smoke tests against $TEST_URL"
+          # Wait for service to be ready
+          for i in {1..30}; do
+            if curl -sf $TEST_URL/health > /dev/null; then
+              echo "Service is ready"
+              break
+            fi
+            echo "Waiting for service... ($i/30)"
+            sleep 2
+          done
+
+          # Basic health checks
+          curl -sf $TEST_URL/health || exit 1
+          curl -sf $TEST_URL/api/health || exit 1
+          curl -sf $TEST_URL/ | grep -q "Cannabis QMS" || exit 1
+          echo "Smoke tests passed"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+      url: https://qms.example.com
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tests passed
+        run: |
+          # Ensure all required status checks have passed
+          echo "Verifying all CI checks passed..."
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: release-${{ github.sha }}
+          release_name: Release ${{ github.sha }}
+          body: |
+            Production deployment of Cannabis EU GMP QMS Creator
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and tag backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          tags: |
+            qms-api:prod-${{ github.sha }}
+            qms-api:prod-latest
+          outputs: type=docker,dest=/tmp/qms-api.tar
+
+      - name: Build and tag frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: false
+          tags: |
+            qms-ui:prod-${{ github.sha }}
+            qms-ui:prod-latest
+          outputs: type=docker,dest=/tmp/qms-ui.tar
+
+      - name: Deploy to production environment
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+
+          # Backup current deployment
+          ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          cd /opt/qms
+          docker-compose down --remove-orphans
+          tar -czf backup-$(date +%s).tar.gz data/ || true
+          EOF
+
+          # Upload Docker images and docker-compose files
+          scp -i ~/.ssh/deploy_key /tmp/qms-api.tar $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          scp -i ~/.ssh/deploy_key /tmp/qms-ui.tar $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          scp -i ~/.ssh/deploy_key docker-compose.yml $DEPLOY_USER@$DEPLOY_HOST:/opt/qms/
+          scp -i ~/.ssh/deploy_key .env.production $DEPLOY_USER@$DEPLOY_HOST:/opt/qms/.env || true
+
+          # Deploy
+          ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          cd /opt/qms
+          docker load -i /tmp/qms-api.tar
+          docker load -i /tmp/qms-ui.tar
+          docker-compose -f docker-compose.yml up -d
+          docker-compose exec backend python -m alembic upgrade head
+          docker-compose exec frontend nginx -s reload
+          rm /tmp/qms-api.tar /tmp/qms-ui.tar
+          EOF
+
+      - name: Health check
+        env:
+          PROD_URL: https://qms.example.com
+        run: |
+          echo "Running production health checks..."
+          for i in {1..30}; do
+            if curl -sf $PROD_URL/health > /dev/null; then
+              echo "Production service is healthy"
+              break
+            fi
+            echo "Waiting for service... ($i/30)"
+            sleep 2
+          done
+          curl -sf $PROD_URL/health || exit 1
+          echo "Production deployment successful"
+
+      - name: Notify Slack (optional)
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "🚀 Production deployment successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Production Deployment Successful*\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }

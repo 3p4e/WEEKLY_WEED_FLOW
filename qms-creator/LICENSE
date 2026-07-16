@@ -1,0 +1,228 @@
+CANNABIS EU GMP QMS CREATOR
+LICENSE AGREEMENT
+
+Version 1.0.0
+Effective Date: January 2026
+
+PROPRIETARY SOFTWARE LICENSE
+
+This Cannabis EU GMP QMS Creator software and all associated documentation,
+including but not limited to source code, compiled binaries, user interfaces,
+and any derivative works are proprietary and confidential material owned by
+the Cannabis EU GMP QMS Creator Project ("Owner").
+
+1. GRANT OF LICENSE
+
+Subject to the terms and conditions of this License, Owner grants you a limited,
+non-exclusive, non-transferable license to use the Software solely for internal
+business purposes related to:
+
+- Quality Management System (QMS) documentation
+- Standard Operating Procedures (SOP) generation
+- Cannabis facility compliance with EU GMP regulations
+- Internal organizational use
+
+2. RESTRICTIONS
+
+You may NOT:
+
+a) Reverse engineer, decompile, disassemble, or attempt to derive the source
+   code, trade secrets, or algorithms from the Software
+
+b) Remove or obscure any proprietary notices, labels, or marks on the Software
+
+c) Redistribute, sublicense, rent, lease, or lend the Software to any third party
+
+d) Use the Software for:
+   - Commercial resale or licensing
+   - Service bureau operations
+   - Competitive analysis
+   - Building competing products
+   - Any unlawful or illegal purposes
+
+e) Modify the Software without prior written consent from Owner
+
+f) Transfer or assign this license to any other party
+
+g) Use the Software in any jurisdiction where such use is prohibited
+
+3. INTELLECTUAL PROPERTY RIGHTS
+
+All intellectual property rights in the Software, including but not limited to:
+patents, copyrights, trademarks, trade secrets, and know-how remain the exclusive
+property of Owner. This license does not grant you any ownership rights in the
+Software.
+
+4. CONFIDENTIALITY
+
+The Software contains confidential and proprietary information. You agree to:
+
+a) Keep the Software and all documentation confidential
+
+b) Not disclose the Software to any third party without prior written consent
+
+c) Protect the Software using the same level of care you use for your own
+   confidential information, but no less than reasonable care
+
+5. DATA AND PRIVACY
+
+You acknowledge that the Software may collect, process, and store:
+
+a) Document metadata and usage statistics
+- Facility information
+- User activity logs
+- Generated document information
+
+You agree to comply with all applicable data protection laws, including
+GDPR and other privacy regulations.
+
+6. DISCLAIMER OF WARRANTIES
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+Owner does not warrant that the Software will:
+- Meet your specific requirements
+- Work without interruption or error
+- Generate legally compliant documents for all jurisdictions
+- Be secure against all threats
+
+7. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL OWNER BE LIABLE FOR:
+
+a) Any indirect, incidental, consequential, special, or punitive damages
+
+b) Loss of profits, revenue, data, or business opportunities
+
+c) Any liability exceeding the fees paid for the Software in the 12 months
+   preceding the claim
+
+d) Damages arising from use of the Software in non-standard configurations
+
+e) Regulatory fines or penalties resulting from improper use
+
+8. REGULATORY COMPLIANCE
+
+You acknowledge that:
+
+a) This Software is a tool to assist in SOP generation and QMS documentation
+
+b) You remain solely responsible for ensuring all generated documents comply
+   with EU GMP regulations and local laws
+
+c) You should have qualified personnel review all generated content before use
+
+d) Owner provides no legal, regulatory, or compliance guarantees
+
+e) You are responsible for validating all generated documents through proper
+   regulatory channels
+
+9. SUPPORT AND MAINTENANCE
+
+Owner may, at its sole discretion, provide:
+- Bug fixes and security updates
+- Feature enhancements
+- Technical support
+
+However, Owner has no obligation to provide:
+- Continued support or updates
+- Specific response times
+- Customizations or modifications
+
+10. TERM AND TERMINATION
+
+This License is effective until terminated. Owner may terminate this License
+immediately if you:
+
+a) Violate any terms of this License
+
+b) Use the Software for unauthorized purposes
+
+c) Breach the confidentiality obligations
+
+Upon termination, you must:
+- Stop using the Software immediately
+- Destroy all copies of the Software
+- Certify in writing compliance with these requirements
+
+11. APPLICABLE LAW
+
+This License shall be governed by and construed in accordance with the laws
+of [Jurisdiction], without regard to its conflict of law principles.
+
+12. DISPUTE RESOLUTION
+
+Any disputes arising from this License shall be:
+a) First subject to good faith negotiation
+b) Then subject to mediation
+c) Finally subject to binding arbitration under [Arbitration Rules]
+
+13. ENTIRE AGREEMENT
+
+This License constitutes the entire agreement between you and Owner regarding
+the Software and supersedes all prior negotiations, representations, and
+agreements.
+
+14. SEVERABILITY
+
+If any provision of this License is found to be invalid or unenforceable,
+the remaining provisions shall remain in full force and effect.
+
+15. AMENDMENTS
+
+Owner reserves the right to amend this License at any time. Continued use
+of the Software constitutes acceptance of any amendments.
+
+16. NO ASSIGNMENT
+
+This License is personal to you and may not be assigned, transferred, or
+delegated to any third party without prior written consent from Owner.
+
+17. WAIVER
+
+The failure of Owner to enforce any right under this License does not
+constitute a waiver of that right.
+
+18. CONTACT INFORMATION
+
+For inquiries regarding this License, licensing options, or compliance,
+please contact:
+
+Cannabis EU GMP QMS Creator Project
+Email: licensing@example.com
+Website: https://example.com
+
+---
+
+ACKNOWLEDGMENT
+
+By installing, copying, or using this Software, you acknowledge that you
+have read this License, understand its terms and conditions, and agree to
+be bound by them.
+
+If you do not agree to the terms of this License, do not use the Software.
+
+Last Updated: January 2026
+Version: 1.0.0
+
+---
+
+ADDITIONAL NOTES FOR CANNABIS INDUSTRY USERS
+
+This Software is designed to assist cannabis facilities subject to EU GMP
+regulations. Users must understand:
+
+1. This Software is a documentation assistance tool only
+2. All generated content requires professional review
+3. Regulatory compliance is your responsibility
+4. Regular training and competency assessments are required per EU GMP
+5. Documentation must be approved by qualified personnel
+6. Records of all changes and approvals must be maintained
+7. Regular audits and updates of SOPs are required
+
+For EU GMP compliance guidance, refer to:
+- ICH Guidelines for Good Manufacturing Practice
+- EMA Guidance on GMP
+- Applicable national regulations in your jurisdiction

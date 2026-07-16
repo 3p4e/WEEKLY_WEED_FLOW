@@ -1,0 +1,90 @@
+@startmindmap
+title Cannabis EU GMP QMS Document Hierarchy
+* QMS Documents
+** EQU_06: Equipment Management
+*** ✓ EQU_06.01: Equipment Operation (General)
+** HRM_05: Human Resources
+*** ✓ HRM_05.01: Training (General)
+*** ○ HRM_05.02: Personnel Qualification
+*** ○ HRM_05.04: GMP Training Program
+*** ✓ HRM_05.05: Employee Hygiene Procedure
+*** ○ HRM_05.06: Visitor Management
+*** ○ HRM_05.07: Gowning Procedures
+** MAT_02: Material Management
+*** ○ MAT_02.01: Analytical Methods Validation
+*** ✓ MAT_02.04: Material Receipt Form
+** PRO_01: Cultivation Processes
+*** ✓ PRO_01.09: Cannabis Flower Curing Process Monitoring
+*** ✓ PRO_01.10: Plant Health Monitoring
+*** ✓ PRO_01.11: Placeholder Cultivation SOP
+** PRO_03: Production Operations
+*** ○ PRO_03.01: Production Standard Operating Procedure
+*** ✓ PRO_03.02: Drying Procedures
+*** ✓ PRO_03.03: Facility Drying Procedures
+** PRO_06: Distribution & Logistics
+*** ✓ PRO_06.01: Transportation of Finished Products
+** QA_00: Quality Management System Core
+*** ✓ QA_00.01: Quality Manual
+*** ✓ QA_00.02: Document Control
+**** ✓ QA_00.02_A01: Document Templates
+**** ✓ QA_00.02_A02: Approval Matrix
+**** ✓ QA_00.02_A03: Change Request Form
+**** ✓ QA_00.02_A04: Obsolete Handling
+*** ✓ QA_00.03: Training (General)
+*** ✓ QA_00.04: Memorandum Control and Management
+*** ✓ QA_00.05: Change Control
+**** ✓ QA_00.05_A01: Change Control Request Form
+**** ✓ QA_00.05_A02: Risk Assessment Templates
+**** ✓ QA_00.05_A03: Impact Assessment Form
+*** ✓ QA_00.06: Corrective and Preventive Action (CAPA) System
+**** ✓ QA_00.06_A01: CAPA Initiation Form
+**** ✓ QA_00.06_A02: CAPA Action Plan
+**** ✓ QA_00.06_A03: CAPA Effectiveness Check
+*** ✓ QA_00.07: Deviation Handling & Investigation
+*** ✓ QA_00.08: Self-Inspection
+*** ○ QA_00.12: Site Master File
+*** ○ QA_00.13: Product Quality Review
+*** ○ QA_00.14: Management Review
+*** ○ QA_00.15: Document Retention
+** QCS_01: QC System & Documentation
+*** ○ QCS_01.01: Batch Release Review
+*** ✓ QCS_01.02: Batch Release Review Detailed
+*** ○ QCS_01.03: Quality Control Master Plan
+*** ○ QCS_01.04: Out-of-Specification Investigations
+*** ○ QCS_01.05: Reference Standards Management
+*** ○ QCS_01.06: Laboratory Equipment Calibration
+*** ○ QCS_01.07: Laboratory Safety
+*** ○ QCS_01.08: Laboratory Waste Disposal
+*** ○ QCS_01.09: Analytical Methods
+*** ○ QCS_01.10: Reference Standards
+** QC_01: Batch Release and Certification
+*** ✓ QC_01.01: Batch Release
+**** ✓ QC_01.01_A01: Batch Release Assessment Form
+**** ✓ QC_01.01_A02: Batch Release Checklist
+**** ✓ QC_01.01_A03: QP Release Certification Form
+**** ✓ QC_01.01_A04: Batch Release Archival Checklist
+**** ✓ QC_01.01_A05: Deviation Investigation Template
+*** ○ QC_01.02: Sampling Procedures
+*** ✓ QC_01.03: Out-of-Expected Results (OOx) Investigation and Handling
+*** ○ QC_01.04: Specifications Management
+*** ○ QC_01.05: Laboratory Organization
+*** ○ QC_01.06: QC Documentation GDP
+*** ○ QC_01.07: Sampling Plan
+*** ○ QC_01.08: Cannabinoid Testing (HPLC)
+*** ○ QC_01.09: Microbial Testing
+*** ○ QC_01.10: Heavy Metals Testing
+*** ○ QC_01.11: Pesticide Residue Testing
+*** ○ QC_01.12: Moisture Content Determination
+*** ○ QC_01.13: Laboratory Sample Management
+*** ○ QC_01.14: Method Validation
+** REC_09: Records Management
+*** ✓ REC_09.01: Records Management
+** RES_10: Research & Development
+*** ✓ RES_10.01: Phenotyping and Characterization
+** SAN_07: Sanitation & Hygiene
+*** ✓ SAN_07.01: Cleaning & Sanitation (GMP Areas)
+** VAL_08: Validation & Qualification
+*** ○ VAL_08.01: Validation Master Plan
+*** ○ VAL_08.02: Process Validation
+*** ○ VAL_08.08: Cleaning Validation Protocol
+@endmindmap

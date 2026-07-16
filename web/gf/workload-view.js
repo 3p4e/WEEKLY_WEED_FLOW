@@ -1,5 +1,5 @@
 /* workload-view.js — crew capacity for the selected week. Global: GF.views.workload
-   Per-person load bars (priority-weighted points, or estimated hours where
+   Per-person load bars (priority-weighted points
    set) over the week's tasks, with drag-and-drop: drag a task chip onto a
    person to add them as a helper (the owner is immutable by design — POST
    /tasks always owns as creator — so drag ADDS an assignee via the existing
@@ -12,7 +12,7 @@ window.GF = window.GF || {};
   const W = { critical: 3, high: 2, medium: 1.5, low: 1 };
   const CAP = 12;   // soft weekly capacity in points — display heuristic only
 
-  const load = (t) => (Number.isFinite(t.est) && t.est > 0 ? t.est / 2 : (W[t.pr] || 1.5));
+  const load = (t) => (W[t.pr] || 1.5);
 
   GF.wlDragStart = (ev, id) => { ev.dataTransfer.setData('text/task-id', id); ev.dataTransfer.effectAllowed = 'copy'; };
   GF.wlDragOver = (ev) => { ev.preventDefault(); ev.currentTarget.classList.add('wl-over'); };
@@ -64,7 +64,7 @@ window.GF = window.GF || {};
       }).join('');
 
     return `${GF.viewHead('workload', 'workload')}
-      <div class="wl-hint">${AL('Drag a task onto a person to add them as a helper. Weights: critical 3 · high 2 · medium 1.5 · low 1 (estimated hours override).',
+      <div class="wl-hint">${AL('Drag a task onto a person to add them as a helper. Weights: critical 3 · high 2 · medium 1.5 · low 1.',
                                 'Повлечете задача врз личност за да ја додадете како помошник. Тежини: критично 3 · високо 2 · средно 1.5 · ниско 1 (проценетите часови имаат предност).')}</div>
       <div class="wl-list">${rows}</div>`;
   };

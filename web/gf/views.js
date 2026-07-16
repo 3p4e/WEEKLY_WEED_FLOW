@@ -151,7 +151,14 @@ GF.views = {
         ${kpi(busiest?GF.dayLabel(busiest[0]):'—', GF.t('busiest'), 'var(--violet)')}
       </div>
       <div class="dash-grid">
-        <div class="dash-card"><div class="dash-card-ttl">${GF.t('completion')} · ${GF.t('total')}</div>${statRows}</div>
+        <div class="dash-card"><div class="dash-card-ttl">${GF.t('completion')} · ${GF.t('total')}</div>
+          ${(() => { const ang = Math.round(rate * 1.8); return `
+          <div class="mw-gauge" title="${GF.t('completion')}: ${rate}%">
+            <div class="mw-gauge__arc" style="background:conic-gradient(from 270deg, var(--green) 0deg ${ang}deg, var(--surface-3) ${ang}deg 180deg, transparent 180deg 360deg)"></div>
+            <div class="mw-gauge__needle" style="transform:translateX(-50%) rotate(${ang - 90}deg)"></div>
+            <div class="mw-gauge__val">${rate}%</div>
+          </div>`; })()}
+          ${statRows}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('departments')}</div>${deptRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('responsible')}</div>${loadRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('blocker')} · ${blockers.length}</div>
@@ -176,7 +183,6 @@ GF.views = {
     const done = by('done'), rate = n ? Math.round(done / n * 100) : 0;
     const blocked = shown.filter(t => t.status === 'stuck');
     const atRisk = shown.filter(t => t.due && t.due < todayStr && !isDone(t));
-    const hours = shown.reduce((a, t) => a + (+t.sessionHours || 0), 0);
     const people = new Set(); shown.forEach(t => { people.add(t.owner); (t.helpers || []).forEach(h => people.add(h)); });
     const activeCount = [...people].filter(id => GF.PEOPLE[id]).length;
 
@@ -189,7 +195,7 @@ GF.views = {
       ${kpi(by('review'), AL('In review', 'На преглед'), 'var(--blue)', '')}
       ${kpi(blocked.length, AL('Blocked', 'Блокирани'), 'var(--red)', '')}
       ${kpi(atRisk.length, AL('Overdue', 'Задоцнети'), 'var(--amber)', '')}
-      ${kpi(Math.round(hours) + 'h', AL('Hours logged', 'Часови'), 'var(--violet)', activeCount + ' ' + AL('active', 'активни'))}
+      ${kpi(activeCount, AL('Active people', 'Активни лица'), 'var(--violet)', '')}
     </div>`;
 
     // Department matrix with a per-department visibility toggle
@@ -280,8 +286,6 @@ GF.views = {
       const doneDue = shown.filter(t => isDone(t) && t.due);
       const onTime = doneDue.filter(t => !t.completed_date || t.completed_date <= t.due);
       const otPct = doneDue.length ? Math.round(onTime.length / doneDue.length * 100) + '%' : '—';
-      const estSum = shown.reduce((a, t) => a + (+t.est || 0), 0);
-      const util = estSum ? Math.round(hours / estSum * 100) + '%' : '—';
       const rowsHtml = GF.DEPTS.filter(d => GF.execDeptShown(d.id)).map(d => {
         const dt = allWeek.filter(t => t.dept === d.id);
         const stuckN = dt.filter(t => t.status === 'stuck').length;
@@ -297,7 +301,6 @@ GF.views = {
           <span class="exec-chip">${AL('COO lens', 'COO поглед')}</span></div>
         <div class="strip-kpis">
           <div class="skpi"><span class="v" style="color:var(--green)">${otPct}</span><span class="l">${AL('On-time (with deadlines)', 'Навремено (со рокови)')}</span></div>
-          <div class="skpi"><span class="v" style="color:var(--blue)">${util}</span><span class="l">${AL('Hours vs estimate', 'Часови наспроти проценка')}</span></div>
           <div class="skpi"><span class="v" style="color:var(--red)">${blocked.length}</span><span class="l">${AL('Bottlenecks', 'Тесни грла')}</span></div>
         </div>
         ${rowsHtml || `<div class="kempty" style="padding:10px 4px">${AL('No bottlenecks this week 🎉', 'Нема тесни грла оваа недела 🎉')}</div>`}

@@ -1,0 +1,1075 @@
+================================================================================
+PURELY PLANT ACTUAL SOP TEMPLATES - ADAPTED TO NEW CODING SYSTEM
+Document ID: REFERENCE-ACTUAL-TEMPLATES
+Version: 1.0
+Effective Date: January 13, 2026
+================================================================================
+
+OVERVIEW:
+
+This document contains ACTUAL SOP templates used by Purely Plant GmbH, extracted
+from their operational documentation (PP_REFERENCE) and adapted to the new
+QMS coding system (QAS-01-XXX, PRO-02-XXX, etc.).
+
+These templates represent Purely Plant's ACTUAL operating practices and serve as
+the basis for customizing SOPs in the new QMS. Per the Reference Material Strategy
+methodology, these templates are to be PARAPHRASED and CUSTOMIZED, not copied
+directly.
+
+================================================================================
+TEMPLATE 1: EQUIPMENT SOP TEMPLATE (Standard Format)
+Adapted from: Template_Equipment_SOP_Draft.docx
+New Code: EQU-02-XXX (Equipment Operation & Maintenance)
+================================================================================
+
+DOCUMENT TITLE: [Operation, Configuration, Calibration & Maintenance of Equipment]
+
+Document ID:                EQU-02-[XXX]-V.1.0
+Equipment Name:             [INSERT: Specific Equipment Name]
+Equipment Model:            [INSERT: Manufacturer/Model Number]
+Asset Number:               [INSERT: Equipment ID(s)]
+Location:                   [INSERT: Facility Room/Area]
+Current Version:            1.0
+Effective Date:             2026-01-22
+Next Review Date:           [INSERT DATE + 1 YEAR]
+Classification:             INTERNAL - Equipment Operations
+
+┌─────────────────────────────────────────────────────────────────┐
+│ DOCUMENT APPROVAL TABLE                                         │
+├─────────────────────────────────────────────────────────────────┤
+│ Prepared By:     [Name, Title, Date, Signature]                 │
+│ Reviewed By:     [Equipment Manager/QA, Date, Signature]        │
+│ Approved By (QA):  [Quality Manager, Date, Signature]           │
+│ Approved By (QP):  [Blagoj Nikolov, Date, Signature]            │
+│ Released By:     [Facility Manager, Date, Signature]            │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+1. PURPOSE
+
+This SOP describes the operation, configuration, calibration, and maintenance
+procedures for [Equipment Name] to ensure:
+  • Consistent equipment performance and reliability
+  • Compliance with EU GMP Annex 7 requirements
+  • Data integrity for batch records
+  • Safe and effective use of equipment
+  • Prevention of product contamination
+  • Accurate measurement and documentation of results
+
+═══════════════════════════════════════════════════════════════════
+
+2. SCOPE
+
+This SOP applies to:
+  • [Equipment Name] located in [FACILITY AREA/ZONE]
+  • All personnel authorized to operate this equipment
+  • Daily use, routine maintenance, and periodic qualifications
+  • All operating modes and configurations
+
+Equipment not included in this SOP: [List if applicable]
+
+═══════════════════════════════════════════════════════════════════
+
+3. DEFINITIONS
+
+GMP             Good Manufacturing Practice (EU GMP Annex 7 standard)
+QA              Quality Assurance
+QC              Quality Control
+QPL             Qualification Plan (DQ/IQ/OQ/PQ protocols)
+QR              Qualification Report
+SOP             Standard Operating Procedure
+DQ              Design Qualification (equipment meets specifications)
+IQ              Installation Qualification (correctly installed)
+OQ              Operational Qualification (performs as intended)
+PQ              Performance Qualification (meets product requirements)
+Calibration     Verification that equipment meets specified accuracy
+Preventive Maint.  Scheduled maintenance to prevent equipment failure
+Corrective Maint.  Unplanned maintenance to repair equipment failure
+Parameter       Physical measurement (temperature, pressure, etc.)
+Acceptance Criteria Specification limits for equipment performance
+Measurement Point  Specific location where parameter is measured
+
+═══════════════════════════════════════════════════════════════════
+
+4. GENERAL DEVICE INFORMATION
+
+Manufacturer:           [INSERT: Manufacturer Name]
+Model/Type:             [INSERT: Model Number/Type]
+Serial Number:          [INSERT: Equipment Serial Number]
+Installation Date:      [INSERT: Date Equipment Installed]
+Warranty Period:        [INSERT: Warranty End Date (if applicable)]
+Expected Lifespan:      [INSERT: Estimated Equipment Lifespan]
+Replacement Timeline:   [INSERT: Estimated Replacement Year]
+
+Area of Usage:
+  Department:           [INSERT: Production/QC/Other]
+  Building/Room:        [INSERT: Facility Location]
+  Environmental Zone:   [INSERT: GACP Green/GMP White/Grade D, etc.]
+  Responsible Person:   [INSERT: Equipment Operator Primary]
+
+Utility Requirements:
+  Electrical:           [Voltage/Phase/Amperage]
+  Water Supply:         [if applicable]
+  Gas Supply:           [if applicable]
+  Compressed Air:       [if applicable]
+  Drainage:             [if applicable]
+
+═══════════════════════════════════════════════════════════════════
+
+5. SAFETY AND ENVIRONMENTAL PRECAUTIONS
+
+SAFETY PRECAUTIONS:
+  [ ] Personal Protective Equipment (PPE) Required:
+      □ Safety glasses                □ Safety shoes
+      □ Nitrile gloves              □ Lab coat
+      □ Hearing protection          □ [Other: ___________]
+
+  [ ] Hazards Associated with Equipment:
+      □ Risk of injury from rotating/moving parts
+      □ Electrical hazard (high voltage, etc.)
+      □ Thermal hazard (hot surfaces, steam, etc.)
+      □ Chemical hazard (reagents, solvents, etc.)
+      □ Pressure hazard (pressurized systems, etc.)
+      □ Noise hazard
+      □ Radiation hazard
+      □ [Other: ___________]
+
+  [ ] Emergency Procedures:
+      □ Location of emergency stop button: ___________
+      □ Emergency shutdown procedure: [Brief description]
+      □ First aid location: ___________
+      □ Emergency contact: ___________
+
+ENVIRONMENTAL PRECAUTIONS:
+  [ ] Disposal Requirements:
+      □ Waste material: [Describe type and disposal method]
+      □ Calibration gases: [If applicable]
+      □ Cleaning solvents: [If applicable]
+      □ Special environmental controls: [List]
+
+  [ ] Spill Response:
+      □ Containment materials available: [Location]
+      □ Emergency cleanup procedure: [Brief description]
+      □ Spill documentation required: Yes / No
+
+═══════════════════════════════════════════════════════════════════
+
+6. APPLICABLE DOCUMENTATION (Cross-References)
+
+Related SOPs:
+  ☐ EQU-02-001-V.X.X  - Equipment Calibration & Maintenance Master SOP
+  ☐ PRE-01-003-V.X.X  - Facility Premises - Environmental Monitoring
+  ☐ SAN-03-001-V.X.X  - Equipment Cleaning Procedures
+  ☐ SEC-03-001-V.X.X  - Security - Equipment Access Control
+  ☐ REC-02-001-V.X.X  - Records Management - Equipment Logbooks
+
+Related Quality Documents:
+  ☐ QAS-01-005-V.X.X  - Validation Strategy & Protocols
+  ☐ [Equipment User Manual - Attached or Referenced]
+  ☐ [Equipment Qualification Reports - DQ/IQ/OQ/PQ]
+  ☐ [Equipment Calibration Certificates - Filed in QC]
+
+═══════════════════════════════════════════════════════════════════
+
+7. RESPONSIBILITIES
+
+┌────────────────────────────┬────────────────────────────────────┐
+│ Function                   │ Responsibility                     │
+├────────────────────────────┼────────────────────────────────────┤
+│ Department Head/           │ • Ensure only trained personnel    │
+│ Equipment Manager          │   operate equipment                │
+│                            │ • Schedule maintenance/            │
+│                            │   calibration                      │
+│                            │ • Approve modifications            │
+│                            │ • Sign maintenance/calibration     │
+│                            │   reports                          │
+│                            │ • Monitor equipment performance    │
+├────────────────────────────┼────────────────────────────────────┤
+│ Equipment Operators        │ • Operate per this SOP             │
+│ (Daily Users)              │ • Document parameters in logbook   │
+│ [Specific Names/Roles]     │ • Report malfunctions             │
+│                            │ • Perform basic cleaning/checks    │
+│                            │ • Alert supervisor of issues       │
+├────────────────────────────┼────────────────────────────────────┤
+│ Quality Assurance          │ • Approve all modifications        │
+│ (QA Manager)               │ • Review maintenance schedules     │
+│                            │ • Audit equipment compliance       │
+│                            │ • Verify qualification status      │
+│                            │ • Sign SOP approvals               │
+├────────────────────────────┼────────────────────────────────────┤
+│ Qualified Person           │ • Final approval of qualification  │
+│ (Blagoj Nikolov)           │   protocols                        │
+│                            │ • Critical SOP sign-offs           │
+│                            │ • Assessment of equipment impact   │
+│                            │   on product quality               │
+├────────────────────────────┼────────────────────────────────────┤
+│ Equipment Maintenance      │ • Perform scheduled maintenance    │
+│ Provider (External/        │ • Complete repairs                 │
+│ Internal)                  │ • Document all service work        │
+│                            │ • Provide calibration certs       │
+│                            │ • Advise on equipment status      │
+├────────────────────────────┼────────────────────────────────────┤
+│ Records/Training Manager   │ • Document equipment training      │
+│ (HR/QMS Coordinator)       │ • Maintain training matrix         │
+│                            │ • Archive qualification reports    │
+│                            │ • File calibration certificates    │
+└────────────────────────────┴────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+8. NORMAL OPERATION PROCEDURES
+
+8.1 PRE-OPERATION CHECKLIST
+
+Before using equipment, operator must verify:
+
+☐ Equipment has current calibration certificate (Not overdue)
+☐ Equipment logbook is available and updated
+☐ Visual inspection: No obvious damage, cracks, or corrosion
+☐ All cables/connections are secure and undamaged
+☐ [Equipment-specific checks, e.g., water lines not kinked, etc.]
+☐ Environmental conditions meet specifications
+  (Temperature: ___°C ± ___ | Humidity: ___%RH ± ___)
+☐ Required PPE is available and in good condition
+☐ All accessories/components are present
+
+If any issue found: Do not use equipment. Report to supervisor immediately.
+
+8.2 OPERATION STEPS
+
+[Customize per specific equipment. General example below:]
+
+Step 1: Power On
+  1a. Verify electrical outlet is properly grounded
+  1b. Flip power switch to ON position
+  1c. Wait 2-3 minutes for equipment initialization
+  1d. Verify display shows startup menu
+
+Step 2: Configure Operating Parameters
+  2a. Select mode: [Mode A / Mode B / Mode C]
+  2b. Set Temperature to: [___°C]
+  2c. Set Humidity to: [___%RH]
+  2d. Set [Other Parameter]: [Value]
+  2e. Confirm settings match target values (±tolerance)
+  2f. Document time and parameters in Equipment Logbook
+
+Step 3: Load Sample/Material
+  3a. Inspect material for contamination
+  3b. Place material in [specific location]
+  3c. Close [access door/cover] securely
+  3d. Verify [safety switch/interlocks] engage
+
+Step 4: Run Program
+  4a. Select [specific program/cycle] from menu
+  4b. Press RUN/START button
+  4c. Equipment begins operation
+  4d. Monitor for any error messages
+  4e. Record start time in logbook
+
+Step 5: Monitor During Operation
+  5a. Check parameters every [15/30/60] minutes
+  5b. Record readings in Equipment Logbook
+  5c. Note any unusual sounds, vibrations, or displays
+  5d. Verify alarm thresholds not exceeded
+  5e. If alarm triggers, stop equipment and report to supervisor
+
+Step 6: End of Operation
+  6a. Allow equipment to cool (if applicable) [____ minutes]
+  6b. Open access door/remove material only when safe
+  6c. Record end time and final parameters in logbook
+  6d. Verify final results/output meets specifications
+  6e. If results out-of-specification, initiate OOS procedure
+
+8.3 SHUTDOWN PROCEDURE
+
+1. Press STOP/OFF button
+2. Allow cooling period: [____ minutes]
+3. Turn main power switch to OFF
+4. Verify all indicators are dark/off
+5. Leave equipment door open for [____ minutes] if applicable
+6. Document shutdown time in logbook
+7. Proceed to Cleaning section (below)
+
+═══════════════════════════════════════════════════════════════════
+
+9. EQUIPMENT CONFIGURATION & PARAMETERS
+
+[Equipment-specific settings required for routine use]
+
+CRITICAL OPERATING PARAMETERS:
+
+Parameter                   Specification           Acceptance Criteria
+─────────────────────────────────────────────────────────────────
+Temperature                 _____ °C                ± _____ °C
+Relative Humidity          _____ %RH               ± _____ %RH
+Pressure                   _____ Bar/PSI           ± _____ Bar/PSI
+Flow Rate                  _____ L/min             ± _____ L/min
+Time/Duration              _____ min               ± _____ min
+[Other Parameter 1]        [Value]                 [Tolerance]
+[Other Parameter 2]        [Value]                 [Tolerance]
+
+ALARM THRESHOLDS:
+
+Upper Limit (High Alarm):   _____ [units]
+Lower Limit (Low Alarm):    _____ [units]
+Action if Alarm Triggered:  [Procedure description]
+
+MAINTENANCE INTERVAL:
+
+Daily Check:        [Specific tasks - 15 minutes]
+Weekly Check:       [Specific tasks - 30 minutes]
+Monthly Check:      [Specific tasks - 1 hour]
+Quarterly Inspection: [External service provider - 4 hours]
+Annual Calibration:   [Certified laboratory - 1-2 days]
+
+═══════════════════════════════════════════════════════════════════
+
+10. CLEANING & SANITATION
+
+[Equipment-specific cleaning requirements]
+
+10.1 FREQUENCY & RESPONSIBILITY
+
+Cleaning Schedule:      [Daily / After Each Use / Weekly / Other]
+Responsible Person:     [Equipment Operator / Sanitation Staff / Other]
+Approved Cleaning Agents: [List specific agents and concentrations]
+
+10.2 CLEANING PROCEDURE
+
+Materials Needed:
+  ☐ [Cleaning agent name and concentration]
+  ☐ Distilled water for final rinse
+  ☐ [Specific cleaning tools/brushes]
+  ☐ [Type of cleaning wipes/cloths]
+  ☐ Approved disinfectant (if applicable)
+
+Steps:
+  1. Power off equipment and verify safe to touch [wait ___ minutes]
+  2. Remove [detachable parts/trays/etc.]
+  3. Wipe external surfaces with damp cloth
+  4. Use cleaning agent to clean [specific surfaces]
+  5. [Equipment-specific cleaning steps]
+  6. Rinse thoroughly with distilled water
+  7. Dry with lint-free cloth
+  8. Apply disinfectant [if applicable]
+  9. Reassemble equipment components
+  10. Perform function check before returning to service
+  11. Document cleaning in Equipment Logbook
+
+HOLD TIME:
+  Clean Hold Time:   [Equipment must be used within ___ hours]
+  Dirty Hold Time:   [Equipment must be cleaned within ___ hours]
+
+═══════════════════════════════════════════════════════════════════
+
+11. MAINTENANCE
+
+11.1 PREVENTIVE MAINTENANCE SCHEDULE
+
+Activity                    Frequency       Duration    Responsible
+────────────────────────────────────────────────────────────────
+Visual Inspection          Daily            5 min       Operator
+Mechanical Check           Weekly           15 min      Operator
+[Component X] Replacement   Every [X] months 1 hour     Maintenance
+Seal/Gasket Replacement    Annually         2 hours     Maintenance
+Professional Service       Annually         4 hours     [Vendor Name]
+Complete Overhaul          Every 5 years    1 day       [Vendor Name]
+
+11.2 CORRECTIVE MAINTENANCE PROCEDURE
+
+If equipment malfunction occurs:
+  1. STOP operation immediately
+  2. Notify supervisor and Equipment Manager
+  3. Do NOT attempt to repair if safety risk
+  4. Document in Equipment Logbook:
+     - Problem description
+     - Time and personnel involved
+     - Actions taken
+  5. Equipment Manager contacts maintenance provider
+  6. [Internal technician / External vendor] performs repair
+  7. Maintenance documentation filed after completion
+  8. If significant repair → may require re-qualification (IQ/OQ/PQ)
+
+═══════════════════════════════════════════════════════════════════
+
+12. CALIBRATION & QUALIFICATION
+
+12.1 CALIBRATION SCHEDULE
+
+Calibration Type            Frequency           Acceptance Criteria
+────────────────────────────────────────────────────────────────
+Routine Calibration         Every [X] months    ± [___]% or ± [__] units
+Performance Verification    Daily               Visual inspection
+Formal Calibration Cert     Annually            ISO 17043 traceability
+
+12.2 MEASUREMENT POINTS
+
+ID          Parameter           Calibration Points    Acceptance Criteria
+──────────────────────────────────────────────────────────────────
+T-1-[XXX]   Temperature        10°C, 20°C, 40°C     ± 0.5°C
+RH-1-[XXX]  Relative Humidity  10%, 75% (@ 25°C)    ± 3.2%, ± 5.2%
+P-1-[XXX]   Pressure           [Low/Mid/High]       ± [X]% of range
+[Other]     [Parameter]        [Points]             [Tolerance]
+
+12.3 QUALIFICATION PROTOCOL
+
+Equipment qualified via:
+  ☐ DQ (Design Qualification) - Date: _________ Report: [File ref]
+  ☐ IQ (Installation Qualification) - Date: _________ Report: [File ref]
+  ☐ OQ (Operational Qualification) - Date: _________ Report: [File ref]
+  ☐ PQ (Performance Qualification) - Date: _________ Report: [File ref]
+
+All qualification reports filed in QC Department
+Annual re-qualification required: Yes / No
+Next Qualification Due: [Date]
+
+═══════════════════════════════════════════════════════════════════
+
+13. DOCUMENTATION & RECORDS
+
+All handling, operation, and maintenance of equipment is documented in:
+
+EQUIPMENT LOGBOOK (Daily Use Record):
+  • Name of logbook: [EQU-02-XXX Equipment Logbook]
+  • Location stored: [Department]
+  • Archive location: [QMS Records Repository]
+  • Retention period: [Per REC-02-001]
+  • Retention after equipment disposal: 10 years (minimum)
+
+Information Documented in Logbook:
+  ☐ Date and time of operation
+  ☐ Operator name and signature
+  ☐ Operating parameters and readings
+  ☐ Any abnormalities or issues
+  ☐ Maintenance activities performed
+  ☐ Calibration status verification
+  ☐ Cleaning performed
+  ☐ Equipment downtime (if any)
+
+MAINTENANCE RECORDS:
+  • Stored in: [Equipment Maintenance Folder]
+  • Updated by: Maintenance provider and Equipment Manager
+  • Must contain:
+    ○ Service date and provider name
+    ○ Maintenance performed (detailed description)
+    ○ Parts replaced
+    ○ Signature of service provider
+    ○ Confirmation of re-testing/re-qualification (if needed)
+
+CALIBRATION CERTIFICATES:
+  • Original certificates stored in: [QC Department Files]
+  • Copy filed in: [Equipment Logbook/Equipment File]
+  • Traceable to: [ISO 17043 standard or equivalent]
+  • Renewal reminder system: [Excel tracker / Calendar alert]
+
+═══════════════════════════════════════════════════════════════════
+
+14. TROUBLESHOOTING
+
+Common Issue              Probable Cause           Action
+─────────────────────────────────────────────────────────────────
+Equipment won't power    No power / Circuit       Check outlet, reset
+on                       breaker tripped          circuit breaker
+
+[Display error]          Sensor malfunction /     Reference manual /
+                        Incorrect parameter      Contact support
+
+[Parameter reading]      Out-of-calibration /     Perform calibration
+abnormal                Drift in readings
+
+[Physical issue]         Wear and tear /          Contact maintenance
+e.g., leak               Component failure        provider
+
+Equipment shuts          Temperature/Humidity     Verify room conditions
+down unexpectedly        out of range             meet specifications
+
+═══════════════════════════════════════════════════════════════════
+
+15. AMENDMENT HISTORY
+
+Version   Date          Amendment Description               Author
+─────────────────────────────────────────────────────────────────
+1.0       [Date]        Initial version                     [Name]
+[Future]  [Date]        [Amendment description]            [Name]
+
+═══════════════════════════════════════════════════════════════════
+
+================================================================================
+TEMPLATE 2: PROCESSING/PRODUCTION SOP (Example - Drying Procedure)
+Adapted from: PRO – 03.04.00 SOP- PROCESSING PRODUCTION GMP OPERATIONS.docx
+New Code: PRO_03.02_v1 (Drying Procedures)
+================================================================================
+
+DOCUMENT TITLE: Drying Procedures & Monitoring
+
+Document ID:                PRO_03.02_v1-V.1.0
+Equipment Referenced:       CDS24 Drying Machine
+Facility Area:              Grade D (GMP Production)
+Drying Room Location:       [Insert Room Number/Name]
+Current Version:            1.0
+Effective Date:             2026-01-22
+Next Review Date:           [INSERT DATE + 1 YEAR]
+Classification:             INTERNAL - Production SOP
+
+┌──────────────────────────────────────────────────────────────────┐
+│ DOCUMENT APPROVAL TABLE                                          │
+├──────────────────────────────────────────────────────────────────┤
+│ Prepared By:     [Production Manager, Date, Signature]          │
+│ Reviewed By:     [Quality Manager, Date, Signature]             │
+│ Approved By (QA): [Quality Manager, Date, Signature]             │
+│ Approved By (QP): [Blagoj Nikolov - Batch Release, Date, Sig]   │
+│ Released By:     [Facility Manager, Date, Signature]            │
+└──────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+1. PURPOSE
+
+To establish standardized procedures for the drying of harvested cannabis
+material in the GMP production area to ensure:
+  • Consistent product quality
+  • Controlled moisture reduction to optimal levels
+  • Compliance with EU GMP Annex 7 standards
+  • Proper documentation of critical process parameters (CPPs)
+  • Prevention of mold, mildew, and degradation
+  • Traceability and batch integrity
+  • Accurate data generation for batch records
+
+═══════════════════════════════════════════════════════════════════
+
+2. SCOPE
+
+This SOP covers:
+  • Receipt of trimmed cannabis from Processing Department
+  • Preparation of material for drying
+  • Operation of CDS24 Drying Machine
+  • Monitoring and recording of drying parameters
+  • Completion of drying process
+  • Moisture content verification
+  • Transfer of dried material to Packaging Department
+
+Not covered in this SOP:
+  • Trimming procedures (ref. PRO_03.01_v1)
+  • Packaging procedures (ref. PRO-03-003)
+  • Post-harvest sanitization (ref. SAN-03-XXX)
+
+═══════════════════════════════════════════════════════════════════
+
+3. DRYING ROOM CONDITIONS (CONTROLLED ENVIRONMENT)
+
+Standard Drying Room Parameters:
+
+Temperature:                22-24 °C (± 2°C)
+Relative Humidity:          30 %RH (± 5% initial)
+                           45 %RH (± 5% final target)
+Air Exchange Rate:          [X air changes per hour]
+Lighting:                   [Type/intensity - minimized for stability]
+Ventilation:                [Active / Passive - specify type]
+Environmental Monitoring:   Continuous via Testo data loggers
+Alarm Setpoints:           High: 26°C / Low: 20°C (Temperature)
+                          High: 50%RH / Low: 20%RH (Humidity)
+
+Monitoring Requirements:
+  • Automated continuous recording
+  • Manual verification every [4-8] hours during drying cycle
+  • Data logged and filed per REC-02-001
+  • Alert supervisor if parameters exceed limits
+
+═══════════════════════════════════════════════════════════════════
+
+4. EQUIPMENT & MATERIALS REQUIRED
+
+DRYING EQUIPMENT:
+
+CDS24 Drying Machine:
+  • Manufacturer: [Insert: Cann System or equivalent]
+  • Location: Drying Room [Insert specific room/area]
+  • Capacity: [Insert: X kg per cycle or X trays]
+  • Material: Drying carts with [X] trays per cart
+  • Maximum Load: [Insert specifications]
+  • Control System: [Digital/Analog temperature/humidity control]
+  • Data Recording: Automatic parameter logging
+  • Calibration Status: [Current as of date]
+
+SUPPORTING EQUIPMENT:
+
+  ☐ Moisture Analyzer (KERN DAB 100-3 or equivalent)
+    Purpose: Determine drying loss percentage
+    Accuracy: ± [X]% per manufacturer specs
+    Location: Drying Room
+    Calibration: [Date of last calibration]
+
+  ☐ Testo Data Loggers (Environmental monitoring)
+    Quantity: [X units deployed in drying room]
+    Locations: [Distributed at height of material]
+    Sampling interval: Every [15/30] minutes
+    Accuracy: ± [X]°C / ± [X]%RH
+
+  ☐ Scale for weighing (DENSI SI Balance - analytical)
+    Purpose: Control tray weight verification
+    Location: Drying Room
+    Calibration status: [Current]
+
+  ☐ Thermometer (verification purposes)
+    Type: Digital or calibrated mercury
+    Location: On-site in drying room
+
+MATERIALS:
+
+  ☐ Trimmed cannabis material (from PRO_03.01_v1)
+  ☐ Drying trays (food-grade, designated for cannabis only)
+  ☐ Drying carts (stainless steel or equivalent)
+  ☐ Transfer bags (food-grade, sealed)
+  ☐ Labels and batch identification
+  ☐ Logbooks and records
+  ☐ [Protective equipment for operators]
+
+═══════════════════════════════════════════════════════════════════
+
+5. DEFINITIONS
+
+Drying Loss:              Reduction in material weight expressed as % loss
+                         per Ph. Eur. 2.2.32 (loss on drying method)
+
+Target Drying Loss:       8-10% m/m (mass percentage)
+                         (Reflects optimal final moisture content)
+
+Critical Process Parameter The temperature, humidity, and time parameters
+(CPP):                   that directly affect final product quality
+
+Control Tray:            Representative sample of material distributed
+                         throughout drying cycle for moisture checks
+
+Wet Weight:              Weight of freshly trimmed material
+                         (higher moisture content)
+
+Dry Weight:              Weight of material after drying cycle
+                         (target moisture <10%)
+
+Homogenization:          Process of mixing dried material for uniformity
+
+Batch:                   All cannabis material from single harvest
+                         processed together with unique batch number
+
+═══════════════════════════════════════════════════════════════════
+
+6. RESPONSIBILITIES
+
+┌────────────────────────────┬────────────────────────────────────┐
+│ Role                       │ Responsibility                     │
+├────────────────────────────┼────────────────────────────────────┤
+│ Production Manager /        │ • Oversee drying operations       │
+│ Drying Department Head      │ • Approve drying parameters      │
+│                            │ • Authorize start of cycle        │
+│                            │ • Review & sign completion records │
+│                            │ • Investigate any deviations      │
+│                            │ • Release material to packaging   │
+├────────────────────────────┼────────────────────────────────────┤
+│ Drying Machine Operator    │ • Prepare drying equipment        │
+│ [Specific Name/Role]       │ • Load material per procedure     │
+│ (Daily Operator)           │ • Record all parameters           │
+│                            │ • Monitor drying cycle            │
+│                            │ • Take control tray samples       │
+│                            │ • Perform moisture checks         │
+│                            │ • Document all data in logbook    │
+│                            │ • Report anomalies to supervisor  │
+├────────────────────────────┼────────────────────────────────────┤
+│ Drying Supervisor          │ • Check operator compliance       │
+│ (Secondary Operator/       │ • Verify parameter recordings     │
+│ QA Rep)                    │ • Inspect drying progress         │
+│                            │ • Approve moisture test results   │
+│                            │ • Verify material transfers       │
+│                            │ • Sign logbook entries            │
+├────────────────────────────┼────────────────────────────────────┤
+│ Quality Assurance Manager  │ • Audit drying procedures         │
+│                            │ • Review data integrity           │
+│                            │ • Investigate out-of-spec results │
+│                            │ • Approve SOP changes             │
+│                            │ • Certify qualification status    │
+├────────────────────────────┼────────────────────────────────────┤
+│ Qualified Person           │ • Final approval of deviations    │
+│ (Blagoj Nikolov)           │ • Batch release authority         │
+│                            │ • Assessment of drying impact     │
+│                            │   on product quality              │
+└────────────────────────────┴────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+7. DRYING PROCEDURE - STEP BY STEP
+
+7.1 PRE-DRYING PREPARATION (Day Before Drying)
+
+Step 1: Verify Environmental Conditions
+  ☐ Check drying room temperature: 22-24°C
+  ☐ Check drying room humidity: <40%RH
+  ☐ Verify HVAC system operational
+  ☐ Verify Testo data loggers operational
+  ☐ Check weather forecast (no unexpected humidity change expected)
+  ☐ Document conditions in Drying Logbook - Annex 04/02
+
+Step 2: Prepare Drying Equipment (CDS24 Machine)
+  ☐ Inspect machine for any residual material from previous cycle
+  ☐ Clean all internal surfaces per EQU-02-XXX (Equipment SOP)
+  ☐ Verify all shelves/trays are clean and dry
+  ☐ Verify carts move freely and lock in place
+  ☐ Verify door seals properly and alarm system functional
+  ☐ Verify temperature and humidity sensors calibrated and responsive
+  ☐ Run empty cycle test: Verify machine reaches target temperature/humidity
+    within [X] minutes
+  ☐ Document equipment status in Drying Logbook
+  ☐ Obtain Production Manager approval to proceed
+
+Step 3: Prepare Drying Trays
+  ☐ Count total trays needed: 360 trays (all 6 carts × 60 trays/cart)
+  ☐ Inspect each tray for cleanliness and integrity
+  ☐ Arrange trays on carts in organized manner
+  ☐ Label each cart with batch number and date
+  ☐ Position 6 "control trays" in strategic locations (representative)
+    - Top shelf (Cart 1)
+    - Middle shelf (Cart 3)
+    - Bottom shelf (Cart 5)
+    - [Other representative locations]
+
+Step 4: Receive Trimmed Cannabis Material
+  ☐ Receive material transfer from Trimming Department via air lock
+  ☐ Complete PRO-03-XXX Transfer Documentation (Annex 03)
+    - Record material source (harvest date/ID)
+    - Record wet weight of received material
+    - Verify batch number consistency
+  ☐ Inspect material for contamination
+  ☐ Allow material to acclimate to drying room conditions [X minutes]
+
+7.2 LOADING DRYING MACHINE (Day of Drying - Morning)
+
+Step 5: Distribute Material onto Trays
+  ☐ Personnel must wear designated protective clothing per SAN-02-03.00
+  ☐ Distribute trimmed cannabis evenly on trays:
+    - One layer per tray (no stacking/piling)
+    - Uniform distribution across tray surface
+    - Avoid clumping or gaps
+  ☐ Fill all 360 trays:
+    - 6 carts × 60 trays per cart = 360 total trays
+  ☐ Record approximate material amount per tray (visual assessment)
+  ☐ Verify all trays appear uniformly loaded
+
+Step 6: Weigh Control Trays (Pre-Drying Baseline)
+  ☐ Identify and separate the 6 pre-selected control trays
+  ☐ Weigh each control tray BEFORE loading into machine:
+    - Tray 1: [___] grams (Weight + Material)
+    - Tray 2: [___] grams
+    - Tray 3: [___] grams
+    - Tray 4: [___] grams
+    - Tray 5: [___] grams
+    - Tray 6: [___] grams
+  ☐ Record pre-drying weights in Drying Logbook - Annex 04/01
+  ☐ Return control trays to designated positions in machine
+
+Step 7: Load All Carts into Drying Machine
+  ☐ Verify all trays are loaded and organized
+  ☐ Move Cart 1 into machine and secure in position
+  ☐ Move Cart 2 into machine and secure
+  ☐ Move Cart 3 into machine and secure
+  ☐ Move Cart 4 into machine and secure
+  ☐ Move Cart 5 into machine and secure
+  ☐ Move Cart 6 into machine and secure
+  ☐ Close machine door and verify seal
+  ☐ Verify "Door Closed" indicator on control panel
+  ☐ Record time, material weight, and operator name in logbook
+
+7.3 DRYING CYCLE OPERATION
+
+Step 8: Program & Start Drying Cycle
+  ☐ Select Drying Program on CDS24 Control Panel:
+    Program Name: [___________________________]
+    Target Temperature: 22-24°C (± 2°C)
+    Target Humidity: Initial [__]% RH → Final [__]% RH
+    Duration: [___] hours (typically 48-72 hours for cannabis)
+  ☐ Confirm parameters display correctly on machine
+  ☐ Record start time: _____ [Date/Time]
+  ☐ Press START button
+  ☐ Verify machine begins heating/humidity control
+  ☐ Verify Testo loggers recording (check displays)
+  ☐ Document start in Drying Logbook - Annex 04/02
+
+Step 9: Monitor Drying Cycle (Ongoing - Every 4-8 Hours)
+  ☐ Every [4-8] hours during drying:
+    - Verify temperature: 22-24°C [within acceptable range: Yes/No]
+    - Verify humidity: [target] %RH [within range: Yes/No]
+    - Verify no equipment alarms or warnings
+    - Verify no visible condensation or moisture escaping
+    - Record all readings in Drying Logbook - Annex 04/02
+    - Verify Testo loggers continuing to record (no SD card errors)
+  ☐ If parameters OUT OF SPECIFICATION:
+    - Note time and readings
+    - Notify Production Manager/Supervisor IMMEDIATELY
+    - Initiate deviation/investigation per QAS-01-XXX
+    - Equipment may continue IF within acceptable tolerance
+    - Do NOT continue IF outside critical limits
+  ☐ Estimated drying duration: [___] hours total
+
+7.4 MOISTURE CONTENT VERIFICATION (Critical Quality Checkpoint)
+
+Step 10: Check Moisture Content - Interim (Midway through cycle)
+  ☐ When material appears approximately 50% dry:
+    - Record time: [___________]
+  ☐ Remove one control tray and weigh:
+    - Pre-dry weight: [___] grams
+    - Current weight: [___] grams
+    - Weight loss: [___] grams
+    - Calculate % loss: (Loss / Pre-weight) × 100 = [__]%
+  ☐ Expected at midway: approximately 5-6% loss
+  ☐ Record in Drying Logbook
+  ☐ Return control tray to machine
+  ☐ Continue drying cycle
+
+Step 11: Check Moisture Content - Near Completion (When 75% dry)
+  ☐ When estimated 75% drying complete:
+    - Record time: [___________]
+  ☐ Remove second control tray and weigh:
+    - Pre-dry weight: [___] grams
+    - Current weight: [___] grams
+    - Weight loss: [___] grams
+    - Calculate % loss: [__]%
+  ☐ Expected at 75% drying: approximately 6-7% loss
+  ☐ Use KERN Moisture Analyzer (advanced check):
+    - Place sample from control tray in analyzer
+    - Record moisture % reading: [__]%
+    - Acceptance: Must be ≤ 12% moisture content (interim)
+  ☐ If moisture too high: Continue drying [X more hours]
+  ☐ If moisture acceptable: Proceed to final check
+  ☐ Record all data in Drying Logbook
+
+Step 12: Final Moisture Content Verification (Endpoint)
+  ☐ When estimated drying complete (after [___] hours total):
+    - Record time: [___________]
+  ☐ Remove all 6 control trays and weigh each:
+    Tray 1: Final weight [___]g | Loss [__]% | Moisture [__]%
+    Tray 2: Final weight [___]g | Loss [__]% | Moisture [__]%
+    Tray 3: Final weight [___]g | Loss [__]% | Moisture [__]%
+    Tray 4: Final weight [___]g | Loss [__]% | Moisture [__]%
+    Tray 5: Final weight [___]g | Loss [__]% | Moisture [__]%
+    Tray 6: Final weight [___]g | Loss [__]% | Moisture [__]%
+
+  ☐ Calculate average drying loss: [__]%
+    TARGET: 8-10% drying loss per Ph. Eur. 2.2.32
+
+  ☐ Analyze samples with KERN Moisture Analyzer:
+    - Test representative samples from different areas of machine
+    - Acceptance Criteria: ≤10% moisture content
+    - Record all readings: [__]%, [__]%, [__]% (average: [__]%)
+
+  ☐ IF RESULTS WITHIN SPECIFICATION (8-10% loss, ≤10% moisture):
+    - Proceed to Step 13 (Complete cycle)
+  ☐ IF RESULTS OUT OF SPECIFICATION:
+    - Contact Production Manager/Supervisor
+    - Decision: Continue drying OR initiate deviation
+    - Document decision and proceed accordingly
+
+7.5 COMPLETION OF DRYING CYCLE
+
+Step 13: Complete Drying Cycle & Cool-Down
+  ☐ Once moisture content verified acceptable:
+    - Stop drying program
+    - Record end time: ___________
+  ☐ Allow equipment to cool:
+    - Reduction to room temperature: [___] minutes
+    - Do NOT remove material until cool
+  ☐ Verify temperature dropped to <28°C
+  ☐ Verify door can be opened safely (no steam release)
+
+Step 14: Unload Dried Material
+  ☐ Open machine door carefully
+  ☐ Remove Cart 1 and position in transfer area
+  ☐ Inspect material visually:
+    - Color: [normal/acceptable/discolored?]
+    - Aroma: [characteristic/acceptable/unusual?]
+    - Contamination: [none visible/acceptable/issues?]
+  ☐ Move Cart 2, 3, 4, 5, 6 similarly
+  ☐ All material transferred to transfer station
+  ☐ Record unloading time: ___________
+
+Step 15: Transfer to Homogenization & Next Step
+  ☐ Prepare transfer documentation per PRO-03-XXX (Annex 03)
+  ☐ Weigh total dried material:
+    - Total weight of dried cannabis: [___] grams
+    - Compare to initial wet weight: [___] grams
+    - Verify weight loss matches moisture content
+  ☐ Place dried material in food-grade sealed bags
+  ☐ Label bags with:
+    - Batch number
+    - Date of drying
+    - Total weight
+    - Operator name
+  ☐ Transport to Packaging Department through air lock
+  ☐ Complete transfer documentation and obtain signatures
+  ☐ Record final weight in Drying Logbook
+
+Step 16: Data Validation & Logbook Completion
+  ☐ Verify all entries in Drying Logbook - Annex 04/01 & 04/02:
+    ☐ Start date/time
+    ☐ Temperature readings (continuous & manual spot checks)
+    ☐ Humidity readings
+    ☐ Control tray weights (pre, interim, final)
+    ☐ Moisture analyzer results
+    ☐ End date/time
+    ☐ Total drying duration
+    ☐ Operator name/signature
+  ☐ Verify supervisor/production manager signature
+  ☐ Verify all data legible and no corrections/overstrike
+    (Use amendment procedure if error found)
+  ☐ Calculate final drying loss percentage
+  ☐ Determine if within specification: Yes / No
+  ☐ If within spec: Initiate sampling for QC testing (QAS-01-15.00)
+  ☐ Forward logbook and QC sampling forms to Quality Department
+
+═══════════════════════════════════════════════════════════════════
+
+8. SAMPLING & QUALITY CONTROL (In-Process Control)
+
+During/after drying, samples taken for QC testing:
+
+  ☐ Cannabinoid Analysis (THC/CBD potency)
+    Sampled from: Control trays (representative)
+    Test method: HPLC or GC-MS
+    Performed by: QC Laboratory
+    Acceptance: [Specification range]
+
+  ☐ Moisture Content (Already verified in Step 11-12)
+    Final acceptance: ≤ 10% m/m
+
+═══════════════════════════════════════════════════════════════════
+
+9. ENVIRONMENTAL MONITORING
+
+During drying cycle, environmental conditions continuously monitored:
+
+  ☐ Temperature: Recorded by Testo logger every 15-30 minutes
+  ☐ Humidity: Recorded by Testo logger every 15-30 minutes
+  ☐ Manual verification every [4-8] hours by operator
+  ☐ All data archived per REC-02-001
+  ☐ Graphs/charts generated monthly for review
+  ☐ Out-of-range events trigger investigation
+
+═══════════════════════════════════════════════════════════════════
+
+10. CLEANING AFTER DRYING CYCLE
+
+Step 17: Post-Drying Equipment Cleaning
+  ☐ Allow equipment to cool completely (30-60 minutes)
+  ☐ Remove all trays and carts from machine
+  ☐ Inspect machine interior for residual material
+  ☐ Clean all internal surfaces per SAN-03-XXX
+  ☐ Wipe shelves with damp cloth
+  ☐ Check and clean any filters [if applicable]
+  ☐ Leave door open for air circulation [___] minutes
+  ☐ Document cleaning in Equipment Logbook
+
+═══════════════════════════════════════════════════════════════════
+
+11. RECORDS & DOCUMENTATION
+
+Required Records (Completion):
+
+DRYING LOGBOOK - Annex 04/01 Drying Cannabis Log Book:
+  • Batch identification
+  • Start date/time
+  • Wet weight received
+  • Temperature record
+  • Humidity record
+  • Control tray baseline weights
+  • Operator name & date/signature
+  • Production Manager review & signature
+  • Supervisor signature
+
+DRYING PARAMETERS LOGBOOK - Annex 04/02 Dryer Parameters:
+  • CDS24 machine program selected
+  • Target temperature: 22-24°C
+  • Target humidity range
+  • Actual readings every [4-8] hours
+  • Times of interim moisture checks
+  • Final moisture content results
+  • Supervisor approval & signature
+  • QA review (if deviation detected)
+
+QUALITY CONTROL SAMPLING FORM:
+  • Submitted with samples to QC Lab
+  • References batch number & drying logbook
+  • Requests cannabinoid testing
+  • Notes any observations during drying
+
+═══════════════════════════════════════════════════════════════════
+
+12. DEVIATION MANAGEMENT
+
+If Any Parameters Out of Specification During Drying:
+
+Immediate Actions:
+  1. Record exact time and parameter reading
+  2. Notify Production Manager IMMEDIATELY
+  3. Document in logbook with "DEVIATION" notation
+  4. DO NOT CONTINUE without explicit authorization
+
+Management Decision:
+  • If within acceptable tolerance (documented): Continue drying
+  • If outside critical limits: STOP cycle
+  • Initiate QAS-01-XXX Deviation/Deviation Report
+  • Quality Manager investigates root cause
+  • QP assesses impact on product
+  • Batch may be:
+    ☐ Released (if no quality impact)
+    ☐ Released with conditions (re-testing required)
+    ☐ Rejected (if quality compromised)
+
+═══════════════════════════════════════════════════════════════════
+
+13. AMENDMENT HISTORY & VERSION CONTROL
+
+Version   Date          Amendment                        Author
+─────────────────────────────────────────────────────────────────
+1.0       [Date]        Initial version - Based on       [Name]
+                        actual PP procedures
+[Future]  [Date]        [Amendment description]         [Name]
+
+═══════════════════════════════════════════════════════════════════
+
+================================================================================
+KEY DISTINCTIONS BETWEEN TEMPLATES
+================================================================================
+
+PURELY PLANT ACTUAL PROCEDURES:
+  ✓ Equipment SOP Template = Master format for ALL equipment SOPs
+  ✓ Processing SOP Template = Example of actual production procedures
+  ✓ Both bilingual-capable (Macedonian-English)
+  ✓ Both GMP-structured with defined responsibilities
+  ✓ Both include logbooks and detailed documentation
+  ✓ Both reference actual equipment (CDS24, DENSI balances, etc.)
+
+NEW QMS CUSTOMIZATION:
+  → Equipment SOPs now use EQU-02-XXX coding
+  → Processing SOPs now use PRO-XX-XXX coding
+  → Paraphrasing applied (not direct copying per strategy)
+  → All Purely Plant specifics retained (CDS24, parameters, etc.)
+  → Personnel roles updated with actual names
+  → Facility dimensions inserted (when provided)
+  → All maintained in English with option for bilingual production
+
+================================================================================
+END OF ACTUAL TEMPLATES DOCUMENT
+================================================================================
+
+This document provides the FOUNDATION for all customized SOPs. The next phase
+will involve:
+
+1. Creating customized versions of these templates with actual Purely Plant
+   personnel names and facility data
+2. Expanding to cover all equipment and processes identified in Facility Profile
+3. Creating Work Instructions (detailed step-by-step for operators)
+4. Creating corresponding Forms/Logbooks (already exist in samples above)
+5. Training all personnel on new SOPs
+
+All SOPs created by paraphrasing/customizing these actual templates, not by
+copying them directly, ensuring intellectual property respect and IP/GMP
+compliance.
+
+================================================================================

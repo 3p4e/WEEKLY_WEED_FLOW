@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Crew Roster</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .crewgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .crew__top{ display:flex; gap:14px; align-items:center; margin-bottom:14px; }
+  .avatar{ width:56px; height:56px; flex:none; display:flex; align-items:center; justify-content:center; font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:22px; color:var(--mw-void); background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan-dim)); clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); box-shadow:0 0 14px rgba(94,200,240,.5); }
+  .avatar--off{ background:linear-gradient(180deg,#2a4055,#16283a); color:var(--mw-text-dim); box-shadow:none; }
+  .crew__nm{ font-family:'Saira Condensed',sans-serif; font-size:19px; font-weight:600; color:var(--mw-ink); }
+  .crew__role{ font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:2px; }
+  .pill{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:2px 9px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); display:inline-block; }
+  .pill--on{ color:var(--mw-void); background:var(--mw-stat-hi); }
+  .pill--off{ color:var(--mw-text-dim); background:rgba(58,159,212,.2); }
+  .pill--leave{ color:var(--mw-void); background:var(--mw-stat-mid); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Crew Roster">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html" class="is-active">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Crew Roster</h1><span class="mw-rule"></span></div>
+  <div class="crewgrid" id="crew"></div>
+</div>
+</div>
+<script>
+  const crew=[
+    {n:'A. Shepard',r:'Master Grower',i:'AS',eff:96,st:'on',z:'Flower A'},
+    {n:'G. Vakarian',r:'IPM Lead',i:'GV',eff:88,st:'on',z:'Veg Hall'},
+    {n:'T. Krios',r:'Extraction Tech',i:'TK',eff:91,st:'on',z:'Extraction'},
+    {n:'L. T\u2019Soni',r:'QA / Compliance',i:'LT',eff:99,st:'on',z:'Lab'},
+    {n:'U. Wrex',r:'Trim Manager',i:'UW',eff:74,st:'leave',z:'Dry / Cure'},
+    {n:'M. Solus',r:'Nutrient Chemist',i:'MS',eff:93,st:'on',z:'Veg Hall'},
+    {n:'J. Moreau',r:'Packaging Op',i:'JM',eff:81,st:'off',z:'Packaging'},
+    {n:'A. Williams',r:'Security / Vault',i:'AW',eff:87,st:'on',z:'Vault'},
+    {n:'K. Chakwas',r:'Clone Bay Tech',i:'KC',eff:90,st:'off',z:'Clone Bay'}
+  ];
+  const tier=e=>e>=90?'hi':e>=78?'mid':'lo';
+  const stt={on:['on','On Shift'],off:['off','Off Duty'],leave:['leave','On Leave']};
+  document.getElementById('crew').innerHTML = crew.map(c=>`
+    <div class="mw-panel">
+      <div class="crew__top">
+        <div class="avatar ${c.st!=='on'?'avatar--off':''}">${c.i}</div>
+        <div><div class="crew__nm">${c.n}</div><div class="crew__role">${c.r}</div></div>
+      </div>
+      <div class="mw-stat"><div class="mw-stat__head"><span class="mw-stat__name">Efficiency</span><span class="mw-stat__val">${c.eff}%</span></div><div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--${tier(c.eff)}" style="width:${c.eff}%"></div></div></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+        <span class="mw-label" style="font-size:10px;">${c.z}</span>
+        <span class="pill pill--${stt[c.st][0]}">${stt[c.st][1]}</span>
+      </div>
+    </div>`).join('');
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

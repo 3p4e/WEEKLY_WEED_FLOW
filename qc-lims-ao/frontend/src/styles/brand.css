@@ -1,0 +1,57 @@
+/* Brand assets: Purely Plant logos
+   The source SVG `assets/pp-logos.svg` contains two logos side-by-side at
+   1703.78 × 595.28 — PP (left half) and PPlab (right half). We crop to each
+   via background-position with a 200% background-size. */
+
+/* Wordmark (full lockup) — used in headers, login, printables */
+.pp-wordmark {
+  display: inline-block;
+  background-image: url('../assets/pp-logos.svg');
+  background-size: 200% auto;
+  background-position: 0 50%;
+  background-repeat: no-repeat;
+  height: 36px;
+  width: 144px;            /* aspect ratio of half the SVG: ~852 × 595 → 1.43 */
+  /* hover lift on interactive headers */
+  transition: opacity .15s;
+}
+.pp-wordmark:hover { opacity: .85; }
+
+/* Lab variant — used in QC Lab module header */
+.pp-wordmark--lab { background-position: 100% 50%; }
+
+/* Sizes */
+.pp-wordmark--sm { height: 24px; width: 96px; }
+.pp-wordmark--md { height: 32px; width: 128px; }
+.pp-wordmark--lg { height: 48px; width: 192px; }
+.pp-wordmark--xl { height: 64px; width: 256px; }
+
+/* Mark-only (square crop on the leaf) — for compact spots, favicons, badges.
+   The leaf sits roughly at x:380-500 of the 1704 viewport, y:120-260 of 596.
+   Express that as a percentage crop. */
+.pp-mark {
+  display: inline-block;
+  background-image: url('../assets/pp-logos.svg');
+  background-repeat: no-repeat;
+  /* 1704 / 120 (crop width) * 100 ≈ 1420%, 596 / 140 ≈ 426% */
+  background-size: 1300% 425%;
+  /* leaf left ≈ 380/1704 ≈ 22%, top ≈ 120/596 ≈ 20% — express via bg-position */
+  background-position: -465% -50%;
+  height: 32px;
+  width: 32px;
+}
+.pp-mark--sm { height: 24px; width: 24px; }
+.pp-mark--lg { height: 48px; width: 48px; }
+
+/* "Powered by" footer mark for printables */
+.pp-footmark {
+  background-image: url('../assets/pp-logos.svg');
+  background-size: 200% auto;
+  background-position: 0 50%;
+  background-repeat: no-repeat;
+  height: 16px;
+  width: 64px;
+  display: inline-block;
+  vertical-align: middle;
+  opacity: .7;
+}

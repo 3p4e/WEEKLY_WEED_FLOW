@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Distribution &amp; Orders</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .grid2{ display:grid; grid-template-columns:1.5fr 1fr; gap:14px; align-items:start; }
+  .ord{ display:grid; grid-template-columns:auto 1fr auto auto auto; gap:14px; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(94,200,240,.08); }
+  .ord:last-child{ border-bottom:none; }
+  .ord__id{ font-family:var(--mw-font-cond); font-size:14px; font-weight:700; color:var(--mw-cyan-bright); }
+  .ord__who{ font-size:13px; color:var(--mw-text); } .ord__meta{ font-size:11px; color:var(--mw-text-dim); margin-top:2px; }
+  .ord__amt{ font-family:var(--mw-font-cond); font-size:16px; font-weight:700; color:var(--mw-ink); text-align:right; }
+  .ord__wt{ font-size:11px; color:var(--mw-text-dim); text-align:right; }
+  .map{ position:relative; height:220px; background:var(--mw-panel-in); border:1px solid rgba(94,200,240,.14); clip-path:polygon(0 0,100% 0,100% 100%,12px 100%,0 calc(100% - 12px)); overflow:hidden; }
+  .map__grid{ position:absolute; inset:0; background-image:linear-gradient(rgba(94,200,240,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(94,200,240,.08) 1px,transparent 1px); background-size:28px 28px; }
+  .node{ position:absolute; width:12px; height:12px; border-radius:50%; transform:translate(-50%,-50%); }
+  .node.hub{ width:16px; height:16px; background:var(--mw-cyan-bright); box-shadow:0 0 14px var(--mw-cyan); }
+  .node.stop{ background:var(--mw-stat-mid); box-shadow:0 0 10px var(--mw-stat-mid); }
+  .node.done{ background:var(--mw-stat-hi); box-shadow:0 0 10px var(--mw-stat-hi); }
+  .node__lbl{ position:absolute; left:16px; top:-4px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); white-space:nowrap; }
+  .node__lbl--left{ left:auto; right:16px; text-align:right; }
+  .route{ position:absolute; inset:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Distribution & Orders">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="orders.html" class="is-active">Orders</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Distribution &amp; Orders</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Open Orders</div><div class="mw-stat-card__v">17</div><div class="mw-stat-card__d up">▲ 3 today</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">In Transit</div><div class="mw-stat-card__v">6</div><div class="mw-stat-card__d">2 manifests</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Fulfilled MTD</div><div class="mw-stat-card__v">312 kg</div><div class="mw-stat-card__d up">▲ 8.4%</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Revenue MTD</div><div class="mw-stat-card__v">$1.24M</div><div class="mw-stat-card__d up">▲ 5.1%</div></div>
+  </div>
+
+  <div class="mw-utabs" style="margin-bottom:14px;">
+    <button class="mw-utab is-active" data-f="all">All Orders</button>
+    <button class="mw-utab" data-f="new">New</button>
+    <button class="mw-utab" data-f="packing">Packing</button>
+    <button class="mw-utab" data-f="transit">In Transit</button>
+    <button class="mw-utab" data-f="done">Delivered</button>
+  </div>
+
+  <div class="grid2">
+    <div class="mw-panel" style="padding:6px 10px;">
+      <div id="orders"></div>
+    </div>
+    <div class="stack" style="display:flex; flex-direction:column; gap:14px;">
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:10px;">Live Fleet · 6 vehicles</div>
+        <div class="map">
+          <div class="map__grid"></div>
+          <svg class="route" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M50 50 L20 22" stroke="rgba(108,240,90,.5)" stroke-width=".6" fill="none" stroke-dasharray="2 1.5"/>
+            <path d="M50 50 L80 30" stroke="rgba(236,236,74,.6)" stroke-width=".6" fill="none" stroke-dasharray="2 1.5"/>
+            <path d="M50 50 L74 78" stroke="rgba(236,236,74,.6)" stroke-width=".6" fill="none" stroke-dasharray="2 1.5"/>
+            <path d="M50 50 L22 74" stroke="rgba(108,240,90,.5)" stroke-width=".6" fill="none" stroke-dasharray="2 1.5"/>
+          </svg>
+          <div class="node hub" style="left:50%; top:50%;"><span class="node__lbl" style="color:var(--mw-cyan-bright);">Depot</span></div>
+          <div class="node done" style="left:20%; top:22%;"><span class="node__lbl">Verdant Co-op ✓</span></div>
+          <div class="node stop" style="left:80%; top:30%;"><span class="node__lbl node__lbl--left">Nova Dispensary</span></div>
+          <div class="node stop" style="left:74%; top:78%;"><span class="node__lbl node__lbl--left">Element Retail</span></div>
+          <div class="node done" style="left:22%; top:74%;"><span class="node__lbl">Citadel Mart ✓</span></div>
+        </div>
+      </div>
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:8px;">Active Manifests</div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">MAN-0412 · Route North</span><span class="mw-badge mw-badge--warn">In Transit</span></div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">MAN-0411 · Route East</span><span class="mw-badge mw-badge--warn">In Transit</span></div>
+        <div class="mw-catalog-row"><span class="mw-cat-name">MAN-0409 · Route South</span><span class="mw-badge mw-badge--ok">Delivered</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  const ORDERS = [
+    {id:'ORD-3391', who:'Nova Dispensary', meta:'License C11-0044 · Net 30', amt:'$18,400', wt:'12.0 kg', st:'new', tag:'New'},
+    {id:'ORD-3390', who:'Verdant Co-op', meta:'License C11-0102 · Prepaid', amt:'$9,250', wt:'6.4 kg', st:'packing', tag:'Packing'},
+    {id:'ORD-3388', who:'Element Retail Group', meta:'License C11-0077 · Net 15', amt:'$42,100', wt:'28.0 kg', st:'transit', tag:'In Transit'},
+    {id:'ORD-3385', who:'Citadel Mart', meta:'License C11-0031 · Prepaid', amt:'$14,900', wt:'9.8 kg', st:'done', tag:'Delivered'},
+    {id:'ORD-3383', who:'Thresher Wellness', meta:'License C11-0210 · Net 30', amt:'$7,600', wt:'5.2 kg', st:'packing', tag:'Packing'},
+    {id:'ORD-3380', who:'Omega Relay Shops', meta:'License C11-0188 · Net 30', amt:'$23,750', wt:'15.6 kg', st:'transit', tag:'In Transit'},
+    {id:'ORD-3377', who:'Nova Dispensary', meta:'License C11-0044 · Net 30', amt:'$11,200', wt:'7.5 kg', st:'done', tag:'Delivered'},
+  ];
+  const tagClass = {New:'mw-badge--cyan', Packing:'mw-badge--warn', 'In Transit':'mw-badge--warn', Delivered:'mw-badge--ok'};
+  function render(f){
+    const rows = ORDERS.filter(o=> f==='all' || o.st===f).map(o=>`
+      <div class="ord">
+        <span class="ord__id">${o.id}</span>
+        <div><div class="ord__who">${o.who}</div><div class="ord__meta">${o.meta}</div></div>
+        <div><div class="ord__amt">${o.amt}</div><div class="ord__wt">${o.wt}</div></div>
+        <span class="mw-badge ${tagClass[o.tag]||''}">${o.tag}</span>
+        <a href="order-detail.html?id=${o.id}" class="mw-btn mw-btn--ghost" style="padding:6px 12px; font-size:11px; text-decoration:none;">View</a>
+      </div>`).join('');
+    document.getElementById('orders').innerHTML = rows || '<div class="mw-empty"><div class="mw-empty__tt">No Orders</div><div class="mw-empty__ds">Nothing in this queue right now.</div></div>';
+  }
+  render('all');
+  document.querySelectorAll('.mw-utab').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.mw-utab').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active'); render(b.dataset.f);
+  }));
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

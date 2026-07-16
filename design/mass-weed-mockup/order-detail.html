@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Order Manifest</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .crumb{ font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-dim); margin-bottom:10px; }
+  .crumb a{ color:var(--mw-cyan-dim); text-decoration:none; } .crumb a:hover{ color:var(--mw-cyan-bright); }
+  .ohead{ display:flex; align-items:flex-start; gap:16px; margin-bottom:16px; }
+  .ohead__id{ font-family:var(--mw-font-cond); font-size:34px; font-weight:700; letter-spacing:.03em; color:var(--mw-ink); line-height:1; text-shadow:0 0 12px rgba(94,200,240,.4); }
+  .ohead__who{ font-size:14px; color:var(--mw-text); margin-top:6px; } .ohead__meta{ font-size:11px; color:var(--mw-text-dim); margin-top:3px; letter-spacing:.04em; }
+  .grid2{ display:grid; grid-template-columns:1.6fr 1fr; gap:14px; align-items:start; }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; }
+  .li{ display:grid; grid-template-columns:1fr auto auto auto; gap:14px; align-items:center; padding:11px 14px; border-bottom:1px solid rgba(94,200,240,.08); }
+  .li:last-child{ border-bottom:none; }
+  .li__nm{ font-size:13px; color:var(--mw-text); font-weight:600; } .li__batch{ font-size:11px; color:var(--mw-text-dim); margin-top:2px; letter-spacing:.04em; }
+  .li__qty{ font-family:var(--mw-font-cond); font-size:14px; color:var(--mw-ink); text-align:right; } .li__u{ font-size:10px; color:var(--mw-text-dim); }
+  .li__amt{ font-family:var(--mw-font-cond); font-size:14px; font-weight:700; color:var(--mw-cyan-bright); text-align:right; }
+  .row{ display:flex; justify-content:space-between; align-items:center; padding:8px 2px; font-size:12px; border-bottom:1px solid rgba(94,200,240,.06); }
+  .row:last-child{ border-bottom:none; } .row__k{ color:var(--mw-text-dim); text-transform:uppercase; letter-spacing:.06em; font-size:10px; } .row__v{ color:var(--mw-text); }
+  .totals{ margin-top:6px; padding-top:10px; border-top:1px solid rgba(94,200,240,.14); }
+  .tl{ position:relative; padding-left:22px; }
+  .tl::before{ content:''; position:absolute; left:5px; top:4px; bottom:4px; width:2px; background:linear-gradient(var(--mw-cyan),rgba(94,200,240,.1)); }
+  .tl__i{ position:relative; padding:0 0 16px; }
+  .tl__i:last-child{ padding-bottom:0; }
+  .tl__dot{ position:absolute; left:-21px; top:2px; width:12px; height:12px; border-radius:50%; background:var(--mw-panel-in); border:2px solid var(--mw-stat-mid); }
+  .tl__i.done .tl__dot{ background:var(--mw-stat-hi); border-color:var(--mw-stat-hi); box-shadow:0 0 8px var(--mw-stat-hi); }
+  .tl__i.active .tl__dot{ background:var(--mw-cyan-bright); border-color:var(--mw-cyan-bright); box-shadow:0 0 10px var(--mw-cyan); }
+  .tl__t{ font-size:12px; color:var(--mw-text); font-weight:600; } .tl__s{ font-size:10px; color:var(--mw-text-dim); margin-top:2px; letter-spacing:.05em; }
+  .sig{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid rgba(94,200,240,.06); }
+  .sig:last-child{ border-bottom:none; }
+  .sig__av{ width:30px; height:30px; flex:none; }
+  .sig__nm{ font-size:12px; color:var(--mw-text); } .sig__r{ font-size:10px; color:var(--mw-text-dim); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Order Manifest">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="orders.html" class="is-active">Orders</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="crumb"><a href="orders.html">◄ Orders</a> &nbsp;/&nbsp; <span id="crumbId">ORD-3388</span></div>
+
+  <div class="ohead">
+    <div style="flex:1;">
+      <div class="ohead__id" id="ordId">ORD-3388</div>
+      <div class="ohead__who" id="ordWho">Element Retail Group</div>
+      <div class="ohead__meta" id="ordMeta">License C11-0077 · Net 15 · Placed 2 days ago</div>
+    </div>
+    <span class="mw-badge mw-badge--warn" id="ordBadge" style="font-size:12px; padding:6px 14px;">In Transit</span>
+    <button class="mw-btn">Print Manifest</button>
+  </div>
+
+  <div class="kpis">
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Order Value</div><div class="mw-stat-card__v">$42,100</div><div class="mw-stat-card__d">6 line items</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Net Weight</div><div class="mw-stat-card__v">28.0 kg</div><div class="mw-stat-card__d">gross 31.4 kg</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">Manifest</div><div class="mw-stat-card__v" style="font-size:22px;">MAN-0411</div><div class="mw-stat-card__d">METRC synced ✓</div></div>
+    <div class="mw-stat-card" style="flex:1;"><div class="mw-stat-card__l">ETA</div><div class="mw-stat-card__v" style="font-size:22px;">14:20</div><div class="mw-stat-card__d up">on schedule</div></div>
+  </div>
+
+  <div class="grid2">
+    <!-- LEFT: line items + totals -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="mw-panel" style="padding:6px 10px;">
+        <div class="mw-label" style="padding:10px 4px 4px;">Line Items</div>
+        <div id="lines"></div>
+      </div>
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:6px;">Chain of Custody</div>
+        <div class="sig" id="sig1"></div>
+        <div class="sig" id="sig2"></div>
+        <div class="sig" id="sig3"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: transport + totals + timeline -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:4px;">Billing</div>
+        <div class="row"><span class="row__k">Subtotal</span><span class="row__v">$40,095</span></div>
+        <div class="row"><span class="row__k">Excise Tax (15%)</span><span class="row__v">$6,014</span></div>
+        <div class="row"><span class="row__k">Delivery</span><span class="row__v">$250</span></div>
+        <div class="row"><span class="row__k">Discount</span><span class="row__v" style="color:var(--mw-stat-hi);">−$4,259</span></div>
+        <div class="row totals"><span class="row__k" style="color:var(--mw-cyan-bright); font-size:12px;">Total Due</span><span class="row__v" style="font-family:var(--mw-font-cond); font-size:18px; font-weight:700; color:var(--mw-ink);">$42,100</span></div>
+      </div>
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:6px;">Transport</div>
+        <div class="row"><span class="row__k">Driver</span><span class="row__v">M. Vega · Lic D-4471</span></div>
+        <div class="row"><span class="row__k">Vehicle</span><span class="row__v">Van 07 · Plate 8ZLR221</span></div>
+        <div class="row"><span class="row__k">Route</span><span class="row__v">North · 3 stops</span></div>
+        <div class="row"><span class="row__k">Departed</span><span class="row__v">12:05 · Depot</span></div>
+      </div>
+      <div class="mw-panel">
+        <div class="mw-label" style="margin-bottom:10px;">Status Timeline</div>
+        <div class="tl">
+          <div class="tl__i done"><span class="tl__dot"></span><div class="tl__t">Order placed</div><div class="tl__s">2 days ago · 09:14</div></div>
+          <div class="tl__i done"><span class="tl__dot"></span><div class="tl__t">Packed &amp; weighed</div><div class="tl__s">Yesterday · 16:40</div></div>
+          <div class="tl__i done"><span class="tl__dot"></span><div class="tl__t">Manifest generated</div><div class="tl__s">Today · 11:50 · METRC ✓</div></div>
+          <div class="tl__i active"><span class="tl__dot"></span><div class="tl__t">In transit</div><div class="tl__s">Today · 12:05 · Van 07</div></div>
+          <div class="tl__i"><span class="tl__dot"></span><div class="tl__t">Delivered</div><div class="tl__s">ETA 14:20</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script src="mw-leaf.js"></script>
+<script>
+  const LINES = [
+    {nm:'Reaper Haze', batch:'BAT-2291 · COA ✓', qty:'8.0', u:'kg', amt:'$12,800'},
+    {nm:'Citadel Kush', batch:'BAT-2287 · COA ✓', qty:'6.0', u:'kg', amt:'$9,600'},
+    {nm:'Omega OG', batch:'BAT-2284 · COA ✓', qty:'5.0', u:'kg', amt:'$8,250'},
+    {nm:'Blue Dream IX', batch:'BAT-2280 · COA ✓', qty:'4.0', u:'kg', amt:'$5,600'},
+    {nm:'Nova Diesel', batch:'BAT-2278 · COA ✓', qty:'3.0', u:'kg', amt:'$2,745'},
+    {nm:'Element Skunk', batch:'BAT-2275 · COA ✓', qty:'2.0', u:'kg', amt:'$1,100'},
+  ];
+  document.getElementById('lines').innerHTML = LINES.map(l=>`
+    <div class="li">
+      <div><div class="li__nm">${l.nm}</div><div class="li__batch">${l.batch}</div></div>
+      <div class="li__qty">${l.qty}<span class="li__u"> ${l.u}</span></div>
+      <div></div>
+      <div class="li__amt">${l.amt}</div>
+    </div>`).join('');
+
+  const SIGS = [
+    {nm:'R. Solari', r:'Cultivation Lead · signed 16:40', c:'#5ec8f0'},
+    {nm:'M. Vega', r:'Transport · signed 12:05', c:'#6cf05a'},
+    {nm:'—', r:'Receiving · pending signature', c:'#4d6d87'},
+  ];
+  ['sig1','sig2','sig3'].forEach((id,i)=>{
+    const s = SIGS[i];
+    document.getElementById(id).innerHTML =
+      `<span class="sig__av" style="display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(94,200,240,.1);border:1px solid ${s.c};color:${s.c};font-size:11px;font-weight:700;font-family:var(--mw-font-cond);">${s.nm==='—'?'?':s.nm.split(' ').map(x=>x[0]).join('')}</span>`+
+      `<div><div class="sig__nm">${s.nm}</div><div class="sig__r">${s.r}</div></div>`;
+  });
+
+  // hydrate from ?id= if provided (labels only; content is representative)
+  const id = new URLSearchParams(location.search).get('id');
+  if(id){ document.getElementById('ordId').textContent=id; document.getElementById('crumbId').textContent=id; }
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

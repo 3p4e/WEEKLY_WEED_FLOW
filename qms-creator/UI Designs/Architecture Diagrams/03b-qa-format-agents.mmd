@@ -1,0 +1,45 @@
+flowchart LR
+    subgraph Agent6["Agent 6: QA Reviewer"]
+        A6_IN[All Sections]
+        A6_CONS[Check<br/>Consistency]
+        A6_REG[Verify<br/>Citations]
+        A6_XREF[Validate<br/>Cross-Refs]
+        A6_SCORE[Calculate<br/>Score]
+        A6_DEC{Score<br/>>= 80?}
+        A6_PASS[Approved]
+        A6_FAIL[Recommendations]
+        A6_IN --> A6_CONS --> A6_REG --> A6_XREF --> A6_SCORE --> A6_DEC
+        A6_DEC -->|Yes| A6_PASS
+        A6_DEC -->|No| A6_FAIL
+    end
+
+    subgraph Agent7["Agent 7: Document Formatter"]
+        A7_IN[Approved Content]
+        A7_COVER[Generate<br/>Cover Page]
+        A7_TOC[Build<br/>TOC]
+        A7_SECT[Format<br/>Sections]
+        A7_RACI[Style<br/>RACI]
+        A7_APPR[Add<br/>Approval Page]
+        A7_OUT[Main DOCX]
+        A7_IN --> A7_COVER --> A7_TOC --> A7_SECT --> A7_RACI --> A7_APPR --> A7_OUT
+    end
+
+    subgraph Agent8["Agent 8: Annex Questionnaire"]
+        A8_IN[Annex Request]
+        A8_TYPE[Determine<br/>Type]
+        A8_FIELDS[Define<br/>Fields]
+        A8_USER[User Input]
+        A8_OUT[Annex Specs]
+        A8_IN --> A8_TYPE --> A8_FIELDS --> A8_USER --> A8_OUT
+    end
+
+    subgraph Agent9["Agent 9: Annex Formatter"]
+        A9_IN[Annex Specs]
+        A9_GEN[Generate<br/>Form]
+        A9_SIG[Add<br/>Signatures]
+        A9_INST[Add<br/>Instructions]
+        A9_OUT[Formatted Annex]
+        A9_IN --> A9_GEN --> A9_SIG --> A9_INST --> A9_OUT
+    end
+
+    Agent6 --> Agent7 --> Agent8 --> Agent9

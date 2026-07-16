@@ -1,0 +1,76 @@
+# docengine.app.fleet — ensure-loop for the gf_* agent fleet.
+#
+# Declarative (agents/fleet.yaml) -> live Letta agents, ADDITIVELY:
+#   * create-by-name if missing (never edit an existing agent — the server
+#     rejects config writes for the legacy provider enum anyway);
+#   * attach the named sources (PQ1 excluded by omission);
+#   * seed a `gf_house_rules` core memory block from the canon text.
+# Model/embedding handles are taken from what the server actually serves
+# (first existing agent's config wins over the YAML default), because the
+# handover documented that invented handles are rejected.
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+import yaml
+
+from .letta import LettaClient, LettaError
+
+log = logging.getLogger("docengine.fleet")
+FLEET_FILE = Path(__file__).resolve().parents[1] / "agents" / "fleet.yaml"
+
+
+def load_fleet() -> dict:
+    return yaml.safe_load(FLEET_FILE.read_text(encoding="utf-8"))
+
+
+async def ensure_fleet(client: LettaClient | None = None) -> dict:
+    """Idempotent. Returns {agent_name: agent_id} for the whole gf_ fleet."""
+    client = client or LettaClient()
+    spec = load_fleet()
+    house_rules = spec["house_rules"].strip()
+    existing = {a.get("name"): a for a in await client.list_agents()}
+    sources = {s.get("name"): s.get("id") for s in await client.list_sources()}
+
+    # Adopt a model handle the server demonstrably accepts: prefer any
+    # existing agent's llm_config over the YAML default.
+    model = spec["defaults"]["model"]
+    embedding = spec["defaults"]["embedding"]
+    for a in existing.values():
+        lc = a.get("llm_config") or {}
+        if lc.get("handle") or lc.get("model"):
+            model = lc.get("handle") or lc.get("model")
+            ec = a.get("embedding_config") or {}
+            embedding = ec.get("handle") or ec.get("embedding_model") or embedding
+            break
+
+    out: dict[str, str] = {}
+    for ag in spec["agents"]:
+        name = ag["name"]
+        if name in existing:
+            out[name] = existing[name]["id"]
+            continue
+        body = {
+            "name": name,
+            "description": ag.get("description", ""),
+            "model": model,
+            "embedding": embedding,
+            "memory_blocks": [
+                {"label": "gf_house_rules", "value": house_rules},
+                {"label": "persona", "value": ag["persona"].strip()},
+            ],
+        }
+        created = await client.create_agent(body)
+        out[name] = created["id"]
+        log.info("created agent %s -> %s", name, created["id"])
+        for src_name in ag.get("sources", []):
+            sid = sources.get(src_name)
+            if not sid:
+                log.warning("source %s not found for %s", src_name, name)
+                continue
+            try:
+                await client.attach_source(created["id"], sid)
+            except LettaError as e:  # non-fatal: agent works, RAG degraded
+                log.warning("attach %s -> %s failed: %s", src_name, name, e)
+    return out

@@ -1,0 +1,66 @@
+erDiagram
+    REGULATORY_BODIES ||--o{ REGULATORY_DOCUMENTS : contains
+    REGULATORY_BODIES {
+        uuid id PK
+        varchar code UK
+        varchar name
+        varchar jurisdiction
+        varchar website_url
+        timestamp created_at
+    }
+
+    REGULATORY_DOCUMENTS ||--o{ REGULATORY_SECTIONS : has
+    REGULATORY_DOCUMENTS ||--o{ REGULATORY_TERMS : defines
+    REGULATORY_DOCUMENTS {
+        uuid id PK
+        uuid body_id FK
+        varchar document_code
+        varchar title
+        varchar version
+        date effective_date
+        varchar document_type
+        text full_text
+        timestamp created_at
+    }
+
+    REGULATORY_SECTIONS ||--o{ REGULATORY_SECTIONS : parent_of
+    REGULATORY_SECTIONS ||--o{ REGULATORY_CITATIONS : cites
+    REGULATORY_SECTIONS ||--o{ REGULATORY_CITATIONS : cited_by
+    REGULATORY_SECTIONS ||--o{ REGULATORY_EMBEDDINGS : embedded
+    REGULATORY_SECTIONS {
+        uuid id PK
+        uuid document_id FK
+        varchar section_number
+        varchar title
+        text content
+        uuid parent_section_id FK
+        int hierarchy_level
+        timestamp created_at
+    }
+
+    REGULATORY_TERMS {
+        uuid id PK
+        varchar term
+        text definition
+        uuid source_document_id FK
+        varchar source_section
+        varchar abbreviation
+        timestamp created_at
+    }
+
+    REGULATORY_CITATIONS {
+        uuid id PK
+        uuid citing_section_id FK
+        uuid cited_section_id FK
+        varchar citation_type
+        text citation_text
+        timestamp created_at
+    }
+
+    REGULATORY_EMBEDDINGS {
+        uuid id PK
+        uuid section_id FK
+        text chunk_text
+        int chunk_index
+        timestamp created_at
+    }

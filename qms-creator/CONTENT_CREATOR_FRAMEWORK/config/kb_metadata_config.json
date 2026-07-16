@@ -1,0 +1,435 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-01-30",
+  "description": "Knowledge Base metadata configuration for Letta agent KB awareness",
+
+  "databases": {
+    "db1_regulatory": {
+      "name": "Official Regulatory Guidance",
+      "archive_name": "db1_regulatory",
+      "purpose": "Authoritative EU GMP, ICH, WHO regulatory requirements and compliance frameworks",
+      "source_authority": "official",
+      "fulfillment_score": 9.5,
+
+      "coverage": {
+        "total_documents": 47,
+        "regulatory_bodies": ["EudraLex", "ICH", "WHO", "EMA", "Ph.Eur.", "PIC/S"],
+        "primary_topics": ["GMP", "GDP", "validation", "quality_systems", "documentation", "personnel"],
+        "document_types": ["regulations", "guidelines", "standards", "best_practices", "annexes"]
+      },
+
+      "content_breakdown": {
+        "EudraLex_Volume4": {
+          "description": "EU GMP Guidelines - Core chapters and annexes",
+          "chapters": ["Chapter 1-9", "Annex 7 (Herbal)", "Annex 11 (Computerized)", "Annex 15 (Validation)"],
+          "use_for": ["regulatory_requirements", "compliance_principles", "official_definitions"]
+        },
+        "ICH_Guidelines": {
+          "description": "International Council for Harmonisation pharmaceutical quality guidelines",
+          "documents": ["ICH Q7 (API)", "ICH Q8 (Development)", "ICH Q9 (Risk Mgmt)", "ICH Q10 (PQS)"],
+          "use_for": ["quality_systems", "risk_management", "process_validation"]
+        },
+        "WHO_GACP": {
+          "description": "Good Agricultural and Collection Practices for Medicinal Plants",
+          "documents": ["GACP Guidelines", "GMP for Herbal Medicines"],
+          "use_for": ["cultivation_requirements", "plant_material_quality", "traceability"]
+        },
+        "EMA_Guidelines": {
+          "description": "European Medicines Agency guidance documents",
+          "documents": ["HBEL guidance", "Shared facilities", "Cross-contamination"],
+          "use_for": ["contamination_control", "cleaning_validation", "risk_assessment"]
+        }
+      },
+
+      "strengths": [
+        "Complete EU GMP Volume 4 coverage (Chapters 1-9 + key Annexes)",
+        "ICH Q7/Q8/Q9/Q10 pharmaceutical quality guidelines",
+        "WHO GACP for medicinal plant cultivation and collection",
+        "Authoritative regulatory definitions and terminology",
+        "Official compliance principles and requirements"
+      ],
+
+      "limitations": [
+        "No entity-specific operational examples",
+        "Theoretical/principle-based (not procedural step-by-step)",
+        "May not address facility-specific implementation scenarios",
+        "No templates, forms, or batch record examples"
+      ],
+
+      "usage_priority": {
+        "regulatory": 10,
+        "definitions": 9,
+        "documentation": 8,
+        "purpose": 8,
+        "scope": 6,
+        "training": 5,
+        "raci": 4,
+        "procedure": 3,
+        "cover": 2,
+        "annex": 4
+      }
+    },
+
+    "db2_entity_qms": {
+      "name": "Entity Operational Examples - Cannabis GMP Facility",
+      "archive_name": "db2_entity_qms",
+      "purpose": "Real-world operational examples and proven practices from an audit-approved cannabis GMP facility",
+      "source_authority": "operational_example",
+      "fulfillment_score": 8.5,
+      "regulatory_alignment_score": 8.2,
+      "content_year_range": "2021-2023",
+
+      "coverage": {
+        "total_documents": 252,
+        "total_passages": 3167,
+        "primary_language": "Macedonian (with English translations)",
+        "document_breakdown": {
+          "docx_templates": 195,
+          "pdf_certificates": 40,
+          "xlsx_logs": 9,
+          "other": 8
+        },
+        "functional_categories": 30
+      },
+
+      "content_breakdown": {
+        "Production_Processing": {
+          "document_count": 10,
+          "quality_score": 9.0,
+          "completeness": "high",
+          "topics": ["cultivation", "post-harvest", "drying", "trimming", "extraction", "packaging"],
+          "use_for": ["procedure_steps", "equipment_lists", "process_parameters", "batch_records"]
+        },
+        "QC_Sampling": {
+          "document_count": 11,
+          "quality_score": 9.5,
+          "completeness": "very_high",
+          "topics": ["sampling_plans", "in_process_testing", "raw_material_testing", "finished_product_testing"],
+          "use_for": ["sampling_procedures", "acceptance_criteria", "test_methods", "lab_protocols"]
+        },
+        "Equipment_Qualification": {
+          "document_count": 6,
+          "quality_score": 8.5,
+          "completeness": "high",
+          "topics": ["IQ_OQ_PQ", "calibration", "preventive_maintenance", "equipment_logs"],
+          "use_for": ["qualification_protocols", "calibration_procedures", "maintenance_schedules"]
+        },
+        "Documentation_Records": {
+          "document_count": 12,
+          "quality_score": 9.0,
+          "completeness": "high",
+          "topics": ["document_control", "record_retention", "change_control", "form_templates"],
+          "use_for": ["forms", "templates", "record_keeping", "document_management"]
+        },
+        "Sanitation_Hygiene": {
+          "document_count": 16,
+          "quality_score": 9.0,
+          "completeness": "very_high",
+          "topics": ["cleaning_procedures", "disinfection", "hygiene_protocols", "facility_sanitation"],
+          "use_for": ["cleaning_SOPs", "sanitization_schedules", "hygiene_requirements"]
+        },
+        "HEPA_HVAC": {
+          "document_count": 13,
+          "quality_score": 8.0,
+          "completeness": "high",
+          "topics": ["air_handling", "environmental_control", "HEPA_maintenance", "climate_monitoring"],
+          "use_for": ["HVAC_procedures", "environmental_monitoring", "filter_maintenance"]
+        },
+        "Transport_Logistics": {
+          "document_count": 15,
+          "quality_score": 8.5,
+          "completeness": "high",
+          "topics": ["shipping", "receiving", "chain_of_custody", "temperature_control"],
+          "use_for": ["shipping_procedures", "receiving_protocols", "logistics_SOPs"]
+        },
+        "Labeling_Packaging": {
+          "document_count": 17,
+          "quality_score": 8.5,
+          "completeness": "high",
+          "topics": ["label_design", "secondary_packaging", "marking_protocols", "serialization"],
+          "use_for": ["labeling_SOPs", "packaging_procedures", "label_templates"]
+        },
+        "Vendor_Qualification": {
+          "document_count": 8,
+          "quality_score": 7.5,
+          "completeness": "medium",
+          "topics": ["supplier_assessment", "qualification_protocols", "approved_supplier_list"],
+          "use_for": ["vendor_qualification", "supplier_management", "procurement_procedures"]
+        },
+        "Personnel_Training": {
+          "document_count": 2,
+          "quality_score": 8.0,
+          "completeness": "medium",
+          "topics": ["gowning", "training_records", "competency_assessment"],
+          "use_for": ["gowning_procedures", "training_programs", "competency_checklists"]
+        },
+        "Cultivation": {
+          "document_count": 9,
+          "quality_score": 8.5,
+          "completeness": "high",
+          "topics": ["substrate", "pesticides", "irrigation", "environmental_control", "IPM"],
+          "use_for": ["cultivation_SOPs", "growing_procedures", "pest_management"]
+        },
+        "Monitoring_Environmental": {
+          "document_count": 14,
+          "quality_score": 8.5,
+          "completeness": "high",
+          "topics": ["environmental_monitoring", "microbial_sampling", "particle_counting", "temperature_humidity"],
+          "use_for": ["monitoring_procedures", "sampling_protocols", "environmental_records"]
+        },
+        "Quality_Certificates": {
+          "document_count": 8,
+          "quality_score": 9.0,
+          "completeness": "high",
+          "topics": ["CoQ", "CoA", "batch_release", "THC_content"],
+          "use_for": ["certificate_templates", "release_documentation", "batch_records"]
+        }
+      },
+
+      "strengths": [
+        "Production operations SOPs (cultivation, post-harvest, extraction): 10 SOPs with detailed process steps",
+        "QC sampling procedures: 11 SOPs with comprehensive sampling protocols and acceptance criteria",
+        "Equipment qualification and calibration: 6 SOPs with IQ/OQ/PQ examples",
+        "Documentation and records management: 12 SOPs with form templates",
+        "Sanitation and hygiene: 16 SOPs with cleaning schedules and sanitization protocols",
+        "Real-world form templates and worksheets ready for adaptation",
+        "Practical implementation examples from audit-approved facility",
+        "Site-specific operational details (equipment models, environmental parameters)",
+        "Historical procedures from 2021-2023 showing operational maturity",
+        "Certificates of Quality examples with actual THC/CBD content data"
+      ],
+
+      "gaps": [
+        {
+          "topic": "Product Recall",
+          "status": "missing",
+          "description": "No recall procedures or mock recall examples",
+          "fallback": "Use DB1 EU GMP Chapter 8 principles only",
+          "skill_fallback": "/qms-compliance-checker",
+          "skill_description": "Use /qms-compliance-checker for recall requirement validation"
+        },
+        {
+          "topic": "Complaint Management",
+          "status": "minimal",
+          "description": "Only 2 OOS documents found, no comprehensive complaint SOP",
+          "fallback": "Use DB1 EU GMP Chapter 8 for complaint handling principles",
+          "skill_fallback": "/qms-deviation-capa",
+          "skill_description": "Use /qms-deviation-capa for OOS investigation templates"
+        },
+        {
+          "topic": "Deviation/CAPA",
+          "status": "limited",
+          "description": "Only 1 deviation log template, minimal CAPA SOPs",
+          "fallback": "Use DB1 ICH Q10 and EU GMP principles for deviation management",
+          "skill_fallback": "/qms-deviation-capa",
+          "skill_description": "Use /qms-deviation-capa for complete deviation report, CAPA, and OOS templates"
+        },
+        {
+          "topic": "Computerized Systems Validation",
+          "status": "absent",
+          "description": "No CSV procedures or 21 CFR Part 11 compliance examples",
+          "fallback": "Use DB1 EU GMP Annex 11 and data integrity guidelines",
+          "skill_fallback": "/qms-validation-protocol",
+          "skill_description": "Use /qms-validation-protocol for IQ/OQ/PQ and CSV protocols"
+        },
+        {
+          "topic": "Change Control",
+          "status": "sparse",
+          "description": "Limited change control procedures",
+          "fallback": "Use DB1 ICH Q10 change management principles",
+          "skill_fallback": "/qms-deviation-capa",
+          "skill_description": "Use /qms-deviation-capa for change-related CAPA documentation"
+        },
+        {
+          "topic": "Self-Inspection/Audit",
+          "status": "limited",
+          "description": "Limited internal audit procedures",
+          "fallback": "Use DB1 EU GMP Chapter 9 self-inspection requirements",
+          "skill_fallback": "/qms-audit-checklist",
+          "skill_description": "Use /qms-audit-checklist for internal audit checklists and protocols"
+        }
+      ],
+
+      "usage_priority": {
+        "procedure": 10,
+        "annex": 9,
+        "documentation": 8,
+        "training": 8,
+        "raci": 7,
+        "scope": 6,
+        "definitions": 5,
+        "cover": 4,
+        "regulatory": 3,
+        "purpose": 5
+      }
+    }
+  },
+
+  "gap_detection": {
+    "keywords": {
+      "product_recall": ["recall", "product withdrawal", "market removal", "batch recall", "customer notification"],
+      "complaint_management": ["complaint", "customer feedback", "adverse event", "product complaint", "customer complaint"],
+      "deviation_capa": ["deviation", "capa", "corrective action", "preventive action", "non-conformance", "ncr"],
+      "computerized_systems": ["computerized system", "csv", "software validation", "21 cfr part 11", "electronic records", "e-signature"],
+      "change_control": ["change control", "change management", "planned change", "unplanned change"],
+      "self_inspection": ["self-inspection", "internal audit", "audit program", "quality audit"]
+    },
+    "gap_notice_template": "NOTE: Limited or no entity examples available in DB2 for this topic. Using DB1 regulatory principles as primary source."
+  },
+
+  "search_guidance": {
+    "db1_priority_topics": [
+      "regulatory requirements",
+      "official definitions",
+      "compliance principles",
+      "legal obligations",
+      "GMP chapter references",
+      "ICH guideline citations",
+      "WHO requirements"
+    ],
+    "db2_priority_topics": [
+      "step-by-step procedures",
+      "form templates",
+      "operational examples",
+      "equipment procedures",
+      "batch records",
+      "cleaning schedules",
+      "calibration logs",
+      "sampling protocols"
+    ]
+  },
+
+  "quality_thresholds": {
+    "high_quality": 8.0,
+    "medium_quality": 6.0,
+    "low_quality_warning": 5.0
+  },
+
+  "skills_integration": {
+    "description": "Claude Code skills that can supplement KB gaps and enhance SOP generation",
+    "available_skills": {
+      "core_qms": [
+        {
+          "name": "/qms-sop-generator",
+          "purpose": "Generate EU GMP compliant SOPs",
+          "use_for": ["Creating new SOPs when no DB2 template exists"],
+          "kb_integration": "Primary SOP generation tool, uses DB1/DB2 as knowledge source"
+        },
+        {
+          "name": "/qms-document-formatter",
+          "purpose": "Format docs for submission (DOCX/PDF)",
+          "use_for": ["Final document formatting", "Regulatory submission preparation"],
+          "kb_integration": "Formats generated content into compliance-ready documents"
+        },
+        {
+          "name": "/qms-compliance-checker",
+          "purpose": "Validate against EU GMP requirements",
+          "use_for": ["Pre-submission compliance validation", "Gap identification"],
+          "kb_integration": "Cross-references generated content with DB1 regulatory requirements"
+        },
+        {
+          "name": "/qms-risk-assessment",
+          "purpose": "FMEA/HACCP risk assessments",
+          "use_for": ["Process hazard analysis", "Risk-based approach documentation"],
+          "kb_integration": "Generates risk assessments aligned with ICH Q9 principles in DB1"
+        },
+        {
+          "name": "/qms-gap-analysis",
+          "purpose": "Portfolio-wide QMS gap analysis",
+          "use_for": ["Identifying missing SOPs", "Audit readiness assessment"],
+          "kb_integration": "Compares DB2 content against EU GMP requirements from DB1"
+        }
+      ],
+      "office_document": [
+        {
+          "name": "/qms-excel-generator",
+          "purpose": "Spreadsheets, matrices, logs",
+          "use_for": ["Creating data tracking tools", "Monitoring logs"],
+          "kb_integration": "Generates templates based on DB2 operational examples"
+        },
+        {
+          "name": "/qms-batch-record",
+          "purpose": "Master/Production batch records",
+          "use_for": ["Batch manufacturing records", "Process documentation"],
+          "kb_integration": "Uses DB2 CoQ examples and production SOPs as templates"
+        },
+        {
+          "name": "/qms-validation-protocol",
+          "purpose": "IQ/OQ/PQ protocols (Annex 15)",
+          "use_for": ["Equipment qualification", "Process validation"],
+          "kb_integration": "Supplements DB2 Equipment_Qualification category with Annex 15 structure"
+        }
+      ],
+      "technical_qms": [
+        {
+          "name": "/qms-training-matrix",
+          "purpose": "Training matrices & competency",
+          "use_for": ["Training program documentation", "Competency tracking"],
+          "kb_integration": "Extends DB2 Personnel_Training category with structured matrices"
+        },
+        {
+          "name": "/qms-deviation-capa",
+          "purpose": "Deviations, OOS, CAPA documentation",
+          "use_for": ["Deviation reports", "CAPA documentation", "OOS investigations"],
+          "kb_integration": "PRIMARY SKILL for DB2 Deviation/CAPA gap - provides complete templates",
+          "gap_filler": true,
+          "fills_gaps": ["Deviation/CAPA", "Complaint Management", "Change Control"]
+        },
+        {
+          "name": "/qms-flowchart",
+          "purpose": "Process diagrams (Mermaid)",
+          "use_for": ["Process visualization", "Workflow documentation"],
+          "kb_integration": "Generates visual process flows from DB2 procedure text"
+        },
+        {
+          "name": "/qms-audit-checklist",
+          "purpose": "Internal audit checklists",
+          "use_for": ["Self-inspection preparation", "Audit protocols"],
+          "kb_integration": "PRIMARY SKILL for DB2 Self-Inspection/Audit gap",
+          "gap_filler": true,
+          "fills_gaps": ["Self-Inspection/Audit"]
+        }
+      ],
+      "research": [
+        {
+          "name": "/regulatory-research",
+          "purpose": "Deep regulatory research",
+          "use_for": ["Investigating regulatory requirements", "Finding guidance on specific topics"],
+          "kb_integration": "Enhances DB1 searches with multi-source regulatory research strategy"
+        }
+      ]
+    },
+    "gap_to_skill_mapping": {
+      "Product Recall": {
+        "primary_skill": "/qms-compliance-checker",
+        "supporting_skills": ["/regulatory-research"],
+        "agent_instruction": "For recall procedures, use /qms-compliance-checker to validate against EU GMP Chapter 8, and /regulatory-research for detailed recall requirements"
+      },
+      "Complaint Management": {
+        "primary_skill": "/qms-deviation-capa",
+        "supporting_skills": ["/qms-compliance-checker"],
+        "agent_instruction": "For complaint handling, use /qms-deviation-capa OOS templates and CAPA structure"
+      },
+      "Deviation/CAPA": {
+        "primary_skill": "/qms-deviation-capa",
+        "supporting_skills": ["/qms-risk-assessment"],
+        "agent_instruction": "For deviation/CAPA procedures, use /qms-deviation-capa which provides complete deviation report, CAPA, and OOS investigation templates"
+      },
+      "Computerized Systems Validation": {
+        "primary_skill": "/qms-validation-protocol",
+        "supporting_skills": ["/regulatory-research"],
+        "agent_instruction": "For CSV procedures, use /qms-validation-protocol for IQ/OQ/PQ structure and /regulatory-research for Annex 11 requirements"
+      },
+      "Change Control": {
+        "primary_skill": "/qms-deviation-capa",
+        "supporting_skills": ["/qms-risk-assessment"],
+        "agent_instruction": "For change control, use /qms-deviation-capa CAPA templates adapted for planned changes"
+      },
+      "Self-Inspection/Audit": {
+        "primary_skill": "/qms-audit-checklist",
+        "supporting_skills": ["/qms-gap-analysis"],
+        "agent_instruction": "For audit procedures, use /qms-audit-checklist for inspection checklists and /qms-gap-analysis for readiness assessment"
+      }
+    }
+  }
+}

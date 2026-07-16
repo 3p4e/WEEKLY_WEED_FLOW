@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import rls
-from app.deps import require_password_set, require_role
+from app.deps import dept_scope, require_password_set, require_role
 from app.roles import ADMIN
 from app.roster import roster
 
@@ -91,6 +91,11 @@ CATALOG = {
     "progress_digest":   "Daily standup digest from progress notes.",
     "risk_flag":         "Flag at-risk tasks needing attention.",
     "template_narrative":"Prefill per-department document template narratives (bilingual EN/MK).",
+    # TMS T3 — AI-native planning, reusing the same generic invoke() path:
+    # any new function is just a catalog entry + an admin-bound Letta agent,
+    # no new endpoint (the fleet pattern the DocEngine established).
+    "workload_balance":  "Suggest workload rebalancing across people/departments from current task load.",
+    "next_week_plan":     "Draft next week's plan on demand (the same reasoning weekly_snapshot.py runs on schedule).",
 }
 
 
@@ -240,20 +245,37 @@ async def list_pins(
 
 
 # Functions that should be grounded in the live task corpus.
-_DATA_FUNCS = {"weekly_summary", "dependency_advisor", "corpus_qa", "risk_flag", "progress_digest"}
+_DATA_FUNCS = {"weekly_summary", "dependency_advisor", "corpus_qa", "risk_flag", "progress_digest",
+               "workload_balance", "next_week_plan"}
 
 
 _CTX_COLS = ("t.id, t.title, t.status, t.priority, t.department, t.week_start, t.tags,"
              " t.estimated_hours, t.actual_hours, t.completed_date, t.user_id")
 
 
-async def _task_context(conn, names: dict, week_id: str | None = None, limit: int = 200) -> str:
+async def _task_context(conn, names: dict, week_id: str | None = None, limit: int = 200,
+                        dept: str | None = None) -> str:
     """*names* is the app-side roster map (owner usernames live in the users
-    database — no SQL join possible)."""
-    if week_id:
+    database — no SQL join possible).
+
+    M2: *dept* is the caller's department_id when they are a department-scoped
+    manager (None for org-wide execs/QP/ADMIN). RLS lets any elevated role read
+    every org task, so without this the corpus would ground a manager's AI
+    answer in ALL departments' work; scope it to their own department instead."""
+    if week_id and dept:
+        rows = await conn.fetch(
+            f"SELECT {_CTX_COLS} FROM tasks t"
+            " WHERE t.is_deleted=false AND t.week_id=$1 AND t.department_id=$2"
+            " ORDER BY t.created_at DESC LIMIT $3", week_id, dept, limit)
+    elif week_id:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
             " WHERE t.is_deleted=false AND t.week_id=$1 ORDER BY t.created_at DESC LIMIT $2", week_id, limit)
+    elif dept:
+        rows = await conn.fetch(
+            f"SELECT {_CTX_COLS} FROM tasks t"
+            " WHERE t.is_deleted=false AND t.department_id=$1"
+            " ORDER BY t.week_start DESC NULLS LAST, t.created_at DESC LIMIT $2", dept, limit)
     else:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
@@ -277,17 +299,48 @@ async def _task_context(conn, names: dict, week_id: str | None = None, limit: in
     return f"TASK DATA ({len(rows)} tasks, most recent first):\n" + "\n".join(lines)
 
 
+async def _family_context(conn, names: dict, task_id: str) -> str:
+    """TMS T3: scope dependency_advisor to ONE task's family (itself + parent
+    + siblings under the same parent) instead of the whole corpus — a
+    'suggest dependencies for THIS task' call needs its immediate tree
+    neighborhood, not every task in the org. Empty string if the task isn't
+    visible under RLS (the caller gets the generic corpus context instead)."""
+    rows = await conn.fetch(
+        f"SELECT {_CTX_COLS} FROM tasks t WHERE t.is_deleted=false AND"
+        " (t.id=$1 OR t.parent_id=$1"
+        " OR t.parent_id=(SELECT parent_id FROM tasks WHERE id=$1)"
+        " OR t.id=(SELECT parent_id FROM tasks WHERE id=$1))"
+        " ORDER BY (t.id=$1) DESC, t.created_at", task_id)
+    if not rows:
+        return ""
+
+    def _hrs(v):
+        return "-" if v is None else f"{float(v):g}"
+
+    lines = []
+    for r in rows:
+        owner = (names.get(str(r["user_id"])) or {}).get("username")
+        lines.append(
+            f"- [task:{str(r['id'])[:8]}] [{r['status']}/{r['priority']}] {r['title']} "
+            f"(dept={r['department']}, owner={owner}, hours={_hrs(r['actual_hours'])}/{_hrs(r['estimated_hours'])})"
+        )
+    return f"TASK FAMILY ({len(rows)} tasks — the target task, its parent, and siblings):\n" + "\n".join(lines)
+
+
 @router.post("/{function_key}")
 async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(require_password_set)):
     if function_key not in CATALOG:
         return {"available": False, "reason": "unknown_function"}
     week_id = (body.context or {}).get("week_id")
+    task_id = (body.context or {}).get("task_id")
     async with rls(user) as c:
         binding = await c.fetchrow(
             "SELECT letta_agent_id FROM ai_agent_bindings"
             " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", function_key)
-        if function_key in _DATA_FUNCS:
-            context = await _task_context(c, await roster(user), week_id=week_id)
+        if function_key == "dependency_advisor" and task_id:
+            context = await _family_context(c, await roster(user), task_id)
+        elif function_key in _DATA_FUNCS:
+            context = await _task_context(c, await roster(user), week_id=week_id, dept=dept_scope(user))
         else:
             context = ""
     if binding is None:

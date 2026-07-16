@@ -1,0 +1,35 @@
+stateDiagram-v2
+    [*] --> Dashboard
+    Dashboard --> CreateSOP: Click Create New
+
+    state Phase1 {
+        [*] --> MetadataForm
+        MetadataForm --> IntroQuestions: Submit
+        IntroQuestions --> ProcedureQuestions: Next
+        ProcedureQuestions --> AutoProcessing: Submit
+        AutoProcessing --> QAReview: Complete
+        QAReview --> [*]: Approved
+        QAReview --> IntroQuestions: Revise
+    }
+
+    CreateSOP --> Phase1
+
+    state Phase2 {
+        [*] --> Formatting
+        Formatting --> AnnexQuestions: Has Annexes
+        Formatting --> Preview: No Annexes
+        AnnexQuestions --> AnnexFormatting: Submit
+        AnnexFormatting --> Preview: Complete
+        Preview --> Download: Approve
+        Download --> [*]
+    }
+
+    Phase1 --> Phase2: Quality Gate Passed
+
+    Phase2 --> DocumentLibrary: Complete
+    DocumentLibrary --> Dashboard: Navigate
+
+    state LanguageToggle {
+        English --> Macedonian: Toggle
+        Macedonian --> English: Toggle
+    }

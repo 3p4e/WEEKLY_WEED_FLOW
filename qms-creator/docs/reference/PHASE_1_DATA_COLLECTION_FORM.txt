@@ -1,0 +1,567 @@
+================================================================================
+PHASE 1 DATA COLLECTION FORM - FACILITY PROFILE & QUALITY MANUAL
+Purely Plant GmbH - Master Documents Customization
+================================================================================
+
+Complete this form with accurate Purely Plant facility information.
+All fields marked with [REQUIRED] must be filled before proceeding.
+
+Return completed form to proceed with document customization.
+
+================================================================================
+SECTION 1: FACILITY IDENTIFICATION [REQUIRED]
+================================================================================
+
+Legal Entity Name:
+  [Current: Purely Plant GmbH - Confirm accurate spelling & legal registration]
+  _______________________________________________
+
+Company Registration Number:
+  [Required for Quality Manual - Legal entity identifier in North Macedonia]
+  _______________________________________________
+
+Facility Address:
+  Street: _______________________________________________
+  City: ___________________________ Postal Code: __________
+  Region/District: ______________________ Country: North Macedonia
+
+GPS Coordinates (if available):
+  Latitude: _____________________ Longitude: ____________________
+
+Medical Cannabis Production License:
+  License Number: _____________________________
+  Issue Date: ______________ Expiration Date: ______________
+  Issuing Authority: Ministry of Health - [Specific Department Name]
+
+Company Email Address:
+  General Contact: _____________________________
+  Quality/Regulatory: _____________________________
+
+Phone Number (Main):
+  _______________________________________________
+
+Website (if applicable):
+  _______________________________________________
+
+================================================================================
+SECTION 2: KEY MANAGEMENT PERSONNEL [REQUIRED FOR BATCH RELEASE & GOVERNANCE]
+================================================================================
+
+All key personnel listed below will appear in Quality Manual as approval signatories
+and in Facility Profile for regulatory contact purposes.
+
+QP - QUALIFIED PERSON (BATCH RELEASE AUTHORITY) [CRITICAL]
+  Name: Blagoj Nikolov
+  Title: Master Pharmacist / Qualified Person for Batch Release
+  Qualifications: [List: e.g., "M.Pharm., 5+ years cannabis QC experience"]
+  _______________________________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+  Professional Registration #: ____________________________
+
+FACILITY MANAGER / OPERATIONS DIRECTOR [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+QUALITY ASSURANCE MANAGER [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+PRODUCTION MANAGER [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+SANITATION & HYGIENE MANAGER [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+SECURITY MANAGER [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+HR / PERSONNEL MANAGER [REQUIRED]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+EQUIPMENT MANAGER [OPTIONAL - if role exists]
+  Name: _______________________________________________
+  Title: _______________________________________________
+  Qualifications: _______________________________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+================================================================================
+SECTION 3: ORGANIZATIONAL STRUCTURE [REQUIRED]
+================================================================================
+
+Reporting Structure (who reports to whom):
+  Facility Manager reports to: ____________________________
+  
+  Quality Manager reports to: ____________________________
+  
+  Production Manager reports to: ____________________________
+  
+  Sanitation Manager reports to: ____________________________
+  
+  Security Manager reports to: ____________________________
+  
+  HR Manager reports to: ____________________________
+  
+  Equipment Manager reports to: ____________________________
+
+Quality Unit Independence:
+  Is Quality Manager independent from Production?  ☐ Yes  ☐ No
+  Direct reporting relationship to Facility Manager?  ☐ Yes  ☐ No
+  
+Total Personnel (approximate):
+  Full-time: _____ Part-time: _____ Contractors: _____
+
+================================================================================
+SECTION 4: FACILITY SCOPE & OPERATIONS [REQUIRED]
+================================================================================
+
+Primary Business Activities (Check all that apply):
+
+CULTIVATION:
+  ☐ Mother plant management & maintenance
+  ☐ Propagation (cloning & seeding)
+  ☐ Vegetative growth
+  ☐ Flowering & harvesting
+  ☐ Integrated Pest Management (IPM)
+  ☐ Plant health monitoring
+
+POST-HARVEST PROCESSING:
+  ☐ Drying operations
+  ☐ Curing procedures
+  ☐ Wet trimming
+  ☐ Dry trimming
+  ☐ Sorting & grading
+  ☐ Primary packaging
+  ☐ Secondary packaging
+
+QUALITY CONTROL & TESTING:
+  ☐ In-house analytical laboratory
+  ☐ Contracted testing laboratory
+  Testing capabilities offered:
+    ☐ Cannabinoid potency (THC/CBD)
+    ☐ Microbiological (bacterial, mold, yeast)
+    ☐ Pesticide residues
+    ☐ Heavy metals
+    ☐ Water quality
+    ☐ Environmental monitoring
+    ☐ Stability studies
+
+DISTRIBUTION:
+  ☐ Wholesale to pharmacies
+  ☐ Distribution to medical institutions
+  ☐ International export
+  ☐ [Other: _____________________________]
+
+Primary Product:
+  ☐ Dry cannabis flower (main product)
+  ☐ Cannabis extracts
+  ☐ Cannabis oils
+  ☐ [Other: _____________________________]
+
+Target Market:
+  ☐ Medical cannabis patients (via pharmacy)
+  ☐ Pharmaceutical/research institutions
+  ☐ [Other: _____________________________]
+
+================================================================================
+SECTION 5: FACILITY AREAS & DIMENSIONS [REQUIRED]
+================================================================================
+
+Facility Layout (from facility profile or latest floor plan):
+
+Cultivation Areas:
+  Total cultivation area: ________________ m²
+  Number of cultivation rooms: _____
+  
+  Rooms listed (if applicable):
+    Room 01 Purpose: _________________ Size: _____ m²
+    Room 02 Purpose: _________________ Size: _____ m²
+    Room 03 Purpose: _________________ Size: _____ m²
+    Room 04 Purpose: _________________ Size: _____ m²
+    Room 05 Purpose: _________________ Size: _____ m²
+    Room 06 Purpose: _________________ Size: _____ m²
+    Room 07 Purpose: _________________ Size: _____ m²
+    Room 08 Purpose: _________________ Size: _____ m²
+    Room 09 Purpose: _________________ Size: _____ m²
+    
+    [Add more if needed]
+
+Production/GMP Area:
+  Total production area: ________________ m²
+  Specific areas:
+    Drying area: _________________ m²
+    Trimming area: _________________ m²
+    Packaging area: _________________ m²
+    Processing area: _________________ m²
+
+Quality Control/Testing:
+  QC Lab total: _________________ m²
+  Type: ☐ In-house  ☐ External facility
+
+Storage/Warehouse:
+  Output warehouse (finished product): _________________ m²
+  Bulk storage (pre-processing): _________________ m²
+  Raw materials/supplies: _________________ m²
+
+Administration & Support:
+  Office areas: _________________ m²
+  Staff areas: _________________ m²
+  Security/monitoring: _________________ m²
+
+Total Facility Size: _________________ m²
+
+================================================================================
+SECTION 6: CRITICAL EQUIPMENT & SYSTEMS [REQUIRED]
+================================================================================
+
+List all major equipment relevant to QMS (from facility analysis, we identified):
+
+CLIMATE CONTROL SYSTEMS:
+
+Greenhouse HVAC (GACP):
+  Model/Description: _____________________________
+  Manufacturer: ____________________________
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Needs maintenance
+
+GMP HEPA Filtration:
+  Model/Description: _____________________________
+  Manufacturer: ____________________________
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Needs maintenance
+
+WATER MANAGEMENT:
+
+Reverse Osmosis System:
+  Model/Description: _____________________________
+  Manufacturer: ____________________________
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Capacity: __________ Liters/day
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Needs maintenance
+  Last Routine Check: __________________________
+
+Ozonation System:
+  Model/Description: _____________________________
+  Manufacturer: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Operational  ☐ Pending  ☐ Maintenance needed
+
+NUTRIENT/MEDIA SYSTEMS:
+
+Agrimix System:
+  Model: Agrimix L
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Maintenance needed
+
+DRYING & PROCESSING:
+
+Drying Machine:
+  Model: CDS24 (or other: ___________________)
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Capacity: _________________ kg/batch
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Maintenance needed
+
+Trimming Machine:
+  Model: MB Bucker 200 (or other: ___________________)
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Maintenance needed
+
+PACKAGING SYSTEMS:
+
+Automatic Packaging:
+  Description: _____________________________
+  Inert Gas: N2 (Nitrogen)
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Qualified  ☐ Pending  ☐ Maintenance needed
+
+Manual Packaging:
+  Description: _____________________________
+  Serial Number: ____________________________
+  Installation Date: ____________________________
+  Current Status: ☐ Operational  ☐ Maintenance needed
+
+ANALYTICAL EQUIPMENT:
+
+Balance - DENSI PC:
+  Model: DENSI PC
+  Serial Number: ____________________________
+  Readability: ________ g
+  Capacity: ________ g
+  Last Calibration: ____________________________
+
+Balance - DENSI SI:
+  Model: DENSI SI
+  Serial Number: ____________________________
+  Readability: ________ g
+  Capacity: ________ g
+  Last Calibration: ____________________________
+
+Environmental Monitoring - Data Logger (Testo):
+  Model: Testo [specify model]
+  Serial Numbers: ____________________________
+  Quantity: _____ units
+  Last Calibration: ____________________________
+
+SECURITY & UTILITIES:
+
+Security System:
+  Type: ______________________________
+  Coverage: ☐ 24/7 CCTV  ☐ Access control  ☐ Alarms
+  Installation Date: ____________________________
+
+Backup Power (Generator):
+  Model: Green Power [specify]
+  Fuel: _________________ (Diesel/Gas)
+  Capacity: _________________ kW
+  Last Test: ____________________________
+
+================================================================================
+SECTION 7: TESTING CAPABILITIES [REQUIRED]
+================================================================================
+
+Testing Laboratory:
+  ☐ In-house analytical laboratory (specify location/room: _________)
+  ☐ Contract laboratory (name: _______________________________)
+  ☐ Both - In-house AND contract (describe division: ____________)
+
+Cannabinoid Testing (THC/CBD Quantification):
+  Method: ☐ HPLC  ☐ GC-MS  ☐ [Other: _________]
+  Equipment: _____________________________
+  Range: THC ___-___%, CBD ___-___%
+  Contractor (if outsourced): ____________________________
+
+Microbiological Testing:
+  Capability: ☐ In-house  ☐ Contract lab
+  Tests performed:
+    ☐ Total aerobic microbial count (TAMC)
+    ☐ Total yeast & mold (TYMC)
+    ☐ Specific pathogens (E. coli, Salmonella)
+  Acceptance Limits: [reference your specification]
+  Contractor (if outsourced): ____________________________
+
+Pesticide Residue Testing:
+  Capability: ☐ In-house  ☐ Contract lab
+  Method: LC-MS/MS
+  Contractor (if outsourced): ____________________________
+
+Heavy Metals Testing:
+  Capability: ☐ In-house  ☐ Contract lab
+  Metals tested: ☐ Lead  ☐ Cadmium  ☐ Mercury  ☐ Arsenic
+  Contractor (if outsourced): ____________________________
+
+Water Quality Testing:
+  Capability: ☐ In-house  ☐ Contract lab
+  Tests: ☐ Microbial (<100 CFU/mL)  ☐ pH  ☐ Conductivity
+  Contractor (if outsourced): ____________________________
+
+Environmental Monitoring:
+  Microbiological: ☐ Viable  ☐ Non-viable  ☐ Both
+  Frequency: _________________ (daily/weekly/monthly)
+  Action levels: Refer to SAN-04-001 specifications
+
+Stability Studies:
+  Capability: ☐ In-house  ☐ Contract
+  Type: ☐ Real-time  ☐ Accelerated  ☐ Intermediate
+  Focus: Cannabinoid degradation kinetics
+  Contractor (if outsourced): ____________________________
+
+================================================================================
+SECTION 8: REGULATORY CONTACTS [REQUIRED]
+================================================================================
+
+PRIMARY REGULATORY AUTHORITY:
+
+North Macedonia Ministry of Health - Medicinal Products Department
+  Official Name: _____________________________
+  Department: _____________________________
+  Address: _____________________________
+  Contact Person: ____________________________
+  Phone: ____________________________
+  Email: ____________________________
+  Regulatory Officer Assigned to PP: ____________________________
+
+SECONDARY REGULATORY AUTHORITIES:
+
+Ministry of Interior (Security & Controlled Substances):
+  Contact Person: ____________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+Environmental/Waste Management Authority:
+  [If applicable for facility]
+  Contact Person: ____________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+Local Municipality/City:
+  Contact Person: ____________________________
+  Phone: ____________________________
+  Email: ____________________________
+
+================================================================================
+SECTION 9: QUALITY OBJECTIVES [REQUIRED]
+================================================================================
+
+Define Purely Plant's Quality Objectives (measured, achievable targets):
+
+Objective 1 - Safety:
+  Target: Zero critical (safety-related) deviations per year
+  Measurement: Deviation log review
+  Responsible: QP / Quality Manager
+  Review: Annually
+
+Objective 2 - Batch Release Compliance:
+  Target: 100% of batches meet specification before release
+  Measurement: Batch release checklist compliance
+  Responsible: QP (your role)
+  Review: Monthly
+
+Objective 3 - Personnel Training:
+  Target: 95% + personnel training completion within 12 months
+  Measurement: Training matrix, attendance records
+  Responsible: HR Manager
+  Review: Quarterly
+
+Objective 4 - Regulatory Compliance:
+  Target: Zero major findings in regulatory inspection
+  Measurement: Self-inspection checklist, audit results
+  Responsible: Quality Manager
+  Review: Annually
+
+Objective 5 - [Your Custom Objective]:
+  Target: _______________________________________________
+  Measurement: _______________________________________________
+  Responsible: _______________________________________________
+  Review: _______________________________________________
+
+Objective 6 - [Your Custom Objective]:
+  Target: _______________________________________________
+  Measurement: _______________________________________________
+  Responsible: _______________________________________________
+  Review: _______________________________________________
+
+================================================================================
+SECTION 10: ORGANIZATIONAL CHART [REQUIRED]
+================================================================================
+
+Provide organizational chart showing:
+  - Facility Manager (top)
+  - Quality Manager (independent reporting)
+  - All department managers
+  - Reporting relationships
+
+Can be:
+  ☐ Attached as separate document (Org_Chart_PP.pdf or .png)
+  ☐ Described textually below:
+  
+  [Describe structure]:
+  _______________________________________________
+  _______________________________________________
+  _______________________________________________
+  _______________________________________________
+
+================================================================================
+SECTION 11: QUALITY POLICY STATEMENT [OPTIONAL - Can be customized later]
+================================================================================
+
+Draft or confirm Purely Plant's Quality Policy (core commitment statement):
+
+Current Quality Policy:
+[Insert existing if available, or describe key principles]
+
+___________________________________________________________________
+___________________________________________________________________
+___________________________________________________________________
+___________________________________________________________________
+
+Key Quality Commitments (check all that apply):
+  ☐ Safety first - rigorous product testing & compliance
+  ☐ Regulatory adherence - EU GMP + North Macedonia compliance
+  ☐ Continuous improvement - systematic quality enhancement
+  ☐ Personnel development - training & competency focus
+  ☐ Transparency - open communication with stakeholders
+  ☐ Environmental responsibility - sustainable operations
+  ☐ [Custom: _____________________________]
+
+================================================================================
+SECTION 12: CURRENT QMS STATUS [REQUIRED - Context for Customization]
+================================================================================
+
+Existing Documentation:
+  ☐ Validation Master Plan 2025 (exists)
+  ☐ Equipment Qualification documents (exist)
+  ☐ Drying/Curing process observation records (exist)
+  ☐ Self-inspection report (19.08.25 exists)
+  ☐ Risk assessment/FMEA templates (available)
+  ☐ Stability study protocol (exists)
+  ☐ Draft SOPs in various folders (indicate how many: _____)
+
+Current Challenges/Gaps:
+  □ Documents need consolidation/standardization
+  □ Document coding system needs implementation
+  □ Bilingual (Macedonian-English) formatting needed
+  □ Master documents need updating (Quality Manual, Facility Profile)
+  □ Some SOPs in draft status need finalization
+  □ [Other: _____________________________]
+
+Priority for Customization:
+  Highest: Batch Release procedures (your QP authority)
+  High: Critical System SOPs (quality, documentation, training)
+  Medium: Equipment-specific procedures
+  Medium: Facility operation procedures
+  Lower: Forms and logging templates
+
+================================================================================
+COMPLETION INSTRUCTIONS
+================================================================================
+
+1. Complete ALL [REQUIRED] fields marked above
+2. Provide organizational chart (as document or text description)
+3. Return this form to initiate Phase 1 customization
+4. Processing time for Facility Profile + Quality Manual: 4-6 hours
+5. Documents will be ready for your review and signature within 2 business days
+
+Once completed, I will:
+  ✓ Create personalized QAS-01-003 (Facility Profile)
+  ✓ Create personalized QAS-01-001 (Quality Manual)
+  ✓ Create personalized QAS-01-004 (Organization Chart & Responsibilities)
+  ✓ Prepare all documents for your review and approval
+
+Questions?
+  - Contact QA Manager for operational details
+  - Contact HR Manager for personnel information
+  - Contact Facility Manager for facility/equipment information
+
+================================================================================
+END OF DATA COLLECTION FORM
+================================================================================

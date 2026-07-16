@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Compliance / METRC</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .top{ display:grid; grid-template-columns:repeat(3,1fr) auto; gap:16px; align-items:stretch; margin-bottom:16px; }
+  .gaugetile{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:14px; }
+  .gaugetile .mw-kpi__label{ margin-bottom:8px; }
+  .tabbar{ margin-bottom:16px; }
+  .filters{ display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .toaststack{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:10px; z-index:80; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Compliance">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="compliance.html" class="is-active">Compliance</a>
+    <a href="ui-elements.html">Elements</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">METRC Compliance</h1><span class="mw-rule"></span></div>
+
+  <div class="top">
+    <div class="mw-panel gaugetile"><div class="mw-kpi__label">Reconcile Rate</div><div class="mw-ring mw-ring--green" style="--p:98;"><span class="mw-ring__val">98%</span></div></div>
+    <div class="mw-panel gaugetile"><div class="mw-kpi__label">Tag Coverage</div><div class="mw-ring mw-ring--amber" style="--p:76;"><span class="mw-ring__val">76%</span></div></div>
+    <div class="mw-panel gaugetile"><div class="mw-kpi__label">Open Flags</div><div class="mw-ring mw-ring--red" style="--p:14;"><span class="mw-ring__val">2</span></div></div>
+    <div class="mw-panel" style="display:flex; flex-direction:column; justify-content:center; gap:10px; min-width:180px;">
+      <button class="mw-btn mw-btn--wide" onclick="pushToast('ok','Sync complete','412 tags reconciled')">Sync METRC</button>
+      <button class="mw-btn mw-btn--wide mw-btn--ghost" onclick="pushToast('warn','Export queued','Manifest CSV generating')">Export Manifest</button>
+      <label class="mw-check" style="justify-content:center;"><input type="checkbox" checked><span class="box"></span> Auto-reconcile</label>
+    </div>
+  </div>
+
+  <div class="mw-panel">
+    <div class="mw-utabs tabbar" id="tabs"><button class="mw-utab is-active" data-f="all">All Tags</button><button class="mw-utab" data-f="flag">Flagged</button><button class="mw-utab" data-f="transit">In Transit</button><button class="mw-utab" data-f="sealed">Sealed</button></div>
+    <div class="filters">
+      <div class="mw-seg"><button class="is-active">Plants</button><button>Packages</button><button>Transfers</button></div>
+      <span class="mw-chip2">This Cycle <span class="x">✕</span></span>
+      <div style="flex:1;"></div>
+      <span style="font-size:12px; color:var(--mw-text-dim);">Showing <b id="cnt" style="color:var(--mw-cyan-bright)">—</b> tags</span>
+    </div>
+    <div class="mw-well" style="padding:4px 10px;">
+      <table class="mw-table"><thead><tr><th>METRC Tag</th><th>Item</th><th>Zone</th><th>Weight</th><th>Last Sync</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody></table>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toaststack" id="toasts"></div>
+
+<script>
+  const TAGS=[
+    ['1A4-F0024','Wedding Cake IX','Flower A','7.2 kg','2m','ok','Verified','all'],
+    ['1A4-F0021','Sour Diesel VIII','Flower B','5.8 kg','2m','flag','Unmatched','flag'],
+    ['1A4-D0012','Live Resin IX','Dry / Cure','1.1 kg','2m','ok','Verified','all'],
+    ['1A4-T0114','Diamonds IX','→ Dispensary','0.8 kg','5m','transit','In Transit','transit'],
+    ['1A4-P0008','Hurricane VIII','Packaging','3.4 kg','2m','sealed','Sealed','sealed'],
+    ['1A4-F0019','OG Kush VIII','Veg Hall','—','12m','flag','Weight Var','flag'],
+    ['1A4-T0110','Avenger VIII','→ Lab','0.2 kg','8m','transit','In Transit','transit'],
+    ['1A4-P0006','Reaper VIII','Vault','2.1 kg','2m','sealed','Sealed','sealed']
+  ];
+  const tagCls={ok:'lo',flag:'mid',transit:'lo',sealed:'hi'};
+  function render(f){
+    const list = TAGS.filter(t=>f==='all'||t[7]===f);
+    document.getElementById('cnt').textContent = list.length;
+    document.getElementById('rows').innerHTML = list.map(t=>`<tr>
+      <td class="mono">${t[0]}</td><td>${t[1]}</td><td>${t[2]}</td><td>${t[3]}</td>
+      <td style="color:var(--mw-text-faint)">${t[4]}</td>
+      <td><span class="mw-tag mw-tag--${t[5]==='flag'?'mid':t[5]==='sealed'?'hi':'lo'}">${t[6]}</span></td></tr>`).join('');
+  }
+  document.querySelectorAll('.mw-utab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.mw-utab').forEach(x=>x.classList.remove('is-active'));b.classList.add('is-active');render(b.dataset.f);});
+  render('all');
+
+  function pushToast(kind,tt,ds){
+    const ic={ok:'<path d="M20 6L9 17l-5-5"/>',warn:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+    const el=document.createElement('div'); el.className='mw-toast mw-toast--'+kind;
+    el.innerHTML=`<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${ic}</svg></span><div><div class="mw-toast__tt">${tt}</div><div class="mw-toast__ds">${ds}</div></div>`;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(()=>{el.style.transition='opacity .4s ease, transform .4s ease'; el.style.opacity='0'; el.style.transform='translateX(20px)'; setTimeout(()=>el.remove(),400);},3200);
+  }
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

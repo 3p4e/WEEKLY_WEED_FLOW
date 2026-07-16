@@ -1,0 +1,77 @@
+{
+  "entity_name": "Entity 1",
+  "entity_id": "entity_1",
+  "folder_path": "Knowledgebase/2ndDataKnowledge/Entity 1",
+
+  "company_replacements": {
+    "HAPA Pharm DOOEL": "Entity 1",
+    "HAPA DOOEL": "Entity 1",
+    "Hapa Pharm DOOEL": "Entity 1",
+    "Hapa Pharm": "Entity 1",
+    "HAPA Pharm": "Entity 1",
+    "Hapa DOOEL": "Entity 1",
+    "HAPA": "Entity 1",
+    "Hapa": "Entity 1",
+
+    "ХАПА Фарм ДООЕЛ": "Entity 1",
+    "ХАПА ДООЕЛ": "Entity 1",
+    "Хапа Фарм ДООЕЛ": "Entity 1",
+    "ХАПА Фарм": "Entity 1",
+    "Хапа Фарм": "Entity 1",
+    "ХАПА фарм": "Entity 1",
+    "ХАПА": "Entity 1",
+    "Хапа": "Entity 1",
+
+    "Subsidiary Spanchevo": "Entity 1",
+    "subsidiary Spanchevo": "Entity 1",
+    "Spanchevo": "Entity 1",
+    "SPANCHEVO": "Entity 1",
+    "spanchevo": "Entity 1",
+
+    "Подружнива Спанчево": "Entity 1",
+    "подружнива Спанчево": "Entity 1",
+    "Спанчево": "Entity 1",
+    "СПАНЧЕВО": "Entity 1",
+    "спанчево": "Entity 1"
+  },
+
+  "known_employees": {
+    "Даворин Филдишев": "Employee 1",
+    "Davorin Fildishev": "Employee 1",
+
+    "Антоанета Буклеска": "Employee 2",
+    "Antoaneta Bukleska": "Employee 2",
+
+    "Наташа Петкоска": "Employee 3",
+    "Natasha Petkoska": "Employee 3",
+    "Natasa Petkoska": "Employee 3",
+
+    "Ленче Николова": "Employee 4",
+    "Lence Nikolova": "Employee 4",
+
+    "Драгана Данилов": "Employee 5",
+    "Dragana Danilov": "Employee 5",
+
+    "Оливер Ристески": "Employee 6",
+    "Oliver Risteski": "Employee 6",
+
+    "Blagoj Nikolov": "Employee 7",
+    "Благој Николов": "Employee 7"
+  },
+
+  "signature_patterns": [
+    "Име и презиме:",
+    "Name and Surname:",
+    "Потпис:",
+    "Изработил:",
+    "Контролирал:",
+    "Одобрил:",
+    "Prepared by:",
+    "Reviewed by:",
+    "Approved by:"
+  ],
+
+  "default_name_replacement": "[Name & Surname]",
+
+  "notes": "Entity 1 refers to a previous pharmaceutical employer. All company and employee identifiers should be anonymized to prevent bias and protect confidentiality."
+}

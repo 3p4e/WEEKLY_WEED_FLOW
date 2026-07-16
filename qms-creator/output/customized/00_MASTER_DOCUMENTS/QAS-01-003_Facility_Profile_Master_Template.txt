@@ -1,0 +1,249 @@
+================================================================================
+FACILITY PROFILE SHEET (MASTER DOCUMENT)
+Document ID: QAS-01-003
+Version: 1.0
+================================================================================
+
+This single-page document consolidates all facility-specific information referenced
+throughout the QMS. Customize this ONCE, then reference it in all other documents
+to ensure consistency.
+
+================================================================================
+FACILITY INFORMATION
+================================================================================
+
+Legal Entity Name:        Purely Plant Medical Cannabis Production Facility
+Company Registration:     MK-REG-2024-001
+Facility Type:            Medical Cannabis Production (GACP/GMP Facility)
+Facility Location:        123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia
+                         Skopje / Skopje Region, North Macedonia
+GPS Coordinates:          41.9973, 21.4280
+
+License Information:
+  License Type:           Medical Cannabis Production
+  License Number:         MK-MED-CANNABIS-2024-001
+  Issued:                 2024-01-15
+  Expires:                2027-01-15
+  Issuing Authority:      North Macedonia Ministry of Health
+
+================================================================================
+KEY MANAGEMENT PERSONNEL (Update quarterly or when personnel changes)
+================================================================================
+
+FACILITY MANAGER
+Name:                     [Manager First Name] [Manager Last Name]
+Title:                    Facility Manager / Operations Director
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+QUALITY ASSURANCE MANAGER
+Name:                     Ana Dimitrova Ana Dimitrova
+Title:                    Quality Assurance Manager / QMS Director
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+PRODUCTION MANAGER
+Name:                     Marko Georgiev Marko Georgiev
+Title:                    Production Manager
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+SANITATION & HYGIENE MANAGER
+Name:                     Jovana Stankova Jovana Stankova
+Title:                    Sanitation & Hygiene Manager
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+SECURITY MANAGER
+Name:                     Nikola Ivanovski Nikola Ivanovski
+Title:                    Security Manager
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+HUMAN RESOURCES MANAGER
+Name:                     Katerina Trajkovska Katerina Trajkovska
+Title:                    HR Manager / Personnel Director
+Education/Qualifications: [Qualifications and Certifications]
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+Signature: ________________________________  Date: ___________
+
+================================================================================
+FACILITY SCOPE & OPERATIONS
+================================================================================
+
+Primary Operations:
+  ☐ Cultivation (Mother plants, cloning, vegetative growth)
+  ☐ Flowering & Harvesting
+  ☐ Post-Harvest Processing (Drying, trimming, sorting)
+  ☐ Quality Control & Testing
+  ☐ Packaging & Labeling
+  ☐ Storage & Warehousing
+  ☐ Distribution/Transport
+  ☐ [OTHER: _________________________]
+
+Testing Capabilities:
+  ☐ In-house analytical laboratory
+  ☐ Outsourced testing (Contract laboratory)
+  ☐ Both (Describe division: ________________)
+
+Key Production Areas:
+  Cultivation Area (GACP):          2500 m²
+  Production Area (GMP):             2500 m²
+  Testing/QC Area:                   2500 m²
+  Warehousing (Storage):             2500 m²
+  Administration & Other:            2500 m²
+
+================================================================================
+CRITICAL EQUIPMENT & SYSTEMS (Update annually)
+================================================================================
+
+Cultivation Equipment:
+  • Growing system: ClimateMax Pro 5000 - Climate Control
+  • Climate control: HVAC Climate Control System
+  • Lighting: Full Spectrum LED 1000W
+  • Irrigation: Automated Irrigation System
+
+Processing Equipment:
+  • Drying: CDS24
+  • Trimming: MT-500
+  • Packaging: Automated Packaging System
+
+Testing Equipment:
+  • Moisture Content Analyzer (MCA-100): [MODEL/ID]
+  • Digital pH Meter (pH-Pro 200): [MODEL/ID]
+  • Temperature/Humidity Logger (TempLog 500): [MODEL/ID]
+
+Utilities:
+  • Water system: ClimateMax Pro 5000 - Climate Control
+  • Power generation: Diesel generator with automatic transfer switch (ATS) - 48-hour fuel capacity
+  • Waste management: Cannabis Waste Disposal System
+
+================================================================================
+REGULATORY & COMPLIANCE CONTACTS
+================================================================================
+
+PRIMARY REGULATORY AUTHORITY:
+Organization:             Ministry of Health - Medicinal Products Department
+Contact Person:           Dr. Ivana Petrov
+Title:                    Quality Manager
+Address:                  123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia
+Phone:                    +389 70 123 456
+Email:                    blagoj.nikolov@purelyplant.mk
+
+SECONDARY CONTACTS:
+Ministry of Interior (Security):
+  Contact:                Dr. Ivana Petrov
+  Phone:                  +389 70 123 456
+
+Local Health Authority:
+  Contact:                Dr. Ivana Petrov
+  Phone:                  +389 70 123 456
+
+LOCAL EMERGENCY SERVICES:
+Police Department:        +389 70 123 456
+Fire Department:          +389 70 123 456
+Medical Emergency:        +389 70 123 456
+Local Hospital:           Blagoj Nikolov - +389 70 123 456
+
+================================================================================
+DOCUMENT CONTROL & STORAGE
+================================================================================
+
+Master Document Storage:
+  Primary Location:       Quality Assurance Office, Server Room
+  Backup Location:        Off-site Cloud Storage + Local Backup Server
+  Responsible Person:     Dejan Angelov
+
+Safe Storage Vault:
+  Location:               Secure Storage Vault (Room 09)
+  Access: Restricted access - authorized personnel only with secure login credentials and biometric verification
+
+Archive Storage:
+  Location:               Dedicated Archive Room (Climate Controlled)
+  Retention Period:       
+  Destruction Process:    [Detailed process description to be provided]
+
+QMS Document Repository:
+  Digital Storage:        [SERVER/LOCATION]
+  Backup:                 Off-site Cloud Storage + Local Backup Server
+  Access Control:         Multi-tier access control system: Biometric fingerprint + access card + PIN. Access levels assigned by role. All access logged and reviewed monthly by Security Manager.
+
+================================================================================
+QUALITY METRICS & OBJECTIVES
+================================================================================
+
+Annual Quality Objectives (Current Year):
+
+1. Zero Critical Deviations (Safety-related)
+   Progress: ___/12 months achieved   Responsible: Blagoj Nikolov
+
+2. 100% Batch Release Compliance
+   Progress: ___/12 months achieved   Responsible: Blagoj Nikolov
+
+3. 95%+ Personnel Training Completion
+   Progress: ___/12 months achieved   Responsible: Blagoj Nikolov
+
+4. Regulatory Inspection: Zero Major Findings
+   Progress: ___/12 months achieved   Responsible: Blagoj Nikolov
+
+5. Maintain environmental monitoring within specifications 99% of the time
+Complete all equipment calibrations 30 days before due date
+Achieve zero critical deviations per quarter
+100% personnel training completion within 30 days of hire
+   Progress: ___/12 months achieved   Responsible: Blagoj Nikolov
+
+================================================================================
+FACILITY CUSTOMIZATION SIGN-OFF
+================================================================================
+
+This Facility Profile Sheet has been customized for:
+
+Facility Name: Purely Plant Medical Cannabis Production Facility
+Location: Skopje
+License #: MK-MED-CANNABIS-2024-001
+
+All placeholder fields marked with Placeholders use square brackets have been completed with 
+facility-specific information.
+
+Approved By:
+
+Quality Manager: ________________________    Date: __________
+               [Signature]___________________  Date:___________
+
+Facility Manager: ________________________    Date: __________
+                 [Signature]___________________  Date:___________
+
+Effective Date: ___________
+
+Next Review Date: ___________
+
+DOCUMENT ID: QAS-01-003 | VERSION: 1.0
+
+================================================================================
+
+INSTRUCTIONS FOR USE:
+
+1. Complete ALL bracketed fields [EXAMPLE_PLACEHOLDER]
+2. This document is the "master" facility information sheet
+3. When customizing other QMS documents, reference this sheet rather than
+   entering facility information repeatedly
+4. If facility information changes (manager name, location, equipment, etc.)
+   update this sheet first, then notify document managers to review affected SOPs
+5. Maintain this as an UNCONTROLLED COPY for ease of frequent updates
+6. Annual review required; update quarterly for personnel changes
+
+REFERENCE IN DOCUMENTS AS:
+"See Facility Profile Sheet (QAS-01-003) for facility-specific information"
+
+================================================================================

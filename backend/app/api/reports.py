@@ -260,3 +260,106 @@ async def weekly_report(
         "tasks": tasks_out,
         "time_band": time_band,
     }
+
+
+@router.get("/analytics")
+async def analytics(
+    weeks: int = Query(8, ge=4, le=16),
+    user: dict = Depends(require_password_set),
+):
+    """Cross-week trends for managers and executives — task throughput,
+    on-time delivery, activity, and a current department snapshot.
+
+    Deliberately hour-free (owner: hour sums are not a meaningful metric
+    here): weekly buckets count tasks and logged sessions, never durations.
+    Buckets are the same Fri→Thu windows as the weekly report, oldest first,
+    ending with the current window. Dept-scoped managers are pinned to their
+    department exactly like /reports/weekly.
+    """
+    if user["role"] == "USER":
+        raise HTTPException(status_code=403, detail="Managers and executives only")
+    tz = str(TZ)
+    today = date.today()
+    fri0, _ = _fri_thu(today)
+    start = fri0 - timedelta(days=7 * (weeks - 1))
+    scope = dept_scope(user)
+    dept_sql = " AND t.department_id = $4::uuid" if scope else ""
+
+    async with rls(user) as c:
+        created = await c.fetch(
+            "SELECT ((t.created_at AT TIME ZONE $2)::date - $1::date) / 7 AS wk, count(*) AS n"
+            " FROM tasks t WHERE t.is_deleted=false"
+            " AND (t.created_at AT TIME ZONE $2)::date >= $1"
+            " AND (t.created_at AT TIME ZONE $2)::date < $1::date + $3::int" + dept_sql +
+            " GROUP BY 1",
+            start, tz, weeks * 7, *([scope] if scope else []))
+        completed = await c.fetch(
+            "SELECT (t.completed_date - $1::date) / 7 AS wk, count(*) AS n,"
+            " count(*) FILTER (WHERE t.due_date IS NULL OR t.completed_date <= t.due_date) AS on_time"
+            " FROM tasks t WHERE t.is_deleted=false"
+            " AND t.completed_date >= $1 AND t.completed_date < $1::date + $2::int"
+            + (" AND t.department_id = $3::uuid" if scope else "") +
+            " GROUP BY 1",
+            start, weeks * 7, *([scope] if scope else []))
+        # Join through tasks so task-visibility RLS bounds what sessions are
+        # counted (work_sessions RLS alone is org-wide — see /weekly's note).
+        sessions = await c.fetch(
+            "SELECT ((ws.started_at AT TIME ZONE $2)::date - $1::date) / 7 AS wk,"
+            " count(*) AS n, count(DISTINCT ws.user_id) AS people"
+            " FROM work_sessions ws JOIN tasks t ON t.id = ws.task_id"
+            " WHERE t.is_deleted=false"
+            " AND (ws.started_at AT TIME ZONE $2)::date >= $1"
+            " AND (ws.started_at AT TIME ZONE $2)::date < $1::date + $3::int" + dept_sql +
+            " GROUP BY 1",
+            start, tz, weeks * 7, *([scope] if scope else []))
+        dept_rows = await c.fetch(
+            "SELECT t.department_id,"
+            " count(*) FILTER (WHERE t.status <> 'completed') AS open,"
+            " count(*) FILTER (WHERE t.status = 'stuck') AS stuck,"
+            " count(*) FILTER (WHERE t.status <> 'completed' AND t.due_date < $1) AS overdue,"
+            " count(*) FILTER (WHERE t.status = 'completed' AND t.completed_date >= $2) AS completed"
+            " FROM tasks t WHERE t.is_deleted=false AND t.is_archived=false"
+            + (" AND t.department_id = $3::uuid" if scope else "") +
+            " GROUP BY 1",
+            today, start, *([scope] if scope else []))
+        types = await c.fetch(
+            "SELECT t.task_type, count(*) AS n FROM tasks t"
+            " WHERE t.is_deleted=false AND t.is_archived=false AND t.status <> 'completed'"
+            + (" AND t.department_id = $1::uuid" if scope else "") +
+            " GROUP BY 1 ORDER BY 2 DESC",
+            *([scope] if scope else []))
+        dept_names = {str(r["id"]): {"code": r["code"], "name": r["name"], "name_mk": r["name_mk"]}
+                      for r in await c.fetch("SELECT id, code, name, name_mk FROM departments")}
+
+    c_by = {r["wk"]: r["n"] for r in created}
+    d_by = {r["wk"]: (r["n"], r["on_time"]) for r in completed}
+    s_by = {r["wk"]: (r["n"], r["people"]) for r in sessions}
+    week_series = []
+    for i in range(weeks):
+        done, on_time = d_by.get(i, (0, 0))
+        sess, people = s_by.get(i, (0, 0))
+        week_series.append({
+            "week_start": (start + timedelta(days=7 * i)).isoformat(),
+            "created": c_by.get(i, 0), "completed": done, "on_time": on_time,
+            "sessions": sess, "active_people": people,
+        })
+
+    departments = []
+    for r in dept_rows:
+        did = str(r["department_id"]) if r["department_id"] else None
+        meta = dept_names.get(did, {})
+        departments.append({
+            "id": did, "code": meta.get("code"),
+            "name": meta.get("name") or "—", "name_mk": meta.get("name_mk"),
+            "open": r["open"], "stuck": r["stuck"], "overdue": r["overdue"],
+            "completed": r["completed"],
+        })
+    departments.sort(key=lambda d: -d["open"])
+
+    return {
+        "range": {"start": start.isoformat(), "end": (fri0 + timedelta(days=6)).isoformat(),
+                  "weeks": weeks},
+        "weeks": week_series,
+        "departments": departments,
+        "task_types": [{"task_type": r["task_type"], "count": r["n"]} for r in types],
+    }

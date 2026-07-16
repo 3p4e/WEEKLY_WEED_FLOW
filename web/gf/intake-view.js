@@ -67,11 +67,13 @@ GF.WWF._renderCandidates = () => {
     out.innerHTML = `<div style="color:var(--ink-3);font-size:13px">${AL('No tasks were extracted from that text.', 'Не се извлечени задачи од тој текст.')}</div>`;
     return;
   }
-  const deptOpts = (sel) => `<option value=""${sel ? '' : ' selected'}>${AL('— dept —', '— оддел —')}</option>` +
-    st.depts.map((d) => `<option value="${GF.esc(d.code)}"${sel === d.code ? ' selected' : ''}>${GF.esc(d.name)}</option>`).join('');
+  const deptOptions = [{ v: '', label: AL('— dept —', '— оддел —') }]
+    .concat(st.depts.map((d) => ({ v: d.code, label: d.name })));
   // department filter (QC-only vs all, per the requested review flow)
-  const filterOpts = `<option value="">${AL('All departments', 'Сите оддели')}</option>` +
-    st.depts.map((d) => `<option value="${GF.esc(d.code)}"${st.filter === d.code ? ' selected' : ''}>${GF.esc(d.name)}</option>`).join('');
+  const filterOptions = [{ v: '', label: AL('All departments', 'Сите оддели') }]
+    .concat(st.depts.map((d) => ({ v: d.code, label: d.name })));
+  const priOptions = _INTAKE_PRI.map((x) => ({ v: x, label: x }));
+  const typeOptions = _INTAKE_TYPES.map((x) => ({ v: x, label: x }));
 
   const cards = st.candidates.map((c, i) => {
     if (st.filter && c.department !== st.filter) return '';
@@ -88,11 +90,12 @@ GF.WWF._renderCandidates = () => {
             placeholder="${AL('description', 'опис')}"
             style="width:100%;font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:5px;margin-top:4px;background:var(--surface-2);color:var(--ink);resize:vertical">${GF.esc(c.description || '')}</textarea>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12px">
-            <select onchange="GF.WWF._intakeSet(${i},'department',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px">${deptOpts(c.department)}</select>
-            <select onchange="GF.WWF._intakeSet(${i},'priority',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px">
-              ${_INTAKE_PRI.map((p) => `<option value="${p}"${c.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
-            <select onchange="GF.WWF._intakeSet(${i},'task_type',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px">
-              ${_INTAKE_TYPES.map((t) => `<option value="${t}"${c.task_type === t ? ' selected' : ''}>${t}</option>`).join('')}</select>
+            ${GF.selectField('intake-dept-' + i, { value: c.department || '', inline: true, title: AL('Department', 'Оддел'),
+              options: deptOptions, onPick: (v) => GF.WWF._intakeSet(i, 'department', v) })}
+            ${GF.selectField('intake-pri-' + i, { value: c.priority || 'medium', inline: true, title: AL('Priority', 'Приоритет'),
+              options: priOptions, onPick: (v) => GF.WWF._intakeSet(i, 'priority', v) })}
+            ${GF.selectField('intake-type-' + i, { value: c.task_type || 'other', inline: true, title: AL('Type', 'Тип'),
+              options: typeOptions, onPick: (v) => GF.WWF._intakeSet(i, 'task_type', v) })}
             ${c.due_date ? `<span style="color:var(--ink-3);align-self:center">${AL('due', 'рок')} ${GF.esc(c.due_date)}</span>` : ''}
           </div>
           ${subs ? `<ul style="margin:8px 0 0 4px;padding-left:16px;font-size:12.5px;color:var(--ink-2)">${subs}</ul>` : ''}
@@ -105,7 +108,8 @@ GF.WWF._renderCandidates = () => {
   out.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
       <b style="font-size:14px;color:var(--ink)">${st.candidates.length} ${AL('extracted', 'извлечени')}</b>
-      <select onchange="GF.WWF._intake.filter=this.value;GF.WWF._renderCandidates()" style="padding:4px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px">${filterOpts}</select>
+      ${GF.selectField('intake-filter', { value: st.filter || '', inline: true, title: AL('All departments', 'Сите оддели'),
+        options: filterOptions, onPick: (v) => { GF.WWF._intake.filter = v; GF.WWF._renderCandidates(); } })}
       <div style="flex:1"></div>
       <button class="btn btn-primary" ${nSel ? '' : 'disabled'} onclick="GF.WWF.adoptSelected()">${AL('Adopt selected', 'Внеси избрани')} (${nSel})</button>
     </div>
@@ -132,7 +136,6 @@ GF.WWF.adoptSelected = async () => {
     reference_code: c.reference_code || null,
     department: c.department || null,       // canonical dept code (kept as the tag)
     due_date: c.due_date || null,
-    estimated_hours: c.estimated_hours != null ? c.estimated_hours : null,
     subtasks: (c.subtasks || []).map((s) => ({ title: s.title, description: s.description || null })),
   }));
   if (out) out.innerHTML = `<span style="color:var(--ink-3);font-size:13px">${AL('Adopting…', 'Се внесува…')}</span>`;

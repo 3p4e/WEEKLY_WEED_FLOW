@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Rule Builder</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .grid2{ display:grid; grid-template-columns:1.6fr 1fr; gap:16px; align-items:start; }
+
+  .step{ position:relative; padding-left:34px; margin-bottom:14px; }
+  .step:not(:last-child)::before{ content:""; position:absolute; left:11px; top:26px; bottom:-14px; width:2px; background:linear-gradient(180deg,var(--mw-cyan-dim),rgba(94,200,240,.1)); }
+  .step__dot{ position:absolute; left:0; top:4px; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mw-font-cond),sans-serif; font-size:12px; font-weight:700; color:var(--mw-void);
+    background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan)); clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .step__cap{ font-size:10px; text-transform:uppercase; letter-spacing:.16em; margin-bottom:8px; }
+  .cap--when{ color:var(--mw-stat-mid); } .cap--if{ color:var(--mw-cyan); } .cap--then{ color:var(--mw-stat-hi); }
+
+  .card{ padding:14px 16px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .fld{ display:flex; flex-direction:column; gap:5px; flex:1; min-width:150px; }
+  .fld label{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-faint); }
+  .sel, .inp{ background:rgba(6,20,40,.6); border:none; box-shadow:inset 0 0 0 1px rgba(94,200,240,.22); color:var(--mw-ink);
+    padding:9px 11px; font-family:var(--mw-font,'Saira'); font-size:13px; outline:none;
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); appearance:none; cursor:pointer; }
+  .sel:focus, .inp:focus{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .selwrap{ position:relative; flex:1; min-width:150px; }
+  .selwrap::after{ content:"▾"; position:absolute; right:11px; top:50%; transform:translateY(-30%); color:var(--mw-cyan-dim); pointer-events:none; font-size:11px; }
+  .selwrap .sel{ width:100%; box-sizing:border-box; }
+
+  .cond, .actn{ display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .rm{ width:26px; height:26px; flex:none; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    color:var(--mw-text-faint); background:rgba(6,20,40,.5); clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .rm:hover{ color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); }
+  .add{ display:inline-flex; align-items:center; gap:7px; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--mw-cyan); cursor:pointer; padding:7px 0; } .add:hover{ color:var(--mw-cyan-bright); }
+  .add svg{ width:13px; height:13px; }
+
+  .prev__ln{ display:flex; gap:9px; margin-bottom:12px; }
+  .prev__cap{ font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-faint); flex:none; width:38px; padding-top:5px; }
+  .prev__toks{ display:flex; gap:7px; flex-wrap:wrap; }
+  .tok{ display:inline-flex; align-items:center; font-size:12px; padding:5px 11px; border-radius:2px; background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18); }
+  .tok.when{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,236,74,.35); }
+  .tok.iff{ color:var(--mw-cyan); }
+  .tok.then{ color:var(--mw-stat-hi); box-shadow:inset 0 0 0 1px rgba(108,240,90,.32); }
+  .nm-inp{ background:none; border:none; border-bottom:2px solid rgba(94,200,240,.3); color:var(--mw-ink);
+    font-family:var(--mw-font-cond),sans-serif; font-size:22px; font-weight:700; outline:none; padding:2px 0; width:100%; letter-spacing:.01em; }
+  .nm-inp:focus{ border-bottom-color:var(--mw-cyan); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Rule Builder">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="automations.html" class="is-active">Automations</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="orders.html">Orders</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="crumb" style="display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;">
+    <a href="automations.html" style="color:var(--mw-cyan-dim);text-decoration:none;">Automations</a><span>›</span><span>New Rule</span>
+  </div>
+
+  <div style="margin-bottom:20px;"><input class="nm-inp" id="ruleName" value="Cure → QA Task" spellcheck="false"/></div>
+
+  <div class="grid2">
+    <div>
+      <!-- WHEN -->
+      <div class="step">
+        <div class="step__dot">1</div>
+        <div class="step__cap cap--when">When this happens (trigger)</div>
+        <div class="mw-panel card">
+          <div class="selwrap"><select class="sel" id="trigger">
+            <option>Batch enters a stage</option>
+            <option>Sensor reading crosses threshold</option>
+            <option>Task becomes overdue</option>
+            <option>Order status changes</option>
+            <option>Inventory drops below level</option>
+            <option>On a schedule</option>
+          </select></div>
+          <div class="row" style="margin-top:10px;" id="triggerParams">
+            <div class="selwrap"><select class="sel" id="tp1"><option>Clone Bay</option><option>Veg Hall</option><option>Flower A</option><option>Flower B</option><option selected>Cure</option><option>Packaging</option></select></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IF -->
+      <div class="step">
+        <div class="step__dot">2</div>
+        <div class="step__cap cap--if">If these conditions match (optional)</div>
+        <div class="mw-panel card">
+          <div id="conds"></div>
+          <span class="add" id="addCond"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add condition</span>
+        </div>
+      </div>
+
+      <!-- THEN -->
+      <div class="step">
+        <div class="step__dot">3</div>
+        <div class="step__cap cap--then">Then do this (actions)</div>
+        <div class="mw-panel card">
+          <div id="actns"></div>
+          <span class="add" id="addActn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add action</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:20px;">
+      <div class="mw-panel mw-panel--alt">
+        <div class="mw-label" style="margin-bottom:14px;">Rule Preview</div>
+        <div class="prev__ln"><span class="prev__cap">When</span><div class="prev__toks" id="pvWhen"></div></div>
+        <div class="prev__ln"><span class="prev__cap">If</span><div class="prev__toks" id="pvIf"></div></div>
+        <div class="prev__ln"><span class="prev__cap">Then</span><div class="prev__toks" id="pvThen"></div></div>
+      </div>
+      <div class="mw-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span class="mw-label" style="font-size:11px;">Enable on save</span>
+          <label class="mw-switch"><input type="checkbox" checked><span class="slot"></span><span class="knob"></span></label>
+        </div>
+        <div style="font-size:11.5px;color:var(--mw-text-dim);line-height:1.5;">Runs automatically whenever the trigger fires and all conditions pass. Est. ~2h crew time saved / week.</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="mw-btn mw-btn--wide" onclick="location.href='automations.html'">Save Rule</button>
+        <button class="mw-btn mw-btn--ghost mw-btn--wide" onclick="location.href='automations.html'">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  // conditions
+  const CFIELDS=['THC potency','Humidity','Temperature','Days to harvest','Priority','Assignee','Batch size'];
+  const COPS=['is greater than','is less than','equals','is not'];
+  let conds=[['Days to harvest','is less than','7']];
+  let actns=[['Create task','QA moisture check'],['Assign to','QA team'],['Set due date','in 2 days']];
+  const ATYPES=['Create task','Assign to','Set due date','Set priority','Send alert','Append METRC log','Reserve resource'];
+  const ATARGETS={'Create task':['QA moisture check','Trim crew task','Purchase order','Phenotype log'],
+    'Assign to':['QA team','Environment team','Trim crew','Ops','Dispatch','Team lead'],
+    'Set due date':['in 1 day','in 2 days','in 3 days','end of week'],
+    'Set priority':['Low','Medium','High','Critical'],
+    'Send alert':['QA team','Environment team','Ops','All leads'],
+    'Append METRC log':['—'],'Reserve resource':['Dry room','Extraction bay','Packaging line']};
+
+  function opt(list,sel){ return list.map(o=>`<option${o===sel?' selected':''}>${o}</option>`).join(''); }
+
+  function renderConds(){
+    document.getElementById('conds').innerHTML = conds.map((c,i)=>`
+      <div class="cond">
+        <div class="selwrap"><select class="sel" onchange="conds[${i}][0]=this.value;preview()">${opt(CFIELDS,c[0])}</select></div>
+        <div class="selwrap"><select class="sel" onchange="conds[${i}][1]=this.value;preview()">${opt(COPS,c[1])}</select></div>
+        <input class="inp" style="flex:1;min-width:90px;" value="${c[2]}" oninput="conds[${i}][2]=this.value;preview()"/>
+        <span class="rm" onclick="conds.splice(${i},1);renderConds();preview()">✕</span>
+      </div>`).join('') || '<div style="font-size:12px;color:var(--mw-text-faint);padding:4px 0;">No conditions — rule always fires on trigger.</div>';
+  }
+  function renderActns(){
+    document.getElementById('actns').innerHTML = actns.map((a,i)=>`
+      <div class="actn">
+        <div class="selwrap"><select class="sel" onchange="setActnType(${i},this.value)">${opt(ATYPES,a[0])}</select></div>
+        <div class="selwrap"><select class="sel" onchange="actns[${i}][1]=this.value;preview()">${opt(ATARGETS[a[0]]||['—'],a[1])}</select></div>
+        <span class="rm" onclick="actns.splice(${i},1);renderActns();preview()">✕</span>
+      </div>`).join('');
+  }
+  function setActnType(i,val){ actns[i]=[val,(ATARGETS[val]||['—'])[0]]; renderActns(); preview(); }
+  function preview(){
+    const trig=document.getElementById('trigger').value;
+    const tp=document.getElementById('tp1');
+    document.getElementById('pvWhen').innerHTML=`<span class="tok when">${trig}${tp?' · '+tp.value:''}</span>`;
+    document.getElementById('pvIf').innerHTML = conds.length
+      ? conds.map(c=>`<span class="tok iff">${c[0]} ${c[1]} ${c[2]}</span>`).join('')
+      : '<span style="font-size:11px;color:var(--mw-text-faint);">always</span>';
+    document.getElementById('pvThen').innerHTML = actns.map(a=>`<span class="tok then">${a[0]}: ${a[1]}</span>`).join('');
+  }
+  document.getElementById('addCond').onclick=()=>{ conds.push(['Humidity','is greater than','62']); renderConds(); preview(); };
+  document.getElementById('addActn').onclick=()=>{ actns.push(['Send alert','Ops']); renderActns(); preview(); };
+  document.getElementById('trigger').onchange=preview;
+  document.addEventListener('change',e=>{ if(e.target.id==='tp1')preview(); });
+  renderConds(); renderActns(); preview();
+</script>
+</body>
+</html>

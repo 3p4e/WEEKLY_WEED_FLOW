@@ -1,0 +1,41 @@
+
+============================================================
+ANONYMIZATION REPORT
+============================================================
+Files processed:  195
+Files modified:   120
+Files skipped:    75
+Files with errors: 0
+Total replacements: 1222
+
+--- Replacements by Term ---
+  Хапа Фарм: 293
+  Спанчево: 203
+  HAPA: 115
+  Hapa Pharm: 91
+  ХАПА Фарм: 65
+  ХАПА фарм: 57
+  HAPA Pharm: 47
+  Hapa: 46
+  Наташа Петкоска: 46
+  ХАПА: 41
+  Даворин Филдишев: 33
+  Антоанета Буклеска: 31
+  Хапа Фарм ДООЕЛ: 27
+  Natasha Petkoska: 24
+  Spanchevo: 15
+  Lence Nikolova: 13
+  Antoaneta Bukleska: 12
+  Blagoj Nikolov: 11
+  Хапа: 10
+  Благој Николов: 9
+  Davorin Fildishev: 8
+  subsidiary Spanchevo: 7
+  Ленче Николова: 5
+  Драгана Данилов: 3
+  СПАНЧЕВО: 3
+  Natasa Petkoska: 2
+  Subsidiary Spanchevo: 2
+  спанчево: 2
+  Оливер Ристески: 1
+============================================================

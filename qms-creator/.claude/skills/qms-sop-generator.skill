@@ -1,0 +1,145 @@
+# QMS SOP Generator
+
+Generate EU GMP compliant Standard Operating Procedures for cannabis pharmaceutical facilities.
+
+## Activation
+- User requests: "generate SOP", "create SOP", "new SOP for [topic]"
+- Document codes matching pattern: XX_XX.XX
+
+---
+
+<qms-sop-generator>
+
+## Instructions
+
+You are generating an EU GMP compliant Standard Operating Procedure (SOP) for a cannabis pharmaceutical facility.
+
+### PHASE 1: REQUIREMENTS GATHERING
+
+Extract from user request:
+- **sop_name**: Full title of the SOP
+- **sop_code**: Document code (suggest if not provided, format: XX_XX.XX)
+- **department**: QA, QC, PRO, LOG, FAC, etc.
+- **facility_type**: Default "Cannabis EU GMP Facility"
+
+If parameters missing, ask:
+1. "What is the SOP title/topic?"
+2. "Which department owns this SOP? (QA/QC/PRO/LOG/FAC)"
+
+### PHASE 2: CONTEXT RETRIEVAL
+
+Search archival memory for:
+- Regulatory requirements: "{sop_name} EU GMP EudraLex ICH requirements"
+- Example documents: "{sop_name} SOP example cannabis pharmaceutical"
+
+Identify applicable:
+- EU GMP chapters/sections
+- ICH guideline references
+- Cannabis-specific requirements
+
+### PHASE 3: SECTION GENERATION
+
+Generate these sections IN ORDER:
+
+1. **Cover Page**
+   - Document metadata table
+   - Approval signature blocks
+
+2. **Purpose** (## 1. Purpose)
+   - Why SOP exists
+   - Regulatory alignment
+   - QMS context
+
+3. **Scope** (## 2. Scope)
+   - In/out of scope
+   - Areas and personnel affected
+
+4. **Definitions** (## 3. Definitions and Abbreviations)
+   - 15-30 relevant terms
+   - Regulatory and cannabis-specific terminology
+
+5. **RACI Matrix** (## 4. Roles and Responsibilities)
+   - Markdown table format
+   - Exactly ONE "A" (Accountable) per activity
+
+6. **Regulatory Requirements** (## 5. Regulatory Requirements)
+   - Numbered list with citations
+   - Format: `<cite source="SOURCE">requirement</cite>`
+
+7. **Procedure** (## 6. Procedure)
+   - Step-by-step numbered instructions
+   - Include parameters, decision points
+   - Cross-references to related SOPs
+
+8. **Documentation** (## 7. Documentation and Records)
+   - Required records and forms
+   - Retention periods
+   - ALCOA+ requirements
+
+9. **Training** (## 8. Training and Competency)
+   - Required training
+   - Competency assessment
+   - Retraining triggers
+
+### PHASE 4: QUALITY CHECKS
+
+Before outputting, verify:
+- [ ] All sections use ## (H2) headings, never # (H1)
+- [ ] All regulatory claims have citations
+- [ ] No placeholder text like [INSERT HERE]
+- [ ] Cannabis-specific terminology used correctly
+- [ ] RACI has exactly one A per row
+- [ ] Procedure steps are numbered sequentially
+
+### OUTPUT FORMAT
+
+```markdown
+| Field | Value |
+|-------|-------|
+| Document Title | {sop_name} |
+| Document Code | {sop_code} |
+| Version | 1.0 |
+| Effective Date | {today YYYY-MM-DD} |
+| Department | {department} |
+
+---
+
+## 1. Purpose
+{content}
+
+## 2. Scope
+{content}
+
+## 3. Definitions and Abbreviations
+| Term | Definition |
+|------|------------|
+| ... | ... |
+
+## 4. Roles and Responsibilities
+| Activity | R | A | C | I |
+|----------|---|---|---|---|
+| ... | ... | ... | ... | ... |
+
+## 5. Regulatory Requirements
+1. <cite source="EUGMP-X.X">Requirement text</cite>
+2. ...
+
+## 6. Procedure
+### 6.1 {Subsection}
+1. Step one...
+2. Step two...
+
+## 7. Documentation and Records
+{content}
+
+## 8. Training and Competency
+{content}
+```
+
+### INTEGRATION
+
+After generating markdown, offer to:
+- Export to DOCX using `/qms-document-formatter`
+- Check compliance using `/qms-compliance-checker`
+
+</qms-sop-generator>

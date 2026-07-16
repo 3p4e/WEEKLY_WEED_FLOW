@@ -53,9 +53,18 @@ GF.WWF._renderWorklog = () => {
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 
+  // Breadcrumb for subtasks (mockup .mw-crumbs): parent → this task, the
+  // parent crumb jumps to the parent's worklog. Keeps hierarchy visible when
+  // a tree row opened this modal.
+  const wlTask = GF.task(st.taskId);
+  const wlParent = wlTask && wlTask.parentId ? GF.task(wlTask.parentId) : null;
+  const crumbs = wlParent ? `<div class="mw-crumbs" style="margin-bottom:10px">
+    <a href="#" onclick="event.preventDefault();GF.WWF.openWorklog('${wlParent.id}')" title="${GF.esc(wlParent.title)}">${GF.esc(wlParent.title.slice(0, 34))}</a>
+    <span class="sep">›</span><span class="cur" title="${GF.esc(wlTask.title)}">${GF.esc(wlTask.title.slice(0, 34))}</span></div>` : '';
+
   let list;
   if (st.sessions === null) {
-    list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('Loading…', 'Се вчитува…')}</div>`;
+    list = `<div class="wl-loading"><span class="mw-spinner mw-spinner--sm"></span>${AL('Loading…', 'Се вчитува…')}</div>`;
   } else if (!st.sessions.length) {
     list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('No work logged yet.', 'Сè уште нема внесена работа.')}</div>`;
   } else {
@@ -75,6 +84,7 @@ GF.WWF._renderWorklog = () => {
   }
 
   body.innerHTML = `
+    ${crumbs}
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label><input id="wl-date" type="date" value="${today}"></div>
       <div class="field" style="flex:1"><label>${AL('Start', 'Почеток')}</label><input id="wl-start" type="time" value="09:00"></div>
@@ -89,9 +99,56 @@ GF.WWF._renderWorklog = () => {
     <div class="field"><label>${AL('Note', 'Белешка')}</label>
       <div class="row" style="gap:8px"><input id="wl-note" placeholder="${AL('What was done…', 'Што беше направено…')}" style="flex:1">
         ${GF.WWF.micBtn('wl-note')}</div></div>
+    ${GF.WWF._progressBlock()}
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="GF.WWF.submitWorklog()">${GF.t('log_work')}</button>
     <div class="sec-label" style="margin-top:16px">${GF.icon('clock','icon')}${AL('Logged sessions', 'Внесени сесии')}</div>
     <div id="wl-list">${list}</div>`;
+};
+
+/* ── Completion % (tasks.progress) — the mockup's log-progress control:
+   quick-set buttons + a slider. Persists on release (PATCH {progress});
+   deliberately decoupled from status — 100% only SUGGESTS "mark done". */
+GF.WWF._progressBlock = () => {
+  const t = GF.task(GF.WWF._worklog.taskId); if (!t) return '';
+  if (!GF.can('status', t)) return '';
+  const pct = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  const quick = [0, 25, 50, 75, 100].map(q =>
+    `<button type="button" class="pl-q${q === pct ? ' on' : ''}" onclick="GF.WWF.setProgress('${t.id}',${q})">${q}%</button>`).join('');
+  const hint = (pct === 100 && t.status !== 'done')
+    ? `<button type="button" class="subdone-hint" style="margin-top:6px" onclick="GF.WWF.progressMarkDone('${t.id}')">✓ ${GF.t('mark_done')}?</button>` : '';
+  return `
+    <div class="sec-label" style="margin-top:4px">${GF.icon('trend','icon')}${GF.t('completion')}</div>
+    <div class="pl-quick">${quick}</div>
+    <div class="row" style="gap:10px;align-items:center">
+      <input type="range" id="wl-pct" class="pl-range" min="0" max="100" step="5" value="${pct}"
+        oninput="var v=GF.$('wl-pct-val');if(v)v.textContent=this.value+'%'"
+        onchange="GF.WWF.setProgress('${t.id}',+this.value)">
+      <span id="wl-pct-val" class="pl-val">${pct}%</span>
+    </div>${hint}`;
+};
+
+GF.WWF.setProgress = async (taskId, pct) => {
+  const t = GF.task(taskId); if (!t) return;
+  pct = Math.max(0, Math.min(100, Math.round(pct)));
+  const prev = t.progressPct;
+  t.progressPct = pct;                       // optimistic; reverted on failure
+  try {
+    await GF.API.updateTask(taskId, { progress: pct });
+    // Scoring progress is the same "work is underway" signal as logging a
+    // session: advance a still-"Not started" task to "Working on it".
+    if (pct > 0 && t.status === 'pending' && GF.setStatus) GF.setStatus(taskId, 'working');
+    GF.render.panels();
+  } catch (e) {
+    t.progressPct = prev;
+    GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error');
+  }
+  GF.WWF._renderWorklog();
+};
+
+GF.WWF.progressMarkDone = (taskId) => {
+  const t = GF.task(taskId); if (!t || t.status === 'done') return;
+  if (GF.setStatus && GF.setStatus(taskId, 'done')) { GF.render.panels(); GF.render.telemetry(); }
+  GF.WWF._renderWorklog();
 };
 
 GF.WWF.submitWorklog = async () => {
@@ -133,7 +190,14 @@ GF.WWF.submitWorklog = async () => {
     GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
     st.sessions = (st.sessions || []).concat([s]);
     const t = GF.task(st.taskId);
-    if (t) { t.sessionHours = Math.round(((t.sessionHours || 0) + Number(s.hours)) * 100) / 100; GF.render.panels(); }
+    if (t) {
+      t.sessionHours = Math.round(((t.sessionHours || 0) + Number(s.hours)) * 100) / 100;
+      // Logging effort is a strong signal the task is underway: advance a
+      // still-"Not started" task to "Working on it" (persisted + permission-
+      // gated by GF.setStatus; never regresses a later status).
+      if (t.status === 'pending' && GF.setStatus) GF.setStatus(st.taskId, 'working');
+      GF.render.panels();
+    }
     GF.WWF._renderWorklog();
   } catch (e) { GF.toast(AL('Log failed: ', 'Неуспешен внес: ') + e.message, 'error'); }
 };
@@ -244,7 +308,11 @@ GF.WWF.openEdit = (taskId) => {
   if (GF.$('add-due')) GF.$('add-due').value = t.due || '';
   if (GF.$('add-ref')) GF.$('add-ref').value = t.ref || '';
   if (GF.$('add-rec')) GF.$('add-rec').value = (t.recurrence && t.recurrence.freq) || '';
-  if (GF.$('add-est')) GF.$('add-est').value = t.est != null ? t.est : '';
+  if (GF.$('add-tags')) GF.$('add-tags').value = (t.tags || []).join(', ');
+  // The dept/priority/type/recurrence fields are popup choosers (hidden input
+  // + trigger button) — setting .value above needs a label sync + re-tint.
+  if (GF.syncSelect) ['add-dept', 'add-pr', 'add-type', 'add-rec'].forEach(GF.syncSelect);
+  if (GF._addAccent) GF._addAccent(t.dept);
   [...GF.$('add-days').querySelectorAll('.chip-opt')].forEach(el => {
     el.classList.toggle('on', (t.days || []).includes(el.dataset.day));
   });

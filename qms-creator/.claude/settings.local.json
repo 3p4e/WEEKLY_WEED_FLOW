@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(python scripts/customize_documents.py:*)",
+      "Bash(if [ -d \"/tmp/pp_archives_extracted\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(if [ -d \"/tmp/pp_rar_extracted\" ])",
+      "Bash(/home/azzu/PROJ/Cannabis EU GMP QMS Creator/.venv/bin/pip install:*)",
+      "mcp__acp__Bash",
+      "mcp__acp__Write",
+      "mcp__acp__Edit",
+      "Bash(cd /home/azzu/PROJ/Cannabis\\\\ EU\\\\ GMP\\\\ QMS\\\\ Creator && grep:*)",
+      "Bash(cd:*)",
+      "Bash(python -m CONTENT_CREATOR_FRAMEWORK.scripts.ingest_db1:*)",
+      "Bash(sg docker -c \"cd /home/azzu/PROJ/Cannabis\\\\ EU\\\\ GMP\\\\ QMS\\\\ Creator/letta-main && docker compose up -d\")",
+      "Bash(if [ -d \"/home/azzu/PROJ/Cannabis EU GMP QMS Creator/Knowledgebase/2ndDataKnowledge\" ])",
+      "Bash(then echo \"2ndDataKnowledge:\")",
+      "Bash(else echo \"2ndDataKnowledge NOT FOUND\")",
+      "mcp__claude_ai_Mermaid_Chart__validate_and_render_mermaid_diagram",
+      "Bash(ssh root@72.61.176.37 \"curl -s localhost:11434/v1/embeddings -X POST -H ''Content-Type: application/json'' -d ''{\"\"model\"\": \"\"nomic-embed-text:latest\"\", \"\"input\"\": \"\"test\"\"}'' | head -c 200\")",
+      "Bash(psql:*)"
+    ],
+    "additionalDirectories": [
+      "/tmp/pp_rar_extracted",
+      "/home/azzu/PROJ/Cannabis EU GMP QMS Creator"
+    ]
+  }
+}

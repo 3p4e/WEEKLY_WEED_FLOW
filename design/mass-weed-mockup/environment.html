@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Climate Control</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1120px; margin:0 auto; padding:20px 24px 60px; }
+
+  /* zone selector */
+  .zonebar{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .zone{ flex:1; min-width:150px; padding:12px 14px; cursor:pointer; background:var(--mw-panel-in);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    border:1px solid rgba(58,159,212,.18); transition:.18s; position:relative; }
+  .zone:hover{ border-color:rgba(94,200,240,.5); }
+  .zone.is-active{ border-color:var(--mw-cyan); background:rgba(30,90,150,.16); box-shadow:0 0 18px rgba(94,200,240,.18) inset; }
+  .zone__nm{ font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:15px; letter-spacing:.04em; color:var(--mw-ink); text-transform:uppercase; }
+  .zone__st{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-top:3px; display:flex; align-items:center; gap:6px; color:var(--mw-text-dim); }
+  .zone__dot{ width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+  .st-ok{ color:var(--mw-stat-hi); } .st-warn{ color:var(--mw-stat-mid); } .st-crit{ color:var(--mw-stat-lo); }
+
+  /* gauge grid */
+  .gauges{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px; }
+  .gauge{ text-align:center; padding:18px 12px 14px; }
+  .gauge__lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-dim); margin-bottom:6px; }
+  .gauge__svg{ width:150px; height:96px; margin:0 auto; display:block; }
+  .gauge__val{ font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:30px; line-height:1; color:var(--mw-ink);
+    text-shadow:0 0 14px rgba(94,200,240,.4); margin-top:-38px; position:relative; }
+  .gauge__unit{ font-size:12px; color:var(--mw-text-dim); font-weight:400; margin-left:1px; }
+  .gauge__set{ font-size:11px; letter-spacing:.06em; color:var(--mw-cyan-dim); margin-top:20px; text-transform:uppercase; }
+
+  /* setpoint controls */
+  .two{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .setrow{ display:grid; grid-template-columns:92px 1fr 64px; align-items:center; gap:14px; padding:11px 0; border-bottom:1px solid rgba(58,159,212,.1); }
+  .setrow:last-child{ border:none; }
+  .setrow .nm{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mw-text-dim); }
+  .setrow .val{ font-family:'Saira Condensed',sans-serif; font-weight:600; text-align:right; color:var(--mw-cyan-bright); font-size:16px; }
+  .slider{ position:relative; height:6px; background:var(--mw-stat-track); border-radius:3px; cursor:pointer; }
+  .slider__fill{ position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,var(--mw-cyan-deep),var(--mw-cyan)); border-radius:3px; box-shadow:0 0 10px rgba(94,200,240,.4); }
+  .slider__knob{ position:absolute; top:50%; width:16px; height:16px; border-radius:50%; transform:translate(-50%,-50%);
+    background:var(--mw-cyan-bright); box-shadow:0 0 12px rgba(94,200,240,.8); border:2px solid var(--mw-deep); }
+
+  /* trend */
+  .trend{ height:200px; position:relative; }
+  .trend svg{ width:100%; height:100%; }
+  .legend{ display:flex; gap:18px; margin-top:10px; }
+  .legend span{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); display:flex; align-items:center; gap:6px; }
+  .legend i{ width:14px; height:2px; display:inline-block; }
+
+  .mode{ display:flex; gap:0; margin-top:14px; }
+  .mode button{ flex:1; padding:9px 0; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:12px; letter-spacing:.1em;
+    text-transform:uppercase; background:var(--mw-panel-in); color:var(--mw-text-dim); border:1px solid rgba(58,159,212,.2); cursor:pointer; transition:.15s; }
+  .mode button:first-child{ clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .mode button:last-child{ clip-path:polygon(0 0,100% 0,100% 100%,6px 100%,0 calc(100% - 6px)); }
+  .mode button.is-active{ background:rgba(30,90,150,.22); color:var(--mw-cyan-bright); border-color:var(--mw-cyan); }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Climate Control">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html" class="is-active">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="index.html">Inventory</a>
+    <a href="team.html">Crew</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Climate Control</h1><span class="mw-rule"></span></div>
+
+  <!-- ZONE SELECTOR -->
+  <div class="zonebar" id="zonebar"></div>
+
+  <!-- LIVE GAUGES -->
+  <div class="mw-panel" style="margin-bottom:16px;">
+    <div class="gauges" id="gauges"></div>
+  </div>
+
+  <div class="two">
+    <!-- SETPOINTS -->
+    <div class="mw-panel">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:8px;">Setpoints</h2>
+      <div id="setpoints"></div>
+      <div class="mode">
+        <button data-mode="veg">Veg</button>
+        <button data-mode="flower" class="is-active">Flower</button>
+        <button data-mode="cure">Cure</button>
+      </div>
+    </div>
+
+    <!-- 24H TREND -->
+    <div class="mw-panel mw-panel--alt">
+      <h2 class="mw-title mw-title--md" style="margin-bottom:8px;">24h Trend</h2>
+      <div class="trend"><svg id="trend" viewBox="0 0 520 200" preserveAspectRatio="none"></svg></div>
+      <div class="legend">
+        <span><i style="background:var(--mw-cyan)"></i>Temp °C</span>
+        <span><i style="background:var(--mw-stat-hi)"></i>RH %</span>
+        <span><i style="background:var(--mw-legendary)"></i>VPD</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="mw-leaf.js" type="module"></script>
+<script>
+(function(){
+  // ---- zone data ----
+  const ZONES = [
+    { id:'clone',  nm:'Clone Bay', st:'ok',   temp:24.2, rh:72, co2:800,  vpd:0.62 },
+    { id:'veg',    nm:'Veg Hall',  st:'ok',   temp:25.6, rh:65, co2:1100, vpd:0.94 },
+    { id:'flwA',   nm:'Flower A',  st:'warn', temp:27.1, rh:58, co2:1350, vpd:1.28 },
+    { id:'flwB',   nm:'Flower B',  st:'crit', temp:28.4, rh:68, co2:1200, vpd:1.02 },
+    { id:'cure',   nm:'Dry / Cure',st:'ok',   temp:18.5, rh:60, co2:600,  vpd:0.71 },
+  ];
+  const STLABEL = { ok:'Nominal', warn:'Watch', crit:'Alert' };
+  let active = 2; // Flower A
+
+  // ---- gauge config: [key, label, unit, min, max, lowGood, highGood] ----
+  const GAUGES = [
+    { key:'temp', lbl:'Temperature', unit:'°C',  min:14, max:34, lo:22, hi:28 },
+    { key:'rh',   lbl:'Humidity',    unit:'%',   min:30, max:90, lo:50, hi:65 },
+    { key:'co2',  lbl:'CO₂',         unit:'ppm', min:400,max:1600,lo:900,hi:1400 },
+    { key:'vpd',  lbl:'VPD',         unit:'kPa', min:0.4,max:1.8, lo:0.8, hi:1.2 },
+  ];
+
+  const zbar = document.getElementById('zonebar');
+  function renderZones(){
+    zbar.innerHTML = ZONES.map((z,i)=>`
+      <div class="zone ${i===active?'is-active':''}" data-i="${i}">
+        <div class="zone__nm">${z.nm}</div>
+        <div class="zone__st st-${z.st}"><span class="zone__dot" style="background:currentColor"></span>${STLABEL[z.st]}</div>
+      </div>`).join('');
+    zbar.querySelectorAll('.zone').forEach(el=>el.onclick=()=>{ active=+el.dataset.i; renderZones(); renderGauges(); renderTrend(); });
+  }
+
+  // semicircle gauge: 180deg arc from left(180) to right(0)
+  function polar(cx,cy,r,deg){ const a=(deg)*Math.PI/180; return [cx - r*Math.cos(a), cy - r*Math.sin(a)]; }
+  function arc(cx,cy,r,d0,d1){
+    const [x0,y0]=polar(cx,cy,r,d0), [x1,y1]=polar(cx,cy,r,d1);
+    const large = Math.abs(d1-d0)>180?1:0;
+    return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+  }
+  function color(g,v){
+    if(v < g.lo) return v < g.min + (g.lo-g.min)*0.4 ? 'var(--mw-stat-lo)' : 'var(--mw-stat-mid)';
+    if(v > g.hi) return v > g.hi + (g.max-g.hi)*0.4 ? 'var(--mw-stat-lo)' : 'var(--mw-stat-mid)';
+    return 'var(--mw-stat-hi)';
+  }
+
+  const gEl = document.getElementById('gauges');
+  function renderGauges(){
+    const z = ZONES[active];
+    gEl.innerHTML = GAUGES.map(g=>{
+      const v = z[g.key];
+      const t = Math.max(0, Math.min(1, (v-g.min)/(g.max-g.min)));
+      const deg = 180 - t*180;                 // 180 (left) -> 0 (right)
+      const [nx,ny] = polar(75,80,54,deg);
+      const c = color(g,v);
+      const setTxt = g.key==='temp'?'Set 26.0°C':g.key==='rh'?'Set 55%':g.key==='co2'?'Set 1300ppm':'Target 1.10';
+      const disp = g.key==='co2'? Math.round(v) : (g.key==='vpd'? v.toFixed(2) : v.toFixed(1));
+      return `<div class="gauge">
+        <div class="gauge__lbl">${g.lbl}</div>
+        <svg class="gauge__svg" viewBox="0 0 150 96">
+          <path d="${arc(75,80,54,180,0)}" fill="none" stroke="rgba(58,159,212,.16)" stroke-width="9" stroke-linecap="round"/>
+          <path d="${arc(75,80,54,180,deg)}" fill="none" stroke="${c}" stroke-width="9" stroke-linecap="round"
+                style="filter:drop-shadow(0 0 6px ${c})"/>
+          <line x1="75" y1="80" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="75" cy="80" r="4.5" fill="var(--mw-deep)" stroke="${c}" stroke-width="2"/>
+        </svg>
+        <div class="gauge__val">${disp}<span class="gauge__unit">${g.unit}</span></div>
+        <div class="gauge__set">${setTxt}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ---- setpoints (sliders) ----
+  const SET = [
+    { nm:'Temp',     min:14, max:34,  val:26.0, unit:'°C',  step:.1 },
+    { nm:'Humidity', min:30, max:90,  val:55,   unit:'%',   step:1 },
+    { nm:'CO₂',      min:400,max:1600,val:1300, unit:'ppm', step:50 },
+    { nm:'Fan Speed',min:0,  max:100, val:72,   unit:'%',   step:1 },
+    { nm:'Light',    min:0,  max:100, val:90,   unit:'%',   step:1 },
+  ];
+  const spEl = document.getElementById('setpoints');
+  function renderSet(){
+    spEl.innerHTML = SET.map((s,i)=>{
+      const pct = ((s.val-s.min)/(s.max-s.min))*100;
+      const disp = s.step<1 ? s.val.toFixed(1) : Math.round(s.val);
+      return `<div class="setrow">
+        <span class="nm">${s.nm}</span>
+        <div class="slider" data-i="${i}"><div class="slider__fill" style="width:${pct}%"></div><div class="slider__knob" style="left:${pct}%"></div></div>
+        <span class="val">${disp}<span style="font-size:11px;color:var(--mw-text-dim)">${s.unit}</span></span>
+      </div>`;
+    }).join('');
+    spEl.querySelectorAll('.slider').forEach(sl=>{
+      const i=+sl.dataset.i;
+      const drag=e=>{
+        const r=sl.getBoundingClientRect();
+        const x=Math.max(0,Math.min(1,((e.touches?e.touches[0].clientX:e.clientX)-r.left)/r.width));
+        SET[i].val = SET[i].min + x*(SET[i].max-SET[i].min);
+        if(SET[i].step>=1) SET[i].val=Math.round(SET[i].val/SET[i].step)*SET[i].step;
+        renderSet();
+      };
+      sl.onmousedown=e=>{ drag(e); const mv=drag,up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}; document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+    });
+  }
+  const MODES = { veg:[25,62,1100,60,85], flower:[26,55,1300,72,90], cure:[18,60,600,40,30] };
+  document.querySelectorAll('.mode button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.mode button').forEach(x=>x.classList.remove('is-active'));
+    b.classList.add('is-active');
+    const m=MODES[b.dataset.mode]; m.forEach((v,i)=>SET[i].val=v); renderSet();
+  });
+
+  // ---- 24h trend ----
+  function series(base,amp,n){ const a=[]; for(let i=0;i<n;i++){ a.push(base + Math.sin(i/n*Math.PI*2 + base)*amp + (Math.random()-.5)*amp*0.5); } return a; }
+  function path(data,min,max){
+    const n=data.length, W=520, H=190;
+    return data.map((v,i)=>{ const x=i/(n-1)*W; const y=H-((v-min)/(max-min))*(H-14)-7; return (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }).join(' ');
+  }
+  function renderTrend(){
+    const n=48;
+    const z=ZONES[active];
+    const temp=series(z.temp,2.2,n), rh=series(z.rh,7,n), vpd=series(z.vpd,0.22,n);
+    const svg=document.getElementById('trend');
+    let grid=''; for(let i=1;i<4;i++){ const y=190/4*i; grid+=`<line x1="0" y1="${y}" x2="520" y2="${y}" stroke="rgba(58,159,212,.1)" stroke-width="1"/>`; }
+    svg.innerHTML = grid +
+      `<path d="${path(temp,14,34)}" fill="none" stroke="var(--mw-cyan)" stroke-width="2" style="filter:drop-shadow(0 0 4px var(--mw-cyan))"/>`+
+      `<path d="${path(rh,30,90)}" fill="none" stroke="var(--mw-stat-hi)" stroke-width="2" style="filter:drop-shadow(0 0 4px var(--mw-stat-hi))"/>`+
+      `<path d="${path(vpd,0.4,1.8)}" fill="none" stroke="var(--mw-legendary)" stroke-width="2" style="filter:drop-shadow(0 0 4px var(--mw-legendary))"/>`;
+  }
+
+  renderZones(); renderGauges(); renderSet(); renderTrend();
+
+  // gentle live jitter on the active zone gauges
+  setInterval(()=>{
+    const z=ZONES[active];
+    z.temp += (Math.random()-.5)*0.15; z.rh += (Math.random()-.5)*0.5;
+    z.co2 += (Math.random()-.5)*8; z.vpd += (Math.random()-.5)*0.02;
+    z.temp=Math.max(15,Math.min(33,z.temp)); z.rh=Math.max(35,Math.min(85,z.rh));
+    z.co2=Math.max(500,Math.min(1550,z.co2)); z.vpd=Math.max(0.5,Math.min(1.6,z.vpd));
+    renderGauges();
+  }, 2200);
+})();
+</script>
+<script src="nav.js"></script>
+</body>
+</html>

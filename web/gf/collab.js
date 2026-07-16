@@ -52,11 +52,12 @@ GF.WWF.renderCollabInner = (t) => {
   let assignRow = '';
   if (manage) {
     const have = new Set(c.assignees.map(a => a.user_id));
-    const opts = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id) && !GF.PEOPLE[id].inactive)
-      .map(id => `<option value="${id}">${GF.esc(GF.PEOPLE[id].name)}</option>`).join('');
-    assignRow = opts ? `
+    const people = Object.keys(GF.PEOPLE || {}).filter(id => !have.has(id) && !GF.PEOPLE[id].inactive);
+    assignRow = people.length ? `
       <div class="note-input" style="margin-top:6px">
-        <select id="assign-${t.id}" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px">${opts}</select>
+        <span style="flex:1;min-width:0">${GF.selectField('assign-' + t.id, {
+          value: people[0], title: AL('Assign', 'Додели'), searchable: true,
+          options: people.map(id => ({ v: id, label: GF.PEOPLE[id].name, sub: GF.roleLabel ? GF.roleLabel(GF.PEOPLE[id].role) : undefined })) })}</span>
         <button class="mini-btn" style="color:var(--blue)" title="${AL('Assign', 'Додели')}" onclick="GF.WWF.doAssign('${t.id}')">${GF.icon('plus')}</button>
       </div>` : '';
   }
@@ -126,39 +127,7 @@ GF.WWF.doAck = async (taskId, accepted) => {
   catch (e) { GF.toast('Failed: ' + e.message, 'error'); }
 };
 
-// Effort capture: hours-spent input on the expanded card (persists to the
-// real backend). estimated_hours is set at creation; actual_hours here.
-GF.WWF.hoursSection = (t) => {
-  const est = (t.est != null) ? t.est : '—';
-  const act = (t.act != null) ? t.act : '';
-  return `
-    <div class="sec-label">${GF.icon('clock','icon')}${AL('Hours', 'Часови')}</div>
-    <div class="note-input">
-      <input id="hrs-${t.id}" type="number" min="0" step="0.5" value="${act}"
-             placeholder="${AL('Hours spent', 'Потрошени часови')}"
-             onchange="GF.WWF.saveHours('${t.id}')"
-             style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13px">
-      <span style="font-size:12px;color:var(--ink-3);white-space:nowrap">/ ${AL('est', 'проц.')} ${est}</span>
-    </div>`;
-};
-
-GF.WWF.saveHours = async (taskId) => {
-  const el = GF.$('hrs-' + taskId); const t = GF.task(taskId);
-  if (!el || !t) return;
-  const raw = el.value.trim();
-  const v = raw === '' ? null : parseFloat(raw);
-  if (v !== null && (!Number.isFinite(v) || v < 0)) { GF.toast(AL('Enter a valid number', 'Внесете важечки број'), 'error'); return; }
-  const prev = t.act;
-  try {
-    // Persist first — only mutate local state once the backend confirms.
-    await GF.API.updateTask(taskId, { actual_hours: v });
-    t.act = v; GF.render.panels(); GF.toast(AL('Hours saved ✓', 'Часовите се зачувани ✓'), 'success');
-  } catch (e) {
-    t.act = prev; GF.render.panels(); GF.toast('Save failed: ' + e.message, 'error');
-  }
-};
-
-// Inject the hours + collab sections into every expanded card, above actions.
+// Inject the collab section into every expanded card, above actions.
 (function () {
   const _card = GF.render.card.bind(GF.render);
   GF.render.card = function (t) {
@@ -168,7 +137,7 @@ GF.WWF.saveHours = async (taskId) => {
     // Function replacement → returned text is inserted literally (a string
     // replacement would interpret $&/$'/$1 patterns inside comment content).
     return html.indexOf(anchor) >= 0
-      ? html.replace(anchor, () => GF.WWF.hoursSection(t) + GF.WWF.collabSection(t) + anchor)
+      ? html.replace(anchor, () => GF.WWF.collabSection(t) + anchor)
       : html;
   };
 })();

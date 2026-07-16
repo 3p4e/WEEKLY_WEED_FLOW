@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "description": "Rules for classifying documents into categories for metadata tagging",
+
+  "classification_rules": {
+    "filename_patterns": {
+      "Production_Processing": {
+        "patterns": ["production", "cultivation", "harvest", "extraction", "processing", "drying", "trimming", "packaging", "batch"],
+        "priority": 1
+      },
+      "QC_Sampling": {
+        "patterns": ["sampling", "qc", "quality control", "testing", "analysis", "laboratory", "lab", "analytical"],
+        "priority": 1
+      },
+      "Equipment_Qualification": {
+        "patterns": ["equipment", "calibration", "qualification", "maintenance", "iq", "oq", "pq", "validation"],
+        "priority": 1
+      },
+      "Documentation_Records": {
+        "patterns": ["documentation", "record", "form", "template", "log", "document control", "retention"],
+        "priority": 1
+      },
+      "Sanitation_Hygiene": {
+        "patterns": ["sanitation", "cleaning", "hygiene", "disinfection", "sanitization", "wash", "sterilization"],
+        "priority": 1
+      },
+      "HEPA_HVAC": {
+        "patterns": ["hvac", "hepa", "air handling", "ventilation", "climate", "environmental control", "air quality"],
+        "priority": 1
+      },
+      "Transport_Logistics": {
+        "patterns": ["transport", "shipping", "receiving", "logistics", "dispatch", "delivery", "chain of custody"],
+        "priority": 1
+      },
+      "Labeling_Packaging": {
+        "patterns": ["labeling", "label", "packaging", "marking", "serialization", "secondary packaging"],
+        "priority": 1
+      },
+      "Vendor_Qualification": {
+        "patterns": ["vendor", "supplier", "procurement", "approved supplier", "qualification", "assessment"],
+        "priority": 1
+      },
+      "Personnel_Training": {
+        "patterns": ["training", "competency", "gowning", "personnel", "qualification", "onboarding"],
+        "priority": 1
+      },
+      "Cultivation": {
+        "patterns": ["cultivation", "growing", "substrate", "pesticide", "irrigation", "ipm", "plant", "propagation"],
+        "priority": 1
+      },
+      "Monitoring_Environmental": {
+        "patterns": ["monitoring", "environmental", "microbial", "particle", "temperature", "humidity", "rh"],
+        "priority": 1
+      },
+      "Quality_Certificates": {
+        "patterns": ["certificate", "coq", "coa", "release", "batch release", "quality assurance"],
+        "priority": 1
+      },
+      "Deviation_CAPA": {
+        "patterns": ["deviation", "capa", "corrective", "preventive", "non-conformance", "ncr", "oos", "oot"],
+        "priority": 1
+      },
+      "Recall_Complaints": {
+        "patterns": ["recall", "complaint", "withdrawal", "adverse", "customer feedback"],
+        "priority": 1
+      },
+      "Regulatory_Compliance": {
+        "patterns": ["regulatory", "compliance", "gmp", "gdp", "ich", "who", "eudralex", "annex"],
+        "priority": 2
+      }
+    },
+
+    "content_keywords": {
+      "Production_Processing": {
+        "keywords": ["yield", "batch", "process", "manufacturing", "raw material", "in-process", "finished product"],
+        "weight": 0.8
+      },
+      "QC_Sampling": {
+        "keywords": ["sample", "test method", "specification", "acceptance criteria", "analytical", "assay", "potency"],
+        "weight": 0.8
+      },
+      "Equipment_Qualification": {
+        "keywords": ["calibration", "performance qualification", "operational qualification", "installation qualification", "pm schedule"],
+        "weight": 0.8
+      },
+      "Documentation_Records": {
+        "keywords": ["signature", "approval", "record retention", "traceability", "alcoa", "data integrity", "audit trail"],
+        "weight": 0.8
+      },
+      "Sanitation_Hygiene": {
+        "keywords": ["clean", "disinfect", "sanitize", "detergent", "residue", "swab", "visual inspection"],
+        "weight": 0.8
+      },
+      "HEPA_HVAC": {
+        "keywords": ["air change", "pressure differential", "filter", "particle count", "iso class", "cleanroom"],
+        "weight": 0.8
+      },
+      "Transport_Logistics": {
+        "keywords": ["cold chain", "temperature excursion", "shipping container", "receipt", "dispatch note"],
+        "weight": 0.8
+      },
+      "Cultivation": {
+        "keywords": ["grow", "flower", "vegetative", "harvest", "cannabinoid", "terpene", "thc", "cbd"],
+        "weight": 0.8
+      },
+      "Monitoring_Environmental": {
+        "keywords": ["cfu", "colony forming", "settle plate", "active air", "viable", "non-viable"],
+        "weight": 0.8
+      }
+    },
+
+    "regulatory_body_patterns": {
+      "EudraLex": {
+        "patterns": ["eudralex", "eu gmp", "volume 4", "chapter", "annex"],
+        "source": "db1"
+      },
+      "ICH": {
+        "patterns": ["ich q", "ich guideline", "international council"],
+        "source": "db1"
+      },
+      "WHO": {
+        "patterns": ["who", "world health", "gacp", "good agricultural"],
+        "source": "db1"
+      },
+      "EMA": {
+        "patterns": ["ema", "european medicines", "hbel", "shared facilities"],
+        "source": "db1"
+      },
+      "Ph_Eur": {
+        "patterns": ["ph. eur", "pharmacopoeia", "monograph"],
+        "source": "db1"
+      }
+    }
+  },
+
+  "quality_scoring": {
+    "structure_indicators": {
+      "has_headers": {"pattern": "^#{1,3}\\s+\\w+", "points": 2.5},
+      "has_numbering": {"pattern": "^\\d+\\.\\s+\\w+", "points": 2.0},
+      "has_tables": {"indicators": ["|", "---"], "points": 1.5},
+      "has_bullet_lists": {"pattern": "^[-*]\\s+", "points": 1.0}
+    },
+    "content_indicators": {
+      "has_purpose": {"keywords": ["purpose", "objective"], "points": 1.0},
+      "has_scope": {"keywords": ["scope", "applicability"], "points": 1.0},
+      "has_procedure": {"keywords": ["procedure", "steps", "instructions"], "points": 1.5},
+      "has_responsibilities": {"keywords": ["responsible", "accountability", "raci"], "points": 1.0},
+      "has_records": {"keywords": ["record", "documentation", "form"], "points": 1.0}
+    },
+    "length_scoring": {
+      "optimal_min_words": 500,
+      "optimal_max_words": 5000,
+      "points": 0.5
+    },
+    "max_score": 10.0
+  },
+
+  "regulatory_alignment_scoring": {
+    "regulatory_references": {
+      "eu gmp": 1.5,
+      "eudralex": 1.5,
+      "ich q": 1.0,
+      "who gacp": 1.0,
+      "gmp annex": 1.0,
+      "21 cfr": 0.5,
+      "pic/s": 0.5,
+      "ph. eur": 0.5
+    },
+    "gmp_concepts": {
+      "keywords": ["validation", "qualification", "deviation", "capa", "data integrity", "alcoa", "change control", "risk assessment"],
+      "points_each": 0.3
+    },
+    "base_score": 5.0,
+    "max_score": 10.0
+  },
+
+  "usage_recommendations": {
+    "Production_Processing": ["procedure", "equipment_list", "process_parameters", "batch_record"],
+    "QC_Sampling": ["sampling_procedure", "acceptance_criteria", "test_methods", "lab_protocol"],
+    "Equipment_Qualification": ["qualification", "calibration", "maintenance", "validation"],
+    "Documentation_Records": ["forms", "templates", "record_keeping", "document_control"],
+    "Sanitation_Hygiene": ["cleaning_procedures", "hygiene_protocols", "sanitization_schedule"],
+    "HEPA_HVAC": ["hvac_operation", "environmental_monitoring", "filter_maintenance"],
+    "Transport_Logistics": ["shipping_procedure", "receiving_protocol", "chain_of_custody"],
+    "Labeling_Packaging": ["labeling_sop", "packaging_procedure", "label_template"],
+    "Vendor_Qualification": ["vendor_qualification", "supplier_management", "procurement"],
+    "Personnel_Training": ["training_program", "competency_assessment", "gowning_procedure"],
+    "Cultivation": ["cultivation_sop", "growing_procedure", "pest_management"],
+    "Monitoring_Environmental": ["monitoring_procedure", "sampling_protocol", "environmental_record"],
+    "Quality_Certificates": ["certificate_template", "release_documentation", "batch_record"],
+    "Deviation_CAPA": ["deviation_management", "corrective_action", "root_cause_analysis"],
+    "Recall_Complaints": ["recall_procedure", "complaint_handling", "customer_notification"],
+    "Regulatory_Compliance": ["requirements", "definitions", "compliance_principles"],
+    "General": ["general_reference"]
+  }
+}

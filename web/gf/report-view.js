@@ -67,7 +67,6 @@ GF.WWF._loadAiInsights = async () => {
              'Total tasks: ' + s.total + ', completed: ' + s.completed +
              ', in progress: ' + s.in_progress + ', stuck: ' + s.stuck +
              ', pending: ' + s.pending + '. ' +
-             'Estimated hours: ' + s.estimated_hours + ', actual: ' + s.actual_hours + '. ' +
              'Provide insights on productivity, risks, and recommendations for next week.',
     });
     st.aiInsights = result.available ? result.output : null;
@@ -249,42 +248,13 @@ GF.WWF.renderReport = () => {
       ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, '#5A6B82')}
       ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, '#7A5BE0') : ''}
       ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, '#F6A609') : ''}
-      ${(s.estimated_hours || s.actual_hours) ? GF.WWF._sc(AL('Hours', 'Часови'), s.actual_hours + '/' + s.estimated_hours, '#7A5BE0') : ''}
     </div>`;
 
   const band = isR ? GF.WWF._renderTimeBand(d.time_band) : '';
 
-  // ── Hours by time class (per person, from work_sessions) ──
-  const HB_COLORS = { regular: '#2BE8A0', overtime: '#E0A73E', night: '#7A5BE0', weekend: '#E5484D' };
-  let hoursByPerson = '';
-  if (isR && d.hours_by_person && d.hours_by_person.length) {
-    const cell = (v, cls) => {
-      const hot = cls !== 'regular' && v > 0;
-      return `<td class="hb-${cls}${hot ? ' nonzero' : ''}" style="padding:8px 10px;text-align:right;font-family:var(--mono);font-size:12.5px;${hot ? `color:${HB_COLORS[cls]};font-weight:800;background:${HB_COLORS[cls]}14` : 'color:var(--ink-2)'}">${v || '—'}</td>`;
-    };
-    hoursByPerson = `<div style="margin:18px 0" id="report-hours">
-      <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Hours by time class', 'Часови по временска класа')}</div>
-      <div class="report-scroll" style="overflow-x:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:11px">
-        <table style="width:100%;border-collapse:collapse;min-width:520px">
-          <thead><tr style="border-bottom:1px solid var(--line)">
-            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px">${AL('Person', 'Лице')}</th>
-            <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--ink-3)">${AL('Regular', 'Редовно')}</th>
-            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.overtime}">${AL('Overtime', 'Прекувремено')}</th>
-            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.night}">${AL('Night', 'Ноќно')}</th>
-            <th style="padding:9px 10px;text-align:right;font-size:11px;color:${HB_COLORS.weekend}">${AL('Weekend', 'Викенд')}</th>
-            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--ink-3)">${AL('Total', 'Вкупно')}</th>
-          </tr></thead>
-          <tbody>${d.hours_by_person.map(p => `
-            <tr style="border-bottom:1px solid var(--line-2)">
-              <td style="padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap">${GF.esc(p.full_name || p.username || p.user_id)}</td>
-              ${cell(p.regular, 'regular')}${cell(p.overtime, 'overtime')}${cell(p.night, 'night')}${cell(p.weekend, 'weekend')}
-              <td style="padding:8px 12px;text-align:right;font-family:var(--mono);font-size:12.5px;font-weight:800;color:var(--ink)">${p.total}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  }
+  // Hour sums were removed app-wide (owner decision) — no hours-by-person
+  // table anymore; the activity band above still shows WHEN work happened.
+  const hoursByPerson = '';
 
   // ── Overdue (due_date passed, not completed) ──
   let overdueList = '';
@@ -312,6 +282,7 @@ GF.WWF.renderReport = () => {
         `<span style="font-size:11.5px;font-weight:700;background:var(--violet-soft);color:var(--violet);padding:3px 10px;border-radius:999px">${GF.esc(GF.taskTypeLabel(tt))} · ${n}</span>`).join('')}
     </div>`;
   }
+
 
   let depts = '';
   if (d.departments.length) {
@@ -368,7 +339,8 @@ GF.WWF.renderReport = () => {
 /* nav item for the report/plan view, above Audit Trail */
 GF.WWF._registerFullPageView({
   key: 'report', icon: 'trend', label: () => AL('Report', 'Извештај'),
-  insertBefore: 'audit', badge: () => GF.WWF._hasNewReportPin,
+  // Management group of the rail (mockup nav.js) — audit/intake/import stay System.
+  insertBefore: 'coord', badge: () => GF.WWF._hasNewReportPin,
 });
 
 /* ── Minimal in-app "new AI report" indicator (no email/push/SMTP) ──────

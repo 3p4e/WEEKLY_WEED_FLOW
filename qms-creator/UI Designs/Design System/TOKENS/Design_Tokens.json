@@ -1,0 +1,280 @@
+{
+  "metadata": {
+    "name": "PP SOP Platform Design Tokens",
+    "description": "Comprehensive design system tokens for both themes",
+    "version": "1.0",
+    "createdDate": "2026-01-29",
+    "maintainer": "Fusion AI Assistant",
+    "status": "Production Ready"
+  },
+  "themes": {
+    "pp-sop": {
+      "name": "PP SOP Theme",
+      "description": "Pharmaceutical-grade design system",
+      "colors": {
+        "primary": "#1F4E79",
+        "secondary": "#538135",
+        "accent": "#538135",
+        "gray": "#404040",
+        "darkBg": "#0F172A",
+        "lightBg": "#F5F7FA",
+        "border": "#E2E8F0",
+        "success": "#16A34A",
+        "warning": "#EA8C55",
+        "error": "#DC2626",
+        "info": "#0EA5E9"
+      },
+      "typography": {
+        "fontFamily": "\"Arial Narrow\", Arial, sans-serif",
+        "sizes": {
+          "xs": "11px",
+          "sm": "12px",
+          "base": "14px",
+          "lg": "16px",
+          "xl": "20px",
+          "2xl": "28px",
+          "3xl": "32px",
+          "4xl": "40px"
+        },
+        "weights": {
+          "normal": 400,
+          "medium": 500,
+          "semibold": 600,
+          "bold": 700
+        },
+        "lineHeights": {
+          "tight": 1.2,
+          "normal": 1.5,
+          "loose": 1.75
+        }
+      },
+      "spacing": {
+        "xs": "4px",
+        "sm": "8px",
+        "md": "16px",
+        "lg": "24px",
+        "xl": "32px",
+        "2xl": "48px",
+        "3xl": "64px"
+      },
+      "borderRadius": {
+        "none": "0px",
+        "sm": "4px",
+        "md": "6px",
+        "lg": "12px",
+        "full": "9999px"
+      },
+      "shadows": {
+        "sm": "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+        "md": "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+        "lg": "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+        "xl": "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+        "none": "none"
+      }
+    },
+    "modern": {
+      "name": "Modern Clean Theme",
+      "description": "Contemporary minimal design system",
+      "colors": {
+        "primary": "#2563EB",
+        "secondary": "#7C3AED",
+        "accent": "#7C3AED",
+        "gray": "#1F2937",
+        "darkBg": "#FFFFFF",
+        "lightBg": "#F3F4F6",
+        "border": "#D1D5DB",
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#06B6D4"
+      },
+      "typography": {
+        "fontFamily": "\"Segoe UI\", \"Helvetica Neue\", sans-serif",
+        "sizes": {
+          "xs": "12px",
+          "sm": "13px",
+          "base": "15px",
+          "lg": "17px",
+          "xl": "22px",
+          "2xl": "28px",
+          "3xl": "32px",
+          "4xl": "40px"
+        },
+        "weights": {
+          "normal": 400,
+          "medium": 500,
+          "semibold": 600,
+          "bold": 700
+        },
+        "lineHeights": {
+          "tight": 1.2,
+          "normal": 1.5,
+          "loose": 1.75
+        }
+      },
+      "spacing": {
+        "xs": "4px",
+        "sm": "8px",
+        "md": "16px",
+        "lg": "24px",
+        "xl": "32px",
+        "2xl": "48px",
+        "3xl": "64px"
+      },
+      "borderRadius": {
+        "none": "0px",
+        "sm": "4px",
+        "md": "8px",
+        "lg": "12px",
+        "full": "9999px"
+      },
+      "shadows": {
+        "sm": "0 1px 3px 0 rgba(0, 0, 0, 0.08)",
+        "md": "0 4px 12px 0 rgba(0, 0, 0, 0.12)",
+        "lg": "0 12px 24px 0 rgba(0, 0, 0, 0.15)",
+        "xl": "0 20px 40px 0 rgba(0, 0, 0, 0.2)",
+        "none": "none"
+      }
+    }
+  },
+  "componentTokens": {
+    "button": {
+      "primary": {
+        "background": "{theme.colors.primary}",
+        "color": "#FFFFFF",
+        "padding": "{theme.spacing.sm} {theme.spacing.md}",
+        "borderRadius": "{theme.borderRadius.md}",
+        "fontWeight": "{theme.typography.weights.medium}",
+        "fontSize": "{theme.typography.sizes.base}"
+      },
+      "secondary": {
+        "background": "{theme.colors.secondary}",
+        "color": "#FFFFFF",
+        "padding": "{theme.spacing.sm} {theme.spacing.md}",
+        "borderRadius": "{theme.borderRadius.md}",
+        "fontWeight": "{theme.typography.weights.medium}"
+      },
+      "small": {
+        "fontSize": "{theme.typography.sizes.sm}",
+        "padding": "4px 8px",
+        "borderRadius": "{theme.borderRadius.sm}"
+      },
+      "large": {
+        "fontSize": "{theme.typography.sizes.lg}",
+        "padding": "{theme.spacing.md} {theme.spacing.lg}",
+        "borderRadius": "{theme.borderRadius.lg}"
+      }
+    },
+    "card": {
+      "background": "{theme.colors.lightBg}",
+      "border": "1px solid {theme.colors.border}",
+      "borderRadius": "{theme.borderRadius.lg}",
+      "padding": "{theme.spacing.md}",
+      "shadow": "{theme.shadows.md}"
+    },
+    "input": {
+      "background": "{theme.colors.lightBg}",
+      "border": "1px solid {theme.colors.border}",
+      "borderRadius": "{theme.borderRadius.md}",
+      "padding": "{theme.spacing.sm} {theme.spacing.md}",
+      "fontSize": "{theme.typography.sizes.base}",
+      "color": "{theme.colors.gray}",
+      "focusBorder": "1px solid {theme.colors.primary}"
+    },
+    "badge": {
+      "fontSize": "{theme.typography.sizes.xs}",
+      "fontWeight": "{theme.typography.weights.semibold}",
+      "padding": "4px 8px",
+      "borderRadius": "{theme.borderRadius.full}"
+    },
+    "heading1": {
+      "fontSize": "{theme.typography.sizes.3xl}",
+      "fontWeight": "{theme.typography.weights.bold}",
+      "lineHeight": 1.2,
+      "color": "{theme.colors.primary}",
+      "marginBottom": "{theme.spacing.lg}"
+    },
+    "heading2": {
+      "fontSize": "{theme.typography.sizes.xl}",
+      "fontWeight": "{theme.typography.weights.bold}",
+      "lineHeight": 1.3,
+      "color": "{theme.colors.secondary}",
+      "marginBottom": "{theme.spacing.md}"
+    },
+    "heading3": {
+      "fontSize": "{theme.typography.sizes.lg}",
+      "fontWeight": "{theme.typography.weights.bold}",
+      "lineHeight": 1.4,
+      "color": "{theme.colors.gray}",
+      "marginBottom": "{theme.spacing.sm}"
+    },
+    "bodyText": {
+      "fontSize": "{theme.typography.sizes.base}",
+      "fontWeight": "{theme.typography.weights.normal}",
+      "lineHeight": 1.5,
+      "color": "{theme.colors.gray}"
+    },
+    "smallText": {
+      "fontSize": "{theme.typography.sizes.sm}",
+      "fontWeight": "{theme.typography.weights.normal}",
+      "lineHeight": 1.4
+    }
+  },
+  "statusTokens": {
+    "success": {
+      "background": "{color}20",
+      "color": "{color}",
+      "border": "1px solid {color}",
+      "icon": "✓"
+    },
+    "warning": {
+      "background": "{color}20",
+      "color": "{color}",
+      "border": "1px solid {color}",
+      "icon": "⚠"
+    },
+    "error": {
+      "background": "{color}20",
+      "color": "{color}",
+      "border": "1px solid {color}",
+      "icon": "✗"
+    },
+    "info": {
+      "background": "{color}20",
+      "color": "{color}",
+      "border": "1px solid {color}",
+      "icon": "ℹ"
+    }
+  },
+  "breakpoints": {
+    "mobile": "0px",
+    "small": "640px",
+    "medium": "768px",
+    "large": "1024px",
+    "xlarge": "1280px",
+    "xxlarge": "1536px"
+  },
+  "zIndex": {
+    "hide": -1,
+    "auto": 0,
+    "base": 10,
+    "dropdown": 30,
+    "sticky": 50,
+    "fixed": 100,
+    "modal": 1000,
+    "popover": 1100,
+    "tooltip": 1200
+  },
+  "transitions": {
+    "fast": "150ms ease-in-out",
+    "normal": "200ms ease-in-out",
+    "slow": "300ms ease-in-out",
+    "slower": "500ms ease-in-out"
+  },
+  "accessibility": {
+    "focusOutlineWidth": "2px",
+    "focusOutlineOffset": "2px",
+    "minTouchTarget": "44px",
+    "minVisualTarget": "44px"
+  }
+}

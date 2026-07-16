@@ -1,0 +1,1107 @@
+# Cannabis & GMP Bilingual Glossary
+# English ↔ Macedonian Technical Terminology
+# Version: 1.0
+# Last Updated: 2026-01-23
+# Purpose: Ensure consistent terminology in bilingual cannabis GMP documentation
+
+metadata:
+  version: "1.0"
+  last_updated: "2026-01-23"
+  languages:
+    - code: "en"
+      name: "English"
+    - code: "mk"
+      name: "Macedonian"
+  categories:
+    - cannabinoids
+    - cultivation
+    - testing_methods
+    - equipment
+    - environmental_controls
+    - gmp_pharmaceutical
+    - quality_control
+    - regulatory
+    - processing
+    - documentation
+
+# GLOSSARY TERMS
+terms:
+  # ==========================================
+  # CANNABINOIDS (20 terms)
+  # ==========================================
+  - english: "THC"
+    macedonian: "THC"
+    cyrillic: "ТХЦ"
+    full_name_en: "Tetrahydrocannabinol"
+    full_name_mk: "Тетрахидроканабинол"
+    category: cannabinoids
+    definition_en: "Primary psychoactive cannabinoid in cannabis"
+    definition_mk: "Примарен психоактивен канабиноид во канабис"
+
+  - english: "CBD"
+    macedonian: "CBD"
+    cyrillic: "ЦБД"
+    full_name_en: "Cannabidiol"
+    full_name_mk: "Канабидиол"
+    category: cannabinoids
+    definition_en: "Non-psychoactive cannabinoid with therapeutic properties"
+    definition_mk: "Непсихоактивен канабиноид со терапевтски својства"
+
+  - english: "cannabinoid"
+    macedonian: "канабиноид"
+    plural_en: "cannabinoids"
+    plural_mk: "канабиноиди"
+    category: cannabinoids
+    definition_en: "Chemical compounds found in cannabis plants"
+    definition_mk: "Хемиски соединенија кои се наоѓаат во канабис растенијата"
+
+  - english: "CBN"
+    macedonian: "CBN"
+    cyrillic: "ЦБН"
+    full_name_en: "Cannabinol"
+    full_name_mk: "Канабинол"
+    category: cannabinoids
+    definition_en: "Cannabinoid formed by THC degradation"
+    definition_mk: "Канабиноид формиран со деградација на THC"
+
+  - english: "CBG"
+    macedonian: "CBG"
+    cyrillic: "ЦБГ"
+    full_name_en: "Cannabigerol"
+    full_name_mk: "Канабигерол"
+    category: cannabinoids
+    definition_en: "Precursor cannabinoid to THC and CBD"
+    definition_mk: "Претходен канабиноид на THC и CBD"
+
+  - english: "THCA"
+    macedonian: "THCA"
+    cyrillic: "ТХЦА"
+    full_name_en: "Tetrahydrocannabinolic Acid"
+    full_name_mk: "Тетрахидроканабинолна киселина"
+    category: cannabinoids
+    definition_en: "Non-psychoactive precursor to THC"
+    definition_mk: "Непсихоактивен претходник на THC"
+
+  - english: "CBDA"
+    macedonian: "CBDA"
+    cyrillic: "ЦБДА"
+    full_name_en: "Cannabidiolic Acid"
+    full_name_mk: "Канабидиолна киселина"
+    category: cannabinoids
+    definition_en: "Precursor to CBD found in raw cannabis"
+    definition_mk: "Претходник на CBD во сиров канабис"
+
+  - english: "terpene"
+    macedonian: "терпен"
+    plural_en: "terpenes"
+    plural_mk: "терпени"
+    category: cannabinoids
+    definition_en: "Aromatic compounds that contribute to cannabis flavor and effects"
+    definition_mk: "Ароматични соединенија кои придонесуваат за вкусот и ефектите на канабисот"
+
+  - english: "myrcene"
+    macedonian: "мирцен"
+    category: cannabinoids
+    definition_en: "Common terpene in cannabis with earthy aroma"
+    definition_mk: "Вообичаен терпен во канабисот со земјена арома"
+
+  - english: "limonene"
+    macedonian: "лимонен"
+    category: cannabinoids
+    definition_en: "Citrus-scented terpene"
+    definition_mk: "Терпен со мирис на цитрус"
+
+  - english: "pinene"
+    macedonian: "пинен"
+    category: cannabinoids
+    definition_en: "Pine-scented terpene"
+    definition_mk: "Терпен со мирис на бор"
+
+  - english: "linalool"
+    macedonian: "линалол"
+    category: cannabinoids
+    definition_en: "Floral-scented terpene"
+    definition_mk: "Терпен со цветен мирис"
+
+  - english: "cannabinoid profile"
+    macedonian: "канабиноиден профил"
+    category: cannabinoids
+    definition_en: "Complete spectrum of cannabinoids in a sample"
+    definition_mk: "Комплетен спектар на канабиноиди во примерок"
+
+  - english: "full-spectrum extract"
+    macedonian: "екстракт со целосен спектар"
+    category: cannabinoids
+    definition_en: "Extract containing all cannabinoids and terpenes"
+    definition_mk: "Екстракт кој содржи сите канабиноиди и терпени"
+
+  - english: "isolate"
+    macedonian: "изолат"
+    category: cannabinoids
+    definition_en: "Pure single cannabinoid compound"
+    definition_mk: "Чист единечен канабиноиден соединение"
+
+  - english: "entourage effect"
+    macedonian: "ефект на опкружување"
+    category: cannabinoids
+    definition_en: "Synergistic interaction of cannabinoids and terpenes"
+    definition_mk: "Синергиско дејство на канабиноиди и терпени"
+
+  - english: "potency"
+    macedonian: "потентност"
+    category: cannabinoids
+    definition_en: "Concentration of cannabinoids in cannabis"
+    definition_mk: "Концентрација на канабиноиди во канабис"
+
+  - english: "decarboxylation"
+    macedonian: "декарбоксилација"
+    category: cannabinoids
+    definition_en: "Process converting THCA to THC through heating"
+    definition_mk: "Процес на конверзија на THCA во THC преку загревање"
+
+  - english: "cannabinoid receptor"
+    macedonian: "канабиноиден рецептор"
+    plural_en: "cannabinoid receptors"
+    plural_mk: "канабиноидни рецептори"
+    category: cannabinoids
+    definition_en: "Cell receptors that interact with cannabinoids"
+    definition_mk: "Клеточни рецептори кои интерагираат со канабиноиди"
+
+  - english: "phytocannabinoid"
+    macedonian: "фитоканабиноид"
+    plural_en: "phytocannabinoids"
+    plural_mk: "фитоканабиноиди"
+    category: cannabinoids
+    definition_en: "Plant-derived cannabinoid"
+    definition_mk: "Канабиноид изведен од растение"
+
+  # ==========================================
+  # CULTIVATION (25 terms)
+  # ==========================================
+  - english: "cultivar"
+    macedonian: "сорта"
+    plural_en: "cultivars"
+    plural_mk: "сорти"
+    category: cultivation
+    definition_en: "Cannabis plant variety with specific characteristics"
+    definition_mk: "Варијетет на канабис растение со специфични карактеристики"
+
+  - english: "strain"
+    macedonian: "сој"
+    plural_en: "strains"
+    plural_mk: "сојеви"
+    category: cultivation
+    definition_en: "Genetic variety of cannabis"
+    definition_mk: "Генетски варијетет на канабис"
+
+  - english: "phenotype"
+    macedonian: "фенотип"
+    plural_en: "phenotypes"
+    plural_mk: "фенотипи"
+    category: cultivation
+    definition_en: "Observable characteristics of a plant"
+    definition_mk: "Видливи карактеристики на растение"
+
+  - english: "genotype"
+    macedonian: "генотип"
+    category: cultivation
+    definition_en: "Genetic makeup of a plant"
+    definition_mk: "Генетски состав на растение"
+
+  - english: "harvest"
+    macedonian: "жетва"
+    verb_en: "to harvest"
+    verb_mk: "да се жнее"
+    category: cultivation
+    definition_en: "Collection of mature cannabis plants"
+    definition_mk: "Собирање на зрели канабис растенија"
+
+  - english: "trichome"
+    macedonian: "трихом"
+    plural_en: "trichomes"
+    plural_mk: "трихоми"
+    category: cultivation
+    definition_en: "Glandular structures containing cannabinoids and terpenes"
+    definition_mk: "Жлездести структури кои содржат канабиноиди и терпени"
+
+  - english: "vegetative stage"
+    macedonian: "вегетативна фаза"
+    category: cultivation
+    definition_en: "Growth phase before flowering"
+    definition_mk: "Фаза на раст пред цветање"
+
+  - english: "flowering stage"
+    macedonian: "фаза на цветање"
+    category: cultivation
+    definition_en: "Reproductive growth phase"
+    definition_mk: "Репродуктивна фаза на раст"
+
+  - english: "clone"
+    macedonian: "клон"
+    plural_en: "clones"
+    plural_mk: "клонови"
+    category: cultivation
+    definition_en: "Genetic copy of mother plant"
+    definition_mk: "Генетска копија на мајчино растение"
+
+  - english: "mother plant"
+    macedonian: "мајчино растение"
+    plural_en: "mother plants"
+    plural_mk: "мајчини растенија"
+    category: cultivation
+    definition_en: "Plant maintained for cloning purposes"
+    definition_mk: "Растение одржувано за цели на клонирање"
+
+  - english: "seedling"
+    macedonian: "саднице"
+    plural_en: "seedlings"
+    plural_mk: "саднице"
+    category: cultivation
+    definition_en: "Young plant germinated from seed"
+    definition_mk: "Младо растение поникнато од семе"
+
+  - english: "germination"
+    macedonian: "никнење"
+    category: cultivation
+    definition_en: "Process of seed sprouting"
+    definition_mk: "Процес на никнење на семе"
+
+  - english: "pruning"
+    macedonian: "обрезување"
+    category: cultivation
+    definition_en: "Removal of plant parts to improve growth"
+    definition_mk: "Отстранување на делови од растението за подобрување на растот"
+
+  - english: "topping"
+    macedonian: "врвосечење"
+    category: cultivation
+    definition_en: "Cutting main stem to promote branching"
+    definition_mk: "Сечење на главната стебло за промовирање на гранење"
+
+  - english: "training"
+    macedonian: "тренирање"
+    category: cultivation
+    definition_en: "Techniques to shape plant growth"
+    definition_mk: "Техники за обликување на растот на растението"
+
+  - english: "nutrient solution"
+    macedonian: "раствор со хранливи материи"
+    category: cultivation
+    definition_en: "Liquid fertilizer for plant feeding"
+    definition_mk: "Течно ѓубриво за хранење на растенијата"
+
+  - english: "pH level"
+    macedonian: "pH ниво"
+    category: cultivation
+    definition_en: "Acidity or alkalinity measurement"
+    definition_mk: "Мерење на киселост или алкалност"
+
+  - english: "growing medium"
+    macedonian: "медиум за одгледување"
+    plural_en: "growing media"
+    plural_mk: "медиуми за одгледување"
+    category: cultivation
+    definition_en: "Substrate for plant growth (soil, coco, etc.)"
+    definition_mk: "Супстрат за раст на растенија (земја, коко, итн.)"
+
+  - english: "curing"
+    macedonian: "созревање"
+    category: cultivation
+    definition_en: "Controlled drying and aging process"
+    definition_mk: "Контролиран процес на сушење и старење"
+
+  - english: "trimming"
+    macedonian: "тримање"
+    category: cultivation
+    definition_en: "Removal of excess plant material"
+    definition_mk: "Отстранување на вишокот растителен материјал"
+
+  - english: "manicuring"
+    macedonian: "маникирање"
+    category: cultivation
+    definition_en: "Precise trimming of cannabis flowers"
+    definition_mk: "Прецизно тримање на цветови на канабис"
+
+  - english: "photoperiod"
+    macedonian: "фотопериод"
+    category: cultivation
+    definition_en: "Light/dark cycle affecting plant growth"
+    definition_mk: "Циклус светлина/темнина кој влијае на растот на растението"
+
+  - english: "autoflowering"
+    macedonian: "автоцветање"
+    category: cultivation
+    definition_en: "Cannabis variety that flowers automatically"
+    definition_mk: "Варијетет на канабис кој автоматски цвета"
+
+  - english: "hermaphrodite"
+    macedonian: "хермафродит"
+    category: cultivation
+    definition_en: "Plant with both male and female flowers"
+    definition_mk: "Растение со машки и женски цветови"
+
+  - english: "pollination"
+    macedonian: "опрашување"
+    category: cultivation
+    definition_en: "Transfer of pollen to produce seeds"
+    definition_mk: "Пренос на полен за производство на семе"
+
+  # ==========================================
+  # TESTING METHODS (15 terms)
+  # ==========================================
+  - english: "HPLC"
+    macedonian: "HPLC"
+    cyrillic: "ХПЛЦ"
+    full_name_en: "High-Performance Liquid Chromatography"
+    full_name_mk: "Високоучинска течна хроматографија"
+    category: testing_methods
+    definition_en: "Analytical technique for separating and quantifying compounds"
+    definition_mk: "Аналитичка техника за разделување и квантифицирање на соединенија"
+
+  - english: "GC-MS"
+    macedonian: "GC-MS"
+    cyrillic: "ГЦ-МС"
+    full_name_en: "Gas Chromatography-Mass Spectrometry"
+    full_name_mk: "Гасна хроматографија-масена спектрометрија"
+    category: testing_methods
+    definition_en: "Analytical method combining gas chromatography and mass spectrometry"
+    definition_mk: "Аналитички метод кој комбинира гасна хроматографија и масена спектрометрија"
+
+  - english: "chromatography"
+    macedonian: "хроматографија"
+    category: testing_methods
+    definition_en: "Separation technique for analyzing mixtures"
+    definition_mk: "Техника на разделување за анализа на мешавини"
+
+  - english: "spectrophotometry"
+    macedonian: "спектрофотометрија"
+    category: testing_methods
+    definition_en: "Measurement of light absorption"
+    definition_mk: "Мерење на апсорпција на светлина"
+
+  - english: "potency testing"
+    macedonian: "тестирање на потентност"
+    category: testing_methods
+    definition_en: "Analysis of cannabinoid concentration"
+    definition_mk: "Анализа на концентрација на канабиноиди"
+
+  - english: "pesticide screening"
+    macedonian: "скрининг на пестициди"
+    category: testing_methods
+    definition_en: "Detection of pesticide residues"
+    definition_mk: "Детекција на остатоци од пестициди"
+
+  - english: "microbial testing"
+    macedonian: "микробиолошко тестирање"
+    category: testing_methods
+    definition_en: "Detection of bacteria, yeast, and mold"
+    definition_mk: "Детекција на бактерии, квасци и мувла"
+
+  - english: "heavy metals testing"
+    macedonian: "тестирање на тешки метали"
+    category: testing_methods
+    definition_en: "Analysis for toxic metal contamination"
+    definition_mk: "Анализа на контаминација со токсични метали"
+
+  - english: "mycotoxin testing"
+    macedonian: "тестирање на микотоксини"
+    category: testing_methods
+    definition_en: "Detection of fungal toxins"
+    definition_mk: "Детекција на габични токсини"
+
+  - english: "residual solvents"
+    macedonian: "резидуални растворувачи"
+    category: testing_methods
+    definition_en: "Leftover extraction solvents"
+    definition_mk: "Преостанати екстракциони растворувачи"
+
+  - english: "water activity"
+    macedonian: "активност на вода"
+    category: testing_methods
+    definition_en: "Measure of available water for microbial growth"
+    definition_mk: "Мерка на достапна вода за микробен раст"
+
+  - english: "moisture content"
+    macedonian: "содржина на влага"
+    category: testing_methods
+    definition_en: "Percentage of water in sample"
+    definition_mk: "Процент на вода во примерокот"
+
+  - english: "terpene profiling"
+    macedonian: "профилирање на терпени"
+    category: testing_methods
+    definition_en: "Analysis of terpene composition"
+    definition_mk: "Анализа на состав на терпени"
+
+  - english: "foreign matter"
+    macedonian: "странски материјали"
+    category: testing_methods
+    definition_en: "Unwanted materials in cannabis sample"
+    definition_mk: "Непожелни материјали во примерокот на канабис"
+
+  - english: "certificate of analysis"
+    macedonian: "сертификат за анализа"
+    abbreviation_en: "COA"
+    abbreviation_mk: "СЗА"
+    category: testing_methods
+    definition_en: "Document showing test results"
+    definition_mk: "Документ кој прикажува резултати од тестирање"
+
+  # ==========================================
+  # EQUIPMENT (20 terms)
+  # ==========================================
+  - english: "drying room"
+    macedonian: "просторија за сушење"
+    plural_en: "drying rooms"
+    plural_mk: "простории за сушење"
+    category: equipment
+    definition_en: "Controlled environment for cannabis drying"
+    definition_mk: "Контролирана средина за сушење на канабис"
+
+  - english: "curing room"
+    macedonian: "просторија за созревање"
+    plural_en: "curing rooms"
+    plural_mk: "простории за созревање"
+    category: equipment
+    definition_en: "Room for controlled cannabis aging"
+    definition_mk: "Просторија за контролирано старење на канабис"
+
+  - english: "grow light"
+    macedonian: "светло за одгледување"
+    plural_en: "grow lights"
+    plural_mk: "светла за одгледување"
+    category: equipment
+    definition_en: "Artificial lighting for plant growth"
+    definition_mk: "Вештачко осветлување за раст на растенија"
+
+  - english: "LED light"
+    macedonian: "LED светло"
+    full_name_en: "Light-Emitting Diode"
+    full_name_mk: "Диода која емитува светлина"
+    category: equipment
+    definition_en: "Energy-efficient grow light"
+    definition_mk: "Енергетски ефикасно светло за одгледување"
+
+  - english: "dehumidifier"
+    macedonian: "одвлажнувач"
+    plural_en: "dehumidifiers"
+    plural_mk: "одвлажнувачи"
+    category: equipment
+    definition_en: "Device that removes moisture from air"
+    definition_mk: "Уред кој отстранува влага од воздухот"
+
+  - english: "humidifier"
+    macedonian: "овлажнувач"
+    plural_en: "humidifiers"
+    plural_mk: "овлажнувачи"
+    category: equipment
+    definition_en: "Device that adds moisture to air"
+    definition_mk: "Уред кој додава влага во воздухот"
+
+  - english: "HVAC system"
+    macedonian: "HVAC систем"
+    full_name_en: "Heating, Ventilation, and Air Conditioning"
+    full_name_mk: "Греење, Вентилација и Климатизација"
+    category: equipment
+    definition_en: "Climate control system"
+    definition_mk: "Систем за контрола на клима"
+
+  - english: "air filtration"
+    macedonian: "филтрација на воздух"
+    category: equipment
+    definition_en: "Removal of airborne contaminants"
+    definition_mk: "Отстранување на контаминанти од воздухот"
+
+  - english: "HEPA filter"
+    macedonian: "HEPA филтер"
+    full_name_en: "High-Efficiency Particulate Air filter"
+    full_name_mk: "Високо ефикасен филтер за честички во воздухот"
+    category: equipment
+    definition_en: "Filter removing 99.97% of particles"
+    definition_mk: "Филтер кој отстранува 99.97% од честичките"
+
+  - english: "extraction equipment"
+    macedonian: "екстракциска опрема"
+    category: equipment
+    definition_en: "Devices for cannabinoid extraction"
+    definition_mk: "Уреди за екстракција на канабиноиди"
+
+  - english: "CO2 extractor"
+    macedonian: "CO2 екстрактор"
+    category: equipment
+    definition_en: "Supercritical CO2 extraction system"
+    definition_mk: "Систем за екстракција со суперкритичен CO2"
+
+  - english: "ethanol extractor"
+    macedonian: "етанолен екстрактор"
+    category: equipment
+    definition_en: "Alcohol-based extraction system"
+    definition_mk: "Систем за екстракција базиран на алкохол"
+
+  - english: "distillation equipment"
+    macedonian: "дестилациска опрема"
+    category: equipment
+    definition_en: "Apparatus for cannabinoid purification"
+    definition_mk: "Апарат за пречистување на канабиноиди"
+
+  - english: "analytical balance"
+    macedonian: "аналитичка вага"
+    plural_en: "analytical balances"
+    plural_mk: "аналитички вagi"
+    category: equipment
+    definition_en: "Precision weighing instrument"
+    definition_mk: "Прецизен инструмент за мерење"
+
+  - english: "temperature probe"
+    macedonian: "температурна сонда"
+    plural_en: "temperature probes"
+    plural_mk: "температурни сонди"
+    category: equipment
+    definition_en: "Device for measuring temperature"
+    definition_mk: "Уред за мерење на температура"
+
+  - english: "humidity sensor"
+    macedonian: "сензор за влажност"
+    plural_en: "humidity sensors"
+    plural_mk: "сензори за влажност"
+    category: equipment
+    definition_en: "Device measuring moisture levels"
+    definition_mk: "Уред за мерење на нивоа на влага"
+
+  - english: "light meter"
+    macedonian: "метар за светлина"
+    plural_en: "light meters"
+    plural_mk: "метри за светлина"
+    category: equipment
+    definition_en: "Device measuring light intensity"
+    definition_mk: "Уред за мерење на интензитет на светлината"
+
+  - english: "pH meter"
+    macedonian: "pH метар"
+    category: equipment
+    definition_en: "Device measuring acidity/alkalinity"
+    definition_mk: "Уред за мерење на киселост/алкалност"
+
+  - english: "microscope"
+    macedonian: "микроскоп"
+    plural_en: "microscopes"
+    plural_mk: "микроскопи"
+    category: equipment
+    definition_en: "Instrument for magnifying small objects"
+    definition_mk: "Инструмент за зголемување на мали објекти"
+
+  - english: "drying rack"
+    macedonian: "сушилник"
+    plural_en: "drying racks"
+    plural_mk: "сушилници"
+    category: equipment
+    definition_en: "Structure for air-drying cannabis"
+    definition_mk: "Структура за сушење на канабис на воздух"
+
+  # ==========================================
+  # ENVIRONMENTAL CONTROLS (10 terms)
+  # ==========================================
+  - english: "temperature control"
+    macedonian: "контрола на температура"
+    category: environmental_controls
+    definition_en: "Management of ambient temperature"
+    definition_mk: "Управување со амбиентална температура"
+
+  - english: "humidity control"
+    macedonian: "контрола на влажност"
+    category: environmental_controls
+    definition_en: "Management of moisture levels"
+    definition_mk: "Управување со нивоа на влага"
+
+  - english: "relative humidity"
+    macedonian: "релативна влажност"
+    abbreviation_en: "RH"
+    abbreviation_mk: "РВ"
+    category: environmental_controls
+    definition_en: "Percentage of moisture in air"
+    definition_mk: "Процент на влага во воздухот"
+
+  - english: "air exchange rate"
+    macedonian: "стапка на размена на воздух"
+    category: environmental_controls
+    definition_en: "Frequency of air replacement"
+    definition_mk: "Фреквенција на замена на воздух"
+
+  - english: "CO2 level"
+    macedonian: "ниво на CO2"
+    category: environmental_controls
+    definition_en: "Carbon dioxide concentration"
+    definition_mk: "Концентрација на јаглероден диоксид"
+
+  - english: "light spectrum"
+    macedonian: "светлосен спектар"
+    category: environmental_controls
+    definition_en: "Range of light wavelengths"
+    definition_mk: "Опсег на бранови должини на светлината"
+
+  - english: "photoperiod"
+    macedonian: "фотопериод"
+    category: environmental_controls
+    definition_en: "Duration of light exposure"
+    definition_mk: "Траење на изложеност на светлина"
+
+  - english: "air circulation"
+    macedonian: "циркулација на воздух"
+    category: environmental_controls
+    definition_en: "Movement of air in grow space"
+    definition_mk: "Движење на воздух во просторот за одгледување"
+
+  - english: "climate control"
+    macedonian: "контрола на клима"
+    category: environmental_controls
+    definition_en: "Management of environmental conditions"
+    definition_mk: "Управување со услови на околината"
+
+  - english: "environmental monitoring"
+    macedonian: "мониторинг на околината"
+    category: environmental_controls
+    definition_en: "Continuous tracking of environmental parameters"
+    definition_mk: "Континуирано следење на параметри на околината"
+
+  # ==========================================
+  # GMP & PHARMACEUTICAL TERMS (30 terms)
+  # ==========================================
+  - english: "Batch"
+    macedonian: "Партија"
+    plural_en: "Batches"
+    plural_mk: "Партии"
+    category: gmp_pharmaceutical
+    definition_en: "Specific quantity produced in single run"
+    definition_mk: "Специфична количина произведена во едно производство"
+
+  - english: "Lot"
+    macedonian: "Серија"
+    plural_en: "Lots"
+    plural_mk: "Серии"
+    category: gmp_pharmaceutical
+    definition_en: "Specific quantity of material"
+    definition_mk: "Специфична количина на материјал"
+
+  - english: "Good Manufacturing Practice"
+    macedonian: "Добра производствена практика"
+    abbreviation_en: "GMP"
+    abbreviation_mk: "ДПП"
+    category: gmp_pharmaceutical
+    definition_en: "Quality assurance system for pharmaceutical production"
+    definition_mk: "Систем за осигурување на квалитет во фармацевтското производство"
+
+  - english: "Critical Quality Attribute"
+    macedonian: "Критично квалитативно својство"
+    abbreviation_en: "CQA"
+    abbreviation_mk: "ККС"
+    category: gmp_pharmaceutical
+    definition_en: "Property within limits to ensure quality"
+    definition_mk: "Својство во рамките на лимити за осигурување на квалитет"
+
+  - english: "Critical Process Parameter"
+    macedonian: "Критичен процесен параметар"
+    abbreviation_en: "CPP"
+    abbreviation_mk: "КПП"
+    category: gmp_pharmaceutical
+    definition_en: "Parameter affecting CQAs"
+    definition_mk: "Параметар кој влијае на ККС"
+
+  - english: "Standard Operating Procedure"
+    macedonian: "Стандардна оперативна процедура"
+    abbreviation_en: "SOP"
+    abbreviation_mk: "СОП"
+    category: gmp_pharmaceutical
+    definition_en: "Detailed written instructions"
+    definition_mk: "Детални писмени инструкции"
+
+  - english: "Quality Assurance"
+    macedonian: "Осигурување на квалитет"
+    abbreviation_en: "QA"
+    abbreviation_mk: "ОК"
+    category: gmp_pharmaceutical
+    definition_en: "System ensuring quality requirements"
+    definition_mk: "Систем кој осигурува барања за квалитет"
+
+  - english: "Quality Control"
+    macedonian: "Контрола на квалитет"
+    abbreviation_en: "QC"
+    abbreviation_mk: "КК"
+    category: gmp_pharmaceutical
+    definition_en: "Testing and inspection activities"
+    definition_mk: "Активности за тестирање и инспекција"
+
+  - english: "Deviation"
+    macedonian: "Девијација"
+    plural_en: "Deviations"
+    plural_mk: "Девијации"
+    category: gmp_pharmaceutical
+    definition_en: "Departure from approved procedures"
+    definition_mk: "Отстапување од одобрени процедури"
+
+  - english: "Change Control"
+    macedonian: "Контрола на промени"
+    category: gmp_pharmaceutical
+    definition_en: "Formal process for managing changes"
+    definition_mk: "Формален процес за управување со промени"
+
+  - english: "Validation"
+    macedonian: "Валидација"
+    category: gmp_pharmaceutical
+    definition_en: "Evidence that process achieves results"
+    definition_mk: "Доказ дека процесот постигнува резултати"
+
+  - english: "Qualification"
+    macedonian: "Квалификација"
+    category: gmp_pharmaceutical
+    definition_en: "Verification that equipment performs correctly"
+    definition_mk: "Верификација дека опремата работи правилно"
+
+  - english: "Calibration"
+    macedonian: "Калибрација"
+    category: gmp_pharmaceutical
+    definition_en: "Adjustment of instrument accuracy"
+    definition_mk: "Прилагодување на точноста на инструментот"
+
+  - english: "Traceability"
+    macedonian: "Проследливост"
+    category: gmp_pharmaceutical
+    definition_en: "Ability to track materials and processes"
+    definition_mk: "Способност за следење на материјали и процеси"
+
+  - english: "Chain of Custody"
+    macedonian: "Ланец на чување"
+    category: gmp_pharmaceutical
+    definition_en: "Documentation of sample handling"
+    definition_mk: "Документација на ракување со примероци"
+
+  - english: "Batch Record"
+    macedonian: "Запис за партија"
+    plural_en: "Batch Records"
+    plural_mk: "Записи за партии"
+    category: gmp_pharmaceutical
+    definition_en: "Complete documentation of batch production"
+    definition_mk: "Комплетна документација на производство на партија"
+
+  - english: "Specification"
+    macedonian: "Спецификација"
+    plural_en: "Specifications"
+    plural_mk: "Спецификации"
+    category: gmp_pharmaceutical
+    definition_en: "Detailed quality requirements"
+    definition_mk: "Детални барања за квалитет"
+
+  - english: "Release Testing"
+    macedonian: "Тестирање за пуштање"
+    category: gmp_pharmaceutical
+    definition_en: "Final testing before product release"
+    definition_mk: "Финално тестирање пред пуштање на производот"
+
+  - english: "Quarantine"
+    macedonian: "Карантин"
+    category: gmp_pharmaceutical
+    definition_en: "Isolation pending approval"
+    definition_mk: "Изолација во очекување на одобрување"
+
+  - english: "Approved"
+    macedonian: "Одобрено"
+    category: gmp_pharmaceutical
+    definition_en: "Authorized for use or release"
+    definition_mk: "Овластено за употреба или пуштање"
+
+  - english: "Rejected"
+    macedonian: "Отфрлено"
+    category: gmp_pharmaceutical
+    definition_en: "Not meeting specifications"
+    definition_mk: "Не ги исполнува спецификациите"
+
+  - english: "In-Process Control"
+    macedonian: "Контрола во процес"
+    abbreviation_en: "IPC"
+    abbreviation_mk: "КВП"
+    category: gmp_pharmaceutical
+    definition_en: "Checks during production"
+    definition_mk: "Проверки за време на производството"
+
+  - english: "Good Agricultural Practice"
+    macedonian: "Добра земјоделска практика"
+    abbreviation_en: "GACP"
+    abbreviation_mk: "ДЗП"
+    category: gmp_pharmaceutical
+    definition_en: "Quality system for plant cultivation"
+    definition_mk: "Систем за квалитет на одгледување на растенија"
+
+  - english: "Contamination"
+    macedonian: "Контаминација"
+    category: gmp_pharmaceutical
+    definition_en: "Unwanted introduction of impurities"
+    definition_mk: "Непожелно внесување на нечистотии"
+
+  - english: "Cross-contamination"
+    macedonian: "Вкрстена контаминација"
+    category: gmp_pharmaceutical
+    definition_en: "Transfer of contaminants between materials"
+    definition_mk: "Пренос на контаминанти меѓу материјали"
+
+  - english: "Sanitization"
+    macedonian: "Санитација"
+    category: gmp_pharmaceutical
+    definition_en: "Process of reducing microbial load"
+    definition_mk: "Процес на намалување на микробно оптоварување"
+
+  - english: "Sterilization"
+    macedonian: "Стерилизација"
+    category: gmp_pharmaceutical
+    definition_en: "Complete elimination of microorganisms"
+    definition_mk: "Комплетна елиминација на микроорганизми"
+
+  - english: "Cleaning Validation"
+    macedonian: "Валидација на чистење"
+    category: gmp_pharmaceutical
+    definition_en: "Verification of cleaning effectiveness"
+    definition_mk: "Верификација на ефективност на чистење"
+
+  - english: "Shelf Life"
+    macedonian: "Рок на траење"
+    category: gmp_pharmaceutical
+    definition_en: "Period product maintains quality"
+    definition_mk: "Период во кој производот го задржува квалитетот"
+
+  - english: "Expiry Date"
+    macedonian: "Датум на истекување"
+    category: gmp_pharmaceutical
+    definition_en: "Date after which product should not be used"
+    definition_mk: "Датум по кој производот не треба да се користи"
+
+  # ==========================================
+  # QUALITY CONTROL (10 terms)
+  # ==========================================
+  - english: "Acceptance Criteria"
+    macedonian: "Критериуми за прифаќање"
+    category: quality_control
+    definition_en: "Standards for passing quality checks"
+    definition_mk: "Стандарди за поминување на проверки на квалитет"
+
+  - english: "Out of Specification"
+    macedonian: "Надвор од спецификација"
+    abbreviation_en: "OOS"
+    abbreviation_mk: "НОС"
+    category: quality_control
+    definition_en: "Result not meeting specifications"
+    definition_mk: "Резултат кој не ги исполнува спецификациите"
+
+  - english: "Retest Date"
+    macedonian: "Датум за повторно тестирање"
+    category: quality_control
+    definition_en: "Date when material should be retested"
+    definition_mk: "Датум кога материјалот треба повторно да се тестира"
+
+  - english: "Sampling Plan"
+    macedonian: "План за земање примероци"
+    category: quality_control
+    definition_en: "Procedure for collecting representative samples"
+    definition_mk: "Процедура за собирање на репрезентативни примероци"
+
+  - english: "Composite Sample"
+    macedonian: "Композитен примерок"
+    category: quality_control
+    definition_en: "Combined sample from multiple sources"
+    definition_mk: "Комбиниран примерок од повеќе извори"
+
+  - english: "Reference Standard"
+    macedonian: "Референтен стандард"
+    plural_en: "Reference Standards"
+    plural_mk: "Референтни стандарди"
+    category: quality_control
+    definition_en: "Material of known quality for comparison"
+    definition_mk: "Материјал со познат квалитет за споредба"
+
+  - english: "Limit of Detection"
+    macedonian: "Граница на детекција"
+    abbreviation_en: "LOD"
+    abbreviation_mk: "ГД"
+    category: quality_control
+    definition_en: "Lowest detectable concentration"
+    definition_mk: "Најниска детектибилна концентрација"
+
+  - english: "Limit of Quantification"
+    macedonian: "Граница на квантификација"
+    abbreviation_en: "LOQ"
+    abbreviation_mk: "ГК"
+    category: quality_control
+    definition_en: "Lowest quantifiable concentration"
+    definition_mk: "Најниска квантифицирачка концентрација"
+
+  - english: "Method Validation"
+    macedonian: "Валидација на метод"
+    category: quality_control
+    definition_en: "Verification that test method is suitable"
+    definition_mk: "Верификација дека методот на тестирање е соодветен"
+
+  - english: "Repeatability"
+    macedonian: "Повторливост"
+    category: quality_control
+    definition_en: "Consistency of results under same conditions"
+    definition_mk: "Конзистентност на резултати под исти услови"
+
+  # ==========================================
+  # REGULATORY & COMPLIANCE (8 terms)
+  # ==========================================
+  - english: "EudraLex"
+    macedonian: "EudraLex"
+    category: regulatory
+    definition_en: "EU pharmaceutical legislation"
+    definition_mk: "ЕУ фармацевтска легислатива"
+
+  - english: "ICH Guidelines"
+    macedonian: "ICH Насоки"
+    full_name_en: "International Council for Harmonisation"
+    full_name_mk: "Меѓународен совет за хармонизација"
+    category: regulatory
+    definition_en: "International pharmaceutical standards"
+    definition_mk: "Меѓународни фармацевтски стандарди"
+
+  - english: "Qualified Person"
+    macedonian: "Квалификувано лице"
+    abbreviation_en: "QP"
+    abbreviation_mk: "КЛ"
+    category: regulatory
+    definition_en: "Person authorized to certify batches"
+    definition_mk: "Лице овластено да сертифицира партии"
+
+  - english: "Regulatory Compliance"
+    macedonian: "Регулаторна усогласеност"
+    category: regulatory
+    definition_en: "Adherence to regulations"
+    definition_mk: "Придржување до регулативи"
+
+  - english: "Inspection"
+    macedonian: "Инспекција"
+    plural_en: "Inspections"
+    plural_mk: "Инспекции"
+    category: regulatory
+    definition_en: "Regulatory authority assessment"
+    definition_mk: "Оценување од регулаторен орган"
+
+  - english: "Audit"
+    macedonian: "Ревизија"
+    plural_en: "Audits"
+    plural_mk: "Ревизии"
+    category: regulatory
+    definition_en: "Systematic examination of compliance"
+    definition_mk: "Систематско испитување на усогласеност"
+
+  - english: "CAPA"
+    macedonian: "CAPA"
+    full_name_en: "Corrective and Preventive Action"
+    full_name_mk: "Корективна и превентивна акција"
+    category: regulatory
+    definition_en: "System for addressing nonconformances"
+    definition_mk: "Систем за справување со несогласности"
+
+  - english: "Risk Assessment"
+    macedonian: "Процена на ризик"
+    category: regulatory
+    definition_en: "Identification and evaluation of risks"
+    definition_mk: "Идентификација и евалуација на ризици"
+
+  # ==========================================
+  # PROCESSING (7 terms)
+  # ==========================================
+  - english: "Extraction"
+    macedonian: "Екстракција"
+    category: processing
+    definition_en: "Removal of cannabinoids from plant material"
+    definition_mk: "Отстранување на канабиноиди од растителен материјал"
+
+  - english: "Winterization"
+    macedonian: "Зимување"
+    category: processing
+    definition_en: "Removal of waxes and lipids"
+    definition_mk: "Отстранување на восоци и липиди"
+
+  - english: "Decarboxylation"
+    macedonian: "Декарбоксилација"
+    category: processing
+    definition_en: "Activation of cannabinoids through heating"
+    definition_mk: "Активација на канабиноиди преку загревање"
+
+  - english: "Filtration"
+    macedonian: "Филтрација"
+    category: processing
+    definition_en: "Removal of particulate matter"
+    definition_mk: "Отстранување на честички"
+
+  - english: "Distillation"
+    macedonian: "Дестилација"
+    category: processing
+    definition_en: "Purification through vaporization"
+    definition_mk: "Пречистување преку испарување"
+
+  - english: "Formulation"
+    macedonian: "Формулација"
+    category: processing
+    definition_en: "Preparation of final product"
+    definition_mk: "Подготовка на финален производ"
+
+  - english: "Packaging"
+    macedonian: "Пакување"
+    category: processing
+    definition_en: "Placing product in containers"
+    definition_mk: "Ставање на производ во контејнери"
+
+  # ==========================================
+  # DOCUMENTATION (5 terms)
+  # ==========================================
+  - english: "Document Control"
+    macedonian: "Контрола на документи"
+    category: documentation
+    definition_en: "Management of controlled documents"
+    definition_mk: "Управување со контролирани документи"
+
+  - english: "Master Record"
+    macedonian: "Главен запис"
+    category: documentation
+    definition_en: "Approved reference document"
+    definition_mk: "Одобрен референтен документ"
+
+  - english: "Training Record"
+    macedonian: "Запис за обука"
+    plural_en: "Training Records"
+    plural_mk: "Записи за обука"
+    category: documentation
+    definition_en: "Documentation of personnel training"
+    definition_mk: "Документација на обука на персонал"
+
+  - english: "Logbook"
+    macedonian: "Дневник"
+    plural_en: "Logbooks"
+    plural_mk: "Дневници"
+    category: documentation
+    definition_en: "Record of activities and observations"
+    definition_mk: "Запис на активности и опсервации"
+
+  - english: "Electronic Signature"
+    macedonian: "Електронски потпис"
+    plural_en: "Electronic Signatures"
+    plural_mk: "Електронски потписи"
+    category: documentation
+    definition_en: "Digital approval indication"
+    definition_mk: "Дигитална индикација за одобрување"
+
+# USAGE NOTES
+usage_notes:
+  - Always use glossary terms consistently throughout documents
+  - Technical abbreviations (THC, CBD, HPLC, etc.) remain in Latin characters in both languages
+  - GMP terms should follow EU pharmaceutical conventions
+  - Cannabis-specific terms maintain scientific accuracy
+  - When in doubt, preserve English technical term with Macedonian explanation
+
+# VERSION HISTORY
+version_history:
+  - version: "1.0"
+    date: "2026-01-23"
+    changes:
+      - Initial glossary creation with 120+ terms
+      - Coverage across 10 categories
+      - Full bilingual support (English-Macedonian)
+      - Cannabis-specific and GMP pharmaceutical terms

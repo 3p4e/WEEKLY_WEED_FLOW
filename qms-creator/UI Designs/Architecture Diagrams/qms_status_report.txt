@@ -1,0 +1,44 @@
+======================================================================
+QMS DOCUMENT HIERARCHY SUMMARY REPORT
+======================================================================
+Generated: 2026-01-15 15:25:07
+
+OVERALL STATUS:
+----------------------------------------------------------------------
+  ✓ Created & Published        39 ( 53.4%)
+  ✎ Draft                       0 (  0.0%)
+  ◑ In Progress                 0 (  0.0%)
+  ○ Planned                    34 ( 46.6%)
+  ✗ Missing/Not Planned         0 (  0.0%)
+----------------------------------------------------------------------
+  TOTAL DOCUMENTS: 73
+
+DOCUMENT FAMILIES BREAKDOWN:
+----------------------------------------------------------------------
+  EQU_06: Equipment Management
+    Progress: 1/1 (100%)
+  HRM_05: Human Resources
+    Progress: 2/6 (33%)
+  MAT_02: Material Management
+    Progress: 1/2 (50%)
+  PRO_01: Cultivation Processes
+    Progress: 3/3 (100%)
+  PRO_03: Production Operations
+    Progress: 2/3 (67%)
+  PRO_06: Distribution & Logistics
+    Progress: 1/1 (100%)
+  QA_00: Quality Management System Core
+    Progress: 18/22 (82%)
+  QCS_01: QC System & Documentation
+    Progress: 1/10 (10%)
+  QC_01: Batch Release and Certification
+    Progress: 7/19 (37%)
+  REC_09: Records Management
+    Progress: 1/1 (100%)
+  RES_10: Research & Development
+    Progress: 1/1 (100%)
+  SAN_07: Sanitation & Hygiene
+    Progress: 1/1 (100%)
+  VAL_08: Validation & Qualification
+    Progress: 0/3 (0%)
+======================================================================

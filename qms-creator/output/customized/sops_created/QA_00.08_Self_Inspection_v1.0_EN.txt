@@ -1,0 +1,43 @@
+---
+document_id: "QA_00.08_v1"
+version: "1.0"
+title_mk: "Self Inspection (MK)"
+title_en: "Self Inspection"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QA_00.08_v1 | **Effective Date:** 15.01.24
+
+---
+
+## Self Inspection (MK) | Self Inspection
+
+### 1. PURPOSE / ЦЕЛ
+
+The purpose of this document is to define the procedure for Self Inspection.
+Целта на овој документ е да ја дефинира процедурата за Self Inspection.
+
+### 2. SCOPE / ОПСЕГ
+
+This procedure applies to Self Inspection at Purely Plant GmbH.
+Оваа процедура се однесува на Self Inspection во Purely Plant GmbH.
+
+### 3. RESPONSIBILITIES / ОДГОВОРНОСТИ
+
+*   **QA Manager:** Responsible for approval.
+*   **Head of Production:** Responsible for implementation.
+
+[PROCESS_OWNER]
+
+### 4. PROCEDURE / ПРОЦЕДУРА
+
+[Content to be developed]
+
+### 5. REFERENCES / РЕФЕРЕНЦИ
+
+*   EudraLex Vol 4, Part I
+[TEMPLATE_VERSION]

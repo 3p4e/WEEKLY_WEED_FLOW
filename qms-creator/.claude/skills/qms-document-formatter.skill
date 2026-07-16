@@ -1,0 +1,135 @@
+# QMS Document Formatter
+
+Format QMS documents for regulatory submission with professional styling.
+
+## Activation
+- User requests: "format document", "prepare for submission", "apply template", "convert to PDF", "export to DOCX"
+
+---
+
+<qms-document-formatter>
+
+## Instructions
+
+You are formatting a QMS document for professional output with EU GMP compliant styling.
+
+### PARAMETERS
+
+- **input**: Markdown content or file path
+- **output_format**: DOCX | PDF | Both (default: DOCX)
+- **theme**: purely_plant | pharma_gmp | corporate_blue (default: purely_plant)
+- **watermark**: DRAFT | CONFIDENTIAL | CONTROLLED | None (default: None)
+- **include_toc**: true | false (default: true)
+
+### THEME SPECIFICATIONS
+
+#### Purely Plant (Default)
+- Primary: #1F4E79 (Blue)
+- Secondary: #538135 (Green)
+- Text: #404040 (Gray)
+- Font: Arial Narrow
+- Headers: Blue with light blue background
+- Tables: Alternating row shading
+
+#### Pharma GMP
+- Primary: #000080 (Navy)
+- Secondary: #006400 (Dark Green)
+- Font: Times New Roman
+- Traditional pharmaceutical styling
+
+#### Corporate Blue
+- Primary: #003366 (Dark Blue)
+- Secondary: #005A9C (Medium Blue)
+- Font: Calibri
+- Modern corporate look
+
+### DOCUMENT STRUCTURE
+
+1. **Cover Page**
+   - Company logo placeholder
+   - Document title and code
+   - Metadata table
+   - Approval signature blocks
+
+2. **Table of Contents**
+   - Auto-generated from headings
+   - Page numbers
+   - Hyperlinked entries
+
+3. **Headers/Footers**
+   - Header: Document code | Classification
+   - Footer: Page X of Y | Generated date
+
+4. **Section Formatting**
+   - H1 (Title): 16pt, Primary color, Bold
+   - H2 (Section): 14pt, Primary color, Bold
+   - H3 (Subsection): 12pt, Secondary color, Bold
+   - Body: 10pt, Text color
+
+5. **Table Formatting**
+   - Header row: Primary color background, white text
+   - RACI cells: Color-coded (R=green, A=blue, C=yellow, I=gray)
+   - Alternating rows for readability
+
+### WORKFLOW
+
+1. Parse input markdown content
+2. Validate document structure
+3. Apply selected theme styling
+4. Generate cover page with metadata
+5. Create table of contents
+6. Apply watermark if specified
+7. Configure headers/footers
+8. Output to requested format
+
+### EXECUTION
+
+To format a document, call the DOCX generation workflow:
+
+```python
+# Integration with workflow_to_docx.py
+from CONTENT_CREATOR_FRAMEWORK.docx_engine.workflow_to_docx import DocxAssembler
+
+assembler = DocxAssembler(
+    sop_name="{document_title}",
+    sop_code="{document_code}",
+    department="{department}",
+    facility_type="Cannabis EU GMP Facility",
+    theme="{selected_theme}"
+)
+
+# Add sections from parsed markdown
+for section in parsed_sections:
+    assembler.add_section(section.name, section.content)
+
+# Generate output
+output_path = assembler.save()
+```
+
+### OUTPUT
+
+Provide user with:
+- Path to generated DOCX/PDF file
+- Summary of applied formatting
+- Any validation warnings
+
+```
+## Document Formatted
+
+**Input:** {source}
+**Output:** {output_path}
+**Theme:** {theme}
+**Watermark:** {watermark or "None"}
+
+### Applied Formatting:
+- Cover page with metadata
+- Table of contents (X entries)
+- X sections formatted
+- Headers/footers configured
+
+### Output Files:
+- DOCX: /output/formatted/{code}_formatted.docx
+- PDF: /output/formatted/{code}_formatted.pdf (if requested)
+```
+
+</qms-document-formatter>

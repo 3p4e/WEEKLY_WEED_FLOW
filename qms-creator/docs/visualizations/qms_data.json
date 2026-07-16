@@ -1,0 +1,98 @@
+{
+  "generated_at": "2026-01-15T15:32:22.279220",
+  "total_documents": 73,
+  "created_documents": 21,
+  "families": {
+    "QA_00": {
+      "total": 22,
+      "created": 11,
+      "percentage": 50.0,
+      "name": "Quality Management System Core",
+      "description": "Fundamental QMS procedures and cross-departmental standards."
+    },
+    "QC_01": {
+      "total": 19,
+      "created": 8,
+      "percentage": 42.10526315789473,
+      "name": "Batch Release and Certification",
+      "description": "Procedures for testing, reviewing, and certifying medicinal cannabis batches."
+    },
+    "PRO_03": {
+      "total": 3,
+      "created": 1,
+      "percentage": 33.33333333333333,
+      "name": "Production Operations",
+      "description": "Standard operating procedures for production and cultivation."
+    },
+    "PRO_01": {
+      "total": 3,
+      "created": 1,
+      "percentage": 33.33333333333333,
+      "name": "Cultivation Processes",
+      "description": "Procedures for cannabis cultivation activities."
+    },
+    "PRO_06": {
+      "total": 1,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Distribution & Logistics",
+      "description": "Procedures for distribution, transportation, and logistics."
+    },
+    "MAT_02": {
+      "total": 2,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Material Management",
+      "description": "Procedures for material receipt, storage, and handling."
+    },
+    "HRM_05": {
+      "total": 6,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Human Resources",
+      "description": "Procedures for personnel training, hygiene, and management."
+    },
+    "EQU_06": {
+      "total": 1,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Equipment Management",
+      "description": "Procedures for equipment operation, maintenance, and calibration."
+    },
+    "SAN_07": {
+      "total": 1,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Sanitation & Hygiene",
+      "description": "Procedures for cleaning and sanitation."
+    },
+    "VAL_08": {
+      "total": 3,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Validation & Qualification",
+      "description": "Procedures for validation and qualification."
+    },
+    "QCS_01": {
+      "total": 10,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "QC System & Documentation",
+      "description": "Quality Control system procedures and documentation standards."
+    },
+    "REC_09": {
+      "total": 1,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Records Management",
+      "description": "Procedures for record keeping and data integrity."
+    },
+    "RES_10": {
+      "total": 1,
+      "created": 0,
+      "percentage": 0.0,
+      "name": "Research & Development",
+      "description": "Procedures for research, development, and innovation."
+    }
+  }
+}

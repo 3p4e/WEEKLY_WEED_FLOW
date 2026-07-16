@@ -1,0 +1,1779 @@
+SOPs LIST/ЛИСТА СО СОПови
+SOP No.
+Бр. на СОП
+
+Versi
+on
+No.
+Верз
+ија
+бр.
+
+Title of the SOP
+Назив-име на СОП
+
+Annex
+Анекс
+
+1. QUALITY / КВАЛИТЕТ
+QAS –
+01.00.00
+QAS –
+01.00.01
+
+V.03
+
+QAS 01.01.00
+
+V.02
+
+QAS –
+01.02.00
+
+V.01
+
+SOP Receiving and storage
+СОП Прием и складирање
+
+QAS –
+01.03.00
+
+V.03
+
+SOP Self - Inspection
+СОП Само-инспекција
+
+QAS –
+01.04.00
+
+V.02
+
+SOP Corrective Action and
+Preventative Action (CAPA)
+СОП Корективни и
+превентивни мерки (CAPA)
+
+QAS –
+01.05.00
+
+V.02
+
+SOP Deviation, handling and
+investigation
+
+V.01
+
+SOP for writing SOPs
+СОП за пишување СОП-ови
+SOP for numbering SOPs
+СОП за нумерирање
+СОПови
+SOP Vendor qualification
+СОП Квалификација на
+добавувачи
+
+Annex 01 Request for change in documentation
+Барање за промена во документацијата
+/
+Annex 01 Vendor Qualification- Contract Manufacturers
+Квалификација на добавувачи-производители
+Annex 02 Vendor Qualification- Contract Laboratories
+Квалификација на добавувачи-Лаборатории
+Annex 03 Vendor Qualification- Service Providers
+Квалификација на добавувачи - даватели на услуги
+Annex 04 Vendor Pre-qualification
+Пред-квалификација на добавувачи
+Annex 05 Vendor Qualification – Material suppliers
+Квалификација на добавувачи на материјали
+Annex 06 Register of Approved Vendors
+Листа на одобрени добавувачи
+Annex 01 Receipt of materials form
+Образец за прием на материјали
+Annex 02 Reception book
+Книга за прием
+Annex 03 Form for internal transfer of documents and goods in
+HAPA pharm Skopje ⇄ Spanchevo
+Образец за интерен трансфер на документи и роба
+во ХАПА фарм Скопје⇄ Спанчево
+Annex 01 Plan for Self-Inspection
+План за само-инспекција
+Annex 02 Annual plan for self-inspection
+Годишен план за само-инспекција
+Annex 03 Self-Inspection report
+Извештај за само-инспекција
+Annex 01 Corrective actions report
+Извештај за корективни активности
+Annex 02 Preventive actions report
+Извештај за превентивни активности
+Annex 03 Status of implemented corrective actions
+Статус на спроведени корективни активности
+Annex 04 Status of implemented preventive actions
+Статус на спроведени превентивни активности
+Annex 05 Report on the undertaken and implemented CAPA
+Извештај за преземени и спроведени CAPA
+Annex 01 Deviation Report Part A
+Извештај за девијации Дел А
+
+Page 1 of 15
+
+QAS 01.06.00
+
+QAS –
+01.06.01
+
+V.01
+
+V.00
+
+СОП Девијации, справување Annex 02 Deviation Report Part B
+и истрага
+Извештај за девијации Дел В
+Annex 03 Deviation log
+Дневник за девијации
+SOP Complaints
+Annex 01 Complaint details form
+СОП Рекламации
+Образец за рекламациja
+Annex 02 Complaint evaluation report
+Извештај од евалуација на рекламациja
+Annex 03 Returned Cannabis Products Receiving Document
+Приемен документ за вратен производи од канабис
+
+SOP Managing of noncompliant product
+СОП Управување со
+неусогласен производ
+
+со неу
+
+QAS –
+01.07.00
+
+V.03
+
+SOP Product recall
+СОП Отповикување на
+производ
+
+QAS –
+01.08.00
+
+V.02
+
+SOP Risk Management
+СОП Управување со ризици
+
+QAS –
+01.09.00
+
+V.02
+
+SOP Change control
+СОП Контрола на промени
+
+QAS –
+01.10.00
+
+V.02
+
+SOP Process validation
+СОП Валидација на процес
+
+Annex 04 Log book for returned products and samples
+Дневник на вратен производ и примерок
+Annex 01 Report for non-compliant product
+Извештај за неусогласен производ
+Annex 02 Request for an extra control of a batch from product due
+to
+noticed.non-compliances
+Барање за дополнителна контрола на серија
+производ поради забележани неусогласености
+Annex 03 Annual report for non-compliant product
+Годишен извештај за неусогласен производ
+Annex 04 Report for out of specifications results (OOS)
+Извештај за OOS резултати
+Annex 01 Decision for product recall
+Одлука за отповикување на производ
+Annex 02 Report for product recall
+Извештај за отповикување на производ
+Annex 01 Performing an Ishikawa Fishbone Analysis
+Изведување на анализа на рибина коска Ишикава
+Annex 02 FMEA Table
+FMEA Табела
+Annex 03 Financial Risk summary
+Резиме на финансиски ризик
+Annex 04 Risk Analysis Report Template
+Извештај за анализа на ризик
+Annex 05 RA directory
+Директориум на анализи на ризици
+Annex 06 Risk Register
+Регистер на ризици
+Annex 01 Request for Change Approval
+Барање за одобрување на промени
+Annex 02 Resolution upon request for change approval
+Постапување по барање за одобрување на промена
+Annex 03 Records of changes
+Евиденција на промени
+Annex 04 Review of changes
+Преглед на промени
+Annex 01 Template for validation production protocol –GMP
+Примерок на протокол за валидација на процес
+одгледување
+Annex 02 Template for validation cultivation protocol –GACP
+Примерок на протокол за валидација на процес
+производство
+
+Page 2 of 15
+
+QAS –
+01.10.01
+
+V.01
+
+QAS –
+01.10.02
+
+V.01
+
+QAS 01.10.03
+
+V.00
+
+QAS –
+01.10.04
+
+V.00
+
+QAS –
+01.11.00
+
+V.03
+
+Validation process production
+Валидација на процес производство
+Validation process cultivation
+Валидација на процес одгледување
+Packaging process validation
+Валидација на процес на
+пакување
+Cleaning validation
+Валидација на чистење
+(да се преведе)
+SOP Equipment qualification
+СОП Квалификација на
+опрема
+
+/
+
+/
+
+/ не постои треба да се изработи
+Annex 01 Cleaning validation protocols
+Протокол за валидација на чистење
+Annex 02 Cleaning validation Report
+Извештај од напраевена валидација на чистење
+Annex 01 Form Risk classification
+Образец Класификација на ризик
+Annex 02 Template User requirement specification (URS)
+Спецификација на кориснички барања (URS)
+Annex 03 Template Qualification Plan
+План за Квалификација
+Annex 04 Template Design Qualification (DQ)
+Дизајн Квалификација (DQ)
+Annex 05 Template Installation Qualification (IQ)
+Инсталациона Квалификација (IQ)
+Annex 06 Template Operational Qualification (OQ)
+Оперативна Квалификација (OQ)
+Annex 07 Template Performance Qualification (PQ)
+Перформансна Квалификација (PQ)
+Annex 08 Form Deficiencie Log
+Образец Дневник на недостатоци
+Annex 09 Form Technical Change Control
+Образец Техничка Контрола на Промена
+
+QAS 01.11.01
+
+V.00
+
+SOP Computer Software
+Qualification
+СОП Квалификација на
+компјутерски софтвер
+(Анеските не се преведени)
+
+Annex 10 Template Qualification Report
+Извештај за квалификација
+Annex 11 Template Re-qualification
+Ре-квалификација
+Annex 12 Template “Life Cycle review check-list”
+“Чек-листа за преглед на животниот циклус”
+Annex 01 User requirements specifications – Software
+Спецификации на кориснички барања - Софтвер
+Annex 02 Software Design Qualification
+Квалификација за дизајн на софтвер
+Annex 03 Installation Qualification – Software
+Квалификација за инсталација - Софтвер
+Annex 04 Operational Qualification – Software
+Оперативна квалификација - Софтвер
+Annex 05 Performance Qualification – Software
+Квалификација за изведба - Софтвер
+Annex 06 Validation summary report – Software
+Резиме извештај за валидација – Софтвер
+Annex 07 Software Protocol Deviation Report – Resolution
+Извештај за отстапување на софтверски протокол Резолуција
+
+Page 3 of 15
+
+QAS 01.11.02
+
+V.00
+
+SOP Premises Qualification
+СОП Квалификација на
+простории
+(не постои)
+SOP Annual Product Quality
+Review СОП Годишен
+преглед на квалитетот на
+производот
+SOP Batch Record Review
+СОП Преглед на серија
+
+QAS –
+01.12.00
+
+V.01
+
+QAS –
+01.13.00
+
+V.02
+
+QAS –
+01.14.00
+
+V.03
+
+SOP Batch Release
+СОП Ослободување на
+серија
+
+QAS –
+01.14.01
+
+V.03
+
+SOP Material management
+and release of incoming
+goods
+СОП Управување со
+материјали и ослободување
+на влезни суровини
+
+QAS-01.14.02
+
+V.01
+
+QAS –
+01.15.00
+
+V.03
+
+SOP for оutput warehouse
+and labelling of products
+СОП за излезен магацин и
+означување на производи
+SOP Sampling
+СОП Узорцирање
+
+QAS –
+01.16.00
+
+V.03
+
+SOP Мaintenance and
+calibration
+СОП Одржување и
+калибрација
+
+Annex 08 Computer system compliance checklist
+Листа за проверка на усогласеност на компјутерскиот
+систем
+Annex 01 URS User requirements settings
+URS Спецификација на кориснички барања
+Annex 02 Premises Qualification Template
+Образец за квалификација на простории
+Annex 01 Annual Product Quality Review Form
+Образец - годишен преглед на квалитет на
+производ
+Annex 01 BRR Checklist
+BRR Чеклиста
+Annex 02 Certificate of compliance CoC
+Сертификат за усогласеност
+Annex 03 Certificate of Quality/Analysis CoA
+Сертификат за квалитет/aнализа
+Annex 04 Specifification/s
+Спецификации
+Annex 01 Release Register
+Регистар на ослободување
+Annex 02 Release Checklist
+Чеклиста за ослободување
+Annex 03 Rejected /blocked batch statement
+Изјава за одбиена/блокирана серија
+Annex 01 Release register
+Регистар на ослободување
+Annex 02 Logbook- control of parameters in the refrigerator for
+seed material
+Дневник- контрола на параметри во фрижидер за
+семенски материјал
+Annex 01 Stock list of bulk product
+Лагер листа на балк производ
+Annex 02 Stock list of final product
+Лагер листа на финален производ
+Annex 01 Sample log book
+Дневник за узорцирање
+Annex 02 Labels for samples
+Етикети за обележување на узорцирани примероци
+Annex 03 Request for analysis (to the contract laboratory)
+Барање за анализа (до договорната лабораторија)
+Annex 01 Annual Maintenance list
+Годишна листа за одржување
+Annex 02 Calibration - Sensors Log
+Калибрација - Дневник на сензори
+Annex 03 Replacement/Spare parts Logbook
+Дневник за замена / резервни делови
+Annex 04 Equipment Use logbook
+Дневник за користење на опрема
+Annex 05 Under Maintenance Label
+Одржување согласно етикета
+Annex 06 Maintenance report
+Извештај за одржување
+
+Page 4 of 15
+
+QAS –
+01.17.00
+
+V.02
+
+QAS –
+01.18.00
+
+V.04
+
+QAS 01.18.01
+
+V.03
+
+QAS 01.18.02
+
+V.03
+
+QAS 01.18.03
+
+V.03
+
+QAS-01.18.04
+
+V.03
+
+QAS-01.18.05
+
+V.03
+
+QAS –
+01.19.00
+
+V.00
+
+QAS –
+01.20.00
+
+V.00
+
+SOP Data integrity
+СОП Интегритет на
+податоци
+SOP Stability Study
+СОП Студија на стабилност
+
+Stability study protocol - Long
+term
+Протокол за студија за
+стабилност - Долгорочна
+Stability study protocol Accelerated
+Протокол за студија за
+стабилност - Забрзана
+Stability study protocol – In
+use
+Протокол за студија на
+стабилност - Во употреба
+Stability study protocol
+Intermediate product – Short
+term
+Протокол за студија на
+стабилност
+Балк производ- краткорочна
+Stability study protocol
+Intermediate product – Long
+term
+Протокол за студија на
+стабилност
+Балк производ- долгорочна
+SOP Quality Management
+Review- QMR
+СОП Преглед на
+управување со квалитетQMR
+SOP Water Quality
+Management
+СОП Управување со
+Квалитет на вода
+
+Annex 07 Networking architecture
+Архитектура за вмрежување
+Annex 08 Daily Greenhouse checklist
+Дневна чеклиста – Опрема во оранжерии
+Annex 01 Data Integrity Assessment Checklist
+Чеклиста за проценка на интегритетот на податоците
+Annex 01 Stability plan
+План за стабилност
+Annex 02 Stability report
+Извештај за стабилност
+Annex 03 Stability log
+Дневник за стабилност
+
+/
+
+/
+
+/
+
+/
+
+/
+
+Annex 01 Template QMR
+Примерок на QMR
+
+Annex 01 Water quality results log
+Дневник за резултатите од квалитетот на водата
+Annex 02 Water results
+Резултати од вода (треба да се преведе)
+
+2. SANITATION / САНИТАЦИЈА
+SAN –
+02.01.00
+
+V.01
+
+SAN –
+02.02.00
+
+V.01
+
+SOP Cleaning and Sanitation
+СОП Чистење и
+дезинфекција
+(ревизија)
+SOP Sanitation work
+instructions and schedule
+СОП Инструкции и распоред
+на хигиенски работи
+
+Annex 01 Sanitation and disinfection plan
+План за чистење и дезинфекција
+Annex 02 Cleaning and sanitation agents
+Агенси за чистење и дезинфекција
+Annex 01 Sanitation log book
+Дневник за чистење и дезинфекција
+Annex 02 Work order for cleaning and disinfection
+Работен налог за чистење и дезинфекција
+
+Page 5 of 15
+
+SAN –
+02.03.00
+
+V.02
+
+SAN –
+02.04.00
+
+V.01
+
+SAN –
+02.05.00
+SAN –
+02.06.00
+SAN –
+02.07.00
+
+V.02
+
+V.02
+
+(ревизија)
+SOP Gowning and Material
+transfer in the clean rooms
+СОП Кодекс на облекување
+при влез во GMP и GACP
+Сектори и трансфер на
+материјал
+
+Annex 01 Disinfection of outside shoes
+Дезинфекција на обувки пред влегување во
+соблекувална
+Annex 02 Wash hands
+Миење на раце
+Annex 03 Remove outside clothes
+Пресоблекување на облеката
+Annex 04 Put on work/safety clothes
+Облекување на работна/заштитна облека
+Annex 05 Face mask and disposable protective caps
+Ставање на заштитна маска и капа
+Annex 06 Disinfect hands/gloves
+Дезинфекција на раце/ракавици
+Annex 07 Step over bench (Change shoes)
+Премин преку клупа (Промена на обувки)
+Annex 08 Put on white coat (White zone - GMP)
+Облекување на бел мантил (Бела зона -GMP)
+Annex 09 Put on gloves
+Ставање на ракавици
+Annex 10 Check correct gowning – internal
+Проверка на кодекс на облекување на вработени
+Annex 11 Put on overshoes
+Ставање на каљачи
+Annex 12 Single use overall
+Користење на облека за еднократна употреба
+Annex 13 Single use disposable coat
+Користење на мантил за еднократна употреба
+Annex 14 Correct gowning external
+Проверка на кодексот на облекување за посетители
+Annex 15 Change shoes - Green zone (GACP)
+Зелена зона - GACP: Промена на чевли
+Annex 16 Protective coat/vest - Green zone (GACP)
+Зелена зона - GACP: Заштитен мантил / Елек
+Annex 17 PPE - Plant Protection
+ЛЗО при хемиски третман на растенија
+Annex 18 Hygienist gowning
+Кодекс на облекување - Хигиеничар
+Annex 19 Gowning Technician/Warehouse
+Кодекс на облекување - Технички Сектор и Магацински
+персонал
+Annex 20 Material Transfer into White Zone (GMP)
+Трансфер на материјал во Бела зона - GMP
+SOP Daily facility evaluation
+Annex 01 Cultivation Facility Evaluation form
+СОП Дневна евалуација на
+Образец за проценка на простории за одгледување
+простории
+Annex 02 Form for evaluation of cleaning by premises zone D
+(ревизија, избриши СОП и
+Образец за евалуација на чистење по простории во
+премести Анекси соодветно)
+Зона Д
+SOP Pest control procedures Annex 01
+СОП Контрола на штетници (додади Анекси)
+SOP Facility entry protocol
+/
+СОП за влез SAN-02.03.00
+SOP Microbiological
+Annex 01 Microbiological sampling Request form
+monitoring
+Барање за микробиолошко земање мостри
+
+Page 6 of 15
+
+SAN –
+02.08.00
+
+SAN –
+02.09.00
+
+V.01
+
+SAN –
+02.10.00
+
+V.01
+
+СОП Микробиолошки
+мониторинг
+SOP Employee hygiene
+procedure
+СОП Хигиена на
+вработените
+SAN-02.03.00
+SOP Employee medical
+examinations procedure
+СОП Здравствени прегледи
+на вработените
+SOP Ozonation and Water
+Sampling
+СОП Озонирање и
+узорцирање на вода
+
+Annex 02 Microbiological monitoring Logbook
+Дневник за микробиолошки мониторинг
+/
+
+/
+Annex 01 Maintenance logbook - Water system
+Дневник за одржување – Систем за вода
+Annex 02 Label – Ozonizing in progress
+Етикета – Озонирање
+
+3. CULTIVATION and PRODUCTION / ОДГЛЕДУВАЊЕ И ПРОИЗВОДСТВО
+PRO 03.01.00
+PRO 03.02.00
+
+V.01
+
+PRO 03.02.01
+
+V.02
+
+PRO 03.03.01
+
+V.01
+
+PRO 03.03.02
+PRO 03.03.03
+
+V.01
+
+PRO 03.04.00
+
+V.02
+
+V.01
+
+V.01
+
+SOP Mother Plants
+СОП Матични растенија
+SOP Propagation
+СОП Размножување
+
+/
+Annex 01 Propagation log book
+Дневник за размножување на клонови
+Annex 02 Propagation log book from seeds
+Дневник за размножување од семе
+
+SOP Seeding and batch
+numbering
+/
+СОП Нумерирање на
+реколта и серија
+SOP Vegetative Growth Stage Annex 01 Transplant log
+СОП Вегетација
+Дневник за расадување
+SOP Flowering Growth Stage
+СОП Расцветување
+SOP Harvesting Cannabis
+СОП Берба
+
+SOP Processing/Production
+GMP Operations
+СОП Обработка
+
+Annex 01 Fertilization log during flowering
+Дневник за фертиригација за време на расцветување
+Annex 01 Harvest Cannabis Log book
+Дневник за берба
+Annex 02 Cannabis waste from harvest log book
+Дневник за отпад од канабис при берба
+Annex 03 Transfer of cannabis material form
+Образец за трансфер на материјал од канабис
+Annex 01 Trimmed cannabis log book
+Дневник за тримиран канабис
+Annex 02 Diary for summary waste from the production process
+Дневник за сумаран отпад од производство
+Annex 03 Transfer of cannabis material form
+Образец за трансфер на канабис предавање/прием
+Annex 04/01 Drying cannabis log book
+Дневник за сушење на канабис
+Annex 04-02 Drying cannabis log book – parameters of the dryer
+Дневник за сушење на канабис – параметри на
+сушара
+Annex 05 Packaging cannabis log book
+Дневник за пакување на канабис
+Annex 06 Stored cannabis product
+Складиран производ од канабис
+
+Page 7 of 15
+
+PRO 03.05.00
+
+V.01
+
+PRO 03.05.01
+
+V.01
+
+PRO 03.06.00
+
+V.02
+
+PRO –
+03.07.00
+
+V.01
+
+SOP Documentation for
+management of cannabis waste
+СОП Управување со отпад од
+канабис
+SOP Cannabis waste
+management disposal
+СОП Постапување со отпад
+од канабис
+SOP Wholesale and transport
+СОП Големопродажба,
+и транспорт
+
+SOP for the cultivation and
+production processes
+СОП за текот на процесите
+на одгледување и
+производство
+SOP GMP Production
+СОП GMP Производство
+SOP Еxperimental production
+СОП Експериментално
+производство
+SOP Packaging
+СОП Пакување
+
+Annex 01 Cannabis waste destruction form
+Образец за уништување на отпадот од канабис
+Annex 02 Sign of the material for destruction
+Означување на материјалот за уништување
+Annex 01 Cannabis waste log book
+Дневник за уништување на отпад од канабис
+Annex 02 Records of cannabis waste
+Евиденција на отпад од канабис
+Annex 01 Transport manifest for medical cannabis
+Транспортен манифест за медицински канабис
+Annex 02 Form for shipment records
+Образец за евиденција на пратка
+Annex 03 Delivery note
+Испратница
+
+/
+
+PRO –
+03.08.00
+PRO –
+03.09.00
+
+V.01
+
+PRO –
+03.10.00
+
+V.00
+
+PRO –
+03.11.00
+
+V.00
+
+SOP Identification and status
+labelling system of equipment
+and premises
+СОП за идентификација и
+статусирање на опрема и
+простории
+
+PRO –
+03.12.00
+
+V.00
+
+PRO - 03.
+G.01
+
+V.02
+
+PRO - 03.
+G.02
+
+V.01
+
+PRO - 03.
+G.03
+
+V.03
+
+SOP Identification and status
+labelling od materials
+Да се додадат Анексите
+СОП за идентификација и
+статусирање на материјали
+SOP Cultivation - General
+Annex 01 Organizational chart of the GACP area
+СОП Одгледување генерално
+Организациска шема на Сектор Одгледување/
+GACP
+SOP Cultivation Methodology
+Annex 01 Water quality results log book
+СОП Методологија
+Дневник за резултати на квалитет на водата
+Annex 02 Facility Ventilation Protection log book
+Дневник на заштита на вентилација филтри/екрани
+SOP Integrated Pest
+Annex 01 Pest and Disease Identification Log
+Management - IPM
+Дневник за идентификација на штетници и
+
+V.01
+
+/
+/
+/
+Annex 01 Label “In process”
+Етикета за означување “Во процес”
+Annex 02 Label “Unclean”
+Етикета за означување “Нечисто”
+Annex 03 Label “Cleaned”
+Етикета за означување “Исчистено”
+Annex 04 Label “Disinfected”
+Етикета за означување “Дезинфицирано”
+Annex 05 Label “In Defect”
+Етикета за означување “Во дефект”
+Annex 06 Label “Not in use”
+Етикета за означување “Не е во уотреба”
+
+Page 8 of 15
+
+PRO - 03.
+G.04
+
+V.03
+
+PRO - 03.
+G.05
+
+PRO – 03.
+G.06
+
+V.02
+
+SEC – 04.
+G.01
+
+V.01
+
+SEC –
+04.01.00
+
+V.01
+
+SEC –
+04.02.00
+
+V.01
+
+SEC –
+04.03.00
+
+V.01
+
+SEC 04.04.00
+
+V.01
+
+СОП Интегрирана заштита од болести
+штетници и болести
+Annex 02 Diary for application of integrated pest protection
+да се средат Анексите (ENG)
+measures (IPM)
+Дневник за примена на интегрирани мерки за
+заштита од штетници (ИПМ)
+Annex 03 Rodent trap Monitoring
+Мониторинг на стапици за глодари
+Annex 04 Pest Log book
+Дневник за евиденција на штетници
+Annex 05 Plant protection plan during cultivation period
+План за заштита на растенијата за време на
+периодот на одгледување
+Annex 06 IPM Preventive Agents
+Превентивни агенси за третман и заштита од
+штетници
+Annex 07 Pesticide application log book
+Дневник за аплицирање на пестициди
+SOP Growing Media and
+Annex 01 Fertilization log book
+Nutrients, Supplements and
+Дневник за фертиригација
+Growth Additives
+Annex 02 Recipes log book
+СОП Користење на супстрати
+Дневник на рецептури
+и нутриенти, додатоци за
+Аnnex 03 Log book for re-use soil/supstrate
+раст
+Дневник за реискористување на почва/супстрат
+(V.02; V.03 потребен превод
+Annex 04 Log book of types of fertilizers in tanks and doses
+на ENG)
+Дневник за видови на фертилизатори во танкови и
+дози
+Annex 05 Log book for consumed fertilizers
+Дневник за потрошок на фертилизатори
+SOP HVAC System (Heating,
+Ventilating, and Air
+Conditioning)
+СОП Систем за управување
+со климатизацијата (HVAC)
+(not in use; EQU - 07.10.00,
+V.01)
+SOP Chemical protection
+СОП Хемиска заштита
+
+Annex 01 HVAC System Log book
+Дневник за HVAC системот
+Annex 02 HVAC System Main Chamber
+Главна комора на системот HVAC
+Annex 03 Graphical design of HVAC system
+Графички дизајн на HVAC системот
+Annex 01 Pesticide Control measures
+Мерки за контрола на штетници
+
+4.SECURITY / БЕЗБЕДНОСТ
+SOP Security measures –
+general
+СОП Безбедносни мерки –
+општо
+SOP Emergency actions
+СОП Активности при итни
+случаеви
+SOP Visitors
+СОП Посетители
+
+SOP Limited access areas
+СОП Простор со ограничен
+пристап
+SOP Licenses
+СОП Безбедносен систем
+
+/
+
+/
+Annex 01 Work order
+Налог за влез во Хапа Фарм - Спанчево
+Annex 02 Visitors log book
+Дневник за посетители
+/
+Annex 01 Licenses log book
+Дневник на лиценци
+
+Page 9 of 15
+
+Лиценци
+
+5.RECORDS / ЗАПИСИ
+REC –
+05.G.00
+
+V.00
+
+REC – 05.
+G.01
+
+V.02
+
+REC –
+05.01.00
+
+V.03
+
+SOP Good documentation
+practice
+СОП Добра Документациска
+Практика
+SOP Records
+СОП Записи
+
+SOP Document Management
+СОП Управување со
+документи
+
+REC –
+05.01.01
+
+V.01
+
+SOP Procurement procedure
+СОП за набавки
+
+REC –
+05.02.00
+
+V.01
+
+REC 05.03.00
+
+V.01
+
+SOP Plant tagging
+СОП Означување на
+растенија
+SOP Inventory reconciliation
+procedure
+СОП Начин на усогласување
+на залихи
+
+REC 05.04.00
+
+V.01
+
+REC 05.05.00
+
+V.00
+
+HR – 06.01.00
+
+V.01
+
+SOP for keeping records - Log
+Book
+СОП за водење на
+евиденција - Log Book
+SOP for summary report after
+completed harvest/seeding
+СОП за сумарен извештај по
+завршена реколта
+(превод на ENG на СОП и на
+Анексот)
+
+Annex 01 List of active signatures
+Листа со активни потписи
+
+Annex 01 Retention Form
+Образец за барање на зачувување на документи
+Annex 02 Sign in-Sign out Log book
+Дневник за пријава-одјава
+Annex 03 Transmittal Request Form
+Образец за барање за предавање на записи
+Annex 01 Master Spreadsheet/SOPs List
+Листа на документи/СОПови
+Annex 02 List of available Documents in safe storage
+Листа на документи складирани во сеф
+Annex 03 Document retrieval from safe storage
+Листа на превземени документи од сеф
+Annex 04 Distibution list
+Дистрибутивна листа
+Annex 01 Order form
+Образец за нарачка
+Annex 02 Urgent order form
+Образец за итна нарачка
+Annex 03 Form for internal transfer of documents and
+goods in Hapa Farm Skopje ⇄ Spancevo
+Образец за интерен трансфер на документи и
+роба во Хапа Фарм Скопје ⇄ Спанчево
+/
+Annex 01 Cannabis Products Inventory log book
+Дневник за записи на материјал/производи од
+канабис
+Annex 02 Equipment Inventory Log book
+Дневник на инвентар/опрема
+Annex 03 Product-equipment Loss log book
+Дневник за записи при загуба на производи
+Annex 01 Log book
+Дневник за работа
+Annex 01 Summary report after completion of the
+harvest/seeding
+Сумарен извештај по завршување на реколта
+
+6. HUMAN RESOURCES / ЧОВЕЧКИ РЕСУРСИ
+
+HR – 06.02.00
+
+V.01
+
+SOP Accident/Injury report
+СОП Извештај за несреќен
+случај/повреда
+SOP Leaving /Dismissed
+
+/
+
+Page 10 of 15
+
+HR – 06.03.00
+
+V.02
+
+HR – 06.03 P
+
+HR - 06.04.00
+
+personal
+СОП Престанок на работен
+однос
+SOP Training
+СОП Обука
+
+SOP Training procedure
+СОП за обуки
+(HR-06.03.00)
+
+V.02
+
+SOP Organization and
+responsibility of the QU( Quality
+unit)
+СОП Организација и
+одговорност на QU (Единица
+
+/
+Annex 01 Training matrix
+Матрица за обука
+Annex 02 Training Log
+Дневник за обука
+Annex 03 Annually planned and completed training
+Годишно планирана и завршена обука
+Annex 04 Training record
+Запис за обука
+Annex 05 Training evaluation questionnaire
+Прашалник за евалуација на обуката
+Annex 06 Practical training assessment
+Евалуација на Практична проценка на обуката
+Annex 07 Approval of Employee for Work
+Одобрение на вработен за работа
+Annex 01 Central Plan for internal training
+Централен план за интерна обука
+Annex 02 GMP Pass Cover sheet
+Дневник за GMP обука
+Annex 03 Training matrix
+Матрица за обука
+Annex 04 Annually planned and completed training
+Годишно планирана и завршна обука
+Annex 05 Training file
+Досие за обуки
+Annex 06 Operator training checklist
+Чеклиста за проверка на оператори
+Annex 07 Operator training records
+Евиденција за оперативна обука
+Annex 08 Statement of readiness to carry out the process
+Изјава за подготвеност за извршување на процес
+Annex 09 Training and assessing training efficiency
+Обука и проценка на ефикасноста на обуката
+Annex 10 Тraining plan and re-training of trainers
+План за обука и ре-обука на обучубачи
+Annex 11 Questionnaire
+Прашалник
+Annex 12 List of persons who have been assigned material for
+internal training
+Список на лица на кои им е доделен материјал за
+интерна обука
+Annex 13 List of persons present for internal training
+Список на присутни лица на интерна обука
+Annex 14 List of persons present for testing
+Список на лица присутни на тестирање
+Annex 15 Distribution list of documents
+Дистрибутивна листа на документи
+/
+
+Page 11 of 15
+
+за квалитет)
+
+7. EQUIPMENT / ОПРЕМА
+EQU –
+07.01.00
+
+V.01
+
+SOP for operating, calibration,
+and maintenance of the 001.
+Agrimix L system
+СОП за работа, калибрација
+и одржување на системот
+001. Agrimix L систем
+
+EQU –
+07.02.00
+
+V.01
+
+SOP for operating, calibration,
+and maintenance of the 002.
+Reverse Osmosis
+СОП за работа, калибрација
+и одржување на системот
+002. Реверзна Осмоза Систем за вода
+SOP for operating, calibration,
+and maintenance of the 003.
+CO2 system
+СОП за работа, калибрација
+и одржување на системот
+003. CO2 систем
+SOP for operating, calibration,
+and maintenance of the 004.
+Drying machine
+СОП за работа, калибрација
+и одржување на системот
+004. Машина за сушењеCDS24
+SOP for operating, calibration,
+and maintenance of the 005.
+Lightning protection system
+ESEs
+СОП за работа, калибрација
+и одржување на системот
+005. Громобранска мрежаESEs
+SOP for operating, calibration,
+and maintenance of the 006.
+Power generator Green
+power
+СОП за работа, калибрација
+и одржување на системот
+006. Генератор за
+електрична енергија - Green
+power
+SOP for operating, calibration,
+and maintenance of the 007.
+Trimming machine - MT
+Tumbler
+СОП за работа, калибрација
+и одржување на системот
+007. Машина за тримирање
+MT Tumbler
+SOP for operating, calibration,
+and maintenance of the 008.
+Greenhouse illumination
+
+EQU –
+07.03.00
+
+EQU –
+07.04.00
+
+EQU –
+07.05.00
+
+EQU –
+07.06.00
+
+EQU –
+07.07.00
+
+EQU –
+07.08.00
+
+V.01
+
+V.01
+
+V.01
+
+V.01
+
+V.01
+
+V.01
+
+Annex 01 Instructions for use
+Упатство за употреба
+Annex 02 Log book for…….
+Дневник за .......
+Annex 03 Log book for…….
+Дневник за .......
+Annex 01 Instructions for use
+Упатство за употреба
+Annex 02 Log book for…….
+Дневник за .......
+Annex 03 Log book for…….
+Дневник за .......
+Annex 01
+Annex 02
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Page 12 of 15
+
+EQU –
+07.09.00
+
+EQU –
+07.10.00
+
+EQU –
+07.11.00
+
+EQU –
+07.12.00
+
+EQU –
+07.13.00
+
+V.01
+
+V.01
+
+V.01
+
+V.01
+
+V.01
+
+EQU –
+07.14.00
+
+V.01
+
+EQU –
+07.15.00
+
+V.01
+
+/Flora LED
+СОП за работа, калибрација
+и одржување на системот
+008. Осветлување на
+оранжерии/Flora LED
+SOP for operating, calibration,
+and maintenance of the 009.
+HVAC greenhouse GACP
+СОП за работа, калибрација
+и одржување на системот
+009. HVAC систем за
+оранжерии GACP
+SOP for operating, calibration,
+and maintenance of the 010.
+HVAC GMP - HEPA system
+СОП за работа, калибрација
+и одржување на системот
+010. HVAC GMP HEPA
+систем
+SOP for operating, calibration,
+and maintenance of the 011.
+Security system
+СОП за работа, калибрација
+и одржување на системот
+011. Систем за
+обезбедување
+SOP for operating, calibration,
+and maintenance of the 012
+Packaging of final product
+System for delivering inert
+gas - (N2)
+СОП за работа, калибрација
+и одржување на системот
+012 Автоматска машина за
+пакување + Систем за
+достава на инертен гас (N2)
+SOP for operating, calibration,
+and maintenance of the 012
+Packaging of final product
+System for delivering inert
+gas - (N2)
+СОП за работа, калибрација
+и одржување на системот
+012 Автоматска машина за
+пакување + Систем за
+достава на инертен гас (N2)
+SOP for operating, calibration,
+and maintenance of the 014
+Soldering machine
+СОП за работа, калибрација
+и одржување на системот 014
+Рачна машина за пакување
+SOP for operating, calibration,
+and maintenance of the 015.
+Bucking machine - MB
+Bucker 200
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Page 13 of 15
+
+EQU –
+07.16.00
+
+V.01
+
+EQU –
+07.17.00
+
+V.00
+
+EQU –
+07.18.00
+
+V.00
+
+EQU –
+07.26.00
+
+V.00
+
+EQU –
+07.27.00
+
+V.00
+
+EQU –
+07.35.00
+
+V.00
+
+EQU –
+07.36.00
+
+EQU –
+07.37.00
+
+V.00
+
+V.00
+
+СОП за работа, калибрација
+и одржување на системот
+015. Машина за бакирање
+при берба - MB Bucker 200
+SOP for operating, calibration,
+and maintenance of the 016.
+System for delivering inert
+gas (N2)
+СОП за работа, калибрација
+и одржување на системот
+016. Систем за достава на
+инертен гас (N2)
+SOP for operating, calibration,
+and maintenance of the 017.
+Balance DENSI PC
+СОП за работа, калибрација
+и одржување на системот
+017. Вага DENSI PC
+SOP for operating, calibration,
+and maintenance of the 018.
+Balance DENSI SI
+СОП за работа, калибрација
+и одржување на 018. Вага
+DENSI SI
+SOP for operating, calibration,
+and maintenance of the 026
+Humidity Metter KERN
+СОП за работа, калибрација
+и одржување на 026
+Влагомер KERN
+SOP for operating, calibration,
+and maintenance of the 027
+Data logger Testo
+СОП за работа, калибрација
+и одржување на 027 Дата
+логер за температура и
+релативна влажност Testo
+SOP for operating, calibration,
+and maintenance of the 035
+Heating and cooling Unit 1
+Output warehouse/ Hitachi
+СОП за работа, калибрација
+и одржување на 035 Heating
+and cooling Unit 1 Output
+warehouse/ Hitachi
+SOP for operating, calibration,
+and maintenance of the 036
+Heating and cooling Unit 2
+Output warehouse/ York
+СОП за работа, калибрација
+и одржување на 036 Heating
+and cooling Unit 2 Output
+warehouse/ York
+SOP for operating, calibration,
+and maintenance of the 037
+Humidifier / Rowenta
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+Page 14 of 15
+
+EQU –
+07.38.00
+
+V.00
+
+PRE –
+08.01.00
+
+V.00
+
+PRE –
+08.02.00
+
+V.00
+
+PRE –
+08.03.00
+
+V.00
+
+СОП за работа, калибрација
+и одржување на 037
+Humidifier / Rowenta
+SOP for operating, calibration,
+and maintenance of the 038
+Dehumidifier// Carier
+СОП за работа, калибрација
+и одржување на 038
+Dehumidifier// Carier
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+8. PREMISES/ ПРОСТОРИИ
+SOP for operating and
+maintenance of the Rooms
+No.01-09
+СОП за работа и одржување
+на Простории бр. 01 до бр.
+09
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+SOP for operating and
+maintenance of the Room
+No.10 Output warehouse
+СОП за работа и одржување
+на Просторија бр. 10
+Излезен магацин
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+SOP for operating and
+maintenance of the.................
+СОП за работа и одржување
+на ................
+
+Annex 01 ……..
+Annex 02 ……..
+Annex 03 ……..
+
+MAIN DOCUMENTS/ ГЛАВНИ ДОКУМЕНТИ
+QAS-01.00. SMF
+
+V.07
+
+Site Mater File
+Главен документ за производство во
+објектот
+Validation Mater Plan
+Главен План за Валидација
+
+QAS-02.00. VMP
+
+V.04
+
+QAS-04.00. JD
+
+V.04
+
+Job Description
+Опис на работни места
+
+QAS-05.00. QMS
+
+V.02
+
+QAS-06.00. HMP
+
+V.00
+
+Quality Management System
+Управување со квалитет
+Hygiene Master Plan
+Главен пран за хигиена
+
+TECHNOLOGICAL DOSSIER/ ТЕХНОЛОШКИ ДОСИЕА
+TD.THC.CF01
+TD.THC.CF02
+
+Technological dossier for production
+Технолошко досие за производство
+Technological dossier for packaging
+Технолошко досие за пакување
+
+Page 15 of 15
+
+

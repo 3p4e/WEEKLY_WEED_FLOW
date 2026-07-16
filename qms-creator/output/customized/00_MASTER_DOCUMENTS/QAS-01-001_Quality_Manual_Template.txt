@@ -1,0 +1,568 @@
+================================================================================
+QUALITY MANUAL
+Document ID: QA_00.01_v1
+Version: 1.0
+Effective Date: 2026-01-22
+Next Review Date: [DATE + 12 months]
+================================================================================
+
+PURELY PLANT GMBH
+Medical Cannabis Production Facility
+123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia
+Skopje, North Macedonia
+
+================================================================================
+DOCUMENT CONTROL INFORMATION
+================================================================================
+
+Document Title:            Quality Manual
+Document ID:               QA_00.01_v1
+Document Type:             Master Document / Governance
+Version Number:            V.1.0
+Effective Date:            2026-02-01
+Last Revision Date:        2026-01-13
+Next Scheduled Review:     2027-02-01
+
+Originator/Author:         Ana Dimitrova
+                          Title: Quality Assurance Manager
+                          Signature: ________________ Date: _______
+
+Quality Assurance Review:   Ana Dimitrova
+                           Title: Quality Assurance Manager
+                           Signature: ________________ Date: _______
+
+Final Approval:            Stefan Petrov
+                          Title: Quality Assurance Manager
+                          Signature: ________________ Date: _______
+
+Distribution:              CONTROLLED COPY #___ of ___
+                          Location: [SPECIFIC LOCATION - To be specified in procedure]
+
+Applicable to:            Purely Plant Medical Cannabis Production Facility - All Operations
+Classification:           CONFIDENTIAL - INTERNAL USE ONLY
+
+================================================================================
+AMENDMENT HISTORY
+================================================================================
+
+Version  | Date       | Description of Change  | Approved By        | Effective Date
+---------|------------|------------------------|--------------------|---------------
+1.0      | 2026-01-22     | Initial Release        | Stefan Petrov     | 2026-01-22
+         |            |                        |                    |
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. INTRODUCTION
+2. COMMITMENT TO QUALITY
+3. FACILITY OVERVIEW
+4. MANAGEMENT RESPONSIBILITY
+5. QUALITY POLICY
+6. ORGANIZATIONAL STRUCTURE
+7. ROLES & RESPONSIBILITIES
+8. QUALITY MANAGEMENT SYSTEM SCOPE
+9. REGULATORY COMPLIANCE
+10. DOCUMENTATION & RECORDS
+11. COMMUNICATION & MANAGEMENT REVIEW
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+This Quality Manual (QM) describes the Quality Management System (QMS) 
+implemented at Purely Plant Medical Cannabis Production Facility, a medical cannabis production facility located 
+in 123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia, North Macedonia.
+
+This manual serves as the primary governance document establishing:
+- Quality policy and objectives
+- Organizational structure and responsibilities
+- Commitment to regulatory compliance and GMP standards
+- Documentation and record management procedures
+- Communication and escalation pathways
+
+This Quality Manual is mandatory reading for all personnel with access to 
+quality-related processes and must be reviewed annually or when significant 
+changes occur in the organization or regulatory requirements.
+
+================================================================================
+2. COMMITMENT TO QUALITY
+================================================================================
+
+Purely Plant Medical Cannabis Production Facility is committed to:
+
+✓ Producing high-quality, safe medical cannabis products that meet all 
+  EU GMP standards and North Macedonian regulatory requirements
+
+✓ Maintaining a robust Quality Management System that ensures product quality, 
+  safety, and regulatory compliance
+
+✓ Providing transparent, traceable documentation from seed/propagation through 
+  final product delivery
+
+✓ Continuous improvement through systematic evaluation of product quality, 
+  processes, and regulatory alignment
+
+✓ Transparent communication with regulatory authorities and stakeholders
+
+✓ Investing in personnel training, competency development, and safety culture
+
+================================================================================
+3. FACILITY OVERVIEW
+================================================================================
+
+Facility Name:              Purely Plant Medical Cannabis Production Facility
+Legal Entity:               Purely Plant GmbH
+Registration Number:        MK-REG-2024-001
+Licensed Activity:          Medical Cannabis Production
+
+Facility Location:
+  Address:                  123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia
+  City/Region:              Skopje / Skopje Region, North Macedonia
+  Coordinates:              41.9973, 21.4280
+
+Regulatory Licenses:
+  License Type:             Medical Cannabis Production
+  License Number:           MK-MED-CANNABIS-2024-001
+  Issue Date:               2024-01-15
+  Expiration Date:          2027-01-15
+  Issuing Authority:        Ministry of Health of North Macedonia
+
+Facility Scope:
+  ✓ Cultivation of cannabis plants (mother plants, cloning, vegetative growth)
+  ✓ Flowering and harvesting operations
+  ✓ Post-harvest processing (drying, trimming, sorting)
+  ✓ Packaging and labeling
+  ✓ Quality control and testing
+  ✓ Storage and distribution of medical cannabis products
+  ✓ Post-harvest quality testing (in-house moisture and visual inspection)
+
+Key Departments:
+  • Cultivation Department (GACP - Good Agricultural & Collection Practice)
+  • Production Department (GMP - Good Manufacturing Practice)
+  • Quality Assurance Department
+  • Sanitation & Hygiene Department
+  • Security Department
+  • Human Resources Department
+  • Administrative/Records Department
+
+================================================================================
+4. MANAGEMENT RESPONSIBILITY
+================================================================================
+
+Management is ultimately responsible for:
+
+✓ Establishing, implementing, and maintaining the Quality Management System
+✓ Ensuring adequate resources (personnel, equipment, facilities, training)
+✓ Establishing quality objectives and performance metrics
+✓ Conducting management reviews of QMS effectiveness
+✓ Ensuring regulatory compliance and timely corrective actions
+✓ Fostering a quality-conscious culture throughout the organization
+✓ Authorizing necessary changes and approvals
+✓ Communicating with regulatory authorities
+
+Facility Management:
+
+Facility Manager:           Stefan Petrov
+                          Title: Quality Assurance Manager
+                          Contact: +389 70 123 456 / blagoj.nikolov@purelyplant.mk
+
+Quality Manager:            Ana Dimitrova
+                           Title: Quality Assurance Manager
+                           Contact: +389 70 123 456 / blagoj.nikolov@purelyplant.mk
+
+Production Manager:         Marko Georgiev
+                           Title: Quality Assurance Manager
+                           Contact: +389 70 123 456 / blagoj.nikolov@purelyplant.mk
+
+================================================================================
+5. QUALITY POLICY
+================================================================================
+
+QUALITY POLICY STATEMENT
+
+Purely Plant Medical Cannabis Production Facility is committed to producing medical cannabis products of the 
+highest quality, safety, and consistency while maintaining full compliance 
+with EU GMP standards (Annex 7 - Herbal Preparations) and all applicable 
+North Macedonian regulations.
+
+Our quality policy includes:
+
+→ SAFETY FIRST
+  We prioritize product safety above all other considerations. Every product 
+  released meets rigorous testing standards for microbial contamination, 
+  pesticide residues, heavy metals, and cannabinoid potency.
+
+→ REGULATORY COMPLIANCE
+  We maintain full compliance with:
+  • EU GMP Annex 7 (Herbal Preparations)
+  • North Macedonia Medical Cannabis Regulations
+  • International standards for herbal products (Ph. Eur., USP)
+  • All licensing requirements and conditions
+
+→ CONTINUOUS IMPROVEMENT
+  We systematically evaluate and improve our processes through:
+  • Regular audits and self-inspections
+  • Root cause analysis of deviations
+  • Implementation of corrective and preventive actions
+  • Evaluation of customer feedback and complaints
+  • Training and competency development
+
+→ TRANSPARENCY & TRACEABILITY
+  We maintain complete documentation traceability from propagation through 
+  final product delivery. All records are maintained in a secure, accessible 
+  format suitable for both digital and paper-based systems.
+
+→ QUALITY CULTURE
+  We foster a quality-conscious culture where every team member understands 
+  their role in maintaining product quality and regulatory compliance.
+
+Quality Objectives (Annual):
+
+Zero critical deviations per quarter
+Target: Potency variance: ±10% of label claim by 2026-01-22
+Responsible: Ana Dimitrova (QA Manager)
+
+100% batch release compliance with specifications
+Target: Potency variance: ±10% of label claim by 2026-01-22
+Responsible: Ana Dimitrova (QA Manager)
+
+95%+ personnel training completion rate
+Target: Potency variance: ±10% of label claim by 2026-01-22
+Responsible: Ana Dimitrova (QA Manager)
+
+================================================================================
+6. ORGANIZATIONAL STRUCTURE
+================================================================================
+
+[INSERT ORGANIZATIONAL CHART HERE]
+
+Primary Reporting Lines:
+• All Department Managers → Facility Manager
+• Quality Manager → Facility Manager
+• Facility Manager → [BOARD/EXECUTIVE]
+• All Personnel → Direct Department Manager
+
+================================================================================
+7. ROLES & RESPONSIBILITIES
+================================================================================
+
+KEY POSITIONS AND RESPONSIBILITIES:
+
+Facility Manager
+- Overall responsibility for facility operations and QMS effectiveness
+- Ensures adequate resources and personnel
+- Approves all quality-related decisions above specified thresholds
+- Communicates with regulatory authorities
+- Conducts quarterly management reviews
+
+Quality Assurance Manager
+- Oversees development and maintenance of QMS procedures
+- Responsible for internal audits and self-inspections
+- Manages deviation, CAPA, and change control processes
+- Reviews batch releases and product quality data
+- Ensures training compliance and records maintenance
+
+Production Manager
+- Oversees all cultivation and production activities
+- Ensures compliance with SOPs and work instructions
+- Conducts daily facility evaluations
+- Manages batch documentation and production records
+- Implements corrective actions for production deviations
+
+Sanitation & Hygiene Manager
+- Develops and implements cleaning and sanitation procedures
+- Conducts environmental monitoring (microbiological sampling)
+- Manages pest control and facility cleanliness
+- Maintains hygiene training records
+
+Security Manager
+- Oversees access control and visitor management
+- Maintains security systems and incident logs
+- Ensures chain of custody documentation
+- Manages regulatory compliance reporting
+
+HR Manager
+- Manages recruitment, training, and personnel records
+- Maintains competency assessments and training matrices
+- Conducts health and safety reviews
+- Manages terminations and personnel files
+
+Document/Records Manager
+- Maintains master document list and distribution
+- Manages records retention and archival
+- Conducts document control reviews
+- Ensures data integrity and record security
+
+Equipment Manager
+- Manages equipment qualification and maintenance
+- Maintains calibration schedules and logs
+- Oversees equipment change control and replacement
+- Ensures spare parts inventory
+
+All Personnel
+- Understand and follow applicable SOPs and work instructions
+- Report deviations, concerns, and improvement suggestions
+- Participate in required training
+- Maintain confidentiality and data security
+- Support facility quality objectives
+
+Detailed Roles & Responsibilities Matrix: See QAS-01-004
+
+================================================================================
+8. QUALITY MANAGEMENT SYSTEM SCOPE
+================================================================================
+
+SCOPE OF THE QMS:
+
+This Quality Management System covers all activities related to the production,
+testing, labeling, packaging, storage, and distribution of medical cannabis 
+products at Purely Plant Medical Cannabis Production Facility.
+
+PROCESSES INCLUDED:
+
+Cultivation (GACP):
+- Mother plant management
+- Propagation (cloning and seeding)
+- Vegetative growth management
+- Flowering and harvesting
+- Quality control during growing
+
+Post-Harvest Processing (GMP):
+- Drying and curing
+- Trimming and sorting
+- Packaging preparation
+- Quality testing
+
+Quality Assurance:
+- Sampling and testing
+- Batch documentation
+- Change control
+- Deviation management
+- Corrective actions
+- Internal audits
+
+Support Functions:
+- Personnel management and training
+- Equipment maintenance and qualification
+- Records management
+- Document control
+- Sanitation and hygiene
+- Security and access control
+
+EXCLUSIONS:
+
+The following are excluded from the scope:
+- [SPECIFY ANY EXCLUDED OPERATIONS]
+
+================================================================================
+9. REGULATORY COMPLIANCE
+================================================================================
+
+REGULATORY FRAMEWORK:
+
+Purely Plant Medical Cannabis Production Facility operates under the following regulatory requirements:
+
+EU GMP Standards:
+✓ Annex 7: Guidelines for Good Manufacturing Practice for Herbal Products
+✓ Annex 15: Guidance for qualification and validation of equipment
+✓ General Principles: Premises, Facilities, and Equipment
+
+North Macedonia Requirements:
+✓ Medical Cannabis Production License (License #: [XXX])
+✓ Ministry of Health Regulations
+✓ Ministry of Interior Security Requirements
+✓ Environmental & Safety Regulations
+
+International Standards:
+✓ European Pharmacopoeia (Ph. Eur.) standards for testing
+✓ Good Agricultural Practice (GACP) principles
+
+REGULATORY CONTACT INFORMATION:
+
+Ministry of Health
+Contact: Dr. Ivana Petrov
+Department: Quality Assurance
+Phone: +389 70 123 456
+Email: blagoj.nikolov@purelyplant.mk
+Address: 123 Cannabis Boulevard, Skopje, 1000, Skopje Region, North Macedonia
+
+Ministry of Interior
+Contact: Dr. Ivana Petrov
+Phone: +389 70 123 456
+Email: blagoj.nikolov@purelyplant.mk
+
+Local Health Authority
+Contact: Dr. Ivana Petrov
+Phone: +389 70 123 456
+
+================================================================================
+10. DOCUMENTATION & RECORDS
+================================================================================
+
+DOCUMENTATION HIERARCHY:
+
+Level 1: QUALITY MANUAL (This Document)
+→ Top-level policy document describing the QMS
+
+Level 2: SYSTEM SOPs (Procedures)
+→ Comprehensive procedures for major system processes (Quality, Sanitation, etc.)
+
+Level 3: OPERATIONAL SOPs (Work Instructions)
+→ Detailed, step-by-step procedures for specific activities
+
+Level 4: FORMS & TEMPLATES
+→ Templates for batch records, logs, checklists, certificates, reports
+
+Level 5: RECORDS (Completed Documents)
+→ Completed forms, logs, test results, approvals, signatures
+
+DOCUMENT CODING SYSTEM:
+
+New standardized coding:
+  Master Documents-Documentation & Records-QMS Document-V.X.X
+
+Categories:
+  QAS (Quality Assurance)    HR  (Human Resources)
+  SAN (Sanitation)           EQU (Equipment Management)
+  PRO (Production)           PRE (Premises)
+  SEC (Security)
+  REC (Records Management)
+
+Example: QA_00.01_v1-V.1.0 = Quality Assurance / Quality Management / Document 001 / Version 1.0
+
+MASTER DOCUMENT LIST:
+
+See QMS-DOCUMENT-REGISTRY.txt for complete list of all documents
+
+RECORDS MANAGEMENT:
+
+All records are maintained according to SOP-REC-02-001 (Records Management)
+with the following requirements:
+
+Retention Period:        [RETENTION_PERIODS BY RECORD TYPE]
+Storage Location:        Primary & Daily automated backup at 23:00 CET to off-site cloud storage + local backup server
+Archive Location:        Dedicated Archive Room (Climate Controlled)
+Retrieval Process:       See REC-02-003 (Record Retrieval Form)
+Destruction Process:     Cannabis waste is rendered unrecognizable and unusable by:
+1. Mixing with non-hazardous waste (coffee grounds, soil) at 50/50 ratio
+2. Placement in locked waste containers
+3. Disposal via licensed waste management contractor
+4. Documented with destruction records (FM-SEC-003)
+5. Witnessed by Security Manager and documented
+
+Data Security:           - 24/7 CCTV surveillance with 90-day retention
+- Access control system with biometric authentication
+- Secure vault with dual-lock system
+- Perimeter fencing and motion sensors
+- On-site security personnel
+- Visitor log and escort requirements
+
+
+================================================================================
+11. COMMUNICATION & MANAGEMENT REVIEW
+================================================================================
+
+INTERNAL COMMUNICATION:
+
+Quality meetings are conducted:
+  • Daily: Production team briefings
+  • Weekly: Quality assurance meeting
+  • Monthly: Management review meeting
+  • Quarterly: Comprehensive QMS review
+
+Issues & Escalation:
+  Level 1: Department Manager (Issues resolved at department level)
+  Level 2: Facility Manager (Quality/Regulatory issues)
+  Level 3: Executive Management (Major deviations, regulatory matters)
+
+See SOP-QAS-XX for detailed communication procedures
+
+MANAGEMENT REVIEW:
+
+Management conducts comprehensive QMS reviews quarterly, evaluating:
+
+✓ Results of internal audits and self-inspections
+✓ Status of product quality data and batch releases
+✓ Deviation, CAPA, and change control status
+✓ Personnel training and competency assessments
+✓ Equipment qualification and maintenance status
+✓ Regulatory compliance and communications
+✓ Customer feedback and complaints
+✓ Effectiveness of document control
+✓ Achievement of quality objectives
+✓ Recommended improvements and actions
+
+Management Review meetings are documented with:
+  • Attendees
+  • Discussions and findings
+  • Decisions and actions
+  • Responsible persons and deadlines
+
+See QAS-07-002 (Annual Product Quality Review)
+
+REGULATORY COMMUNICATION:
+
+All regulatory communications are:
+  • Documented and maintained on file
+  • Authorized by Facility Manager and Quality Manager
+  • Submitted to Ministry of Health of North Macedonia
+  • Tracked in Regulatory Communication Log
+
+Regulatory inspections are:
+  • Planned and scheduled with appropriate preparation
+  • Conducted with complete transparency
+  • Documented with formal reports and findings
+  • Responded to with corrective action plans
+
+================================================================================
+DOCUMENT APPROVAL & RELEASE
+================================================================================
+
+This Quality Manual has been reviewed, approved, and authorized for release to 
+all personnel at Purely Plant Medical Cannabis Production Facility.
+
+This document supersedes all previous Quality Manual versions dated prior to 
+2026-02-01.
+
+Previous versions are retained in the Document Archive located at:
+Dedicated Archive Room (Climate Controlled)
+
+APPROVALS:
+
+Quality Manager:                    Date: _______
+Signature: _________________________
+
+Facility Manager:                   Date: _______
+Signature: _________________________
+
+EFFECTIVE DATE: 2026-02-01
+
+NEXT REVIEW DATE: [NEXT_REVIEW_DATE + 12 MONTHS]
+
+================================================================================
+DISTRIBUTION RECORD
+================================================================================
+
+CONTROLLED COPY DISTRIBUTION:
+
+Copy #  Location                      Received By        Date
+-----  ----------------------------  -----------------  ----------
+1      Facility Manager              Blagoj Nikolov             2026-01-22
+2      Quality Manager               Blagoj Nikolov             2026-01-22
+3      Production Manager            Blagoj Nikolov             2026-01-22
+4      Department Managers           Blagoj Nikolov             2026-01-22
+5      Skopje                    Blagoj Nikolov             2026-01-22
+6      Archive/Records               Blagoj Nikolov             2026-01-22
+
+Uncontrolled copies may be printed by authorized personnel and must be 
+clearly marked "UNCONTROLLED COPY - Not subject to change control"
+
+================================================================================
+END OF QUALITY MANUAL
+================================================================================
+
+Document ID: QA_00.01_v1 | Version: 1.0 | Last Review: 2026-01-22
+Reference: QMS Document Registry
+Classification: CONFIDENTIAL - INTERNAL USE ONLY
+

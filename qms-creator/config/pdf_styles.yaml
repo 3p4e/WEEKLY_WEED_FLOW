@@ -1,0 +1,276 @@
+# PDF Styling Configuration for GMP Documents
+# Cannabis EU GMP QMS Creator - Professional PDF Output
+
+# Page settings
+page:
+  size: 'A4'  # 210mm x 297mm
+  orientation: 'portrait'
+  margins:
+    top: 72  # 1 inch (72 points)
+    bottom: 72
+    left: 72
+    right: 72
+
+# Header configuration
+header:
+  enabled: true
+  height: 50
+  background_color: '#F0F0F0'
+  border_bottom:
+    width: 2
+    color: '#3498DB'
+
+  left:
+    content: '{company_name}'
+    font: 'Helvetica-Bold'
+    size: 10
+    color: '#2C3E50'
+
+  center:
+    content: '{document_id} - {document_title}'
+    font: 'Helvetica-Bold'
+    size: 11
+    color: '#2C3E50'
+
+  right:
+    content: 'Version {version}'
+    font: 'Helvetica'
+    size: 9
+    color: '#7F8C8D'
+
+# Footer configuration
+footer:
+  enabled: true
+  height: 40
+  background_color: '#F8F9FA'
+  border_top:
+    width: 1
+    color: '#BDC3C7'
+
+  left:
+    content: 'Confidential - Internal Use Only'
+    font: 'Helvetica'
+    size: 8
+    color: '#7F8C8D'
+
+  center:
+    content: 'Page {page_number} of {total_pages}'
+    font: 'Helvetica'
+    size: 9
+    color: '#2C3E50'
+
+  right:
+    content: 'Printed: {print_date}'
+    font: 'Helvetica'
+    size: 8
+    color: '#7F8C8D'
+
+# Document title page
+title_page:
+  enabled: true
+
+  # Company logo area (if logo file provided)
+  logo:
+    position: 'center'
+    max_width: 200
+    max_height: 80
+
+  # Main title
+  title:
+    font: 'Helvetica-Bold'
+    size: 24
+    color: '#2C3E50'
+    align: 'center'
+    margin_top: 150
+
+  # Document ID
+  document_id:
+    font: 'Helvetica-Bold'
+    size: 18
+    color: '#3498DB'
+    align: 'center'
+    margin_top: 20
+
+  # Metadata box
+  metadata:
+    border: true
+    border_color: '#BDC3C7'
+    background: '#F8F9FA'
+    padding: 20
+    margin_top: 80
+    font: 'Helvetica'
+    size: 11
+
+    fields:
+      - label: 'Effective Date'
+        value: '{effective_date}'
+      - label: 'Version'
+        value: '{version}'
+      - label: 'Department'
+        value: '{department}'
+      - label: 'Approved By'
+        value: '{approved_by}'
+      - label: 'Classification'
+        value: 'CONFIDENTIAL - INTERNAL USE ONLY'
+
+  # Footer disclaimer
+  disclaimer:
+    text: 'This document is the property of Purely Plant GmbH and contains confidential information. Unauthorized distribution is prohibited.'
+    font: 'Helvetica'
+    size: 9
+    color: '#7F8C8D'
+    align: 'center'
+    position_from_bottom: 50
+
+# Body text styling
+body:
+  # Main content
+  text:
+    font: 'Helvetica'
+    size: 11
+    color: '#2C3E50'
+    line_spacing: 1.5
+    paragraph_spacing: 12
+
+  # Section headers (detected by all caps or specific patterns)
+  heading1:
+    font: 'Helvetica-Bold'
+    size: 16
+    color: '#2C3E50'
+    space_before: 20
+    space_after: 12
+    # Pattern: Lines that are all uppercase and start with number
+
+  heading2:
+    font: 'Helvetica-Bold'
+    size: 14
+    color: '#34495E'
+    space_before: 16
+    space_after: 10
+
+  heading3:
+    font: 'Helvetica-Bold'
+    size: 12
+    color: '#34495E'
+    space_before: 12
+    space_after: 8
+
+  # Bullet points
+  bullet:
+    symbol: '•'
+    indent: 20
+    font: 'Helvetica'
+    size: 11
+
+  # Numbered lists
+  numbered:
+    indent: 20
+    font: 'Helvetica'
+    size: 11
+
+  # Tables (if detected)
+  table:
+    border: true
+    border_color: '#BDC3C7'
+    header_background: '#3498DB'
+    header_text_color: '#FFFFFF'
+    row_alternate_color: '#F8F9FA'
+    cell_padding: 8
+
+# Document categories with color coding
+categories:
+  master_documents:
+    color: '#3498DB'  # Blue
+    label: 'MASTER DOCUMENT'
+
+  quality_assurance:
+    color: '#2ECC71'  # Green
+    label: 'QUALITY ASSURANCE'
+
+  sanitation_hygiene:
+    color: '#9B59B6'  # Purple
+    label: 'SANITATION & HYGIENE'
+
+  production:
+    color: '#E67E22'  # Orange
+    label: 'PRODUCTION & CULTIVATION'
+
+  equipment:
+    color: '#E74C3C'  # Red
+    label: 'EQUIPMENT MANAGEMENT'
+
+  security:
+    color: '#34495E'  # Dark gray
+    label: 'SECURITY & PREMISES'
+
+  records:
+    color: '#16A085'  # Teal
+    label: 'RECORDS MANAGEMENT'
+
+  default:
+    color: '#95A5A6'  # Gray
+    label: 'QMS DOCUMENT'
+
+# Watermark (for draft versions)
+watermark:
+  enabled: false  # Set to true for draft documents
+  text: 'DRAFT'
+  font: 'Helvetica-Bold'
+  size: 80
+  color: '#E74C3C'
+  opacity: 0.1
+  rotation: 45
+
+# Approval signature block styling
+signature_block:
+  enabled: true
+  border: true
+  border_color: '#BDC3C7'
+  padding: 15
+
+  fields:
+    - label: 'Prepared By'
+      signature_line: true
+      date_line: true
+    - label: 'Reviewed By'
+      signature_line: true
+      date_line: true
+    - label: 'Approved By (QP)'
+      signature_line: true
+      date_line: true
+
+# Bookmarks/Table of Contents
+bookmarks:
+  enabled: true
+  # Auto-generate from section headers
+  max_depth: 3
+
+# PDF metadata
+metadata:
+  author: 'Purely Plant GmbH - Cannabis EU GMP QMS Creator'
+  creator: 'Cannabis EU GMP QMS Creator v1.0'
+  subject: 'GMP Quality Management System Documentation'
+  keywords: 'GMP, Cannabis, QMS, SOP, Quality Assurance, EU GMP'
+
+# Digital signature placeholder
+digital_signature:
+  enabled: false  # Enable when digital signatures are implemented
+  position: 'bottom_right'
+  size: 100
+
+# Output settings
+output:
+  compression: true
+  optimize: true
+  pdf_version: '1.7'  # PDF/A-2 compatible
+  # PDF/A compliance for archival (if needed)
+  pdfa_compliance: false
+
+# Company branding
+branding:
+  company_name: 'Purely Plant GmbH'
+  facility_name: 'Purely Plant Medical Cannabis Production Facility'
+  location: 'Skopje, North Macedonia'
+  color_primary: '#3498DB'
+  color_secondary: '#2C3E50'
+  color_accent: '#E67E22'

@@ -196,3 +196,250 @@ and experiments:
   **the mass instance has no backups by design**.
 - Accounts/passwords equal production at clone time (incl. the `tt.*` cast).
 - Full teardown procedure: see `/opt/stacks/wwf_mass/README.md` on the host.
+
+## QMS Studio federation (unification Phase 1)
+
+New internal service `qms-api` — the QMS Creator backend built from this
+repo's `qms-creator/` (image `wwf-qms-api:vN`). It is **never published**:
+its only client is the platform backend's authed proxy (`backend/app/api/
+qms.py`), which injects the service's `X-API-Key` server-side.
+
+Compose service (added to the stack's compose.yaml):
+
+```yaml
+  qms-api:
+    image: wwf-qms-api:v1
+    environment:
+      API_KEY: ${QMS_API_KEY}
+      LETTA_BASE_URL: http://host.docker.internal:8283
+      LETTA_API_KEY: ${LETTA_API_KEY}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - qms_data:/app/data
+      - qms_output:/app/output
+    networks: [internal]
+```
+
+Backend env (app.env): `QMS_API_URL=http://qms-api:8000` and
+`QMS_API_KEY=<same secret as the service's API_KEY>`. An EMPTY
+`QMS_API_KEY` disables the federation cleanly — the proxy answers
+503 "QMS service unavailable" and the QMS Studio views show a labeled
+unavailable state.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**. Production (`wwf_app`) is promoted
+ONLY after the owner's additional tests and explicit approval. The
+promotion is exactly:
+
+1. `wwf_app/compose.yaml`: add the `qms-api` service block above (+ the two
+   named volumes at the bottom `qms_data: {}`, `qms_output: {}`).
+2. `wwf_app/app.env`: add `QMS_API_URL` + `QMS_API_KEY` (generate a fresh
+   secret; also export it for compose interpolation or inline it).
+3. `docker compose up -d qms-api && docker compose up -d --no-deps backend
+   frontend` with the same backend/frontend image tags already verified on
+   wwf_mass.
+4. Verify: /qms 401 unauthenticated, registry + knowledge views load for an
+   elevated account, USER gets no QMS Studio group.
+
+Note: the `qms-api` container in the `/opt/stacks/letta` project is an
+unrelated April prototype (18KB main.py) — not this service, not touched by
+this deployment; cleanup candidate at unification Phase 4.
+
+## GrowFlow DocEngine (dedicated document AI service)
+
+New internal service `docengine` (`docengine/`, image `growflow-docengine:vN`)
+— a dedicated FastAPI service powered by Letta with an additive `gf_*` agent
+fleet. It adopts the pp-document-suite formatting engine COMPLETELY (canon:
+`docs/DOCENGINE-CANON-2026-07.md`) and merges the questionnaire-driven
+SOP/Annex authoring workflow with per-section regulatory checks. Every
+produced document is gated on `pp_verify`'s `RESULT: PASS` — a failing build
+is deleted server-side and never reaches the API. **Never published**; its
+only client is the platform backend's `/qms/studio/*` proxy routes (same
+X-API-Key server-side injection pattern as `qms-api`).
+
+Compose service (added to the stack's compose.yaml):
+
+```yaml
+  docengine:
+    image: growflow-docengine:v1
+    environment:
+      DOCENGINE_API_KEY: ${DOCENGINE_API_KEY}
+      DOCENGINE_DATABASE_URL: postgresql://...@wwf-tasks-db:5432/wwf_tasks  # docengine schema
+      LETTA_BASE_URL: http://host.docker.internal:8283
+      LETTA_API_KEY: ${LETTA_API_KEY}
+      GOTENBERG_URL: http://gotenberg:3000
+      # A stateful-agent generation can take minutes; the read timeout covers
+      # ONE agent turn (the pipeline makes ~11 sequential calls per SOP as a
+      # polled background job). Connect stays short so a down server fails fast.
+      LETTA_READ_TIMEOUT: "300"     # optional; default 300s
+      LETTA_CONNECT_TIMEOUT: "15"   # optional; default 15s
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - docengine_out:/data/docengine-out
+    networks: [internal]
+```
+
+The workflow-state schema lives in the `wwf_tasks` DB under a dedicated
+`docengine` schema, auto-created at startup. This requires the service's DB
+role to hold `CREATE ON DATABASE wwf_tasks` (granted once per stack:
+`GRANT CREATE ON DATABASE wwf_tasks TO app_admin;`). Without it the service
+still boots and serves `/health`, `/questionnaires`, and direct `/build`, but
+`/workflows` answers 503 "DocEngine storage unavailable".
+
+Backend env (app.env): `DOCENGINE_URL=http://docengine:8000` and
+`DOCENGINE_API_KEY=<same secret as the service's DOCENGINE_API_KEY>`. An
+EMPTY key disables it cleanly — `/qms/studio/*` answers 503 "DocEngine
+unavailable" and the Create view shows the labeled unavailable state with a
+retry, same UX contract as QMS Studio Phase 1.
+
+Role gates (enforced server-side in `backend/app/api/qms.py`, UI only
+mirrors them): reading questionnaires/documents = any elevated role; STARTING
+a workflow or a direct build (authoring a controlled document) = `ADMIN`,
+`OWNER`, `QP`, `QA_MGR` only.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**, same governance as QMS Studio Phase 1:
+production promotion only after the owner's tests + explicit approval.
+Promotion mirrors the qms-api steps above (add the compose service + two env
+vars, `docker compose up -d docengine && docker compose up -d --no-deps
+backend frontend` with already-verified tags, then verify a full
+questionnaire→SOP round trip produces a PASS .docx with the house header,
+citations from the real DB1/DB3 sources, and that the authoring gate holds
+for a non-QA/QP manager account).
+
+## Task-Management System v2 (TMS T1–T3, unification Phase 1 priority #1)
+
+Owner-priority-#1 upgrade to the task-management core, built additively on
+the existing model (no rebuild — see the delta analysis in
+`docs/PLATFORM-ROADMAP-2026-07.md` §3/§6 Phase 1). Currently on
+**wwf_mass only**: backend v44 / frontend v66 / migration 0017.
+
+- **T1 — task tree + dependency graph + handoffs.** `tasks.node_kind`
+  (task|annex|step, additive column) + new `task_dependencies` table (a
+  real blocker graph — WWF previously had only free-text `blocker_reason`)
+  + `GET /tasks/tree` + `POST/DELETE /tasks/{id}/dependencies` (recursive
+  cycle guard) + surfaced the pre-existing `handoffs` table via
+  `POST /tasks/{id}/handoffs` / `POST /handoffs/{id}/resolve` (accept
+  re-homes the task's department).
+- **T2 — in-app team digest.** `GET /notifications/digest?window=daily|weekly`
+  over the `events` table, same dept/org-wide scoping as `/activity`. Also
+  fixed a stale regex bug: migration 0016 widened `notifications.reason`'s
+  CHECK to include `capa_stuck`/`validation_stuck` but the `/notifications`
+  query-param validator was never updated. Emailed digests and
+  quiet-hours-gated push are explicitly deferred (no SMTP / push channel
+  exists yet — see `docs/RESEARCH-NOTIFICATIONS-2026-07.md`'s own v2 path).
+- **T3 — AI-native planning.** Two new entries in the existing data-driven
+  AI catalog (`app/api/ai.py` — a capability is a `CATALOG` entry + an
+  admin-bound Letta agent via `/ai/bindings`, no new endpoint):
+  `workload_balance`, `next_week_plan` (on-demand version of the
+  `weekly_snapshot.py` scheduled reasoning). `dependency_advisor` now
+  accepts `context.task_id` to ground on that task's family (itself +
+  parent + siblings) instead of the whole corpus — pairs the existing
+  advisory function with T1's real graph. Advisory only; no auto-apply.
+
+### Migration 0017
+
+Additive: `tasks.node_kind` column + `task_dependencies` table (own RLS
+policy + hash-chained audit trigger + guarded grants, same shape as 0015).
+Verified: upgrades/downgrades cleanly, `schema.tasks.sql` regenerated from
+alembic head with zero drift.
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**; same governance as every other
+unification-era feature. Local gate: 298 backend tests pass, node --check
+clean, zero schema-tasks.sql drift. Live-verified on wwf_mass with a real
+auth token and real data for every T1/T2/T3 piece (tree, cycle-rejecting
+dependency add, handoff accept re-homing a task, digest counts, catalog
+functions degrading gracefully when unbound).
+
+Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
+1. Apply migration 0017 to prod's `wwf_tasks` (superuser `TASKS_MIGRATION_DATABASE_URL`,
+   `alembic -n tasks upgrade head` — same recipe as every prior migration).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v44`+) and
+   frontend to the verified tag (`v66`+).
+3. `docker compose up -d --no-deps backend frontend`.
+4. Verify: `/tasks/tree` returns real data, a dependency add+cycle-reject
+   round-trips, a handoff accept moves a task's department, the digest
+   endpoint returns non-error counts, `/ai/functions` lists the two new
+   catalog entries.
+
+T4 (this polish pass) is the last increment before that promotion gate.
+
+## QC LIMS module (Phase 2, native rebuild, U1–U3)
+
+Native rebuild of the `qc-lims-ao` prototype domain on the WWF spine, same
+facility-module pattern (uuid PK + org_id, FORCE/ENABLE RLS + org_isolation,
+`audit_<tbl>` trigger, guarded GRANT block). Currently on **wwf_mass only**:
+backend `v46` / frontend `v67` / migrations `0018`–`0020` (tasks DB head).
+
+- **U1 — Specifications.** `qc_specifications` (8-stage lifecycle
+  INITIATED→…→ACTIVE, partial-unique one-ACTIVE-per-material) +
+  `qc_spec_parameters` (acceptance criteria, locked once past authoring).
+- **U2 — Samples.** `qc_sampling_plans` + `qc_samples` (aggregate root,
+  self-FK genealogy, 10-state lifecycle incl. QUARANTINE).
+- **U3 — CoA + results.** `qc_certificates` (DRAFT→REVIEWED→APPROVED→
+  RELEASED, decision PASS/FAIL) + `qc_results` (auto-evaluated `complies`;
+  a failing result quarantines the linked sample — the OOS hook). GxP
+  guardrails: RELEASE/APPROVE are QP-only (`_QP_ROLES`); the DRAFT→REVIEWED
+  transition rejects if the reviewer is the same person as the analyst.
+
+Router `backend/app/api/qc.py` (17 endpoints, prefix `/qc`), registered in
+`main.py`. Frontend: `web/gf/qcspec-view.js` / `qcsample-view.js` /
+`qccoa-view.js`, wired into `index.html` + the SW precache list, under the
+QMS Studio nav group.
+
+**Bug found + fixed during the wwf_mass live smoke (backend v46):**
+`effective_date`/`sampling_date`/`report_date`/`result_date` were typed
+`str` in the Pydantic models but bound against an explicit `::date` SQL
+cast — asyncpg requires a real `date` object for that cast, so any request
+supplying an actual date value 500'd. No existing test exercised a non-null
+value for any of the four fields. Fixed by typing all four `date | None`
+(FastAPI/Pydantic parses the ISO string before it reaches asyncpg); added
+a regression test (`test_date_fields_accept_real_iso_dates`) covering all
+four creation/patch paths with real dates. `v45` (pre-fix) was replaced by
+`v46` before this smoke passed — `v45` was never left running.
+
+### Migrations 0018–0020
+
+Additive, same shape as 0015/0017: `qc_spec_id_seq`/`qc_sampling_plan_id_seq`/
+`qc_sample_id_seq`/`qc_coa_id_seq` sequences (human ids `PP-<TYPE>-YYYY-NNNN`),
+FORCE/ENABLE RLS + `org_isolation` + `audit_<tbl>` trigger on every table,
+guarded GRANT block extended to the new sequences. Verified: upgrades/
+downgrades cleanly, `schema.tasks.sql` regenerated from alembic head with
+zero drift (CI's `migrations` job — green on PR #23).
+
+### Status & prod promotion (owner-gated)
+
+Deployed to **wwf_mass (test) only**; same governance as every other
+unification-era feature. Local gate: full backend suite (323 tests, incl.
+25 in `test_qc.py`) passes locally against real Postgres with the date-field
+fix applied — no regressions; CI also green on PR #23 for the pre-fix
+commit (schema-drift, e2e, security scan); `node --check` clean on the
+three QC views. Live-
+verified on wwf_mass with real `tt.qc.mgr` (QC_MGR) / `tt.qp` (QP) tokens:
+a spec created with a real `effective_date` and driven to ACTIVE, a sample
+registered with a real `sampling_date`, a CoA issued with a real
+`report_date` linking both, a passing result (sample untouched) and a
+failing result (sample auto-QUARANTINE) each with a real `result_date`,
+QC_MGR blocked (403) from CoA REVIEWED (self-review) and APPROVED (QP-only),
+QP succeeding (200) on both.
+
+Promotion to `wwf_app` (prod) — after the owner's tests + explicit approval:
+1. Apply migrations 0018–0020 to prod's `wwf_tasks` (`alembic -n tasks
+   upgrade head` — same recipe as every prior migration).
+2. `wwf_app/compose.yaml`: bump backend to the verified tag (`v46`+, NOT
+   `v45` — see the date-field fix above) and frontend to the verified tag
+   (`v67`+).
+3. `docker compose up -d --no-deps backend frontend`.
+4. Verify: the same spec→sample→CoA→pass/fail-result→quarantine round trip
+   above, against prod data, with real accounts.
+
+**Next increment (not yet built):** the deferred Phase-2 units — OOS +
+CAPA (migration 0021), the custody cluster (chain_of_custody/SFR/RQS), and
+the water/stability/transport JSONB leaves — per
+`docs/PLATFORM-ROADMAP-2026-07.md`.

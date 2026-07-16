@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;height:100%;background:var(--mw-void);overflow:hidden;}
+  .splash{ position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; }
+  .splash::before{ content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 50% 42%, rgba(28,108,163,0.28) 0%, transparent 55%),
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(58,159,212,0.03) 2px 3px);
+    pointer-events:none; }
+  .leafwrap{ width:min(46vh,420px); height:min(46vh,420px); }
+  .brand{ font-family:'Saira Condensed',sans-serif; font-weight:700; letter-spacing:.26em; text-transform:uppercase; font-size:clamp(38px,7vw,68px); color:var(--mw-cyan-bright); text-shadow:0 0 32px rgba(94,200,240,.6); line-height:1; margin-top:8px; position:relative; z-index:2; }
+  .brand small{ display:block; font-size:13px; letter-spacing:.42em; color:var(--mw-text-dim); margin-top:14px; font-weight:400; text-align:center; }
+  .enter{ position:absolute; bottom:44px; left:0; right:0; text-align:center; font-family:'Saira Condensed',sans-serif; text-transform:uppercase; letter-spacing:.28em; font-size:12px; color:var(--mw-text-dim); z-index:2; }
+  .enter b{ color:var(--mw-cyan-bright); }
+  .prog{ width:min(340px,60vw); height:3px; background:var(--mw-stat-track); box-shadow:inset 0 0 0 1px rgba(58,159,212,.35); margin-top:26px; position:relative; z-index:2; overflow:hidden; }
+  .prog i{ position:absolute; inset:0 100% 0 0; background:linear-gradient(90deg,var(--mw-cyan-dim),var(--mw-cyan-bright)); box-shadow:0 0 12px rgba(94,200,240,.7); animation:mwload 2.6s cubic-bezier(.4,.1,.2,1) forwards; }
+  @keyframes mwload{ to{ right:0; } }
+  .corner{ position:absolute; width:34px; height:34px; border:1px solid rgba(94,200,240,.4); }
+  .corner.tl{ top:22px; left:22px; border-right:none; border-bottom:none;}
+  .corner.tr{ top:22px; right:22px; border-left:none; border-bottom:none;}
+  .corner.bl{ bottom:22px; left:22px; border-right:none; border-top:none;}
+  .corner.br{ bottom:22px; right:22px; border-left:none; border-top:none;}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="splash" data-screen-label="Splash" onclick="location.href='login.html'">
+  <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+  <div class="mw-leaf leafwrap" data-mw-leaf data-size="hero"></div>
+  <div class="brand">Mass&nbsp;Weed<small>Cultivation Command · Node 7</small></div>
+  <div class="prog"><i></i></div>
+  <div class="enter">Click anywhere to <b>enter</b></div>
+</div>
+</div>
+<script>setTimeout(()=>{ location.href='login.html'; }, 3400);</script>
+<script type="module" src="mw-leaf.js"></script>
+</body>
+</html>

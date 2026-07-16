@@ -1,0 +1,282 @@
+---
+document_id: "QAS-00.6"
+version: "1.0"
+title_mk: "Purely Plant GmbH"
+title_en: "Purely Plant GmbH"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QAS-00.6 v.1.0 | **Effective Date:** 15.01.24
+
+---
+
+## Purely Plant GmbH | Purely Plant GmbH
+
+### ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL
+
+| Дејство / Action | Позиција / Position | Име и Презиме / Name & Surname | Датум / Date | Потпис / Signature |
+|---|---|---|---|---|
+| **Подготвено од:** / _Prepared by:_ | Менаџер за Контрола на Квалитет / Quality Control Manager | Ana Dimitrova | __________ | _________________ |
+| **Проверено од:** / _Checked by:_ | Управник на Фацилитет / Facility Manager | Stefan Petrov | __________ | _________________ |
+| **Одобрено од:** / _Approved by:_ | Квалификувано Лице (QP) / Qualified Person (QP) | Blagoj Nikolov | __________ | _________________ |
+
+---
+
+### КОНТРОЛА НА ДОКУМЕНТ | DOCUMENT CONTROL
+
+| Field | Value |
+|---|---|
+| **Оригиналот се чува во:** / _The original is kept & stored in:_ | Quality Assurance Archive - Building A, Room 12 |
+| **Тип на документ:** / _Type of document:_ | SOP |
+| **Овој документ се чува во:** / _This document is kept & stored in:_ | Department Manager's Office |
+| **Тип на копија:** / _Copy type:_ | Controlled |
+
+**Корисник:** / _User:_  ☒ Внатрешен / Internal  ☐ Надворешен / External
+
+**Датум на последна ревизија:** / _Date of last revision:_ 15.01.24
+
+**Ефективен датум на користење:** / _Effective Date of Use:_ 15.01.24
+
+**Датум на валидност / редовна ревизија:** / _Date of validity / planned revision:_ 15.01.25
+
+---
+
+### ИСТОРИЈА НА РЕВИЗИИ | REVISION HISTORY
+
+| Верзија бр. / Version No. | Датум на промена / Date of change | Опис на променета содржина / Description of change |
+|---|---|---|
+| 1.0 | 15.01.24 | Initial Release / Почетна верзија |
+
+---
+
+---
+document_id: "QAS-00.6"
+version: "1.0"
+title_mk: "Purely Plant GmbH"
+title_en: "Purely Plant GmbH"
+effective_date: "2024-01-15"
+copy_type: "controlled"
+document_type: "SOP"
+---
+
+# Purely Plant GmbH
+
+**Document ID:** QAS-00.6 v.1.0 | **Effective Date:** 15.01.24
+
+---
+
+## Purely Plant GmbH | Purely Plant GmbH
+
+### ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL
+
+| Дејство / Action | Позиција / Position | Име и Презиме / Name & Surname | Датум / Date | Потпис / Signature |
+|---|---|---|---|---|
+| **Подготвено од:** / _Prepared by:_ | Менаџер за Контрола на Квалитет / Quality Control Manager | Ana Dimitrova | __________ | _________________ |
+| **Проверено од:** / _Checked by:_ | Управник на Фацилитет / Facility Manager | Stefan Petrov | __________ | _________________ |
+| **Одобрено од:** / _Approved by:_ | Квалификувано Лице (QP) / Qualified Person (QP) | Blagoj Nikolov | __________ | _________________ |
+
+---
+
+### КОНТРОЛА НА ДОКУМЕНТ | 
+================================================================================
+QA_00.06_v1 - CAPA SYSTEM SOP
+Corrective and Preventive Action (CAPA) System
+Version: 1.0
+Effective Date: 2026-02-01
+Next Review Date: [DATE + 12 months]
+Classification: CONFIDENTIAL - INTERNAL USE ONLY
+================================================================================
+
+
+AMENDMENT HISTORY
+
+Version  Date          Description of Change          Changed By      Approved By
+------   -----------   -----------------------------  ---------------  ---------------
+1.0      2026-01-22        Initial Release                 [Document Author Name]         Stefan Petrov
+
+================================================================================
+SECTION 1: PURPOSE & SCOPE
+================================================================================
+
+1.1 PURPOSE
+
+The purpose of this SOP is to define the Corrective and Preventive Action (CAPA)
+system at Purely Plant Medical Cannabis Production Facility. This SOP provides consistent, documented procedures for
+identifying quality issues, performing investigations and root cause analysis, implementing
+corrective actions to address the immediate nonconformity, and instituting preventive actions
+to reduce the probability of recurrence. The CAPA system ensures that actions taken are
+effective, timely, and appropriately reviewed and approved.
+
+1.2 SCOPE
+
+This SOP applies to all employees, contractors and third parties who identify, report,
+investigate or implement actions arising from deviations, complaints, audit findings,
+out-of-specification (OOS) results, supplier issues, process trends or other quality events
+that may impact product quality, safety, or regulatory compliance.
+
+1.3 APPLICABILITY
+
+Personnel required to follow this procedure:
+  • Quality Assurance (QA) Team
+  • Qualified Person (QP) where applicable
+  • Department Managers and Supervisors
+  • Production and Laboratory Staff
+  • Facilities and Maintenance
+  • Supply Chain / Procurement
+
+================================================================================
+SECTION 2: DEFINITIONS
+================================================================================
+
+CAPA: Corrective and Preventive Action — system to correct and prevent recurrence of quality issues.
+Corrective Action: Action taken to eliminate the cause of an identified nonconformity or other undesirable situation.
+Preventive Action: Action taken to eliminate the cause of a potential nonconformity to prevent its occurrence.
+Nonconformity: Any deviation from established procedures, specifications, regulatory requirements or expected outcomes.
+Root Cause Analysis (RCA): A structured investigation to identify the underlying cause(s) of a problem.
+Effectiveness Check: Verification that corrective or preventive actions have achieved the desired outcome and prevented recurrence.
+
+================================================================================
+SECTION 3: RESPONSIBILITIES
+================================================================================
+
+3.1 Quality Assurance (QA)
+  • Maintain the CAPA system and ensure availability of CAPA forms and records.
+  • Triage incoming CAPA initiations and assign priority and ownership.
+  • Lead or support investigations and RCA as needed.
+  • Review and approve CAPA plans, verify implementation, and conduct effectiveness checks.
+
+3.2 Department Managers
+  • Ensure staff report events promptly and participate in investigations.
+  • Implement corrective and preventive actions within their departments.
+  • Provide resources and timelines for action completion.
+
+3.3 Initiator / Reporter
+  • Complete CAPA initiation form with relevant details and immediate containment actions.
+  • Notify QA and relevant managers of significant events.
+
+3.4 Implementation Owner
+  • Execute assigned corrective or preventive actions and record completion evidence.
+  • Communicate status updates to QA and stakeholders.
+
+3.5 Qualified Person (QP)
+  • Review CAPAs that may affect product release or regulatory compliance and provide approval where required.
+
+================================================================================
+SECTION 4: CAPA PROCESS OVERVIEW
+================================================================================
+
+4.1 Identification and Initiation
+  • Events that may trigger CAPA: deviations, complaints, audit findings, OOS, supplier nonconformances, trends, near-misses.
+  • The initiator completes the CAPA Initiation Form (Annex A — 01_QUALITY_ASSURANCE/QA_00.06_v1_A01_CAPA_Initiation_Form_v1.0_EN.md) and submits to QA within specified timelines.
+  • QA records the CAPA in the CAPA log and assigns a unique CAPA number, priority level, and owner.
+
+4.2 Triage and Prioritization
+  • QA assesses severity, patient/product safety impact, regulatory risk and resource needs.
+  • CAPAs are categorized: Critical (immediate safety/regulatory impact), Major (quality/process impact), Minor (administrative/process improvements).
+
+4.3 Investigation and Root Cause Analysis (RCA)
+  • The owner conducts an investigation using structured RCA tools (5 Whys, Fishbone/Ishikawa, Fault Tree Analysis) as appropriate.
+  • Investigation includes collection of objective evidence, interviews, and process data review.
+  • A written RCA summary and impact assessment are documented in the CAPA record.
+
+4.4 Corrective and Preventive Action Planning
+  • Based on RCA, the owner proposes corrective and preventive actions, including implementation timelines, responsible persons, and measurable success criteria.
+  • Actions must be specific, measurable, achievable, relevant and time-bound (SMART).
+  • QA reviews and approves the CAPA plan before implementation.
+
+4.5 Implementation
+  • Owners implement actions and provide documented evidence (records, training logs, updated procedures, test results).
+  • Implementation progress is tracked in the CAPA record and CAPA log.
+
+4.6 Effectiveness Verification
+  • After implementation, an effectiveness check is performed within the agreed timeframe to verify that actions prevented recurrence and achieved the expected outcome.
+  • Methods include trend analysis, audits, sampling, re-testing, and review of related metrics.
+  • Effectiveness check results are documented and approved by QA.
+
+4.7 Closure
+  • CAPA closure requires documented evidence of implementation and successful effectiveness verification.
+  • QA reviews the full CAPA record and approves formal closure.
+  • Closed CAPAs are retained according to document retention policy.
+
+================================================================================
+SECTION 5: RECORDS & DOCUMENTATION
+================================================================================
+
+5.1 CAPA Records
+  • CAPA Initiation Form (Annex A) — 01_QUALITY_ASSURANCE/QA_00.06_v1_A01_CAPA_Initiation_Form_v1.0_EN.md
+  • CAPA Investigation Report and RCA documentation
+  • CAPA Action Plan and implementation evidence (Annex A02 file: 01_QUALITY_ASSURANCE/QA_00.06_v1_A02_CAPA_Action_Plan_v1.0_EN.md)
+  • Effectiveness Check Report (Annex A03 file: 01_QUALITY_ASSURANCE/QA_00.06_v1_A03_CAPA_Effectiveness_Check_v1.0_EN.md)
+  • CAPA Closure Approval
+
+5.2 CAPA Log
+  • QA maintains a CAPA log tracking number, event summary, owner, status, priority, key dates and closure status.
+
+5.3 Retention
+  • CAPA records are retained for a minimum of 5 years or as required by local regulations, whichever is longer.
+
+================================================================================
+SECTION 6: METRICS & TRENDING
+================================================================================
+
+6.1 Key Performance Indicators (KPIs)
+  • CAPA cycle time (initiation to closure)
+  • Percentage of CAPAs closed on time
+  • Number of recurring CAPAs by category
+  • Effectiveness failure rate
+
+6.2 Trending and Review
+  • QA conducts periodic trend analysis (monthly/quarterly) to identify systemic issues.
+  • Results are presented at the Quality Review Board and drive continuous improvement.
+
+================================================================================
+SECTION 7: TRAINING
+================================================================================
+
+7.1 Training Requirements
+  • All relevant personnel receive CAPA system training during onboarding and annually thereafter.
+  • Training records are retained in the training management system and referenced in CAPA records when applicable.
+
+================================================================================
+SECTION 8: NONCONFORMITIES AND EMERGENCY ACTIONS
+================================================================================
+
+8.1 Immediate Containment
+  • For critical events, immediate containment actions must be taken to protect product quality and safety (quarantine, hold, stop release).
+  • Notify QA, QP and Facility Management immediately.
+
+8.2 Communication
+  • Stakeholders and affected departments must be informed of CAPA status and corrective measures.
+
+================================================================================
+SECTION 9: REFERENCES
+================================================================================
+
+  • ICH Q10 Pharmaceutical Quality System
+  • EU GMP - EudraLex Volume 4
+  • FDA Guidance for Industry: Quality Systems Approach to Pharmaceutical CGMP Regulations
+
+================================================================================
+ANNEX A: CAPA INITIATION FORM (TEMPLATE)
+================================================================================
+
+CAPA Number: [AUTO-ASSIGNED]
+Title / Short Description:
+Date Reported:
+Reported By (Name / Dept):
+Immediate Actions Taken (Containment):
+Event Details (What happened?):
+Impact Assessment (Product / Patient / Regulatory):
+Requested Priority: ☐ Critical  ☐ Major  ☐ Minor
+Assigned Owner:
+Proposed Root Cause(s):
+Proposed Corrective Actions (who, what, when):
+Proposed Preventive Actions (who, what, when):
+Required Resources:
+Signatures:
+  Initiator: ____________________ Date: _______
+  QA Reviewer: __________________ Date: _______

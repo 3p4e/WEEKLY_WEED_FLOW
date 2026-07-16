@@ -14,8 +14,10 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.automation import canned_recipients
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
+from app.notify import emit, participants
 from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
@@ -23,6 +25,10 @@ router = APIRouter(tags=["tasks"])
 
 Status = Literal["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 TaskType = Literal["capa", "sop", "validation", "document", "lab", "meeting", "admin", "other"]
+# node_kind is the task's ROLE in the tree (harvested from qc-lims-ao), distinct
+# from task_type (the domain category): a 'task' is ordinary work; an 'annex' is
+# a document/form node under a parent; a 'step' is an execution step under one.
+NodeKind = Literal["task", "annex", "step"]
 # "normal" is the wire value the GrowFlow UI sends for medium (P_OUT in
 # integrate.js); the capture path uses "medium". Both are accepted; anything
 # else is a clean 422 instead of silently sorting last in priority views.
@@ -113,8 +119,8 @@ async def weeks(user: dict = Depends(require_password_set)):
 
 _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
-    "t.task_type,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
-    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,"
+    "t.task_type,t.node_kind,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
+    "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,t.progress,"
     "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
 )
 
@@ -176,6 +182,43 @@ async def list_tasks(
             f"WHERE {where} GROUP BY t.id ORDER BY t.created_at", *args))
 
 
+def _scope_clause(user: dict, args: list) -> str:
+    """The department-manager visibility predicate shared by list/tree — own
+    department, personally owned/assigned, or either side of a multi-dept
+    family. Executives / QP / ADMIN have scope None → no clause (org-wide).
+    Appends its bind params to `args` and returns the SQL fragment (or '')."""
+    scope = dept_scope(user)
+    if not scope:
+        return ""
+    args.append(scope); d = len(args)
+    args.append(str(user["id"])); u = len(args)
+    return (
+        f" AND (t.department_id=${d} OR t.user_id=${u}"
+        f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
+        f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=${d} AND ch.is_deleted=false)"
+        f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
+
+
+@router.get("/tasks/tree")
+async def task_tree(include_archived: bool = False, user: dict = Depends(require_password_set)):
+    """The task hierarchy as a flat, scoped list the client nests by parent_id.
+    Lightweight columns only (id/parent_id/title/node_kind/status/priority/
+    task_type/department_id/due_date/dep counts) — the board renders a
+    document→annex→step spine without pulling every task's full detail. Ordered
+    parent-first then created_at so a simple client fold reconstructs the tree.
+    (Declared before /tasks/{task_id} so 'tree' isn't captured as a task id.)"""
+    args: list = []
+    arch = "" if include_archived else " AND t.is_archived=false"
+    where = "t.is_deleted=false" + arch + _scope_clause(user, args)
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT t.id,t.parent_id,t.title,t.node_kind,t.status,t.priority,t.task_type,"
+            "t.department_id,t.due_date,t.progress,"
+            "(SELECT count(*) FROM task_dependencies dd WHERE dd.task_id=t.id) AS blocked_by_count "
+            f"FROM tasks t WHERE {where} ORDER BY t.parent_id NULLS FIRST, t.created_at", *args)
+    return _ser(rows)
+
+
 @router.get("/tasks/{task_id}")
 async def get_task(task_id: str, user: dict = Depends(require_password_set)):
     async with rls(user) as c:
@@ -191,8 +234,20 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         prog = await c.fetch("SELECT day_label,note,created_at,user_id FROM task_progress WHERE task_id=$1 ORDER BY created_at", task_id)
         sessions = await c.fetch("SELECT * FROM work_sessions WHERE task_id=$1 ORDER BY started_at", task_id)
         links = await c.fetch("SELECT * FROM task_links WHERE task_id=$1 ORDER BY created_at", task_id)
+        # Dependency edges: what this task is blocked_by, and (reverse) what it
+        # blocks. Each carries the depended-on task's title + status so the UI
+        # can render "blocked by X (ongoing)" without a second round trip.
+        blocked_by = await c.fetch(
+            "SELECT d.depends_on_task_id AS id, t.title, t.status FROM task_dependencies d"
+            " JOIN tasks t ON t.id=d.depends_on_task_id AND t.is_deleted=false"
+            " WHERE d.task_id=$1 ORDER BY t.created_at", task_id)
+        blocks = await c.fetch(
+            "SELECT d.task_id AS id, t.title, t.status FROM task_dependencies d"
+            " JOIN tasks t ON t.id=d.task_id AND t.is_deleted=false"
+            " WHERE d.depends_on_task_id=$1 ORDER BY t.created_at", task_id)
         return {"task": dict(task), "subtasks": _ser(subs), "progress": _ser(prog),
-                "sessions": [_session_out(s) for s in sessions], "links": _ser(links)}
+                "sessions": [_session_out(s) for s in sessions], "links": _ser(links),
+                "blocked_by": _ser(blocked_by), "blocks": _ser(blocks)}
 
 
 class TaskIn(BaseModel):
@@ -203,6 +258,7 @@ class TaskIn(BaseModel):
     status: Status = "pending"
     priority: Priority = "medium"
     task_type: TaskType = "other"
+    node_kind: NodeKind = "task"
     reference_code: str | None = Field(default=None, max_length=80)
     external_ref: str | None = Field(default=None, max_length=200)
     blocker_reason: str | None = Field(default=None, max_length=2000)
@@ -217,9 +273,18 @@ class TaskIn(BaseModel):
     tags: list[str] = []
     attributes: dict | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
+    progress: int = Field(default=0, ge=0, le=100)
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
+# L3: an unbounded interval sails through the positive-int check but then
+# overflows date arithmetic at rollover — a 500 that rolls back (and so
+# permanently blocks) the completion that triggers it. 1000 covers every real
+# cadence (every 1000 months ≈ 83y) while keeping base+interval*unit in range.
+_RECUR_INTERVAL_MAX = 1000
+# L5: DoS hygiene on the free-form tag list (bounds, not a business rule).
+_TAGS_MAX = 32
+_TAG_MAX_LEN = 64
 
 # The UI writes 3-letter capitalized tokens (GF.DAYS in web/gf/data.js);
 # anything else in days text[] is a typo or an API caller inventing values
@@ -233,6 +298,15 @@ def _check_days(days: list[str] | None) -> None:
     bad = [d for d in days if d not in _DAY_TOKENS]
     if bad:
         raise HTTPException(422, f"days must be Mon..Sun tokens, got: {', '.join(map(str, bad[:3]))}")
+
+
+def _check_tags(tags: list[str] | None) -> None:
+    if not tags:
+        return
+    if len(tags) > _TAGS_MAX:
+        raise HTTPException(422, f"tags: at most {_TAGS_MAX}")
+    if any(not isinstance(t, str) or len(t) > _TAG_MAX_LEN for t in tags):
+        raise HTTPException(422, f"tags: each tag must be a string of at most {_TAG_MAX_LEN} chars")
 
 
 # Department-template metadata (room, strain, sample_ref, equipment_ref, …).
@@ -267,8 +341,9 @@ def _check_recurrence(rec: dict | None) -> None:
         return
     if rec.get("freq") not in _RECURRENCE_FREQS:
         raise HTTPException(422, "recurrence.freq must be daily|weekly|monthly")
-    if not isinstance(rec.get("interval", 1), int) or rec.get("interval", 1) < 1:
-        raise HTTPException(422, "recurrence.interval must be a positive integer")
+    iv = rec.get("interval", 1)
+    if not isinstance(iv, int) or isinstance(iv, bool) or iv < 1 or iv > _RECUR_INTERVAL_MAX:
+        raise HTTPException(422, f"recurrence.interval must be an integer in 1..{_RECUR_INTERVAL_MAX}")
     # `until` is only parsed later, inside the completion transaction — validate
     # it here so a bad value is a clean 422 at write time, not a 500 that rolls
     # back (and permanently blocks) the completion that triggers it.
@@ -285,6 +360,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     _check_recurrence(body.recurrence)
     _check_days(body.days)
     _check_attributes(body.attributes)
+    _check_tags(body.tags)
     # A dept-scoped manager creates TOP-LEVEL tasks in their own department
     # only; an omitted department defaults to theirs instead of landing
     # unassigned (which their scoped list could then never show them again).
@@ -317,19 +393,28 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
         try:
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-                " task_type,reference_code,external_ref,blocker_reason,recurrence,"
+                " task_type,node_kind,reference_code,external_ref,blocker_reason,recurrence,"
                 " department,department_id,week_id,week_start,due_date,days,tags,attributes,"
-                " estimated_hours,created_by,updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$2,$2)"
+                " estimated_hours,progress,created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$2,$2)"
                 " RETURNING *",
                 user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
-                body.priority, body.task_type, body.reference_code, body.external_ref, body.blocker_reason,
-                body.recurrence, body.department, body.department_id, body.week_id,
+                body.priority, body.task_type, body.node_kind, body.reference_code, body.external_ref,
+                body.blocker_reason, body.recurrence, body.department, body.department_id, body.week_id,
                 body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
-                body.estimated_hours,
+                body.estimated_hours, body.progress,
             )
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
+        # Feed-only awareness (NO recipients): creation never notifies —
+        # Slack/Linear defaults — but the shared activity stream shows it,
+        # which is what makes exec-created work visible to the org.
+        try:
+            await emit(c, user, verb="created", object_type="task", object_id=row["id"],
+                       recipients=[], task_id=row["id"], department_id=row["department_id"],
+                       params={"title": row["title"]})
+        except Exception:
+            pass
     return dict(row)
 
 
@@ -340,6 +425,7 @@ class TaskPatch(BaseModel):
     priority: Priority | None = None
     workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
     task_type: TaskType | None = None
+    node_kind: NodeKind | None = None
     department: str | None = Field(default=None, max_length=120)
     department_id: str | None = None
     reference_code: str | None = Field(default=None, max_length=80)
@@ -357,6 +443,7 @@ class TaskPatch(BaseModel):
     completed_date: date | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
     actual_hours: Decimal | None = Field(default=None, ge=0)
+    progress: int | None = Field(default=None, ge=0, le=100)
 
 
 # Columns a PATCH may set to SQL NULL. exclude_unset (not exclude_none)
@@ -424,6 +511,8 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         _check_recurrence(patch["recurrence"])
     if "days" in patch:
         _check_days(patch["days"])
+    if "tags" in patch:
+        _check_tags(patch["tags"])
     if "attributes" in patch:
         _check_attributes(patch["attributes"])
         # The column is NOT NULL DEFAULT '{}' — an explicit null means "clear",
@@ -443,6 +532,12 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         args.append(date.today()); fields.append(f"completed_date=${len(args)}")
     elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
+    # Completing forward-fills the completion bar unless the caller set one.
+    # Deliberately one-directional: progress=100 never forces status (the
+    # research rule — never hard-enforce completion), and reopening keeps the
+    # percentage (work done stays done; the user adjusts it if it regressed).
+    if patch.get("status") == "completed" and "progress" not in patch:
+        args.append(100); fields.append(f"progress=${len(args)}")
     noop = not fields  # nothing to apply once null-drops are accounted for
     if not noop:
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
@@ -490,6 +585,24 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
             nxt = await _materialize_recurrence(c, row)
             if nxt:
                 out["next_instance"] = nxt
+        # Status-change awareness: participants (creator/owner/assignees/
+        # commenters) get notified; the actor never is (emit guards that).
+        if "status" in patch and prev_status != row["status"]:
+            try:
+                who = await participants(c, task_id)
+                # Canned automation recipients go FIRST: emit()'s recipient
+                # dedup keeps the first (user_id, reason) pair it sees, so a
+                # quality manager who is also a participant still gets the
+                # more specific "capa_stuck"/"validation_stuck" reason
+                # instead of the generic "status" one.
+                canned = await canned_recipients(user, row["task_type"], row["status"])
+                recipients = canned + [(u, "status") for u in who]
+                await emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
+                           recipients=recipients, task_id=task_id,
+                           department_id=row["department_id"],
+                           params={"title": row["title"], "old": prev_status, "new": row["status"]})
+            except Exception:
+                pass
     return out
 
 
@@ -640,4 +753,59 @@ async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_p
         res = await c.execute("DELETE FROM task_links WHERE id=$1 AND task_id=$2", link_id, task_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Link not found")
+    return {"ok": True}
+
+
+# ── Task dependencies (the blocker graph) ───────────────────────────────────
+class DependencyIn(BaseModel):
+    depends_on_task_id: str
+
+
+@router.post("/tasks/{task_id}/dependencies", status_code=201)
+async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(require_password_set)):
+    """Record 'task_id is blocked by depends_on_task_id'. Both tasks must be
+    visible to the caller. Rejects a self-edge (also a DB CHECK) and any edge
+    that would introduce a CYCLE — if the prospective blocker is already
+    (transitively) blocked by this task, adding the edge would deadlock the
+    graph, so it's a 422."""
+    dep = body.depends_on_task_id
+    if dep == task_id:
+        raise HTTPException(422, "A task cannot depend on itself")
+    async with rls(user) as c:
+        for tid in (task_id, dep):
+            t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
+            if t is None:
+                raise HTTPException(404, "Task not found or not permitted")
+            await _assert_scope_visible(c, tid, user)
+        # Cycle guard: can `dep` already reach `task_id` through the graph? If
+        # so, task_id -> dep would close a loop. Walk the edges from dep.
+        reaches = await c.fetchval(
+            "WITH RECURSIVE reach(id) AS ("
+            "  SELECT depends_on_task_id FROM task_dependencies WHERE task_id=$1"
+            "  UNION"
+            "  SELECT d.depends_on_task_id FROM task_dependencies d JOIN reach r ON d.task_id=r.id"
+            ") SELECT EXISTS (SELECT 1 FROM reach WHERE id=$2)", dep, task_id)
+        if reaches:
+            raise HTTPException(422, "That dependency would create a cycle")
+        try:
+            await c.execute(
+                "INSERT INTO task_dependencies(org_id,task_id,depends_on_task_id,created_by)"
+                " VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+                user["org_id"], task_id, dep, user["id"])
+        except _FK_ERRORS:
+            raise HTTPException(422, "Unknown task")
+    return {"ok": True, "task_id": task_id, "depends_on_task_id": dep}
+
+
+@router.delete("/tasks/{task_id}/dependencies/{dep_id}")
+async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(require_password_set)):
+    async with rls(user) as c:
+        t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        res = await c.execute(
+            "DELETE FROM task_dependencies WHERE task_id=$1 AND depends_on_task_id=$2", task_id, dep_id)
+    if res.split()[-1] == "0":
+        raise HTTPException(404, "Dependency not found")
     return {"ok": True}

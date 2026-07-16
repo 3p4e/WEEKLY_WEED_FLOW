@@ -271,3 +271,120 @@ async def test_invoke_with_binding_returns_letta_message(client, admin_headers, 
     assert body["function"] == "draft_description"
     assert body["output"] == "Here is your drafted description."
     assert captured["agent_id"] == "agent-xyz"
+
+
+async def test_ai_corpus_is_scoped_to_managers_department(client, admin_headers, org, monkeypatch):
+    """M2: a department-scoped manager's AI grounding corpus must contain ONLY
+    their own department's tasks. RLS grants any elevated role org-wide task
+    read, so without the dept filter in _task_context the corpus would leak
+    other departments' work into the manager's AI answer. Intercept the Letta
+    call and assert on the prompt that was actually built."""
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+
+    d_qc = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"]))["id"]
+    d_pr = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'pr','Production') RETURNING id", org["org_id"]))["id"]
+
+    await client.post("/tasks", json={"title": "QCONLYMARKER", "department_id": str(d_qc)}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "PRONLYMARKER", "department_id": str(d_pr)}, headers=admin_headers)
+
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
+
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=str(d_qc))
+    token = await login_and_set_password(client, mgr["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post("/ai/weekly_summary", json={"input": "summarise"}, headers=h)
+    assert r.status_code == 200
+    assert "QCONLYMARKER" in captured["prompt"], "manager's own department task must ground the answer"
+    assert "PRONLYMARKER" not in captured["prompt"], "another department's task must NOT leak into the corpus"
+
+
+async def test_ai_corpus_is_org_wide_for_executives(client, admin_headers, org, monkeypatch):
+    """M2 must not over-restrict: an org-wide role (CEO) still grounds on every
+    department's tasks."""
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+
+    d_qc = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'qc','QC') RETURNING id", org["org_id"]))["id"]
+    d_pr = (await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id,code,name) VALUES ($1,'pr','Production') RETURNING id", org["org_id"]))["id"]
+    await client.post("/tasks", json={"title": "QCMARK", "department_id": str(d_qc)}, headers=admin_headers)
+    await client.post("/tasks", json={"title": "PRMARK", "department_id": str(d_pr)}, headers=admin_headers)
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'weekly_summary','org','fake-agent-id',true)", org["org_id"])
+
+    ceo, otp = await create_user(client, admin_headers, role="CEO")
+    token = await login_and_set_password(client, ceo["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+    r = await client.post("/ai/weekly_summary", json={"input": "summarise"}, headers=h)
+    assert r.status_code == 200
+    assert "QCMARK" in captured["prompt"] and "PRMARK" in captured["prompt"]
+
+
+# ── TMS T3: AI-native planning — new catalog functions + task-scoped context ─
+async def test_workload_balance_and_next_week_plan_in_catalog(client, admin_headers):
+    """The two new T3 functions are just catalog entries — reusing the same
+    generic invoke() path (the fleet pattern the DocEngine established): no
+    new endpoint, just an admin binding away from being active."""
+    r = await client.get("/ai/functions", headers=admin_headers)
+    assert r.status_code == 200
+    catalog = r.json()["catalog"]
+    assert "workload_balance" in catalog
+    assert "next_week_plan" in catalog
+
+
+async def test_dependency_advisor_scopes_to_task_family_not_whole_corpus(client, admin_headers, org, monkeypatch):
+    """T3: dependency_advisor invoked with context.task_id should ground on
+    that task's family (itself + parent + siblings) instead of the org-wide
+    _task_context — verified the same way as the week-scope regression test,
+    by intercepting _letta_message and inspecting the prompt it received."""
+    import app.api.ai as ai_module
+
+    captured = {}
+
+    async def fake_letta_message(agent_id, text):
+        captured["prompt"] = text
+        return "ok"
+
+    monkeypatch.setattr(ai_module, "_letta_message", fake_letta_message)
+
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_agent_bindings(org_id, function_key, scope, letta_agent_id, is_active)"
+        " VALUES ($1,'dependency_advisor','org','fake-agent-id',true)", org["org_id"])
+
+    parent = (await client.post("/tasks", json={"title": "Family Parent"},
+                                headers=admin_headers)).json()
+    await client.post("/tasks", json={"title": "Family Sibling", "parent_id": parent["id"]},
+                      headers=admin_headers)
+    target = (await client.post("/tasks", json={"title": "Family Target", "parent_id": parent["id"]},
+                                 headers=admin_headers)).json()
+    await client.post("/tasks", json={"title": "Unrelated Outsider Task"}, headers=admin_headers)
+
+    r = await client.post("/ai/dependency_advisor",
+                          json={"input": "suggest dependencies", "context": {"task_id": target["id"]}},
+                          headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["available"] is True
+
+    prompt = captured["prompt"]
+    assert "Family Target" in prompt
+    assert "Family Parent" in prompt
+    assert "Family Sibling" in prompt
+    assert "Unrelated Outsider Task" not in prompt

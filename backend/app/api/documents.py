@@ -29,10 +29,11 @@ from app.api.ai import _letta_message
 from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
-from app.db import rls
+from app.db import rls, rls_users
 from app.deps import dept_scope, is_dept_scoped_role, require_role
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
+from app.notify import emit
 from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
@@ -292,7 +293,7 @@ def _metrics(tasks: list[dict], sessions, prior_sessions) -> dict:
 _ASK = {
     "weekly_summary": "Write the executive narrative for this document: what happened, what stands out, what deserves leadership attention. Be concrete and reference tasks/SOPs by name. LENGTH BUDGET: at most 120 words per language.",
     "risk_flag": "Identify concrete risks, blockers and deviations visible in this data. For each: what, why it matters, suggested action. LENGTH BUDGET: at most 8 one-line bullets per language.",
-    "progress_digest": "Write per-SOP observations for the TOP 6 SOPs by hours only: what was done, anomalies vs the 4-week average, off-hours concentration. LENGTH BUDGET: at most 50 words per SOP per language.",
+    "progress_digest": "Write per-SOP observations for the TOP 6 SOPs by logged-session count only: what was done and what stands out. Do NOT quote hour totals. LENGTH BUDGET: at most 50 words per SOP per language.",
     "dependency_advisor": "Given these carried-over tasks, lay out sequencing and dependency advice for next week: what must precede what, conflicts to watch. LENGTH BUDGET: at most 8 one-line bullets per language.",
 }
 
@@ -479,8 +480,7 @@ def _ai_context(kind: str, period: dict, tasks: list[dict], metrics: dict) -> st
                      + (f" dept={t['department']}" if t.get("department") else ""))
     if kind == "report":
         for b in metrics["per_sop"][:10]:
-            lines.append(f"SOP {b['sop']}: {b['hours']}h this week (prev 4-wk avg {b['prev4_avg_hours']}h),"
-                         f" night {b['night']}h weekend {b['weekend']}h")
+            lines.append(f"SOP {b['sop']}: {b['sessions']} logged sessions this week across {b['tasks']} tasks")
         ot = metrics["on_time"]
         lines.append(f"On-time completion: {ot['on_time']}/{ot['completed']}")
     return "\n".join(lines)
@@ -912,6 +912,23 @@ async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED
             " WHERE id=$1 AND status='draft' RETURNING *", doc_id, user["id"])
         if row is None:
             raise HTTPException(404, "Document not found")
+        # report_locked → that dept's manager(s) + org-wide execs/QP (never
+        # the locker; emit guards self-notify). Best-effort.
+        try:
+            async with rls_users(user) as uc:
+                profs = await uc.fetch(
+                    "SELECT id, role, department_id FROM profiles"
+                    " WHERE org_id=$1 AND is_deleted=false AND is_active=true", user["org_id"])
+            execs = {"OWNER", "CEO", "COO", "QP"}
+            rcpts = [(str(pr["id"]), "report") for pr in profs
+                     if pr["role"] in execs
+                     or (row["department_id"] and pr["department_id"] == row["department_id"]
+                         and pr["role"].endswith("_MGR"))]
+            await emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
+                       recipients=rcpts, department_id=row["department_id"],
+                       params={"kind": row["kind"], "week_start": str(row["week_start"])})
+        except Exception:
+            pass
     return _doc_row(row)
 
 
@@ -986,7 +1003,7 @@ def _ribbon_svg(segments: list[dict], week_start: str, days: int = 7) -> str:
             parts.append(
                 f'<rect x="{x:.1f}" y="{y + 6}" width="{w:.1f}" height="{ROW - 12}" rx="3"'
                 f' fill="{_color(s.get("color"))}" fill-opacity="0.9"><title>{_e(s.get("title"))} · {_e(s.get("sop"))}'
-                f' · {_e(s.get("hours"))}h</title></rect>')
+                f'</title></rect>')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -1185,18 +1202,17 @@ def _pdf_task_tables(c: dict, who) -> str:
             days = "/".join(_e(d) for d in (t.get("days") or []))
             sub = ""
             if t.get("description") or notes or days:
-                sub = (f'<tr class="trow-sub"><td colspan="6">'
+                sub = (f'<tr class="trow-sub"><td colspan="5">'
                        + (f'<span class="sub">Days: {days}</span> ' if days else "")
                        + (f'{_nl(t["description"])}' if t.get("description") else "")
                        + (f'<ul>{notes}</ul>' if notes else "") + "</td></tr>")
-            hours = f'{t.get("estimated_hours") or "—"} / {t.get("actual_hours") or "—"}'
             anchor = f' id="task-{_e(str(t.get("id", ""))[:8].lower())}"' if t.get("id") else ""
             rows += (f'<tr{anchor}><td>{_e(t.get("title", ""))}</td><td>{_e(t.get("reference_code") or "—")}</td>'
                      f'<td>{_e(t.get("status", ""))}</td><td>{_e(t.get("priority", ""))}</td>'
-                     f'<td>{_e(hours)}</td><td>{_e(t.get("due_date") or "—")}</td></tr>{sub}')
+                     f'<td>{_e(t.get("due_date") or "—")}</td></tr>{sub}')
         out += (f'<h3>{_e(dept_label)} <span class="sub">({len(tasks)})</span></h3>'
                 f'<table class="grid"><tr><th>Task / Задача</th><th>Ref</th><th>Status</th>'
-                f'<th>Priority</th><th>Est/Act h</th><th>Due</th></tr>{rows}</table>')
+                f'<th>Priority</th><th>Due</th></tr>{rows}</table>')
     n = len(c.get("tasks", []))
     return f'<h2>Tasks ({n}) <span class="mk">Задачи</span></h2>{out}' if out else ""
 
@@ -1206,16 +1222,15 @@ def _pdf_metrics(c: dict) -> str:
     # missing a key (or carrying an injected color) must never 500 the export.
     sop_rows = "".join(
         f'<tr><td><span class="dot" style="background:{_color(b.get("color"))}"></span>{_e(b.get("sop"))}</td>'
-        f'<td>{_e(b.get("hours", 0))}</td><td>{_e(b.get("prev4_avg_hours", 0))}</td><td>{_e(b.get("tasks", 0))}</td>'
-        f'<td>{_e(b.get("sessions", 0))}</td><td>{_e(b.get("night", 0))}</td><td>{_e(b.get("weekend", 0))}</td><td>{_e(b.get("overtime", 0))}</td></tr>'
+        f'<td>{_e(b.get("tasks", 0))}</td><td>{_e(b.get("sessions", 0))}</td></tr>'
         for b in c.get("metrics", {}).get("per_sop", []))
     if not sop_rows:
         return ""
     ot = c.get("metrics", {}).get("on_time") or {}
     rate = f" ({round(100 * (ot.get('rate') or 0))}%)" if ot.get("rate") is not None else ""
     return (f'<h2>Metrics <span class="mk">Показатели</span></h2>'
-            f'<table class="grid"><tr><th>SOP / area</th><th>Hours</th><th>4-wk avg</th><th>Tasks</th>'
-            f'<th>Sessions</th><th>Night</th><th>Weekend</th><th>Overtime</th></tr>{sop_rows}</table>'
+            f'<table class="grid"><tr><th>SOP / area</th><th>Tasks</th>'
+            f'<th>Sessions</th></tr>{sop_rows}</table>'
             f'<p class="sub">On-time completion / Навремено завршени: {ot.get("on_time", "—")}/{ot.get("measured", "—")}'
             f' with deadlines{rate} · {ot.get("completed", "—")} completed total</p>')
 
@@ -1342,12 +1357,6 @@ _HTML_CSS = """
 def _html_kpis(c: dict) -> str:
     tasks = c.get("tasks", [])
     metrics = c.get("metrics", {}) or {}
-    total_h = 0.0
-    for b in metrics.get("per_sop", []):
-        try:
-            total_h += float(b.get("hours") or 0)
-        except (TypeError, ValueError):
-            pass  # a hostile/legacy value never breaks the export
     completed = sum(1 for t in tasks if t.get("status") == "completed")
     ot = metrics.get("on_time") or {}
     rate = f"{round(100 * ot['rate'])}%" if isinstance(ot.get("rate"), (int, float)) else "—"
@@ -1357,7 +1366,6 @@ def _html_kpis(c: dict) -> str:
             + kpi(len(tasks), "Tasks", "Задачи")
             + kpi(completed, "Completed", "Завршени")
             + kpi(rate, "On-time", "Навремено")
-            + (kpi(f"{total_h:.1f}h", "Logged hours", "Одработени часови") if total_h else "")
             + "</div>")
 
 
@@ -1377,12 +1385,10 @@ def _html_task_details(c: dict, who) -> str:
             body = ((f'<div class="sub">Days: {days}</div>' if days else "")
                     + (f"<div>{_nl(t['description'])}</div>" if t.get("description") else "")
                     + notes) or '<div class="sub">—</div>'
-            hours = f"{t.get('estimated_hours') or '—'} / {t.get('actual_hours') or '—'}"
             anchor = f' id="task-{_e(str(t.get("id", ""))[:8].lower())}"' if t.get("id") else ""
             rows += (f'<details{anchor}><summary>{_e(t.get("title", ""))}'
                      f' <span class="chip {"locked" if t.get("status") == "completed" else "draft"}">{_e(t.get("status", ""))}</span>'
                      f' <span class="sub mono">{_e(t.get("reference_code") or "")}</span>'
-                     f' <span class="sub mono">est/act {_e(hours)}</span>'
                      f' <span class="sub mono">{_e(t.get("due_date") or "")}</span></summary>{body}</details>')
         out += (f'<details><summary>{_e(dept_label)} <span class="sub">({len(tasks)})</span></summary>{rows}</details>')
     n = len(c.get("tasks", []))

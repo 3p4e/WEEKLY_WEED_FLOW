@@ -1,0 +1,236 @@
+ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL	ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL	ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL	ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL	ОДОБРУВАЊЕ НА ДОКУМЕНТ | DOCUMENT APPROVAL
+Дејство: | Action:	Позиција: | Position:	Име и Презиме | Name & Surname	Датум: | Date:	Потпис: | Signature:
+Подготвено од: | Prepared by:				
+Проверено од: | Checked by				
+Одобрено од: |  Approved by:				
+Оригиналот се чува во: | The original doc. is kept & stored in:	Оригиналот се чува во: | The original doc. is kept & stored in:	Оригиналот се чува во: | The original doc. is kept & stored in:	Оригиналот се чува во: | The original doc. is kept & stored in:	Тип на документ | Type of document:
+				
+Овој документ се чува во: | This document is kept & stored in:	Овој документ се чува во: | This document is kept & stored in:	Овој документ се чува во: | This document is kept & stored in:	Овој документ се чува во: | This document is kept & stored in:	
+				
+Регистар на ревизии на документот | Revision registry	Регистар на ревизии на документот | Revision registry	Регистар на ревизии на документот | Revision registry	Регистар на ревизии на документот | Revision registry	
+Датум на последна ревизија: | Date of last revision:	Датум на последна ревизија: | Date of last revision:	Датум на последна ревизија: | Date of last revision:		
+Ефективен датум на користење | Effective Date of Use:	Ефективен датум на користење | Effective Date of Use:	Ефективен датум на користење | Effective Date of Use:		
+Датум на валидност / редовна ревизија: | Date of validity / planed revision	Датум на валидност / редовна ревизија: | Date of validity / planed revision	Датум на валидност / редовна ревизија: | Date of validity / planed revision		
+				
+Корисник: | User:	Внатрешен: | Internal:	X		
+Корисник: | User:	Надворешен: | External:			
+ИСТОРИЈА НА РЕВИЗИИ | REVISION HYSTORY	ИСТОРИЈА НА РЕВИЗИИ | REVISION HYSTORY	ИСТОРИЈА НА РЕВИЗИИ | REVISION HYSTORY
+Претходни верзии и ревизии: | Previous versions and revisions:	Претходни верзии и ревизии: | Previous versions and revisions:	Претходни верзии и ревизии: | Previous versions and revisions:
+Верзија бр. | Version No.	Датум на промена: | 
+Date of change:	Oпис на променета содржина, број на страна | Description of change, Page No.
+v0		
+v1		First Creation
+v2		
+		
+		
+		
+[add rows as needed in future document reviews]
+1.0 PURPOSE
+This Standard Operating Procedure (SOP) establishes a robust, validated system for the creation, unique identification, controlled distribution, and compliant archival of the General Memorandum (MEM). The procedure ensures that all formal communications requiring documented traceability—but falling outside the scope of other quality system instruments such as Change Control, Deviation, or Corrective and Preventive Action (CAPA)—are managed in a manner consistent with the principles of Good Manufacturing Practice (GMP) and Good Documentation Practice (GDP).
+This SOP fulfils the regulatory requirement for a documented procedure governing the control of records and documents as mandated by EU GMP Chapter 4 (Documentation), EU GMP Chapter 7 (Outsourced Activities), EudraLex Volume 4, and the principles of ICH Q10 (Pharmaceutical Quality System). The system herein described ensures that memoranda are attributable, legible, contemporaneous, original, and accurate (ALCOA+), thereby supporting data integrity throughout the document lifecycle.
+2.0 SCOPE
+2.1 Internal Application
+This SOP applies to all departments within Purely Plant GmbH (hereinafter referred to as "the Company") that are involved in generating, distributing, or receiving formal internal communications using the controlled Memorandum template (Annex 01) and its accompanying forms, including the Document Distribution Record (Annex 02).
+The procedure governs the issuance, sequential coding, maintenance, and formal closure of Departmental Memorandum Issuance Lists (Annex 03) and Departmental Memorandum Receipt Lists (Annex 04), which serve as the primary instruments for Reference Number reservation, traceability, and action tracking.
+The following departments are explicitly included within the scope of this SOP: Cultivation (CU), Production (PR), Quality Control (QC), Maintenance and Engineering (ME), Incoming/Receiving (IR), Qualified Person (QP), and Quality Assurance (QA). Additional departments may be added to this scope through formal change control procedures.
+2.2 External Application
+In accordance with EU GMP Chapter 7 (Outsourced Activities) and the principles governing contract giver/acceptor relationships, this SOP also applies to formal documented communications with external parties where traceable correspondence is required. Such external parties include, but are not limited to:
+• Contract Laboratories performing analytical testing, stability studies, or microbiological assessments on behalf of the Company
+• Approved Suppliers of starting materials, active pharmaceutical ingredients, excipients, packaging components, and critical consumables
+• Service Providers for calibration, validation, qualification, pest control, environmental monitoring, and equipment maintenance
+• Regulatory Authorities and Competent Bodies for submissions, responses to queries, and official correspondence
+• Transport and Logistics Providers for GDP-compliant shipment coordination and chain of custody documentation
+• Auditors and Inspection Bodies for pre-audit communications, audit response follow-up, and ongoing correspondence
+External memoranda shall be subject to the same documentation controls as internal memoranda, with additional requirements for recipient confirmation as specified in Section 9.0.
+2.3 Exclusions
+This SOP does not apply to informal communications (e.g., electronic mail, verbal instructions, or meeting minutes) unless such communications are subsequently formalized using the Memorandum template. Communications governed by dedicated quality system procedures (Change Control, Deviation, CAPA) shall use their respective documentation systems.
+3.0 REFERENCES
+3.1 European Commission. EudraLex Volume 4: EU Guidelines for Good Manufacturing Practice for Medicinal Products for Human and Veterinary Use, Chapter 4: Documentation. Brussels: European Commission; 2011 (as amended). Available from: https://health.ec.europa.eu/medicinal-products/eudralex/eudralex-volume-4_en
+3.2 European Commission. EudraLex Volume 4, Chapter 7: Outsourced Activities. Brussels: European Commission; 2013. [Requirements for contract giver/acceptor documentation, communication, and quality oversight].
+3.3 European Commission. EudraLex Volume 4, Annex 11: Computerised Systems. Brussels: European Commission; 2011. [Principles applicable to paper-based data integrity controls by extension].
+3.4 International Council for Harmonisation of Technical Requirements for Pharmaceuticals for Human Use (ICH). ICH Q10: Pharmaceutical Quality System. Geneva: ICH; 2008. DOI: N/A (Regulatory Guideline).
+3.5 World Health Organization. WHO Technical Report Series, No. 996, Annex 5: Guidance on Good Data and Record Management Practices. Geneva: WHO; 2016.
+3.6 Medicines and Healthcare products Regulatory Agency (MHRA). 'GXP' Data Integrity Guidance and Definitions. London: MHRA; 2018 (Revision 1, March 2018).
+3.7 International Organization for Standardization. ISO 9001:2015 – Quality Management Systems – Requirements. Geneva: ISO; 2015. [Section 7.5: Documented Information].
+3.8 PIC/S Secretariat. PIC/S Guidance: Good Practices for Data Management and Integrity in Regulated GMP/GDP Environments. PI 041-1. Geneva: Pharmaceutical Inspection Co-operation Scheme; 2021.
+3.9 Purely Plant GmbH. SOP Document Creation and Control. [Internal SOP Number]. [Effective Date].
+3.10 Purely Plant GmbH. SOP Logbooks. [Internal SOP Number]. [Effective Date].
+4.0 DEFINITIONS AND ABBREVIATIONS
+4.1 Definitions
+4.1.1 Memorandum (MEM): A standardized, version-controlled blank template (Annex 01) used to create official, traceable internal or external communications that require formal documentation but are not addressed by other specific quality system procedures.
+4.1.2 Document Distribution Record (DDR): A controlled form (Annex 02) used to formally record and document the receipt acknowledgement of a memorandum by internal personnel requiring mandatory confirmation of communication.
+4.1.3 Departmental Memorandum Issuance List: A controlled physical register (Annex 03) maintained by each issuing department for the sequential reservation, tracking, and closure of outgoing Memorandum Reference Numbers.
+4.1.4 Departmental Memorandum Receipt List: A controlled physical register (Annex 04) maintained by each receiving department for the chronological tracking of incoming memoranda, including action requirements, deadlines, and completion status.
+4.1.5 Good Documentation Practice (GDP): A set of principles and practices ensuring that documentation is attributable, legible, contemporaneous, original, and accurate (ALCOA), with additional attributes of completeness, consistency, enduring, and available (ALCOA+).
+4.1.6 ALCOA+ Principles: The extended acronym representing the fundamental data integrity attributes required for GMP-compliant records: Attributable (who performed the action and when), Legible (readable and permanent), Contemporaneous (recorded at the time of the activity), Original (first-generation record or certified true copy), Accurate (error-free and correct), Complete (all data including any repeat or reanalysis), Consistent (sequenced correctly, date/time stamped as expected), Enduring (recorded on approved media that allows long-term storage), and Available (accessible for review throughout the retention period).
+4.1.7 Controlled Document: Any document governed by a formal system that ensures version control, authorized distribution, periodic review, and traceable changes.
+4.1.8 Voiding: The formal process of cancelling a reserved Reference Number that was not utilized, requiring documented justification, signature, and date to maintain sequential integrity.
+4.1.9 External Party: Any organization outside the Company with which formal documented communication is required, including but not limited to contract laboratories, approved suppliers, service providers, regulatory authorities, and transport providers.
+4.2 Abbreviations
+CAPA – Corrective and Preventive Action
+CU – Cultivation Department
+DDR – Document Distribution Record
+GDP – Good Documentation Practice
+GMP – Good Manufacturing Practice
+IR – Incoming/Receiving Department
+ME – Maintenance and Engineering Department
+MEM – Memorandum
+PR – Production Department
+QA – Quality Assurance
+QC – Quality Control
+QMS – Quality Management System
+QP – Qualified Person
+rMEM – Received Memorandum (Receipt List prefix)
+SOP – Standard Operating Procedure
+5.0 RESPONSIBILITIES
+The following roles bear defined responsibilities for the effective implementation, maintenance, and compliance with this procedure. These responsibilities are consistent with the principles of EU GMP Chapter 1 (Pharmaceutical Quality System) and ICH Q10 regarding management responsibilities and resource allocation.
+Role	Responsibilities
+Document Control / Quality Assurance	Maintains custody and version control of the master SOP and Annexes 01, 02, 03, and 04. Issues, codes, and formally closes the Departmental Issuance and Receipt Lists in accordance with [SOP Logbooks]. Ensures procedural compliance during internal audits. Provides training on this SOP.
+Issuing Department Head / Designee	Acts as Custodian of the departmental Memorandum Issuance List (Annex 03). Ensures strict sequential use and maintains code continuity across list volumes. Reserves the unique Memorandum Reference Number prior to document preparation. Reviews, approves, and signs the final approval sections of the Memorandum (Annex 01) and, where applicable, the Document Distribution Record (Annex 02).
+Receiving Department Head / Designee	Acts as Custodian of the departmental Memorandum Receipt List (Annex 04). Logs all incoming memoranda chronologically upon receipt. Assigns action deadlines where applicable. Tracks completion status and ensures timely closure of entries. Maintains traceability for incoming communications from both internal and external sources.
+Preparer / User	Drafts the memorandum content in accordance with Good Documentation Practice (GDP). Ensures the official Company Stamp is affixed in the designated area. Facilitates the collection of acknowledgement signatures on Annex 02 where distribution control is mandated. Adheres to all applicable data integrity requirements (ALCOA+ principles).
+Recipient Personnel	Confirms receipt of the memorandum by providing their printed name, original signature, and date on the Document Distribution Record (Annex 02) or the Receipt List (Annex 04), thereby creating a contemporaneous record of acknowledgement.
+6.0 INTENDED USE AND DISTRIBUTION CONTROL
+6.1 Appropriate Circumstances for Memorandum Use
+The Memorandum is intended for formal communications that require a documented, traceable record but are not appropriate for—or do not meet the threshold criteria for—a full Quality System procedure such as Change Control, Deviation, or CAPA. The following circumstances represent appropriate applications of the Memorandum system:
+6.1.1 Temporary Justification: Documenting the formal rationale for a minor, immediate procedural adjustment or a temporary departure from standard practice requiring rapid, authorized sign-off. Examples include justification for using alternative, verified equipment for a non-critical process step, or temporary modification to sampling frequency pending formal SOP revision.
+6.1.2 Inter-Departmental Instructions: Formalizing the transfer of critical, time-sensitive instructions or information between departments where verbal communication alone would be insufficient for traceability. Examples include QC instructing Production on specific material segregation requirements, or Maintenance notifying QA of equipment status changes affecting production capability.
+6.1.3 Equipment Status and Process Handovers: Documenting equipment status notifications, long-term repair schedules, or formal shift handovers for specialized processes requiring continuity of record.
+6.1.4 Policy Clarification: Issuing a formal, interim clarification or authoritative interpretation of an existing ambiguous SOP clause, effective until the parent SOP undergoes formal revision through change control.
+6.1.5 Audit Response Documentation: Recording the initial internal consensus on how to address a minor audit finding before a formal CAPA is initiated, where immediate documented communication is required.
+6.1.6 External Formal Communication: Transmitting official correspondence to external parties, institutions, or regulatory authorities where a formal, traceable Company document is required.
+6.1.7 Contract Laboratory Requests: Formal requests for analytical testing, stability studies, microbiological assessments, or method transfer activities to contract laboratories operating under Technical Agreements.
+6.1.8 Supplier Communications: Official correspondence with approved suppliers regarding material specifications, delivery schedules, quality concerns, or certification requirements.
+6.1.9 Service Provider Coordination: Formal communications with service providers for calibration scheduling, validation activities, pest control reports, or maintenance interventions requiring documented acknowledgement.
+6.2 Inappropriate Use
+The Memorandum shall not be used to circumvent or bypass established quality system procedures. The following applications are explicitly prohibited:
+6.2.1 Introduction of new permanent standard operating procedures (requires formal SOP development and approval).
+6.2.2 Authorization of major or critical changes to validated processes, materials, or equipment specifications (requires formal Change Control).
+6.2.3 Documentation of quality events, product non-conformances, or deviations from approved specifications (requires Deviation Report and/or CAPA).
+6.2.4 Permanent modification of batch manufacturing records or analytical specifications (requires formal change control and regulatory assessment where applicable).
+6.2.5 Amendment or supersession of Technical Agreements, Quality Agreements, or other contractual documents with external parties (requires formal contract amendment procedures).
+6.2.6 Documentation of product complaints, adverse events, or pharmacovigilance matters (requires dedicated pharmacovigilance procedures).
+6.3 Distribution Control Requirements
+The requirement for formal distribution control depends upon the nature of the communication and the recipient(s). The Document Distribution Record (DDR, Annex 02) or the External Recipient Confirmation section of Annex 01 shall be utilized as follows:
+6.3.1 Internal Multi-Party Distribution: When the Memorandum is distributed to more than one individual within Company premises who requires documented acknowledgement of receipt, the DDR (Annex 02) is mandatory. Each recipient must provide their printed name, original signature, and date of receipt.
+6.3.2 External Distribution: When the Memorandum is addressed and transmitted to external parties or institutions (e.g., regulatory authorities, suppliers, auditors, contract laboratories), the DDR (Annex 02) is not used for external signatures. Instead, the External Recipient Confirmation table located at the conclusion of the Memorandum (Annex 01) shall be completed by the receiving party to document formal receipt.
+6.3.3 Single Internal Recipient: When the Memorandum is directed to a single internal recipient, the DDR (Annex 02) is optional but recommended for communications containing critical instructions, policy changes, or safety-related information.
+6.3.4 Receipt Documentation by Receiving Department: All incoming memoranda—whether from internal departments or external parties—shall be logged in the receiving department's Memorandum Receipt List (Annex 04) to ensure chronological traceability and action tracking.
+7.0 DOCUMENT CODING AND TRACEABILITY
+All controlled documents and records governed by this SOP shall be identified using standardized coding structures that ensure unambiguous traceability throughout the document lifecycle. The coding system is designed to provide immediate identification of document type, originating department, temporal context, and sequential position within the series.
+7.1 Individual Memorandum Reference Number
+Each individual Memorandum instance (Annex 01) is assigned a unique, dynamic Reference Number upon reservation from the Departmental Issuance List (Annex 03). This Reference Number serves as the primary identifier for the specific communication and enables traceability from the issued document back to its registration in the controlled list.
+The mandatory format for the Memorandum Reference Number is:
+MEMYY_DD_nnn
+Component	Description	Example
+MEM	Fixed alphanumeric prefix denoting "Memorandum"	MEM
+YY	Last two digits of the current calendar year at the time of reservation	25 (for year 2025)
+_DD	Underscore followed by the two-letter Department Code (CU, PR, QC, ME, IR, QP, QA)	_PR (Production)
+_nnn	Underscore followed by three-digit sequential number (001–999), resetting to 001 on January 1st each year	_001
+Complete Example: MEM25_PR_001 represents the first Memorandum issued by the Production Department in calendar year 2025.
+7.2 Departmental Memorandum Issuance List Coding (Annex 03)
+The Departmental Memorandum Issuance List (Annex 03) is a controlled document requiring unique identification to ensure traceability and facilitate the management of multiple list volumes over time.
+The mandatory format for Issuance List coding is:
+MEM_DD_nn/yy
+Component	Description	Example
+MEM	Fixed alphanumeric prefix denoting "Memorandum Issuance List"	MEM
+_DD	Underscore followed by the two-letter Department Code	_PR (Production)
+_nn	Underscore followed by two-digit consecutive issue number within the calendar year (01–99)	_01 (First list)
+/yy	Forward slash followed by last two digits of calendar year	/25 (Year 2025)
+Complete Example: MEM_PR_01/25 represents the first Memorandum Issuance List issued to the Production Department in calendar year 2025.
+7.3 Departmental Memorandum Receipt List Coding (Annex 04)
+The Departmental Memorandum Receipt List (Annex 04) is a controlled document for tracking all incoming memoranda received by a department, whether from internal sources or external parties.
+The mandatory format for Receipt List coding is:
+rMEM_DD_nn/yy
+Component	Description	Example
+rMEM	Fixed prefix with lowercase 'r' denoting "received Memorandum" (Receipt List)	rMEM
+_DD	Underscore followed by the two-letter Department Code of the receiving department	_QC (Quality Control)
+_nn	Underscore followed by two-digit consecutive issue number within the calendar year (01–99)	_01 (First list)
+/yy	Forward slash followed by last two digits of calendar year	/25 (Year 2025)
+Complete Example: rMEM_QC_01/25 represents the first Memorandum Receipt List issued to the Quality Control Department in calendar year 2025.
+Note: The lowercase 'r' prefix distinguishes Receipt Lists from Issuance Lists, allowing immediate visual identification of the list type and preventing coding confusion.
+8.0 LIST CONTROL AND CODE CONTINUITY
+8.1 Issuance List Management (Annex 03)
+The Departmental Memorandum Issuance List (Annex 03) serves as the authoritative register for the sequential reservation, tracking, and formal closure of outgoing Memorandum Reference Numbers within each department. The list is classified as a GMP-controlled document and shall be managed in accordance with the requirements of [SOP Logbooks].
+8.1.1 Each Issuance List provides 100 entries per volume. Upon reaching capacity, a new volume shall be issued using the next sequential number (e.g., MEM_PR_02/25 follows MEM_PR_01/25).
+8.1.2 Continuity between volumes is maintained by completing the "Previous Log Reference" field on the new volume and the "Next Log Reference" field on the closing volume.
+8.1.3 Annual Reset: The three-digit sequential memorandum number (nnn) resets to 001 on January 1st of each calendar year. Lists spanning calendar years shall be formally closed on December 31st, and new lists opened for the new year.
+8.1.4 Quality Assurance shall maintain a master register of all Issuance Lists across departments, enabling organization-wide traceability.
+8.2 Receipt List Management (Annex 04)
+The Departmental Memorandum Receipt List (Annex 04) serves as the authoritative register for chronological tracking of all incoming memoranda received by each department. This provides documented evidence of timely response and action completion.
+8.2.1 Each Receipt List provides 100 entries per volume. Management follows the same volume continuity rules as Issuance Lists.
+8.2.2 The Receipt List shall be used to track memoranda received from internal departments, external contract laboratories, approved suppliers, service providers, regulatory authorities, and any other external parties.
+8.2.3 For each entry, the receiving department shall record: Entry Number, Reference Number of the incoming memorandum, Date Received, Source (FROM), Subject, Receiver Initials, Required Action Date (if specified in the memorandum), Completion Date, and Archive Location.
+8.2.4 The Receipt List enables departments to demonstrate compliance with action deadlines, provide evidence of response to formal communications, and maintain complete traceability of incoming correspondence.
+8.3 Voiding Procedure
+If a reserved Reference Number in the Issuance List is not used (e.g., memorandum not completed, cancelled, or superseded before issuance), the entry shall be formally voided as follows:
+8.3.1 Draw a single horizontal line through the entire row (do not obliterate or render illegible).
+8.3.2 Write "VOID" in the Status column and provide a brief reason in the Archive Location column (e.g., "VOID – superseded by MEM25_PR_002").
+8.3.3 Affix initials and date adjacent to the voiding notation.
+8.3.4 Voided Reference Numbers shall not be reused. The next available sequential number shall be used for subsequent memoranda.
+9.0 PROCEDURE
+9.1 Step 1: Reservation and Template Preparation
+Responsible Party: Issuing Department Head or Designee
+9.1.1 The Preparer identifies the need for a formal memorandum and approaches the Department Head or Designee with a summary of the communication purpose, intended recipient(s), and subject matter.
+9.1.2 The Department Head or Designee opens the current Departmental Memorandum Issuance List (Annex 03) and locates the next available row.
+9.1.3 The Designee constructs the unique Reference Number using the format specified in Section 7.1 (MEMYY_DD_nnn) and enters this Reference Number in Column 1 of the List.
+9.1.4 The Designee records the current date in Column 2 (Date Issued), the intended recipient in Column 3 (Recipient), and a brief summary of the subject in Column 4 (Subject Summary).
+9.1.5 The Designee determines whether a Document Distribution Record (DDR, Annex 02) is required based on the criteria in Section 6.3 and marks Column 6 (DDR Req?) accordingly.
+9.1.6 The Designee prints the current version of the Memorandum template (Annex 01) from the controlled document repository.
+9.1.7 The reserved Reference Number is accurately transcribed onto the Memorandum template in the designated header field.
+9.2 Step 2: Content Drafting and Document Completion
+Responsible Party: Preparer / User
+9.2.1 The Preparer drafts the memorandum content in the designated free-text area of Annex 01. Content may be entered electronically (typed prior to printing) or manually (handwritten on the printed template).
+9.2.2 All handwritten entries must be made using permanent ink (blue or black) and must be legible. Corrections shall be made by drawing a single line through the error, writing the correct information adjacent to the error, and initialing and dating the correction. Use of correction fluid or obliteration is strictly prohibited.
+9.2.3 The Preparer completes the "Prepared By" signature block at the bottom of Annex 01, including printed name, signature, and date.
+9.2.4 If a Reviewed By signature is required based on departmental practice or document criticality, the designated reviewer shall complete the "Reviewed By" signature block.
+9.3 Step 3: Distribution and Receipt Documentation
+Responsible Party: Preparer / User and Recipient Personnel
+Internal Multi-Party Distribution:
+9.3.1 If the DDR (Annex 02) was deemed mandatory in Step 1.5, the Preparer prints the current version of Annex 02 and attaches it to the Memorandum.
+9.3.2 The Preparer transcribes the Memorandum Reference Number onto the DDR header in the designated "Linked Memorandum Reference No." field, establishing the link between the documents.
+9.3.3 Each internal recipient must formally confirm receipt by completing a row in the DDR table: providing their printed Name and Surname, Date of Receipt, and Original Signature. Electronic signatures are not acceptable for paper-based DDRs.
+External Distribution:
+9.3.4 For memoranda directed to external parties, the DDR (Annex 02) is not used. The receiving external party shall complete the "External Recipient Confirmation" table on the final page of the Memorandum (Annex 01), including their name, title, organization, signature, date of receipt, and official stamp or seal if applicable.
+Receipt Documentation by Receiving Department:
+9.3.5 Upon receipt of any memorandum (internal or external), the receiving department shall log the incoming document in their Memorandum Receipt List (Annex 04), recording: Reference Number, Date Received, Source, Subject, Receiver Initials, Required Action Date (if any), and Archive Location upon filing.
+9.3.6 If the received memorandum requires action, the receiving department shall track completion and record the Completion Date in the Receipt List upon action closure.
+9.4 Step 4: Finalization and Approval
+Responsible Party: Issuing Department Head
+9.4.1 Upon completion of distribution activities, the person who managed the delivery of the Memorandum shall sign the "Delivery Confirmation" section of the DDR (Annex 02), if used.
+9.4.2 The Responsible Person (Department Head) of the Issuing Department reviews the completed Memorandum and attached DDR (if applicable) for completeness, accuracy, and compliance with this SOP.
+9.4.3 The Responsible Person signs the "Document Approval" section of the DDR (Annex 02), if used, confirming that distribution is complete and documented.
+9.4.4 The Responsible Person signs the "Approved By" signature block on the Memorandum (Annex 01), formally authorizing the communication and completing the approval chain.
+9.5 Step 5: Archiving and List Closure
+Responsible Party: Issuing and Receiving Department Heads or Designees
+9.5.1 The finalized, fully signed Memorandum (Annex 01) and the completed DDR (Annex 02), if applicable, shall be physically attached together (e.g., stapled or bound) and treated as a single Controlled Record.
+9.5.2 The combined record shall be filed in the designated departmental filing system in accordance with the Company's document retention policy and the requirements of [SOP Logbooks].
+9.5.3 The Issuing Department Head or Designee returns to the Memorandum Issuance List (Annex 03) and completes the remaining columns: Date Finalized (Column 7), Status (Column 8 – marked as CLOSED or "C"), and Archive Location (Column 9 – specifying the physical filing location, e.g., "QA Binder 2025-MEM-001" or "PR Cabinet 3, Shelf B").
+9.5.4 The Receiving Department Head or Designee updates their Memorandum Receipt List (Annex 04) with the Completion Date and Archive Location upon filing the received memorandum.
+9.5.5 This final entry in both Lists officially closes the Memorandum lifecycle for this Reference Number.
+10.0 TRAINING REQUIREMENTS
+10.1 All personnel who may prepare, authorize, distribute, or receive Memoranda shall receive documented training on this SOP prior to performing any activities governed herein.
+10.2 Training shall be documented in the individual's training record and shall include acknowledgement of understanding of the procedure, the coding system (including both Issuance and Receipt List codes), GDP requirements, and ALCOA+ principles as they apply to Memorandum handling.
+10.3 Department Heads and Designees who will serve as List Custodians shall receive additional training on list management, code continuity requirements, the voiding procedure, and the proper use of both Issuance Lists (Annex 03) and Receipt Lists (Annex 04).
+10.4 Retraining shall be conducted when this SOP is revised, when deviations related to memorandum handling are identified, or at minimum every two (2) years as part of GMP refresher training.
+10.5 Quality Assurance is responsible for developing and delivering training materials and for verifying training completion prior to granting access to controlled forms and lists.
+11.0 ANNEXES
+The following controlled forms are integral components of this SOP and shall be used as specified throughout this procedure:
+11.1 Annex 01: General Memorandum Template
+11.2 Annex 02: Document Distribution Record (DDR)
+11.3 Annex 03: Departmental Memorandum Issuance List
+11.4 Annex 04: Departmental Memorandum Receipt List
+12.0 REVISION HISTORY
+Version	Date	Author	Description of Change
+1.0	[DD.MM.YYYY]	[Initials]	Initial release. New standalone SOP for Memorandum Control and Management.
+REFERENCES
+The following regulatory documents, guidelines, and standards have been consulted in the development of this Standard Operating Procedure and constitute the normative framework for its interpretation and implementation:
+1. European Commission. EudraLex – Volume 4: EU Guidelines for Good Manufacturing Practice for Medicinal Products for Human and Veterinary Use. Part I, Chapter 4: Documentation. Brussels: European Commission; 2011 (consolidated version with amendments). Official Journal of the European Union. Available from: https://health.ec.europa.eu/medicinal-products/eudralex/eudralex-volume-4_en [Accessed November 2025]. Relevant sections: 4.1–4.32 (Document Design and Control).
+2. European Commission. EudraLex – Volume 4: EU Guidelines for Good Manufacturing Practice for Medicinal Products for Human and Veterinary Use. Part I, Chapter 7: Outsourced Activities. Brussels: European Commission; 2013. [Establishes requirements for documented agreements, communication, and quality oversight between contract givers and acceptors including contract laboratories, approved suppliers, and service providers].
+3. European Commission. EudraLex – Volume 4: EU Guidelines for Good Manufacturing Practice for Medicinal Products for Human and Veterinary Use. Annex 11: Computerised Systems. Brussels: European Commission; 2011. [Principles concerning data integrity applicable by extension to paper-based systems]. Available from: https://health.ec.europa.eu/system/files/2016-11/annex11_01-2011_en_0.pdf
+4. International Council for Harmonisation of Technical Requirements for Pharmaceuticals for Human Use (ICH). ICH Harmonised Tripartite Guideline: Pharmaceutical Quality System Q10. Geneva: ICH; 2008. Step 4 version dated 4 June 2008. Relevant sections: Section 3 (Pharmaceutical Quality System Elements), Section 4 (Continual Improvement of Process Performance and Product Quality).
+5. World Health Organization. WHO Technical Report Series, No. 996, 2016. Annex 5: Guidance on Good Data and Record Management Practices. Geneva: WHO; 2016. pp. 167–228. [Establishes ALCOA+ principles and documentation requirements for pharmaceutical operations].
+6. Medicines and Healthcare products Regulatory Agency (MHRA). 'GXP' Data Integrity Guidance and Definitions. Revision 1. London: MHRA; March 2018. Available from: https://www.gov.uk/government/publications/guidance-on-gxp-data-integrity
+7. International Organization for Standardization. ISO 9001:2015 – Quality Management Systems – Requirements. Geneva: ISO; 2015. Section 7.5: Documented Information. DOI: N/A (International Standard).
+8. PIC/S Secretariat. PIC/S Guidance: Good Practices for Data Management and Integrity in Regulated GMP/GDP Environments. PI 041-1. Geneva: Pharmaceutical Inspection Co-operation Scheme; 2021. [Provides detailed guidance on ALCOA+ implementation].
+— END OF DOCUMENT —

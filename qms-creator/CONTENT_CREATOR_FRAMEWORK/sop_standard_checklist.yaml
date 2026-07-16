@@ -1,0 +1,136 @@
+# SOP Standard Checklist
+# Defines required elements and content expectations for compliant SOPs
+
+version: "1.0"
+description: "Target standard for SOPs in the Cannabis EU GMP QMS"
+
+required_sections:
+  - id: header
+    name: "Document Header"
+    elements:
+      - "SOP Number"
+      - "SOP Title"
+      - "Version Number"
+      - "Effective Date"
+      - "Document Number"
+      - "Page Number"
+    keywords: ["doc no", "version", "effective date", "department", "purely plant"]
+    weight: 10
+
+  - id: purpose
+    name: "Purpose Section"
+    elements:
+      - "Clear objective statement"
+      - "Why this SOP exists"
+    keywords: ["purpose", "objective", "aim"]
+    weight: 10
+
+  - id: scope
+    name: "Scope Section"
+    elements:
+      - "Applicable areas/departments"
+      - "Applicable products/processes"
+      - "Exclusions (if any)"
+    keywords: ["scope", "applies to", "applicable"]
+    weight: 10
+
+  - id: responsibilities
+    name: "Responsibilities Section"
+    elements:
+      - "Defined roles"
+      - "Specific accountability"
+    keywords: ["responsibility", "responsibilities", "responsible", "accountable", "role"]
+    weight: 10
+
+  - id: definitions
+    name: "Definitions Section"
+    elements:
+      - "Key terms defined"
+      - "Abbreviations explained"
+    keywords: ["definition", "abbreviation", "glossary", "terms"]
+    weight: 5
+
+  - id: procedure
+    name: "Procedure Section"
+    elements:
+      - "Step-by-step instructions"
+      - "Numbered or bulleted steps"
+      - "Operator-friendly language"
+    keywords: ["procedure", "steps", "instructions", "method"]
+    weight: 20
+    required: true
+
+  - id: references
+    name: "References Section"
+    elements:
+      - "Related SOPs"
+      - "Regulatory references"
+      - "Forms and attachments"
+    keywords: ["reference", "related", "annex", "attachment"]
+    weight: 5
+
+  - id: revision_history
+    name: "Revision History"
+    elements:
+      - "Version tracking"
+      - "Change description"
+      - "Date of changes"
+    keywords: ["revision", "history", "version", "amendment"]
+    weight: 5
+
+  - id: approval
+    name: "Approval Signatures"
+    elements:
+      - "Author signature/date"
+      - "Reviewer signature/date"
+      - "Approver (QA) signature/date"
+    keywords: ["approved", "signature", "prepared by", "reviewed by"]
+    weight: 10
+
+quality_checks:
+  - id: gmp_compliance
+    name: "GMP Compliance Language"
+    description: "Uses GMP-compliant terminology and references"
+    patterns:
+      - "EU GMP"
+      - "EudraLex"
+      - "Annex"
+      - "qualification"
+      - "validation"
+    weight: 5
+
+  - id: traceability
+    name: "Traceability Elements"
+    description: "Includes batch/lot tracking requirements"
+    patterns:
+      - "batch"
+      - "lot"
+      - "record"
+      - "log"
+    weight: 5
+
+  - id: deviation_handling
+    name: "Deviation Handling"
+    description: "References deviation procedures"
+    patterns:
+      - "deviation"
+      - "non-conformance"
+      - "CAPA"
+    weight: 5
+
+formatting_rules:
+  - id: document_control
+    name: "Document Control Header"
+    description: "Must have controlled header on each page"
+    
+  - id: numbering
+    name: "Consistent Numbering"
+    description: "Procedure steps must be numbered sequentially"
+    
+  - id: font_consistency
+    name: "Font Consistency"
+    description: "Single font family throughout document"
+
+scoring:
+  threshold_pass: 70
+  threshold_conditional: 50

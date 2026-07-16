@@ -1,0 +1,9 @@
+# GrowFlow DocEngine — pinned service deps (engine deps: python-docx + lxml).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+asyncpg==0.30.0
+pydantic==2.10.4
+python-docx==1.2.0
+lxml==5.3.0
+PyYAML==6.0.2

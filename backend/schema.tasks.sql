@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
+\restrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -82,6 +82,7 @@ DECLARE
   v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END).id::text, '');
   v_payload text;
 BEGIN
+  PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
   SELECT entry_hash INTO v_prev FROM audit_log ORDER BY id DESC LIMIT 1;
   -- IMPORTANT: convert_to(text,'UTF8'), never text::bytea (escape-format bug).
   v_payload := COALESCE(v_prev,'') || v_actor || TG_OP || TG_TABLE_NAME || v_rec
@@ -223,6 +224,26 @@ ALTER TABLE ONLY public.departments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    actor_id uuid NOT NULL,
+    verb text NOT NULL,
+    object_type text NOT NULL,
+    object_id text NOT NULL,
+    task_id uuid,
+    department_id uuid,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.events FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: handoffs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -242,6 +263,296 @@ CREATE TABLE public.handoffs (
 );
 
 ALTER TABLE ONLY public.handoffs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    recipient_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    reason text NOT NULL,
+    coalesce_key text NOT NULL,
+    read_at timestamp with time zone,
+    done_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text, 'capa_stuck'::text, 'validation_stuck'::text])))
+);
+
+ALTER TABLE ONLY public.notifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: plant_batches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plant_batches (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    strain text NOT NULL,
+    plant_count integer NOT NULL,
+    phase text NOT NULL,
+    phase_since date DEFAULT CURRENT_DATE NOT NULL,
+    note text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT plant_batches_phase_check CHECK ((phase = ANY (ARRAY['clone'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'drying'::text]))),
+    CONSTRAINT plant_batches_plant_count_check CHECK ((plant_count >= 0))
+);
+
+ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_certificates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_certificates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coa_number text NOT NULL,
+    batch_id text NOT NULL,
+    specification_id uuid NOT NULL,
+    sample_id uuid,
+    report_date date,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    decision text,
+    cert_type text DEFAULT 'ICOA'::text NOT NULL,
+    source_lab text,
+    analyst_id uuid,
+    reviewer_id uuid,
+    approver_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
+    CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
+    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coa_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_coa_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_results (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coa_id uuid NOT NULL,
+    parameter_id uuid,
+    test_name text NOT NULL,
+    result_value text,
+    result_numeric numeric,
+    unit text,
+    lower_limit numeric,
+    upper_limit numeric,
+    complies boolean,
+    status text DEFAULT 'unknown'::text NOT NULL,
+    analyst_id uuid,
+    verified_by_id uuid,
+    result_date date,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_results_status_check CHECK ((status = ANY (ARRAY['pass'::text, 'fail'::text, 'marginal'::text, 'unknown'::text])))
+);
+
+ALTER TABLE ONLY public.qc_results FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sample_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_sample_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_samples; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_samples (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    sample_id text NOT NULL,
+    batch_id text NOT NULL,
+    sample_type text,
+    material_code text NOT NULL,
+    material_name_en text,
+    material_name_mk text,
+    sampling_date date,
+    status text DEFAULT 'COLLECTED'::text NOT NULL,
+    location text,
+    quantity numeric,
+    quantity_unit text,
+    retention_sample boolean DEFAULT false NOT NULL,
+    parent_id uuid,
+    sampling_plan_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_samples_status_check CHECK ((status = ANY (ARRAY['COLLECTED'::text, 'IN_TRANSIT'::text, 'RECEIVED'::text, 'IN_TEST'::text, 'TESTED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'REJECTED'::text, 'QUARANTINE'::text])))
+);
+
+ALTER TABLE ONLY public.qc_samples FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sampling_plan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_sampling_plan_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_sampling_plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_sampling_plans (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    plan_id text NOT NULL,
+    material_code text NOT NULL,
+    sampling_frequency text DEFAULT 'EVERY_BATCH'::text NOT NULL,
+    sample_size_formula text DEFAULT 'ROUNDUP(SQRT(N)*1.5)'::text NOT NULL,
+    min_sample_size integer,
+    max_sample_size integer,
+    active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_sampling_plans_freq_check CHECK ((sampling_frequency = ANY (ARRAY['EVERY_BATCH'::text, 'PERIODIC'::text, 'RANDOM'::text])))
+);
+
+ALTER TABLE ONLY public.qc_sampling_plans FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_spec_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_spec_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_spec_parameters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_spec_parameters (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    spec_id uuid NOT NULL,
+    test_name_en text NOT NULL,
+    test_name_mk text,
+    test_method text,
+    spec_type text,
+    lower_limit numeric,
+    upper_limit numeric,
+    unit text,
+    pharmacopoeia_ref text,
+    test_location text,
+    sorting_order integer DEFAULT 0 NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_spec_parameters FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_specifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_specifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    spec_id text NOT NULL,
+    material_code text NOT NULL,
+    material_name_en text NOT NULL,
+    material_name_mk text,
+    version integer DEFAULT 1 NOT NULL,
+    effective_date date,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    thc_grade text,
+    thc_acceptance_min numeric,
+    thc_acceptance_max numeric,
+    notes text,
+    approved_by uuid,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_specifications_status_check CHECK ((status = ANY (ARRAY['INITIATED'::text, 'DRAFT'::text, 'QC_REVIEW'::text, 'QA_APPROVED'::text, 'NUMBERED'::text, 'TRAINED'::text, 'ACTIVE'::text, 'UNDER_CHANGE'::text, 'SUPERSEDED'::text, 'WITHDRAWN'::text]))),
+    CONSTRAINT qc_specifications_thc_grade_check CHECK (((thc_grade IS NULL) OR (thc_grade = ANY (ARRAY['GRADE_I'::text, 'GRADE_II'::text, 'GRADE_III'::text, 'GRADE_IV'::text, 'GRADE_V'::text])))),
+    CONSTRAINT qc_specifications_version_check CHECK ((version >= 1))
+);
+
+ALTER TABLE ONLY public.qc_specifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rooms (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    name_mk text,
+    kind text DEFAULT 'flower'::text NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rooms_kind_check CHECK ((kind = ANY (ARRAY['nursery'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'dry'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -277,6 +588,23 @@ CREATE TABLE public.task_comments (
 );
 
 ALTER TABLE ONLY public.task_comments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: task_dependencies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.task_dependencies (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    depends_on_task_id uuid NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT task_dependencies_no_self CHECK ((task_id <> depends_on_task_id))
+);
+
+ALTER TABLE ONLY public.task_dependencies FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -352,7 +680,11 @@ CREATE TABLE public.tasks (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     external_ref text,
     attributes jsonb DEFAULT '{}'::jsonb NOT NULL,
+    progress smallint DEFAULT 0 NOT NULL,
+    node_kind text DEFAULT 'task'::text NOT NULL,
     CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
+    CONSTRAINT tasks_node_kind_check CHECK ((node_kind = ANY (ARRAY['task'::text, 'annex'::text, 'step'::text]))),
+    CONSTRAINT tasks_progress_check CHECK (((progress >= 0) AND (progress <= 100))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ongoing'::text, 'review'::text, 'stuck'::text, 'postponed'::text, 'completed'::text]))),
     CONSTRAINT tasks_task_type_check CHECK ((task_type = ANY (ARRAY['capa'::text, 'sop'::text, 'validation'::text, 'document'::text, 'lab'::text, 'meeting'::text, 'admin'::text, 'other'::text])))
 );
@@ -473,11 +805,139 @@ ALTER TABLE ONLY public.departments
 
 
 --
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: handoffs handoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.handoffs
     ADD CONSTRAINT handoffs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plant_batches plant_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_certificates qc_certificates_coa_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_coa_number_key UNIQUE (org_id, coa_number);
+
+
+--
+-- Name: qc_certificates qc_certificates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_results qc_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_samples qc_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_samples qc_samples_sample_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_sample_id_key UNIQUE (org_id, sample_id);
+
+
+--
+-- Name: qc_sampling_plans qc_sampling_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_plans
+    ADD CONSTRAINT qc_sampling_plans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_sampling_plans qc_sampling_plans_plan_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_plans
+    ADD CONSTRAINT qc_sampling_plans_plan_id_key UNIQUE (org_id, plan_id);
+
+
+--
+-- Name: qc_spec_parameters qc_spec_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_specifications qc_specifications_material_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_material_version_key UNIQUE (org_id, material_code, version);
+
+
+--
+-- Name: qc_specifications qc_specifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_specifications qc_specifications_spec_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_specifications
+    ADD CONSTRAINT qc_specifications_spec_id_key UNIQUE (org_id, spec_id);
+
+
+--
+-- Name: rooms rooms_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_org_id_code_key UNIQUE (org_id, code);
+
+
+--
+-- Name: rooms rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_pkey PRIMARY KEY (id);
 
 
 --
@@ -494,6 +954,22 @@ ALTER TABLE ONLY public.task_assignees
 
 ALTER TABLE ONLY public.task_comments
     ADD CONSTRAINT task_comments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: task_dependencies task_dependencies_edge_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_edge_key UNIQUE (task_id, depends_on_task_id);
+
+
+--
+-- Name: task_dependencies task_dependencies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_pkey PRIMARY KEY (id);
 
 
 --
@@ -548,6 +1024,125 @@ CREATE UNIQUE INDEX ai_agent_bindings_org_scope_uniq ON public.ai_agent_bindings
 --
 
 CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, record_id);
+
+
+--
+-- Name: events_org_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX events_org_created_idx ON public.events USING btree (org_id, created_at DESC);
+
+
+--
+-- Name: events_org_dept_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX events_org_dept_created_idx ON public.events USING btree (org_id, department_id, created_at DESC);
+
+
+--
+-- Name: notifications_coalesce_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX notifications_coalesce_idx ON public.notifications USING btree (recipient_id, coalesce_key) WHERE ((read_at IS NULL) AND (done_at IS NULL));
+
+
+--
+-- Name: notifications_recipient_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notifications_recipient_created_idx ON public.notifications USING btree (recipient_id, created_at DESC);
+
+
+--
+-- Name: notifications_unread_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notifications_unread_idx ON public.notifications USING btree (recipient_id) WHERE ((read_at IS NULL) AND (done_at IS NULL));
+
+
+--
+-- Name: plant_batches_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org_id, room_id) WHERE is_active;
+
+
+--
+-- Name: qc_certificates_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_certificates_batch_idx ON public.qc_certificates USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_certificates_spec_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_certificates_spec_idx ON public.qc_certificates USING btree (org_id, specification_id);
+
+
+--
+-- Name: qc_results_coa_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_results_coa_idx ON public.qc_results USING btree (org_id, coa_id);
+
+
+--
+-- Name: qc_samples_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_batch_idx ON public.qc_samples USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_samples_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_parent_idx ON public.qc_samples USING btree (org_id, parent_id) WHERE (parent_id IS NOT NULL);
+
+
+--
+-- Name: qc_samples_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_status_idx ON public.qc_samples USING btree (org_id, status);
+
+
+--
+-- Name: qc_sampling_plans_material_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sampling_plans_material_idx ON public.qc_sampling_plans USING btree (org_id, material_code) WHERE active;
+
+
+--
+-- Name: qc_spec_parameters_spec_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_spec_parameters_spec_idx ON public.qc_spec_parameters USING btree (org_id, spec_id);
+
+
+--
+-- Name: qc_specifications_material_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_specifications_material_idx ON public.qc_specifications USING btree (org_id, material_code);
+
+
+--
+-- Name: qc_specifications_one_active_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_specifications_one_active_idx ON public.qc_specifications USING btree (org_id, material_code) WHERE (status = 'ACTIVE'::text);
+
+
+--
+-- Name: task_dependencies_dep_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX task_dependencies_dep_idx ON public.task_dependencies USING btree (org_id, depends_on_task_id);
 
 
 --
@@ -670,6 +1265,69 @@ CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoff
 
 
 --
+-- Name: plant_batches audit_plant_batches; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.plant_batches FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_certificates audit_qc_certificates; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_certificates AFTER INSERT OR DELETE OR UPDATE ON public.qc_certificates FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_results audit_qc_results; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_results AFTER INSERT OR DELETE OR UPDATE ON public.qc_results FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_samples audit_qc_samples; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_samples AFTER INSERT OR DELETE OR UPDATE ON public.qc_samples FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_sampling_plans audit_qc_sampling_plans; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_sampling_plans AFTER INSERT OR DELETE OR UPDATE ON public.qc_sampling_plans FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_spec_parameters audit_qc_spec_parameters; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_spec_parameters AFTER INSERT OR DELETE OR UPDATE ON public.qc_spec_parameters FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_specifications audit_qc_specifications; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_specifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_specifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: rooms audit_rooms; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_rooms AFTER INSERT OR DELETE OR UPDATE ON public.rooms FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: task_dependencies audit_task_dependencies; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_dependencies AFTER INSERT OR DELETE OR UPDATE ON public.task_dependencies FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: task_progress audit_task_prog; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -746,6 +1404,78 @@ ALTER TABLE ONLY public.handoffs
 
 
 --
+-- Name: notifications notifications_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE CASCADE;
+
+
+--
+-- Name: plant_batches plant_batches_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_certificates qc_certificates_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_certificates qc_certificates_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_results qc_results_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_coa_fkey FOREIGN KEY (coa_id) REFERENCES public.qc_certificates(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_results qc_results_param_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_results
+    ADD CONSTRAINT qc_results_param_fkey FOREIGN KEY (parameter_id) REFERENCES public.qc_spec_parameters(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_samples qc_samples_parent_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_parent_fkey FOREIGN KEY (parent_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_samples qc_samples_plan_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_plan_fkey FOREIGN KEY (sampling_plan_id) REFERENCES public.qc_sampling_plans(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_spec_parameters qc_spec_parameters_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_spec_fkey FOREIGN KEY (spec_id) REFERENCES public.qc_specifications(id) ON DELETE CASCADE;
+
+
+--
 -- Name: task_assignees task_assignees_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -759,6 +1489,22 @@ ALTER TABLE ONLY public.task_assignees
 
 ALTER TABLE ONLY public.task_comments
     ADD CONSTRAINT task_comments_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: task_dependencies task_dependencies_dep_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_dep_fkey FOREIGN KEY (depends_on_task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: task_dependencies task_dependencies_task_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_dependencies
+    ADD CONSTRAINT task_dependencies_task_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
 
 
 --
@@ -854,10 +1600,57 @@ ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: events events_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY events_insert ON public.events FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: events events_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY events_read ON public.events FOR SELECT USING ((org_id = app.current_org_id()));
+
+
+--
 -- Name: handoffs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.handoffs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: notifications notif_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_insert ON public.notifications FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: notifications notif_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_select ON public.notifications FOR SELECT USING (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id())));
+
+
+--
+-- Name: notifications notif_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY notif_update ON public.notifications FOR UPDATE USING (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id()))) WITH CHECK (((org_id = app.current_org_id()) AND (recipient_id = app.current_user_id())));
+
+
+--
+-- Name: notifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: ai_agent_bindings org_isolation; Type: POLICY; Schema: public; Owner: -
@@ -895,6 +1688,62 @@ CREATE POLICY org_isolation ON public.handoffs USING ((org_id = app.current_org_
 
 
 --
+-- Name: plant_batches org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_certificates org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_results org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_results USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_samples org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_samples USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_sampling_plans org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_sampling_plans USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_spec_parameters org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_spec_parameters USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_specifications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_specifications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: rooms org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.rooms USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: task_assignees org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -906,6 +1755,13 @@ CREATE POLICY org_isolation ON public.task_assignees USING ((org_id = app.curren
 --
 
 CREATE POLICY org_isolation ON public.task_comments USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: task_dependencies org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.task_dependencies USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -923,11 +1779,59 @@ CREATE POLICY org_isolation ON public.work_sessions USING ((org_id = app.current
 
 
 --
+-- Name: plant_batches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: task_progress progress_rw; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: qc_certificates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_certificates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_results; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_results ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_samples; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_samples ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_sampling_plans; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_sampling_plans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_spec_parameters; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_spec_parameters ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_specifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_specifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_assignees; Type: ROW SECURITY; Schema: public; Owner: -
@@ -940,6 +1844,12 @@ ALTER TABLE public.task_assignees ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: task_dependencies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.task_dependencies ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_links; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1021,5 +1931,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vxirYao09fJVy8nOBzZYM23ChiFi44yMuFdyhLBHUYRg8idg5kYEeWS1fpS7nlG
+\unrestrict yokNF5b0hUhlxF9v5sgRhbcY1Vd9droW3iB0cnFijLfJ2nQ9KZREwLkg8mrS6JO
 

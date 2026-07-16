@@ -1,0 +1,363 @@
+{
+  "equipment_types": {
+    "laboratory": [
+      "HPLC System (High Performance Liquid Chromatography)",
+      "GC-MS (Gas Chromatography-Mass Spectrometry)",
+      "UV-Vis Spectrophotometer",
+      "Analytical Balance (0.0001g)",
+      "pH Meter",
+      "Karl Fischer Titrator",
+      "Dissolution Apparatus",
+      "Melting Point Apparatus",
+      "Refractometer",
+      "Polarimeter",
+      "Microscope (Optical)",
+      "Stereo Microscope",
+      "Laminar Flow Hood",
+      "Biosafety Cabinet",
+      "Autoclave",
+      "Incubator",
+      "Water Bath",
+      "Centrifuge",
+      "Vortex Mixer",
+      "Magnetic Stirrer",
+      "Ultrasonic Bath",
+      "Fume Hood"
+    ],
+    "cultivation": [
+      "LED Grow Lights",
+      "HPS Grow Lights",
+      "Fertigation System",
+      "Irrigation Controller",
+      "Climate Controller (HVAC)",
+      "CO2 Generator/Controller",
+      "Dehumidifier",
+      "Humidifier",
+      "Air Handler Unit",
+      "Exhaust Fan",
+      "Carbon Filter",
+      "Growing Tables/Benches",
+      "Propagation Dome",
+      "Cloning Machine",
+      "Trimming Machine",
+      "Plant Support System",
+      "Nutrient Mixing Tank",
+      "EC/pH Dosing System"
+    ],
+    "production": [
+      "Drying Rack/Chamber",
+      "Curing Containers",
+      "Trimming Machine (Automatic)",
+      "Trimming Scissors (Manual)",
+      "Packaging Machine",
+      "Vacuum Sealer",
+      "Label Printer",
+      "Weighing Scale (Industrial)",
+      "Metal Detector",
+      "Extraction Equipment",
+      "Rotary Evaporator",
+      "Short Path Distillation",
+      "Homogenizer",
+      "Filling Machine",
+      "Capping Machine"
+    ],
+    "monitoring": [
+      "Temperature Logger (Testo 184 T4)",
+      "Temperature/Humidity Logger (Testo 184 H1)",
+      "Temperature/Humidity Logger (Testo 184 H2)",
+      "Data Logger (Multi-channel)",
+      "Environmental Monitoring System",
+      "Differential Pressure Monitor",
+      "Particle Counter",
+      "CO2 Monitor",
+      "PAR Light Meter",
+      "Lux Meter"
+    ],
+    "storage": [
+      "Cold Room (2-8°C)",
+      "Freezer (-20°C)",
+      "Ultra-low Freezer (-80°C)",
+      "Controlled Room Temperature Storage",
+      "Desiccator Cabinet",
+      "Flammable Storage Cabinet",
+      "Chemical Storage Cabinet",
+      "Secure Storage (Controlled Substances)"
+    ]
+  },
+  "ppe_types": [
+    "Lab Coat (Cotton)",
+    "Lab Coat (Disposable)",
+    "Cleanroom Gown",
+    "Nitrile Gloves",
+    "Latex Gloves (if no allergy)",
+    "Safety Glasses",
+    "Safety Goggles",
+    "Face Shield",
+    "N95 Respirator",
+    "Half-Face Respirator",
+    "Full-Face Respirator",
+    "Hair Net",
+    "Beard Cover",
+    "Shoe Covers",
+    "Cleanroom Booties",
+    "Ear Plugs",
+    "Ear Muffs",
+    "Hard Hat",
+    "Steel-toe Boots"
+  ],
+  "testing_methods": {
+    "potency": [
+      "HPLC-UV (Cannabinoid Potency)",
+      "HPLC-DAD",
+      "UHPLC",
+      "Gas Chromatography (GC-FID)"
+    ],
+    "terpenes": [
+      "GC-MS (Terpene Profile)",
+      "GC-FID (Terpene Quantification)",
+      "Headspace GC-MS"
+    ],
+    "contaminants": [
+      "ICP-MS (Heavy Metals)",
+      "ICP-OES (Heavy Metals)",
+      "LC-MS/MS (Pesticides)",
+      "GC-MS/MS (Pesticides)",
+      "LC-MS/MS (Mycotoxins)"
+    ],
+    "microbial": [
+      "Total Aerobic Microbial Count (TAMC)",
+      "Total Yeast and Mold Count (TYMC)",
+      "Bile-tolerant Gram-negative Bacteria",
+      "E. coli Detection",
+      "Salmonella Detection",
+      "Staphylococcus aureus Detection",
+      "Pseudomonas aeruginosa Detection",
+      "qPCR Pathogen Detection"
+    ],
+    "physical": [
+      "Loss on Drying (LOD)",
+      "Karl Fischer Moisture",
+      "Water Activity (aw)",
+      "Particle Size Analysis",
+      "Foreign Matter Inspection",
+      "Visual Inspection"
+    ],
+    "identity": [
+      "HPLC Fingerprint",
+      "TLC (Thin Layer Chromatography)",
+      "Microscopy",
+      "Organoleptic Testing"
+    ]
+  },
+  "regulatory_references": {
+    "eu_gmp": [
+      "EudraLex Volume 4 - EU GMP Guidelines",
+      "EudraLex Vol 4, Part I, Chapter 1 - Pharmaceutical Quality System",
+      "EudraLex Vol 4, Part I, Chapter 2 - Personnel",
+      "EudraLex Vol 4, Part I, Chapter 3 - Premises and Equipment",
+      "EudraLex Vol 4, Part I, Chapter 4 - Documentation",
+      "EudraLex Vol 4, Part I, Chapter 5 - Production",
+      "EudraLex Vol 4, Part I, Chapter 6 - Quality Control",
+      "EudraLex Vol 4, Part I, Chapter 7 - Outsourced Activities",
+      "EudraLex Vol 4, Part I, Chapter 8 - Complaints and Product Recall",
+      "EudraLex Vol 4, Part I, Chapter 9 - Self Inspection",
+      "EudraLex Vol 4, Annex 1 - Manufacture of Sterile Medicinal Products",
+      "EudraLex Vol 4, Annex 7 - Manufacture of Herbal Medicinal Products",
+      "EudraLex Vol 4, Annex 11 - Computerised Systems",
+      "EudraLex Vol 4, Annex 15 - Qualification and Validation",
+      "EudraLex Vol 4, Annex 17 - Real Time Release Testing"
+    ],
+    "ich": [
+      "ICH Q1 - Stability Testing",
+      "ICH Q2 - Analytical Validation",
+      "ICH Q3 - Impurities",
+      "ICH Q6 - Specifications",
+      "ICH Q7 - GMP for Active Pharmaceutical Ingredients",
+      "ICH Q8 - Pharmaceutical Development",
+      "ICH Q9 - Quality Risk Management",
+      "ICH Q10 - Pharmaceutical Quality System",
+      "ICH Q11 - Development and Manufacture of Drug Substances",
+      "ICH Q12 - Lifecycle Management"
+    ],
+    "who": [
+      "WHO GMP Guidelines",
+      "WHO TRS 992 - Annex 2 (GMP for Pharmaceutical Products)",
+      "WHO TRS 996 - Annex 4 (GMP for Herbal Medicines)",
+      "WHO Guidelines on GACP (Good Agricultural and Collection Practices)"
+    ],
+    "cannabis_specific": [
+      "GACP Guidelines for Medicinal Cannabis",
+      "EU GMP Annex 7 (Herbal Products)",
+      "German Cannabis Agency Requirements",
+      "Dutch OMC Guidelines",
+      "INCB Cannabis Regulations"
+    ]
+  },
+  "environmental_parameters": {
+    "cultivation_rooms": {
+      "temperature": ["18-26°C", "20-25°C", "22-24°C"],
+      "humidity": ["40-60% RH", "45-55% RH", "50-60% RH", "55-65% RH"],
+      "co2": ["400-1500 ppm", "800-1200 ppm", "1000-1500 ppm"],
+      "light_cycle": ["18/6 (Vegetative)", "12/12 (Flowering)", "24/0 (Propagation)", "20/4 (Auto-flower)"],
+      "par_level": ["200-400 µmol/m²/s (Seedling)", "400-600 µmol/m²/s (Vegetative)", "600-1000 µmol/m²/s (Flowering)"]
+    },
+    "drying_rooms": {
+      "temperature": ["18-21°C", "15-20°C", "18-22°C"],
+      "humidity": ["45-55% RH", "50-60% RH", "55-60% RH"],
+      "air_exchange": ["4-8 ACH", "6-10 ACH"]
+    },
+    "storage_areas": {
+      "temperature": ["15-25°C", "2-8°C (Cold)", "-20°C (Frozen)"],
+      "humidity": ["30-40% RH", "40-50% RH", "<60% RH"],
+      "light": ["Protected from light", "Dark storage", "Amber containers"]
+    },
+    "laboratory": {
+      "temperature": ["20-25°C", "22±2°C"],
+      "humidity": ["40-60% RH", "45-55% RH"],
+      "differential_pressure": ["Positive pressure", "Negative pressure", "±5 Pa", "±10 Pa"]
+    },
+    "cleanroom_classifications": [
+      "ISO Class 5 (Grade A equivalent)",
+      "ISO Class 7 (Grade B/C equivalent)",
+      "ISO Class 8 (Grade D equivalent)",
+      "Controlled Not Classified (CNC)",
+      "Grade A (At rest)",
+      "Grade B (At rest)",
+      "Grade C (At rest/Operation)",
+      "Grade D (At rest/Operation)"
+    ]
+  },
+  "training_types": [
+    "GMP Fundamentals",
+    "GDP (Good Documentation Practices)",
+    "Hygiene and Gowning",
+    "Cleanroom Behavior",
+    "SOP-Specific Training",
+    "Equipment Operation",
+    "Safety Training (General)",
+    "Chemical Safety/Hazmat",
+    "Aseptic Technique",
+    "Sampling Procedures",
+    "Deviation Handling",
+    "CAPA System",
+    "Change Control",
+    "Quality Risk Management (ICH Q9)",
+    "Data Integrity (ALCOA+)",
+    "Cannabis-Specific Regulations",
+    "Controlled Substances Handling"
+  ],
+  "documentation_types": [
+    "Batch Manufacturing Record (BMR)",
+    "Batch Packaging Record (BPR)",
+    "Cultivation Batch Record",
+    "Laboratory Worksheet",
+    "Equipment Logbook",
+    "Cleaning Record",
+    "Environmental Monitoring Log",
+    "Deviation Report",
+    "CAPA Form",
+    "Change Control Request",
+    "Training Record",
+    "Qualification Protocol",
+    "Validation Protocol",
+    "Certificate of Analysis (CoA)",
+    "Release Certificate"
+  ],
+  "deviation_categories": [
+    "Minor - No impact on product quality",
+    "Major - Potential impact on product quality",
+    "Critical - Definite impact on product quality or patient safety"
+  ],
+  "capa_types": [
+    "Corrective Action - Address existing nonconformity",
+    "Preventive Action - Prevent potential nonconformity",
+    "Improvement Action - Enhance existing process"
+  ],
+  "validation_types": [
+    "Prospective Validation",
+    "Concurrent Validation",
+    "Retrospective Validation",
+    "Revalidation",
+    "Continuous Process Verification"
+  ],
+  "qualification_types": [
+    "Design Qualification (DQ)",
+    "Installation Qualification (IQ)",
+    "Operational Qualification (OQ)",
+    "Performance Qualification (PQ)",
+    "User Requirement Specification (URS)"
+  ],
+  "risk_assessment_tools": [
+    "FMEA (Failure Mode and Effects Analysis)",
+    "HACCP (Hazard Analysis Critical Control Points)",
+    "FTA (Fault Tree Analysis)",
+    "PHA (Preliminary Hazard Analysis)",
+    "Risk Ranking and Filtering",
+    "5 Whys Analysis",
+    "Fishbone/Ishikawa Diagram"
+  ],
+  "departments": [
+    "Quality Assurance (QA)",
+    "Quality Control (QC)",
+    "Production",
+    "Cultivation",
+    "Extraction",
+    "Packaging",
+    "Warehouse/Logistics",
+    "Maintenance/Engineering",
+    "Research & Development (R&D)",
+    "Regulatory Affairs",
+    "Human Resources",
+    "IT/Computer Systems"
+  ],
+  "retention_periods": [
+    "1 year",
+    "2 years",
+    "3 years",
+    "5 years",
+    "7 years",
+    "10 years",
+    "15 years",
+    "Product shelf life + 1 year",
+    "Product shelf life + 5 years",
+    "Batch expiry + 1 year"
+  ],
+  "product_types": [
+    "Dried Cannabis Flower",
+    "Pre-rolls",
+    "Cannabis Oil (Full Spectrum)",
+    "Cannabis Oil (Broad Spectrum)",
+    "Cannabis Oil (Isolate)",
+    "Cannabis Extract",
+    "Cannabis Tincture",
+    "Cannabis Capsules",
+    "Cannabis Edibles",
+    "Cannabis Topicals",
+    "Cannabis Vape Products",
+    "API (Active Pharmaceutical Ingredient)",
+    "Intermediate Product"
+  ],
+  "areas_locations": [
+    "Propagation Room",
+    "Vegetative Room",
+    "Flowering Room",
+    "Mother Room",
+    "Drying Room",
+    "Curing Room",
+    "Trimming Area",
+    "Packaging Area",
+    "QC Laboratory",
+    "Microbiology Laboratory",
+    "Warehouse (Quarantine)",
+    "Warehouse (Released)",
+    "Warehouse (Rejected)",
+    "Shipping/Dispatch",
+    "Receiving Dock",
+    "Extraction Suite",
+    "Formulation Area",
+    "Gowning Room",
+    "Airlock",
+    "Material Airlock (MAL)",
+    "Personnel Airlock (PAL)"
+  ]
+}

@@ -1,0 +1,120 @@
+erDiagram
+    FACILITIES ||--o{ DEPARTMENTS : contains
+    FACILITIES ||--o{ PERSONNEL : employs
+    FACILITIES ||--o{ EQUIPMENT : owns
+    FACILITIES ||--o{ DOCUMENT_TEMPLATES : stores
+    FACILITIES {
+        uuid id PK
+        varchar name
+        varchar code UK
+        varchar facility_type
+        text address
+        varchar gmp_license_number
+        date license_expiry
+        timestamp created_at
+    }
+
+    DEPARTMENTS ||--o{ PERSONNEL : has
+    DEPARTMENTS ||--o{ EQUIPMENT : uses
+    DEPARTMENTS {
+        uuid id PK
+        uuid facility_id FK
+        varchar name
+        varchar code
+        uuid manager_id
+        timestamp created_at
+    }
+
+    PERSONNEL {
+        uuid id PK
+        uuid facility_id FK
+        uuid department_id FK
+        varchar first_name
+        varchar last_name
+        varchar job_title
+        varchar job_title_mk
+        varchar email
+        timestamp created_at
+    }
+
+    EQUIPMENT {
+        uuid id PK
+        uuid facility_id FK
+        uuid department_id FK
+        varchar name
+        varchar name_mk
+        varchar equipment_code
+        varchar manufacturer
+        varchar model
+        varchar serial_number
+        varchar qualification_status
+        date last_calibration
+        date next_calibration
+        varchar location
+        timestamp created_at
+    }
+
+    USER_SESSIONS ||--o{ WORKFLOW_STATES : manages
+    USER_SESSIONS ||--o{ AUDIT_TRAIL : logs
+    USER_SESSIONS {
+        uuid id PK
+        uuid user_id
+        uuid facility_id FK
+        varchar session_token
+        varchar language_preference
+        timestamp started_at
+        timestamp last_activity
+        timestamp expires_at
+    }
+
+    WORKFLOW_STATES ||--o{ AUDIT_TRAIL : tracked_by
+    WORKFLOW_STATES {
+        uuid id PK
+        uuid session_id FK
+        varchar workflow_type
+        int current_agent
+        varchar current_phase
+        varchar status
+        timestamp created_at
+    }
+
+    AUDIT_TRAIL {
+        uuid id PK
+        uuid session_id FK
+        uuid workflow_id FK
+        varchar action_type
+        uuid performed_by
+        timestamp created_at
+    }
+
+    DOCUMENT_TEMPLATES ||--o{ TEMPLATE_EMBEDDINGS : embedded
+    DOCUMENT_TEMPLATES {
+        uuid id PK
+        uuid facility_id FK
+        varchar template_type
+        varchar category
+        varchar title
+        varchar title_mk
+        text content
+        varchar file_path
+        decimal quality_score
+        decimal regulatory_alignment
+        timestamp created_at
+    }
+
+    TEMPLATE_EMBEDDINGS {
+        uuid id PK
+        uuid template_id FK
+        text chunk_text
+        int chunk_index
+        timestamp created_at
+    }
+
+    FORMATTING_RULES {
+        uuid id PK
+        varchar rule_name
+        varchar rule_type
+        varchar language
+        int priority
+        timestamp created_at
+    }

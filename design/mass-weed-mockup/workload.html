@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Crew Workload</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .hint{ font-size:11px; color:var(--mw-text-faint); letter-spacing:.04em; margin:-6px 0 14px; }
+  .hint b{ color:var(--mw-cyan); }
+
+  .lanes{ display:flex; flex-direction:column; gap:12px; }
+  .lane{ display:grid; grid-template-columns:210px 1fr; gap:16px; align-items:center; padding:12px 16px; transition:box-shadow .12s ease; }
+  .lane.over{ box-shadow:inset 0 0 0 1.5px var(--mw-cyan), 0 0 20px rgba(58,159,212,.2); }
+  .who{ display:flex; align-items:center; gap:11px; }
+  .av{ width:38px; height:38px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mw-font-cond),sans-serif; font-size:13px; font-weight:700; color:var(--mw-void);
+    background:linear-gradient(135deg,var(--mw-cyan),rgba(16,48,80,.9)); }
+  .av.off{ filter:grayscale(.6) brightness(.7); }
+  .nm{ font-size:13.5px; font-weight:600; color:var(--mw-ink); } .role{ font-size:10.5px; color:var(--mw-text-dim); letter-spacing:.04em; margin-top:1px; }
+  .caparea{ display:flex; flex-direction:column; gap:7px; }
+  .capbar{ display:flex; align-items:center; gap:12px; }
+  .track{ flex:1; height:22px; background:rgba(6,20,40,.6); box-shadow:inset 0 0 0 1px rgba(94,200,240,.12); position:relative; overflow:hidden;
+    clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .fill{ height:100%; display:flex; align-items:center; padding-left:9px; font-size:10px; font-weight:700; color:var(--mw-void); letter-spacing:.05em; }
+  .fill--ok{ background:linear-gradient(90deg,var(--mw-stat-hi),rgba(108,240,90,.6)); }
+  .fill--mid{ background:linear-gradient(90deg,var(--mw-stat-mid),rgba(236,236,74,.6)); }
+  .fill--over{ background:linear-gradient(90deg,var(--mw-stat-lo),rgba(240,90,90,.6)); }
+  .cap100{ position:absolute; top:0; bottom:0; left:100%; width:2px; background:rgba(255,255,255,.35); } /* only if >100 track scaled */
+  .pct{ font-family:var(--mw-font-cond),sans-serif; font-size:16px; font-weight:700; width:46px; text-align:right; }
+  .pct--ok{ color:var(--mw-stat-hi); } .pct--mid{ color:var(--mw-stat-mid); } .pct--over{ color:var(--mw-stat-lo); }
+
+  .chips{ display:flex; gap:7px; flex-wrap:wrap; }
+  .chip{ font-size:11px; padding:5px 10px; border-radius:2px; background:rgba(6,20,40,.55); box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);
+    color:var(--mw-text); cursor:grab; user-select:none; display:flex; align-items:center; gap:6px; transition:box-shadow .12s ease,transform .1s ease; }
+  .chip:hover{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .chip.drag{ opacity:.4; }
+  .chip i{ width:6px; height:6px; border-radius:50%; flex:none; }
+  .chip.p-hi i{ background:var(--mw-stat-lo); } .chip.p-mid i{ background:var(--mw-stat-mid); } .chip.p-lo i{ background:var(--mw-cyan-dim); }
+  .laneR{ display:flex; flex-direction:row; flex-wrap:wrap; gap:7px; }
+  .chip{ flex:0 0 auto; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Crew Workload">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="my-day.html">My Day</a>
+    <a href="team.html">Crew</a>
+    <a href="workload.html" class="is-active">Workload</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="calendar.html">Schedule</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Crew Workload</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Open Tasks</div><div class="mw-kpi__val" id="k-open">—</div><div class="mw-kpi__delta">across crew</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Overloaded</div><div class="mw-kpi__val mw-kpi__val--amber" id="k-over">—</div><div class="mw-kpi__delta">over capacity</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Available</div><div class="mw-kpi__val mw-kpi__val--green" id="k-free">—</div><div class="mw-kpi__delta">under 70%</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Avg Load</div><div class="mw-kpi__val" id="k-avg">—</div><div class="mw-kpi__delta">of capacity</div></div>
+  </div>
+
+  <div class="hint">Drag a task chip from one crew member onto another to <b>reassign</b>. Capacity bars and KPIs update live.</div>
+
+  <div class="mw-panel"><div class="lanes" id="lanes"></div></div>
+</div>
+</div>
+
+<script src="nav.js"></script>
+<script src="cmdk.js"></script>
+<script>
+  // capacity in "task points"; each crew has a weekly capacity
+  const crew=[
+    {n:'A. Shepard',r:'Master Grower',i:'AS',off:false,cap:10,tasks:[['Sign COA F-24','hi'],['Flower A ballast swap','mid'],['Phenotype review','lo'],['Cycle board triage','mid']]},
+    {n:'G. Vakarian',r:'IPM Lead',i:'GV',off:false,cap:10,tasks:[['Zone 4 mildew check','hi'],['Weekly pest scout','mid']]},
+    {n:'T. Krios',r:'Extraction Tech',i:'TK',off:false,cap:8,tasks:[['Live resin run','mid'],['Solvent recovery log','lo'],['Diamond wash','mid'],['Purge cycle QA','hi'],['Equipment calib.','lo']]},
+    {n:'L. T\u2019Soni',r:'QA / Compliance',i:'LT',off:false,cap:9,tasks:[['METRC reconcile','hi'],['COA archive','mid'],['Compliance log','mid']]},
+    {n:'U. Wrex',r:'Trim Manager',i:'UW',off:false,cap:10,tasks:[['Trim F-24','mid'],['Dry room rotate','mid'],['Bucking crew brief','lo']]},
+    {n:'M. Solus',r:'Nutrient Chemist',i:'MS',off:false,cap:8,tasks:[['Res B refill','hi'],['EC/pH calibration','mid']]},
+    {n:'J. Moreau',r:'Packaging Op',i:'JM',off:true,cap:8,tasks:[['Pack #MW-3182','mid']]},
+    {n:'A. Williams',r:'Security / Vault',i:'AW',off:false,cap:7,tasks:[['Vault audit','lo'],['Camera sweep','lo']]},
+  ];
+  const W={hi:3,mid:2,lo:1};
+
+  function load(c){ return c.tasks.reduce((s,t)=>s+W[t[1]],0); }
+  function tier(pct){ return pct>100?'over':pct>=75?'mid':'ok'; }
+
+  function kpis(){
+    const open=crew.reduce((s,c)=>s+c.tasks.length,0);
+    const over=crew.filter(c=>load(c)/c.cap*100>100).length;
+    const free=crew.filter(c=>load(c)/c.cap*100<70).length;
+    const avg=Math.round(crew.reduce((s,c)=>s+load(c)/c.cap*100,0)/crew.length);
+    document.getElementById('k-open').textContent=open;
+    document.getElementById('k-over').textContent=over;
+    document.getElementById('k-free').textContent=free;
+    document.getElementById('k-avg').textContent=avg+'%';
+  }
+
+  function render(){
+    document.getElementById('lanes').innerHTML = crew.map((c,ci)=>{
+      const ld=load(c), pct=Math.round(ld/c.cap*100), t=tier(pct), w=Math.min(pct,100);
+      return `<div class="mw-panel--alt lane" data-ci="${ci}">
+        <div class="who"><div class="av ${c.off?'off':''}">${c.i}</div><div><div class="nm">${c.n}</div><div class="role">${c.r}</div></div></div>
+        <div class="caparea">
+          <div class="capbar">
+            <div class="track"><div class="fill fill--${t}" style="width:${w}%">${pct}%</div></div>
+            <span class="pct pct--${t}">${ld}/${c.cap}</span>
+          </div>
+          <div class="chips laneR" data-ci="${ci}">
+            ${c.tasks.map((tk,ti)=>`<span class="chip p-${tk[1]}" draggable="true" data-ci="${ci}" data-ti="${ti}"><i></i>${tk[0]}</span>`).join('')
+              || '<span style="font-size:11px;color:var(--mw-text-faint);">No open tasks</span>'}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    bindDnD(); kpis();
+  }
+
+  let dragFrom=null;
+  function bindDnD(){
+    document.querySelectorAll('.chip[draggable]').forEach(ch=>{
+      ch.addEventListener('dragstart',e=>{ dragFrom={ci:+ch.dataset.ci,ti:+ch.dataset.ti}; ch.classList.add('drag'); e.dataTransfer.effectAllowed='move'; });
+      ch.addEventListener('dragend',()=>ch.classList.remove('drag'));
+    });
+    document.querySelectorAll('.lane').forEach(ln=>{
+      ln.addEventListener('dragover',e=>{ e.preventDefault(); ln.classList.add('over'); });
+      ln.addEventListener('dragleave',()=>ln.classList.remove('over'));
+      ln.addEventListener('drop',e=>{
+        e.preventDefault(); ln.classList.remove('over');
+        const to=+ln.dataset.ci;
+        if(dragFrom && dragFrom.ci!==to){
+          const [task]=crew[dragFrom.ci].tasks.splice(dragFrom.ti,1);
+          crew[to].tasks.push(task);
+          render();
+        }
+        dragFrom=null;
+      });
+    });
+  }
+  render();
+</script>
+</body>
+</html>

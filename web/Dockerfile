@@ -5,8 +5,14 @@ FROM nginx:1.27-alpine
 
 # Static app (index.html + gf/ + assets/)
 COPY . /usr/share/nginx/html
-# Don't ship the Dockerfile / nginx.conf into the web root
-RUN rm -f /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/nginx.conf
+# Don't ship build/test cruft into the public web root. e2e/ (specs, seed.js,
+# record-*.cjs, playwright config) discloses API flows + selectors and must not
+# be fetchable; also drop the Dockerfile/nginx.conf and loose docs. This runs
+# regardless of build context (the deploy uses `git archive`, which ignores
+# .dockerignore), so it is the effective guard.
+RUN rm -f  /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/nginx.conf \
+ && rm -rf /usr/share/nginx/html/e2e \
+ && find /usr/share/nginx/html -maxdepth 1 -name '*.md' -delete
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

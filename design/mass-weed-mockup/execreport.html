@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Executive Report</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  ════════════════════════════════════════════════════════════════════
+  DESIGN NOTES · Executive Report  (surface 3.3, brief §3.3) — .xr-* scope
+  ────────────────────────────────────────────────────────────────────
+  WHAT THIS IS: the owner's read-only cockpit over the weekly documents.
+  Full-page (own week/kind picker, no week strip). Six ordered blocks:
+    1. Submission status board — 7 dept + 1 org-wide chip
+       (missing=red / draft=amber / locked=green). Click focuses section.
+    2. Org KPI band — on-time %, overdue, hours, complexity (font-cond
+       hero numerals, glass stat cards mirroring telemetry).
+    3. Per-department sections — collapsible (native <details>, collapsed
+       by default). Header = dept badge + status + updated-at. Inside:
+       read-only metric grid, bilingual narrative, AI passage inside the
+       standard AI-disclaimer wrapper.
+    4. Task drill-down rows — nested <details>: status pill + title +
+       assignee avatars; expanded → progress notes WITH author names +
+       per-task hours. Owner notes keep a GOLD treatment, CEO/COO a
+       lighter exec accent (directives never drown in ordinary notes).
+    5. Deep links — "Open in board" + "Worklog" icon buttons per row.
+    6. Export actions — PDF + Interactive HTML in the view header.
+
+  GRACEFUL DEGRADATION (both shown live):
+    · missing dept document → ghost section, "not submitted" state, no
+      drill-down (QA in this sample).
+    · AI unbound → toggle the header switch; every .xr-ai passage hides
+      and sections render on their human narrative alone.
+
+  EXTENDED: .xr-* only. Reuses .mw-panel/-hero/-quiet, .mw-badge, avatars,
+    .mw-st status pills, .mw-attr, and the KPI tile vocabulary.
+  NEW TOKENS: none. Dept identity via --mw-acc; owner-gold reuses
+    --mw-legendary (#f0b95e). STATES: hover, focus (deep-link buttons +
+    summaries are focusable), open/closed, ghost/missing, ai-off, themes.
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+  html,body{ margin:0; background:var(--mw-void); }
+  .wrap{ max-width:1120px; margin:0 auto; padding:18px 24px 70px; }
+
+  /* header */
+  .xr-head{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+  .xr-head__ttl{ font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:.12em; font-size:24px; font-weight:700; color:var(--mw-header); text-shadow:0 0 16px rgba(94,200,240,.5); }
+  .xr-head__sub{ font-size:12px; color:var(--mw-text-dim); letter-spacing:.04em; margin-top:2px; }
+  .xr-head__sp{ flex:1; }
+  .xr-head__acts{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .xr-aiswitch{ display:inline-flex; align-items:center; gap:8px; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-text-dim); }
+
+  .xr-sectionlabel{ display:flex; align-items:center; gap:10px; font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--mw-text-dim); margin:26px 0 12px; }
+  .xr-sectionlabel::after{ content:""; flex:1; height:1px; background:linear-gradient(90deg, rgba(94,200,240,.3), transparent); }
+
+  /* submission status board */
+  .xr-subs{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .xr-subs > *{ min-width:0; }
+  .xr-sub{ display:flex; align-items:flex-start; gap:11px; padding:12px 14px; cursor:pointer; text-align:left; width:100%; border:none;
+    background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dc,#5ec8f0) 26%, transparent);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); transition:all .13s ease; }
+  .xr-sub:hover{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dc,#5ec8f0) 60%, transparent), 0 0 16px color-mix(in srgb,var(--dc,#5ec8f0) 20%, transparent); transform:translateY(-1px); }
+  .xr-sub__ab{ font-family:var(--mw-font-cond); font-weight:700; font-size:16px; letter-spacing:.04em; color:var(--dc,#5ec8f0); flex:none; width:36px; padding-top:1px; }
+  .xr-sub__body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+  .xr-sub__nm{ font-size:12px; font-weight:600; color:var(--mw-text); line-height:1.25; }
+  .xr-sub__dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .st-missing{ --s:var(--mw-stat-lo); } .st-draft{ --s:var(--mw-stat-mid); } .st-locked{ --s:var(--mw-stat-hi); }
+  .xr-sub .xr-sub__dot{ background:var(--s); box-shadow:0 0 7px var(--s); }
+  .xr-stlab{ display:inline-flex; align-items:center; gap:6px; font-family:var(--mw-font-cond); font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--s); }
+
+  /* KPI band */
+  .xr-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .xr-kpis > *{ min-width:0; }
+  .xr-kpi{ padding:16px 18px; }
+  .xr-kpi__l{ font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--mw-text-dim); }
+  .xr-kpi__v{ font-family:var(--mw-font-cond); font-weight:700; font-size:40px; line-height:1; color:var(--mw-cyan-bright); text-shadow:0 0 16px rgba(94,200,240,.45); margin:8px 0 4px; }
+  .xr-kpi__v.green{ color:var(--mw-digit); text-shadow:0 0 14px var(--mw-digit-glow); }
+  .xr-kpi__v.amber{ color:var(--mw-stat-mid); text-shadow:0 0 14px rgba(236,236,74,.5); }
+  .xr-kpi__v.red{ color:var(--mw-stat-lo); text-shadow:0 0 14px rgba(239,77,77,.5); }
+  .xr-kpi__d{ font-size:11px; font-weight:600; color:var(--mw-text-dim); }
+
+  /* department section */
+  .xr-sec{ margin-bottom:12px; scroll-margin-top:16px; }
+  .xr-sec > summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:14px; padding:15px 18px;
+    background:linear-gradient(120deg, color-mix(in srgb,var(--mw-acc,#5ec8f0) 12%, transparent), var(--mw-panel) 60%);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); position:relative; }
+  .xr-sec > summary::-webkit-details-marker{ display:none; }
+  .xr-sec > summary::before{ content:""; position:absolute; inset:0; clip-path:inherit; padding:1px;
+    background:linear-gradient(150deg, color-mix(in srgb,var(--mw-acc,#5ec8f0) 60%, transparent), transparent 60%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+  .xr-sec__ab{ width:40px; height:40px; flex:none; display:grid; place-items:center; font-family:var(--mw-font-cond); font-weight:700; font-size:15px; color:var(--mw-acc,#5ec8f0);
+    background:color-mix(in srgb,var(--mw-acc,#5ec8f0) 15%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-acc,#5ec8f0) 45%, transparent);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+  .xr-sec__nm{ font-family:var(--mw-font-cond); font-size:18px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--mw-ink); }
+  .xr-sec__meta{ font-size:11px; color:var(--mw-text-dim); margin-top:3px; font-family:'Saira Condensed',monospace; }
+  .xr-sec__sp{ flex:1; }
+  .xr-sec__chev{ width:11px; height:11px; border-right:2px solid var(--mw-cyan); border-bottom:2px solid var(--mw-cyan); transform:rotate(45deg); transition:transform .2s ease; flex:none; margin-right:4px; }
+  .xr-sec[open] > summary .xr-sec__chev{ transform:rotate(-135deg); }
+
+  .xr-sec__body{ padding:18px 18px 6px; background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.1);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%); margin-top:-2px; }
+
+  .xr-metrics{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+  .xr-metrics > *{ min-width:0; }
+  .xr-metric{ padding:11px 13px; background:rgba(58,159,212,.06); box-shadow:inset 0 0 0 1px rgba(94,200,240,.14); clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px); }
+  .xr-metric__l{ font-size:9.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); }
+  .xr-metric__v{ font-family:var(--mw-font-cond); font-size:24px; font-weight:700; color:var(--mw-ink); margin-top:4px; }
+
+  .xr-narr{ font-size:13.5px; line-height:1.6; color:var(--mw-text); margin:0 0 14px; max-width:74ch; }
+  .xr-narr__lbl{ font-family:var(--mw-font-cond); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--mw-text-dim); margin-bottom:6px; }
+
+  /* AI disclaimer wrapper */
+  .xr-ai{ position:relative; padding:13px 15px 13px 42px; margin:0 0 18px;
+    background:color-mix(in srgb, var(--mw-epic,#c89bf0) 8%, var(--mw-panel-in));
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,#c89bf0 30%, transparent); border-left:3px solid #c89bf0;
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+  .xr-ai__ic{ position:absolute; left:13px; top:14px; color:#c89bf0; }
+  .xr-ai__ic svg{ width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.6; }
+  .xr-ai__tag{ font-family:var(--mw-font-cond); font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#c89bf0; margin-bottom:4px; }
+  .xr-ai__tx{ font-size:13px; line-height:1.55; color:var(--mw-text); font-style:italic; }
+  body.ai-off .xr-ai{ display:none; }
+
+  /* task drill-down rows */
+  .xr-tasks{ display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+  .xr-trow{ background:rgba(58,159,212,.05); box-shadow:inset 0 0 0 1px rgba(94,200,240,.1); clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
+  .xr-trow > summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:11px; padding:9px 13px; }
+  .xr-trow > summary::-webkit-details-marker{ display:none; }
+  .xr-trow__ttl{ flex:1; min-width:0; font-size:13.5px; font-weight:600; color:var(--mw-ink); }
+  .xr-trow__id{ font-family:'Saira Condensed',monospace; font-size:11px; color:var(--mw-text-faint); }
+  .xr-links{ display:flex; gap:5px; flex:none; }
+  .xr-link{ width:26px; height:26px; display:grid; place-items:center; cursor:pointer; color:var(--mw-text-dim); background:rgba(94,200,240,.08); box-shadow:inset 0 0 0 1px rgba(94,200,240,.14); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); text-decoration:none; }
+  .xr-link:hover{ color:var(--mw-cyan-bright); background:rgba(94,200,240,.18); }
+  .xr-link svg{ width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .xr-trow__body{ padding:4px 14px 13px 14px; border-top:1px solid rgba(94,200,240,.1); }
+  .xr-trow__hrs{ font-family:'Saira Condensed',monospace; font-size:11px; color:var(--mw-cyan-bright); margin:8px 0 10px; letter-spacing:.03em; }
+
+  /* progress notes with authors */
+  .xr-note{ display:flex; gap:11px; padding:8px 0; border-bottom:1px solid rgba(94,200,240,.08); }
+  .xr-note:last-child{ border-bottom:none; }
+  .xr-note__meta{ flex:none; width:96px; }
+  .xr-note__auth{ font-size:11.5px; font-weight:700; color:var(--mw-text); }
+  .xr-note__day{ font-family:'Saira Condensed',monospace; font-size:10px; color:var(--mw-text-faint); }
+  .xr-note__tx{ flex:1; font-size:12.5px; line-height:1.5; color:var(--mw-text-dim); }
+  .xr-note--owner{ padding-left:11px; border-left:3px solid var(--mw-legendary); background:rgba(240,185,94,.06); }
+  .xr-note--owner .xr-note__auth{ color:var(--mw-legendary); }
+  .xr-note--owner .xr-note__auth::after{ content:" ★"; }
+  .xr-note--exec{ padding-left:11px; border-left:3px solid var(--mw-cyan); background:rgba(94,200,240,.05); }
+  .xr-note--exec .xr-note__auth{ color:var(--mw-cyan-bright); }
+
+  /* ghost / not-submitted section */
+  .xr-ghost > summary{ background:linear-gradient(120deg, rgba(239,77,77,.08), var(--mw-panel-in) 60%); }
+  .xr-ghost .xr-sec__ab{ color:var(--mw-stat-lo); background:rgba(239,77,77,.1); box-shadow:inset 0 0 0 1px rgba(239,77,77,.4); }
+  .xr-ghost__note{ padding:22px; text-align:center; }
+  .xr-ghost__note .t{ font-family:var(--mw-font-cond); font-size:15px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--mw-stat-lo); }
+  .xr-ghost__note .d{ font-size:12.5px; color:var(--mw-text-dim); margin-top:5px; }
+
+  @media (max-width:900px){
+    .xr-subs,.xr-kpis,.xr-metrics{ grid-template-columns:repeat(2,1fr); }
+    .wrap{ padding:16px 14px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Executive Report">
+
+  <!-- header -->
+  <div class="xr-head">
+    <div>
+      <div class="xr-head__ttl"><span class="en">Executive Report</span><span class="mk">Извршен извештај</span></div>
+      <div class="xr-head__sub">Purely Plant · <span class="en">Week 28 · Jul 7–13, 2026 · Report</span><span class="mk">Недела 28 · 7–13 јул 2026 · Извештај</span></div>
+    </div>
+    <div class="xr-head__sp"></div>
+    <div class="xr-head__acts">
+      <div class="mw-seg" aria-label="Kind"><button class="is-active" type="button"><span class="en">Report</span><span class="mk">Извештај</span></button><button type="button"><span class="en">Plan</span><span class="mk">План</span></button></div>
+      <label class="xr-aiswitch"><span class="en">AI</span><span class="mk">ВИ</span>
+        <span class="mw-switch"><input type="checkbox" id="aiToggle" checked><span class="slot"></span><span class="knob"></span></span></label>
+      <button class="mw-btn mw-btn--ghost" type="button" style="padding:9px 18px;font-size:13px"><span class="en">PDF</span><span class="mk">ПДФ</span></button>
+      <a class="mw-btn mw-btn--accent" href="report-standalone.html" style="--mw-acc:#5ec8f0;padding:9px 18px;font-size:13px;text-decoration:none"><span class="en">Interactive HTML</span><span class="mk">Интерактивен HTML</span></a>
+      <div class="mw-seg" aria-label="Language"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg" aria-label="Theme"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <!-- 1 · submission status board -->
+  <div class="xr-sectionlabel"><span class="en">Submission status</span><span class="mk">Статус на поднесување</span></div>
+  <div class="xr-subs" id="subs"></div>
+
+  <!-- 2 · KPI band -->
+  <div class="xr-sectionlabel"><span class="en">Organisation — this week</span><span class="mk">Организација — оваа недела</span></div>
+  <div class="xr-kpis">
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">On-time</span><span class="mk">Навреме</span></div><div class="xr-kpi__v green">88%</div><div class="xr-kpi__d"><span class="en">of 142 tasks</span><span class="mk">од 142 задачи</span></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Overdue</span><span class="mk">Задоцнети</span></div><div class="xr-kpi__v red">6</div><div class="xr-kpi__d"><span class="en">across 3 depts</span><span class="mk">во 3 оддели</span></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Logged hours</span><span class="mk">Логирани часови</span></div><div class="xr-kpi__v">1 084</div><div class="xr-kpi__d"><span class="en">+7% vs W27</span><span class="mk">+7% vs Н27</span></div></div>
+    <div class="mw-panel mw-panel--quiet xr-kpi"><div class="xr-kpi__l"><span class="en">Complexity</span><span class="mk">Комплексност</span></div><div class="xr-kpi__v amber">3.4</div><div class="xr-kpi__d"><span class="en">avg / task</span><span class="mk">просек / задача</span></div></div>
+  </div>
+
+  <!-- 3–5 · department sections -->
+  <div class="xr-sectionlabel"><span class="en">Departments</span><span class="mk">Оддели</span></div>
+  <div id="sections"></div>
+
+</div>
+</div>
+
+<script>
+const IC = {
+  ai:'<path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>',
+  board:'<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+};
+const DEPTS = [
+  { c:'cultivation', en:'Cultivation', mk:'Одгледување', col:'#2BE8A0', ab:'CU', st:'locked', upd:'Jul 13 · 14:20' },
+  { c:'production',  en:'Production',  mk:'Производство', col:'#2FD9D9', ab:'PR', st:'locked', upd:'Jul 13 · 11:05' },
+  { c:'qc',          en:'Quality Control', mk:'Контрола на квалитет', col:'#9B7BE8', ab:'QC', st:'draft', upd:'Jul 12 · 17:40' },
+  { c:'quality_assurance', en:'Quality Assurance', mk:'Обезбедување квалитет', col:'#E0743A', ab:'QA', st:'missing', upd:'—' },
+  { c:'logistics',   en:'Warehouse',   mk:'Магацин',      col:'#22B8D8', ab:'WH', st:'locked', upd:'Jul 13 · 09:15' },
+  { c:'security',    en:'Security',    mk:'Обезбедување', col:'#7C90AE', ab:'SE', st:'draft', upd:'Jul 12 · 22:10' },
+  { c:'tooling',     en:'Maintenance', mk:'Одржување',    col:'#8496B2', ab:'MU', st:'locked', upd:'Jul 13 · 08:30' }
+];
+const ORG = { c:'org', en:'Org-wide', mk:'Ниво организација', col:'#5ec8f0', ab:'ORG', st:'draft', upd:'Jul 13 · 15:00' };
+const ST_LABEL = { missing:['Missing','Недостасува'], draft:['Draft','Нацрт'], locked:['Locked','Заклучено'] };
+
+/* per-dept content */
+const CONTENT = {
+  cultivation:{
+    metrics:[['On-time','92%'],['Hours','214'],['Tasks','31'],['Rooms','5']],
+    narr_en:'All five flowering rooms held target VPD through the week. GR-B was harvested Thursday (18.4 kg wet) and handed to Production on schedule. One humidity excursion in GR-B triggered CAPA-14 (see QA).',
+    narr_mk:'Сите пет соби за цветање го одржаа целниот VPD оваа недела. GR-B е обрана во четврток (18,4 kg свежо) и предадена на Производство навреме. Едно отстапување на влажност во GR-B ја активираше КАПА-14 (види ОК).',
+    ai_en:'Cultivation is trending 4% above the quarter\u2019s on-time baseline; the GR-B excursion is the only open risk and is already contained.',
+    ai_mk:'Одгледувањето е 4% над квартал­ната основа за навременост; отстапувањето во GR-B е единствениот отворен ризик и е веќе задржано.',
+    tasks:[
+      {t_en:'Harvest Flower B — Sour Diesel',t_mk:'Берба Соба Б — Sour Diesel',id:'CU-1039',st:'done',hrs:26,who:['ГП','АС'],notes:[
+        {a:'[TEST] Ana Stoeva',d:'Thu',tx_en:'Wet weight 18.4 kg logged. Moved to Dry/Cure DR-2.',tx_mk:'Свежа тежина 18,4 kg. Преместено во Сушара DR-2.'},
+        {a:'[TEST] Owner',role:'owner',d:'Thu',tx_en:'Good yield. Prioritise this pheno next cycle.',tx_mk:'Добар принос. Приоритизирај го овој фенотип следен циклус.'}
+      ]},
+      {t_en:'Defoliate canopy rows 3–5',t_mk:'Дефолијација редови 3–5',id:'CU-1042',st:'working',hrs:9,who:['ДТ'],notes:[
+        {a:'[TEST] Dejan Trpev',d:'Wed',tx_en:'Rows 3–4 complete, row 5 tomorrow.',tx_mk:'Редови 3–4 готови, ред 5 утре.'}
+      ]}
+    ]
+  },
+  production:{
+    metrics:[['On-time','86%'],['Hours','198'],['Tasks','24'],['Batches','3']],
+    narr_en:'Three batches in motion. WC-2405 trimming 50% complete; SD-2404 extraction yielded 780 g live resin. Weigh-and-log on SD is blocked pending a calibrated scale (see Maintenance).',
+    narr_mk:'Три серии во тек. WC-2405 тримање 50% завршено; SD-2404 екстракција даде 780 g live resin. Мерењето на SD е блокирано до калибрирана вага (види Одржување).',
+    ai_en:'Throughput is on plan except the SD weigh-and-log block; resolving the scale calibration clears an estimated 6 downstream hours.',
+    ai_mk:'Протокот е според план освен блокот за мерење на SD; решавањето на калибрацијата ослободува околу 6 часа надолу по текот.',
+    tasks:[
+      {t_en:'Extraction run — live resin',t_mk:'Екстракција — live resin',id:'PR-877',st:'working',hrs:14,who:['МК'],notes:[
+        {a:'[TEST] Marija Koleva',d:'Tue',tx_en:'780 g recovered, purge started.',tx_mk:'780 g повратено, започна прочистување.'}
+      ]},
+      {t_en:'Weigh & log output',t_mk:'Мерење и запис',id:'PR-879',st:'stuck',hrs:1,who:['МК'],notes:[
+        {a:'[TEST] Marija Koleva',d:'Wed',tx_en:'Blocked — scale out of calibration. Raised MU-43.',tx_mk:'Блокирано — вагата без калибрација. Подигнато MU-43.'},
+        {a:'[TEST] COO',role:'exec',d:'Wed',tx_en:'Escalated to Maintenance as high priority.',tx_mk:'Ескалирано до Одржување со висок приоритет.'}
+      ]}
+    ]
+  },
+  qc:{
+    metrics:[['On-time','79%'],['Hours','96'],['Tasks','14'],['Samples','9']],
+    narr_en:'Potency and micro panels running. One moisture test overdue (SD batch). Pesticide panel for WC-S1 signed off and handed to QA.',
+    narr_mk:'Тестови за потентност и микро во тек. Еден тест за влага задоцни (SD серија). Панел за пестициди за WC-S1 потпишан и предаден на ОК.',
+    ai_en:'QC is the week\u2019s on-time laggard at 79%; the overdue SD moisture test is the single driver.',
+    ai_mk:'ОК е најслаб по навременост оваа недела со 79%; задоцнетиот тест за влага на SD е единствената причина.',
+    tasks:[
+      {t_en:'Potency — WC-S1',t_mk:'Потентност — WC-S1',id:'QC-311',st:'working',hrs:5,who:['ИВ'],notes:[
+        {a:'[TEST] Ivona Vasi',d:'Thu',tx_en:'HPLC queued, result expected Fri.',tx_mk:'HPLC во ред, резултат во петок.'}
+      ]},
+      {t_en:'Moisture — SD batch',t_mk:'Влага — SD серија',id:'QC-314',st:'postponed',hrs:0,who:['ИВ'],notes:[
+        {a:'[TEST] Ivona Vasi',d:'Wed',tx_en:'Deferred — oven in use for GR-A lot.',tx_mk:'Одложено — печката зафатена за GR-A лот.'}
+      ]}
+    ]
+  },
+  logistics:{
+    metrics:[['On-time','94%'],['Hours','132'],['Tasks','19'],['Orders','7']],
+    narr_en:'Inbound nutrient delivery received and put away. Order SO-118 (Skopje Dispensary, 240 units) picked and staged for Friday cold-chain dispatch.',
+    narr_mk:'Влезна испорака на прихрана примена и складирана. Нарачка SO-118 (Диспанзер Скопје, 240 единици) подготвена за петочна испорака со ладен ланец.',
+    ai_en:'Warehouse leads on-time at 94%; no risks flagged.',
+    ai_mk:'Магацинот води по навременост со 94%; нема означени ризици.',
+    tasks:[
+      {t_en:'Pick order — Skopje Dispensary',t_mk:'Подготви — Диспанзер Скопје',id:'WH-208',st:'working',hrs:7,who:['БН'],notes:[
+        {a:'[TEST] Blagoj Nikolov',d:'Thu',tx_en:'240 units staged, awaiting van.',tx_mk:'240 единици подготвени, се чека комбе.'}
+      ]}
+    ]
+  },
+  security:{
+    metrics:[['On-time','90%'],['Hours','88'],['Tasks','11'],['Incidents','1']],
+    narr_en:'Routine patrols complete. One low-severity door-sensor fault in GR-2 logged and passed to Maintenance.',
+    narr_mk:'Рутинските патроли завршени. Еден дефект на сензор за врата со ниска сериозност во GR-2 пријавен и предаден на Одржување.',
+    ai_en:'Security nominal; the GR-2 sensor fault is low severity and already routed.',
+    ai_mk:'Обезбедувањето е номинално; дефектот на сензорот во GR-2 е со ниска сериозност и веќе рутиран.',
+    tasks:[
+      {t_en:'Vault access audit',t_mk:'Ревизија на трезор',id:'SE-92',st:'working',hrs:4,who:['ЗС'],notes:[
+        {a:'[TEST] Zoran Simov',d:'Tue',tx_en:'Access logs reconciled, no anomalies.',tx_mk:'Дневниците усогласени, без аномалии.'}
+      ]}
+    ]
+  },
+  tooling:{
+    metrics:[['On-time','83%'],['Hours','76'],['Tasks','9'],['Assets','12']],
+    narr_en:'Preventive maintenance on HVAC-01 done. Chiller CH-1 refrigerant leak is the week\u2019s critical open item; parts on order. Scale calibration (blocks PR-879) scheduled Friday.',
+    narr_mk:'Превентивно одржување на ХВАК-01 завршено. Протекување на ладилник CH-1 е критична отворена ставка; делови нарачани. Калибрација на вага (го блокира PR-879) закажана за петок.',
+    ai_en:'Maintenance carries the week\u2019s only critical: CH-1 leak. Parts ETA Friday; contingency cooling in place.',
+    ai_mk:'Одржувањето ја носи единствената критична ставка: протекување CH-1. Делови стигнуваат во петок; резервно ладење е поставено.',
+    tasks:[
+      {t_en:'Chiller CH-1 — refrigerant leak',t_mk:'Ладилник CH-1 — протекување',id:'MU-46',st:'stuck',hrs:5,who:['ФА'],notes:[
+        {a:'[TEST] Filip Andov',d:'Wed',tx_en:'Leak isolated, valve kit on order (ETA Fri).',tx_mk:'Протекувањето изолирано, вентил нарачан (петок).'},
+        {a:'[TEST] Owner',role:'owner',d:'Wed',tx_en:'Keep GR-A on backup cooling until resolved. Report daily.',tx_mk:'Држи ја GR-A на резервно ладење додека не се реши. Извести дневно.'}
+      ]}
+    ]
+  }
+};
+
+function bil(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+function stLabel(st){ const l=ST_LABEL[st]; return '<span class="xr-stlab st-'+st+'"><span class="xr-sub__dot"></span>'+bil(l[0],l[1])+'</span>'; }
+
+/* submission board */
+function renderSubs(){
+  const all = DEPTS.concat([ORG]);
+  document.getElementById('subs').innerHTML = all.map(d=>
+    '<button class="xr-sub st-'+d.st+'" style="--dc:'+d.col+'" data-goto="'+d.c+'" type="button">'+
+      '<span class="xr-sub__ab">'+d.ab+'</span>'+
+      '<span class="xr-sub__body"><span class="xr-sub__nm">'+bil(d.en,d.mk)+'</span>'+
+      stLabel(d.st)+'</span>'+
+    '</button>').join('');
+}
+
+/* deep-link buttons */
+function links(id){
+  return '<span class="xr-links">'+
+    '<a class="xr-link" href="board.html" title="Open in board" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24">'+IC.board+'</svg></a>'+
+    '<a class="xr-link" href="task-detail.html" title="Worklog" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24">'+IC.clock+'</svg></a>'+
+  '</span>';
+}
+function note(n){
+  const cls = n.role==='owner' ? ' xr-note--owner' : (n.role==='exec' ? ' xr-note--exec' : '');
+  return '<div class="xr-note'+cls+'"><div class="xr-note__meta"><div class="xr-note__auth">'+n.a+'</div><div class="xr-note__day">'+n.d+'</div></div>'+
+    '<div class="xr-note__tx">'+bil(n.tx_en,n.tx_mk)+'</div></div>';
+}
+function task(t, acc){
+  const notes = (t.notes||[]).map(note).join('');
+  const av = (t.who||[]).map(w=>'<span class="mw-avatar mw-avatar--sm">'+w+'</span>').join('');
+  return '<details class="xr-trow"><summary>'+
+      '<span class="mw-st mw-st--'+t.st+'">'+t.st+'</span>'+
+      '<span class="xr-trow__ttl">'+bil(t.t_en,t.t_mk)+' <span class="xr-trow__id">'+t.id+'</span></span>'+
+      '<span class="mw-avstack">'+av+'</span>'+ links(t.id)+
+    '</summary>'+
+    '<div class="xr-trow__body"><div class="xr-trow__hrs">'+bil('Logged','Логирано')+': '+t.hrs+'h</div>'+notes+'</div>'+
+  '</details>';
+}
+function section(d){
+  const acc = d.col;
+  if(d.st==='missing'){
+    return '<details class="xr-sec xr-ghost" id="sec-'+d.c+'" style="--mw-acc:'+acc+'"><summary>'+
+        '<span class="xr-sec__ab">'+d.ab+'</span><div><div class="xr-sec__nm">'+bil(d.en,d.mk)+'</div>'+
+        '<div class="xr-sec__meta">'+bil('not submitted','не поднесено')+'</div></div><span class="xr-sec__sp"></span>'+
+        stLabel(d.st)+'<span class="xr-sec__chev"></span></summary>'+
+      '<div class="xr-sec__body xr-ghost__note"><div class="t">'+bil('No document submitted','Нема поднесен документ')+'</div>'+
+        '<div class="d">'+bil('This department has not compiled its weekly section for Week 28.','Овој оддел не го составил своето неделно поглавје за Недела 28.')+'</div></div></details>';
+  }
+  const co = CONTENT[d.c];
+  const metrics = co.metrics.map(m=>'<div class="xr-metric"><div class="xr-metric__l">'+m[0]+'</div><div class="xr-metric__v">'+m[1]+'</div></div>').join('');
+  const tasks = co.tasks.map(t=>task(t,acc)).join('');
+  return '<details class="xr-sec" id="sec-'+d.c+'" style="--mw-acc:'+acc+'"><summary>'+
+      '<span class="xr-sec__ab">'+d.ab+'</span><div><div class="xr-sec__nm">'+bil(d.en,d.mk)+'</div>'+
+      '<div class="xr-sec__meta">'+bil('updated','ажурирано')+' '+d.upd+'</div></div><span class="xr-sec__sp"></span>'+
+      stLabel(d.st)+'<span class="xr-sec__chev"></span></summary>'+
+    '<div class="xr-sec__body">'+
+      '<div class="xr-metrics">'+metrics+'</div>'+
+      '<div class="xr-narr__lbl">'+bil('Summary','Резиме')+'</div>'+
+      '<p class="xr-narr">'+bil(co.narr_en,co.narr_mk)+'</p>'+
+      '<div class="xr-ai"><span class="xr-ai__ic"><svg viewBox="0 0 24 24">'+IC.ai+'</svg></span>'+
+        '<div class="xr-ai__tag">'+bil('AI summary — informational, not a QMS record','ВИ резиме — информативно, не е QMS запис')+'</div>'+
+        '<div class="xr-ai__tx">'+bil(co.ai_en,co.ai_mk)+'</div></div>'+
+      '<div class="xr-narr__lbl">'+bil('Tasks','Задачи')+'</div>'+
+      '<div class="xr-tasks">'+tasks+'</div>'+
+    '</div></details>';
+}
+
+renderSubs();
+document.getElementById('sections').innerHTML = DEPTS.map(section).join('');
+
+/* submission chip → open + focus section */
+document.getElementById('subs').addEventListener('click', e=>{
+  const b = e.target.closest('[data-goto]'); if(!b) return;
+  const c = b.getAttribute('data-goto'); if(c==='org') return;
+  const sec = document.getElementById('sec-'+c);
+  if(sec){ sec.open = true; const y = sec.getBoundingClientRect().top + window.scrollY - 14; window.scrollTo({top:y, behavior:'smooth'}); }
+});
+/* AI toggle */
+document.getElementById('aiToggle').addEventListener('change', e=>{
+  document.body.classList.toggle('ai-off', !e.target.checked);
+});
+</script>
+<script src="mw-i18n.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+# QMS Gap Analysis
+
+Perform comprehensive gap analysis of QMS against EU GMP requirements.
+
+## Activation
+- User requests: "gap analysis", "QMS assessment", "audit readiness", "identify missing SOPs", "compliance gaps"
+
+---
+
+<qms-gap-analysis>
+
+## Instructions
+
+You are performing a comprehensive gap analysis of the Quality Management System against EU GMP requirements for a cannabis pharmaceutical facility.
+
+### PARAMETERS
+
+- **scope**: full | department | category (default: full)
+- **department_filter**: QA | QC | PRO | LOG | FAC | All (default: All)
+- **benchmark**: eu_gmp | ich_q10 | inspection_ready (default: eu_gmp)
+- **include_priority**: true | false (default: true)
+
+### PHASE 1: REQUIREMENT MAPPING
+
+#### EU GMP SOP Requirements by Chapter
+
+| Chapter | Area | Required SOPs |
+|---------|------|---------------|
+| Ch. 1 | Quality Management | Quality Policy, QMS Overview, Management Review |
+| Ch. 2 | Personnel | Training, Hygiene, Job Descriptions, Organizational Chart |
+| Ch. 3 | Premises & Equipment | Facility Maintenance, Equipment Qualification, Calibration, Cleaning |
+| Ch. 4 | Documentation | Document Control, Record Management, Electronic Records |
+| Ch. 5 | Production | Batch Manufacturing, In-Process Controls, Packaging, Labeling |
+| Ch. 6 | Quality Control | Sampling, Testing, Stability, OOS Investigation, Release |
+| Ch. 7 | Outsourced Activities | Supplier Qualification, Contract Management |
+| Ch. 8 | Complaints & Recalls | Complaint Handling, Recall Procedures, CAPA |
+| Ch. 9 | Self-Inspection | Internal Audit, Self-Inspection |
+| Annex 7 | Herbal/Cannabis | Starting Materials, Processing, Quality Control |
+
+#### Cannabis-Specific Requirements
+- Controlled substance handling and security
+- Cannabinoid potency testing
+- Microbial and contaminant testing
+- Cultivation and harvesting (if applicable)
+- Supply chain security
+
+### PHASE 2: CURRENT STATE INVENTORY
+
+1. List all existing QMS documents
+2. Categorize by department and type
+3. Extract version and review dates
+4. Identify document owners
+
+### PHASE 3: GAP IDENTIFICATION
+
+For each requirement, determine status:
+- **COMPLIANT**: SOP exists and meets requirements
+- **MISSING**: Required SOP does not exist
+- **OUTDATED**: SOP exists but review date exceeded (>2 years)
+- **INCOMPLETE**: SOP exists but missing required sections
+- **NON-COMPLIANT**: SOP content does not meet requirement
+
+### PHASE 4: PRIORITIZATION
+
+Calculate priority score (0-10):
+```
+Priority = (Inspection_Risk + Patient_Safety + Operations) / Complexity
+
+Where:
+- Inspection_Risk: 0-10 (likelihood of citation)
+- Patient_Safety: 0-10 (impact on product quality)
+- Operations: 0-10 (business criticality)
+- Complexity: 1-10 (implementation difficulty, inverse)
+```
+
+| Priority | Score | Timeline |
+|----------|-------|----------|
+| P1 Critical | >= 8 | 0-30 days |
+| P2 High | 6-7.9 | 30-90 days |
+| P3 Medium | 4-5.9 | 90-180 days |
+| P4 Low | < 4 | 180+ days |
+
+### PHASE 5: REMEDIATION PLANNING
+
+For each gap:
+1. Action type: CREATE | REVISE | RETIRE
+2. Estimated effort
+3. Dependencies
+4. Responsible department
+5. Target completion date
+
+### OUTPUT FORMAT
+
+```markdown
+# QMS Gap Analysis Report
+
+**Facility:** Cannabis EU GMP Facility
+**Date:** {date}
+**Scope:** {scope}
+**Benchmark:** {benchmark}
+
+## Executive Summary
+
+| Metric | Value |
+|--------|-------|
+| Total Requirements | {total} |
+| Compliant | {compliant} ({pct}%) |
+| Gaps Identified | {gaps} |
+| Critical (P1) | {p1_count} |
+| High (P2) | {p2_count} |
+| Medium (P3) | {p3_count} |
+| Low (P4) | {p4_count} |
+
+## Compliance by EU GMP Chapter
+
+| Chapter | Requirements | Compliant | Gaps | Score |
+|---------|--------------|-----------|------|-------|
+| Ch. 1 Quality Management | 5 | 4 | 1 | 80% |
+| Ch. 2 Personnel | 8 | 6 | 2 | 75% |
+| Ch. 3 Premises & Equipment | 12 | 10 | 2 | 83% |
+| Ch. 4 Documentation | 6 | 5 | 1 | 83% |
+| Ch. 5 Production | 15 | 12 | 3 | 80% |
+| Ch. 6 Quality Control | 10 | 8 | 2 | 80% |
+| Ch. 7 Outsourced | 4 | 3 | 1 | 75% |
+| Ch. 8 Complaints/Recalls | 5 | 4 | 1 | 80% |
+| Ch. 9 Self-Inspection | 3 | 3 | 0 | 100% |
+| Annex 7 Cannabis | 8 | 6 | 2 | 75% |
+
+## Gap Register
+
+| ID | Requirement | EU GMP Ref | Gap Type | Severity | Priority | Action | Owner |
+|----|-------------|------------|----------|----------|----------|--------|-------|
+| G-001 | Document Control | 4.1 | MISSING | CRITICAL | P1 | CREATE | QA |
+| G-002 | Stability Program | 6.25 | INCOMPLETE | MAJOR | P2 | REVISE | QC |
+
+## Remediation Roadmap
+
+### Phase 1: Critical (0-30 days)
+| Gap ID | Document | Action | Owner | Target |
+|--------|----------|--------|-------|--------|
+| G-001 | Document Control SOP | Create | QA | Week 2 |
+
+### Phase 2: High Priority (30-90 days)
+{phase_2_items}
+
+### Phase 3: Medium Priority (90-180 days)
+{phase_3_items}
+
+### Phase 4: Low Priority (180+ days)
+{phase_4_items}
+
+## Resource Requirements
+- Total Estimated Effort: {hours} hours
+- Recommended Team: QA Lead + SMEs from each department
+
+## Next Steps
+1. Review and approve gap analysis findings
+2. Assign owners for P1 items
+3. Schedule kickoff for Phase 1 remediation
+4. Use `/qms-sop-generator` to create missing SOPs
+```
+
+### INTEGRATION
+
+After gap analysis, offer to:
+- Generate missing SOPs using `/qms-sop-generator`
+- Create project plan for remediation
+- Schedule follow-up assessment
+
+</qms-gap-analysis>

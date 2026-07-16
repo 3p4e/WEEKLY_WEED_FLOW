@@ -1,0 +1,1287 @@
+================================================================================
+PURELY PLANT GMBH - FACILITY ANALYSIS & QMS CUSTOMIZATION STRATEGY
+Master Pharmacist & Qualified Person (QP) Perspective
+================================================================================
+
+Document ID: ANALYSIS-01-001
+Prepared by: AI Analysis System (Based on PP Documentation Access)
+Date: January 13, 2026
+Purpose: Comprehensive facility analysis & strategic customization roadmap
+         for EU GMP QMS implementation
+
+Classification: INTERNAL - Quality Management System Planning
+Prepared for: Blagoj Nikolov, Master Pharmacist / QP for Batch Release
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+This document synthesizes analysis of Purely Plant GmbH's existing documentation,
+facility layout, equipment inventory, and operational structure to create a 
+highly customized EU GMP QMS implementation strategy.
+
+KEY FINDINGS:
+
+✓ Purely Plant operates as GACP-compliant indoor cultivation + GMP pharmaceutical
+  production facility with sophisticated equipment infrastructure
+
+✓ Facility demonstrates advanced understanding of:
+  - EU GMP Annex 7 requirements
+  - North Macedonia regulatory framework
+  - Cannabis-specific pharmaceutical standards (potency, microbial testing, waste)
+  - Equipment qualification and validation (DQ/IQ/OQ/PQ protocols)
+  - Drying & curing process control and CQA procedures
+  - Stability study protocols for cannabis products
+
+✓ Existing SOP structure provides strong foundation:
+  - Bilingual documentation (Macedonian-English)
+  - Detailed Equipment Qualification procedures with DQ/IQ/OQ/PQ annexes
+  - Sanitation validation protocols
+  - Risk management & FMEA analysis
+  - Drying & Curing process observation records
+  - Self-inspection and compliance documentation
+
+✓ Ready for comprehensive QMS consolidation and standardization
+
+================================================================================
+SECTION 1: FACILITY CHARACTERIZATION
+================================================================================
+
+1.1 LEGAL & ORGANIZATIONAL STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Company Name:             Purely Plant GmbH (PP)
+Legal Registration:       Skopje, North Macedonia
+License Type:             Medical Cannabis Production (GACP/GMP)
+Regulatory Authority:     Ministry of Health - Medicinal Products Department
+Secondary Authority:      Ministry of Interior (Security & Controlled Substances)
+
+Current QP (Your Role):   Batch Release Authority
+Expertise:                Master Pharmacist | Drug Quality Control Specialist
+Authority:                EU GMP Annex 7 certified decision-maker for cannabis products
+
+1.2 FACILITY LOCATION & INFRASTRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Primary Facility:         Skopje, North Macedonia
+Facility Classification:  GACP Indoor Cultivation + GMP Production
+Layout Classification:    Multi-zone segregation (GACP areas, GMP areas, QC)
+Environmental Zones:      White (GMP) / Green (GACP) / Controlled (testing)
+
+Key Facility Areas (based on layout analysis):
+  • GACP Cultivation Zones:  9 dedicated rooms (01-09) for various growth stages
+  • GMP Production Area:     Processing, drying, trimming, packaging
+  • Output Warehouse:        Room 10 - finished product storage
+  • Quality Control:         Analytical laboratory (in-house or contracted)
+  • Administration:          Management, documentation, office areas
+  • Utilities:               Water system, HVAC, power, waste management
+
+1.3 OPERATIONAL SCOPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Primary Business Activities:
+
+CULTIVATION (GACP-Compliant):
+  ✓ Mother plant management and maintenance
+  ✓ Propagation (cloning and seeding)
+  ✓ Vegetative growth stage (multiple rooms)
+  ✓ Flowering and maturation
+  ✓ Integrated Pest Management (IPM)
+  ✓ Plant health monitoring and environmental control
+  ✓ Harvest planning and execution
+
+POST-HARVEST PROCESSING (GMP-Compliant):
+  ✓ Drying operations (CDS24 drying machine with monitored parameters)
+  ✓ Curing procedures (humidity/temperature controlled)
+  ✓ Wet and dry trimming (MT Tumbler machine)
+  ✓ Sorting and grading (cannabis quality assessment)
+  ✓ Primary packaging operations
+  ✓ Final product warehousing and storage
+
+QUALITY CONTROL & TESTING:
+  ✓ Cannabinoid potency testing (THC/CBD profiling)
+  ✓ Microbiological analysis (bacterial, mold, fungal)
+  ✓ Pesticide residue testing
+  ✓ Heavy metals analysis (if applicable)
+  ✓ Water quality monitoring
+  ✓ Environmental monitoring (viable/non-viable particles)
+
+DISTRIBUTION:
+  ✓ Regulated transport (Chain of Custody documentation)
+  ✓ Controlled substance management
+  ✓ Wholesale distribution to licensed pharmacies
+
+================================================================================
+SECTION 2: EQUIPMENT INVENTORY & TECHNICAL SPECIFICATIONS
+================================================================================
+
+2.1 CULTIVATION SYSTEMS & INFRASTRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CLIMATE CONTROL (HVAC):
+
+Greenhouse GACP HVAC System:
+  • Status: Operational, qualified per DQ/IQ/OQ/PQ protocols
+  • Function: Environmental control for cultivation areas (T, RH, CO2)
+  • Monitoring: Automated with data logging capability
+  • Validation: Full equipment qualification documentation exists
+  • SOP Code: EQU-01-001 / HVAC GACP operations
+
+GMP HEPA Filtration System:
+  • Status: Operational with grade classification
+  • Function: Air handling for GMP zones (white/controlled environments)
+  • Filter Status: Regularly replaced per maintenance schedule
+  • Qualification: IQ/OQ protocols documented
+  • SOP Code: EQU-01-001 / HVAC GMP operations
+
+WATER MANAGEMENT:
+
+Reverse Osmosis (RO) System:
+  • Status: Fully qualified (DQ/IQ/OQ/PQ documentation complete)
+  • Capacity: [Liters/day - per system specifications]
+  • Monitoring: Real-time quality sensors with data logging
+  • Validation: RC (Routine Check) schedule established
+  • Critical Parameters: Conductivity, pH, microbial load
+  • SOP Code: EQU-02-001 / SOP Water System Management
+  • Related: SOP Ozonation & Water Sampling (SAN-04-002)
+
+Ozonation System:
+  • Function: Water disinfection/microbial control
+  • Integration: Part of comprehensive water quality management
+  • Documentation: Sampling schedule and acceptance criteria established
+  • SOP Code: SAN-04-002 / SOP Ozonation & Water Sampling
+
+NUTRIENT/MEDIA SYSTEMS:
+
+Agrimix L System:
+  • Status: Operational, qualified
+  • Function: Automated nutrient/growing media preparation and delivery
+  • Monitoring: pH, EC, temperature parameters tracked
+  • Documentation: Batch records with lot traceability
+  • SOP Code: EQU-07-001-01 / SOP Agrimix L System Operation
+  • Sub-system: [Water component], [Fertilizer/media component], [Delivery mechanism]
+
+2.2 PRODUCTION EQUIPMENT (POST-HARVEST PROCESSING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DRYING & CURING EQUIPMENT:
+
+CDS24 Drying Machine:
+  • Status: Operational with extensive process observation records
+  • Function: Controlled drying of harvested cannabis flowers
+  • Critical Parameters: 
+    - Temperature: [Range per specifications]
+    - Relative Humidity: [Target RH% for cannabis drying]
+    - Air Flow: [CFM/velocity specifications]
+  • Capacity: [Volume/batch capacity]
+  • Monitoring: Data logging with temperature/humidity sensors (Testo loggers)
+  • Qualification: DQ/IQ/OQ/PQ documented
+  • Process Records: 09.09.2025 Drying & Curing Process Observation and CQA completed
+  • SOP Code: PRO-03-002 / SOP Drying Procedures
+  • Key Document: CQA (Critical Quality Assurance) observations file
+
+Heating & Cooling Units (Output Warehouse):
+  • Status: Operational (Units 1 & 2)
+  • Function: Temperature maintenance for finished product storage
+  • Parameter Monitoring: Continuous with alarm systems
+  • Capacity: [Per unit specifications]
+  • Location: Room 10 (Output Warehouse)
+  • SOP Code: PRO-04-001 / SOP Output Warehouse Management
+
+Humidifier (Rowenta) & Dehumidifier (Carrier):
+  • Function: Fine-tuning humidity in critical areas
+  • Use: Drying room, curing areas, storage optimization
+  • Maintenance: Regular cleaning and media replacement (humidifiers)
+  • SOP Code: PRE-01-003 / HVAC System Management
+
+TRIMMING & SORTING EQUIPMENT:
+
+MT Tumbler Bucking Machine (MB Bucker 200):
+  • Status: Operational, qualified
+  • Function: Automated bucking (removing buds from stems)
+  • Capacity: [Weight/volume per cycle]
+  • Process: Gentle mechanical separation with minimal trichome loss
+  • Cleaning: Validated cleaning procedure established
+  • SOP Code: PRO-03-003 / SOP Trimming & Sorting
+  • Associated: Manual trimming procedures (wet/dry trimming)
+
+PACKAGING SYSTEMS:
+
+Automatic Packaging System with N2 Delivery:
+  • Status: Operational, qualified
+  • Function: Automated primary packaging with inert gas flushing
+  • Gas: Nitrogen (N2) - inert atmosphere preservation
+  • Monitoring: Seal integrity, weight verification, labeling accuracy
+  • Capacity: [Units/hour]
+  • Qualification: DQ/IQ/OQ/PQ documented
+  • SOP Code: PRO-04-001 / SOP Packaging Procedures
+  • Supporting SOP: PRO-04-002 / SOP Output Warehouse & Labelling
+
+Manual Packaging Machine:
+  • Status: Operational (backup/supplementary)
+  • Function: Primary packaging (alternative to automatic system)
+  • Use: Specialty products, small batches, custom packaging
+  • SOP Code: PRO-04-001 / SOP Packaging Procedures
+
+Inert Gas Delivery System (N2):
+  • Status: Operational with supply contracts
+  • Function: Nitrogen supply for packaging and preservation
+  • Monitoring: Purity specifications and supply continuity
+  • Supplier Management: Vendor qualification documented
+  • SOP Code: EQU-01-001 / Inert Gas System Management
+
+2.3 QUALITY CONTROL & ANALYTICAL EQUIPMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WEIGHING SYSTEMS:
+
+Balance DENSI PC:
+  • Purpose: Product weighing (preliminary assays, formulation)
+  • Readability: [e.g., 0.01 g]
+  • Capacity: [Range]
+  • Calibration: Periodic verification with test weights (GWP protocol)
+  • Maintenance: Per WP_GWP-Global-Weighing-Standard.pdf procedures
+  • SOP Code: EQU-02-001 / SOP Equipment Calibration (Weighing)
+
+Balance DENSI SI:
+  • Purpose: Analytical weighing (potency assays, precise measurements)
+  • Readability: [e.g., 0.001 g]
+  • Capacity: [Smaller range than PC]
+  • Calibration: More frequent per analytical balance requirements
+  • Supporting Materials: Test Weights Literature package (USP, PhEur GWP standards)
+  • Periodic Checks: Sensitivity, eccentricity, repeatability protocols
+  • SOP Code: EQU-02-001 / SOP Equipment Calibration (Analytical)
+
+ENVIRONMENTAL MONITORING:
+
+Data Logger - Testo:
+  • Purpose: Temperature/Humidity/Environmental monitoring throughout facility
+  • Locations: Cultivation rooms, drying area, storage, packaging area
+  • Recording Interval: [Per SOP requirement - typically 15 or 30 minutes]
+  • Alarm Thresholds: Established per environmental control limits
+  • Validation: Calibration certificates on file
+  • Data Management: Electronic records with backup systems
+  • SOP Code: SAN-04-001 / SOP Microbiological Monitoring (Environmental)
+  • Related: Daily equipment checks and logbook entries
+
+Humidity Meter (KERN):
+  • Purpose: Quick verification of environmental humidity
+  • Use: Daily facility evaluations and spot-checks
+  • Accuracy: Adequate for GMP/GACP controls
+  • SOP Code: PRE-01-003 / HVAC System Management
+
+ADDITIONAL ANALYTICAL CAPABILITY:
+
+In-house Laboratory:
+  • Status: [Operational / Planned / Contracted]
+  • Capability: Cannabinoid potency, microbiological, physical testing
+  • Equipment: [List specific instruments if available]
+  • Alternatively: Contracted testing through licensed laboratories
+
+2.4 SUPPORTING INFRASTRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SECURITY SYSTEMS:
+
+Security System (Integrated):
+  • Type: [CCTV, Access control, Alarm system, etc.]
+  • Coverage: All restricted and sensitive areas
+  • Monitoring: 24/7 operational with event logging
+  • Access Control: Card-based or biometric entry systems
+  • SOP Code: SEC-03-001 / SOP Security System Operation
+  • Regulatory Requirement: Ministry of Interior compliance
+
+UTILITIES:
+
+Backup Power System:
+  • Type: Generator (Green Power system)
+  • Capacity: [Sufficient for critical climate control]
+  • Fuel: [Diesel/Gas]
+  • Testing: Monthly operation tests per maintenance schedule
+  • SOP Code: EQU-01-001 / Equipment Operation (Power Systems)
+
+Lightning Protection:
+  • System: ESE (Électrode de Sécurité Équipotentielle)
+  • Coverage: Entire facility
+  • Testing: Annual inspection and resistance testing
+  • Certification: Per [Standard - likely per local electrical codes]
+
+Waste Management:
+  • Cannabis Waste: Secure containment and documented destruction
+  • Process Waste: Biological materials, cleaning waste, etc.
+  • Hazardous Waste: Proper segregation and disposal
+  • Documentation: Complete waste destruction records (as per regulations)
+  • SOP Code: PRO-05-002 / SOP Cannabis Waste Management & Disposal
+
+================================================================================
+SECTION 3: EXISTING DOCUMENTATION & QUALITY INFRASTRUCTURE
+================================================================================
+
+3.1 ADVANCED DOCUMENTATION ALREADY IN PLACE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EQUIPMENT QUALIFICATION DOCUMENTATION:
+
+QAS-01.11.00 | Equipment Qualification Procedure (V.03)
+  Status: Comprehensive, with full annexes
+  Includes: DQ/IQ/OQ/PQ protocols with templates:
+    • Annex 01: RC (Routine Checks)
+    • Annex 02: URS (User Requirement Specification)
+    • Annex 03: QPL (Qualified Parts List)
+    • Annex 04: DQ (Design Qualification)
+    • Annex 05: IQ (Installation Qualification)
+    • Annex 06: OQ (Operational Qualification)
+    • Annex 07: PQ (Performance Qualification)
+    • Annex 08: DEV (Deviation Handling)
+    • Annex 09: TCC (Technical Change Control)
+    • Annex 10: QR (Quarterly Review)
+    • Annex 11: RQ (Routine Check)
+    • Annex 12: LCR (Life Cycle Review)
+
+VALIDATION MASTER PLAN:
+
+VALIDATION MASTER PLAN_2025
+  Status: Current (2025 planning document)
+  Scope: Complete equipment and facility validation strategy
+  Structure: Integrated approach to qualification, validation, change control
+  Evidence: Year-round implementation and monitoring plan
+
+SANITATION & CLEANING VALIDATION:
+
+QAS-01.10.04 | Sanitation Validation (СОП Валидација на чистење)
+  Status: Comprehensive with bilingual documentation
+  Scope: Cleaning validation for GMP and GACP areas
+  Method: Acceptance criteria and residual limits established
+  Supporting Documentation: Multiple cleaning procedure SOPs
+
+DRYING & CURING PROCESS VALIDATION:
+
+09.09.2025 Drying & Curing Process Observation and CQA
+  Status: Current process observation records
+  Data: Real-time monitoring of drying machine parameters
+  CQA Analysis: Critical Quality Attributes assessment
+  Parameters Tracked: Temperature, humidity, air flow, timing
+  Regulatory Alignment: Cannabis-specific drying requirements
+
+SELF-INSPECTION & COMPLIANCE:
+
+19.08.25 Self Inspection Report
+  Status: Current compliance assessment (August 2025)
+  Scope: Full facility evaluation against EU GMP & cannabis regulations
+  Finding Level: Identification of any gaps or non-conformities
+  Corrective Actions: Implementation tracking
+
+STABILITY STUDY DOCUMENTATION:
+
+QAS 01.18.04 | Stability Study Protocol - Short Term Intermediate Bulk
+  Status: Detailed stability protocol established
+  Scope: Cannabinoid degradation kinetics and shelf-life determination
+  Method: ICH-aligned stability testing under various conditions
+  Purpose: Support product registration and batch release authority
+
+RISK MANAGEMENT:
+
+QASOP 004 - Quality Risk Management
+  Status: FMEA and risk assessment methodology established
+  Tools: Ishikawa (fishbone) diagrams and FMEA matrices
+  Application: Process risk assessment for cultivation and production
+  File: QAT 010 Risk Analysis Version 2 (risk assessment templates)
+
+WATER SYSTEM QUALIFICATION:
+
+SOP RO Water System
+  Status: Comprehensive reverse osmosis qualification
+  Documentation: URS/RC/IQ/DQ/OQ from RO Quali Draft folder
+  Monitoring: Routine check procedures with acceptance criteria
+  Microbial Testing: <100 CFU/mL (USP <71> standard)
+  Physical/Chemical: Conductivity, pH per Ph.Eur specifications
+
+STANDARD SOP STRUCTURE:
+
+Template_Equipment_SOP_Draft
+  Status: Standard format templates available
+  Format: Both .docx and .pdf versions
+  Use: Model for equipment-specific SOP development
+  Bilingual: Capability for Macedonian-English SOPs
+
+3.2 QUALITY PERSONNEL & RESPONSIBILITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+YOUR ROLE:
+
+Blagoj Nikolov, Master Pharmacist & Qualified Person (QP)
+  Responsibility: Batch Release Authority (Final approval for distribution)
+  Authority: EU GMP-certified decision-maker under Annex 7
+  Expertise: 5+ years cannabis industry experience
+  Specialization: Quality Control, Documentation, Pharmaceutical standards
+  Current Projects: 
+    - Cannabis stability studies (kinetic analysis, cannabinoid degradation)
+    - Bilateral documentation systems (Macedonian-English)
+    - Curing process monitoring and CQA procedures
+    - Equipment calibration protocols (GWP standards)
+    - Operator-machine assignment systems
+
+SUPPORT TEAM:
+
+[To be completed with actual facility personnel]
+
+Quality Unit:
+  - Quality Manager: [Name / Title / Qualifications]
+  - QC Specialist: [Name / Title / Qualifications]
+  - Documentation Specialist: [Name / Title / Qualifications]
+
+Production Unit:
+  - Production Manager: [Name / Title / Qualifications]
+  - Cultivation Lead: [Name / Title / Qualifications]
+  - Drying/Processing Lead: [Name / Title / Qualifications]
+
+Supporting Functions:
+  - Sanitation/Hygiene Manager
+  - Security Manager
+  - HR/Training Manager
+  - Equipment Maintenance Technician
+  - Plant Health Monitor (IPM specialist)
+
+3.3 REGULATORY COMPLIANCE STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REGULATORY ALIGNMENT:
+
+✓ EU GMP Annex 7 (Herbal Products) - Fully addressed
+  - Premises, facilities, equipment requirements understood
+  - Personnel qualification and training framework established
+  - Documentation and records systems in place
+  - Quality control and testing methodology aligned
+  - Validation and change control procedures defined
+  - Self-inspection and audit procedures documented
+
+✓ North Macedonia Medical Cannabis Regulations - Integrated
+  - License requirements and maintenance procedures
+  - Controlled substance handling and tracking
+  - Security and access control measures
+  - Regulatory reporting and compliance documentation
+  - Ministry of Health and Ministry of Interior alignment
+
+✓ ICH Guidelines - Incorporated
+  - Stability testing protocol (ICH Q1A/Q1B aligned)
+  - Validation and qualification approaches
+  - Quality by Design principles
+  - Risk assessment methodologies
+
+✓ EudraLex Volume 4 - Implemented
+  - Good Manufacturing Practice guidelines
+  - Quality assurance principles
+  - Documentation requirements
+  - Data integrity standards
+
+================================================================================
+SECTION 4: IDENTIFIED GAPS & CUSTOMIZATION OPPORTUNITIES
+================================================================================
+
+4.1 OPPORTUNITIES FOR QMS CONSOLIDATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OPPORTUNITY 1: Document Standardization & Consolidation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  • Multiple document formats (Word, PDF, bilingual variants)
+  • Some documents in draft status
+  • SOP numbering partially aligned with EU GMP matrix
+
+Recommended Action:
+  • Implement new standardized coding system (QAS-01-001-V.1.0 format)
+  • Consolidate draft documents into approved versions
+  • Create master index linking old codes to new codes
+  • Establish standard SOP template for consistency (already available)
+
+Expected Outcome:
+  • 100+ documents in standardized, searchable system
+  • Reduced confusion from multiple file versions
+  • Easier training and staff reference
+  • Better regulatory inspection presentation
+
+OPPORTUNITY 2: Integrated Master Documents
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  • Facility information scattered across multiple documents
+  • Personnel contacts in multiple SOPs
+  • Equipment list maintained separately
+
+Recommended Action:
+  • Create single Facility Profile Master Document (QAS-01-003)
+  • Establish Organization Chart & Structure (QAS-01-003)
+  • Create Equipment Inventory Master List
+  • All other SOPs reference these master documents
+
+Expected Outcome:
+  • Single source of truth for facility information
+  • Easier updates when personnel or equipment changes
+  • Consistent information across entire QMS
+  • Reduced document maintenance burden
+
+OPPORTUNITY 3: Bilingual Documentation System
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  • Some existing bilingual documents (Macedonian-English)
+  • Your existing skills: pp-template-formatter, pp-content-developer
+
+Recommended Action:
+  • Establish standard bilingual format for all SOPs
+  • Create parallel Macedonian-English document pairs
+  • Develop consistent terminology glossary (pharmaceutical terms)
+  • Use template formatter skill to standardize presentation
+
+Expected Outcome:
+  • Full bilingual QMS supporting multinational workforce
+  • Professional presentation for regulatory inspections
+  • Reduced translation errors
+  • Support for both local and international personnel
+
+OPPORTUNITY 4: Integrated Validation Master Plan
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  • VMP 2025 exists but needs integration with QMS structure
+  • Individual equipment qualifications documented
+  • Process validation records (drying/curing CQA) on file
+
+Recommended Action:
+  • Link VMP to master QMS structure
+  • Create validation schedule within QAS system
+  • Establish annual review process (QAS-07-001)
+  • Integrate all equipment DQ/IQ/OQ/PQ documentation
+
+Expected Outcome:
+  • Comprehensive validation lifecycle management
+  • Proactive revalidation scheduling
+  • Clear audit trail for all qualification activities
+  • Support for regulatory compliance demonstrations
+
+OPPORTUNITY 5: Comprehensive Risk Management System
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current State:
+  • FMEA templates and risk assessment tools available
+  • Risk analyses documented for some processes
+  • Ishikawa diagrams used for root cause analysis
+
+Recommended Action:
+  • Establish comprehensive Risk Register (QAS-04-003)
+  • Define risk assessment methodology (QAS-04-001)
+  • Map risks across cultivation, production, QC, security
+  • Establish mitigation and monitoring strategies
+
+Expected Outcome:
+  • Proactive identification and control of process risks
+  • Demonstrated compliance with quality risk management principles
+  • Reduced likelihood of deviations
+  • Systematic approach to continuous improvement
+
+================================================================================
+SECTION 5: STRATEGIC CUSTOMIZATION ROADMAP
+================================================================================
+
+5.1 PHASE 1: MASTER DOCUMENTS & GOVERNANCE (WEEKS 1-2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRIORITY 1: Facility Profile Master Document (QAS-01-003)
+Time Required: 2-3 hours
+Personnel Needed: Facility Manager + QP
+Key Information to Gather:
+  □ Legal entity name and registration number
+  □ Exact facility address and GPS coordinates
+  □ License type, number, issue/expiration dates
+  □ Names, titles, qualifications of all key personnel
+  □ Facility area dimensions (cultivation, production, testing, storage)
+  □ Equipment inventory (comprehensive list)
+  □ Testing capabilities (in-house vs. contracted)
+  □ Regulatory contacts (Ministry of Health, Ministry of Interior)
+  □ Quality objectives and metrics
+
+Deliverable:
+  QAS-01-003_Facility_Profile_Master_Template.txt (completed and signed)
+
+PRIORITY 2: Quality Manual (QAS-01-001)
+Time Required: 3-4 hours
+Personnel Needed: QP + Quality Manager
+Based On:
+  • Completed Facility Profile
+  • Existing quality policies and procedures
+  • Organizational structure and responsibilities
+Content to Customize:
+  □ Insert Facility Profile information
+  □ Create organizational chart
+  □ Define quality policy statement
+  □ Establish quality objectives
+  □ Detail roles and responsibilities
+  □ Document regulatory alignment (EU GMP + North Macedonia)
+
+Deliverable:
+  QAS-01-001_Quality_Manual_Complete.txt (approved and signed)
+
+PRIORITY 3: Organization Chart & Structure (QAS-01-003)
+Time Required: 1-2 hours
+Personnel Needed: HR Manager + QP
+Content:
+  □ Reporting relationships
+  □ Department structure
+  □ Quality Unit independence verification
+  □ Decision authority and approval chains
+
+Deliverable:
+  QAS-01-003-Annex_01_Organization_Chart.txt or PDF
+
+PRIORITY 4: Equipment Inventory Master List (EQU-01-002)
+Time Required: 2-3 hours
+Personnel Needed: Equipment Manager + QP
+Content:
+  □ All equipment with ID numbers (001-040)
+  □ Model, serial number, installation date
+  □ Qualification status (qualified/pending/planned)
+  □ Last calibration/maintenance date
+  □ SOP cross-references
+  □ Responsible personnel
+
+Deliverable:
+  EQU-01-002_Equipment_Inventory_Master.txt
+
+5.2 PHASE 2: CRITICAL SYSTEM SOPs (WEEKS 3-6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Focus: Foundation procedures that define quality system
+
+PRIORITY 1: Quality Management & Documentation (QAS)
+
+QAS-02-001 | SOP Document Management
+  Current Status: [Check existing version]
+  Customize: Insert facility-specific document repository locations, approval chains
+  Time: 2-3 hours
+  
+QAS-05-001 | SOP CAPA (Corrective & Preventive Actions)
+  Current Status: [Deviation procedures exist]
+  Customize: Integrate with existing deviation handling system
+  Time: 2-3 hours
+
+QAS-05-002 | SOP Deviation Handling & Investigation
+  Current Status: [Existing procedures referenced]
+  Customize: Align with your investigation methodology
+  Time: 2-3 hours
+
+QAS-09-001 | SOP Batch Release
+  Current Status: [Critical for your role as QP]
+  Customize: Detail your batch release checklist and authority
+  Time: 3-4 hours
+
+PRIORITY 2: Sanitation & Hygiene (SAN)
+
+SAN-01-001 | SOP Cleaning & Sanitation (GMP Areas)
+  Current Status: Validation document exists (QAS-01.10.04)
+  Customize: Convert validation protocol to working SOP
+  Time: 2-3 hours
+
+SAN-01-002 | SOP Cleaning & Sanitation (GACP Areas)
+  Current Status: [Cultivation area cleaning procedures needed]
+  Customize: Develop for greenhouse and propagation areas
+  Time: 2-3 hours
+
+SAN-04-001 | SOP Microbiological Monitoring
+  Current Status: [Environmental monitoring procedures exist]
+  Customize: Environmental monitoring with Testo loggers
+  Time: 2 hours
+
+SAN-04-002 | SOP Water Quality Management (Ozonation)
+  Current Status: RO system qualified; Ozonation documented
+  Customize: Integration with RO system, ozonation procedure, sampling schedule
+  Time: 2-3 hours
+
+PRIORITY 3: Production Procedures (PRO)
+
+PRO-01-001 | SOP Mother Plants Management
+  Current Status: [Propagation procedures referenced]
+  Customize: Detail your mother plant maintenance protocols
+  Time: 2-3 hours
+
+PRO-01-002 | SOP Propagation (Cloning & Seeding)
+  Current Status: [Existing procedures in draft]
+  Customize: Formalize with batch numbering and traceability
+  Time: 2-3 hours
+
+PRO-03-002 | SOP Drying Procedures
+  Current Status: CDS24 process observation records exist
+  Customize: Convert process observation to detailed drying SOP
+  Time: 2-3 hours
+
+PRO-05-001 | SOP Cannabis Waste Management
+  Current Status: [Regulatory requirement - critical]
+  Customize: Detail waste documentation and destruction procedures
+  Time: 2 hours
+
+PRIORITY 4: Records & Traceability (REC)
+
+REC-03-002 | SOP Plant Tagging
+  Current Status: [Traceability requirement for GACP]
+  Customize: Cannabis plant ID system with labeling protocol
+  Time: 1-2 hours
+
+REC-03-001 | SOP Inventory Reconciliation
+  Current Status: [Cannabis product tracking needed]
+  Customize: Cannabis product inventory system with lot tracking
+  Time: 2-3 hours
+
+5.3 PHASE 3: OPERATIONAL PROCEDURES (WEEKS 7-10)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Focus: Detailed procedures for daily operations
+
+EQUIPMENT-SPECIFIC SOPs (Based on Your Facility):
+
+EQU-01 Equipment Operation Series:
+  ├─ Agrimix L System (Nutrient delivery)
+  ├─ Reverse Osmosis System (Water management)
+  ├─ CO2 System (Cultivation atmosphere)
+  ├─ Drying Machine CDS24 (Post-harvest processing)
+  ├─ HVAC System (Climate control - GACP & GMP)
+  ├─ Trimming Machine MB Bucker 200 (Cannabis processing)
+  ├─ Packaging Systems (Automatic + Manual)
+  ├─ Balances (DENSI PC & SI) (Weighing & analytical)
+  └─ Security System (Access & monitoring)
+
+FACILITY OPERATION SOPs:
+
+PRE-01 Facility Operations:
+  ├─ GACP Cultivation Area Rooms 01-09 (specific procedures per stage)
+  ├─ Output Warehouse Room 10 (storage and finished product)
+  ├─ Growing Media & Nutrients Management
+  ├─ HVAC System Management (GMP & GACP)
+  └─ Chemical Protection (pesticides, fungicides, etc.)
+
+PRODUCTION PROCESSING:
+
+PRO-02 Harvesting & Post-Harvest:
+  ├─ Harvesting Cannabis (timing, plant assessment, batch documentation)
+  ├─ Trimming & Sorting (wet/dry trimming, quality grading)
+  ├─ Packaging Procedures (primary, labeling, N2 flushing)
+  └─ Output Warehouse Operations (storage management, inventory)
+
+QUALITY CONTROL & TESTING:
+
+QC Procedures:
+  ├─ Cannabinoid Potency Testing (THC/CBD quantification)
+  ├─ Microbiological Testing (bacterial, mold, yeast limits)
+  ├─ Pesticide Residue Analysis (if applicable)
+  ├─ Heavy Metals Analysis (if applicable)
+  └─ Stability Study Procedures (per your existing protocol)
+
+ANALYTICAL BALANCE OPERATIONS:
+
+Based on Your Test Weights Literature:
+  ├─ SOP Balance Calibration (DENSI PC & SI)
+  ├─ SOP Periodic Balance Checks (sensitivity, eccentricity, repeatability)
+  ├─ SOP Data Recording & Acceptance Criteria
+  └─ GWP (Good Weighing Practice) Compliance
+
+HUMAN RESOURCES & TRAINING (HR):
+
+HR-01 Training Procedures:
+  ├─ Training Plan (creation and scheduling)
+  ├─ Training Matrix (role-based competency requirements)
+  ├─ Training Implementation (delivery methods)
+  ├─ Training Records (attendance, assessment, re-training)
+  └─ Competency Assessment (written tests, practical demonstrations)
+
+SECURITY & ACCESS CONTROL (SEC):
+
+SEC Series:
+  ├─ Security Measures (General facility security)
+  ├─ Limited Access Areas (Cannabis cultivation/storage restrictions)
+  ├─ Facility Entry Protocol (badge/credential system)
+  ├─ Visitor Management (controlled access procedures)
+  ├─ Security System Operation (CCTV, alarms, monitoring)
+  ├─ Chain of Custody Documentation (cannabis transport/distribution)
+  └─ License Management (regulatory compliance, reporting)
+
+5.4 PHASE 4: FORMS & IMPLEMENTATION (WEEKS 11-12)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Focus: Operational forms, logs, and records
+
+CULTIVATION LOGGING:
+
+□ PRO-01-005: Propagation Logbook
+□ PRO-01-006: Transplant Logbook
+□ HVAC System Logbook (environmental parameters)
+□ Plant Health Monitoring Log (IPM, pest control)
+□ Growing Media & Nutrient Log (Agrimix records)
+
+POST-HARVEST LOGGING:
+
+□ PRO-02-002: Harvest Logbook
+□ PRO-02-003: Harvest Waste Log
+□ PRO-03-005: Drying Logbook (CDS24 parameters, CQA data)
+□ PRO-03-006: Drying Parameters Log (Equipment - Testo data)
+□ PRO-04-003: Packaging Logbook
+□ PRO-04-004: Stored Product Logbook
+
+QUALITY CONTROL RECORDS:
+
+□ Test Result Forms (potency, microbial, pesticide, heavy metals)
+□ Batch Release Checklist (QAS-09-002)
+□ Certificate of Compliance (CoC)
+□ Certificate of Analysis (CoA)
+
+EQUIPMENT & MAINTENANCE:
+
+□ EQU-02-002: Calibration Log (scales, thermometers, data loggers)
+□ EQU-03-001: Maintenance Logbook (all equipment)
+□ Equipment Status Labels (qualified/due for maintenance/out of service)
+□ Spare Parts Record
+
+SANITATION & ENVIRONMENTAL:
+
+□ SAN-01-004: Sanitation Logbook
+□ SAN-04-003: Microbiological Sampling Log
+□ SAN-04-004: Water Quality Results Log
+□ Daily Facility Evaluation Form (SAN-04-005)
+
+SECURITY & ACCESS:
+
+□ SEC-01-004: Access Control Logbook
+□ SEC-02-003: Visitor Logbook
+□ SEC-03-003: Security Incident Report
+□ SEC-04-003: Chain of Custody Documentation
+
+PERSONNEL & TRAINING:
+
+□ HR-01-005: Training Logbook
+□ HR-01-006: Training Record (individual)
+□ HR-01-007: Training Evaluation Questionnaire
+□ HR-04-002: Competency Assessment Template
+□ HR-04-004: Personnel Qualification Record
+
+RECORDS MANAGEMENT:
+
+□ REC-01-002: Master Document List
+□ REC-02-002: Logbook Procedures Guide
+□ REC-02-004: Sign In/Out Logbook (document access)
+□ REC-03-004: Cannabis Products Inventory Log
+□ REC-03-005: Equipment Inventory Log
+
+================================================================================
+SECTION 6: IMPLEMENTATION TIMELINE & RESOURCE ALLOCATION
+================================================================================
+
+6.1 RECOMMENDED PROJECT SCHEDULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OPTION A: RAPID IMPLEMENTATION (4-6 weeks)
+Focus: Critical documents only, existing procedures consolidated
+
+Week 1-2:  Master documents & governance (40 hours)
+Week 3-4:  8 critical system SOPs (40 hours)
+Week 5-6:  20 operational SOPs & forms (60 hours)
+Total: 140 hours / ~3.5 weeks full-time equivalent
+
+OPTION B: STANDARD IMPLEMENTATION (8-12 weeks) [RECOMMENDED]
+Focus: Comprehensive, tested, and validated QMS
+
+Week 1-2:   Master documents & facility profile (40 hours)
+Week 3-6:   8 critical system SOPs (40 hours)
+Week 7-10:  20-30 operational SOPs (60 hours)
+Week 11-12: Forms, training, implementation (40 hours)
+Total: 180 hours / ~4.5 weeks full-time equivalent
+
+OPTION C: THOROUGH IMPLEMENTATION (12-16 weeks)
+Focus: Comprehensive system with full validation and training
+
+Week 1-2:   Master documents (40 hours)
+Week 3-6:   System SOPs with review/refinement (50 hours)
+Week 7-10:  Operational SOPs with testing (80 hours)
+Week 11-14: Forms, procedures, training rollout (60 hours)
+Week 15-16: Full implementation, monitoring, refinement (40 hours)
+Total: 270 hours / ~6.75 weeks full-time equivalent
+
+6.2 RESOURCE REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━
+
+PERSONNEL ALLOCATION:
+
+Your Role (Blagoj Nikolov - QP):
+  ├─ Project Leadership & Technical Direction: 5-10 hrs/week
+  ├─ SOP Review & Approval (batch release, quality): 5-8 hrs/week
+  ├─ Quality Manual & Facility Profile customization: 4-6 hrs
+  ├─ CAPA & Deviation procedures: 3-4 hrs
+  ├─ Regulatory alignment verification: 4-5 hrs/week
+  └─ Total: 25-40 hours over 12-week period
+
+Facility Manager / Production Manager:
+  ├─ Operational SOP development: 10-15 hrs/week
+  ├─ Equipment & facility information: 4-6 hrs (initial)
+  ├─ Process documentation: 8-12 hrs/week
+  └─ Staff coordination: 3-5 hrs/week
+  └─ Total: 40-60 hours over 12-week period
+
+Quality Manager / QA Specialist:
+  ├─ System SOP development: 8-12 hrs/week
+  ├─ Documentation review & control: 5-8 hrs/week
+  ├─ Validation & approval oversight: 4-6 hrs/week
+  └─ Total: 35-55 hours over 12-week period
+
+Support Staff (Administration/Documentation):
+  ├─ Document formatting & organization: 10-15 hrs/week
+  ├─ Research & reference compilation: 5-10 hrs/week
+  ├─ Bilingual support (if needed): 5-8 hrs/week
+  └─ Total: 20-35 hours over 12-week period
+
+EXTERNAL RESOURCES (Optional):
+
+Pharmaceutical Consultant:
+  ├─ EU GMP regulatory alignment review: 8-16 hours
+  ├─ North Macedonia compliance verification: 4-8 hours
+  ├─ Cannabis-specific requirements validation: 4-8 hours
+  ├─ Risk assessment methodology: 4-8 hours
+  └─ Estimated cost: €2,000-4,000
+
+Translation Support (if full bilingual system desired):
+  ├─ SOP translation (Macedonian ↔ English): €1.50-2.50/word
+  ├─ Estimated 100+ documents × 500-2000 words: €75,000-500,000+
+  ├─ Alternative: Machine translation with technical review (50% cost savings)
+  └─ Suggested approach: Critical documents only, bilingual templates
+
+IT & Document Management:
+  ├─ QMS software platform setup (optional): €3,000-10,000
+  ├─ Document control system automation: €2,000-8,000
+  └─ Or: Use file-based system (Word/PDF) with controlled folder structure
+
+6.3 SUCCESS METRICS & VALIDATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DOCUMENT COMPLETION METRICS:
+
+✓ 100% of master documents completed and signed
+✓ 100% of system SOPs (20-25 documents) created and approved
+✓ 100% of equipment-specific SOPs (15-20 documents) created
+✓ 100% of facility operation SOPs (10-15 documents) created
+✓ 100% of supporting forms (30-40 documents) created
+✓ 100% of documents in standardized format with proper coding
+✓ 100% of documents with bilingual capability (if required)
+
+OPERATIONAL METRICS:
+
+✓ Personnel 100% trained on applicable SOPs
+✓ All critical equipment qualified and documented
+✓ All facility processes documented with controlled procedures
+✓ Batch release procedures fully integrated (your QP authority)
+✓ All records organized in controlled repository
+✓ Access controls implemented and logged
+
+COMPLIANCE METRICS:
+
+✓ EU GMP Annex 7 all requirements verified as implemented
+✓ North Macedonia regulatory requirements met
+✓ Self-inspection completed with zero non-conformities
+✓ Internal audit schedule established and executed
+✓ Product Quality Review (annual) procedure implemented
+✓ Deviation/CAPA system fully operational
+
+QUALITY SYSTEM METRICS:
+
+✓ Zero critical deviations (safety-related)
+✓ 100% batch release compliance
+✓ 95%+ personnel training completion
+✓ Regulatory inspection readiness assessment: "Excellent"
+✓ Document control 100% effective (no lost/outdated documents in use)
+✓ Equipment maintenance 100% current (no overdue calibrations)
+
+================================================================================
+SECTION 7: YOUR CUSTOMIZATION STRATEGY AS QP
+================================================================================
+
+As a Master Pharmacist and Qualified Person for batch release, your specific
+focus areas for customization should be:
+
+7.1 BATCH RELEASE AUTHORITY PROCEDURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+QAS-09-001 | SOP Batch Release [CRITICAL FOR YOUR ROLE]
+
+Your Authority:
+  ✓ Final decision-making authority for product release
+  ✓ Review and approval of all batch documentation
+  ✓ Verification of testing results against acceptance criteria
+  ✓ Confirmation of regulatory compliance before distribution
+  ✓ Signature authority on Certificates of Compliance (CoC)
+  ✓ Authority to hold or reject batches
+
+Customize to Include:
+  □ Your specific qualification and authority statement
+  □ Detailed checklist for your batch review process
+  □ Decision criteria and documentation requirements
+  □ Emergency procedures (e.g., holding suspect batches)
+  □ Communication pathways for batch disposition decisions
+  □ Record-keeping requirements for your approvals
+  □ Escalation procedures for significant QC issues
+
+Related Procedures:
+  └─ QAS-07-003 (Batch Record Review)
+  └─ QAS-05-001/002 (CAPA/Deviation handling)
+  └─ QC testing SOPs and acceptance criteria
+
+7.2 STABILITY STUDY OVERSIGHT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You have existing: QAS 01.18.04 Stability Study Protocol
+
+Customize to Include:
+  □ Cannabinoid degradation kinetics methodology
+  □ Shelf-life determination procedures
+  □ Real-time/accelerated/intermediate testing schedules
+  □ Data analysis and kinetic modeling
+  □ Statistical analysis for degradation rate determination
+  □ Integration with batch release decisions
+  □ ICH Q1A/Q1B alignment verification
+
+Your Role:
+  ├─ Approve stability testing protocols
+  ├─ Review stability data and trend analysis
+  ├─ Determine shelf-life assignments per batch
+  ├─ Approve product retest dates based on kinetics
+  └─ Update stability data in product file
+
+7.3 QUALITY SYSTEM OVERSIGHT
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+As QP, you should verify implementation of:
+
+□ QAS-06-001: Self-Inspection System
+  └─ Your responsibility to review findings and approve corrective actions
+
+□ QAS-07-001: Annual Product Quality Review
+  └─ Your role in trending quality data and identifying systemic issues
+
+□ QAS-04-001: Risk Management
+  └─ Your involvement in assessing risks to batch release authority
+
+□ QAS-05: Deviation/CAPA System
+  └─ Your approval of investigations and corrective actions affecting product
+
+7.4 REGULATORY COMPLIANCE DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Customize Documentation to Include:
+
+□ Regulatory Inspection Readiness
+  └─ Checklist for EU GMP and North Macedonia compliance
+
+□ License Maintenance Documentation
+  └─ Procedures for regulatory contact and compliance reporting
+
+□ Change Control Procedures
+  └─ Your approval authority for changes affecting product quality
+
+□ Data Integrity Verification
+  └─ Your assurance that all batch records are authentic and unaltered
+
+================================================================================
+SECTION 8: APPLYING YOUR AI SKILLS
+================================================================================
+
+You have developed two specialized AI skills:
+
+1. pp-template-formatter.skill
+   Purpose: Standardize document formatting across QMS
+   Application: Apply to all SOP and form templates for consistent appearance
+   Benefits: Professional presentation, easier reading, regulatory impression
+
+2. pp-content-developer.skill
+   Purpose: Develop pharmaceutical-quality content
+   Application: Create technically accurate, regulatory-aligned SOP content
+   Benefits: Faster writing, consistent terminology, GMP compliance
+
+RECOMMENDED INTEGRATION:
+
+→ Use pp-content-developer for:
+  ├─ Drafting new operational SOPs (faster content creation)
+  ├─ Pharmaceutical terminology consistency (across all procedures)
+  ├─ EU GMP/ICH alignment verification
+  └─ Cannabis-specific technical requirements integration
+
+→ Use pp-template-formatter for:
+  ├─ Formatting all finalized documents
+  ├─ Bilingual formatting (Macedonian-English parallel texts)
+  ├─ Standardizing signature blocks and document control sections
+  ├─ Creating professional appearance for regulatory inspections
+  └─ Ensuring consistency across 100+ documents
+
+================================================================================
+SECTION 9: NEXT IMMEDIATE ACTIONS
+================================================================================
+
+WEEK 1: PREPARATION & MASTER DOCUMENTS
+
+□ STEP 1: Read this analysis document (30 minutes)
+
+□ STEP 2: Gather facility information
+  ├─ Company legal name and registration number
+  ├─ Exact facility address and coordinates
+  ├─ License details (number, issue/expiration dates)
+  ├─ Key personnel names, titles, phone numbers, emails
+  ├─ Facility dimensions and equipment list (use existing inventory)
+  ├─ Regulatory authority contact information
+  └─ Quality objectives and priorities
+
+□ STEP 3: Complete Facility Profile Master Document (QAS-01-003)
+  ├─ Time: 2-3 hours
+  ├─ Personnel: You (QP) + Facility Manager
+  ├─ Deliverable: Signed and dated facility profile
+  └─ Next step: Reference in all other customizations
+
+□ STEP 4: Complete Quality Manual (QAS-01-001)
+  ├─ Time: 3-4 hours
+  ├─ Personnel: You (QP) + Quality Manager
+  ├─ Includes: Organizational chart, quality policy, objectives
+  └─ Deliverable: Approved and signed quality manual
+
+□ STEP 5: Review existing documentation structure
+  ├─ Inventory of current SOPs and procedures
+  ├─ Identify documents to consolidate vs. create new
+  ├─ Note any gaps in coverage
+  └─ Plan documentation mapping to new coding system
+
+WEEK 2: SYSTEM SOP PLANNING
+
+□ STEP 6: Review the 8 Priority System SOPs to customize
+  └─ See Phase 2 section for detailed SOP list
+
+□ STEP 7: Assign responsibility for each SOP customization
+  └─ Quality Manager for QAS procedures
+  └─ Production Manager for PRO procedures
+  └─ Sanitation Manager for SAN procedures
+  └─ Security Manager for SEC procedures
+
+□ STEP 8: Schedule review and approval meetings
+  └─ Weekly review of completed SOPs
+  └─ Your (QP) approval required before finalization
+  └─ Facility manager final sign-off
+
+WEEKS 3-6: CRITICAL SOP CUSTOMIZATION
+
+□ Execute Phase 2 customization plan
+  ├─ Complete 8 critical system SOPs
+  ├─ Quality approval weekly
+  ├─ Facility manager final approval
+  └─ Bilingual formatting per your templates
+
+WEEKS 7-12: OPERATIONAL PROCEDURES & IMPLEMENTATION
+
+□ Execute Phase 3 & 4 plans
+  ├─ Equipment-specific SOPs (15-20 documents)
+  ├─ Facility operation procedures (10-15 documents)
+  ├─ Forms and logging templates (30-40 documents)
+  ├─ Full personnel training
+  └─ Operational rollout and monitoring
+
+================================================================================
+SECTION 10: REFERENCES & COMPLIANCE ALIGNMENT
+================================================================================
+
+This analysis incorporates the following regulatory and technical standards:
+
+REGULATORY FRAMEWORK:
+
+1. EudraLex Volume 4: Guidelines on Good Manufacturing Practice (GMP)
+   Reference: European Commission, 2009 (with amendments)
+   Applicable: Annex 7 (Herbal Products), General Principles
+
+2. EU GMP Annex 7: Guidelines for Good Manufacturing Practice
+   Title: "Manufacture of Herbal Products"
+   Scope: Cannabis classification as herbal pharmaceutical product
+   Requirements: All major sections (Personnel, Premises, Equipment, 
+                 Production, QC, Documentation, Complaints, Recalls, 
+                 Self-Inspection, Validation)
+
+3. ICH Q1A/Q1B: Stability Testing
+   Reference: International Council on Harmonisation
+   Application: Your stability study protocol for cannabinoid degradation
+                kinetics analysis
+
+4. European Pharmacopoeia (Ph. Eur.)
+   Standards: Testing methodologies, acceptance criteria, technical guidance
+   Application: Quality control specifications for cannabis products
+
+5. USP <71>: Sterility Tests
+   Alternative: USP <71> Microbiological Limits and Testing for Cannabis
+
+6. North Macedonia Medical Cannabis Regulations
+   Authority: Ministry of Health - Medicinal Products Department
+   Requirements: License maintenance, controlled substance reporting,
+                 security protocols, regulatory compliance
+
+QUALITY SYSTEM STANDARDS:
+
+7. ISO 9001: Quality Management Systems
+   Application: Risk-based approach to quality system design
+
+8. ASTM Standards: Test Methods for Cannabis
+   Application: Cannabinoid testing, microbial analysis methodologies
+
+9. Good Weighing Practice (GWP): ISO/IEC 17043:2023
+   Application: Balance calibration and periodic verification procedures
+
+CANNABIS-SPECIFIC GUIDANCE:
+
+10. GACP (Good Agricultural and Collection Practice)
+    Scope: Cannabis plant cultivation and plant health management
+    Standards: EU GMP harmonization with agricultural practices
+
+11. Cannabis Testing Standards
+    Cannabinoid Potency: HPLC or GC-MS quantification methods
+    Microbiological: USP/Ph. Eur. limits for bacterial/mold/yeast
+    Pesticide Residues: LC-MS/MS analysis with MRL limits
+    Heavy Metals: ICP-MS analysis for lead, cadmium, mercury, arsenic
+
+================================================================================
+SECTION 11: CONTACT & SUPPORT INFORMATION
+================================================================================
+
+Project Owner:
+  Name: Blagoj Nikolov
+  Title: Master Pharmacist, Qualified Person (Batch Release)
+  Organization: Purely Plant GmbH
+  Role: QMS Customization Lead & Approval Authority
+
+For Questions or Technical Support:
+  - Review the comprehensive QMS Documentation available in workspace
+  - Consult QMS_README.txt for toolkit overview
+  - See CUSTOMIZATION_GUIDE_Complete.txt for detailed procedures
+  - Reference MASTER_INDEX_And_Navigation.txt for file locations
+
+For Regulatory Guidance:
+  - North Macedonia Ministry of Health: [Contact from Facility Profile]
+  - EU GMP Resources: EudraLex Volume 4, EDQM materials
+  - Pharmacopeial Standards: Ph. Eur. and USP standards databases
+
+================================================================================
+END OF ANALYSIS DOCUMENT
+================================================================================
+
+Document Classification: Internal QMS Planning Document
+Version: 1.0
+Date Prepared: January 13, 2026
+Status: Ready for Implementation
+Next Review: Upon completion of Phase 1 customization
+Approval: Awaiting Facility Manager & QP Review
+
+This document serves as strategic roadmap for customizing your EU GMP QMS
+framework to your specific Purely Plant operations, leveraging existing
+documentation and your advanced pharmaceutical quality expertise.
+
+Implementation should begin with Facility Profile (Week 1-2), proceed through
+critical SOPs (Week 3-6), and complete with operational procedures (Week 7-12).
+
+Your role as QP ensures regulatory compliance and product safety throughout
+the implementation process.
+
+================================================================================

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Tactical Dossier Archive</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  ════════════════════════════════════════════════════════════════════
+  DESIGN NOTES · Board tree rows (surface 3.5) — MASS EFFECT HUD recut
+  ────────────────────────────────────────────────────────────────────
+  Rebuilt in the authentic MASS WEED / Mass Effect command-deck language:
+    · each THEME is a chamfered dossier panel (top-left + bottom-right
+      corner cuts) with a glowing department-colored hairline edge, a
+      scanline wash, an angular dept SIGIL, and square-corner BRACKETS.
+    · the subtask counter is the "◤ N DOCUMENTS" DECRYPT toggle.
+    · expanding drops a glowing DATA-SPINE with diamond status NODES and
+      diagonal connectors — the documents hang off it as HUD readout rows
+      (designation · //ref · [ Wnn ▸ Wnn ] · hrs). Documents with reworks
+      expand once more into a dimmer sub-spine of VERSION log lines.
+    · every readout is a labelled HUD cell (SPAN / LOG / PROGRESS) with
+      bracketed mono values and a tick-segmented progress bar.
+  UNLIMITED nesting: the manifest renders recursively, so any node hangs a
+  further spine — theme → document → version → redline → fix → draft → …
+  Each child shows its own week-span (they run other weeks than the parent).
+
+  Content is grounded in the app's real capture/qcm-theme-map CSV
+  (theme_id → theme_title, member tasks → documents, session_count →
+  versions): QASOP 031 labeling, LoD/HMA validation, Stability, RO Water,
+  Warehouse control, CEO Tranche-1.  Scope: .tb-* only + existing mw-*.
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+  html,body{ margin:0; background:var(--mw-void); }
+  .wrap{ max-width:940px; margin:0 auto; padding:16px 26px 74px; }
+
+  .tb-cap{ text-align:center; font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:.34em;
+    font-size:11px; color:var(--mw-text-faint); margin:-6px 0 20px; }
+  .tb-cap b{ color:var(--mw-cyan-dim); font-weight:600; }
+
+  .tb-top{ display:flex; align-items:center; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
+  .tb-top__sp{ flex:1; }
+  .tb-hint{ font-family:var(--mw-font-cond); font-size:12px; color:var(--mw-text-faint); letter-spacing:.04em; margin:0 0 16px; }
+
+  .tb-lane{ display:flex; flex-direction:column; gap:16px; }
+
+  /* ── THEME dossier panel ──────────────────────────────── */
+  .tb-theme{ position:relative; --acc:#5ec8f0; animation:tbIn .5s ease both; }
+  @keyframes tbIn{ from{ opacity:0; transform:translateY(8px); } }
+  .tb-theme > summary{ list-style:none; cursor:pointer; display:block; position:relative;
+    padding:16px 22px 15px 24px;
+    background:linear-gradient(158deg, rgba(9,28,52,.82), rgba(6,20,40,.9));
+    clip-path:polygon(0 15px,15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%); }
+  .tb-theme > summary::-webkit-details-marker{ display:none; }
+  .tb-theme > summary > *{ position:relative; z-index:2; }
+  /* glowing dept hairline edge */
+  .tb-edge{ position:absolute; inset:0; clip-path:inherit; padding:1.5px; z-index:1; pointer-events:none;
+    background:linear-gradient(150deg, var(--acc), color-mix(in srgb,var(--acc) 26%, transparent) 58%, var(--acc));
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude;
+    filter:drop-shadow(0 0 6px color-mix(in srgb,var(--acc) 55%, transparent)); }
+  .tb-scan{ position:absolute; inset:0; clip-path:inherit; z-index:1; pointer-events:none; background:var(--mw-scan); opacity:.6; mix-blend-mode:screen; }
+  .tb-theme > summary:hover{ filter:brightness(1.1); }
+  /* square-corner brackets (TR + BL; the other two corners are chamfered) */
+  .tb-bk{ position:absolute; width:15px; height:15px; z-index:3; pointer-events:none;
+    filter:drop-shadow(0 0 4px color-mix(in srgb,var(--acc) 70%, transparent)); }
+  .tb-bk--tr{ top:6px; right:6px; border-top:2px solid var(--acc); border-right:2px solid var(--acc); }
+  .tb-bk--bl{ bottom:6px; left:6px; border-bottom:2px solid var(--acc); border-left:2px solid var(--acc); }
+
+  .tb-hd{ display:flex; align-items:center; gap:14px; }
+  .tb-sigil{ width:40px; height:40px; flex:none; display:grid; place-items:center;
+    font-family:var(--mw-font-cond); font-weight:700; font-size:15px; letter-spacing:.02em; color:var(--acc);
+    background:color-mix(in srgb,var(--acc) 15%, rgba(4,14,28,.85));
+    box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--acc) 55%, transparent), 0 0 12px color-mix(in srgb,var(--acc) 28%, transparent);
+    clip-path:polygon(0 7px,7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
+  .tb-name{ flex:1; min-width:0; }
+  .tb-name h3{ margin:0; font-family:var(--mw-font-cond); font-weight:600; font-size:18px; line-height:1.15;
+    text-transform:uppercase; letter-spacing:.09em; color:var(--mw-ink); }
+  .tb-name .mk{ display:block; font-family:var(--mw-font); font-size:11px; font-weight:400; color:var(--mw-text-dim); letter-spacing:.02em; margin-top:3px; text-transform:none; }
+  .tb-right{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:none; }
+  .tb-toggle{ display:inline-flex; align-items:center; gap:8px; font-family:var(--mw-font-cond); font-weight:700;
+    text-transform:uppercase; letter-spacing:.1em; font-size:12px; color:var(--acc); white-space:nowrap; }
+  .tb-toggle .cut{ color:color-mix(in srgb,var(--acc) 55%, transparent); }
+  .tb-toggle .chev{ width:8px; height:8px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .2s ease; margin-left:1px; }
+  .tb-theme[open] > summary .tb-toggle .chev{ transform:rotate(45deg); }
+
+  /* HUD readout strip */
+  .tb-meta{ display:flex; align-items:stretch; margin-top:14px; }
+  .tb-cell{ padding:0 18px; border-left:1px solid rgba(94,200,240,.15); }
+  .tb-cell:first-child{ padding-left:0; border-left:none; }
+  .tb-cell--prog{ flex:1; min-width:110px; }
+  .tb-k{ display:block; font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:.2em; font-size:9px; color:var(--mw-text-faint); margin-bottom:5px; }
+  .tb-v{ font-family:var(--mw-font-cond); font-size:14px; font-weight:600; letter-spacing:.05em; color:var(--mw-cyan-bright); white-space:nowrap; }
+  .tb-v em{ color:color-mix(in srgb,var(--acc) 70%, var(--mw-text-dim)); font-style:normal; margin:0 3px; }
+  .tb-v .br{ color:var(--mw-text-faint); }
+  .tb-bar{ position:relative; height:9px; margin-top:3px; background:var(--mw-stat-track); box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);
+    -webkit-mask:repeating-linear-gradient(90deg,#000 0 5px,transparent 5px 7px); mask:repeating-linear-gradient(90deg,#000 0 5px,transparent 5px 7px); }
+  .tb-bar > i{ display:block; height:100%; background:linear-gradient(90deg, color-mix(in srgb,var(--acc) 65%,#fff), var(--acc));
+    box-shadow:0 0 9px color-mix(in srgb,var(--acc) 70%, transparent); }
+  .tb-pct{ font-family:var(--mw-font-cond); font-size:11px; font-weight:700; color:var(--acc); margin-left:8px; }
+
+  /* ── manifest tree — recursive glowing data-spine (unlimited depth) ─ */
+  .tb-branch{ position:relative; padding:14px 0 6px 30px; }
+  .tb-branch--root{ margin:2px 0 4px 32px; }
+  .tb-branch::before{ content:""; position:absolute; left:9px; top:0; bottom:14px; width:2px;
+    background:linear-gradient(var(--acc), color-mix(in srgb,var(--acc) 18%, transparent));
+    box-shadow:0 0 8px color-mix(in srgb,var(--acc) 45%, transparent); }
+  /* deeper spines tighten + dim so nesting reads as recursion, to any depth */
+  .tb-branch .tb-branch{ padding-left:26px; }
+  .tb-branch .tb-branch::before{ opacity:.7; box-shadow:none; }
+  .tb-branch .tb-branch .tb-branch::before{ opacity:.5; }
+
+  .tb-row{ position:relative; margin-bottom:7px; --s:var(--mw-cyan); }
+  /* diagonal connector + diamond node hanging off the spine */
+  .tb-row::before{ content:""; position:absolute; left:-16px; top:20px; width:14px; height:2px; z-index:1;
+    background:color-mix(in srgb,var(--acc) 55%, transparent); }
+  .tb-row::after{ content:""; position:absolute; left:-25px; top:15px; width:11px; height:11px; z-index:2; transform:rotate(45deg);
+    background:var(--s); box-shadow:0 0 9px var(--s); }
+
+  .tb-doc{ display:flex; align-items:center; gap:12px; padding:9px 15px 9px 15px; cursor:pointer; list-style:none;
+    background:linear-gradient(100deg, color-mix(in srgb,var(--acc) 9%, rgba(6,18,34,.72)), rgba(5,14,28,.72));
+    box-shadow:inset 3px 0 0 var(--s), inset 0 0 0 1px rgba(94,200,240,.09);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%); transition:filter .12s ease, background .12s ease; }
+  .tb-doc::-webkit-details-marker{ display:none; }
+  .tb-doc:hover{ filter:brightness(1.16); background:linear-gradient(100deg, color-mix(in srgb,var(--acc) 15%, rgba(6,18,34,.8)), rgba(6,16,32,.8)); }
+  .tb-doc__name{ flex:1; min-width:0; font-family:var(--mw-font-cond); font-weight:500; font-size:13.5px; letter-spacing:.03em;
+    text-transform:uppercase; color:var(--mw-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tb-doc__name .mk{ text-transform:none; letter-spacing:0; }
+  .tb-doc__ref{ font-family:var(--mw-font-cond); font-size:10.5px; letter-spacing:.05em; color:var(--mw-text-faint); text-transform:none; }
+  .tb-doc__span{ font-family:var(--mw-font-cond); font-size:11.5px; font-weight:600; letter-spacing:.06em; color:var(--mw-text-dim); flex:none; }
+  .tb-doc__span .br{ color:var(--mw-text-faint); } .tb-doc__span em{ font-style:normal; color:color-mix(in srgb,var(--acc) 75%, var(--mw-text-dim)); margin:0 2px; }
+  .tb-doc__hrs{ font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.04em; color:var(--mw-cyan-bright); flex:none; min-width:32px; text-align:right; }
+  .tb-vtab{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mw-font-cond); font-weight:700; font-size:10px; letter-spacing:.08em;
+    color:var(--acc); padding:2px 8px; flex:none; background:color-mix(in srgb,var(--acc) 12%, transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 40%, transparent); clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); }
+  .tb-vtab .chev{ width:6px; height:6px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .18s ease; }
+  .tb-row[open] > .tb-doc .tb-vtab .chev{ transform:rotate(45deg); }
+  .tb-doc__pad{ width:6px; flex:none; }
+
+  /* version-label pill (rework / draft nodes) */
+  .tb-vpill{ flex:none; font-family:var(--mw-font-cond); font-weight:700; font-size:10px; letter-spacing:.04em; color:var(--acc);
+    padding:2px 7px; background:color-mix(in srgb,var(--acc) 14%, transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 42%, transparent); clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); }
+
+  /* status node colors */
+  .n-done{ --s:var(--mw-stat-hi); } .n-working{ --s:#f0b95e; } .n-review{ --s:var(--mw-cyan-bright); }
+  .n-stuck{ --s:var(--mw-stat-lo); } .n-pending{ --s:var(--mw-text-faint); } .n-postponed{ --s:var(--mw-stat-mid); }
+
+  /* ── light "Cool Mist" overrides ──────────────────────── */
+  [data-theme="light"] .tb-theme > summary{ background:linear-gradient(158deg, color-mix(in srgb,var(--acc) 13%, rgba(255,255,255,.88)), rgba(235,244,251,.92)); }
+  [data-theme="light"] .tb-doc{ background:linear-gradient(100deg, color-mix(in srgb,var(--acc) 10%, rgba(255,255,255,.7)), rgba(240,247,252,.7)); }
+  [data-theme="light"] .tb-scan{ opacity:.25; }
+
+  @media (max-width:640px){
+    .tb-doc__ref, .tb-vrow__date, .tb-cell--span2{ display:none; }
+    .wrap{ padding:14px 12px 60px; } .tb-docs{ margin-left:14px; }
+  }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Theme Board">
+
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl"><span class="en">Tactical Dossier Archive</span><span class="mk">Тактички архив на досиеја</span></h1><span class="mw-rule"></span></div>
+  <div class="tb-cap"><span class="en">Theme <b>▸</b> Document <b>▸</b> Version · deep index</span><span class="mk">Тема <b>▸</b> Документ <b>▸</b> Верзија · длабок индекс</span></div>
+
+  <div class="tb-top">
+    <div class="mw-seg" id="filter" aria-label="Filter">
+      <button class="is-active" data-f="all" type="button"><span class="en">All</span><span class="mk">Сите</span></button>
+      <button data-f="working" type="button"><span class="en">Active</span><span class="mk">Активни</span></button>
+      <button data-f="review" type="button"><span class="en">Review</span><span class="mk">Преглед</span></button>
+      <button data-f="done" type="button"><span class="en">Complete</span><span class="mk">Завршени</span></button>
+    </div>
+    <span class="tb-top__sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+  <p class="tb-hint"><span class="en">▹ Select a dossier to decrypt its manifest. Any node nests as deep as the work goes — document ▸ version ▸ redline ▸ fix ▸ draft. Children run their own week-spans.</span><span class="mk">▹ Избери досие за да го дешифрираш пописот. Секој јазол се гнезди онолку длабоко колку што бара работата. Децата траат сопствени недели.</span></p>
+
+  <div class="tb-lane" id="lane"></div>
+
+</div>
+</div>
+
+<script>
+/* grounded in capture/qcm-theme-map CSV — theme → member docs → session_count reworks */
+const THEMES = [
+  { ab:'QA', col:'#E0743A', st:'working', span:['W19','W28'], en:'Labeling & Label Control', code:'QASOP 031', mk:'Означување и контрола на етикети', prog:62, hrs:38,
+    docs:[
+      { en:'QASOP 031 — Base Rebaseline', mk:'основна ре-баселина', ref:'pp-qasop-031-v1-01', st:'working', span:['W24','W28'], hrs:6,
+        children:[
+          { v:'v1.00', st:'done', date:'W24', hrs:2 },
+          { v:'v1.01', st:'working', date:'W26–W28', hrs:3, children:[
+            { en:'QC Redline — Legibility', mk:'QC редлајн', ref:'qc-rl-031-a', st:'review', date:'W27', hrs:1 },
+            { en:'CAPA — Font Spec Fix', mk:'КАПА — фонт', ref:'capa-031-font', st:'working', date:'W28', hrs:1, children:[
+              { v:'draft', st:'working', date:'W28', hrs:0.5 }
+            ]}
+          ]}
+        ] },
+      { en:'A05 — Storage Label', mk:'Етикета за складирање', ref:'qasop-031-a05', st:'working', span:['W25','W28'], hrs:5,
+        vers:[['v1','done','W25',1],['v2','review','W26',1],['v3','working','W28',1]] },
+      { en:'A06 — Inspected Label', mk:'Прегледана етикета', ref:'qasop-031-a06', st:'working', span:['W26','W28'], hrs:3, vers:[['v1','done','W26',1],['v2','working','W28',1]] },
+      { en:'A09 — SL Label', mk:'СЛ етикета', ref:'qasop-031-a09-sl-label', st:'working', span:['W27','W28'], hrs:2 },
+      { en:'A01 — Quarantine Label', mk:'Карантин етикета', ref:'qasop-031-a01', st:'working', span:['W25','W28'], hrs:4, vers:[['v1','done','W25',1],['v2','working','W28',1]] },
+      { en:'Status Labels Set', mk:'Сет статус-етикети', ref:'qasop-031-status-labels', st:'working', span:['W27','W28'], hrs:3 },
+      { en:'Deviation — Version Mismatch', mk:'Отстапување — неусогласеност', ref:'pp-qms-deviation-qasop-031', st:'pending', span:['W28','W28'], hrs:1 }
+    ]},
+  { ab:'QC', col:'#9B7BE8', st:'review', span:['W18','W28'], en:'LoD / HMA Method Validation', code:'SAM a02.1/a02.2', mk:'Валидација на метод LoD / HMA', prog:78, hrs:24,
+    docs:[
+      { en:'AMV a02.1 — SAM', mk:'АМВ a02.1', ref:'pp-qc-amv-a02.1-sam', st:'review', span:['W22','W28'], hrs:6, vers:[['v1','done','W22',1],['v2','review','W28',1]] },
+      { en:'AMV a02.2 — LoD', mk:'АМВ a02.2', ref:'pp-qc-amv-a02.2-lod', st:'review', span:['W24','W28'], hrs:5 },
+      { en:'AMSF a02.2', mk:'АМСФ a02.2', ref:'pp-qc-amsf-a02.2', st:'working', span:['W25','W28'], hrs:4, vers:[['v1','done','W25',1],['v2','working','W28',1]] },
+      { en:'AMVR a02.1 — Report 2026', mk:'извештај 2026', ref:'pp-qc-amvr-a02-1-001-2026', st:'done', span:['W26','W27'], hrs:3 },
+      { en:'LoD a02.2 — Handover', mk:'предавање', ref:'pp-lod-a02.2-handover-cowork', st:'done', span:['W27','W27'], hrs:2 }
+    ]},
+  { ab:'QC', col:'#9B7BE8', st:'working', span:['W20','W28'], en:'Stability Studies', code:'QCSOP 018', mk:'Студии за стабилност', prog:40, hrs:16,
+    docs:[
+      { en:'QCSOP 018 — Master', mk:'мастер', ref:'qcsop-018', st:'working', span:['W20','W28'], hrs:5, vers:[['v1','done','W20',1],['v2','working','W28',1]] },
+      { en:'A01 — Protocol', mk:'протокол', ref:'qcsop-018-a01', st:'working', span:['W22','W28'], hrs:3 },
+      { en:'A02 — Pull Schedule', mk:'распоред', ref:'qcsop-018-a02', st:'working', span:['W23','W28'], hrs:3 },
+      { en:'A06 — Data Sheet', mk:'лист', ref:'qcsop-018-a06', st:'working', span:['W25','W28'], hrs:2 },
+      { en:'A09 — Trend Annex', mk:'тренд анекс', ref:'qcsop-018-a09', st:'working', span:['W27','W28'], hrs:3 }
+    ]},
+  { ab:'MU', col:'#8496B2', st:'working', span:['W21','W28'], en:'RO Water System Qualification', code:'PP/S/002', mk:'Квалификација на RO вода', prog:55, hrs:22,
+    docs:[
+      { en:'URS', mk:'УРС', ref:'eqp-pps002-urs', st:'working', span:['W21','W25'], hrs:3, vers:[['v1','done','W21',1]] },
+      { en:'PQ1 v01', mk:'ПК1 v01', ref:'eqp-pps002-pq1-v01', st:'working', span:['W24','W28'], hrs:6, vers:[['v1','done','W24',1],['v2','working','W26',1],['v3','working','W28',1]] },
+      { en:'CAPA — PQ Conductivity F117', mk:'КАПА — спроводливост', ref:'capa-dp-pps002-pq-cond-f117', st:'working', span:['W27','W28'], hrs:2 },
+      { en:'CAPA — PQ Micro 1203', mk:'КАПА — микро', ref:'capa-dp-pps002-pq-micro-1203', st:'working', span:['W27','W28'], hrs:2 },
+      { en:'pH Spec Revision a05/a06', mk:'ревизија pH', ref:'eqp-pps002-a05-a06', st:'working', span:['W28','W28'], hrs:1 },
+      { en:'QR v01', mk:'КР v01', ref:'eqp-pps002-qr-v01', st:'pending', span:['W29','W29'], hrs:0 }
+    ]},
+  { ab:'WH', col:'#22B8D8', st:'done', span:['W17','W27'], en:'Material Logistics & Warehouse Control', code:'WHSOP 001', mk:'Материјална логистика и магацин', prog:100, hrs:14,
+    docs:[
+      { en:'WHSOP 001', mk:'ВХСОП 001', ref:'whsop-001', st:'done', span:['W17','W20'], hrs:4 },
+      { en:'PO SOP A01 — Material Handover', mk:'предавање материјал', ref:'po-sop-a01', st:'done', span:['W21','W24'], hrs:3 },
+      { en:'PO SOP A02 — Material Receipt', mk:'прием материјал', ref:'po-sop-a02', st:'done', span:['W22','W25'], hrs:3 },
+      { en:'Quarantine Register', mk:'карантин регистар', ref:'pp-warehouse-quarantine-register', st:'working', span:['W26','W28'], hrs:2 },
+      { en:'Material Transfer Forms', mk:'форми за трансфер', ref:'pp-material-transfer-forms', st:'working', span:['W27','W28'], hrs:2 }
+    ]},
+  { ab:'ORG', col:'#5ec8f0', st:'pending', span:['W28','W32'], en:'CEO Order — Tranche 1 Release', code:'EU GMP DOSSIER', mk:'Наредба од ЦЕО — Транша 1', prog:12, hrs:4,
+    docs:[
+      { en:'Memo 07:01 — Intake', mk:'мемо 07:01', ref:'ceo-memo-2026-07:01', st:'done', span:['W28','W28'], hrs:1 },
+      { en:'Memo 07:02 — Release Plan', mk:'план за пуштање', ref:'ceo-memo-2026-07:02', st:'working', span:['W28','W29'], hrs:2 },
+      { en:'Memo 07:03 — GMP Dossier Index', mk:'индекс на досие', ref:'ceo-memo-2026-07:03', st:'working', span:['W28','W30'], hrs:1 },
+      { en:'Memo 07:08 — Batch Review', mk:'преглед на серии', ref:'ceo-memo-2026-07:08', st:'pending', span:['W29','W31'], hrs:0 },
+      { en:'Memo 07:11 — QP Certification', mk:'сертификација QP', ref:'ceo-memo-2026-07:11', st:'pending', span:['W30','W32'], hrs:0 }
+    ]}
+];
+
+function bil(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+const VSTATE = { done:['Approved','Одобрено'], working:['In Rework','Преработка'], review:['In Review','Преглед'], pending:['Planned','Планирано'], stuck:['Blocked','Блокирано'], postponed:['Deferred','Одложено'] };
+
+function span(s){ return '<span class="br">[</span> '+s[0]+' <em>▸</em> '+s[1]+' <span class="br">]</span>'; }
+function stWord(st){ const s = VSTATE[st]||['','']; return bil(s[0],s[1]); }
+function badge(n){
+  if(n.span) return '<span class="tb-doc__span">'+span(n.span)+'</span>';
+  if(n.date) return '<span class="tb-doc__span"><span class="br">[</span> '+n.date+' <span class="br">]</span></span>';
+  return '';
+}
+/* accept legacy [label,st,date,hrs] version tuples OR full node objects */
+function toNode(x){ return Array.isArray(x) ? { v:x[0], st:x[1], date:x[2], hrs:x[3] } : x; }
+
+/* recursive — a node nests to ANY depth via .children (or legacy .vers) */
+function renderNode(n){
+  const src = n.children || n.vers;
+  const kids = src ? src.map(toNode) : null;
+  const hasKids = kids && kids.length;
+  const label = n.en
+    ? n.en + (n.ref ? ' <span class="tb-doc__ref">// '+n.ref+'</span>' : '') + (n.mk ? '<span class="mk"> · '+n.mk+'</span>' : '')
+    : stWord(n.st);
+  const row =
+    (n.v ? '<span class="tb-vpill">'+n.v+'</span>' : '')+
+    '<span class="tb-doc__name">'+label+'</span>'+
+    badge(n)+
+    '<span class="tb-doc__hrs">'+n.hrs+'h</span>'+
+    (hasKids ? '<span class="tb-vtab">'+kids.length+'<span class="chev"></span></span>' : '<span class="tb-doc__pad"></span>');
+  if(!hasKids) return '<div class="tb-row n-'+n.st+'"><div class="tb-doc">'+row+'</div></div>';
+  return '<details class="tb-row n-'+n.st+'"><summary class="tb-doc">'+row+'</summary>'+
+    '<div class="tb-branch">'+kids.map(renderNode).join('')+'</div></details>';
+}
+
+function themeCard(t){
+  const docs = t.docs.map(renderNode).join('');
+  return '<details class="tb-theme" data-st="'+t.st+'" style="--acc:'+t.col+'"><summary>'+
+    '<span class="tb-edge"></span><span class="tb-scan"></span><span class="tb-bk tb-bk--tr"></span><span class="tb-bk tb-bk--bl"></span>'+
+    '<div class="tb-hd">'+
+      '<span class="tb-sigil">'+t.ab+'</span>'+
+      '<div class="tb-name"><h3>'+t.en+'</h3><span class="mk">'+t.mk+'</span></div>'+
+      '<div class="tb-right">'+
+        '<span class="mw-st mw-st--'+t.st+'">'+t.st+'</span>'+
+        '<span class="tb-toggle"><span class="cut">◤</span> '+t.docs.length+' '+bil('Documents','Документи')+'<span class="chev"></span></span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="tb-meta">'+
+      '<div class="tb-cell"><span class="tb-k">'+bil('Ref','Реф')+'</span><span class="tb-v">'+t.code+'</span></div>'+
+      '<div class="tb-cell tb-cell--span2"><span class="tb-k">'+bil('Span','Период')+'</span><span class="tb-v">'+span(t.span)+'</span></div>'+
+      '<div class="tb-cell"><span class="tb-k">'+bil('Log','Дневник')+'</span><span class="tb-v">'+t.hrs+' H</span></div>'+
+      '<div class="tb-cell tb-cell--prog"><span class="tb-k">'+bil('Progress','Напредок')+'</span>'+
+        '<div style="display:flex;align-items:center;"><div class="tb-bar" style="flex:1"><i style="width:'+t.prog+'%"></i></div><span class="tb-pct">'+t.prog+'%</span></div></div>'+
+    '</div>'+
+  '</summary>'+
+    '<div class="tb-branch tb-branch--root">'+docs+'</div>'+
+  '</details>';
+}
+
+function render(filter){
+  const lane = document.getElementById('lane');
+  const rows = THEMES.filter(t=> filter==='all' || t.st===filter);
+  lane.innerHTML = rows.map(themeCard).join('') ||
+    '<div class="mw-empty" style="text-align:center;padding:40px;color:var(--mw-text-faint);font-family:var(--mw-font-cond);letter-spacing:.2em">— NO DOSSIERS —</div>';
+}
+render('all');
+
+document.getElementById('filter').addEventListener('click', e=>{
+  const b = e.target.closest('[data-f]'); if(!b) return;
+  document.querySelectorAll('#filter button').forEach(x=>x.classList.toggle('is-active', x===b));
+  render(b.getAttribute('data-f'));
+});
+</script>
+<script src="mw-i18n.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>

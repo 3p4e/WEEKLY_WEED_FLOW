@@ -1,0 +1,155 @@
+==========================================
+Ollama VPS Setup - Copy & Paste Commands
+==========================================
+
+Step 1: Connect to VPS
+----------------------
+ssh root@72.61.176.37
+# Password: C2nnabis123qwe123
+
+
+Step 2: Update System (Run on VPS)
+----------------------------------
+apt-get update && apt-get upgrade -y
+
+apt-get install -y curl wget git ufw docker.io docker-compose
+
+
+Step 3: Install Ollama (Run on VPS)
+-----------------------------------
+curl -fsSL https://ollama.ai/install.sh | sh
+
+cat > /etc/systemd/system/ollama.service << 'EOF'
+[Unit]
+Description=Ollama AI Model Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/ollama serve
+User=root
+Restart=always
+RestartSec=3
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_ORIGINS=*"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable ollama
+systemctl start ollama
+sleep 5
+
+
+Step 4: Configure Firewall (Run on VPS)
+---------------------------------------
+ufw --force reset
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 11434/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+echo 'y' | ufw enable
+
+
+Step 5: Install Models (Run on VPS - Takes Time)
+------------------------------------------------
+ollama pull llama3.2
+ollama pull codellama
+ollama pull deepseek-coder
+ollama pull qwen2.5-coder
+
+ollama list
+
+
+Step 6: Test Installation (Run on VPS)
+--------------------------------------
+curl -s http://localhost:11434/api/version
+curl -X POST http://localhost:11434/api/generate -H "Content-Type: application/json" -d '{"model":"llama3.2","prompt":"Say hello!","stream":false}'
+
+
+==========================================
+SSH Key Setup (Run on LOCAL Machine)
+==========================================
+
+# Create SSH key
+ssh-keygen -t ed25519 -f ~/.ssh/hostinger-vps-access -N ""
+
+# Copy key to VPS (replace PASSWORD with: C2nnabis123qwe123)
+ssh-copy-id -i ~/.ssh/hostinger-vps-access.pub root@72.61.176.37
+
+# Or manually add this to /root/.ssh/authorized_keys on VPS:
+cat ~/.ssh/hostinger-vps-access.pub
+
+
+==========================================
+Add to ~/.ssh/config (Run on LOCAL Machine)
+==========================================
+
+cat >> ~/.ssh/config << 'EOF'
+
+# Hostinger VPS - Ollama Server
+Host ollama-vps
+    HostName srv1211306.hstgr.cloud
+    User root
+    Port 22
+    IdentityFile ~/.ssh/hostinger-vps-access
+    ForwardAgent yes
+EOF
+
+
+==========================================
+Zed Connection
+==========================================
+
+# In Zed:
+# 1. Press Cmd+Shift+P (or Ctrl+Shift+P)
+# 2. Type "Open Remote"
+# 3. Enter: ssh://root@72.61.176.37:22
+
+# Or use alias:
+# ssh://ollama-vps
+
+
+==========================================
+SSH Tunnel (Local Ollama Access)
+==========================================
+
+# Create tunnel from local machine
+ssh -L 11434:localhost:11434 -N root@72.61.176.37
+
+# Then use Ollama locally at http://localhost:11434
+
+
+==========================================
+Useful Commands
+==========================================
+
+# Check Ollama status on VPS
+ssh root@72.61.176.37 "systemctl status ollama"
+
+# List models on VPS
+ssh root@72.61.176.37 "ollama list"
+
+# Run a test query on VPS
+ssh root@72.61.176.37 'curl -s -X POST http://localhost:11434/api/generate -H "Content-Type: application/json" -d '\''{"model":"llama3.2","prompt":"What is 2+2?","stream":false}'\'''
+
+# Check firewall status on VPS
+ssh root@72.61.176.37 "ufw status"
+
+
+==========================================
+Web UI (Optional)
+==========================================
+
+# Install Open WebUI for browser interface
+# Run on VPS:
+docker run -d -p 8080:8080 -e OLLAMA_BASE_URL=http://localhost:11434 -v open-webui:/app/backend/data --name open-webui ghcr.io/open-webui/open-webui:main
+
+# Access at: http://72.61.176.37:8080
+
+==========================================

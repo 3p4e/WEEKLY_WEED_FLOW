@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Inventory Terminal</title>
+<link rel="stylesheet" href="mass-weed.css">
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .term{ max-width: 720px; margin: 0 auto; padding: 22px 18px 30px; }
+  .compare{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .cmp-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .cmp-name{ font-family:var(--mw-font-cond); font-size:22px; font-weight:600; letter-spacing:.03em; color:var(--mw-ink); text-shadow:0 0 10px rgba(94,200,240,.4); line-height:1; }
+  .cmp-brand{ font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:3px; }
+  .cmp-top{ display:flex; gap:12px; align-items:center; margin-bottom:14px; }
+  .cmp-glyph{ width:52px; height:52px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--mw-cyan); filter:drop-shadow(0 0 6px rgba(94,200,240,.5)); }
+  .details-link{ text-align:center; font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-cyan-dim); padding-top:10px; margin-top:6px; border-top:1px solid rgba(58,159,212,.18); cursor:pointer; }
+  .details-link:hover{ color:var(--mw-cyan-bright); text-shadow:var(--mw-glow-cyan); }
+  .catbar{ display:flex; align-items:center; gap:12px; margin-bottom:2px; padding:0 4px; }
+  .catbar .mw-title{ flex:none; }
+  .catbar .sp{ flex:1; }
+  .listwrap{ height:270px; }
+  .actionbar{ display:flex; align-items:center; justify-content:space-between; padding:6px 10px; margin-top:2px; }
+  .actionbar .div{ width:1px; height:20px; background:rgba(58,159,212,.3); }
+  .resframe{ margin-top:16px; padding:14px 20px; }
+  .flourish{ position:fixed; bottom:18px; right:22px; color:var(--mw-cyan-dim); opacity:.5; }
+  .topbtns{ display:flex; gap:10px; justify-content:center; margin-top:16px; }
+  /* recovered overlay */
+  .overlay{ position:fixed; inset:0; background:radial-gradient(120% 90% at 50% 0,rgba(6,20,40,.6),rgba(3,6,16,.9)); display:none; align-items:center; justify-content:center; z-index:50; backdrop-filter:blur(2px); }
+  .overlay.open{ display:flex; }
+  .recov{ width:520px; max-width:92vw; padding:20px 22px 18px; }
+  .recov-foot{ display:flex; align-items:center; justify-content:space-between; margin:10px 2px 0; padding-top:12px; border-top:1px solid rgba(58,159,212,.2); }
+  .recov-val{ display:flex; align-items:center; gap:8px; font-family:var(--mw-font-cond); font-weight:600; }
+  .recov-val .mw-res__icon{ width:26px; height:26px; }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<a href="design-system.html" class="mw-tabbtn" style="position:fixed; top:10px; left:14px; z-index:40; text-decoration:none;">◄ Design System</a>
+<div style="position:fixed; top:8px; right:16px; z-index:40; display:flex; align-items:center; gap:9px;"><span class="mw-nav__mark" style="width:22px; height:26px; margin:0;"></span><span style="font-family:'Saira Condensed',sans-serif; font-weight:700; letter-spacing:.22em; text-transform:uppercase; font-size:15px; color:var(--mw-cyan-bright); text-shadow:0 0 12px rgba(94,200,240,.5);">Mass Weed</span></div>
+<div class="term" data-screen-label="Inventory Terminal">
+
+  <!-- COMPARISON CARDS -->
+  <div class="compare">
+    <!-- In Stock -->
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:8px;">In Stock</div>
+      <div class="cmp-top">
+        <div class="cmp-glyph" id="glyphA">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2c-1 5-5 7-5 11a5 5 0 0 0 10 0c0-4-4-6-5-11z"/><path d="M12 8v12"/></svg>
+        </div>
+        <div>
+          <div class="cmp-name" id="nameA">Blue Dream IX</div>
+          <div class="cmp-brand" id="brandA">Serrice Cultivars</div>
+        </div>
+        <div style="flex:1;"></div>
+        <div class="mw-slots"><span class="mw-slot mw-slot--filled">◆</span><span class="mw-slot">＋</span><span class="mw-slot">＋</span></div>
+      </div>
+      <div id="statsA"></div>
+      <div class="details-link">Details ▸</div>
+    </div>
+    <!-- Selected -->
+    <div class="mw-panel mw-panel--alt">
+      <div class="mw-label" style="margin-bottom:8px; text-align:right;">Selected Batch</div>
+      <div class="cmp-top">
+        <div class="mw-slots"><span class="mw-slot mw-slot--filled">◆</span><span class="mw-slot">＋</span><span class="mw-slot">＋</span></div>
+        <div style="flex:1;"></div>
+        <div style="text-align:right;">
+          <div class="cmp-name" id="nameB">—</div>
+          <div class="cmp-brand" id="brandB">—</div>
+        </div>
+        <div class="cmp-glyph" id="glyphB">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2c-1 5-5 7-5 11a5 5 0 0 0 10 0c0-4-4-6-5-11z"/><path d="M12 8v12"/></svg>
+        </div>
+      </div>
+      <div id="statsB"></div>
+      <div class="details-link">Details ▸</div>
+    </div>
+  </div>
+
+  <!-- LIST PANEL -->
+  <div class="mw-panel">
+    <div class="catbar">
+      <div class="mw-title mw-title--md" id="catTitle">Flower</div>
+      <div class="sp"></div>
+      <div class="mw-tabs" id="tabs"></div>
+    </div>
+    <div class="mw-well listwrap mw-scroll" id="list" style="padding:6px 4px;"></div>
+    <div class="actionbar">
+      <button class="mw-tabbtn" onclick="openRecovered()">◄ Stock Intake</button>
+      <div class="div"></div>
+      <button class="mw-tabbtn" id="sortBtn">Sort: Potency ▾</button>
+      <div class="div"></div>
+      <button class="mw-tabbtn" onclick="reduceTrim()">Reduce to Trim</button>
+    </div>
+  </div>
+
+  <div class="topbtns">
+    <button class="mw-btn" onclick="stockSelected()">Stock Batch</button>
+    <button class="mw-btn mw-btn--ghost" onclick="openRecovered()">Recovered Harvest</button>
+  </div>
+
+  <!-- RESOURCES -->
+  <div class="mw-panel resframe">
+    <div class="mw-resbar" id="resbar"></div>
+  </div>
+
+  <div class="flourish">
+    <svg width="46" height="30" viewBox="0 0 46 30" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 15h30l-8-8m8 8l-8 8"/><path d="M40 4v22"/></svg>
+  </div>
+</div>
+
+<!-- RECOVERED HARVEST OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="mw-panel recov">
+    <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Recovered Harvest</h2><span class="mw-rule"></span></div>
+    <div class="mw-scroll" style="max-height:52vh; padding-right:4px;" id="recovList"></div>
+    <div class="recov-foot">
+      <div class="recov-val"><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M8 12h8"/></svg></span><span style="color:var(--mw-text-dim); font-size:14px;">Value:&nbsp;</span><span style="color:var(--mw-digit); text-shadow:0 0 10px var(--mw-digit-glow); font-size:20px;" id="recovCount">6</span></div>
+      <div class="recov-val"><span style="color:var(--mw-digit); text-shadow:0 0 10px var(--mw-digit-glow); font-size:20px;" id="recovGrams">300</span><span class="mw-res__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18M4 8l8-5 8 5"/></svg></span></div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+      <button class="mw-btn mw-btn--wide" onclick="reduceAllTrim()">Reduce to Trim</button>
+      <button class="mw-btn mw-btn--wide" onclick="takeAll()">Log All</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,1477 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Complete QMS Document System - Interactive Dashboard</title>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            :root {
+                --primary: #6366f1;
+                --primary-dark: #4f46e5;
+                --success: #10b981;
+                --warning: #f59e0b;
+                --danger: #ef4444;
+                --info: #3b82f6;
+                --gray-100: #f3f4f6;
+                --gray-200: #e5e7eb;
+                --gray-300: #d1d5db;
+                --gray-400: #9ca3af;
+                --gray-500: #6b7280;
+                --gray-600: #4b5563;
+                --gray-700: #374151;
+                --gray-800: #1f2937;
+                --gray-900: #111827;
+            }
+
+            body {
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    sans-serif;
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                min-height: 100vh;
+                color: var(--gray-800);
+            }
+
+            .dashboard {
+                max-width: 1800px;
+                margin: 0 auto;
+                padding: 2rem;
+            }
+
+            header {
+                background: white;
+                border-radius: 24px;
+                padding: 2.5rem;
+                margin-bottom: 2rem;
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            }
+
+            h1 {
+                font-size: 2.5rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 0.5rem;
+            }
+
+            .subtitle {
+                color: var(--gray-500);
+                font-size: 1rem;
+            }
+
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1.5rem;
+                margin-bottom: 2rem;
+            }
+
+            .stat-card {
+                background: white;
+                border-radius: 16px;
+                padding: 1.5rem;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                position: relative;
+                overflow: hidden;
+            }
+
+            .stat-card::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 4px;
+                background: linear-gradient(
+                    90deg,
+                    var(--primary) 0%,
+                    var(--primary-dark) 100%
+                );
+            }
+
+            .stat-value {
+                font-size: 2.5rem;
+                font-weight: 700;
+                margin-bottom: 0.5rem;
+            }
+
+            .stat-label {
+                color: var(--gray-500);
+                font-size: 0.875rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+            .viz-container {
+                background: white;
+                border-radius: 24px;
+                padding: 2rem;
+                margin-bottom: 2rem;
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            }
+
+            .tabs {
+                display: flex;
+                gap: 0.5rem;
+                margin-bottom: 2rem;
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                padding: 0.75rem 1.5rem;
+                background: var(--gray-100);
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                font-weight: 600;
+                color: var(--gray-600);
+                transition: all 0.3s ease;
+                font-size: 0.9rem;
+            }
+
+            .tab:hover {
+                background: var(--gray-200);
+            }
+
+            .tab.active {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .tab-content {
+                display: none;
+                min-height: 600px;
+            }
+
+            .tab-content.active {
+                display: block;
+            }
+
+            .tooltip {
+                position: absolute;
+                text-align: left;
+                padding: 12px;
+                font-size: 13px;
+                background: rgba(0, 0, 0, 0.95);
+                color: white;
+                border-radius: 8px;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s;
+                max-width: 350px;
+                z-index: 1000;
+            }
+
+            .tooltip.show {
+                opacity: 1;
+            }
+
+            .tooltip .doc-code {
+                font-weight: 700;
+                color: #fbbf24;
+                margin-bottom: 4px;
+            }
+
+            .tooltip .doc-title {
+                margin-bottom: 8px;
+            }
+
+            .tooltip .doc-status {
+                font-size: 11px;
+                padding: 2px 8px;
+                border-radius: 4px;
+                display: inline-block;
+                margin-top: 4px;
+            }
+
+            .tooltip .doc-status.created {
+                background: #10b981;
+            }
+
+            .tooltip .doc-status.planned {
+                background: #6b7280;
+            }
+
+            #sunburst,
+            #bubble-chart,
+            #network-graph,
+            #treemap,
+            #matrix {
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .legend {
+                display: flex;
+                gap: 2rem;
+                justify-content: center;
+                margin-bottom: 1rem;
+                flex-wrap: wrap;
+            }
+
+            .legend-item {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-size: 0.875rem;
+            }
+
+            .legend-color {
+                width: 20px;
+                height: 20px;
+                border-radius: 4px;
+            }
+
+            .controls {
+                margin-bottom: 1rem;
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+            }
+
+            .control-btn {
+                padding: 0.5rem 1rem;
+                background: var(--gray-100);
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 500;
+                transition: all 0.2s;
+            }
+
+            .control-btn:hover {
+                background: var(--gray-200);
+            }
+
+            .control-btn.active {
+                background: var(--primary);
+                color: white;
+            }
+
+            select {
+                padding: 0.5rem 1rem;
+                border: 1px solid var(--gray-300);
+                border-radius: 8px;
+                font-family: inherit;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="dashboard">
+            <header>
+                <h1>🏥 Complete QMS Document System Dashboard</h1>
+                <p class="subtitle">
+                    All 106+ Documents with Codes and Titles - Interactive
+                    Visualizations
+                </p>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--success)">
+                        106
+                    </div>
+                    <div class="stat-label">Total Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--primary)">
+                        13
+                    </div>
+                    <div class="stat-label">Document Families</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--warning)">
+                        73
+                    </div>
+                    <div class="stat-label">Main Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--info)">33</div>
+                    <div class="stat-label">Annexes</div>
+                </div>
+            </div>
+
+            <div class="viz-container">
+                <div class="tabs">
+                    <button
+                        class="tab active"
+                        onclick="showTab('sunburst', this)"
+                    >
+                        ☀️ Sunburst
+                    </button>
+                    <button class="tab" onclick="showTab('bubble-chart', this)">
+                        ⭕ Bubble Chart
+                    </button>
+                    <button
+                        class="tab"
+                        onclick="showTab('network-graph', this)"
+                    >
+                        🔗 Network Graph
+                    </button>
+                    <button class="tab" onclick="showTab('treemap', this)">
+                        📊 Treemap
+                    </button>
+                    <button class="tab" onclick="showTab('matrix', this)">
+                        📋 Progress Matrix
+                    </button>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <div
+                            class="legend-color"
+                            style="background: #10b981"
+                        ></div>
+                        <span>Created</span>
+                    </div>
+                    <div class="legend-item">
+                        <div
+                            class="legend-color"
+                            style="background: #6b7280"
+                        ></div>
+                        <span>Planned</span>
+                    </div>
+                </div>
+
+                <div id="sunburst" class="tab-content active"></div>
+                <div id="bubble-chart" class="tab-content"></div>
+                <div id="network-graph" class="tab-content"></div>
+                <div id="treemap" class="tab-content"></div>
+                <div id="matrix" class="tab-content"></div>
+            </div>
+        </div>
+
+        <div class="tooltip"></div>
+
+        <script>
+            // Complete QMS Document Data Structure with ALL documents
+            const qmsData = {
+                name: "QMS System",
+                children: [
+                    {
+                        name: "QA_00: Quality Management System Core",
+                        code: "QA_00",
+                        children: [
+                            {
+                                name: "QA_00.01: Quality Manual",
+                                code: "QA_00.01",
+                                status: "created",
+                            },
+                            {
+                                name: "QA_00.02: Document Control",
+                                code: "QA_00.02",
+                                status: "created",
+                                children: [
+                                    {
+                                        name: "QA_00.02_A01: Document Templates",
+                                        code: "QA_00.02_A01",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.02_A02: Approval Matrix",
+                                        code: "QA_00.02_A02",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.02_A03: Change Request Form",
+                                        code: "QA_00.02_A03",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.02_A04: Obsolete Handling",
+                                        code: "QA_00.02_A04",
+                                        status: "created",
+                                    },
+                                ],
+                            },
+                            {
+                                name: "QA_00.03: Training (General)",
+                                code: "QA_00.03",
+                                status: "created",
+                            },
+                            {
+                                name: "QA_00.04: Memorandum Control and Management",
+                                code: "QA_00.04",
+                                status: "created",
+                            },
+                            {
+                                name: "QA_00.05: Change Control",
+                                code: "QA_00.05",
+                                status: "created",
+                                children: [
+                                    {
+                                        name: "QA_00.05_A01: Change Control Request Form",
+                                        code: "QA_00.05_A01",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.05_A02: Risk Assessment Templates",
+                                        code: "QA_00.05_A02",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.05_A03: Impact Assessment Form",
+                                        code: "QA_00.05_A03",
+                                        status: "created",
+                                    },
+                                ],
+                            },
+                            {
+                                name: "QA_00.06: CAPA System",
+                                code: "QA_00.06",
+                                status: "created",
+                                children: [
+                                    {
+                                        name: "QA_00.06_A01: CAPA Initiation Form",
+                                        code: "QA_00.06_A01",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.06_A02: CAPA Action Plan",
+                                        code: "QA_00.06_A02",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QA_00.06_A03: CAPA Effectiveness Check",
+                                        code: "QA_00.06_A03",
+                                        status: "created",
+                                    },
+                                ],
+                            },
+                            {
+                                name: "QA_00.07: Deviation Handling & Investigation",
+                                code: "QA_00.07",
+                                status: "created",
+                            },
+                            {
+                                name: "QA_00.08: Self-Inspection",
+                                code: "QA_00.08",
+                                status: "created",
+                            },
+                            {
+                                name: "QA_00.12: Site Master File",
+                                code: "QA_00.12",
+                                status: "planned",
+                            },
+                            {
+                                name: "QA_00.13: Product Quality Review",
+                                code: "QA_00.13",
+                                status: "planned",
+                            },
+                            {
+                                name: "QA_00.14: Management Review",
+                                code: "QA_00.14",
+                                status: "planned",
+                            },
+                            {
+                                name: "QA_00.15: Document Retention",
+                                code: "QA_00.15",
+                                status: "planned",
+                            },
+                        ],
+                    },
+                    {
+                        name: "QC_01: Batch Release and Certification",
+                        code: "QC_01",
+                        children: [
+                            {
+                                name: "QC_01.01: Batch Release",
+                                code: "QC_01.01",
+                                status: "created",
+                                children: [
+                                    {
+                                        name: "QC_01.01_A01: Batch Release Assessment Form",
+                                        code: "QC_01.01_A01",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QC_01.01_A02: Batch Release Checklist",
+                                        code: "QC_01.01_A02",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QC_01.01_A03: QP Release Certification Form",
+                                        code: "QC_01.01_A03",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QC_01.01_A04: Batch Release Archival Checklist",
+                                        code: "QC_01.01_A04",
+                                        status: "created",
+                                    },
+                                    {
+                                        name: "QC_01.01_A05: Deviation Investigation Template",
+                                        code: "QC_01.01_A05",
+                                        status: "created",
+                                    },
+                                ],
+                            },
+                            {
+                                name: "QC_01.02: Sampling Procedures",
+                                code: "QC_01.02",
+                                status: "created",
+                            },
+                            {
+                                name: "QC_01.03: OOx Investigation and Handling",
+                                code: "QC_01.03",
+                                status: "created",
+                            },
+                            {
+                                name: "QC_01.04: Specifications Management",
+                                code: "QC_01.04",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.05: Laboratory Organization",
+                                code: "QC_01.05",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.06: QC Documentation GDP",
+                                code: "QC_01.06",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.07: Sampling Plan",
+                                code: "QC_01.07",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.08: Cannabinoid Testing (HPLC)",
+                                code: "QC_01.08",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.09: Microbial Testing",
+                                code: "QC_01.09",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.10: Heavy Metals Testing",
+                                code: "QC_01.10",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.11: Pesticide Residue Testing",
+                                code: "QC_01.11",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.12: Moisture Content Determination",
+                                code: "QC_01.12",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.13: Laboratory Sample Management",
+                                code: "QC_01.13",
+                                status: "planned",
+                            },
+                            {
+                                name: "QC_01.14: Method Validation",
+                                code: "QC_01.14",
+                                status: "planned",
+                            },
+                        ],
+                    },
+                    {
+                        name: "QCS_01: QC System & Documentation",
+                        code: "QCS_01",
+                        children: [
+                            {
+                                name: "QCS_01.01: Batch Release Review",
+                                code: "QCS_01.01",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.02: Batch Release Review Detailed",
+                                code: "QCS_01.02",
+                                status: "created",
+                            },
+                            {
+                                name: "QCS_01.03: Quality Control Master Plan",
+                                code: "QCS_01.03",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.04: Out-of-Specification Investigations",
+                                code: "QCS_01.04",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.05: Reference Standards Management",
+                                code: "QCS_01.05",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.06: Laboratory Equipment Calibration",
+                                code: "QCS_01.06",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.07: Laboratory Safety",
+                                code: "QCS_01.07",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.08: Laboratory Waste Disposal",
+                                code: "QCS_01.08",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.09: Analytical Methods",
+                                code: "QCS_01.09",
+                                status: "planned",
+                            },
+                            {
+                                name: "QCS_01.10: Reference Standards",
+                                code: "QCS_01.10",
+                                status: "planned",
+                            },
+                        ],
+                    },
+                    {
+                        name: "PRO_01: Cultivation Processes",
+                        code: "PRO_01",
+                        children: [
+                            {
+                                name: "PRO_01.09: Cannabis Flower Curing Process Monitoring",
+                                code: "PRO_01.09",
+                                status: "created",
+                            },
+                            {
+                                name: "PRO_01.10: Plant Health Monitoring",
+                                code: "PRO_01.10",
+                                status: "created",
+                            },
+                            {
+                                name: "PRO_01.11: Placeholder Cultivation SOP",
+                                code: "PRO_01.11",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "PRO_03: Production Operations",
+                        code: "PRO_03",
+                        children: [
+                            {
+                                name: "PRO_03.01: Production Standard Operating Procedure",
+                                code: "PRO_03.01",
+                                status: "planned",
+                            },
+                            {
+                                name: "PRO_03.02: Drying Procedures",
+                                code: "PRO_03.02",
+                                status: "created",
+                            },
+                            {
+                                name: "PRO_03.03: Facility Drying Procedures",
+                                code: "PRO_03.03",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "PRO_06: Distribution & Logistics",
+                        code: "PRO_06",
+                        children: [
+                            {
+                                name: "PRO_06.01: Transportation of Finished Products",
+                                code: "PRO_06.01",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "MAT_02: Material Management",
+                        code: "MAT_02",
+                        children: [
+                            {
+                                name: "MAT_02.01: Analytical Methods Validation",
+                                code: "MAT_02.01",
+                                status: "planned",
+                            },
+                            {
+                                name: "MAT_02.04: Material Receipt Form",
+                                code: "MAT_02.04",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "HRM_05: Human Resources",
+                        code: "HRM_05",
+                        children: [
+                            {
+                                name: "HRM_05.01: Training (General)",
+                                code: "HRM_05.01",
+                                status: "created",
+                            },
+                            {
+                                name: "HRM_05.02: Personnel Qualification",
+                                code: "HRM_05.02",
+                                status: "planned",
+                            },
+                            {
+                                name: "HRM_05.04: GMP Training Program",
+                                code: "HRM_05.04",
+                                status: "planned",
+                            },
+                            {
+                                name: "HRM_05.05: Employee Hygiene Procedure",
+                                code: "HRM_05.05",
+                                status: "created",
+                            },
+                            {
+                                name: "HRM_05.06: Visitor Management",
+                                code: "HRM_05.06",
+                                status: "planned",
+                            },
+                            {
+                                name: "HRM_05.07: Gowning Procedures",
+                                code: "HRM_05.07",
+                                status: "planned",
+                            },
+                        ],
+                    },
+                    {
+                        name: "EQU_06: Equipment Management",
+                        code: "EQU_06",
+                        children: [
+                            {
+                                name: "EQU_06.01: Equipment Operation (General)",
+                                code: "EQU_06.01",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "SAN_07: Sanitation & Hygiene",
+                        code: "SAN_07",
+                        children: [
+                            {
+                                name: "SAN_07.01: Cleaning & Sanitation (GMP Areas)",
+                                code: "SAN_07.01",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "VAL_08: Validation & Qualification",
+                        code: "VAL_08",
+                        children: [
+                            {
+                                name: "VAL_08.01: Validation Master Plan",
+                                code: "VAL_08.01",
+                                status: "planned",
+                            },
+                            {
+                                name: "VAL_08.02: Process Validation",
+                                code: "VAL_08.02",
+                                status: "planned",
+                            },
+                            {
+                                name: "VAL_08.08: Cleaning Validation Protocol",
+                                code: "VAL_08.08",
+                                status: "planned",
+                            },
+                        ],
+                    },
+                    {
+                        name: "REC_09: Records Management",
+                        code: "REC_09",
+                        children: [
+                            {
+                                name: "REC_09.01: Records Management",
+                                code: "REC_09.01",
+                                status: "created",
+                            },
+                        ],
+                    },
+                    {
+                        name: "RES_10: Research & Development",
+                        code: "RES_10",
+                        children: [
+                            {
+                                name: "RES_10.01: Phenotyping and Characterization",
+                                code: "RES_10.01",
+                                status: "created",
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            // Flatten data for easier processing
+            function flattenData(node, parent = null) {
+                const result = [];
+                if (node.code) {
+                    result.push({
+                        name: node.name,
+                        code: node.code,
+                        status: node.status || "family",
+                        parent: parent,
+                        family: parent ? parent.split(":")[0] : node.code,
+                    });
+                }
+                if (node.children) {
+                    node.children.forEach((child) => {
+                        result.push(...flattenData(child, node.name));
+                    });
+                }
+                return result;
+            }
+
+            const allDocuments = flattenData(qmsData);
+
+            // Create Sunburst Chart with all documents
+            function createSunburst() {
+                const container = document.getElementById("sunburst");
+                container.innerHTML = "";
+
+                const width = 900;
+                const height = 900;
+                const radius = Math.min(width, height) / 2;
+
+                const color = d3
+                    .scaleOrdinal()
+                    .domain(["family", "created", "planned"])
+                    .range(["#667eea", "#10b981", "#9ca3af"]);
+
+                const svg = d3
+                    .select("#sunburst")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height)
+                    .append("g")
+                    .attr("transform", `translate(${width / 2},${height / 2})`);
+
+                const partition = d3.partition().size([2 * Math.PI, radius]);
+
+                const arc = d3
+                    .arc()
+                    .startAngle((d) => d.x0)
+                    .endAngle((d) => d.x1)
+                    .innerRadius((d) => d.y0)
+                    .outerRadius((d) => d.y1);
+
+                const root = d3
+                    .hierarchy(qmsData)
+                    .sum((d) => (d.children ? 0 : 1))
+                    .sort((a, b) => b.value - a.value);
+
+                partition(root);
+
+                const path = svg
+                    .selectAll("path")
+                    .data(root.descendants())
+                    .enter()
+                    .append("path")
+                    .attr("d", arc)
+                    .style("fill", (d) => {
+                        if (d.depth === 0) return "#667eea";
+                        return color(d.data.status || "family");
+                    })
+                    .style("stroke", "#fff")
+                    .style("stroke-width", 2)
+                    .style("cursor", "pointer")
+                    .on("mouseover", function (event, d) {
+                        if (d.data.code) {
+                            showTooltip(event, d.data);
+                        }
+                    })
+                    .on("mouseout", hideTooltip);
+
+                // Add center text
+                svg.append("text")
+                    .attr("text-anchor", "middle")
+                    .attr("dy", "0.35em")
+                    .style("font-size", "20px")
+                    .style("font-weight", "700")
+                    .text("QMS");
+            }
+
+            // Create Bubble Chart showing all documents grouped by family
+            function createBubbleChart() {
+                const container = document.getElementById("bubble-chart");
+                container.innerHTML = "";
+
+                const width = 1200;
+                const height = 800;
+
+                const svg = d3
+                    .select("#bubble-chart")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+                // Group documents by family
+                const families = d3.group(
+                    allDocuments.filter((d) => d.code),
+                    (d) => d.family,
+                );
+
+                const nodes = [];
+                families.forEach((docs, family) => {
+                    docs.forEach((doc) => {
+                        nodes.push({
+                            ...doc,
+                            radius: doc.status === "family" ? 40 : 25,
+                            x: width / 2,
+                            y: height / 2,
+                        });
+                    });
+                });
+
+                const color = d3
+                    .scaleOrdinal()
+                    .domain([
+                        "QA_00",
+                        "QC_01",
+                        "QCS_01",
+                        "PRO_01",
+                        "PRO_03",
+                        "PRO_06",
+                        "MAT_02",
+                        "HRM_05",
+                        "EQU_06",
+                        "SAN_07",
+                        "VAL_08",
+                        "REC_09",
+                        "RES_10",
+                    ])
+                    .range(d3.schemeSet3);
+
+                const simulation = d3
+                    .forceSimulation(nodes)
+                    .force("charge", d3.forceManyBody().strength(-50))
+                    .force("x", d3.forceX(width / 2).strength(0.1))
+                    .force("y", d3.forceY(height / 2).strength(0.1))
+                    .force(
+                        "collision",
+                        d3.forceCollide().radius((d) => d.radius + 2),
+                    );
+
+                const bubbles = svg
+                    .selectAll("circle")
+                    .data(nodes)
+                    .enter()
+                    .append("circle")
+                    .attr("r", (d) => d.radius)
+                    .style("fill", (d) => {
+                        if (d.status === "created") return "#10b981";
+                        if (d.status === "planned") return "#9ca3af";
+                        return color(d.family);
+                    })
+                    .style("fill-opacity", 0.8)
+                    .style("stroke", "#fff")
+                    .style("stroke-width", 2)
+                    .style("cursor", "pointer")
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).style("fill-opacity", 1);
+                        showTooltip(event, d);
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).style("fill-opacity", 0.8);
+                        hideTooltip();
+                    })
+                    .call(
+                        d3
+                            .drag()
+                            .on("start", dragstarted)
+                            .on("drag", dragged)
+                            .on("end", dragended),
+                    );
+
+                const labels = svg
+                    .selectAll("text")
+                    .data(nodes)
+                    .enter()
+                    .append("text")
+                    .text((d) => d.code)
+                    .style("text-anchor", "middle")
+                    .style("font-size", "10px")
+                    .style("font-weight", "600")
+                    .style("pointer-events", "none")
+                    .style("fill", "white");
+
+                simulation.on("tick", () => {
+                    bubbles.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+                    labels.attr("x", (d) => d.x).attr("y", (d) => d.y + 3);
+                });
+
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            }
+
+            // Create Network Graph showing document relationships
+            function createNetworkGraph() {
+                const container = document.getElementById("network-graph");
+                container.innerHTML = "";
+
+                const width = 1200;
+                const height = 800;
+
+                const svg = d3
+                    .select("#network-graph")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+                // Create nodes and links
+                const nodes = [];
+                const links = [];
+
+                function processNode(node, parentId = null) {
+                    const nodeId = node.code || node.name;
+                    nodes.push({
+                        id: nodeId,
+                        name: node.name,
+                        code: node.code,
+                        status: node.status || "family",
+                        radius: node.status === "family" ? 15 : 8,
+                    });
+
+                    if (parentId) {
+                        links.push({ source: parentId, target: nodeId });
+                    }
+
+                    if (node.children) {
+                        node.children.forEach((child) =>
+                            processNode(child, nodeId),
+                        );
+                    }
+                }
+
+                processNode(qmsData);
+
+                const color = d3
+                    .scaleOrdinal()
+                    .domain(["family", "created", "planned"])
+                    .range(["#667eea", "#10b981", "#9ca3af"]);
+
+                const simulation = d3
+                    .forceSimulation(nodes)
+                    .force(
+                        "link",
+                        d3
+                            .forceLink(links)
+                            .id((d) => d.id)
+                            .distance(100),
+                    )
+                    .force("charge", d3.forceManyBody().strength(-300))
+                    .force("center", d3.forceCenter(width / 2, height / 2));
+
+                const link = svg
+                    .append("g")
+                    .selectAll("line")
+                    .data(links)
+                    .enter()
+                    .append("line")
+                    .style("stroke", "#999")
+                    .style("stroke-opacity", 0.6)
+                    .style("stroke-width", 1);
+
+                const node = svg
+                    .append("g")
+                    .selectAll("g")
+                    .data(nodes)
+                    .enter()
+                    .append("g")
+                    .style("cursor", "pointer")
+                    .call(
+                        d3
+                            .drag()
+                            .on("start", dragstarted)
+                            .on("drag", dragged)
+                            .on("end", dragended),
+                    );
+
+                node.append("circle")
+                    .attr("r", (d) => d.radius)
+                    .style("fill", (d) => color(d.status))
+                    .style("stroke", "#fff")
+                    .style("stroke-width", 2);
+
+                node.append("text")
+                    .text((d) => d.code || "")
+                    .style("font-size", "9px")
+                    .style("text-anchor", "middle")
+                    .attr("dy", 3);
+
+                node.on("mouseover", function (event, d) {
+                    showTooltip(event, d);
+                }).on("mouseout", hideTooltip);
+
+                simulation.on("tick", () => {
+                    link.attr("x1", (d) => d.source.x)
+                        .attr("y1", (d) => d.source.y)
+                        .attr("x2", (d) => d.target.x)
+                        .attr("y2", (d) => d.target.y);
+
+                    node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+                });
+
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            }
+
+            // Create Treemap showing all documents
+            function createTreemap() {
+                const container = document.getElementById("treemap");
+                container.innerHTML = "";
+
+                const width = 1200;
+                const height = 700;
+
+                const treemap = d3
+                    .treemap()
+                    .size([width, height])
+                    .padding(2)
+                    .round(true);
+
+                const root = d3
+                    .hierarchy(qmsData)
+                    .sum((d) => (d.children ? 0 : 1))
+                    .sort((a, b) => b.value - a.value);
+
+                treemap(root);
+
+                const color = d3
+                    .scaleOrdinal()
+                    .domain(["family", "created", "planned"])
+                    .range(["#667eea", "#10b981", "#9ca3af"]);
+
+                const svg = d3
+                    .select("#treemap")
+                    .append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+                const leaf = svg
+                    .selectAll("g")
+                    .data(root.leaves())
+                    .enter()
+                    .append("g")
+                    .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
+
+                leaf.append("rect")
+                    .attr("width", (d) => d.x1 - d.x0)
+                    .attr("height", (d) => d.y1 - d.y0)
+                    .style("fill", (d) => color(d.data.status))
+                    .style("stroke", "#fff")
+                    .style("stroke-width", 1)
+                    .style("cursor", "pointer")
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).style("fill-opacity", 0.8);
+                        showTooltip(event, d.data);
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).style("fill-opacity", 1);
+                        hideTooltip();
+                    });
+
+                leaf.append("text")
+                    .attr("x", 4)
+                    .attr("y", 14)
+                    .text((d) => d.data.code)
+                    .style("font-size", "10px")
+                    .style("font-weight", "600")
+                    .style("fill", "white");
+
+                leaf.append("text")
+                    .attr("x", 4)
+                    .attr("y", 26)
+                    .text((d) => {
+                        const title = d.data.name.split(":")[1];
+                        return title ? title.substring(0, 30) : "";
+                    })
+                    .style("font-size", "8px")
+                    .style("fill", "white")
+                    .style("opacity", 0.9);
+            }
+
+            // Create Progress Matrix with all documents
+            function createProgressMatrix() {
+                const container = document.getElementById("matrix");
+                container.innerHTML = "";
+
+                const families = [
+                    {
+                        code: "QA_00",
+                        name: "Quality Management System Core",
+                        total: 22,
+                        created: 18,
+                    },
+                    {
+                        code: "QC_01",
+                        name: "Batch Release and Certification",
+                        total: 19,
+                        created: 7,
+                    },
+                    {
+                        code: "QCS_01",
+                        name: "QC System & Documentation",
+                        total: 10,
+                        created: 1,
+                    },
+                    {
+                        code: "PRO_01",
+                        name: "Cultivation Processes",
+                        total: 3,
+                        created: 3,
+                    },
+                    {
+                        code: "PRO_03",
+                        name: "Production Operations",
+                        total: 3,
+                        created: 2,
+                    },
+                    {
+                        code: "PRO_06",
+                        name: "Distribution & Logistics",
+                        total: 1,
+                        created: 1,
+                    },
+                    {
+                        code: "MAT_02",
+                        name: "Material Management",
+                        total: 2,
+                        created: 1,
+                    },
+                    {
+                        code: "HRM_05",
+                        name: "Human Resources",
+                        total: 6,
+                        created: 2,
+                    },
+                    {
+                        code: "EQU_06",
+                        name: "Equipment Management",
+                        total: 1,
+                        created: 1,
+                    },
+                    {
+                        code: "SAN_07",
+                        name: "Sanitation & Hygiene",
+                        total: 1,
+                        created: 1,
+                    },
+                    {
+                        code: "VAL_08",
+                        name: "Validation & Qualification",
+                        total: 3,
+                        created: 0,
+                    },
+                    {
+                        code: "REC_09",
+                        name: "Records Management",
+                        total: 1,
+                        created: 1,
+                    },
+                    {
+                        code: "RES_10",
+                        name: "Research & Development",
+                        total: 1,
+                        created: 1,
+                    },
+                ];
+
+                const matrixHTML = `
+                <div style="padding: 2rem;">
+                    <h3 style="margin-bottom: 2rem; font-size: 1.5rem;">Document Progress by Family</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem;">
+                        ${families
+                            .map((family) => {
+                                const percentage = (
+                                    (family.created / family.total) *
+                                    100
+                                ).toFixed(0);
+                                const color =
+                                    percentage == 100
+                                        ? "#10b981"
+                                        : percentage > 50
+                                          ? "#f59e0b"
+                                          : "#9ca3af";
+
+                                // Get all documents for this family
+                                const familyDocs = allDocuments.filter(
+                                    (d) =>
+                                        d.family === family.code &&
+                                        d.code !== family.code,
+                                );
+
+                                return `
+                                <div style="background: white; border: 2px solid ${color}; border-radius: 12px; padding: 1.5rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                                        <div>
+                                            <div style="font-weight: 700; font-size: 1.1rem; color: #1f2937;">${family.code}</div>
+                                            <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">${family.name}</div>
+                                        </div>
+                                        <div style="font-size: 2rem; font-weight: 700; color: ${color};">${percentage}%</div>
+                                    </div>
+
+                                    <div style="margin: 1rem 0;">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">
+                                            <span>${family.created} created</span>
+                                            <span>${family.total - family.created} remaining</span>
+                                        </div>
+                                        <div style="height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
+                                            <div style="height: 100%; width: ${percentage}%; background: ${color}; transition: width 0.5s;"></div>
+                                        </div>
+                                    </div>
+
+                                    <details style="margin-top: 1rem;">
+                                        <summary style="cursor: pointer; font-size: 0.875rem; color: #4b5563; font-weight: 600;">View Documents (${familyDocs.length})</summary>
+                                        <div style="margin-top: 0.75rem; max-height: 200px; overflow-y: auto;">
+                                            ${familyDocs
+                                                .map(
+                                                    (doc) => `
+                                                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; font-size: 0.75rem; border-bottom: 1px solid #f3f4f6;">
+                                                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${doc.status === "created" ? "#10b981" : "#9ca3af"};"></div>
+                                                    <code style="color: #4f46e5; font-weight: 600;">${doc.code}</code>
+                                                    <span style="color: #6b7280; flex: 1;">${doc.name.split(":")[1] || ""}</span>
+                                                </div>
+                                            `,
+                                                )
+                                                .join("")}
+                                        </div>
+                                    </details>
+                                </div>
+                            `;
+                            })
+                            .join("")}
+                    </div>
+
+                    <div style="margin-top: 3rem;">
+                        <h3 style="margin-bottom: 1.5rem; font-size: 1.25rem;">All Documents List (${allDocuments.length})</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.75rem;">
+                            ${allDocuments
+                                .filter((d) => d.code && d.status !== "family")
+                                .sort((a, b) => a.code.localeCompare(b.code))
+                                .map(
+                                    (doc) => `
+                                    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: ${doc.status === "created" ? "#d1fae5" : "#f3f4f6"}; border-radius: 8px; font-size: 0.8rem;">
+                                        <div style="width: 10px; height: 10px; border-radius: 50%; background: ${doc.status === "created" ? "#10b981" : "#9ca3af"};"></div>
+                                        <code style="color: #4f46e5; font-weight: 700; min-width: 80px;">${doc.code}</code>
+                                        <span style="color: #374151;">${doc.name.split(":")[1] || doc.name}</span>
+                                    </div>
+                                `,
+                                )
+                                .join("")}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+                container.innerHTML = matrixHTML;
+            }
+
+            // Tooltip functions
+            function showTooltip(event, data) {
+                const tooltip = document.querySelector(".tooltip");
+                tooltip.innerHTML = `
+                <div class="doc-code">${data.code || "QMS System"}</div>
+                <div class="doc-title">${data.name || ""}</div>
+                ${data.status ? `<span class="doc-status ${data.status}">${data.status.toUpperCase()}</span>` : ""}
+            `;
+                tooltip.style.left = event.pageX + 10 + "px";
+                tooltip.style.top = event.pageY + 10 + "px";
+                tooltip.classList.add("show");
+            }
+
+            function hideTooltip() {
+                document.querySelector(".tooltip").classList.remove("show");
+            }
+
+            // Tab switching
+            function showTab(tabName, button) {
+                // Hide all tabs
+                document.querySelectorAll(".tab-content").forEach((tab) => {
+                    tab.classList.remove("active");
+                });
+
+                // Remove active class from all buttons
+                document.querySelectorAll(".tab").forEach((btn) => {
+                    btn.classList.remove("active");
+                });
+
+                // Show selected tab
+                document.getElementById(tabName).classList.add("active");
+                button.classList.add("active");
+
+                // Initialize visualization if not already done
+                const container = document.getElementById(tabName);
+                if (container.children.length === 0) {
+                    switch (tabName) {
+                        case "sunburst":
+                            createSunburst();
+                            break;
+                        case "bubble-chart":
+                            createBubbleChart();
+                            break;
+                        case "network-graph":
+                            createNetworkGraph();
+                            break;
+                        case "treemap":
+                            createTreemap();
+                            break;
+                        case "matrix":
+                            createProgressMatrix();
+                            break;
+                    }
+                }
+            }
+
+            // Initialize first view
+            window.addEventListener("DOMContentLoaded", () => {
+                createSunburst();
+            });
+        </script>
+    </body>
+</html>
