@@ -1587,3 +1587,91 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             pass
     return {"coa_id": str(coa["id"]), "coa_number": coa["coa_number"],
             "results_created": len(mapped), "skipped_unmapped": len(rows) - len(mapped)}
+
+
+# ── Verify loop (Phase 3 U3) — reconcile a promoted certificate vs its source ─
+# A certificate minted from an ingested eCoA (U2) is reconciled against that
+# source document: every promoted qc_result is matched (by spec parameter) to
+# the qc_coa_extraction it came from and the value / verdict / limits compared.
+# The outcome is an auditable qc_coa_verifications record — a GxP second check
+# that the promoted data still agrees with the source. Nothing is recomputed or
+# "corrected" here; a mismatch is surfaced, never silently reconciled.
+def _num_eq(a, b) -> bool:
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    return abs(float(a) - float(b)) <= 1e-9
+
+
+def _verify_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "coa_id": str(r["coa_id"]),
+        "source_document_id": str(r["source_document_id"]) if r["source_document_id"] else None,
+        "verdict": r["verdict"], "checked": r["checked"], "mismatches": r["mismatches"],
+        "details": r["details"],
+        "verified_at": r["verified_at"].isoformat() if r.get("verified_at") else None,
+    }
+
+
+@router.get("/certificates/{coa_id}/verifications")
+async def list_verifications(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT * FROM qc_coa_verifications WHERE coa_id=$1 ORDER BY verified_at DESC", coa_id)
+    return [_verify_out(dict(r)) for r in rows]
+
+
+@router.post("/certificates/{coa_id}/verify", status_code=201)
+async def verify_certificate(coa_id: str, user: dict = Depends(require_role(*_WRITERS))):
+    """Reconcile a promoted certificate against its source eCoA and record the
+    verdict. 409 if the certificate was not promoted from an ingested document
+    (nothing to reconcile against)."""
+    async with rls(user) as c:
+        coa = await c.fetchrow("SELECT id FROM qc_certificates WHERE id=$1", coa_id)
+        if coa is None:
+            raise HTTPException(404, "Certificate not found")
+        doc = await c.fetchrow(
+            "SELECT * FROM qc_coa_documents WHERE promoted_coa_id=$1", coa_id)
+        if doc is None:
+            raise HTTPException(409, "Certificate was not promoted from an ingested eCoA")
+        results = await c.fetch("SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+        exts = await c.fetch(
+            "SELECT * FROM qc_coa_extractions WHERE document_id=$1 AND parameter_id IS NOT NULL",
+            doc["id"])
+        by_param = {str(e["parameter_id"]): dict(e) for e in exts}
+        details, mismatches = [], 0
+        for r in results:
+            pid = str(r["parameter_id"]) if r["parameter_id"] else None
+            src = by_param.get(pid) if pid else None
+            if src is None:
+                match, reason = False, "no matching source line"
+            else:
+                num_ok = _num_eq(r["result_numeric"], src["numeric_value"])
+                comply_ok = (r["complies"] == src["complies"])
+                lim_ok = _num_eq(r["lower_limit"], src["lower_limit"]) and _num_eq(r["upper_limit"], src["upper_limit"])
+                match = num_ok and comply_ok and lim_ok
+                reason = "" if match else ", ".join(
+                    x for x, ok in (("value", num_ok), ("verdict", comply_ok), ("limits", lim_ok)) if not ok)
+            if not match:
+                mismatches += 1
+            _f = lambda v: None if v is None else float(v)   # jsonb can't take Decimal
+            details.append({
+                "parameter_id": pid, "test_name": r["test_name"],
+                "result_numeric": _f(r["result_numeric"]),
+                "source_numeric": _f(src["numeric_value"]) if src else None,
+                "result_complies": r["complies"], "source_complies": src["complies"] if src else None,
+                "match": match, "reason": reason})
+        verdict = "VERIFIED" if mismatches == 0 else "DISCREPANCY"
+        row = await c.fetchrow(
+            "INSERT INTO qc_coa_verifications(org_id, coa_id, source_document_id, verdict,"
+            " checked, mismatches, details, verified_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], coa_id, doc["id"], verdict, len(results), mismatches, details, user["id"])
+        try:
+            await emit(c, user, verb="coa_verified", object_type="qc_certificate",
+                       object_id=coa_id, recipients=[],
+                       params={"verdict": verdict, "checked": len(results), "mismatches": mismatches})
+        except Exception:
+            pass
+    return _verify_out(dict(row))

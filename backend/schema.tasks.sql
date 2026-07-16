@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict w6fIgMX6WfvocnL2FxmQOJPk7uFwKoHNHRr2eVqkkd57k1bnTBKTfYYQez6njm8
+\restrict bE2WedD8DvhvUIf5EWDM7q7qNaXr5cUzMKBJR5nVXGcEUCXlKfN3KO4Fa795hEY
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -417,6 +417,28 @@ CREATE SEQUENCE public.qc_coa_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
+
+
+--
+-- Name: qc_coa_verifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coa_verifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coa_id uuid NOT NULL,
+    source_document_id uuid,
+    verdict text NOT NULL,
+    checked integer DEFAULT 0 NOT NULL,
+    mismatches integer DEFAULT 0 NOT NULL,
+    details jsonb DEFAULT '[]'::jsonb NOT NULL,
+    verified_by uuid,
+    verified_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_coa_verifications_verdict_check CHECK ((verdict = ANY (ARRAY['VERIFIED'::text, 'DISCREPANCY'::text])))
+);
+
+ALTER TABLE ONLY public.qc_coa_verifications FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1092,6 +1114,14 @@ ALTER TABLE ONLY public.qc_coa_extractions
 
 
 --
+-- Name: qc_coa_verifications qc_coa_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_verifications
+    ADD CONSTRAINT qc_coa_verifications_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_field_placeholders qc_field_placeholders_label_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1391,6 +1421,13 @@ CREATE INDEX qc_coa_extractions_document_idx ON public.qc_coa_extractions USING 
 
 
 --
+-- Name: qc_coa_verifications_coa_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coa_verifications_coa_idx ON public.qc_coa_verifications USING btree (org_id, coa_id);
+
+
+--
 -- Name: qc_field_placeholders_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1636,6 +1673,13 @@ CREATE TRIGGER audit_qc_coa_extractions AFTER INSERT OR DELETE OR UPDATE ON publ
 
 
 --
+-- Name: qc_coa_verifications audit_qc_coa_verifications; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coa_verifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_verifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_field_placeholders audit_qc_field_placeholders; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1858,6 +1902,22 @@ ALTER TABLE ONLY public.qc_coa_extractions
 
 ALTER TABLE ONLY public.qc_coa_extractions
     ADD CONSTRAINT qc_coa_extractions_parameter_fkey FOREIGN KEY (parameter_id) REFERENCES public.qc_spec_parameters(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coa_verifications qc_coa_verifications_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_verifications
+    ADD CONSTRAINT qc_coa_verifications_coa_fkey FOREIGN KEY (coa_id) REFERENCES public.qc_certificates(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coa_verifications qc_coa_verifications_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_verifications
+    ADD CONSTRAINT qc_coa_verifications_document_fkey FOREIGN KEY (source_document_id) REFERENCES public.qc_coa_documents(id) ON DELETE SET NULL;
 
 
 --
@@ -2189,6 +2249,13 @@ CREATE POLICY org_isolation ON public.qc_coa_extractions USING ((org_id = app.cu
 
 
 --
+-- Name: qc_coa_verifications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coa_verifications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_field_placeholders org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2323,6 +2390,12 @@ ALTER TABLE public.qc_coa_documents ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_coa_extractions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coa_verifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coa_verifications ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_field_placeholders; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2482,5 +2555,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict w6fIgMX6WfvocnL2FxmQOJPk7uFwKoHNHRr2eVqkkd57k1bnTBKTfYYQez6njm8
+\unrestrict bE2WedD8DvhvUIf5EWDM7q7qNaXr5cUzMKBJR5nVXGcEUCXlKfN3KO4Fa795hEY
 

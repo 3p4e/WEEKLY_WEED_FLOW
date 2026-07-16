@@ -14,7 +14,7 @@
 
 (function () {
   GF.WWF._qcecoa = { docs: null, sel: null, detail: null, ph: null,
-                     specs: null, mapParams: {}, q: '', status: '', tab: 'docs',
+                     specs: null, mapParams: {}, verify: {}, q: '', status: '', tab: 'docs',
                      loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -117,6 +117,17 @@
     } catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
+  // Verify loop: reconcile the promoted certificate against this source doc.
+  GF.WWF.qcEcoaVerify = async (docId, coaId) => {
+    try {
+      const v = await GF.API.qcVerifyCert(coaId);
+      GF.WWF._qcecoa.verify[docId] = v;
+      GF.toast(v.verdict === 'VERIFIED'
+        ? AL('Verified — matches source', 'Потврдено — се совпаѓа со изворот')
+        : AL('Discrepancy: ', 'Отстапување: ') + v.mismatches + '/' + v.checked);
+    } catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
 
   // Placeholder queue — map a discovered label to a spec parameter or ignore it.
   GF.WWF.qcEcoaPickSpec = async (phId, specId) => {
@@ -172,6 +183,15 @@
         ${(doc.status !== 'PROMOTED' && doc.status !== 'REJECTED') ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaAdvance('${doc.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
       </div>` : ''}
       ${!doc.specification_id ? `<div class="ana-note" style="margin-top:6px">${AL('Attach a specification to grade & promote.', 'Прикачете спецификација за оценување и промоција.')}</div>` : ''}
+      ${doc.status === 'PROMOTED' && doc.promoted_coa_id ? (() => {
+        const v = GF.WWF._qcecoa.verify[doc.id];
+        const vc = v ? (v.verdict === 'VERIFIED' ? 'var(--green)' : 'var(--red)') : null;
+        return `<div class="qms-dl" style="margin-top:8px;align-items:center">
+          ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaVerify('${doc.id}','${doc.promoted_coa_id}')">${AL('Verify vs source', 'Провери со извор')}</button>` : ''}
+          ${v ? chip(AL(v.verdict === 'VERIFIED' ? 'Verified' : 'Discrepancy', v.verdict === 'VERIFIED' ? 'Потврдено' : 'Отстапување') + ' ' + (v.checked - v.mismatches) + '/' + v.checked, vc) : ''}
+        </div>` +
+        (v && v.mismatches ? `<div class="ana-note" style="margin-top:4px">${v.details.filter(d => !d.match).map(d => GF.esc((d.test_name || '') + ': ' + (d.reason || 'mismatch'))).join(' · ')}</div>` : '');
+      })() : ''}
     </div>`;
   };
 

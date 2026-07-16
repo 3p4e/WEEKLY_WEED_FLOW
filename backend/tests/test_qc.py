@@ -813,3 +813,66 @@ async def test_ecoa_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)
     assert r.status_code == 403
+
+
+# ── Phase 3 U3 — certificate verify loop (source reconciliation) ────────────
+async def _promoted_cert(client, headers, batch, thc=22.0):
+    """Register an eCoA, grade one THC field, promote → returns (coa_id, doc_id)."""
+    spec = await _spec(client, headers, material=f"VER-{batch}")
+    await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                      json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                            "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                            "upper_limit": 30.0}, headers=headers)
+    doc = (await client.post("/qc/coa-documents",
+                             json={"batch_id": batch, "specification_id": spec["id"],
+                                   "source_institution": "Lab X"}, headers=headers)).json()
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": thc, "unit": "%"}]},
+                      headers=headers)
+    pr = (await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=headers)).json()
+    return pr["coa_id"], doc["id"]
+
+
+async def test_verify_matches_source(client, admin_headers):
+    coa_id, _ = await _promoted_cert(client, admin_headers, "B-VER-OK")
+    r = await client.post(f"/qc/certificates/{coa_id}/verify", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    v = r.json()
+    assert v["verdict"] == "VERIFIED" and v["checked"] == 1 and v["mismatches"] == 0
+    assert v["details"][0]["match"] is True
+    # the run is recorded for audit
+    hist = (await client.get(f"/qc/certificates/{coa_id}/verifications", headers=admin_headers)).json()
+    assert len(hist) == 1 and hist[0]["verdict"] == "VERIFIED"
+
+
+async def test_verify_flags_discrepancy(client, admin_headers):
+    coa_id, doc_id = await _promoted_cert(client, admin_headers, "B-VER-DIFF")
+    # tamper the promoted result so it no longer matches the source extraction
+    detail = (await client.get(f"/qc/certificates/{coa_id}", headers=admin_headers)).json()
+    res_id = detail["results"][0]["id"]
+    # add a fresh result via a direct PATCH is not exposed; instead re-grade the
+    # source extraction so the source now disagrees with the promoted result
+    d = (await client.get(f"/qc/coa-documents/{doc_id}", headers=admin_headers)).json()
+    eid = d["extractions"][0]["id"]
+    await client.patch(f"/qc/coa-documents/{doc_id}/extractions/{eid}",
+                       json={"numeric_value": 99.0}, headers=admin_headers)
+    r = await client.post(f"/qc/certificates/{coa_id}/verify", headers=admin_headers)
+    assert r.status_code == 201
+    v = r.json()
+    assert v["verdict"] == "DISCREPANCY" and v["mismatches"] == 1
+    assert v["details"][0]["match"] is False and "value" in v["details"][0]["reason"]
+
+
+async def test_verify_requires_promoted_cert(client, admin_headers):
+    # a hand-built certificate (not promoted from an eCoA) has no source to check
+    spec = await _spec(client, admin_headers, material="VER-NONE")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-VER-NONE")
+    r = await client.post(f"/qc/certificates/{coa['id']}/verify", headers=admin_headers)
+    assert r.status_code == 409
+
+
+async def test_verify_is_write_gated(client, admin_headers):
+    coa_id, _ = await _promoted_cert(client, admin_headers, "B-VER-GATE")
+    _, user_headers = await _actor(client, admin_headers, "USER")
+    r = await client.post(f"/qc/certificates/{coa_id}/verify", headers=user_headers)
+    assert r.status_code == 403
