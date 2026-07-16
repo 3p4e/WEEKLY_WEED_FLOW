@@ -115,3 +115,95 @@ async def test_parameters_add_and_lock_after_authoring(client, admin_headers):
     assert r.status_code == 409
     r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{param_id}", headers=admin_headers)
     assert r.status_code == 409
+
+
+# ── QC LIMS U2 — samples + lifecycle ────────────────────────────────────────
+async def _sample(client, headers, batch="B-2026-001", **extra):
+    body = {"batch_id": batch, "material_code": "CANN-FLOS-D", "sample_type": "flos", **extra}
+    r = await client.post("/qc/samples", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_create_and_list_sample(client, admin_headers):
+    s = await _sample(client, admin_headers)
+    assert s["sample_id"].startswith("PP-SMP-") and s["status"] == "COLLECTED"
+    r = await client.get("/qc/samples", headers=admin_headers)
+    assert r.status_code == 200 and any(x["id"] == s["id"] for x in r.json())
+    r = await client.get(f"/qc/samples?batch_id={s['batch_id']}", headers=admin_headers)
+    assert r.status_code == 200 and len(r.json()) >= 1
+
+
+async def test_sample_lifecycle_happy_path(client, admin_headers):
+    s = await _sample(client, admin_headers, batch="B-LC")
+    chain = ["RECEIVED", "IN_TEST", "TESTED", "REVIEWED", "APPROVED", "RELEASED"]
+    for tgt in chain:
+        r = await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt}, headers=admin_headers)
+        assert r.status_code == 200, (tgt, r.text)
+        assert r.json()["status"] == tgt
+
+
+async def test_sample_illegal_transition_rejected(client, admin_headers):
+    s = await _sample(client, admin_headers, batch="B-ILL")
+    # COLLECTED -> RELEASED is not legal
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "RELEASED"}, headers=admin_headers)
+    assert r.status_code == 409
+    # out-of-spec branch: IN_TEST -> QUARANTINE, then QUARANTINE -> IN_TEST (retest)
+    for tgt in ("RECEIVED", "IN_TEST", "QUARANTINE", "IN_TEST"):
+        assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200
+    # unknown status 422
+    assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": "NOPE"},
+                               headers=admin_headers)).status_code == 422
+
+
+async def test_release_reject_is_qp_gated(client, admin_headers):
+    """RELEASED/REJECTED are QP-level; a QC_MGR can drive the sample up to
+    APPROVED but not RELEASE it — that's the Qualified Person's call."""
+    s = await _sample(client, admin_headers, batch="B-QP")
+    for tgt in ("RECEIVED", "IN_TEST", "TESTED", "REVIEWED", "APPROVED"):
+        assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "RELEASED"}, headers=qc_h)
+    assert r.status_code == 403, r.text          # QC_MGR may not release
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "RELEASED"}, headers=qp_h)
+    assert r.status_code == 200, r.text          # QP may
+
+
+async def test_sample_genealogy(client, admin_headers):
+    parent = await _sample(client, admin_headers, batch="B-GEN")
+    child = await _sample(client, admin_headers, batch="B-GEN", parent_id=parent["id"], retention_sample=True)
+    assert child["parent_id"] == parent["id"]
+    detail = (await client.get(f"/qc/samples/{parent['id']}", headers=admin_headers)).json()
+    assert [k["id"] for k in detail["children"]] == [child["id"]]
+    # unknown parent rejected
+    r = await client.post("/qc/samples",
+                          json={"batch_id": "B-X", "material_code": "M", "parent_id": parent["id"][:-1] + "0"},
+                          headers=admin_headers)
+    assert r.status_code in (422, 404)
+
+
+async def test_sample_role_gating(client, admin_headers):
+    s = await _sample(client, admin_headers, batch="B-ROLE")
+    _, user_h = await _actor(client, admin_headers, "USER")
+    assert (await client.get("/qc/samples", headers=user_h)).status_code == 403
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    assert (await client.get("/qc/samples", headers=cu_h)).status_code == 200   # elevated read
+    r = await client.post("/qc/samples", json={"batch_id": "B-CU", "material_code": "M"}, headers=cu_h)
+    assert r.status_code == 403                                                 # non-QC manager can't write
+
+
+async def test_sampling_plan_create_and_list(client, admin_headers):
+    r = await client.post("/qc/sampling-plans",
+                          json={"material_code": "CANN-FLOS-D", "sampling_frequency": "EVERY_BATCH"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["plan_id"].startswith("PP-SPL-")
+    r = await client.get("/qc/sampling-plans", headers=admin_headers)
+    assert r.status_code == 200 and len(r.json()) >= 1
+    # bad frequency 422
+    r = await client.post("/qc/sampling-plans",
+                          json={"material_code": "X", "sampling_frequency": "HOURLY"}, headers=admin_headers)
+    assert r.status_code == 422

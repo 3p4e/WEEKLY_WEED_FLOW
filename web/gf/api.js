@@ -112,6 +112,13 @@ GF.API = {
   qcPatchSpec(id, b)       { return this._req('PATCH', '/qc/specifications/' + id, b); },
   qcAddSpecParam(id, b)    { return this._req('POST', '/qc/specifications/' + id + '/parameters', b); },
   qcDeleteSpecParam(id, pid){ return this._req('DELETE', '/qc/specifications/' + id + '/parameters/' + pid); },
+  // QC LIMS — samples + sampling plans (U2)
+  qcSamples(q)             { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/samples' + (u?'?'+u:'')); },
+  qcSample(id)             { return this._req('GET', '/qc/samples/' + id); },
+  qcCreateSample(b)        { return this._req('POST', '/qc/samples', b); },
+  qcPatchSample(id, b)     { return this._req('PATCH', '/qc/samples/' + id, b); },
+  qcSamplingPlans(q)       { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-plans' + (u?'?'+u:'')); },
+  qcCreateSamplingPlan(b)  { return this._req('POST', '/qc/sampling-plans', b); },
   // QMS Studio — DocEngine (dedicated Letta-powered document AI)
   studioQuestionnaires()   { return this._req('GET', '/qms/studio/questionnaires'); },
   studioQuestionnaire(key) { return this._req('GET', '/qms/studio/questionnaires/' + encodeURIComponent(key)); },

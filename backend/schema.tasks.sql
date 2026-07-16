@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xyvQffCAMrmkZ9i2VMFDh8AwGKgL5308l0Z1pdpJtfMEcGgNXsJokaRizjnMMYz
+\restrict xErainK0rPL1bE2ezOhWF4f17plX6swgC6XmlXrazdIgyN1gYapcdbxprrEGo0R
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -308,6 +308,88 @@ CREATE TABLE public.plant_batches (
 );
 
 ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sample_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_sample_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_samples; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_samples (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    sample_id text NOT NULL,
+    batch_id text NOT NULL,
+    sample_type text,
+    material_code text NOT NULL,
+    material_name_en text,
+    material_name_mk text,
+    sampling_date date,
+    status text DEFAULT 'COLLECTED'::text NOT NULL,
+    location text,
+    quantity numeric,
+    quantity_unit text,
+    retention_sample boolean DEFAULT false NOT NULL,
+    parent_id uuid,
+    sampling_plan_id uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_samples_status_check CHECK ((status = ANY (ARRAY['COLLECTED'::text, 'IN_TRANSIT'::text, 'RECEIVED'::text, 'IN_TEST'::text, 'TESTED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'REJECTED'::text, 'QUARANTINE'::text])))
+);
+
+ALTER TABLE ONLY public.qc_samples FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_sampling_plan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_sampling_plan_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_sampling_plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_sampling_plans (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    plan_id text NOT NULL,
+    material_code text NOT NULL,
+    sampling_frequency text DEFAULT 'EVERY_BATCH'::text NOT NULL,
+    sample_size_formula text DEFAULT 'ROUNDUP(SQRT(N)*1.5)'::text NOT NULL,
+    min_sample_size integer,
+    max_sample_size integer,
+    active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_sampling_plans_freq_check CHECK ((sampling_frequency = ANY (ARRAY['EVERY_BATCH'::text, 'PERIODIC'::text, 'RANDOM'::text])))
+);
+
+ALTER TABLE ONLY public.qc_sampling_plans FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -682,6 +764,38 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: qc_samples qc_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_samples qc_samples_sample_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_sample_id_key UNIQUE (org_id, sample_id);
+
+
+--
+-- Name: qc_sampling_plans qc_sampling_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_plans
+    ADD CONSTRAINT qc_sampling_plans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_sampling_plans qc_sampling_plans_plan_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_sampling_plans
+    ADD CONSTRAINT qc_sampling_plans_plan_id_key UNIQUE (org_id, plan_id);
+
+
+--
 -- Name: qc_spec_parameters qc_spec_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -858,6 +972,34 @@ CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org
 
 
 --
+-- Name: qc_samples_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_batch_idx ON public.qc_samples USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_samples_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_parent_idx ON public.qc_samples USING btree (org_id, parent_id) WHERE (parent_id IS NOT NULL);
+
+
+--
+-- Name: qc_samples_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_samples_status_idx ON public.qc_samples USING btree (org_id, status);
+
+
+--
+-- Name: qc_sampling_plans_material_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_sampling_plans_material_idx ON public.qc_sampling_plans USING btree (org_id, material_code) WHERE active;
+
+
+--
 -- Name: qc_spec_parameters_spec_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1012,6 +1154,20 @@ CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.pl
 
 
 --
+-- Name: qc_samples audit_qc_samples; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_samples AFTER INSERT OR DELETE OR UPDATE ON public.qc_samples FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_sampling_plans audit_qc_sampling_plans; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_sampling_plans AFTER INSERT OR DELETE OR UPDATE ON public.qc_sampling_plans FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_spec_parameters audit_qc_spec_parameters; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1129,6 +1285,22 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.plant_batches
     ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_samples qc_samples_parent_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_parent_fkey FOREIGN KEY (parent_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_samples qc_samples_plan_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_samples
+    ADD CONSTRAINT qc_samples_plan_fkey FOREIGN KEY (sampling_plan_id) REFERENCES public.qc_sampling_plans(id) ON DELETE SET NULL;
 
 
 --
@@ -1359,6 +1531,20 @@ CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current
 
 
 --
+-- Name: qc_samples org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_samples USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_sampling_plans org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_sampling_plans USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_spec_parameters org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1426,6 +1612,18 @@ ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: qc_samples; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_samples ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_sampling_plans; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_sampling_plans ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_spec_parameters; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1543,5 +1741,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xyvQffCAMrmkZ9i2VMFDh8AwGKgL5308l0Z1pdpJtfMEcGgNXsJokaRizjnMMYz
+\unrestrict xErainK0rPL1bE2ezOhWF4f17plX6swgC6XmlXrazdIgyN1gYapcdbxprrEGo0R
 
