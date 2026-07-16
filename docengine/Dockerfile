@@ -7,13 +7,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY agents ./agents
-COPY engine ./engine
-
 RUN useradd -u 1000 -m docengine \
     && mkdir -p /data/docengine-out \
     && chown -R docengine:docengine /data/docengine-out
+
+# --chown: the runner uploads the build context as root with whatever modes
+# the source tarball carried, and the service runs unprivileged — without
+# this the docengine user can't even read its own module files (import
+# fails with EACCES at container start, not at build time).
+COPY --chown=docengine:docengine app ./app
+COPY --chown=docengine:docengine agents ./agents
+COPY --chown=docengine:docengine engine ./engine
+
 USER docengine
 
 # state lives in Postgres; 2 workers are safe
