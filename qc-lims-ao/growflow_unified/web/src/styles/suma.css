@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SUMA Design System — ported from the Purely Plant · SUMA cloud design.
+   Dark "control-room" / StarCraft-FUI language: deep-navy void + HUD grid,
+   psi-cyan / Khaydarin-gold / plant-green / psionic-violet accents, hexagon
+   motifs, Orbitron / Rajdhani / Saira type, and 6 theme schemes via
+   [data-theme] (protoss · terran · aiur · verdant · zerg · swann) plus
+   [data-hud] intensity. Imported LAST in global.css so it re-skins the whole
+   app: SUMA semantics are defined here AND the legacy GrowFlow token names are
+   remapped onto them, so every existing inline-styled view inherits the look.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Saira:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ── Void / navy ramp ── */
+  --void:#0b1322; --navy-950:#101a2e; --navy-900:#16233c; --navy-850:#1b2e4e;
+  --navy-800:#213655; --navy-700:#284163; --navy-600:#314c73; --navy-500:#3c5e8c;
+  /* ── Psi-cyan ── */
+  --cyan-100:#c9f7ff; --cyan-300:#7ceeff; --cyan-400:#2ee6ff; --cyan-500:#1bb6e0; --cyan-600:#1184ad;
+  /* ── Khaydarin gold ── */
+  --gold-100:#ffe39a; --gold-300:#ffcf6b; --gold-400:#ffaf3a; --gold-500:#e08a1f;
+  /* ── Plant green ── */
+  --green-200:#6ee7b7; --green-300:#34d399; --green-400:#10b981; --green-500:#0e9469;
+  /* ── Psionic violet ── */
+  --violet-300:#c4b1ff; --violet-400:#a78bfa; --violet-500:#7c5cf0;
+  /* ── Signal hues ── */
+  --red-400:#ef4444; --red-300:#ff6b6b; --amber-400:#f59e0b; --blue-400:#3b82f6;
+  /* ── Cool light (text on dark) ── */
+  --ice-50:#eaf4ff; --ice-200:#c3d4ea; --ice-300:#9fb4cf; --ice-400:#6f86a6; --ice-500:#50647e;
+
+  /* ── Semantic aliases (default theme = Protoss: gold + cyan) ── */
+  --bg-void:var(--void); --bg-deep:var(--navy-950); --bg-body:var(--navy-900);
+  --surface-1:rgba(18,39,66,.55); --surface-2:rgba(28,54,88,.55);
+  --surface-solid:var(--navy-850); --surface-inset:rgba(4,9,20,.55);
+  --glass:rgba(120,180,230,.05); --glass-hover:rgba(120,180,230,.09);
+  --hairline:rgba(120,165,215,.16); --hairline-strong:rgba(46,230,255,.28);
+  --text:var(--ice-50); --text-muted:var(--ice-200); --text-soft:var(--ice-300);
+  --text-dim:var(--ice-400); --text-faint:var(--ice-500); --text-on-accent:#04121d;
+  --accent:var(--cyan-400); --accent-bright:var(--cyan-300); --accent-dim:rgba(46,230,255,.14); --accent-line:rgba(46,230,255,.45);
+  --highlight:var(--gold-300); --highlight-deep:var(--gold-400); --highlight-dim:rgba(255,207,107,.14);
+  --brand:var(--green-400); --brand-bright:var(--green-300); --brand-dim:rgba(16,185,129,.14);
+  --ai:var(--violet-400); --ai-bright:var(--violet-300); --ai-dim:rgba(167,139,250,.13);
+  --grad-energy:linear-gradient(135deg,var(--cyan-400),var(--gold-300));
+  --grad-leaf:linear-gradient(150deg,var(--green-300),var(--gold-300));
+  --grad-cyan:linear-gradient(160deg,var(--cyan-300),var(--cyan-600));
+  --grad-gold:linear-gradient(160deg,var(--gold-100),var(--gold-400));
+  --grad-panel:linear-gradient(160deg,rgba(22,48,80,.55),rgba(12,29,58,.55));
+  --grad-deep:radial-gradient(130% 70% at 50% -10%,var(--navy-850) 0%,var(--navy-950) 42%,var(--void) 85%);
+  /* status (task lifecycle) */
+  --status-completed:var(--green-400); --status-ongoing:var(--cyan-400); --status-stuck:var(--red-400);
+  --status-postponed:var(--gold-400); --status-pending:var(--ice-400); --status-review:var(--violet-400);
+  --status-completed-dim:rgba(16,185,129,.14); --status-ongoing-dim:rgba(46,230,255,.14);
+  --status-stuck-dim:rgba(239,68,68,.14); --status-postponed-dim:rgba(255,175,58,.14);
+  --status-pending-dim:rgba(111,134,166,.16); --status-review-dim:rgba(167,139,250,.14);
+  /* role tiers */
+  --role-staff:var(--ice-400); --role-team_leader:var(--cyan-400); --role-hod:var(--green-400);
+  --role-executive:var(--gold-300); --role-owner:var(--red-300);
+
+  /* ── Typography ── */
+  --font-display:'Orbitron','Saira',system-ui,sans-serif;
+  --font-mono:'Rajdhani',ui-monospace,'SF Mono',Menlo,monospace;
+  --font-body:'Saira',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --fs-2xs:.6875rem; --fs-xs:.75rem; --fs-sm:.8125rem; --fs-base:.9375rem; --fs-md:1.0625rem;
+  --fs-lg:1.375rem; --fs-xl:1.75rem; --fs-2xl:2.5rem; --fs-3xl:3.5rem;
+  --fw-light:300; --fw-regular:400; --fw-medium:500; --fw-semibold:600; --fw-bold:700; --fw-display:800;
+  --lh-tight:1.08; --lh-snug:1.25; --lh-normal:1.5; --lh-relaxed:1.65;
+  --tracking-tight:-0.01em; --tracking-normal:0; --tracking-wide:0.08em; --tracking-wider:0.16em; --tracking-widest:0.28em;
+  --type-hero:var(--fw-display) var(--fs-3xl)/var(--lh-tight) var(--font-display);
+  --type-title:var(--fw-bold) var(--fs-2xl)/var(--lh-tight) var(--font-display);
+  --type-heading:var(--fw-semibold) var(--fs-xl)/var(--lh-snug) var(--font-display);
+  --type-card-title:var(--fw-semibold) var(--fs-lg)/var(--lh-snug) var(--font-body);
+  --type-body:var(--fw-regular) var(--fs-base)/var(--lh-relaxed) var(--font-body);
+  --type-ui:var(--fw-medium) var(--fs-sm)/var(--lh-normal) var(--font-body);
+  --type-mono:var(--fw-medium) var(--fs-sm)/var(--lh-normal) var(--font-mono);
+  --eyebrow-font:var(--fw-semibold) var(--fs-xs)/1.4 var(--font-mono);
+  --eyebrow-tracking:var(--tracking-widest);
+
+  /* ── Effects ── */
+  --radius-xs:4px; --radius-sm:6px; --radius-md:10px; --radius-lg:14px; --radius-xl:20px; --radius-pill:999px;
+  --border:1px solid var(--hairline); --border-strong-line:1px solid var(--hairline-strong); --border-accent:1px solid var(--accent-line);
+  --shadow-sm:0 2px 8px rgba(2,6,16,.45); --shadow-md:0 8px 28px rgba(2,6,16,.55); --shadow-lg:0 18px 56px rgba(2,6,16,.6);
+  --shadow-inset:inset 0 1px 0 rgba(180,215,255,.06);
+  --glow-cyan:0 0 14px rgba(46,230,255,.45),0 0 32px rgba(46,230,255,.18); --glow-cyan-sm:0 0 10px rgba(46,230,255,.5);
+  --glow-gold:0 0 16px rgba(255,190,80,.45),0 0 36px rgba(255,175,58,.18); --glow-gold-sm:0 0 10px rgba(255,207,107,.55);
+  --glow-green:0 0 14px rgba(16,185,129,.45),0 0 34px rgba(16,185,129,.18); --glow-violet:0 0 14px rgba(167,139,250,.45),0 0 34px rgba(167,139,250,.18);
+  --glow-red:0 0 14px rgba(239,68,68,.4);
+  --focus-ring:0 0 0 3px var(--accent-dim),0 0 12px rgba(46,230,255,.35);
+  --text-glow-cyan:0 0 18px rgba(46,230,255,.35); --text-glow-gold:0 0 18px rgba(255,207,107,.35); --text-glow-soft:0 1px 14px rgba(180,215,255,.18);
+  --blur:blur(18px) saturate(1.2); --blur-strong:blur(28px) saturate(1.3);
+  --ease:cubic-bezier(0.22,1,0.36,1); --ease-in-out:cubic-bezier(0.65,0,0.35,1);
+  --dur-fast:.14s; --dur:.22s; --dur-slow:.4s; --transition:var(--dur) var(--ease);
+  --tex-grid:linear-gradient(rgba(46,230,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(46,230,255,.035) 1px,transparent 1px);
+  --tex-grid-size:46px 46px; --tex-void:var(--grad-deep);
+  --clip-hex:polygon(25% 5%,75% 5%,100% 50%,75% 95%,25% 95%,0% 50%);
+  --clip-hex-pointy:polygon(50% 0,95% 25%,95% 75%,50% 100%,5% 75%,5% 25%);
+
+  /* ── Spacing / layout ── */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.25rem; --space-6:1.5rem;
+  --space-8:2rem; --space-10:2.5rem; --space-12:3rem; --space-16:4rem;
+  --header-h:56px; --sidebar-w:260px; --content-max:1440px; --gutter:var(--space-6);
+  --control-h:36px; --control-h-sm:28px;
+
+  /* ════════════════════════════════════════════════════════════════════════
+     LEGACY REMAP — the existing app's GrowFlow (light) token names are
+     redefined onto SUMA semantics so all current inline-styled views re-skin
+     to the dark control-room theme with zero per-view changes.
+     ════════════════════════════════════════════════════════════════════════ */
+  --bg:var(--bg-deep); --surface:var(--surface-solid);
+  --ink:var(--text); --ink-2:var(--text-soft); --ink-3:var(--text-dim);
+  --line:var(--hairline); --line-2:var(--hairline);
+  --blue:var(--accent); --blue-700:var(--accent-bright); --blue-soft:var(--accent-dim); --blue-soft-2:var(--accent-dim);
+  --orange:var(--highlight); --orange-700:var(--highlight-deep); --orange-soft:var(--highlight-dim); --orange-soft-2:var(--highlight-dim);
+  --green:var(--brand); --green-soft:var(--brand-dim); --green-fg:var(--brand-bright);
+  --red:var(--status-stuck); --red-soft:var(--status-stuck-dim); --red-fg:var(--red-300);
+  --amber:var(--status-postponed); --amber-soft:var(--status-postponed-dim); --amber-fg:var(--gold-300);
+  --violet:var(--ai); --violet-soft:var(--ai-dim);
+  --sh-1:var(--shadow-sm); --sh-2:var(--shadow-md); --sh-3:var(--shadow-lg);
+
+  --color-navy-900:var(--void); --color-navy-800:var(--accent-bright); --color-navy-700:var(--accent);
+  --color-brand:var(--accent); --color-brand-mid:var(--accent-bright); --color-brand-soft:var(--accent-dim);
+  --color-accent:var(--highlight); --color-accent-bright:var(--highlight); --color-accent-deep:var(--highlight-deep); --color-accent-tint:var(--highlight-dim);
+  --color-slate-50:var(--surface-1); --color-slate-100:var(--surface-1); --color-slate-200:var(--hairline);
+  --color-slate-300:var(--text-faint); --color-slate-400:var(--text-dim); --color-slate-500:var(--text-dim);
+
+  --surface-3:var(--surface-2);
+  --surface-app:var(--bg-deep); --surface-card:var(--surface-solid);
+  --surface-sidebar:rgba(12,24,44,.72); --surface-sidebar-active:var(--accent-dim); --surface-overlay:rgba(2,5,14,.7);
+  --text-primary:var(--text); --text-secondary:var(--text-soft); --text-tertiary:var(--text-dim);
+  --text-quaternary:var(--text-faint); --text-inverse:var(--text-on-accent); --text-brand:var(--accent);
+  --border-subtle:var(--hairline); --border-strong:var(--hairline-strong);
+  --zebra:var(--surface-1); --zebra-head:var(--surface-2);
+  --status-pass:var(--status-completed); --status-pass-bg:var(--status-completed-dim); --status-pass-border:color-mix(in srgb,var(--status-completed) 42%,transparent);
+  --status-fail:var(--status-stuck); --status-fail-bg:var(--status-stuck-dim); --status-fail-border:color-mix(in srgb,var(--status-stuck) 42%,transparent);
+  --status-pending-bg:var(--status-postponed-dim); --status-pending-border:color-mix(in srgb,var(--status-postponed) 42%,transparent);
+  --status-review-bg:var(--status-review-dim); --status-review-border:color-mix(in srgb,var(--status-review) 42%,transparent);
+  --status-info:var(--accent); --status-info-bg:var(--accent-dim); --status-info-border:var(--accent-line);
+  --font-sans:var(--font-body); --font-brand:var(--font-display);
+  --radius-full:var(--radius-pill); --shadow-xl:var(--shadow-lg); --transition-ui:var(--transition);
+  --sidebar-width:var(--sidebar-w); --header-height:var(--header-h);
+  --ease-out:var(--ease);
+}
+
+/* ════════════════════════════════════ THEME SCOPES ════════════════════════════════════ */
+[data-theme="terran"]{ --bg-deep:#0a1118; --bg-body:#0d1822; --surface-1:rgba(24,46,58,.55); --surface-2:rgba(34,62,76,.55); --surface-solid:#12222e; --hairline:rgba(120,175,190,.16); --hairline-strong:rgba(58,200,210,.3); --accent:#38c8d2; --accent-bright:#6fe0e6; --accent-dim:rgba(56,200,210,.14); --accent-line:rgba(56,200,210,.45); --highlight:#d6a356; --highlight-deep:#c0863a; --highlight-dim:rgba(214,163,86,.13); --grad-energy:linear-gradient(135deg,#38c8d2,#6f86a6); --status-ongoing:#38c8d2; --status-postponed:#d6a356; --role-team_leader:#38c8d2; --role-executive:#d6a356; }
+[data-theme="aiur"]{ --bg-deep:#0c0a06; --bg-body:#14110a; --surface-1:rgba(48,38,18,.45); --surface-2:rgba(64,50,24,.45); --surface-solid:#1c1810; --hairline:rgba(220,185,110,.18); --hairline-strong:rgba(255,207,107,.34); --accent:var(--gold-300); --accent-bright:var(--gold-100); --accent-dim:rgba(255,207,107,.15); --accent-line:rgba(255,207,107,.5); --highlight:var(--cyan-400); --highlight-deep:var(--cyan-500); --highlight-dim:rgba(46,230,255,.13); --text-on-accent:#1a1304; --grad-energy:linear-gradient(135deg,var(--gold-300),var(--cyan-400)); --status-ongoing:var(--gold-300); --role-team_leader:var(--gold-300); }
+[data-theme="verdant"]{ --bg-deep:#061410; --bg-body:#081b15; --surface-1:rgba(16,48,38,.5); --surface-2:rgba(24,64,50,.5); --surface-solid:#0c2620; --hairline:rgba(120,200,165,.16); --hairline-strong:rgba(52,211,153,.3); --accent:var(--green-300); --accent-bright:var(--green-200); --accent-dim:rgba(52,211,153,.14); --accent-line:rgba(52,211,153,.45); --highlight:var(--gold-300); --highlight-deep:var(--gold-400); --grad-energy:linear-gradient(135deg,var(--green-300),var(--gold-300)); --status-ongoing:var(--cyan-400); --role-team_leader:var(--green-300); }
+[data-theme="zerg"]{ --bg-deep:#0c0814; --bg-body:#140c1e; --surface-1:rgba(42,22,58,.52); --surface-2:rgba(58,30,78,.5); --surface-solid:#1a1026; --hairline:rgba(190,120,220,.16); --hairline-strong:rgba(200,90,210,.32); --accent:#c061f0; --accent-bright:#e0a6ff; --accent-dim:rgba(192,97,240,.16); --accent-line:rgba(192,97,240,.45); --highlight:#ff5da2; --highlight-deep:#e0388a; --highlight-dim:rgba(255,93,162,.14); --grad-energy:linear-gradient(135deg,#c061f0,#ff5da2); --status-ongoing:#c061f0; --role-team_leader:#ff5da2; }
+[data-theme="swann"]{ --bg-deep:#14100a; --bg-body:#1b150d; --surface-1:rgba(54,42,26,.52); --surface-2:rgba(72,54,32,.5); --surface-solid:#241c10; --hairline:rgba(230,170,90,.16); --hairline-strong:rgba(255,150,50,.32); --accent:#ff8a2a; --accent-bright:#ffb061; --accent-dim:rgba(255,138,42,.16); --accent-line:rgba(255,138,42,.45); --highlight:#ffd27a; --highlight-deep:#f0a83a; --highlight-dim:rgba(255,210,122,.14); --grad-energy:linear-gradient(135deg,#ff8a2a,#ffd27a); --status-ongoing:#ff8a2a; --role-team_leader:#ffb061; }
+
+/* ════════════════════════════════════ HUD CHROME ENGINE ════════════════════════════════════ */
+:root{
+  --hud-cut:16px; --hud-radius:4px; --hud-line:1.5px; --hud-edge:var(--accent); --hud-bracket:var(--accent);
+  --hud-bracket-op:.85; --hud-fill:var(--surface-1);
+  --hud-glow:0 0 22px color-mix(in srgb,var(--accent) 18%,transparent);
+  --hud-font:'Orbitron',sans-serif; --hud-tracking:.1em;
+  --hud-clip:polygon(var(--hud-cut) 0,100% 0,100% calc(100% - var(--hud-cut)),calc(100% - var(--hud-cut)) 100%,0 100%,0 var(--hud-cut));
+}
+[data-theme="terran"]{ --hud-cut:14px; --hud-radius:0; --hud-font:'Chakra Petch',sans-serif; --hud-tracking:.14em; --hud-clip:polygon(14px 0,100% 0,100% 100%,0 100%,0 14px); }
+[data-theme="aiur"]{ --hud-cut:22px; --hud-radius:0; --hud-font:'Orbitron',sans-serif; --hud-tracking:.2em; --hud-clip:polygon(22px 0,calc(100% - 22px) 0,100% 22px,100% calc(100% - 22px),calc(100% - 22px) 100%,22px 100%,0 calc(100% - 22px),0 22px); }
+[data-theme="verdant"]{ --hud-radius:18px; --hud-font:'Saira',sans-serif; --hud-tracking:.05em; --hud-clip:none; }
+[data-theme="zerg"]{ --hud-radius:24px 6px 24px 6px; --hud-font:'Rajdhani',sans-serif; --hud-tracking:.08em; --hud-clip:none; }
+[data-theme="swann"]{ --hud-cut:12px; --hud-radius:0; --hud-font:'Chakra Petch',sans-serif; --hud-tracking:.12em; --hud-clip:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px); }
+[data-hud="subtle"]{ --hud-bracket-op:.3; --hud-line:1px; --hud-glow:0 0 12px color-mix(in srgb,var(--accent) 10%,transparent); }
+[data-hud="medium"]{ --hud-bracket-op:.85; --hud-line:1.5px; }
+[data-hud="heavy"]{ --hud-bracket-op:1; --hud-line:2px; --hud-glow:0 0 32px color-mix(in srgb,var(--accent) 28%,transparent); }
+
+.hud-panel{ position:relative; box-sizing:border-box; padding:18px; color:var(--text);
+  background:linear-gradient(var(--hud-fill),var(--hud-fill)) padding-box,
+    linear-gradient(135deg,var(--hud-edge),color-mix(in srgb,var(--hud-edge) 16%,transparent) 30%,color-mix(in srgb,var(--hud-edge) 16%,transparent) 70%,var(--hud-edge)) border-box;
+  border:var(--hud-line) solid transparent; border-radius:var(--hud-radius); clip-path:var(--hud-clip,none);
+  backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); filter:drop-shadow(var(--hud-glow)); }
+[data-hud="heavy"] .hud-panel{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hud-edge) 24%,transparent); }
+.hud-panel::before,.hud-panel::after{ content:''; position:absolute; width:18px; height:18px; opacity:var(--hud-bracket-op); pointer-events:none; }
+.hud-panel::before{ top:8px; right:8px; border-top:2px solid var(--hud-bracket); border-right:2px solid var(--hud-bracket); }
+.hud-panel::after{ bottom:8px; left:8px; border-bottom:2px solid var(--hud-bracket); border-left:2px solid var(--hud-bracket); }
+.hud-bar{ display:flex; align-items:center; gap:9px; margin:-18px -18px 16px; padding:9px 24px 9px 15px;
+  background:color-mix(in srgb,var(--hud-edge) 13%,transparent); border-bottom:1px solid color-mix(in srgb,var(--hud-edge) 36%,transparent);
+  font:600 11px/1 var(--hud-font); letter-spacing:var(--hud-tracking); text-transform:uppercase; color:var(--text); white-space:nowrap; overflow:hidden; }
+.hud-bar::before{ content:''; width:7px; height:7px; border-radius:2px; flex:0 0 auto; background:var(--hud-edge); box-shadow:0 0 9px var(--hud-edge); }
+.hud-bar > .hud-bar-title{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.hud-bar .hud-bar-tag{ margin-left:auto; font:600 10px/1 var(--font-mono); letter-spacing:.12em; color:var(--text-dim); text-transform:uppercase; }
+.hud-title{ font-family:var(--hud-font); letter-spacing:var(--hud-tracking); text-transform:uppercase; color:var(--text); }
+
+/* ════════════════════════════════════ BASE BACKDROP + RECIPES ════════════════════════════════════ */
+html body{
+  font:var(--type-body); color:var(--text);
+  background-color:var(--bg-deep);
+  background-image:var(--tex-grid),var(--tex-void);
+  background-size:var(--tex-grid-size),cover;
+  background-attachment:fixed;
+}
+h1,h2,h3,h4{ font-family:var(--font-display); letter-spacing:var(--tracking-tight); }
+a{ color:var(--accent); }
+::selection{ background:var(--accent-dim); color:var(--accent-bright); }
+::-webkit-scrollbar-thumb{ background:var(--surface-2); border:2px solid transparent; background-clip:padding-box; }
+::-webkit-scrollbar-thumb:hover{ background:var(--accent-dim); }
+:focus-visible{ outline:none; box-shadow:var(--focus-ring); }
+
+.pp-eyebrow{ font:var(--eyebrow-font); letter-spacing:var(--eyebrow-tracking); text-transform:uppercase; color:var(--accent); display:inline-flex; align-items:center; gap:var(--space-2); }
+.pp-glass{ background:var(--surface-1); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-md),var(--shadow-inset); }
+.pp-hex{ display:inline-grid; place-items:center; width:44px; aspect-ratio:1; clip-path:var(--clip-hex); background:var(--grad-gold); color:var(--text-on-accent); font:var(--fw-bold) var(--fs-sm)/1 var(--font-mono); }
+.pp-glow-cyan{ color:var(--accent); text-shadow:var(--text-glow-cyan); }
+.pp-glow-gold{ color:var(--highlight); text-shadow:var(--text-glow-gold); }
+.pp-rule{ height:1px; border:0; background:linear-gradient(90deg,transparent,var(--accent-line) 20%,var(--accent-line) 80%,transparent); position:relative; }
+
+@media (prefers-reduced-motion: reduce){ .hud-panel{ filter:none; } }

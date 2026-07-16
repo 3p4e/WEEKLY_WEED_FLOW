@@ -1,0 +1,59 @@
+# WEEKLY_WEED_FLOW — canonical stack definition (project: weekly_weed_flow).
+# Sibling deployment to QC_LIMS_Ao1 on KVM4. Frontend is exposed via the shared
+# Traefik proxy at ${APP_HOST}; backend never published (frontend nginx proxies
+# the API path-prefixes to it); db is internal-only with a named volume.
+#
+# Secrets come from app.env / db.env (generated server-side, never committed):
+#   POSTGRES_PASSWORD, APP_USER_PASSWORD, APP_ADMIN_PASSWORD, SECRET_KEY
+name: weekly_weed_flow
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: weekly_weed_flow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d weekly_weed_flow"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    networks: [internal]
+
+  backend:
+    build: ./backend
+    env_file: [app.env]          # DATABASE_URL, ADMIN_DATABASE_URL, SECRET_KEY, LETTA_* ...
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host-published Letta/Qdrant
+    restart: unless-stopped
+    networks: [internal, shared, kpm_shared]  # shared = Letta net; kpm = runner net
+
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+    restart: unless-stopped
+    networks: [internal, traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "traefik_network"
+      traefik.http.routers.wwf.entrypoints: "websecure"
+      traefik.http.routers.wwf.rule: "Host(`${APP_HOST:-wwf.srv1231216.hstgr.cloud}`)"
+      traefik.http.routers.wwf.tls.certresolver: "letsencrypt"
+      traefik.http.services.wwf.loadbalancer.server.port: "80"
+
+networks:
+  internal:
+  shared:      { external: true }                      # Letta/Qdrant shared net
+  kpm_shared:  { external: true, name: kpm_network }
+  traefik:     { external: true, name: traefik_network }
+
+volumes:
+  pgdata:
+    external: true
+    name: weekly_weed_flow_pgdata
