@@ -17,7 +17,7 @@ env:
 jobs:
   backend:
     name: Backend deps + import
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,7 +57,7 @@ jobs:
 
   security:
     name: Security scan (pip-audit + bandit)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -78,7 +78,7 @@ jobs:
 
   tests:
     name: Backend test suite
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     services:
       postgres:
         image: postgres:16
@@ -128,7 +128,7 @@ jobs:
 
   migrations:
     name: Alembic baselines match schema files
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     services:
       postgres:
         image: postgres:16
@@ -181,7 +181,7 @@ jobs:
 
   e2e:
     name: End-to-end (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     services:
       postgres:
         image: postgres:16
@@ -249,7 +249,7 @@ jobs:
 
   images:
     name: Build container images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
@@ -259,7 +259,7 @@ jobs:
 
   compose:
     name: Validate compose stack
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: docker compose config
