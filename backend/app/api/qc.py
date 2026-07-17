@@ -213,6 +213,7 @@ async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS)
 
 @router.patch("/specifications/{spec_id}")
 async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(spec_id, "Specification")
     patch = body.model_dump(exclude_unset=True)
     _check_grade(patch.get("thc_grade"))
     async with rls(user) as c:
@@ -265,6 +266,7 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
 # ── Spec parameters (acceptance criteria) ───────────────────────────────────
 @router.post("/specifications/{spec_id}/parameters", status_code=201)
 async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(spec_id, "Specification")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
         if spec is None:
@@ -285,6 +287,8 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
 
 @router.delete("/specifications/{spec_id}/parameters/{param_id}")
 async def delete_parameter(spec_id: str, param_id: str, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(spec_id, "Specification")
+    _uuid_or_404(param_id, "Parameter")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
         if spec is None:
@@ -439,6 +443,8 @@ async def get_sample(sample_id: str, user: dict = Depends(require_role(*ELEVATED
 
 @router.post("/samples", status_code=201)
 async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_422(body.parent_id, "parent_id")
+    _uuid_or_422(body.sampling_plan_id, "sampling_plan_id")
     async with rls(user) as c:
         if body.parent_id:
             p = await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.parent_id)
@@ -470,6 +476,7 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
 
 @router.patch("/samples/{sample_id}")
 async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(sample_id, "Sample")
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT status FROM qc_samples WHERE id=$1", sample_id)
@@ -627,6 +634,8 @@ async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
 async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS))):
     if body.cert_type not in _CERT_TYPES:
         raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
+    _uuid_or_422(body.specification_id, "specification_id")
+    _uuid_or_422(body.sample_id, "sample_id")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id)
         if spec is None:
@@ -652,6 +661,8 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
     vs the limits — never typed by hand. If the result FAILS and the CoA links
     a sample that is still in a testable state, the sample is quarantined (the
     OOS hook). Results may only be entered while the CoA is DRAFT."""
+    _uuid_or_404(coa_id, "Certificate")
+    _uuid_or_422(body.parameter_id, "parameter_id")
     async with rls(user) as c:
         coa = await c.fetchrow(
             "SELECT id, status, sample_id, specification_id FROM qc_certificates WHERE id=$1", coa_id)
@@ -707,6 +718,7 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
 
 @router.patch("/certificates/{coa_id}")
 async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(coa_id, "Certificate")
     patch = body.model_dump(exclude_unset=True)
     if "decision" in patch and patch["decision"] is not None and patch["decision"] not in ("PASS", "FAIL"):
         raise HTTPException(422, "decision must be PASS or FAIL")
@@ -837,6 +849,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
     the DocEngine's PASS-gated formatter. Data gate: every result must comply
     (a FAIL or unmeasured result blocks). Issuing the COQ is a QC Manager
     function (QP may also issue one)."""
+    _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
@@ -1070,6 +1083,8 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
         raise HTTPException(422, f"oos_type must be one of: {', '.join(_OOS_TYPES)}")
     if body.risk_level is not None and body.risk_level not in _OOS_RISK:
         raise HTTPException(422, f"risk_level must be one of: {', '.join(_OOS_RISK)}")
+    _uuid_or_422(body.result_id, "result_id")
+    _uuid_or_422(body.sample_id, "sample_id")
     async with rls(user) as c:
         if body.result_id:
             if await c.fetchrow("SELECT id FROM qc_results WHERE id=$1", body.result_id) is None:
@@ -1103,6 +1118,7 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
 
 @router.patch("/oos/{oos_id}")
 async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(oos_id, "OOS record")
     patch = body.model_dump(exclude_unset=True)
     if patch.get("risk_level") is not None and patch["risk_level"] not in _OOS_RISK:
         raise HTTPException(422, "Unknown risk_level")
@@ -1177,6 +1193,7 @@ async def add_register_event(oos_id: str, body: OosRegisterIn,
                              user: dict = Depends(require_role(*_WRITERS))):
     """Append an event to the OOS register. Append-only — the register is never
     modified or deleted (the qc-lims-ao 'ONCE WRITTEN, NEVER MODIFIED' rule)."""
+    _uuid_or_404(oos_id, "OOS record")
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_oos_records WHERE id=$1", oos_id) is None:
             raise HTTPException(404, "OOS record not found")
@@ -1192,6 +1209,7 @@ async def add_oos_notification(oos_id: str, body: OosNotifyIn,
                                user: dict = Depends(require_role(*_WRITERS))):
     if body.part not in _OOS_NOTIF_PARTS:
         raise HTTPException(422, f"part must be one of: {', '.join(_OOS_NOTIF_PARTS)}")
+    _uuid_or_404(oos_id, "OOS record")
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_oos_records WHERE id=$1", oos_id) is None:
             raise HTTPException(404, "OOS record not found")
@@ -1208,6 +1226,8 @@ async def add_oos_notification(oos_id: str, body: OosNotifyIn,
 @router.post("/oos/{oos_id}/notifications/{notif_id}/ack")
 async def ack_oos_notification(oos_id: str, notif_id: str,
                                user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(oos_id, "OOS record")
+    _uuid_or_404(notif_id, "Notification")
     async with rls(user) as c:
         row = await c.fetchrow(
             "UPDATE qc_oos_notifications SET acknowledged=true, acknowledged_at=now()"
@@ -1361,6 +1381,7 @@ async def list_coa_documents(status: str | None = None, batch_id: str | None = N
 
 @router.get("/coa-documents/{doc_id}")
 async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(doc_id, "eCoA document")
     async with rls(user) as c:
         doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
         if doc is None:
@@ -1373,6 +1394,8 @@ async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVA
 
 @router.post("/coa-documents", status_code=201)
 async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_422(body.specification_id, "specification_id")
+    _uuid_or_422(body.sample_id, "sample_id")
     async with rls(user) as c:
         if body.specification_id:
             if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
@@ -1396,7 +1419,10 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
 @router.patch("/coa-documents/{doc_id}")
 async def update_coa_document(doc_id: str, body: CoaDocPatch,
                               user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(doc_id, "eCoA document")
     patch = body.model_dump(exclude_unset=True)
+    _uuid_or_422(patch.get("specification_id"), "specification_id")
+    _uuid_or_422(patch.get("sample_id"), "sample_id")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
         if cur is None:
@@ -1891,6 +1917,7 @@ async def list_rqs(status: str | None = None, batch_id: str | None = None,
 
 @router.get("/sampling-requests/{rqs_id}")
 async def get_rqs(rqs_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(rqs_id, "Sampling request")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM qc_sampling_requests WHERE id=$1", rqs_id)
         if row is None:
@@ -1918,6 +1945,7 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
     _uuid_or_404(rqs_id, "Sampling request")
     patch = body.model_dump(exclude_unset=True)
     _uuid_or_422(patch.get("assigned_to_id"), "assigned_to_id")
+    _uuid_or_422(patch.get("sample_id"), "sample_id")
     async with rls(user) as c:
         cur = await c.fetchrow(
             "SELECT status, registration_deadline FROM qc_sampling_requests WHERE id=$1", rqs_id)
@@ -1976,6 +2004,7 @@ async def list_sfr(status: str | None = None, user: dict = Depends(require_role(
 
 @router.get("/field-records/{sfr_id}")
 async def get_sfr(sfr_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(sfr_id, "Field record")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM qc_sample_field_records WHERE id=$1", sfr_id)
         if row is None:
@@ -2011,7 +2040,9 @@ async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS)))
 
 @router.patch("/field-records/{sfr_id}")
 async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(sfr_id, "Field record")
     patch = body.model_dump(exclude_unset=True)
+    _uuid_or_422(patch.get("sample_id"), "sample_id")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT status FROM qc_sample_field_records WHERE id=$1", sfr_id)
         if cur is None:
@@ -2044,6 +2075,7 @@ async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_r
 # ── Chain of custody (per-sample, append-only) ───────────────────────────────
 @router.get("/samples/{sample_id}/custody")
 async def list_custody(sample_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(sample_id, "Sample")
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", sample_id) is None:
             raise HTTPException(404, "Sample not found")

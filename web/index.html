@@ -3,7 +3,18 @@
 <head>
   <!-- Set the real theme before any CSS paints — reading it later (after
        stylesheets load) would flash the wrong theme for a light-mode user. -->
-  <script>try{var t=localStorage.getItem('gf_theme');if(t){var r=document.documentElement;r.dataset.theme=t;/* Carbon skins (anything but the core themes) carry a marker so their shared derived-token block applies. Set synchronously so there's no flash. Mass Weed stays the default (the <html data-theme> above); all skins remain selectable. */ if(['dark','light','suma','mass-weed','mass-weed-light'].indexOf(t)<0)r.setAttribute('data-skin-carbon','');}}catch(e){}</script>
+  <script>try{
+    /* Mirrors GF.THEME_CORE + GF.THEMES (core.js) — kept in sync by hand since
+       this must run before core.js loads. A saved id outside this full set
+       (retired skin, corruption, a typo) is HEALED here, synchronously, same
+       as the exclusive-Mass-Weed era's boot script: reset to the default and
+       overwrite storage, so an invalid value can never paint unstyled. */
+    var CORE=['dark','light','suma','mass-weed','mass-weed-light'];
+    var CARBON=['blurple-chat','blush-slate-dark','code-forge','digital-rain','ebony-amber','forest','heart-of-darkness','indigo-turquoise','lambda-core','mocha-paws','nightfang','nord','nordic','solo-night','tropical-midnight','vapor-classic','vapor-deck','amber-glow-light','aurora-light','azure-silence-light','blush-slate-light','console-horizon-light','jade-matrix-light','jade-mint-light','kawaii','miami-neon-light','playlist-mint-light','retro-98','steel-mist-light','winter-blush-light'];
+    var t=localStorage.getItem('gf_theme');
+    if(t&&CORE.indexOf(t)<0&&CARBON.indexOf(t)<0){t='mass-weed';try{localStorage.setItem('gf_theme','mass-weed');}catch(e){}}
+    if(t){var r=document.documentElement;r.dataset.theme=t;if(CORE.indexOf(t)<0)r.setAttribute('data-skin-carbon','');else r.removeAttribute('data-skin-carbon');}
+  }catch(e){}</script>
   <meta charset="utf-8">
   <!-- no maximum-scale: pinch-zoom must stay available (a11y) -->
   <meta name="viewport" content="width=device-width, initial-scale=1">

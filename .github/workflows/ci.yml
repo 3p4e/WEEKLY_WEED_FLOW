@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
 
+# All jobs run on the dedicated self-hosted runner (kvm4-wwf) on host
+# networking, so tests/migrations/e2e's Postgres service containers and e2e's
+# local nginx bind fixed host ports (5432, 8091) with no per-job VM isolation
+# to fall back on. A second in-flight run for the same ref would fight over
+# those ports, so cancel any superseded run for this ref before its jobs start.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # The app runs against TWO databases (identity vs work data — separate
 # Postgres containers in production). CI mirrors that: one postgres service
 # hosting two databases, bootstrapped from the two generated schema files.

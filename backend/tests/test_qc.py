@@ -654,9 +654,15 @@ async def test_coq_is_qc_mgr_gated(client, admin_headers, monkeypatch):
     _, cu_mgr = await _actor(client, admin_headers, "CU_MGR")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=cu_mgr)).status_code == 403   # non-QC manager cannot
+    _, ceo = await _actor(client, admin_headers, "CEO")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=ceo)).status_code == 403      # executive is not a GMP quality role
     _, qc_mgr = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=qc_mgr)).status_code == 201   # QC Manager issues the COQ
+    coa2 = await _released_coa(client, admin_headers, qp, material="COQ-ROLE-2")
+    assert (await client.post(f"/qc/certificates/{coa2['id']}/coq",
+                              headers=qp)).status_code == 201       # QP may also issue one
 
 
 async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
