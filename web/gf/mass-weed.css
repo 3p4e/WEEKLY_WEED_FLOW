@@ -16,8 +16,9 @@
 /* ═══════════════ 1 · DARK — command deck (mass-weed) ═══════════════ */
 :root[data-theme="mass-weed"] {
   color-scheme: dark;
-  /* Surfaces — hull black, gunmetal blue steel */
-  --bg:#050b18; --surface:#0a1c33; --surface-2:#0d2545; --surface-3:#123a5c;
+  /* Surfaces — gunmetal blue steel (lightened from the original near-black
+     hull — a dark theme still needs to read as navy, not void). */
+  --bg:#14273f; --surface:#1c3350; --surface-2:#234064; --surface-3:#2c4e79;
   --line:rgba(94,200,240,.16); --line-2:rgba(94,200,240,.09);
   --border-strong:rgba(94,200,240,.34); --overlay:rgba(3,6,16,.74);
 
@@ -112,7 +113,7 @@
 
 /* Deep-space canvas + faint starfield behind the whole shell */
 :root[data-theme="mass-weed"] body{
-  background:radial-gradient(120% 90% at 50% -10%, #0c2445 0%, #061224 45%, var(--bg) 100%), var(--bg);
+  background:radial-gradient(120% 90% at 50% -10%, #234064 0%, #1a3050 45%, var(--bg) 100%), var(--bg);
 }
 :root[data-theme="mass-weed-light"] body{
   background:radial-gradient(120% 90% at 50% -10%, #f4f9ff 0%, #e7eff7 45%, #dbe6f2 100%), var(--bg);
