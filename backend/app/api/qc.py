@@ -30,8 +30,15 @@ router = APIRouter(prefix="/qc", tags=["qc"])
 
 # QC manager owns the domain; QP certifies; execs + ADMIN org-wide.
 _WRITERS = (ADMIN, *EXECUTIVE_ROLES, "QC_MGR", "QP")
-# Release / reject are a Qualified-Person decision (Annex 16) — narrower gate.
-_QP_ROLES = (ADMIN, *EXECUTIVE_ROLES, "QP")
+# Batch release/reject, CoA approve/release, and OOS disposition are a
+# Qualified-Person decision (Annex 16) — the QP (or ADMIN as system operator)
+# ONLY. Executives are business leadership, not a GMP quality role, and are
+# deliberately excluded here even though they're org-wide writers elsewhere.
+_QP_ROLES = (ADMIN, "QP")
+# Issuing the Certificate of Quality is a QC Manager function (the QC Manager
+# signs it), not an Annex-16 release decision — QP may also issue one (QP
+# outranks QC_MGR on the quality side) and ADMIN as system operator.
+_COQ_ROLES = (ADMIN, "QC_MGR", "QP")
 
 _SPEC_STATUSES = (
     "INITIATED", "DRAFT", "QC_REVIEW", "QA_APPROVED", "NUMBERED",
@@ -825,10 +832,11 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list) -> s
 
 
 @router.post("/certificates/{coa_id}/coq", status_code=201)
-async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_QP_ROLES))):
+async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLES))):
     """Render a Certificate of Quality (.docx) from a RELEASED certificate via
     the DocEngine's PASS-gated formatter. Data gate: every result must comply
-    (a FAIL or unmeasured result blocks). Certifying is a QP act."""
+    (a FAIL or unmeasured result blocks). Issuing the COQ is a QC Manager
+    function (QP may also issue one)."""
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:

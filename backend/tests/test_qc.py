@@ -644,15 +644,19 @@ async def test_coq_blocks_on_noncompliant_result(client, admin_headers, monkeypa
     assert r.status_code == 409 and "comply" in r.json()["detail"]
 
 
-async def test_coq_is_qp_gated(client, admin_headers, monkeypatch):
+async def test_coq_is_qc_mgr_gated(client, admin_headers, monkeypatch):
+    """Issuing the COQ is a QC Manager function (QC Manager signs it) — QP may
+    also issue one; a non-QC manager (any other department, or an executive)
+    may not."""
     _stub_de(monkeypatch, {"document_id": "DE-COQ-2", "verify": "RESULT: PASS"})
     _, qp = await _actor(client, admin_headers, "QP")
     coa = await _released_coa(client, admin_headers, qp, material="COQ-ROLE")
+    _, cu_mgr = await _actor(client, admin_headers, "CU_MGR")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=cu_mgr)).status_code == 403   # non-QC manager cannot
     _, qc_mgr = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
-                              headers=qc_mgr)).status_code == 403   # QC mgr cannot certify
-    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
-                              headers=qp)).status_code == 201        # QP can
+                              headers=qc_mgr)).status_code == 201   # QC Manager issues the COQ
 
 
 async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):

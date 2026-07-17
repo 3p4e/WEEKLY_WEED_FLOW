@@ -5,7 +5,9 @@
    two-phase flow — Phase I laboratory investigation → Phase II full/root-cause
    investigation → QP disposition → close. Closing the OOS and setting a batch
    disposition (RELEASE/REJECT/REPROCESS/RETAIN) are Qualified-Person decisions
-   (backend-gated; mirrored by canQP() here). The register is append-only.
+   (Annex 16 — QP or ADMIN ONLY, backend-gated; mirrored by canQP() here;
+   executives are business leadership, not a GMP quality role). The register
+   is append-only.
 
    CAPA is not a separate record: it is derived at read time from the OOS rows
    (/qc/capa), so the CAPA register panel here is a live view of OOS state.
@@ -17,7 +19,7 @@
                     q: '', status: '', tab: 'oos', loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QP'];
+  const _QP = ['ADMIN', 'QP'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
   const canQP = () => _QP.includes((GF.API.user || {}).role);
 

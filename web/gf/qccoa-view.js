@@ -10,9 +10,12 @@
    hook, done in the backend).
 
    Review is second-person (the backend rejects a reviewer who is the analyst).
-   Approve / release are Qualified-Person decisions (backend-gated; mirrored by
-   canQP() here). Read = elevated; write = QC_MGR / QP / execs / ADMIN. Same
-   full-page-view + qms-zone pattern; QMS Studio zone, anchored 'qms-end'. */
+   Approve / release are Qualified-Person decisions (Annex 16 — QP or ADMIN
+   ONLY, mirrored by canQP() here; executives are business leadership, not a
+   GMP quality role). Issuing the COQ is a QC Manager function (mirrored by
+   canCoq() — QP may also issue one). Read = elevated; write = QC_MGR / QP /
+   execs / ADMIN. Same full-page-view + qms-zone pattern; QMS Studio zone,
+   anchored 'qms-end'. */
 
 (function () {
   GF.WWF._qccoa = { coas: null, sel: null, detail: null, specParams: null,
@@ -20,9 +23,11 @@
                     loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QP'];
+  const _QP = ['ADMIN', 'QP'];
+  const _COQ = ['ADMIN', 'QC_MGR', 'QP'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
   const canQP = () => _QP.includes((GF.API.user || {}).role);
+  const canCoq = () => _COQ.includes((GF.API.user || {}).role);
 
   const ST = {
     DRAFT: { en: 'Draft', mk: 'Нацрт', c: 'var(--orange)' },
@@ -206,7 +211,7 @@
         ${c.status !== 'DRAFT' && c.status !== 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
       </div>` : ''}
-      ${c.status === 'RELEASED' && canQP() ? `<div class="qms-dl" style="margin-top:8px">
+      ${c.status === 'RELEASED' && canCoq() ? `<div class="qms-dl" style="margin-top:8px">
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaGenerateCoq('${c.id}')">${AL('Generate COQ', 'Генерирај COQ')}</button>
         ${c.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','docx')">${AL('COQ .docx', 'COQ .docx')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','pdf')">${AL('COQ PDF', 'COQ PDF')}</button>` : ''}

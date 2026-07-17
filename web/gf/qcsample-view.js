@@ -3,8 +3,10 @@
    Physical samples reached through /qc/samples. A sample has a PP-SMP id, a
    batch, a material, and a lifecycle (COLLECTED → IN_TRANSIT → RECEIVED →
    IN_TEST → TESTED → REVIEWED → APPROVED → RELEASED, + terminal REJECTED and
-   the OOS branch QUARANTINE). Release/reject are QP-gated (backend enforces).
-   Self-referential genealogy (sub-samples / retests) shows in the detail.
+   the OOS branch QUARANTINE). Release/reject are a Qualified-Person decision
+   (Annex 16 — QP or ADMIN ONLY, backend-enforced; executives are business
+   leadership, not a GMP quality role). Self-referential genealogy
+   (sub-samples / retests) shows in the detail.
 
    Read = elevated; write/advance = QC_MGR / QP / execs / ADMIN. Same
    full-page-view + qms-zone pattern as qcspec; QMS Studio zone, anchored
@@ -15,7 +17,7 @@
                    loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QP'];
+  const _QP = ['ADMIN', 'QP'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
   const canQP = () => _QP.includes((GF.API.user || {}).role);
 
