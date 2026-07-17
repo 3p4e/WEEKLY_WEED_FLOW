@@ -17,13 +17,15 @@ from app.roles import CREATABLE_ROLES, MANAGER_ROLES  # noqa: E402
 CANONICAL = ["cultivation", "production", "qc", "quality_assurance", "logistics", "security", "tooling"]
 
 
-def test_seven_canonical_departments_match_demo_js():
+def test_seven_canonical_departments_match_demo_org():
     assert [d["code"] for d in DEPARTMENTS] == CANONICAL
-    demo = (Path(__file__).parent.parent.parent / "web" / "gf" / "demo.js").read_text()
-    for code in CANONICAL:
-        assert f"code: '{code}'" in demo, f"{code} missing from web/gf/demo.js facility"
+    # The live demo seeds these same canonical departments server-side
+    # (app/demo_org.py replaced the old client-side demo.js facility mock).
+    from app.demo_org import _DEPARTMENTS
+    assert [code for code, _en, _mk in _DEPARTMENTS] == CANONICAL
     # every department carries both language names
     assert all(d["name"] and d["name_mk"] for d in DEPARTMENTS)
+    assert all(en and mk for _c, en, mk in _DEPARTMENTS)
 
 
 def test_matrix_shape():

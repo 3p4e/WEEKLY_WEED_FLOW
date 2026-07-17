@@ -223,14 +223,10 @@ GF.WWF.lockDocument = async () => {
 
 /* ── shared authenticated file download (PDF / standalone HTML) ──
    One owner of the raw-fetch → blob → <a download> flow, the 401 → re-login
-   routing, the Content-Disposition filename adoption, and the demo-mode
-   guard. Also used by execreport-view.js. */
+   routing, and the Content-Disposition filename adoption. Also used by
+   execreport-view.js. (In the live demo the backend is real, so exports work
+   exactly like any other session — no demo guard here.) */
 GF.WWF._fetchDownload = async (path, fallbackName, init) => {
-  if (GF.DEMO && GF.DEMO.active && GF.DEMO.active()) {
-    GF.toast(AL('File export is not available in demo mode — on the live system this downloads the document.',
-                'Извозот на датотеки не е достапен во демо режим — во живата апликација се презема документот.'), 'info');
-    return;
-  }
   const res = await fetch(GF.API.base + path, Object.assign(
     { headers: { Authorization: 'Bearer ' + GF.API.token } }, init || {}));
   if (res.status === 401) {

@@ -622,8 +622,10 @@ async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:
         raise
     client = None if skip_letta else httpx.AsyncClient(timeout=60)
     try:
-        orgs = await uconn.fetch("SELECT id, name FROM organizations"
-                                 + (" WHERE id=$1" if only_org else ""),
+        # slug 'demo' = the live demo org (app/demo_org.py) — wiped on every
+        # demo start; its throwaway data must never reach the Letta RAG digest.
+        orgs = await uconn.fetch("SELECT id, name FROM organizations WHERE slug <> 'demo'"
+                                 + (" AND id=$1" if only_org else ""),
                                  *([only_org] if only_org else []))
         log(f"processing {len(orgs)} org(s) for ref={ref.isoformat()} skip_letta={skip_letta}")
         for o in orgs:

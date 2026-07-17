@@ -97,7 +97,8 @@ async def _orgs_needing_recovery(since: datetime) -> list:
         return []
     uconn = await asyncpg.connect(dsn)
     try:
-        orgs = await uconn.fetch("SELECT id, name FROM organizations")
+        # Exclude the live demo org (slug 'demo') — same rule as run_all.
+        orgs = await uconn.fetch("SELECT id, name FROM organizations WHERE slug <> 'demo'")
     except Exception as e:
         snap.log(f"org list fetch failed: {type(e).__name__} — skipping recovery")
         return []

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # the placeholder key during first-time setup.
     environment: str = "production"
 
+    # Live demo mode (app/api/demo.py + app/demo_org.py): OFF by default
+    # everywhere — /demo/* 404s unless DEMO_ENABLED=true is set on the stack
+    # (currently the wwf_mass test stack only; production stays off).
+    demo_enabled: bool = False
+
     # Auth
     secret_key: str = _INSECURE_DEFAULT_SECRET
     algorithm: str = "HS256"
