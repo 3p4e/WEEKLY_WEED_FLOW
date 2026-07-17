@@ -78,6 +78,16 @@
 .coord-tag.wait{background:var(--amber-soft);color:var(--amber);border:1px solid rgba(199,154,84,.35)}
 .coord-tag.prog{background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line)}
 
+/* ── Facility resource strip — site-wide totals (total + per-phase) as a
+   single flowing row, distinct from the .dash-kpis tile grid used elsewhere. ── */
+.fac-resbar{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;
+  padding:14px 8px;margin-bottom:14px}
+.fac-res{display:flex;align-items:center;gap:9px}
+.fac-res-ic{width:30px;height:30px;flex:none;border-radius:50%;background:var(--surface-2);
+  box-shadow:inset 0 0 0 1px var(--line)}
+.fac-res-v{font-size:20px;font-weight:800;min-width:22px;text-align:center}
+.fac-res-l{font-size:11.5px;color:var(--ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+
 /* ── Dashboard ── */
 .dash-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--sh-1)}

@@ -159,9 +159,13 @@
 }
 :root[data-theme="mass-weed"] .card::before{opacity:.5}
 
-/* Chamfered dialogs with a glowing cyan frame */
+/* Chamfered dialogs with a glowing cyan frame — a full octagon (all 4
+   corners cut), matching the mockup's .mw-dialog "HUD popup" silhouette
+   rather than the 2-corner notch other panels use. */
 :root[data-theme^="mass-weed"] .modal{
-  clip-path:var(--clip-panel);border-radius:0;
+  clip-path:polygon(18px 0, calc(100% - 18px) 0, 100% 16px, 100% calc(100% - 16px),
+    calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 16px), 0 16px);
+  border-radius:0;
   box-shadow:var(--sh-3), 0 0 34px rgba(var(--accent-rgb),.35);
 }
 
@@ -689,3 +693,32 @@
   :root[data-theme^="mass-weed"] .ana-hb-f::after,
   :root[data-theme^="mass-weed"] .wl-fill::after{animation:none}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   9 · REMAINING FIDELITY POLISH — dept-tinted task-card edge (the rarity-
+   coded item band, adapted to the app's real dept-color concept) + the
+   resource HUD strip (facility board site-wide totals).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 9a — dept-colored left edge on task cards, driven by --dept-acc (set inline
+   by views.js/depthome-view.js from the same color the app already shows on
+   .kcard-dept). Repeats the §6 base shadow + adds the inset accent, so it
+   wins by source order at equal specificity without disturbing sibling
+   selectors (.kcol/.tlcard/etc. keep the plain §6 treatment). */
+:root[data-theme^="mass-weed"] .kcard{
+  box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.06),
+    inset 3px 0 0 var(--dept-acc, var(--primary))}
+:root[data-theme^="mass-weed"] .kcard:hover{
+  box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22),
+    inset 3px 0 0 var(--dept-acc, var(--primary));transform:translateY(-1px)}
+
+/* 9b — resource HUD strip (facility board totals): hexagonal icon badge with
+   an inner glow ring + Orbitron numeral, mirroring the mockup's .mw-res. */
+:root[data-theme^="mass-weed"] .fac-res-ic{
+  border-radius:0;background:rgba(var(--accent-rgb),.08);
+  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+  box-shadow:inset 0 0 0 1px currentColor, 0 0 8px currentColor}
+:root[data-theme^="mass-weed"] .fac-res-v{
+  font-family:var(--font-num);text-shadow:0 0 12px currentColor}
+:root[data-theme^="mass-weed"] .fac-res-l{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em}

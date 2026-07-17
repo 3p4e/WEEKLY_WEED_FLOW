@@ -60,13 +60,16 @@
         <button class="btn btn-sm" onclick="GF.WWF.loadFacility()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
     }
     const d = st.data, t = d.totals || {};
-    const kpi = (v, l, c) => `<div class="kpi"><div class="kpi-v" style="color:${c}">${v}</div><div class="kpi-l">${l}</div></div>`;
-    const kpis = `<div class="dash-kpis">
-      ${kpi(t.total || 0, AL('Total plants', 'Вкупно растенија'), 'var(--ink)')}
-      ${kpi(t.clone || 0, phLbl('clone'), phCol('clone'))}
-      ${kpi(t.veg || 0, phLbl('veg'), phCol('veg'))}
-      ${kpi(t.flower || 0, phLbl('flower'), phCol('flower'))}
-      ${(t.mother || t.drying) ? kpi((t.mother || 0) + (t.drying || 0),
+    // Site-wide totals as a resource strip (icon + glowing count), not a tile
+    // grid — the facility board's single "how much is out there right now"
+    // readout, distinct from the .dash-kpis tiles other screens use.
+    const res = (v, l, c) => `<div class="fac-res"><span class="fac-res-ic" style="color:${c}"></span><span class="fac-res-v" style="color:${c}">${v}</span><span class="fac-res-l">${l}</span></div>`;
+    const kpis = `<div class="fac-resbar">
+      ${res(t.total || 0, AL('Total plants', 'Вкупно растенија'), 'var(--ink)')}
+      ${res(t.clone || 0, phLbl('clone'), phCol('clone'))}
+      ${res(t.veg || 0, phLbl('veg'), phCol('veg'))}
+      ${res(t.flower || 0, phLbl('flower'), phCol('flower'))}
+      ${(t.mother || t.drying) ? res((t.mother || 0) + (t.drying || 0),
           phLbl('mother') + ' / ' + phLbl('drying'), phCol('mother')) : ''}
     </div>`;
     const rooms = (d.rooms || []).map(r => {

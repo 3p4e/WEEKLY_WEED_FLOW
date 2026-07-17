@@ -17,7 +17,7 @@ GF.views = GF.views || {};
   // the expanded card in My Week (card actions all live there).
   const card = (t) => {
     const d = GF.dep(t.dept);
-    return `<div class="kcard" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+    return `<div class="kcard" style="--dept-acc:${d.color}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
       <div class="kcard-top">
         <span class="kcard-dept" style="color:${d.color}">${GF.esc(GF.depAbbr(t.dept))}</span>
         <span class="kstatus pill s-${t.status}"><span class="dot" style="background:currentColor;opacity:.75"></span>${GF.statusLabel(t.status)}</span>
