@@ -757,7 +757,7 @@ GF.DEMO = (function () {
       // Random skin per start (always different from the one on screen);
       // the visitor's own theme is remembered once and restored on exit.
       if (GF.THEMES && GF.THEMES.length) {
-        const cur = localStorage.getItem('gf_theme') || 'dark';
+        const cur = localStorage.getItem('gf_theme') || 'mass-weed';
         if (localStorage.getItem(PREV_THEME_KEY) === null) localStorage.setItem(PREV_THEME_KEY, cur);
         const pool = GF.THEMES.filter(t => t.id !== cur);
         const pick = pool[Math.floor(Math.random() * pool.length)] || GF.THEMES[0];
