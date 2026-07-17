@@ -383,3 +383,206 @@
 :root[data-theme^="mass-weed"] .fr-n{
   font-family:var(--font-num);text-shadow:0 0 12px rgba(var(--accent-rgb),.3)}
 :root[data-theme^="mass-weed"] .fs-dot{box-shadow:0 0 8px currentColor;color:inherit}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4 · CHART / DATA-VIZ PALETTE  (was falling back to the retired violet+green)
+   Categorical HUD hues drawn from the theme's own validated signal colors —
+   cyan→amber is a CVD-safe blue/orange pair; c/d/e extend it for N-series.
+   Consumed by analytics-view / auditprep-view / QC charts via var(--ch-*).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="mass-weed"]{
+  --ch-a:#5ec8f0; --ch-b:#f0b95e; --ch-c:#c89bf0; --ch-d:#6cf05a; --ch-e:#ff7ea8;
+  --ch-grid:rgba(94,200,240,.14); --ch-axis:rgba(157,192,216,.5);
+}
+:root[data-theme="mass-weed-light"]{
+  --ch-a:#1a7fb4; --ch-b:#bd7714; --ch-c:#7a4fc2; --ch-d:#1c9a4d; --ch-e:#c23f6b;
+  --ch-grid:rgba(26,127,180,.16); --ch-axis:rgba(61,94,120,.55);
+}
+/* wire the grid/axis tokens into the analytics chart chrome (blind before) */
+:root[data-theme^="mass-weed"] .ana-grid{stroke:var(--ch-grid)}
+:root[data-theme^="mass-weed"] .ana-tick{fill:var(--ch-axis)}
+:root[data-theme^="mass-weed"] .ana-cap{fill:var(--primary-hover)}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5 · HUD PRIMITIVES  — reusable Mass Effect building blocks (were missing).
+   Drop any of these classes onto an element; all are token-driven.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* .hud-frame — corner-bracket targeting reticle (the defining ME motif) */
+:root[data-theme^="mass-weed"] .hud-frame{position:relative}
+:root[data-theme^="mass-weed"] .hud-frame::before,
+:root[data-theme^="mass-weed"] .hud-frame::after{
+  content:"";position:absolute;width:13px;height:13px;pointer-events:none;
+  border:1.5px solid var(--primary);opacity:.7;filter:drop-shadow(0 0 3px rgba(var(--accent-rgb),.7))}
+:root[data-theme^="mass-weed"] .hud-frame::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+:root[data-theme^="mass-weed"] .hud-frame::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+/* .hud-scan — scanline texture overlay any surface can opt into */
+:root[data-theme^="mass-weed"] .hud-scan{position:relative;isolation:isolate}
+:root[data-theme^="mass-weed"] .hud-scan::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;
+  background:var(--scanlines);opacity:.6;mix-blend-mode:screen}
+/* .hud-panel — the canonical chamfered HUD panel (chamfer + edge + inner glow) */
+:root[data-theme^="mass-weed"] .hud-panel{
+  clip-path:var(--clip-panel);border-radius:0;
+  background:var(--glass-bg);border:1px solid var(--glass-border);
+  box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.07), inset 0 0 30px rgba(28,108,163,.06)}
+/* .hud-divider — angular accent rule between sections */
+:root[data-theme^="mass-weed"] .hud-divider{
+  height:1px;border:0;margin:14px 0;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);opacity:.4}
+/* .hud-led — status light with a bloom (color via currentColor/inline) */
+:root[data-theme^="mass-weed"] .hud-led{
+  width:8px;height:8px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 8px currentColor,0 0 2px currentColor;display:inline-block}
+/* .hud-label — condensed, uppercase, wide-tracked micro-label */
+:root[data-theme^="mass-weed"] .hud-label{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:var(--ls-wide);
+  color:var(--ink-3);font-size:11px}
+/* .hud-glow — wire the previously-dead --glow-cyan primitive */
+:root[data-theme^="mass-weed"] .hud-glow{box-shadow:var(--glow-cyan)}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   6 · COMPONENT COVERAGE SWEEP — families that had no HUD treatment.
+   Additive only (clip/glow/type); no layout-box changes.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* — Chip / tag family: clipped corner + condensed micro-caps + faint edge — */
+:root[data-theme^="mass-weed"] .type-chip,
+:root[data-theme^="mass-weed"] .tag-chip,
+:root[data-theme^="mass-weed"] .attr-chip,
+:root[data-theme^="mass-weed"] .dep-chip,
+:root[data-theme^="mass-weed"] .prtag,
+:root[data-theme^="mass-weed"] .daytag,
+:root[data-theme^="mass-weed"] .due-badge,
+:root[data-theme^="mass-weed"] .xr-chip,
+:root[data-theme^="mass-weed"] .coord-tag,
+:root[data-theme^="mass-weed"] .fac-chip,
+:root[data-theme^="mass-weed"] .chip-opt{
+  border-radius:0;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);
+  font-family:var(--font-display);letter-spacing:.06em}
+/* — Secondary buttons: same swept corner + hover bloom as .btn — */
+:root[data-theme^="mass-weed"] .icon-btn,
+:root[data-theme^="mass-weed"] .mini-btn,
+:root[data-theme^="mass-weed"] .btn-ghost,
+:root[data-theme^="mass-weed"] .btn-orange,
+:root[data-theme^="mass-weed"] .btn-danger,
+:root[data-theme^="mass-weed"] .seg-b{
+  border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px)}
+:root[data-theme^="mass-weed"] .icon-btn:hover,
+:root[data-theme^="mass-weed"] .mini-btn:hover{
+  box-shadow:0 0 12px rgba(var(--accent-rgb),.28);border-color:var(--border-strong)}
+:root[data-theme^="mass-weed"] .btn-orange{box-shadow:0 0 14px rgba(240,185,94,.3)}
+:root[data-theme^="mass-weed"] .btn-danger{box-shadow:0 0 14px rgba(239,77,77,.28)}
+/* — Panels / cards that were generic: chamfer + hairline edge + scanline — */
+:root[data-theme^="mass-weed"] .panel,
+:root[data-theme^="mass-weed"] .fac-panel,
+:root[data-theme^="mass-weed"] .dash-card,
+:root[data-theme^="mass-weed"] .team-card,
+:root[data-theme^="mass-weed"] .coord-row,
+:root[data-theme^="mass-weed"] .ana-tile,
+:root[data-theme^="mass-weed"] .ana-panel,
+:root[data-theme^="mass-weed"] .xr-kpi,
+:root[data-theme^="mass-weed"] .kcol,
+:root[data-theme^="mass-weed"] .kcard,
+:root[data-theme^="mass-weed"] .tlcard,
+:root[data-theme^="mass-weed"] .wl-row{
+  border-radius:0;clip-path:var(--clip-notch);
+  box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.06)}
+:root[data-theme^="mass-weed"] .kcard:hover,
+:root[data-theme^="mass-weed"] .team-card:hover{
+  box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22);transform:translateY(-1px)}
+/* KPI numerals across the generic dashboards get the Orbitron plasma glow */
+:root[data-theme^="mass-weed"] .xr-kpi .v,
+:root[data-theme^="mass-weed"] .xr-kpi b,
+:root[data-theme^="mass-weed"] .ana-tv,
+:root[data-theme^="mass-weed"] .dash-n,
+:root[data-theme^="mass-weed"] .exec-n{
+  font-family:var(--font-num);text-shadow:0 0 14px rgba(var(--accent-rgb),.35)}
+:root[data-theme^="mass-weed"] .ana-tl,
+:root[data-theme^="mass-weed"] .ana-pt,
+:root[data-theme^="mass-weed"] .xr-kpi .l{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:var(--ls-label)}
+/* progress fills in generic bars pick up the sweep + glow like .tp-fill */
+:root[data-theme^="mass-weed"] .ana-hb-f,
+:root[data-theme^="mass-weed"] .wl-fill,
+:root[data-theme^="mass-weed"] .exec-dbar > span{
+  box-shadow:0 0 10px rgba(var(--accent-rgb),.35)}
+/* — Board columns: HUD header rail — */
+:root[data-theme^="mass-weed"] .kcol-h,
+:root[data-theme^="mass-weed"] .kcol-title{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)}
+/* — Calendar cells: angular, today gets a targeting glow — */
+:root[data-theme^="mass-weed"] .cal-cell{border-radius:0;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px)}
+:root[data-theme^="mass-weed"] .cal-today{
+  box-shadow:inset 0 0 0 1px var(--primary), 0 0 12px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .cal-chip{border-radius:0}
+/* — Secondary inputs: same chamfer + focus glow as .field input — */
+:root[data-theme^="mass-weed"] .search,
+:root[data-theme^="mass-weed"] .sel-search,
+:root[data-theme^="mass-weed"] .qms-search,
+:root[data-theme^="mass-weed"] .sp-field,
+:root[data-theme^="mass-weed"] .wl-input,
+:root[data-theme^="mass-weed"] .note-input,
+:root[data-theme^="mass-weed"] .pl-range{
+  border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px)}
+:root[data-theme^="mass-weed"] .search:focus,
+:root[data-theme^="mass-weed"] .sel-search:focus,
+:root[data-theme^="mass-weed"] .qms-search:focus,
+:root[data-theme^="mass-weed"] .sp-field:focus{
+  box-shadow:inset 0 0 0 1px var(--primary), 0 0 12px rgba(var(--accent-rgb),.22);outline:0}
+/* — Switches / segmented toggles / settings tabs — */
+:root[data-theme^="mass-weed"] .seg,
+:root[data-theme^="mass-weed"] .lang-toggle{
+  border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px)}
+:root[data-theme^="mass-weed"] .set-tab.on,
+:root[data-theme^="mass-weed"] .seg-b.on{
+  box-shadow:inset 0 -2px 0 var(--primary-hover), 0 0 12px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .set-tab{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.06em}
+/* — Skeleton: give the shimmer a cyan cast — */
+:root[data-theme^="mass-weed"] .mw-skel{
+  background-image:linear-gradient(90deg,transparent,rgba(94,200,240,.10),transparent)}
+/* — Base spinner (non-mw) picks up the glow — */
+:root[data-theme^="mass-weed"] .spinner{box-shadow:0 0 10px rgba(var(--accent-rgb),.25)}
+/* — Priority tag: hazard-lean colored edge — */
+:root[data-theme^="mass-weed"] .prtag{box-shadow:inset 0 0 0 1px currentColor;opacity:.95}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   7 · SIGNATURE HUD CUES — the two defining Mass Effect motifs the mockups
+   lead with on every screen (design/mass-weed-mockup/{dashboard,board}.html):
+   the KPI top-accent glow bar (.mw-kpi / .mw-col::after) and the glowing
+   left-accent bar on the active nav rail item (.mw-rail__item.is-active).
+   Pure chrome — pseudo-elements + shadow only, no layout-box change.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* KPI / telemetry tiles: a cyan top-edge accent that fades right, with bloom.
+   The tiles are chamfered in §2/§6, so the bar follows the cut top-left. */
+:root[data-theme^="mass-weed"] .kpi,
+:root[data-theme^="mass-weed"] .ekpi,
+:root[data-theme^="mass-weed"] .tele-card,
+:root[data-theme^="mass-weed"] .ana-tile,
+:root[data-theme^="mass-weed"] .xr-kpi{position:relative}
+:root[data-theme^="mass-weed"] .kpi::before,
+:root[data-theme^="mass-weed"] .ekpi::before,
+:root[data-theme^="mass-weed"] .tele-card::before,
+:root[data-theme^="mass-weed"] .ana-tile::before,
+:root[data-theme^="mass-weed"] .xr-kpi::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:2px;pointer-events:none;
+  background:linear-gradient(90deg, var(--primary), transparent 78%);
+  box-shadow:0 0 10px color-mix(in srgb, var(--primary) 60%, transparent);
+}
+
+/* Active nav rail item: make the base inset left-bar bloom, and add the
+   soft cyan text glow the mockup rail uses on the current screen. */
+:root[data-theme^="mass-weed"] .nav-item.active{
+  box-shadow:inset 3px 0 0 var(--primary), -1px 0 12px -2px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+/* Centered section headers with flanking rule lines (.mw-header-bar) — the
+   app's page/section titles that opt in via a .gf-hdr wrapper get the
+   symmetric cyan rules; harmless where the wrapper is absent. */
+:root[data-theme^="mass-weed"] .gf-hdr{
+  display:flex;align-items:center;gap:14px;justify-content:center}
+:root[data-theme^="mass-weed"] .gf-hdr::before,
+:root[data-theme^="mass-weed"] .gf-hdr::after{
+  content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,var(--primary-fg))}
+:root[data-theme^="mass-weed"] .gf-hdr::after{
+  background:linear-gradient(90deg,var(--primary-fg),transparent)}

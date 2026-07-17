@@ -290,12 +290,44 @@ GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.
 // mass-weed.css, so they never carry the data-skin-carbon marker.
 GF.THEME_CORE = { dark: 1, light: 1, suma: 1, 'mass-weed': 1, 'mass-weed-light': 1 };
 GF.THEMES = [
-  // EXCLUSIVE MASS WEED — the app ships only the two Mass Weed variants (dark
-  // HUD + its 'Cool Mist' light). The other core + Carbon skins' CSS still
-  // lives in app.css / skins.css (reversible), but they are intentionally NOT
-  // listed here, so the picker, demo, and splash only ever surface Mass Weed.
-  { id: 'mass-weed',       name: 'Mass Weed',        group: 'dark' },
-  { id: 'mass-weed-light', name: 'Mass Weed · Light', group: 'light' },
+  // Core — Mass Weed is the default; the other skins remain selectable.
+  { id: 'mass-weed',       name: 'Mass Weed (default)', group: 'dark' },
+  { id: 'mass-weed-light', name: 'Mass Weed · Cool Mist', group: 'light' },
+  { id: 'dark',  name: 'Plasma',           group: 'dark' },
+  { id: 'suma',  name: 'SUMA · Protoss',   group: 'dark' },
+  { id: 'light', name: 'Cool Mist',        group: 'light' },
+  // Carbon — dark
+  { id: 'blurple-chat',      name: 'Blurple Chat',      group: 'dark' },
+  { id: 'blush-slate-dark',  name: 'Blush Slate',       group: 'dark' },
+  { id: 'code-forge',        name: 'Code Forge',        group: 'dark' },
+  { id: 'digital-rain',      name: 'Digital Rain',      group: 'dark' },
+  { id: 'ebony-amber',       name: 'Ebony Amber',       group: 'dark' },
+  { id: 'forest',            name: 'Forest',            group: 'dark' },
+  { id: 'heart-of-darkness', name: 'Heart of Darkness', group: 'dark' },
+  { id: 'indigo-turquoise',  name: 'Indigo Turquoise',  group: 'dark' },
+  { id: 'lambda-core',       name: 'Lambda Core',       group: 'dark' },
+  { id: 'mocha-paws',        name: 'Mocha (Catppuccin)',group: 'dark' },
+  { id: 'nightfang',         name: 'Nightfang (Dracula)',group: 'dark' },
+  { id: 'nord',              name: 'Nord',              group: 'dark' },
+  { id: 'nordic',            name: 'Nordic',            group: 'dark' },
+  { id: 'solo-night',        name: 'Solo Night',        group: 'dark' },
+  { id: 'tropical-midnight', name: 'Tropical Midnight', group: 'dark' },
+  { id: 'vapor-classic',     name: 'Vapor Classic',     group: 'dark' },
+  { id: 'vapor-deck',        name: 'Vapor Deck',        group: 'dark' },
+  // Carbon — light
+  { id: 'amber-glow-light',     name: 'Amber Glow',      group: 'light' },
+  { id: 'aurora-light',         name: 'Aurora',          group: 'light' },
+  { id: 'azure-silence-light',  name: 'Azure Silence',   group: 'light' },
+  { id: 'blush-slate-light',    name: 'Blush Slate',     group: 'light' },
+  { id: 'console-horizon-light',name: 'Console Horizon', group: 'light' },
+  { id: 'jade-matrix-light',    name: 'Jade Matrix',     group: 'light' },
+  { id: 'jade-mint-light',      name: 'Jade Mint',       group: 'light' },
+  { id: 'kawaii',               name: 'Kawaii',          group: 'light' },
+  { id: 'miami-neon-light',     name: 'Miami Neon',      group: 'light' },
+  { id: 'playlist-mint-light',  name: 'Playlist Mint',   group: 'light' },
+  { id: 'retro-98',             name: 'Retro 98',        group: 'light' },
+  { id: 'steel-mist-light',     name: 'Steel Mist',      group: 'light' },
+  { id: 'winter-blush-light',   name: 'Winter Blush',    group: 'light' },
 ];
 GF.themeById = (id) => GF.THEMES.find(t => t.id === id);
 GF.curTheme = () => {
