@@ -23,22 +23,22 @@ test('QMS Studio zone: rail group, both views, graceful unavailable state', asyn
     await expect(page.locator('[data-nav="qmsknow"]')).toBeVisible();
   });
 
-  await test.step('SOP Registry renders with zone banner and the unavailable state', async () => {
+  await test.step('SOP Registry renders with zone banner and the retired state', async () => {
     await page.locator('[data-nav="qmsregistry"]').click();
     await expect(page.locator('.qms-zone')).toBeVisible({ timeout: 10_000 });
-    // no qms-api locally → proxy answers 503 with this exact detail string
+    // qms-api is retired platform-wide: its proxy 503 renders as an honest
+    // "retired" panel pointing at Document Studio — deliberately NO retry.
     await expect(page.locator('#view-root, main, body').first())
-      .toContainText('QMS service unavailable', { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /retry/i })).toBeVisible();
+      .toContainText('SOP Registry retired', { timeout: 15_000 });
   });
 
-  await test.step('Knowledge search renders and degrades the same way', async () => {
+  await test.step('Knowledge search renders and shows its retired state', async () => {
     await page.locator('[data-nav="qmsknow"]').click();
     await expect(page.locator('#qmsk-q')).toBeVisible({ timeout: 10_000 });
     await page.locator('#qmsk-q').fill('cleaning validation');
     await page.locator('#qmsk-q').press('Enter');
     await expect(page.locator('#view-root, main, body').first())
-      .toContainText('QMS service unavailable', { timeout: 15_000 });
+      .toContainText('Knowledge search retired', { timeout: 15_000 });
   });
 
   await test.step('Create (DocEngine wizard) renders and degrades gracefully', async () => {

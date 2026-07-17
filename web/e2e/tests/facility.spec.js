@@ -45,8 +45,9 @@ test('facility board: room renders, batch added, totals update', async ({ page }
     const cell = page.locator('.fac-room', { has: page.locator('.fr-nm', { hasText: 'Grow Room 1' }) });
     await expect(cell.locator('.fr-n')).toHaveText('96', { timeout: 10_000 });
     await expect(cell.locator('.fs-nm', { hasText: 'Gorilla Glue' })).toBeVisible();
-    // the Flowering KPI counts it
-    const kpi = page.locator('.kpi', { has: page.locator('.kpi-l', { hasText: /flowering/i }) });
-    await expect(kpi.locator('.kpi-v')).toHaveText('96');
+    // the Flowering resource-strip readout counts it (the totals row renders
+    // as .fac-res entries — icon + glowing count — not .kpi tiles)
+    const res = page.locator('.fac-res', { has: page.locator('.fac-res-l', { hasText: /flowering/i }) });
+    await expect(res.locator('.fac-res-v')).toHaveText('96');
   });
 });
