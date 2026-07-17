@@ -107,3 +107,19 @@ async def test_batch_changes_feed_the_activity_stream(client, admin_headers):
     # ...and nobody was inbox-notified (feed-only by design)
     inbox = (await client.get("/notifications", headers=admin_headers)).json()
     assert not any(n.get("object_id") == b["id"] for n in inbox)
+
+
+async def test_batch_phase_since_patch_accepts_real_date(client, admin_headers):
+    """PATCH /facility/batches/{id} with an explicit phase_since must bind via a
+    ::date cast (backdating a phase), not 500 on asyncpg's str→date rejection."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "grow_ps", "Grow PS")
+    b = await client.post("/facility/batches", json={
+        "room_id": room["id"], "strain": "Backdate Kush", "plant_count": 12,
+        "phase": "veg"}, headers=cu_h)
+    assert b.status_code == 201, b.text
+    bid = b.json()["id"]
+    # explicit phase_since, phase unchanged → the value is used verbatim (cast)
+    r = await client.patch(f"/facility/batches/{bid}", json={"phase_since": "2026-06-01"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert r.json()["phase_since"] == "2026-06-01"

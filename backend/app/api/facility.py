@@ -14,6 +14,8 @@ Access model (role gating here, org isolation via RLS as everywhere):
 Batch changes emit feed-only events (recipients=[]) so the activity stream
 shows plants moving through the facility without pinging anyone's inbox.
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -50,7 +52,7 @@ class BatchIn(BaseModel):
     strain: str = Field(max_length=120)
     plant_count: int = Field(ge=0, le=100000)
     phase: str
-    phase_since: str | None = None   # ISO date; defaults to today in the DB
+    phase_since: date | None = None   # defaults to today in the DB when omitted
     note: str | None = Field(default=None, max_length=500)
 
 
@@ -59,7 +61,7 @@ class BatchPatch(BaseModel):
     strain: str | None = Field(default=None, max_length=120)
     plant_count: int | None = Field(default=None, ge=0, le=100000)
     phase: str | None = None
-    phase_since: str | None = None
+    phase_since: date | None = None
     note: str | None = Field(default=None, max_length=500)
     is_active: bool | None = None
 
@@ -204,7 +206,12 @@ async def update_batch(batch_id: str, body: BatchPatch,
                 continue
             if val is None and col != "note":
                 continue
-            args.append(val); fields.append(f"{col}=${len(args)}")
+            if col == "phase_since":
+                # asyncpg won't bind a str to a date column without the cast
+                # (the create path does the same via COALESCE($6::date, …)).
+                args.append(val); fields.append(f"{col}=${len(args)}::date")
+            else:
+                args.append(val); fields.append(f"{col}=${len(args)}")
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

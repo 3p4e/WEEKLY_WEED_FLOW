@@ -220,8 +220,14 @@ GF.WWF = GF.WWF || {};
       // random one.
       try {
         const saved = localStorage.getItem('gf_theme') || 'mass-weed';
-        if (GF.setTheme && document.documentElement.dataset.theme !== saved) {
-          GF.setTheme(saved, { silent: true, noPersist: true });
+        // A valid saved skin is re-applied without touching storage. An invalid
+        // one (retired/corrupt/legacy id the pre-paint boot applied verbatim,
+        // matching no CSS) is HEALED: setTheme falls back to mass-weed and — by
+        // dropping noPersist — rewrites gf_theme, so the unstyled-flash can't
+        // recur on every load.
+        const valid = GF.themeById && GF.themeById(saved);
+        if (GF.setTheme && (!valid || document.documentElement.dataset.theme !== saved)) {
+          GF.setTheme(saved, { silent: true, noPersist: !!valid });
         }
       } catch (e) {}
       return _origLoadAndRender.apply(this, arguments);

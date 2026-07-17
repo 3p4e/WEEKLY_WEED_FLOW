@@ -36,7 +36,9 @@ GF.API = {
         // under them resets the reveal and eats whatever they were typing.
         if (hadSession && GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
       }
-      throw new Error('unauthorized');
+      const authErr = new Error('unauthorized');
+      authErr.status = 401;   // parity with the generic branch (callers key on e.status)
+      throw authErr;
     }
     if (!res.ok) {
       let detail = '';

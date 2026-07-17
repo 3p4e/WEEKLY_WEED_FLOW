@@ -1107,3 +1107,72 @@ async def test_batch_size_caps(client, admin_headers):
     r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
                           json={"items": [{"raw_label": "x"}] * 501}, headers=admin_headers)
     assert r.status_code == 422, r.text
+
+
+# ── Regression: 2026-07-17 backend audit fixes ──────────────────────────────
+async def test_result_partial_limit_inherits_spec_bound(client, admin_headers):
+    """A cited parameter that supplies only ONE limit must still inherit the
+    spec's other bound — a partial override must never silently disable it and
+    grade an out-of-spec value as compliant (GxP: never fabricate conformance)."""
+    spec = await _spec(client, admin_headers, material="PARTIAL-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "unit": "%",
+                                "lower_limit": 18.0, "upper_limit": 30.0}, headers=admin_headers)
+    param_id = p.json()["id"]
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-PARTIAL")
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Total THC", "parameter_id": param_id,
+                                "lower_limit": 18.0, "result_numeric": 40.0}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["upper_limit"] == 30.0        # inherited from the spec
+    assert body["complies"] is False          # 40 > 30 — not graded compliant
+
+
+async def test_reviewer_cannot_be_a_result_analyst(client, admin_headers):
+    """Second-person review: the reviewer must differ from ANYONE who entered a
+    result, not only the CoA's analyst-of-record (each result stamps its own
+    analyst_id)."""
+    spec = await _spec(client, admin_headers, material="REV2-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-REV2")   # analyst-of-record = admin
+    _, b_h = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Water", "result_numeric": 5.0, "upper_limit": 10.0},
+                          headers=b_h)
+    assert r.status_code == 201, r.text
+    # B produced data on this CoA → B may not review it (even though B != creator)
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"}, headers=b_h)
+    assert r.status_code == 403, r.text
+    # a third, uninvolved qualified person may
+    _, c_h = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"}, headers=c_h)
+    assert r.status_code == 200 and r.json()["status"] == "REVIEWED"
+
+
+async def test_spec_acceptance_criteria_locked_after_authoring(client, admin_headers):
+    """Acceptance criteria freeze once the spec leaves the authoring states — the
+    same control the child parameters already enforce. notes + a lifecycle
+    transition stay allowed."""
+    spec = await _spec(client, admin_headers, material="LOCK-MAT")
+    for tgt in ("QC_REVIEW", "QA_APPROVED", "NUMBERED", "TRAINED", "ACTIVE"):
+        assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200, tgt
+    r = await client.patch(f"/qc/specifications/{spec['id']}",
+                           json={"thc_acceptance_max": 99.0}, headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"notes": "audit note"},
+                               headers=admin_headers)).status_code == 200
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "UNDER_CHANGE"},
+                               headers=admin_headers)).status_code == 200
+
+
+async def test_malformed_uuid_returns_4xx_not_500(client, admin_headers):
+    """A garbage {id} path → clean 404; a garbage uuid BODY field → 422 — never a
+    500 from asyncpg trying to cast the value."""
+    assert (await client.get("/qc/specifications/not-a-uuid", headers=admin_headers)).status_code == 404
+    assert (await client.get("/qc/samples/xyz", headers=admin_headers)).status_code == 404
+    assert (await client.get("/qc/certificates/nope", headers=admin_headers)).status_code == 404
+    r = await client.post("/qc/field-records",
+                          json={"sampling_location": "Field A", "destination_facility": "Lab",
+                                "sampled_by_id": "not-a-uuid"}, headers=admin_headers)
+    assert r.status_code == 422, r.text

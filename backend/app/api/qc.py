@@ -14,6 +14,7 @@ stored NULL for a human to fill. Every table is audited by the shared
 hash-chained trigger. Human ids are `PP-SPEC-YYYY-NNNN`, stamped server-side
 from a Postgres sequence so the audit trail attributes the number.
 """
+import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -56,6 +57,26 @@ _SPEC_TRANSITIONS = {
 }
 # Structure/parameters may only change while the spec is still being authored.
 _EDITABLE_STATUSES = {"INITIATED", "DRAFT", "QC_REVIEW"}
+
+
+def _uuid_or_404(value, what: str = "Resource") -> None:
+    """A malformed {id} path segment must be a clean 404, not a 500 from asyncpg
+    trying to cast it to a uuid inside the lookup query (mirrors auth._require_uuid)."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(404, f"{what} not found")
+
+
+def _uuid_or_422(value, field: str) -> None:
+    """A user-supplied uuid BODY field (cross-DB actor refs have no FK to catch a
+    bad value) must 422 on a malformed id rather than 500 on the insert."""
+    if value is None:
+        return
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(422, f"{field} must be a valid id")
 
 
 class SpecIn(BaseModel):
@@ -143,6 +164,7 @@ async def list_specs(material_code: str | None = None, status: str | None = None
 
 @router.get("/specifications/{spec_id}")
 async def get_spec(spec_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(spec_id, "Specification")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1", spec_id)
         if spec is None:
@@ -190,6 +212,17 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
         cur = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
         if cur is None:
             raise HTTPException(404, "Specification not found")
+        # The pharmaceutically load-bearing fields (acceptance criteria, grade,
+        # effective date, identity) are locked once the spec leaves authoring —
+        # the same control the child parameters already enforce. Outside the
+        # editable states only a lifecycle `status` move + `notes` may change;
+        # a substantive revision goes through a new version, not an in-place edit.
+        if cur["status"] not in _EDITABLE_STATUSES:
+            locked = {k for k in patch if k not in ("status", "notes")}
+            if locked:
+                raise HTTPException(
+                    409, f"Specification is {cur['status']}; {', '.join(sorted(locked))} "
+                         "cannot be edited after authoring — supersede with a new version instead")
         # A status change is a guarded lifecycle transition, validated first.
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -387,6 +420,7 @@ async def list_samples(batch_id: str | None = None, status: str | None = None,
 
 @router.get("/samples/{sample_id}")
 async def get_sample(sample_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(sample_id, "Sample")
     async with rls(user) as c:
         s = await c.fetchrow("SELECT * FROM qc_samples WHERE id=$1", sample_id)
         if s is None:
@@ -572,6 +606,7 @@ async def list_coas(batch_id: str | None = None, status: str | None = None,
 
 @router.get("/certificates/{coa_id}")
 async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
@@ -630,9 +665,14 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
                 raise HTTPException(422, "Unknown spec parameter")
             if coa["specification_id"] is not None and p["spec_id"] != coa["specification_id"]:
                 raise HTTPException(422, "Parameter does not belong to this certificate's specification")
-            if lo is None and hi is None:
-                lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
-                hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
+            # Snapshot EACH side independently: a caller who supplies only one
+            # limit must still inherit the spec's other bound, or a partial
+            # override would silently disable it (an over-limit value passing as
+            # compliant — a fabricated conformance, which GxP forbids).
+            if lo is None and p["lower_limit"] is not None:
+                lo = float(p["lower_limit"])
+            if hi is None and p["upper_limit"] is not None:
+                hi = float(p["upper_limit"])
         complies, status = _evaluate(body.result_numeric, lo, hi)
         row = await c.fetchrow(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
@@ -676,10 +716,16 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
             if target in _COA_QP_TARGETS and user["role"] not in _QP_ROLES:
                 raise HTTPException(403, f"{target} is a Qualified-Person decision")
-            # GxP second-person review: the reviewer must not be the analyst who
-            # entered the results.
+            # GxP second-person review: the reviewer must not be anyone who
+            # produced the data — neither the CoA's analyst-of-record NOR any
+            # analyst who entered a result on it (each qc_results row stamps its
+            # own analyst_id, so checking only the certificate's would let a
+            # second data-enterer sign off their own measurements).
             if target == "REVIEWED":
-                if cur["analyst_id"] and str(cur["analyst_id"]) == str(user["id"]):
+                entered = await c.fetchval(
+                    "SELECT 1 FROM qc_results WHERE coa_id=$1 AND analyst_id=$2 LIMIT 1",
+                    coa_id, user["id"])
+                if entered or (cur["analyst_id"] and str(cur["analyst_id"]) == str(user["id"])):
                     raise HTTPException(403, "The reviewer must be a different person than the analyst")
                 extra_args.append(user["id"]); extra_sql.append(f"reviewer_id=${'PLACEHOLDER'}")
             if target == "APPROVED":
@@ -996,6 +1042,7 @@ async def list_oos(batch_id: str | None = None, status: str | None = None,
 
 @router.get("/oos/{oos_id}")
 async def get_oos(oos_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(oos_id, "OOS record")
     async with rls(user) as c:
         oos = await c.fetchrow("SELECT * FROM qc_oos_records WHERE id=$1", oos_id)
         if oos is None:
@@ -1860,7 +1907,9 @@ async def create_rqs(body: RqsIn, user: dict = Depends(require_role(*_WRITERS)))
 
 @router.patch("/sampling-requests/{rqs_id}")
 async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(rqs_id, "Sampling request")
     patch = body.model_dump(exclude_unset=True)
+    _uuid_or_422(patch.get("assigned_to_id"), "assigned_to_id")
     async with rls(user) as c:
         cur = await c.fetchrow(
             "SELECT status, registration_deadline FROM qc_sampling_requests WHERE id=$1", rqs_id)
@@ -1928,6 +1977,8 @@ async def get_sfr(sfr_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
 
 @router.post("/field-records", status_code=201)
 async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS))):
+    for _f in ("rqs_id", "sample_id", "sampled_by_id", "escort_id"):
+        _uuid_or_422(getattr(body, _f), _f)
     async with rls(user) as c:
         if body.rqs_id:
             if await c.fetchrow("SELECT id FROM qc_sampling_requests WHERE id=$1", body.rqs_id) is None:
@@ -1997,6 +2048,9 @@ async def list_custody(sample_id: str, user: dict = Depends(require_role(*ELEVAT
 async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(require_role(*_WRITERS))):
     if body.transfer_type is not None and body.transfer_type not in _TRANSFER_TYPES:
         raise HTTPException(422, f"transfer_type must be one of: {', '.join(_TRANSFER_TYPES)}")
+    _uuid_or_404(sample_id, "Sample")
+    for _f in ("from_user_id", "to_user_id", "sfr_id"):
+        _uuid_or_422(getattr(body, _f), _f)
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", sample_id) is None:
             raise HTTPException(404, "Sample not found")

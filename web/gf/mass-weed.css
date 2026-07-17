@@ -576,13 +576,116 @@
   box-shadow:inset 3px 0 0 var(--primary), -1px 0 12px -2px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 
-/* Centered section headers with flanking rule lines (.mw-header-bar) — the
-   app's page/section titles that opt in via a .gf-hdr wrapper get the
-   symmetric cyan rules; harmless where the wrapper is absent. */
-:root[data-theme^="mass-weed"] .gf-hdr{
-  display:flex;align-items:center;gap:14px;justify-content:center}
-:root[data-theme^="mass-weed"] .gf-hdr::before,
-:root[data-theme^="mass-weed"] .gf-hdr::after{
-  content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,var(--primary-fg))}
-:root[data-theme^="mass-weed"] .gf-hdr::after{
-  background:linear-gradient(90deg,var(--primary-fg),transparent)}
+/* ═══════════════════════════════════════════════════════════════════════
+   8 · CANONICAL-FIDELITY PASS — closes the real gaps vs design/mass-weed-
+   mockup/ found in the coverage audit, all mapped onto REAL shipped classes
+   (no new markup). Brings the traced edge-glow, panel scanlines, the corner-
+   bracket reticle, section-header markers, moving sheen, dept-home HUD, and
+   nav-group rules to live fidelity.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 8a — MASKED CYAN EDGE-GLOW (the mockup's defining trace-outline look).
+   A 1px cyan stroke that follows each chamfer via mask-composite, instead of
+   the box-shadow ring that clip-path was truncating at the cut corners.
+   Uses ::after (every target's ::before is free-or-scanline; none own ::after). */
+:root[data-theme^="mass-weed"] .card,
+:root[data-theme^="mass-weed"] .modal,
+:root[data-theme^="mass-weed"] .panel,
+:root[data-theme^="mass-weed"] .kcol,
+:root[data-theme^="mass-weed"] .kcard,
+:root[data-theme^="mass-weed"] .ana-tile,
+:root[data-theme^="mass-weed"] .ana-panel,
+:root[data-theme^="mass-weed"] .xr-sec,
+:root[data-theme^="mass-weed"] .xr-kpi,
+:root[data-theme^="mass-weed"] .kpi,
+:root[data-theme^="mass-weed"] .ekpi,
+:root[data-theme^="mass-weed"] .tele-card,
+:root[data-theme^="mass-weed"] .fac-panel,
+:root[data-theme^="mass-weed"] .dash-card,
+:root[data-theme^="mass-weed"] .team-card{position:relative}
+:root[data-theme^="mass-weed"] .card::after,
+:root[data-theme^="mass-weed"] .modal::after,
+:root[data-theme^="mass-weed"] .panel::after,
+:root[data-theme^="mass-weed"] .kcol::after,
+:root[data-theme^="mass-weed"] .kcard::after,
+:root[data-theme^="mass-weed"] .ana-tile::after,
+:root[data-theme^="mass-weed"] .ana-panel::after,
+:root[data-theme^="mass-weed"] .xr-sec::after,
+:root[data-theme^="mass-weed"] .xr-kpi::after,
+:root[data-theme^="mass-weed"] .kpi::after,
+:root[data-theme^="mass-weed"] .ekpi::after,
+:root[data-theme^="mass-weed"] .tele-card::after,
+:root[data-theme^="mass-weed"] .fac-panel::after,
+:root[data-theme^="mass-weed"] .dash-card::after,
+:root[data-theme^="mass-weed"] .team-card::after{
+  content:"";position:absolute;inset:0;clip-path:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(150deg, var(--primary), var(--blue-700) 55%, var(--primary));
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; opacity:.55;
+}
+
+/* 8b — SCANLINE overlay on the §6 panel families that had none (.card/.modal
+   already carry it in app.css; KPI tiles spend ::before on the top-accent). */
+:root[data-theme^="mass-weed"] .panel::before,
+:root[data-theme^="mass-weed"] .kcol::before,
+:root[data-theme^="mass-weed"] .kcard::before,
+:root[data-theme^="mass-weed"] .xr-sec::before,
+:root[data-theme^="mass-weed"] .ana-panel::before,
+:root[data-theme^="mass-weed"] .fac-panel::before,
+:root[data-theme^="mass-weed"] .dash-card::before,
+:root[data-theme^="mass-weed"] .team-card::before{
+  content:"";position:absolute;inset:0;background:var(--scanlines);opacity:.35;pointer-events:none}
+
+/* 8c — CORNER-BRACKET RETICLE (the signature ME targeting frame) made live on
+   the real exec-dashboard KPI strip, drawn in its margin so it frames the row. */
+:root[data-theme^="mass-weed"] .exec-kpis{position:relative}
+:root[data-theme^="mass-weed"] .exec-kpis::before,
+:root[data-theme^="mass-weed"] .exec-kpis::after{
+  content:"";position:absolute;width:14px;height:14px;pointer-events:none;
+  border:1.5px solid var(--primary);opacity:.7;filter:drop-shadow(0 0 3px rgba(var(--accent-rgb),.6))}
+:root[data-theme^="mass-weed"] .exec-kpis::before{top:-6px;left:-4px;border-right:0;border-bottom:0}
+:root[data-theme^="mass-weed"] .exec-kpis::after{bottom:-6px;right:-4px;border-left:0;border-top:0}
+
+/* 8d — SECTION-HEADER MARKER: replaces the dead .gf-hdr rule with a universal,
+   layout-safe leading cyan accent bar + glow on the real .view-title (rendered
+   on every screen). Non-breaking — .view-head keeps its flex row + actions. */
+:root[data-theme^="mass-weed"] .view-title{
+  display:inline-flex;align-items:center;gap:11px;text-shadow:0 0 14px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .view-title::before{
+  content:"";width:4px;height:.86em;flex:none;
+  background:linear-gradient(180deg,var(--primary-hover),var(--primary));
+  box-shadow:0 0 9px rgba(var(--accent-rgb),.65)}
+
+/* 8e — MOVING SHEEN on the generic progress bars (was only on .tp-fill). */
+:root[data-theme^="mass-weed"] .track>span,
+:root[data-theme^="mass-weed"] .ana-hb-f,
+:root[data-theme^="mass-weed"] .wl-fill{position:relative;overflow:hidden}
+:root[data-theme^="mass-weed"] .track>span::after,
+:root[data-theme^="mass-weed"] .ana-hb-f::after,
+:root[data-theme^="mass-weed"] .wl-fill::after{
+  content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+  animation:mw-sheen 3.5s ease-in-out infinite}
+
+/* 8f — DEPT-HOME HUD (was entirely un-themed): grouped-key chips, icon glow,
+   condensed labels, console empty-state — onto the real .dh-* classes. */
+:root[data-theme^="mass-weed"] .dh-group-key{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.06em;
+  color:var(--primary-fg);background:rgba(var(--accent-rgb),.1);
+  box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.3)}
+:root[data-theme^="mass-weed"] .dh-icon{box-shadow:0 0 12px rgba(var(--accent-rgb),.25)}
+:root[data-theme^="mass-weed"] .dh-presets-lbl,
+:root[data-theme^="mass-weed"] .dh-empty-title{
+  font-family:var(--font-display);letter-spacing:.08em;text-transform:uppercase}
+
+/* 8g — NAV-GROUP flanking rule (mirrors the mockup rail .mw-rail__group::after). */
+:root[data-theme^="mass-weed"] .nav-group{display:flex;align-items:center;gap:8px}
+:root[data-theme^="mass-weed"] .nav-group::after{
+  content:"";flex:1;height:1px;opacity:.35;
+  background:linear-gradient(90deg,currentColor,transparent)}
+
+@media (prefers-reduced-motion: reduce){
+  :root[data-theme^="mass-weed"] .track>span::after,
+  :root[data-theme^="mass-weed"] .ana-hb-f::after,
+  :root[data-theme^="mass-weed"] .wl-fill::after{animation:none}
+}
