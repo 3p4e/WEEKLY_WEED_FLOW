@@ -774,3 +774,23 @@ qms-registry "retired — use Document Studio" panel (from PR #33, which had nev
 been promoted) — the intended cosmetic improvement; prod functions as before.
 **Rollback** = revert the two image tags to `v53`/`v74` + `docker compose up -d
 --no-deps backend frontend` (no DB step, since no migration).
+
+## Frontend theme — EXCLUSIVE Mass Weed (2026-07-16)
+
+Owner directive: "the app must be created with MASS WEED theme skin all the way."
+Mass Weed was already the shipped default; this makes it the **only** skin.
+Frontend-only, no backend/migration:
+
+- **`web/gf/core.js`** — `GF.THEMES` reduced from ~38 skins to the **two Mass Weed
+  variants** (`mass-weed` dark HUD + `mass-weed-light` "Cool Mist"). The picker,
+  demo showcase, and 3D-leaf splash are all data-driven off `GF.THEMES`, so they
+  now only ever surface Mass Weed; the header theme button becomes a Mass Weed
+  dark/light toggle. `setTheme`'s unknown-skin fallback → `mass-weed` (was `dark`).
+- **`web/index.html`** — the pre-paint boot script now **whitelists** the two Mass
+  Weed variants: any user whose saved `gf_theme` was a now-retired skin is snapped
+  to `mass-weed` and the stale preference is overwritten — so the existing roster
+  migrates onto Mass Weed on next load. Both variants are core skins, so
+  `data-skin-carbon` is never set.
+- **Other skins' CSS stays** in `app.css`/`skins.css` (unreachable via the UI) — a
+  clean revert = re-add entries to `GF.THEMES` + restore the boot whitelist.
+- SW `wwf-shell-v3.40.0`. `node --check` clean. Deploy: frontend image only.

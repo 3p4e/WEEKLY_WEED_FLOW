@@ -3,7 +3,7 @@
 <head>
   <!-- Set the real theme before any CSS paints — reading it later (after
        stylesheets load) would flash the wrong theme for a light-mode user. -->
-  <script>try{var t=localStorage.getItem('gf_theme');if(t){var r=document.documentElement;r.dataset.theme=t;/* Carbon skins (anything but the 3 core themes) carry a marker so their shared derived-token block applies. Set synchronously so there's no flash. */ if(['dark','light','suma','mass-weed','mass-weed-light'].indexOf(t)<0)r.setAttribute('data-skin-carbon','');}}catch(e){}</script>
+  <script>try{var r=document.documentElement;var t=localStorage.getItem('gf_theme');/* EXCLUSIVE MASS WEED: only the two Mass Weed variants are valid; anyone whose saved skin was retired snaps back to Mass Weed (and we overwrite the stale preference). Both variants are core skins, so no data-skin-carbon marker is ever needed. */ if(t!=='mass-weed'&&t!=='mass-weed-light'){t='mass-weed';try{localStorage.setItem('gf_theme','mass-weed');}catch(e){}}r.dataset.theme=t;r.removeAttribute('data-skin-carbon');}catch(e){}</script>
   <meta charset="utf-8">
   <!-- no maximum-scale: pinch-zoom must stay available (a11y) -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
