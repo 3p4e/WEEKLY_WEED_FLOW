@@ -799,9 +799,9 @@ body.demo-on .main{padding-bottom:56px}
 .tree-row:hover .tree-title{color:var(--ink)}
 .tree-range{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);white-space:nowrap}
 .tree-row .pill{font-size:9.5px;padding:2px 7px}
-.tree-edit{opacity:0;transition:opacity .12s}
-.tree-row:hover .tree-edit{opacity:1}
-@media (max-width:760px){.tree-range{display:none}.tree-edit{opacity:1}}
+.tree-edit,.tree-add{opacity:0;transition:opacity .12s}
+.tree-row:hover .tree-edit,.tree-row:hover .tree-add{opacity:1}
+@media (max-width:760px){.tree-range{display:none}.tree-edit,.tree-add{opacity:1}}
 
 /* ── Popup chooser (chooser.js) — replaces native <select> app-wide ────── */
 .sel-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;

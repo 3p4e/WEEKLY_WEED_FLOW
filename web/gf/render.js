@@ -363,6 +363,7 @@ GF.render = {
           <span class="tp-val">${p}%</span></span>` : ''; })()}
         <span class="pill s-${c.status}" title="${GF.t('change_status') || 'Change status'}"
           onclick="event.stopPropagation();GF.pickStatus('${c.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
+        <button class="mini-btn tree-add" title="${GF.t('add_subtask')}" onclick="event.stopPropagation();GF.openAdd(${JSON.stringify(c.weekId)},'${c.id}')">${GF.icon('plus')}</button>
         <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
       </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
     }).join('');
