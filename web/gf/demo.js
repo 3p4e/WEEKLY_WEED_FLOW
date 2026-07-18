@@ -8,7 +8,7 @@
    wiped on exit and again on the next start.
 
    Same rules as the previous (in-memory) demo instalment:
-     · two sample casts alternate per start (cartoon crew ↔ Arrakis spice ops);
+     · one narrative — Arrakis / Spice Production ("the spice must flow");
      · a RANDOM skin is applied on every start (the visitor's own theme is
        remembered and restored on exit);
      · nothing is saved; never connected to the production database (the /demo
@@ -20,24 +20,19 @@ window.GF = window.GF || {};
 
 GF.DEMO = (function () {
   const KEY = 'wwf_demo';                       // sessionStorage — this tab is a demo
-  const CAST_KEY = 'wwf_demo_cast';             // localStorage — flips on every enter()
   const PREV_THEME_KEY = 'wwf_demo_prev_theme'; // localStorage — visitor's own skin
-  const CASTS = {
-    cartoon: { en: 'Cartoon crew', mk: 'Цртана екипа' },
-    dune:    { en: 'Arrakis spice ops', mk: 'Аракис — зачин' },
-  };
+  const CAST = 'dune';                          // one narrative: Arrakis / Spice Production
+  const CAST_LABEL = { en: 'Arrakis · Spice Production', mk: 'Аракис · Производство на зачин' };
   const active = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; } };
-  const cast = () => { try { return localStorage.getItem(CAST_KEY) === 'dune' ? 'dune' : 'cartoon'; } catch (e) { return 'cartoon'; } };
 
   async function enter() {
     const btn = document.querySelector('.gf-demo-float');
     if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
-    const next = cast() === 'cartoon' ? 'dune' : 'cartoon';
     let data;
     try {
       const r = await fetch('/demo/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cast: next }),
+        body: JSON.stringify({ cast: CAST }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || ('HTTP ' + r.status));
       data = await r.json();
@@ -49,7 +44,6 @@ GF.DEMO = (function () {
       return;
     }
     try {
-      localStorage.setItem(CAST_KEY, data.cast || next);
       // Random skin per start (always different from the one on screen);
       // the visitor's own theme is remembered once and restored on exit.
       if (GF.THEMES && GF.THEMES.length) {
@@ -95,10 +89,10 @@ GF.DEMO = (function () {
     const b = document.createElement('div');
     b.id = 'gf-demo-banner';
     const mk = (GF.state && GF.state.lang) === 'mk';
-    const label = CASTS[cast()] || CASTS.cartoon;
+    const label = CAST_LABEL;
     b.innerHTML = `<span class="gfdb-dot"></span><b>${mk ? 'ДЕМО' : 'DEMO'} · ${mk ? label.mk : label.en}</b>
-      <span>${mk ? 'примерни податоци · екипата и изгледот се менуваат при секој старт · промените не се зачувуваат · не е поврзано со продукциската база'
-                 : 'sample data · cast & skin rotate every start · changes are not saved · not connected to the production database'}</span>
+      <span>${mk ? 'примерни податоци · изгледот се менува при секој старт · промените не се зачувуваат · не е поврзано со продукциската база'
+                 : 'sample data · skin rotates every start · changes are not saved · not connected to the production database'}</span>
       <button onclick="GF.DEMO.exit()">${mk ? 'Излези од демо' : 'Exit demo'}</button>`;
     document.body.appendChild(b);
     document.body.classList.add('demo-on');

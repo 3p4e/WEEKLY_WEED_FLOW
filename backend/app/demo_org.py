@@ -18,8 +18,9 @@ Invariants (from the platform's own rules):
 - No ai_agent_bindings are seeded — every AI surface degrades gracefully
   ("no binding"), so anonymous visitors can never invoke real Letta agents.
 
-Both sample casts from the old demo are kept (cartoon crew / Arrakis spice
-ops) and alternate per start, same rules as before.
+The demo runs a single narrative — Arrakis / Spice Production ("the spice must
+flow"). A random visual skin is still applied on every start (kept as before);
+only the cast/narrative is fixed.
 """
 import secrets
 import uuid
@@ -78,121 +79,10 @@ def _username(full_name: str) -> str:
     return "".join(out).strip(".")
 
 
-# ── the two casts (ported from the retired in-memory demo.js) ───────────────
+# ── the demo cast (Arrakis / Spice Production) ─────────────────────────────
 # people: (key, full_name, role, dept_code|None, function_role)
 # tasks:  dicts; owner/helpers reference people keys; dept is a dept code;
 #         notes: (person_key, day_label, text); w: prev|cur|next (default cur)
-
-def _cast_cartoon():
-    people = [
-        ("admin",   "Mickey Mouse",   "ADMIN",  None,                "System Administrator"),
-        ("owner",   "Scrooge McDuck", "OWNER",  None,                "Owner"),
-        ("ceo",     "Minnie Mouse",   "CEO",    None,                "Chief Executive Officer"),
-        ("coo",     "Daisy Duck",     "COO",    None,                "Chief Operating Officer"),
-        ("qp",      "Dexter",         "QP",     None,                "Qualified Person"),
-        ("qa",      "Lisa Simpson",   "QA_MGR", "quality_assurance", "QA Manager"),
-        ("qc",      "Donald Duck",    "QC_MGR", "qc",                "QC Manager"),
-        ("pr",      "Goofy",          "PR_MGR", "production",        "Production Manager"),
-        ("cu",      "Bugs Bunny",     "CU_MGR", "cultivation",       "Cultivation Manager"),
-        ("wh",      "Popeye",         "WH_MGR", "logistics",         "Warehouse Manager"),
-        ("se",      "Scooby-Doo",     "SE_MGR", "security",          "Security Manager"),
-        ("mu",      "Handy Manny",    "MU_MGR", "tooling",           "Maintenance Manager"),
-        ("op_pr",   "SpongeBob",      "USER",   "production",        "Production Operator"),
-        ("op_wh",   "Patrick Star",   "USER",   "logistics",         "Warehouse Operator"),
-        ("op_cu",   "Jerry",          "USER",   "cultivation",       "Grow Room Operator"),
-        ("op_qc",   "Tweety",         "USER",   "qc",                "Lab Technician"),
-    ]
-    batch = "GC-042"
-    tasks = [
-        # last week
-        dict(w="prev", title=f'Harvest Flower Room 3 — batch {batch} "Golden Carrot" | Берба во соба 3 — серија {batch}',
-             dept="cultivation", owner="cu", helpers=["op_cu"], status="completed", priority="high",
-             days=["Mon", "Tue"], tags=[batch, "harvest"], ref="SOP-CU-014",
-             notes=[("cu", "Tue", "Harvest complete: 42.5 kg wet weight, all trolleys transferred to drying."),
-                    ("owner", "Tue", "Excellent yield. I want the drying loss figure on my desk the moment it exists.")]),
-        dict(w="prev", title="Load drying room 2 and set environmental program | Полнење на сушара 2",
-             dept="production", owner="pr", helpers=["op_pr"], status="completed",
-             days=["Tue", "Wed"], tags=[batch, "drying"], ref="SOP-PR-007"),
-        dict(w="prev", title="Night-shift environmental checks (weekend) | Ноќни проверки на параметри",
-             dept="security", owner="se", status="completed", days=["Sat", "Sun"], tags=["monitoring"],
-             sessions=[("se", "prev", 5, 22, 4.5, "Sat night round"),
-                       ("se", "prev", 6, 10, 4.5, "Sun checks")],
-             notes=[("se", "Sun", "Ruh-roh — RH spiked to 62% at 03:00, dehumidifier #2 restarted, stable after.")]),
-        dict(w="prev", title="Replace HEPA pre-filters, corridor B | Замена на HEPA предфилтри",
-             dept="tooling", owner="mu", status="completed", days=["Fri"],
-             type="validation", tags=["HVAC"], ref="PM-2026-31"),
-        # this week — the batch chain
-        dict(title=f"Trim & weigh dried batch {batch} | Тримирање и мерење на {batch}",
-             desc="Dry trim, record net weight per container, transfer to QC sampling.",
-             dept="production", owner="pr", helpers=["op_pr"], status="ongoing", priority="critical",
-             days=["Mon", "Tue", "Wed"], tags=[batch, "trim"], ref="SOP-PR-009", est=24,
-             sessions=[("op_pr", "cur", 0, 8, 8, "Trim day 1"),
-                       ("pr", "cur", 0, 17, 3, "Catch-up after scale drift")],
-             notes=[("op_pr", "Mon", "Aye aye! First 12 containers trimmed — I'm ready!"),
-                    ("pr", "Tue", "Gawrsh, scale #2 drifted 0.3 g — Maintenance notified, using scale #1 meanwhile."),
-                    ("ceo", "Tue", "Please keep daily net-weight totals in the notes — board wants the drying-loss trend.")],
-             comments=[("qc", "Hand-off window is Wed 09:00 — QC booth is booked. Don't be late."),
-                       ("pr", "We'll be there! Probably. Almost certainly.")]),
-        dict(title=f"QC sampling of batch {batch} per sampling plan | QC узорцирање на {batch}",
-             desc="Sample per SOP-QC-003 after trim hand-off from Production; deliver to lab same day.",
-             dept="qc", owner="qc", helpers=["op_qc"], status="ongoing", priority="critical",
-             days=["Wed", "Thu"], tags=[batch, "sampling"], ref="SOP-QC-003", type="lab", est=8,
-             notes=[("qc", "Wed", "Sampling booth prepped. If Production is late AGAIN I will not be responsible for my temper.")]),
-        dict(title=f"Microbiology + potency testing {batch} | Микробиологија и потентност {batch}",
-             dept="qc", owner="op_qc", status="pending", priority="high",
-             days=["Thu", "Fri"], tags=[batch, "lab"], type="lab", ref="TM-114"),
-        dict(title=f"Batch record review & release dossier {batch} | Преглед на серија и досие за {batch}",
-             desc="QA review of executed batch record; assemble release dossier for QP decision.",
-             dept="quality_assurance", owner="qa", status="pending", priority="high",
-             days=["Fri"], tags=[batch, "release"], type="document", ref=f"BR-{batch}",
-             notes=[("qa", "Mon", "Pre-review checklist ready. I refuse to let a single uninitialled entry through.")]),
-        dict(title=f"QP certification decision — batch {batch} | Одлука за сертификација на {batch}",
-             dept="quality_assurance", owner="qp", status="pending", priority="critical",
-             days=["Fri"], tags=[batch, "release"], due="cur_end", ref="QP-CERT-042"),
-        dict(title=f"Reserve quarantine bay & shipping paperwork {batch} | Карантин и шпедиција за {batch}",
-             dept="logistics", owner="wh", helpers=["op_wh"], status="pending",
-             days=["Fri"], tags=[batch, "shipping"],
-             notes=[("wh", "Mon", "Bay 4 cleared and labeled. I yam ready when QA is.")]),
-        # this week — the rest of the facility
-        dict(title="Transplant 240 clones to Veg Room 1 | Пресадување 240 резници во вегетативна соба 1",
-             dept="cultivation", owner="cu", helpers=["op_cu"], status="ongoing", priority="high",
-             days=["Mon", "Tue"], tags=["new-genetics", "propagation"], est=16,
-             notes=[("op_cu", "Mon", "Trays 1–8 done, rooting hormone lot recorded."),
-                    ("owner", "Mon", "These clones cost me a fortune — I expect a 95% take rate, not a penny less!")]),
-        dict(title="Repair irrigation valve, Veg Room 2 | Поправка на вентил за наводнување",
-             dept="tooling", owner="mu", status="stuck", priority="critical", days=["Tue"], tags=["irrigation"],
-             blocker="Replacement valve stuck in customs — broker chasing daily; ETA Thursday.",
-             notes=[("mu", "Tue", "We can fix it! …as soon as the part actually arrives.")]),
-        dict(title="Weekly perimeter & camera audit | Неделна проверка на периметар и камери",
-             dept="security", owner="se", status="ongoing", days=["Wed"], tags=["audit"]),
-        dict(title="Investigate temperature deviation DEV-2026-089 | Истрага за отстапување DEV-2026-089",
-             dept="quality_assurance", owner="qa", helpers=["mu"], status="review", priority="high",
-             days=["Wed", "Thu"], type="capa", tags=["deviation", "HVAC"], ref="DEV-2026-089",
-             notes=[("qa", "Thu", "Root cause: compressor cycling. CAPA drafted, waiting Maintenance countersign.")]),
-        dict(title="Update SOP-PR-007 (hang-drying process) | Ажурирање на SOP-PR-007",
-             dept="production", owner="pr", status="review", type="sop", days=["Thu"], tags=["GMP", "SOP"], ref="SOP-PR-007"),
-        dict(title="Cycle count — packaging materials | Попис на пакувачки материјали",
-             dept="logistics", owner="op_wh", status="postponed", days=["Wed"], tags=["inventory"],
-             notes=[("op_wh", "Wed", "Uhh… moved to next week, the forklift and I had a disagreement.")]),
-        dict(title="Weekly management meeting — production status | Неделен колегиум за производство",
-             dept="production", owner="ceo", helpers=["coo", "pr", "cu", "qc"],
-             status="completed", type="meeting", days=["Mon"]),
-        # next week
-        dict(w="next", title=f"Package released batch {batch} (400 g + 10 g) | Пакување на {batch}",
-             dept="production", owner="pr", helpers=["op_pr"], status="pending", priority="high",
-             days=["Mon", "Tue"], tags=[batch, "packaging"]),
-        dict(w="next", title=f"Ship {batch} to distributor + CoA pack | Испорака на {batch} со CoA",
-             dept="logistics", owner="wh", status="pending", priority="high", days=["Wed"], tags=[batch, "shipping"]),
-        dict(w="next", title="Prepare mother-plant room for new genetics | Подготовка на соба за мајки — нова генетика",
-             dept="cultivation", owner="cu", helpers=["op_cu"], status="pending", priority="critical",
-             days=["Mon", "Tue", "Wed"], tags=["new-genetics", "quarantine"]),
-        dict(w="next", title="Environmental monitoring re-qualification | Реквалификација на мониторинг на средина",
-             dept="qc", owner="qc", status="pending", type="validation", days=["Thu", "Fri"], tags=["GMP", "EM"]),
-    ]
-    return dict(label="Cartoon crew", people=people, tasks=tasks, batch=batch,
-                material=("DCF-GC", "Dried Cannabis Flower — Golden Carrot", "Сушен цвет од канабис — Golden Carrot"),
-                strains=("Golden Carrot", "Acme OG", "Looney Haze"), lab="Acme Contract Labs")
-
 
 def _cast_dune():
     people = [
@@ -299,7 +189,11 @@ def _cast_dune():
                 strains=("Melange Prime", "Arrakeen Dawn", "Sietch Kush"), lab="Guild Reference Lab")
 
 
-CASTS = {"cartoon": _cast_cartoon, "dune": _cast_dune}
+# A single narrative — Arrakis / Spice Production. Kept as a dict (not a bare
+# function) so the router's `cast in CASTS` guard and the frontend's cast key
+# keep working unchanged if another narrative is ever added back.
+CASTS = {"dune": _cast_dune}
+DEFAULT_CAST = "dune"
 
 
 # ── org lifecycle ───────────────────────────────────────────────────────────
@@ -338,13 +232,13 @@ async def wipe_demo_org(org_id: uuid.UUID) -> None:
     await users_admin_pool().execute("DELETE FROM profiles WHERE org_id=$1", org_id)
 
 
-async def reset_demo_org(cast: str = "cartoon") -> dict:
+async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
     """Wipe + re-seed the demo org from the named cast. Returns the demo
     ADMIN profile identity {id, org_id, role, username, full_name,
     password_set_at} — the caller mints the session token from it (demo
     profiles carry an unusable random password; no password ever leaves
     the server)."""
-    data = CASTS.get(cast, _cast_cartoon)()
+    data = CASTS.get(cast, _cast_dune)()
     org_id = await _ensure_org()
     await wipe_demo_org(org_id)
 

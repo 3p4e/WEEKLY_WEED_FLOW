@@ -54,7 +54,7 @@ async def start_demo(body: StartIn, request: Request):
     if not settings.demo_enabled:
         raise HTTPException(404, "Not found")
     _throttle(request.client.host if request.client else "unknown")
-    cast = body.cast if body.cast in demo_org.CASTS else "cartoon"
+    cast = body.cast if body.cast in demo_org.CASTS else demo_org.DEFAULT_CAST
     admin = await demo_org.reset_demo_org(cast)
     pwv = admin["password_set_at"].isoformat() if admin["password_set_at"] else None
     token = create_access_token(

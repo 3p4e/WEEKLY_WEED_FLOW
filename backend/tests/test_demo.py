@@ -40,7 +40,7 @@ async def demo_on():
                 "DELETE FROM organizations WHERE id=$1", org_id)
 
 
-async def _start(client, cast="cartoon"):
+async def _start(client, cast="dune"):
     r = await client.post("/demo/start", json={"cast": cast})
     assert r.status_code == 200, r.text
     body = r.json()
@@ -49,7 +49,7 @@ async def _start(client, cast="cartoon"):
 
 async def test_disabled_by_default(client):
     # Default settings.demo_enabled is False — the endpoint simply doesn't exist.
-    r = await client.post("/demo/start", json={"cast": "cartoon"})
+    r = await client.post("/demo/start", json={"cast": "dune"})
     assert r.status_code == 404
     r = await client.post("/demo/exit")
     assert r.status_code in (401, 404)  # 404 disabled OR 401 no token
@@ -57,7 +57,7 @@ async def test_disabled_by_default(client):
 
 async def test_start_mints_admin_token(client, demo_on):
     body, headers = await _start(client)
-    assert body["cast"] == "cartoon"
+    assert body["cast"] == "dune"
     assert body["user"]["role"] == "ADMIN"
     assert body["user"]["username"].startswith("demo.")
     me = await client.get("/auth/me", headers=headers)
@@ -175,7 +175,7 @@ async def test_reset_leaves_other_org_untouched(client, demo_on, org, admin_head
 async def test_start_throttled_after_limit(client, demo_on):
     from app.api import demo as demo_router
     for _ in range(demo_router._MAX_STARTS_PER_IP):
-        r = await client.post("/demo/start", json={"cast": "cartoon"})
+        r = await client.post("/demo/start", json={"cast": "dune"})
         assert r.status_code == 200, r.text
-    r = await client.post("/demo/start", json={"cast": "cartoon"})
+    r = await client.post("/demo/start", json={"cast": "dune"})
     assert r.status_code == 429
