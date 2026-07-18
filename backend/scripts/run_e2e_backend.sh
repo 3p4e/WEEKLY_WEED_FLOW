@@ -6,6 +6,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 export ENVIRONMENT=development
 export SECRET_KEY="${SECRET_KEY:-local-e2e-secret-not-for-production}"
+# control-wiring.spec.js drives the app via the live demo (GF.DEMO.enter()) —
+# needs a real POST /demo/start round trip, so the e2e backend must have it on.
+export DEMO_ENABLED=true
 export USERS_DATABASE_URL="${USERS_DATABASE_URL:-postgresql://app_user:testpw_user@localhost:5432/wwf_users_test}"
 export USERS_ADMIN_DATABASE_URL="${USERS_ADMIN_DATABASE_URL:-postgresql://app_admin:testpw_admin@localhost:5432/wwf_users_test}"
 export TASKS_DATABASE_URL="${TASKS_DATABASE_URL:-postgresql://app_user:testpw_user@localhost:5432/wwf_tasks_test}"
