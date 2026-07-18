@@ -211,6 +211,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: "Free e2e ports (self-hosted runner: a cancelled prior run's nginx/uvicorn can be orphaned past its job and block this one)"
+        run: |
+          for port in 8000 8091; do
+            pid=$(ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | grep -oP 'pid=\K[0-9]+' | sort -u)
+            [ -n "$pid" ] && kill -9 $pid 2>/dev/null || true
+          done
+          pkill -9 -f 'nginx -c /tmp/wwf-e2e-nginx.conf' 2>/dev/null || true
+          sleep 1
       - name: Install nginx
         run: sudo apt-get update -q && sudo apt-get install -y -q nginx-light
       - name: Bootstrap test roles + both schemas
