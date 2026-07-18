@@ -723,3 +723,93 @@
   font-family:var(--font-num);text-shadow:0 0 12px currentColor}
 :root[data-theme^="mass-weed"] .fac-res-l{
   font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   10 · ADHERENCE PASS (2026-07) — closes the remaining gaps from the UI
+   audit: cyan HUD scrollbar, cyan text-selection, a fully-HUD login "front
+   door" with the signature corner-bracket reticle, pulsing threat/overdue
+   cues, a "systems online" boot-in on brand + section headers, a radial-
+   gauge bloom, and a demo status LED. All additive + mass-weed-scoped
+   (inert on every other skin) and CSS-only (no markup change).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 10a — cyan HUD scrollbar (the base app.css thumb-hover was off-palette
+   plasma-green — a leftover from the retired theme). */
+:root[data-theme^="mass-weed"] ::-webkit-scrollbar-track{background:rgba(6,18,34,.5)}
+:root[data-theme^="mass-weed"] ::-webkit-scrollbar-thumb{background:rgba(var(--accent-rgb),.32)}
+:root[data-theme^="mass-weed"] ::-webkit-scrollbar-thumb:hover{background:rgba(var(--accent-rgb),.6)}
+:root[data-theme^="mass-weed"]{scrollbar-color:rgba(var(--accent-rgb),.4) transparent}
+
+/* 10b — cyan text selection (was the browser-default blue, breaking the HUD). */
+:root[data-theme^="mass-weed"] ::selection{
+  background:rgba(var(--accent-rgb),.32);color:var(--ink);
+  text-shadow:0 0 6px rgba(var(--accent-rgb),.6)}
+
+/* 10c — LOGIN FRONT DOOR: the splash/login card (entry.js .gf-*) gets the
+   full HUD chrome — chamfer, glowing frame, condensed brand, swept CTA —
+   plus the signature corner-bracket targeting reticle every interior screen
+   otherwise has but the first screen lacked. */
+:root[data-theme^="mass-weed"] .gf-card{
+  clip-path:var(--clip-panel);border-radius:0;
+  box-shadow:var(--sh-3), 0 0 34px rgba(var(--accent-rgb),.28);
+  position:relative;isolation:isolate}
+:root[data-theme^="mass-weed"] .gf-card::after{
+  content:"";position:absolute;inset:9px;pointer-events:none;opacity:.7;
+  filter:drop-shadow(0 0 3px rgba(var(--accent-rgb),.7));
+  background:
+    linear-gradient(var(--primary),var(--primary)) 0 0/16px 1.5px no-repeat,
+    linear-gradient(var(--primary),var(--primary)) 0 0/1.5px 16px no-repeat,
+    linear-gradient(var(--primary),var(--primary)) 100% 100%/16px 1.5px no-repeat,
+    linear-gradient(var(--primary),var(--primary)) 100% 100%/1.5px 16px no-repeat}
+:root[data-theme^="mass-weed"] .gf-card-title{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.12em;
+  color:var(--primary-hover);text-shadow:0 0 14px rgba(var(--accent-rgb),.4)}
+:root[data-theme^="mass-weed"] .gf-card-sub{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.16em;font-size:11px}
+:root[data-theme^="mass-weed"] .gf-in{
+  border-radius:0;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+:root[data-theme^="mass-weed"] .gf-in:focus{
+  box-shadow:inset 0 0 0 1px var(--primary), inset 0 0 16px rgba(var(--accent-rgb),.18)}
+:root[data-theme^="mass-weed"] .gf-btn{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:var(--ls-label);border-radius:0;
+  clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px);
+  box-shadow:0 0 18px rgba(var(--accent-rgb),.4)}
+:root[data-theme^="mass-weed"] .gf-demo-float{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em;border-radius:0;
+  clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px);
+  box-shadow:0 0 16px rgba(var(--accent-rgb),.35)}
+
+/* 10d — THREAT / OVERDUE PULSE: the mockup's "active alert" bloom, mapped
+   onto the real overdue / blocked / critical signal classes. */
+@keyframes mw-alert{0%,100%{box-shadow:0 0 0 0 rgba(239,77,77,0)}50%{box-shadow:0 0 10px 1px rgba(239,77,77,.55)}}
+@keyframes mw-alert-amber{0%,100%{box-shadow:0 0 0 0 rgba(240,185,94,0)}50%{box-shadow:0 0 10px 1px rgba(240,185,94,.5)}}
+:root[data-theme^="mass-weed"] .due-badge.overdue,
+:root[data-theme^="mass-weed"] .attn-tag.overdue,
+:root[data-theme^="mass-weed"] .ops-tag.overdue{animation:mw-alert-amber 2.4s ease-in-out infinite}
+:root[data-theme^="mass-weed"] .attn-tag.stuck,
+:root[data-theme^="mass-weed"] .prtag.critical{animation:mw-alert 2.4s ease-in-out infinite}
+
+/* 10e — "SYSTEMS ONLINE" boot-in on the brand lockup + every section title
+   (a classic ME power-on cue; stays readable — never fully blanks). */
+@keyframes mw-boot{0%{opacity:.25}10%{opacity:.7}16%{opacity:.35}28%{opacity:.9}40%{opacity:.5}100%{opacity:1}}
+:root[data-theme^="mass-weed"] .gf-name{animation:mw-boot .9s steps(1,end) 1}
+:root[data-theme^="mass-weed"] .view-title{animation:mw-boot .55s steps(1,end) 1}
+
+/* 10f — RADIAL GAUGE bloom: the exec conic gauge (views.js .mw-gauge) reads
+   as a real HUD dial — cyan rim + glowing arc. */
+:root[data-theme^="mass-weed"] .mw-gauge{
+  box-shadow:0 0 0 1px rgba(var(--accent-rgb),.2), inset 0 0 18px rgba(var(--accent-rgb),.08)}
+:root[data-theme^="mass-weed"] .mw-gauge__arc{filter:drop-shadow(0 0 6px rgba(var(--accent-rgb),.35))}
+
+/* 10g — DEMO status LED: the banner dot blooms like a HUD indicator light. */
+:root[data-theme^="mass-weed"] .gfdb-dot{box-shadow:0 0 8px currentColor, 0 0 2px currentColor}
+
+@media (prefers-reduced-motion: reduce){
+  :root[data-theme^="mass-weed"] .due-badge.overdue,
+  :root[data-theme^="mass-weed"] .attn-tag.overdue,
+  :root[data-theme^="mass-weed"] .ops-tag.overdue,
+  :root[data-theme^="mass-weed"] .attn-tag.stuck,
+  :root[data-theme^="mass-weed"] .prtag.critical,
+  :root[data-theme^="mass-weed"] .gf-name,
+  :root[data-theme^="mass-weed"] .view-title{animation:none}
+}
