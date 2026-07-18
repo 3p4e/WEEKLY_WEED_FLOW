@@ -330,7 +330,10 @@ async def wipe_demo_org(org_id: uuid.UUID) -> None:
             # One reset at a time — held until this transaction commits.
             await c.execute("SELECT pg_advisory_xact_lock($1)", _RESET_LOCK_KEY)
             for table in _TASKS_WIPE_ORDER:
-                await c.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
+                # `table` is only ever a value from the hardcoded module
+                # constant _TASKS_WIPE_ORDER — never user input; the org_id
+                # filter is a bound parameter. Safe by construction.
+                await c.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)  # nosec B608
     # Users DB: profiles (cascades password_reset_codes). Org row stays.
     await users_admin_pool().execute("DELETE FROM profiles WHERE org_id=$1", org_id)
 
