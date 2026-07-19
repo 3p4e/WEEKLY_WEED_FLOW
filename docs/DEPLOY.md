@@ -839,3 +839,49 @@ regulatory-check pipeline defect (see below) and backend-only feature gaps
 with no frontend UI (Handoffs, Task Dependencies, External Links, QC Sampling
 Plans, a partial Facility Rooms write path; plus two silent-truncation UI spots
 — Calendar "+N" chip, Workload chip).
+
+## Feature-gap UI wiring (frontend v90 → wwf_mass ONLY, 2026-07-19)
+
+Owner approved building UI for every backend feature the audit found had
+none. All five backends already existed with api.js wrappers and zero call
+sites:
+
+- **`web/gf/task-extras.js` (NEW)** — Links / Dependencies / Handoffs
+  sections on the expanded task card (collab.js's injection pattern chained).
+- **Facility rooms** — ADMIN-only Add/Edit/Deactivate room
+  (`facility-view.js` + the previously-missing `facilityPatchRoom` wrapper).
+- **QC Sampling Plans** — list/create tab + optional plan picker on sample
+  creation (`qcsample-view.js`).
+- **Calendar "+N" / Workload 8-chip caps** — now click-to-expand instead of
+  silently hiding overflow tasks.
+
+SW `wwf-shell-v3.53.0`. Local gate: full Playwright 14/14 (incl.
+control-wiring across every view), `node --check` clean. Built
+`wwf-growflow:v90`, deployed to **wwf_mass ONLY** (`docker compose up -d
+--no-deps frontend`); live smoke green (SW v3.53.0 served, task-extras.js
+200, room/plan functions present in served JS). **Production stays on v89**
+(all bug fixes, no new features) — promoting v90 to prod is the standard
+one-step image bump, owner-gated per the features rule. **Rollback** (mass)
+= revert tag to `v89`.
+
+## DocEngine regulatory-check overflow fix (docengine v4/v5 → wwf_mass, 2026-07-19)
+
+The SOP wizard failed deterministically at `regulatory-check`:
+`CONTEXT_WINDOW_EXCEEDED` (~92k tokens vs the model's 65536 ceiling).
+Root cause: `pipeline.py` sent all 9 sections' checks to ONE persistent
+Letta agent conversation, which folds its whole prior history into every
+turn's prompt. Fix (v4): `fleet.spawn_ephemeral` — each section's check runs
+on its own short-lived clone of `gf_reg_checker` (same persona/sources/
+model), used for exactly one exchange then deleted; `_resolve_model`
+extracted as the shared handle-resolution helper; `LettaClient.delete_agent`
+added. v5 adds per-section stage reporting ("regulatory-check 3.0").
+Deployed to **wwf_mass ONLY** (`growflow-docengine:v5`, prod stays on `v3`).
+Verified live: the wizard now advances section-by-section far past the old
+failure point (v4 cut peak tokens 92k→80k and doubled survival; per-section
+isolation in v5 confirmed advancing through section 6+ of 9 vs. dying
+wholesale before). Note for the record: a single section's check can still
+run heavy if the agent's `open_files` tool loads a large regulatory document
+into core memory mid-turn — if a residual per-section overflow ever
+reappears, constrain the reg-check prompt to snippet-returning search tools
+(`semantic_search_files`/`grep_files`) or detach `open_files` from the
+ephemeral clones.
