@@ -199,6 +199,7 @@ GF.API = {
   purgeUser(id)    { return this._req('DELETE', '/auth/users/' + id + '/purge'); },
 
   departments() { return this._req('GET', '/departments'); },
+  createDepartment(b) { return this._req('POST', '/departments', b); },
   weeks()       { return this._req('GET', '/weeks'); },
   tasks(q = {}) {
     const p = new URLSearchParams(q).toString();
