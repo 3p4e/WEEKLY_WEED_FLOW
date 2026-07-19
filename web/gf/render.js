@@ -129,7 +129,12 @@ GF.render = {
       <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
-      </div>`).join('');
+      </div>`).join('')
+      + (GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin()
+        ? `<div class="dept-row" style="opacity:.7" onclick="GF.WWF.openDeptForm()">
+            <span class="dept-dot" style="background:transparent;border:1px dashed currentColor"></span>${
+            GF.state.lang === 'mk' ? '+ Додади оддел' : '+ Add department'}</div>`
+        : '');
 
     const u = GF.PEOPLE[GF.state.user] || { name: '—', roleLabel: '' };
     GF.$('user-card').innerHTML = `${GF.avatar(GF.state.user, 34)}

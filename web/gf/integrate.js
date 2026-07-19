@@ -795,6 +795,46 @@ GF.WWF.deptScope = () => {
 // Settings "AI agents" tab to managers who then got a raw 403 from every call.
 GF.WWF.isAdmin = () => (GF.API.user || {}).role === 'ADMIN';
 
+/* ── Department provisioning (POST /departments, ADMIN-only) ──
+   The backend route existed only for the provisioning script — org
+   departments could never be created from the app. Idempotent server-side:
+   re-POSTing an existing code returns the existing row. */
+GF.WWF.openDeptForm = () => {
+  if (!GF.WWF.isAdmin()) return;
+  GF.WWF._ensureModal('dept-form-modal', '420px');
+  GF.$('dept-form-modal-title').textContent = AL('Add department', 'Додади оддел');
+  GF.$('dept-form-modal-body').innerHTML = `
+    <div class="field"><label>${AL('Code', 'Код')}</label>
+      <input id="dept-code" maxlength="64" placeholder="${AL('e.g. logistics', 'пр. logistics')}"></div>
+    <div class="field"><label>${AL('Name', 'Име')}</label>
+      <input id="dept-name" maxlength="120"></div>
+    <div class="field"><label>${AL('Name (Macedonian)', 'Име (МК)')}</label>
+      <input id="dept-name-mk" maxlength="120"></div>
+    <div class="row" style="gap:10px"><div class="spacer"></div>
+      <button class="btn btn-primary" onclick="GF.WWF.saveDept()">${GF.t('save')}</button></div>`;
+  GF.openModal('dept-form-modal');
+  setTimeout(() => { const f = GF.$('dept-code'); if (f) f.focus(); }, 60);
+};
+
+GF.WWF.saveDept = async () => {
+  if (!GF.WWF.isAdmin()) return;
+  const code = ((GF.$('dept-code') || {}).value || '').trim().toLowerCase();
+  const name = ((GF.$('dept-name') || {}).value || '').trim();
+  const nameMk = ((GF.$('dept-name-mk') || {}).value || '').trim();
+  if (!/^[a-z0-9_]{1,64}$/.test(code)) {   // mirrors DepartmentIn.code server-side
+    GF.toast(AL('Code must be lowercase letters, digits, underscore only (1-64 characters)',
+                'Кодот смее да содржи само мали букви, цифри и долна црта (1-64 знаци)'), 'error');
+    return;
+  }
+  if (!name) { GF.toast(AL('Enter a department name', 'Внесете име на одделот'), 'error'); return; }
+  try {
+    await GF.API.createDepartment({ code, name, name_mk: nameMk || null });
+    GF.closeModal('dept-form-modal');
+    GF.toast(GF.t('save') + ' ✓', 'success');
+    await GF.WWF.loadAndRender();
+  } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
+};
+
 // openUser(id) → edit an existing person (name/role/dept/title + reset password);
 // openUser() with no id → create a new account. The Team-card gear icon passes id.
 GF.openUser = (id) => {
