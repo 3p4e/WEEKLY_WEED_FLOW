@@ -655,8 +655,8 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
 
 
 class ProgressIn(BaseModel):
-    day_label: str = PydField(max_length=40)
-    note: str = PydField(max_length=10_000)
+    day_label: str = Field(max_length=40)
+    note: str = Field(max_length=10_000)
 
 
 @router.post("/tasks/{task_id}/progress", status_code=201)
