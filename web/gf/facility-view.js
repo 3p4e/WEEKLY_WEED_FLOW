@@ -30,6 +30,12 @@
   const roomName = (r) => (GF.state.lang === 'mk' && r.name_mk) ? r.name_mk : r.name;
   const canWrite = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR']
     .includes((GF.API.user || {}).role);
+  // Room provisioning (POST /facility/rooms, PATCH /facility/rooms/{id}) is
+  // ADMIN-only — narrower than canWrite()'s batch-writer set above. Reuses
+  // the shared strict-ADMIN helper (integrate.js) rather than duplicating
+  // the role check inline.
+  const canWriteRooms = () => !!(GF.WWF.isAdmin && GF.WWF.isAdmin());
+  const ROOM_CODE_RE = /^[a-z0-9_]{1,64}$/;   // mirrors RoomIn.code server-side pattern
   const daysIn = (iso) => {
     if (!iso) return 0;
     return Math.max(0, Math.round((Date.now() - new Date(iso + 'T00:00:00')) / 864e5));
@@ -47,8 +53,11 @@
   GF.views.facility = () => {
     const st = GF.WWF._fac;
     if (!st.data && !st.loading && !st.error) GF.WWF.loadFacility();
+    const addRoomBtn = canWriteRooms()
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.openRoomForm(null)">${GF.icon('plus', 'icon', '#fff')}${AL('Add room', 'Додади соба')}</button>`
+      : '';
     const head = GF.viewHead
-      ? GF.viewHead('facility_map', 'facility_sub')
+      ? GF.viewHead('facility_map', 'facility_sub', addRoomBtn)
       : `<h2>${AL('Facility', 'Капацитет')}</h2>`;
     if (st.loading || (!st.data && !st.error)) {
       return head + `<div class="mw-skel" style="height:96px;margin-bottom:10px"></div>
@@ -93,8 +102,12 @@
     }).join('');
     return head + kpis + `
       <div class="fac-map">${rooms || `<div class="ntf-empty">${
-        AL('No rooms configured yet — an administrator seeds them via the facility API.',
-           'Сè уште нема соби — администраторот ги внесува преку facility API.')}</div>`}</div>`;
+        canWriteRooms()
+          ? AL('No rooms configured yet — use "Add room" above to create the first one.',
+               'Сè уште нема соби — користете „Додади соба" погоре за да ја креирате првата.')
+          : AL('No rooms configured yet — an administrator sets them up on the facility board.',
+               'Сè уште нема соби — администраторот ги поставува на таблата за капацитет.')
+        }</div>`}</div>`;
   };
 
   /* ── Room detail modal: batches + writer controls ── */
@@ -115,7 +128,9 @@
     GF.$('fac-room-modal-body').innerHTML = `
       <div id="fac-room-rows">${rows || `<div class="fr-empty" style="padding:8px 0">${AL('Empty', 'Празно')}</div>`}</div>
       ${canWrite() ? `<button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px"
-        onclick="GF.WWF.openBatch(null,'${r.id}')">${AL('Add batch', 'Додади серија')}</button>` : ''}`;
+        onclick="GF.WWF.openBatch(null,'${r.id}')">${AL('Add batch', 'Додади серија')}</button>` : ''}
+      ${canWriteRooms() ? `<button class="btn" style="width:100%;justify-content:center;margin-top:8px"
+        onclick="GF.WWF.openRoomForm('${r.id}')">${GF.icon('settings', 'icon')}${AL('Edit room', 'Уреди соба')}</button>` : ''}`;
     GF.openModal('fac-room-modal');
   };
 
@@ -182,6 +197,94 @@
     try {
       await GF.API.facilityPatchBatch(batchId, { is_active: false });
       GF.closeModal('fac-batch-modal');
+      GF.toast('✓', 'success');
+      GF.WWF.loadFacility();
+    } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
+  };
+
+  /* ── Room editor: create (roomId null) or edit — ADMIN only ──
+     Mirrors the batch editor above (same modal shell, same save/close-then-
+     refresh flow) but gated by canWriteRooms(), not canWrite(), because
+     POST/PATCH /facility/rooms are require_role(ADMIN) on the backend while
+     batch writes admit the broader CU_MGR/executive set. */
+  GF.WWF.openRoomForm = (roomId) => {
+    if (!canWriteRooms()) return;
+    const d = GF.WWF._fac.data; if (!d) return;
+    let r = null;
+    if (roomId) { r = (d.rooms || []).find(x => x.id === roomId); if (!r) return; }
+    GF.closeModal('fac-room-modal');
+    GF.WWF._ensureModal('fac-roomform-modal', '420px');
+    GF.$('fac-roomform-modal-title').textContent = r
+      ? AL('Edit room', 'Уреди соба') : AL('Add room', 'Додади соба');
+    const kindOpts = Object.keys(KINDS).map(k => ({ v: k, label: AL(KINDS[k].en, KINDS[k].mk) }));
+    // code is immutable after creation (RoomPatch has no code field) — only
+    // shown on the create form.
+    GF.$('fac-roomform-modal-body').innerHTML = `
+      ${r ? '' : `<div class="field"><label>${AL('Code', 'Код')}</label>
+        <input id="fr-code" maxlength="64" placeholder="${AL('e.g. flower_a', 'пр. flower_a')}"></div>`}
+      <div class="field"><label>${AL('Name', 'Име')}</label>
+        <input id="fr-name" maxlength="120" value="${GF.esc(r ? r.name : '')}" placeholder="${AL('e.g. Flower Room A', 'пр. Соба за цветање А')}"></div>
+      <div class="field"><label>${AL('Name (Macedonian)', 'Име (МК)')}</label>
+        <input id="fr-name-mk" maxlength="120" value="${GF.esc(r && r.name_mk ? r.name_mk : '')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1.4"><label>${AL('Kind', 'Тип')}</label>
+          ${GF.selectField('fr-kind', { value: r ? r.kind : 'flower', title: AL('Kind', 'Тип'), options: kindOpts })}</div>
+        <div class="field" style="flex:1"><label>${AL('Sort', 'Редослед')}</label>
+          <input id="fr-sort" type="number" min="0" max="1000" step="1" value="${r ? r.sort : 0}"></div>
+      </div>
+      <div class="row" style="gap:10px">
+        ${r ? `<button class="btn" style="color:var(--red)" onclick="GF.WWF.deactivateRoom('${r.id}')">${AL('Deactivate room', 'Деактивирај соба')}</button>` : ''}
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="GF.WWF.saveRoom(${r ? `'${r.id}'` : 'null'})">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('fac-roomform-modal');
+    setTimeout(() => { const f = GF.$('fr-code') || GF.$('fr-name'); if (f) f.focus(); }, 60);
+  };
+
+  GF.WWF.saveRoom = async (roomId) => {
+    if (!canWriteRooms()) return;
+    const name = ((GF.$('fr-name') || {}).value || '').trim();
+    const nameMk = ((GF.$('fr-name-mk') || {}).value || '').trim();
+    const kind = (GF.$('fr-kind') || {}).value;
+    const sortRaw = ((GF.$('fr-sort') || {}).value || '').trim();
+    const sort = sortRaw === '' ? 0 : parseInt(sortRaw, 10);
+    if (!name) {
+      GF.toast(AL('Enter a room name', 'Внесете име на собата'), 'error');
+      return;
+    }
+    if (!Number.isFinite(sort) || sort < 0 || sort > 1000) {
+      GF.toast(AL('Sort must be a number between 0 and 1000', 'Редоследот мора да е број меѓу 0 и 1000'), 'error');
+      return;
+    }
+    try {
+      if (roomId) {
+        // name_mk is the one field the server treats an explicit null as
+        // "clear it" rather than "not supplied" — sending '' as null here
+        // lets an admin remove a Macedonian name they'd set earlier.
+        await GF.API.facilityPatchRoom(roomId, { name, name_mk: nameMk || null, kind, sort });
+      } else {
+        const code = ((GF.$('fr-code') || {}).value || '').trim().toLowerCase();
+        if (!ROOM_CODE_RE.test(code)) {
+          GF.toast(AL('Code must be lowercase letters, digits, underscore only (1-64 characters)',
+                       'Кодот смее да содржи само мали букви, цифри и долна црта (1-64 знаци)'), 'error');
+          return;
+        }
+        await GF.API.facilityAddRoom({ code, name, name_mk: nameMk || null, kind, sort });
+      }
+      GF.closeModal('fac-roomform-modal');
+      GF.toast(GF.t('save') + ' ✓', 'success');
+      GF.WWF.loadFacility();
+    } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
+  };
+
+  GF.WWF.deactivateRoom = async (roomId) => {
+    if (!canWriteRooms()) return;
+    if (!confirm(AL(
+      'Deactivate this room? It disappears from the facility board immediately — move or close any batches inside it first.',
+      'Да се деактивира собата? Веднаш исчезнува од таблата за капацитет — прво преместете или затворете ги сериите во неа.'))) return;
+    try {
+      await GF.API.facilityPatchRoom(roomId, { is_active: false });
+      GF.closeModal('fac-roomform-modal');
       GF.toast('✓', 'success');
       GF.WWF.loadFacility();
     } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }

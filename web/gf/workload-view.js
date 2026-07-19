@@ -14,6 +14,16 @@ window.GF = window.GF || {};
 
   const load = (t) => (W[t.pr] || 1.5);
 
+  // A person with more than 8 tasks this week only showed the first 8, with
+  // no indicator at all that more existed — the rest were silently dropped.
+  // A "+N" pill now toggles that person's row to show every chip.
+  GF.state.wlExpandedPeople = GF.state.wlExpandedPeople || new Set();
+  GF.wlToggle = (personId) => {
+    const s = GF.state.wlExpandedPeople;
+    if (s.has(personId)) s.delete(personId); else s.add(personId);
+    GF.render.all();
+  };
+
   GF.wlDragStart = (ev, id) => { ev.dataTransfer.setData('text/task-id', id); ev.dataTransfer.effectAllowed = 'copy'; };
   GF.wlDragOver = (ev) => { ev.preventDefault(); ev.currentTarget.classList.add('wl-over'); };
   GF.wlDragLeave = (ev) => { ev.currentTarget.classList.remove('wl-over'); };
@@ -49,10 +59,14 @@ window.GF = window.GF || {};
         const p = GF.PEOPLE[pid] || { name: pid, roleLabel: '' };
         const pct = Math.min(100, Math.round((d.pts / CAP) * 100));
         const tier = pct >= 90 ? 'hot' : pct >= 60 ? 'warm' : 'ok';
-        const chips = d.tasks.slice(0, 8).map(t => `
+        const expanded = GF.state.wlExpandedPeople.has(pid);
+        const shownTasks = expanded ? d.tasks : d.tasks.slice(0, 8);
+        const chips = shownTasks.map(t => `
           <span class="wl-chip" draggable="true" ondragstart="GF.wlDragStart(event,'${GF.esc(t.id)}')"
             title="${GF.esc(t.title)}" onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">
-            ${GF.esc(t.title.length > 34 ? t.title.slice(0, 33) + '…' : t.title)}</span>`).join('');
+            ${GF.esc(t.title.length > 34 ? t.title.slice(0, 33) + '…' : t.title)}</span>`).join('')
+          + (d.tasks.length > 8 ? `<span class="wl-chip" style="cursor:pointer;color:var(--ink-3)"
+              onclick="GF.wlToggle('${GF.esc(pid)}')">${expanded ? AL('less', 'помалку') : `+${d.tasks.length - 8}`}</span>` : '');
         return `<div class="wl-row" ondragover="GF.wlDragOver(event)" ondragleave="GF.wlDragLeave(event)"
                      ondrop="GF.wlDrop(event,'${GF.esc(pid)}')">
           <div class="wl-who">${GF.avatar(pid, 32)}

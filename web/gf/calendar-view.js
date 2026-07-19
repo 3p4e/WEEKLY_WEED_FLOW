@@ -11,6 +11,17 @@ window.GF = window.GF || {};
   GF.calNav = (d) => { GF.state.calOffset += d; GF.render.all(); };
   GF.calToday = () => { GF.state.calOffset = 0; GF.render.all(); };
 
+  // Days with more than 3 due tasks only show the first 3 by default (the
+  // grid cell has no room for more) — the "+N" pill was previously inert,
+  // silently hiding the rest with no way to reach them. It now toggles this
+  // day into its cell showing every task.
+  GF.state.calExpandedDays = GF.state.calExpandedDays || new Set();
+  GF.calToggleDay = (iso) => {
+    const s = GF.state.calExpandedDays;
+    if (s.has(iso)) s.delete(iso); else s.add(iso);
+    GF.render.all();
+  };
+
   const MONTHS = {
     en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
     mk: ['Јануари','Февруари','Март','Април','Мај','Јуни','Јули','Август','Септември','Октомври','Ноември','Декември'],
@@ -40,13 +51,18 @@ window.GF = window.GF || {};
     for (let d = 1; d <= daysIn; d++) {
       const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const ts = byDay[iso] || [];
-      const chips = ts.slice(0, 3).map(t => {
+      const expanded = GF.state.calExpandedDays.has(iso);
+      const shown = expanded ? ts : ts.slice(0, 3);
+      const chips = shown.map(t => {
         const dep = GF.dep(t.dept) || {};
         return `<div class="cal-chip ${t.status === 'done' ? 'done' : ''}" title="${GF.esc(t.title)}"
           style="border-left-color:${dep.color || 'var(--primary)'}"
           onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">${GF.esc(t.title)}</div>`;
       }).join('');
-      const more = ts.length > 3 ? `<div class="cal-more">+${ts.length - 3}</div>` : '';
+      const more = ts.length > 3
+        ? `<div class="cal-more" role="button" tabindex="0" onclick="GF.calToggleDay('${iso}')"
+             onkeydown="if(event.key==='Enter')GF.calToggleDay('${iso}')">${expanded ? AL('less', 'помалку') : `+${ts.length - 3}`}</div>`
+        : '';
       cells += `<div class="cal-cell ${iso === todayISO ? 'cal-today' : ''}">
         <div class="cal-num">${d}</div>${chips}${more}</div>`;
     }

@@ -185,6 +185,7 @@ GF.API = {
   studioPdfUrl(id)         { return '/qms/studio/documents/' + encodeURIComponent(id) + '/pdf'; },
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
   facilityAddRoom(b)       { return this._req('POST', '/facility/rooms', b); },
+  facilityPatchRoom(id,b)  { return this._req('PATCH', '/facility/rooms/' + id, b); },
   facilityAddBatch(b)      { return this._req('POST', '/facility/batches', b); },
   facilityPatchBatch(id,b) { return this._req('PATCH', '/facility/batches/' + id, b); },
   activity(q)          { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/activity' + (u?'?'+u:'')); },

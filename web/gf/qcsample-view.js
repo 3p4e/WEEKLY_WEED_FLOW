@@ -13,8 +13,9 @@
    insertBefore 'qms-end'. */
 
 (function () {
-  GF.WWF._qcsm = { samples: null, sel: null, detail: null, q: '', status: '',
-                   loading: false, error: null };
+  GF.WWF._qcsm = { samples: null, sel: null, detail: null, q: '', status: '', tab: 'samples',
+                   loading: false, error: null,
+                   plans: null, plansLoading: false, plansError: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const _QP = ['ADMIN', 'QP'];
@@ -45,6 +46,17 @@
     return `<span class="chip-opt" style="border-color:${m.c};color:${m.c}">${GF.esc(AL(m.en, m.mk))}</span>`;
   };
 
+  // sampling-plan frequency vocabulary (mirrors backend's _FREQUENCIES)
+  const FREQ = {
+    EVERY_BATCH: { en: 'Every batch', mk: 'Секоја серија', c: 'var(--blue)' },
+    PERIODIC: { en: 'Periodic', mk: 'Периодично', c: 'var(--violet)' },
+    RANDOM: { en: 'Random', mk: 'Случајно', c: 'var(--orange)' },
+  };
+  const chip = (txt, c) => `<span class="chip-opt" style="border-color:${c};color:${c}">${GF.esc(txt)}</span>`;
+  const freqChip = (f) => { const m = FREQ[f] || { en: f || '—', mk: f || '—', c: 'var(--ink-3)' }; return chip(AL(m.en, m.mk), m.c); };
+  // resolve a sample's linked sampling_plan_id (uuid) to its human PP-SPL code
+  const planLabel = (id) => { const p = (GF.WWF._qcsm.plans || []).find(p => p.id === id); return p ? p.plan_id : id; };
+
   GF.WWF.loadQcSamples = async () => {
     const st = GF.WWF._qcsm;
     st.loading = true; st.error = null;
@@ -53,6 +65,15 @@
       st.samples = await GF.API.qcSamples(q);
     } catch (e) { st.error = e.message; }
     st.loading = false;
+    if (GF.state.view === 'qcsample') GF.render.all();
+  };
+
+  GF.WWF.loadQcPlans = async () => {
+    const st = GF.WWF._qcsm;
+    st.plansLoading = true; st.plansError = null;
+    try { st.plans = await GF.API.qcSamplingPlans({}); }
+    catch (e) { st.plansError = e.message; }
+    st.plansLoading = false;
     if (GF.state.view === 'qcsample') GF.render.all();
   };
 
@@ -65,6 +86,7 @@
   };
   GF.WWF.qcSampleFilter = (v) => { GF.WWF._qcsm.q = v; GF.render.all(); };
   GF.WWF.qcSampleStatus = (v) => { GF.WWF._qcsm.status = v; GF.WWF.loadQcSamples(); };
+  GF.WWF.qcSampleTab = (t) => { GF.WWF._qcsm.tab = t; GF.render.all(); };
 
   GF.WWF.qcSampleMove = async (id, target) => {
     try { await GF.API.qcPatchSample(id, { status: target }); GF.toast(AL('Updated', 'Ажурирано')); }
@@ -79,10 +101,26 @@
     if (!batch_id || !material_code) return GF.toast(AL('Batch and material are required', 'Потребни се серија и материјал'), 'error');
     const body = { batch_id, material_code, sample_type: mk('qsm-type').trim() || null,
                    location: mk('qsm-loc').trim() || null };
+    const plan = mk('qsm-plan'); if (plan) body.sampling_plan_id = plan;
     try {
       const s = await GF.API.qcCreateSample(body);
       GF.toast(s.sample_id + ' ' + AL('created', 'креирано'));
       await GF.WWF.loadQcSamples(); GF.WWF.qcSamplePick(s.id);
+    } catch (e) { GF.toast(e.message, 'error'); }
+  };
+
+  GF.WWF.qcPlanCreate = async () => {
+    const mk = (i) => (document.getElementById(i) || {}).value || '';
+    const material_code = mk('qsp-mat').trim();
+    if (!material_code) return GF.toast(AL('Material code is required', 'Потребен е код на материјал'), 'error');
+    const body = { material_code, sampling_frequency: mk('qsp-freq') || 'EVERY_BATCH' };
+    const formula = mk('qsp-formula').trim(); if (formula) body.sample_size_formula = formula;
+    const min = mk('qsp-min').trim(); if (min !== '') body.min_sample_size = parseInt(min, 10);
+    const max = mk('qsp-max').trim(); if (max !== '') body.max_sample_size = parseInt(max, 10);
+    try {
+      const p = await GF.API.qcCreateSamplingPlan(body);
+      GF.toast(p.plan_id + ' ' + AL('created', 'креирано'));
+      await GF.WWF.loadQcPlans();
     } catch (e) { GF.toast(e.message, 'error'); }
   };
 
@@ -98,6 +136,7 @@
         <span>${AL('Material', 'Материјал')}</span><b>${GF.esc(s.material_code)}</b>
         <span>${AL('Status', 'Статус')}</span><b>${stChip(s.status)}</b>
         <span>${AL('Location', 'Локација')}</span><b>${GF.esc(s.location || '—')}</b>
+        ${s.sampling_plan_id ? `<span>${AL('Sampling plan', 'План за земање мостри')}</span><b class="mono">${GF.esc(planLabel(s.sampling_plan_id))}</b>` : ''}
         ${s.retention_sample ? `<span>${AL('Retention', 'Резерва')}</span><b>✓</b>` : ''}
       </div>
       ${canWrite() && (moves.length || canReject) ? `<div class="qms-dl">
@@ -125,13 +164,35 @@
       ${st.sel === s.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:50px"></div></div>`) : ''}`).join('');
   };
 
+  const planList = () => {
+    const st = GF.WWF._qcsm;
+    if (st.plansLoading && !st.plans) return `<div class="mw-skel" style="height:80px"></div>`;
+    if (st.plansError) return `<div class="ana-note" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="color:var(--red-fg,var(--red))">${GF.esc(st.plansError)}</span>
+      <button class="btn btn-sm" onclick="GF.WWF.loadQcPlans()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
+    const rows = st.plans || [];
+    if (!rows.length) return `<div class="ana-note">${AL('No sampling plans yet', 'Сè уште нема планови за земање мостри')}</div>`;
+    return `<table class="qcp-table"><thead><tr>
+      <th>${AL('Plan', 'План')}</th><th>${AL('Material', 'Материјал')}</th>
+      <th>${AL('Frequency', 'Фреквенција')}</th><th>${AL('Formula', 'Формула')}</th>
+      <th>${AL('Size', 'Големина')}</th></tr></thead>
+      <tbody>${rows.map(p => `<tr>
+        <td class="mono">${GF.esc(p.plan_id)}</td>
+        <td>${GF.esc(p.material_code)}</td>
+        <td>${freqChip(p.sampling_frequency)}</td>
+        <td>${GF.esc(p.sample_size_formula || '—')}</td>
+        <td class="mono">${p.min_sample_size != null ? GF.esc(String(p.min_sample_size)) : '—'} … ${p.max_sample_size != null ? GF.esc(String(p.max_sample_size)) : '—'}</td>
+      </tr>`).join('')}</tbody></table>`;
+  };
+
   GF.views.qcsample = () => {
     const st = GF.WWF._qcsm;
     if (!st.samples && !st.loading && !st.error) GF.WWF.loadQcSamples();
+    if (!st.plans && !st.plansLoading && !st.plansError) GF.WWF.loadQcPlans();
     const head = GF.viewHead('qc_samples', 'qc_samples_sub');
     const zone = `<div class="qms-zone">${AL(
-      'QMS Studio — physical QC samples. Release / reject is a Qualified-Person decision.',
-      'QMS Студио — физички КК примероци. Ослободување / одбивање е одлука на Квалификуваното лице.')}</div>`;
+      'QMS Studio — physical QC samples and their sampling plans. Release / reject is a Qualified-Person decision.',
+      'QMS Студио — физички КК примероци и нивните планови за земање мостри. Ослободување / одбивање е одлука на Квалификуваното лице.')}</div>`;
     if (st.loading || (!st.samples && !st.error)) {
       return head + zone + `<div class="mw-skel" style="height:60px;margin-bottom:10px"></div><div class="mw-skel" style="height:200px"></div>`;
     }
@@ -140,6 +201,32 @@
         <span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span>
         <button class="btn btn-sm" onclick="GF.WWF.loadQcSamples()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
     }
+    const tabs = `<div class="qms-dl" style="margin-bottom:10px">
+      <button class="btn btn-sm ${st.tab === 'samples' ? 'btn-primary' : ''}" onclick="GF.WWF.qcSampleTab('samples')">${AL('Samples', 'Примероци')}</button>
+      <button class="btn btn-sm ${st.tab === 'plans' ? 'btn-primary' : ''}" onclick="GF.WWF.qcSampleTab('plans')">${AL('Sampling plans', 'Планови за земање мостри')} (${(st.plans || []).length})</button>
+    </div>`;
+    if (st.tab === 'plans') {
+      const createPlan = canWrite() ? `
+        <div class="panel ana-panel" style="margin-bottom:12px">
+          <div class="ana-pt" style="margin-bottom:8px">${AL('New sampling plan', 'Нов план за земање мостри')}</div>
+          <div class="qcs-form">
+            <input id="qsp-mat" placeholder="${AL('Material code', 'Код на материјал')}">
+            ${GF.selectField('qsp-freq', { value: 'EVERY_BATCH', title: AL('Frequency', 'Фреквенција'),
+              options: Object.keys(FREQ).map(f => ({ v: f, label: AL(FREQ[f].en, FREQ[f].mk) })) })}
+            <input id="qsp-formula" placeholder="${AL('Sample size formula (optional)', 'Формула за големина (опц.)')}">
+            <input id="qsp-min" type="number" min="0" max="100000" placeholder="${AL('Min size', 'Мин.')}" style="width:80px">
+            <input id="qsp-max" type="number" min="0" max="100000" placeholder="${AL('Max size', 'Макс.')}" style="width:80px">
+            <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcPlanCreate()">${GF.t('create_task') || 'Create'}</button>
+          </div>
+        </div>` : '';
+      return head + zone + tabs + createPlan + `
+        <div class="panel ana-panel">
+          <div class="ana-pt" style="margin-bottom:8px">${AL('Active sampling plans', 'Активни планови за земање мостри')}</div>
+          ${planList()}
+        </div>`;
+    }
+    const planOptions = [{ v: '', label: AL('No plan', 'Без план') }]
+      .concat((st.plans || []).map(p => ({ v: p.id, label: p.plan_id, sub: p.material_code })));
     const create = canWrite() ? `
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('Collect sample', 'Земи примерок')}</div>
@@ -148,10 +235,12 @@
           <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}">
           <input id="qsm-type" placeholder="${AL('Type', 'Тип')}">
           <input id="qsm-loc" placeholder="${AL('Location', 'Локација')}">
+          ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
+            searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSampleCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';
-    return head + zone + create + `
+    return head + zone + tabs + create + `
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Samples', 'Примероци')}</div>

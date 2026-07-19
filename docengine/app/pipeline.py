@@ -166,6 +166,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         await db.job_update(job_id, stage="regulatory-check")
         reg_findings: list[str] = []
         for s in sections:
+            await db.job_update(job_id, stage=f"regulatory-check {s['num']}")
             tmp_id = await spawn_ephemeral(
                 client, "gf_reg_checker", f"{job_id[:8]}_{s['num'].replace('.', '')}"
             )
