@@ -178,9 +178,14 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     f"retrieved passages; say NO-FINDING if nothing applies.\n\n{s['content']}",
                 )
             finally:
+                # Broad catch on purpose: cleanup of a throwaway clone must
+                # never abort the job — delete_agent can also raise plain
+                # httpx transport errors (ReadTimeout etc.), not just
+                # LettaError, and an orphaned tmp agent is harmless (the next
+                # fleet audit sweeps _tmp_ leftovers) while a failed job isn't.
                 try:
                     await client.delete_agent(tmp_id)
-                except LettaError as e:
+                except Exception as e:  # noqa: BLE001
                     log.warning("failed to delete ephemeral reg-checker %s: %s", tmp_id, e)
             reg_findings.append(f"[{s['num']}] {finding.strip()}")
 

@@ -78,5 +78,6 @@ async def exit_demo(user: dict = Depends(get_current_user)):
     demo_id = await demo_org.get_demo_org_id()
     if demo_id is None or str(user["org_id"]) != str(demo_id):
         raise HTTPException(403, "Not a demo session")
-    await demo_org.wipe_demo_org(demo_id)
+    async with demo_org.demo_mutex():
+        await demo_org.wipe_demo_org(demo_id)
     return {"ok": True}

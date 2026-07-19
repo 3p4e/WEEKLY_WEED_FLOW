@@ -38,6 +38,16 @@ Priority = Literal["low", "normal", "medium", "high", "critical"]
 _FK_ERRORS = (asyncpg.ForeignKeyViolationError, asyncpg.DataError, asyncpg.InvalidTextRepresentationError)
 
 
+
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _uuid_or_422(val: str | None, name: str) -> None:
+    """Malformed uuids on raw-SQL read paths otherwise surface as asyncpg
+    cast errors -> 500; the write paths already map them via _FK_ERRORS."""
+    if val is not None and not _UUID_RE.match(str(val)):
+        raise HTTPException(422, f"{name} must be a uuid")
+
 def _ser(rows):
     return [dict(r) for r in rows]
 
@@ -133,6 +143,8 @@ async def list_tasks(
     include_archived: bool = False,
     user: dict = Depends(require_password_set),
 ):
+    _uuid_or_422(week_id, "week_id")
+    _uuid_or_422(department_id, "department_id")
     clauses, args = ["t.is_deleted=false"], []
     if not include_archived:
         clauses.append("t.is_archived=false")
@@ -221,6 +233,8 @@ async def task_tree(include_archived: bool = False, user: dict = Depends(require
 
 @router.get("/tasks/{task_id}")
 async def get_task(task_id: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(task_id)):
+        raise HTTPException(404, "Task not found")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT * FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -382,6 +396,15 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                 raise HTTPException(422, "Unknown department, week, or parent task")
             mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
                 or str(parent["user_id"]) == str(user["id"])
+            if not mine:
+                # A foreign parent is attachable ONLY if it is ALREADY visible
+                # to this manager (existing multi-departmental family / own or
+                # assigned task). Without this, attaching a child in their own
+                # department to ANY org task uuid would grant them the family
+                # visibility clause on that task — a self-served scope
+                # escalation (_assert_scope_visible counts existing children,
+                # so the check runs before the new child exists).
+                await _assert_scope_visible(c, str(body.parent_id), user)
             if not mine and body.department_id and str(body.department_id) != scope:
                 raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
             if not body.department_id:
@@ -467,11 +490,14 @@ def _advance(d: date, rec: dict) -> date:
         return d + timedelta(days=interval)
     if freq == "weekly":
         return d + timedelta(weeks=interval)
-    # monthly: same day-of-month, clamped
+    # monthly: same day-of-month, clamped. anchor_day (RFC-5545 semantics)
+    # remembers the ORIGINAL day so a Jan-31 monthly task clamped to Feb-28
+    # springs back to Mar-31 instead of drifting to the 28th forever.
     month = d.month - 1 + interval
     year, month = d.year + month // 12, month % 12 + 1
-    day = min(d.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
-                      31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    anchor = int(rec.get("anchor_day") or d.day)
+    day = min(anchor, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
     return date(year, month, day)
 
 
@@ -479,8 +505,12 @@ async def _materialize_recurrence(c, row) -> dict | None:
     """When a recurring task completes, create its next instance: same
     definition, dates advanced by the recurrence rule, fresh lifecycle.
     Stops silently once `until` is passed."""
-    rec = row["recurrence"]
+    rec = dict(row["recurrence"])
     base = row["due_date"] or row["week_start"] or date.today()
+    # Pin the monthly day anchor on first materialization (before any clamp
+    # rewrites it) so the cadence never drifts off the original day-of-month.
+    if rec.get("freq") == "monthly" and not rec.get("anchor_day"):
+        rec["anchor_day"] = base.day
     nxt = _advance(base, rec)
     until = rec.get("until")
     if until and nxt > date.fromisoformat(str(until)):
@@ -495,12 +525,13 @@ async def _materialize_recurrence(c, row) -> dict | None:
             row["org_id"], next_week_start)
     new = await c.fetchrow(
         "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-        " task_type,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
+        " task_type,node_kind,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
         " days,tags,attributes,estimated_hours,created_by,updated_by)"
         " SELECT org_id,user_id,parent_id,title,description,'pending',priority,"
-        " task_type,reference_code,recurrence,department,department_id,$2,$3,$4,"
+        " task_type,node_kind,reference_code,$6,department,department_id,$2,$3,$4,"
         " days,tags,attributes,estimated_hours,$5,$5 FROM tasks WHERE id=$1 RETURNING *",
-        row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None, row["updated_by"])
+        row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None,
+        row["updated_by"], rec)
     return dict(new) if new else None
 
 
@@ -556,20 +587,37 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # see) — EXCEPT re-targeting a subtask whose parent is in their own
         # department (or personally theirs): that's the delegation move that
         # makes a task multi-departmental.
-        if scope and "department_id" in patch and str(patch["department_id"] or "") != scope:
-            fam = await c.fetchrow(
-                "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
-                " JOIN tasks p ON p.id=t.parent_id"
-                " WHERE t.id=$1 AND t.is_deleted=false", task_id)
-            delegable = fam is not None and (
-                (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
-            if not delegable:
-                raise HTTPException(403, "Managers may not move tasks outside their own department")
+        if scope and "department_id" in patch:
+            cur_t = await c.fetchrow(
+                "SELECT department_id, user_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+            cur_dept = str(cur_t["department_id"]) if cur_t and cur_t["department_id"] else None
+            if cur_t is not None and str(patch["department_id"] or "") != (cur_dept or ""):
+                fam = await c.fetchrow(
+                    "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
+                    " JOIN tasks p ON p.id=t.parent_id"
+                    " WHERE t.id=$1 AND t.is_deleted=false", task_id)
+                delegable = fam is not None and (
+                    (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
+                owns = str(cur_t["user_id"]) == str(user["id"])
+                # Both directions are guarded: OUT of their department (the
+                # original rule) and IN to it — without src_ok a scoped
+                # manager could hijack any task they can merely see (e.g. as
+                # assignee) onto their own board by setting department_id to
+                # their scope, which the old !=scope condition never checked.
+                src_ok = cur_dept == scope or owns or delegable
+                dst_ok = str(patch["department_id"] or "") == scope or delegable
+                if not (src_ok and dst_ok):
+                    raise HTTPException(403, "Managers may not move tasks outside their own department")
         # Capture the pre-update status so a repeated/retried PATCH that sets
         # status='completed' on an ALREADY-completed recurring task doesn't
         # re-materialize a duplicate next instance (recurrence isn't cleared
         # on completion, so this check is the only idempotency guard).
-        prev_status = await c.fetchval("SELECT status FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        # FOR UPDATE: two concurrent completion PATCHes otherwise both read the
+        # pre-completion status and each materializes a "next" recurring
+        # instance (the read is the only idempotency guard, so it must hold
+        # the row lock until this transaction commits).
+        prev_status = await c.fetchval(
+            "SELECT status FROM tasks WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
         try:
             row = await c.fetchrow(
                 f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
@@ -607,8 +655,8 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
 
 
 class ProgressIn(BaseModel):
-    day_label: str
-    note: str
+    day_label: str = PydField(max_length=40)
+    note: str = PydField(max_length=10_000)
 
 
 @router.post("/tasks/{task_id}/progress", status_code=201)
@@ -630,7 +678,7 @@ class SessionIn(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     hours: Decimal | None = Field(default=None, gt=0)
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=10_000)
     source: Literal["manual", "timer", "capture"] = "manual"
 
 

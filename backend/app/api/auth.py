@@ -114,7 +114,9 @@ class ChangePwReq(BaseModel):
 
 
 class CreateUserReq(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
+    # No '@': an email-shaped username could shadow another account's login
+    # email in the login lookup (see login()'s precedence comment).
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[^@\s]+$")
     full_name: str = Field(min_length=1, max_length=120)
     email: str | None = Field(default=None, max_length=254)
     role: str = Field(default="USER", max_length=32)
@@ -144,10 +146,18 @@ async def login(body: LoginReq, request: Request):
     identifier = body.email.lower()
     _rate_limit_check(f"id:{identifier}", f"ip:{ip}")
 
+    # Username match takes strict precedence over email match. The combined
+    # (username=$1 OR email=$1) fetchrow had no ORDER BY, and email carries no
+    # uniqueness constraint — two accounts sharing an email (or a username
+    # crafted to equal someone's login email) made authentication
+    # nondeterministic: the "wrong" row could win the plan and the real
+    # password would fail apparently at random.
     row = await users_admin_pool().fetchrow(
-        "SELECT * FROM profiles WHERE (username=$1 OR email=$1) AND is_deleted=false",
-        body.email,
-    )
+        "SELECT * FROM profiles WHERE username=$1 AND is_deleted=false", body.email)
+    if row is None:
+        row = await users_admin_pool().fetchrow(
+            "SELECT * FROM profiles WHERE email=$1 AND is_deleted=false"
+            " ORDER BY created_at LIMIT 1", body.email)
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     # Always pay the bcrypt cost, even on a miss (unknown/inactive user) —
     # short-circuiting before it is a timing side-channel that lets an

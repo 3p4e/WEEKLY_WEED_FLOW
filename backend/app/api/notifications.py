@@ -19,6 +19,8 @@ app-layer, mirroring list_tasks' scoping approach.
 """
 from datetime import datetime, timedelta, timezone
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls
@@ -93,8 +95,13 @@ async def read_all(user: dict = Depends(require_password_set)):
     return {"ok": True, "marked": int(res.split()[-1])}
 
 
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
 @router.post("/notifications/{nid}/read")
 async def mark_read(nid: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(nid)):
+        raise HTTPException(404, "Not found")
     async with rls(user) as c:
         res = await c.execute(
             "UPDATE notifications SET read_at=COALESCE(read_at, now()) WHERE id=$1", nid)
@@ -105,6 +112,8 @@ async def mark_read(nid: str, user: dict = Depends(require_password_set)):
 
 @router.post("/notifications/{nid}/done")
 async def mark_done(nid: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(nid)):
+        raise HTTPException(404, "Not found")
     async with rls(user) as c:
         res = await c.execute(
             "UPDATE notifications SET done_at=now(), read_at=COALESCE(read_at, now()) WHERE id=$1", nid)

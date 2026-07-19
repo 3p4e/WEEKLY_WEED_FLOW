@@ -24,6 +24,7 @@ only the cast/narrative is fixed.
 """
 import secrets
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 
 from app.db import tasks_admin_pool, users_admin_pool
@@ -215,14 +216,31 @@ async def _ensure_org() -> uuid.UUID:
     return org_id
 
 
+@asynccontextmanager
+async def demo_mutex():
+    """Serialize EVERY demo-org mutation (reset AND exit-wipe). A session-level
+    advisory lock held on a dedicated connection for the whole wipe+seed span —
+    the old design locked only the wipe transaction, so two concurrent
+    /demo/start calls could interleave their seeds (one wiping the other's
+    half-seeded rows mid-insert → FK violations / UNIQUE collisions → a
+    corrupt half-seeded demo org, externally triggerable since /demo/start is
+    public when demo_enabled)."""
+    async with tasks_admin_pool().acquire() as lock_conn:
+        await lock_conn.execute("SELECT pg_advisory_lock($1)", _RESET_LOCK_KEY)
+        try:
+            yield
+        finally:
+            await lock_conn.execute("SELECT pg_advisory_unlock($1)", _RESET_LOCK_KEY)
+
+
 async def wipe_demo_org(org_id: uuid.UUID) -> None:
     """Delete every demo-org row in both DBs EXCEPT audit_log (global hash
-    chain) and the organizations row itself (stable identity)."""
+    chain) and the organizations row itself (stable identity). Callers must
+    hold demo_mutex() — the wipe itself stays transactional, but serialization
+    against a concurrent reset's SEED phase lives in the mutex."""
     t = tasks_admin_pool()
     async with t.acquire() as c:
         async with c.transaction():
-            # One reset at a time — held until this transaction commits.
-            await c.execute("SELECT pg_advisory_xact_lock($1)", _RESET_LOCK_KEY)
             for table in _TASKS_WIPE_ORDER:
                 # `table` is only ever a value from the hardcoded module
                 # constant _TASKS_WIPE_ORDER — never user input; the org_id
@@ -240,6 +258,11 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
     the server)."""
     data = CASTS.get(cast, _cast_dune)()
     org_id = await _ensure_org()
+    async with demo_mutex():
+        return await _reset_locked(org_id, data)
+
+
+async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
     await wipe_demo_org(org_id)
 
     u, t = users_admin_pool(), tasks_admin_pool()

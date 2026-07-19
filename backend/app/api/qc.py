@@ -870,6 +870,17 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
     if unmet:
         raise HTTPException(
             409, f"{len(unmet)} result(s) do not comply or are unmeasured — cannot certify")
+    # GxP completeness gate (COQ_GEN guard parity): every parameter of the
+    # certificate's specification must be covered by a result — passing the
+    # results-comply gate alone would let a COQ certify a partially-tested
+    # batch (spec says 5 tests, only 3 entered, all 3 pass → certified).
+    covered = {str(r["parameter_id"]) for r in results if r["parameter_id"]}
+    missing = [p for p in params if str(p["id"]) not in covered]
+    if missing:
+        names = ", ".join((p["test_name_en"] or p["test_name_mk"] or "?") for p in missing[:5])
+        raise HTTPException(
+            409, f"{len(missing)} specification parameter(s) have no result ({names}"
+                 f"{'…' if len(missing) > 5 else ''}) — batch is not fully tested")
     params_by_id = {str(p["id"]): dict(p) for p in params}
     md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id,
                        [dict(r) for r in results])
@@ -1427,6 +1438,11 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
         cur = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
         if cur is None:
             raise HTTPException(404, "eCoA document not found")
+        if cur["status"] in ("PROMOTED", "REJECTED"):
+            # A promoted document is the source-of-record for a minted
+            # certificate — rebinding its spec/sample/metadata afterwards would
+            # break the provenance the verify loop reconciles against.
+            raise HTTPException(409, f"Document is {cur['status']} — locked")
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
             if target not in _DOC_STATUSES:
@@ -1546,6 +1562,15 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
     that parameter's limits) and/or correct the value/unit."""
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
+        doc = await c.fetchrow(
+            "SELECT status, specification_id FROM qc_coa_documents WHERE id=$1", doc_id)
+        if doc is None:
+            raise HTTPException(404, "Document not found")
+        if doc["status"] in ("PROMOTED", "REJECTED"):
+            # Once a certificate has been minted (or the doc rejected) the
+            # source-of-record is closed — editing an extraction afterwards
+            # would silently desync it from the already-created qc_results.
+            raise HTTPException(409, f"Document is {doc['status']} — extractions are locked")
         cur = await c.fetchrow(
             "SELECT * FROM qc_coa_extractions WHERE id=$1 AND document_id=$2", eid, doc_id)
         if cur is None:
@@ -1557,9 +1582,16 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
         if "parameter_id" in patch:
             pid = patch["parameter_id"]
             if pid:
+                _uuid_or_422(pid, "parameter_id")
+                # Same guard add_result has: the cited parameter must belong to
+                # THIS document's specification, else a reviewer could re-grade
+                # a value against another spec's limits and promote fabricated
+                # conformance onto the certificate.
                 p = await c.fetchrow("SELECT * FROM qc_spec_parameters WHERE id=$1", pid)
                 if p is None:
                     raise HTTPException(422, "Unknown parameter")
+                if doc["specification_id"] is None or p["spec_id"] != doc["specification_id"]:
+                    raise HTTPException(422, "Parameter does not belong to this document's specification")
                 lo, hi = p["lower_limit"], p["upper_limit"]
                 test_name = patch.get("test_name") or p["test_name_en"] or p["test_name_mk"]
             else:
@@ -1673,9 +1705,16 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
                 m["test_name"] or m["raw_label"], m["raw_value"], m["numeric_value"], m["unit"],
                 m["lower_limit"], m["upper_limit"], m["complies"], st, user["id"],
                 doc["doc_number"], doc["source_institution"])
-        await c.execute(
+        # Optimistic re-assert (same TOCTOU defense generate_coq uses): the
+        # promoted_coa_id IS NULL predicate makes concurrent promotes race-safe
+        # — the loser's UPDATE matches 0 rows and the whole transaction (its
+        # duplicate certificate + results included) rolls back with a 409.
+        tag = await c.execute(
             "UPDATE qc_coa_documents SET status='PROMOTED', promoted_coa_id=$1,"
-            " updated_by=$2, updated_at=now() WHERE id=$3", coa["id"], user["id"], doc_id)
+            " updated_by=$2, updated_at=now()"
+            " WHERE id=$3 AND promoted_coa_id IS NULL", coa["id"], user["id"], doc_id)
+        if tag == "UPDATE 0":
+            raise HTTPException(409, "Document was already promoted")
         try:
             await emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
                        object_id=doc_id, recipients=[],
@@ -2047,6 +2086,7 @@ async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_r
         cur = await c.fetchrow("SELECT status FROM qc_sample_field_records WHERE id=$1", sfr_id)
         if cur is None:
             raise HTTPException(404, "Field record not found")
+        _uuid_or_422(patch.get("received_by_id"), "received_by_id")
         if patch.get("sample_id"):
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
                 raise HTTPException(422, "Unknown sample")

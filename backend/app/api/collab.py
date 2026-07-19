@@ -10,11 +10,11 @@ import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
-from app.db import rls, rls_users
-from app.deps import require_password_set
+from app.db import rls, rls_users, tasks_admin_pool
+from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.notify import emit, participants
 from app.roster import display_name, roster
@@ -33,17 +33,17 @@ _ELEVATED = ELEVATED_ROLES
 
 
 class CommentReq(BaseModel):
-    content: str
+    content: str = Field(max_length=10_000)
 
 
 class AssignReq(BaseModel):
     user_id: UUID
-    role: str = "assignee"
+    role: str = Field(default="assignee", max_length=64)
 
 
 class AckReq(BaseModel):
     accepted: bool
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 async def _task_or_404(conn, task_id: str) -> dict:
@@ -95,14 +95,26 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             mentioned = []
             handles = {h.lower() for h in _MENTION_RE.findall(content)}
+            who = await participants(c, task_id)
             if handles:
                 async with rls_users(user) as uc:
                     rows = await uc.fetch(
-                        "SELECT id FROM profiles WHERE org_id=$1 AND is_deleted=false"
+                        "SELECT id, role, department_id FROM profiles"
+                        " WHERE org_id=$1 AND is_deleted=false"
                         " AND lower(username) = ANY($2::text[])",
                         user["org_id"], sorted(handles)[:16])
-                mentioned = [str(r["id"]) for r in rows]
-            who = await participants(c, task_id)
+                # A mention notification carries the task title + a comment
+                # preview — deliver it only to people who can actually see the
+                # task (elevated roles, same-department staff, or existing
+                # participants). Otherwise "@operator see <detail>" on an
+                # elevated-only task leaks its title+content into the inbox of
+                # someone who gets 404 on the task itself.
+                task_dept = str(t["department_id"]) if t and t["department_id"] else None
+                who_set = {str(w) for w in who}
+                mentioned = [str(r["id"]) for r in rows
+                             if r["role"] != "USER"
+                             or (task_dept and str(r["department_id"] or "") == task_dept)
+                             or str(r["id"]) in who_set]
             await emit(c, user, verb="commented", object_type="task", object_id=task_id,
                        recipients=[(u, "mentioned") for u in mentioned]
                                   + [(u, "comment") for u in who],
@@ -231,8 +243,8 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
 # receiving side actually learns about it; accepting it re-homes the task into
 # that department (which also makes it visible to that department's board).
 class HandoffIn(BaseModel):
-    to_dept_id: str
-    note: str | None = None
+    to_dept_id: UUID
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class HandoffResolve(BaseModel):
@@ -290,25 +302,53 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
     if body.status not in ("accepted", "rejected", "cancelled"):
         raise HTTPException(422, "status must be accepted, rejected, or cancelled")
     async with rls(user) as c:
-        h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1", handoff_id)
+        # FOR UPDATE: without the row lock, concurrent accept+reject both pass
+        # the proposed-status check and the task can move departments while the
+        # handoff record ends "rejected".
+        h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1 FOR UPDATE", handoff_id)
         if h is None:
             raise HTTPException(404, "Handoff not found")
         if h["status"] != "proposed":
             raise HTTPException(409, f"Handoff already {h['status']}")
-        await _assert_scope_visible(c, str(h["task_id"]), user)
         dst = await c.fetchrow("SELECT head_user_id FROM departments WHERE id=$1", h["to_dept_id"])
         is_head = dst is not None and str(dst["head_user_id"] or "") == str(user["id"])
         is_requester = str(h["requested_by"]) == str(user["id"])
-        allowed = user["role"] in _ELEVATED or is_head or (body.status == "cancelled" and is_requester)
+        # Receiving-side authority: the target department's head, or a manager
+        # whose department IS the target. The old scope-visibility check ran
+        # first, which 404'd the exact person the proposal pings (the target
+        # dept's scoped manager — the task still sits in the SOURCE dept), so
+        # the handoff's primary actor could never resolve it.
+        target_side = is_head or (
+            user["role"] in _ELEVATED
+            and str(user.get("department_id") or "") == str(h["to_dept_id"]))
+        # Org-wide elevated roles (ADMIN/executives/QP — not dept-scoped) may
+        # arbitrate, but the PROPOSER may not accept their own handoff into a
+        # department that never consented (second-person rule). They may still
+        # reject/cancel it (withdrawing an own proposal is harmless).
+        org_wide = user["role"] in _ELEVATED and dept_scope(user) is None
+        if body.status == "accepted":
+            allowed = target_side or (org_wide and not is_requester)
+        else:
+            allowed = target_side or org_wide or is_requester
         if not allowed:
             raise HTTPException(403, "Not permitted to resolve this handoff")
+        # Non-target resolvers still need ordinary visibility of the task.
+        if not target_side:
+            await _assert_scope_visible(c, str(h["task_id"]), user)
         await c.execute(
             "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now() WHERE id=$3",
             body.status, user["id"], handoff_id)
         if body.status == "accepted":
-            await c.execute(
-                "UPDATE tasks SET department_id=$1, updated_at=now() WHERE id=$2",
-                h["to_dept_id"], h["task_id"])
+            # Admin pool with explicit org+id filter: a USER-role department
+            # head passes the permission check but the caller-scoped RLS
+            # tasks_write policy silently filters their UPDATE to 0 rows —
+            # handoff marked accepted while the task never moved.
+            tag = await tasks_admin_pool().execute(
+                "UPDATE tasks SET department_id=$1, updated_at=now()"
+                " WHERE id=$2 AND org_id=$3",
+                h["to_dept_id"], h["task_id"], user["org_id"])
+            if tag == "UPDATE 0":
+                raise HTTPException(409, "Task no longer exists — handoff not applied")
         t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", h["task_id"])
         verb_txt = {"accepted": "✓ Handoff accepted", "rejected": "✗ Handoff rejected",
                     "cancelled": "⊘ Handoff cancelled"}[body.status]
