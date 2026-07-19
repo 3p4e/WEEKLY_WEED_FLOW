@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
-from app.roles import ADMIN
+from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -98,6 +98,39 @@ CATALOG = {
     "next_week_plan":     "Draft next week's plan on demand (the same reasoning weekly_snapshot.py runs on schedule).",
 }
 
+# ── Role→capability matrix for the AI surface (owner directive 2026-07-19:
+# "depending on user credentials and access levels there should be differences
+# in the agent capabilities"). Until now the generic invoke() was gated only by
+# require_password_set, so ANY authenticated operator could call ANY bound
+# function — including planning/analytics over the task corpus. Two mechanisms
+# now differentiate roles:
+#   1. ACCESS (this map): personal tier (absent from the map) — every
+#      authenticated user; elevated tier — managers/QP/executives/ADMIN.
+#   2. GROUNDING BREADTH (dept_scope in _task_context, the M2 work): a
+#      dept-scoped manager's corpus functions ground ONLY on their own
+#      department's tasks, while executives/ADMIN/QP ground org-wide — so the
+#      same function answers with a different reach per access level.
+# /ai/functions filters to the caller's tier, so the UI only offers what the
+# role may use; invoke() enforces it server-side regardless.
+FUNCTION_ROLES: dict[str, tuple[str, ...]] = {
+    "task_extract":       ELEVATED_ROLES,
+    "dependency_advisor": ELEVATED_ROLES,
+    "corpus_qa":          ELEVATED_ROLES,
+    "progress_digest":    ELEVATED_ROLES,
+    "risk_flag":          ELEVATED_ROLES,
+    "template_narrative": ELEVATED_ROLES,
+    "weekly_summary":     ELEVATED_ROLES,
+    "workload_balance":   ELEVATED_ROLES,
+    "next_week_plan":     ELEVATED_ROLES,
+    # personal tier (all authenticated): voice_capture, translate_bilingual,
+    # draft_description — deliberately absent.
+}
+
+
+def _function_allowed(function_key: str, role: str) -> bool:
+    allowed = FUNCTION_ROLES.get(function_key)
+    return allowed is None or role in allowed
+
 
 class InvokeReq(BaseModel):
     input: str
@@ -135,9 +168,13 @@ async def functions(user: dict = Depends(require_password_set)):
     async with rls(user) as c:
         bound = await c.fetch(
             "SELECT function_key, scope, is_active FROM ai_agent_bindings WHERE is_active=true")
-    active = {b["function_key"] for b in bound}
+    # Only the functions this caller's role may invoke — the UI builds its AI
+    # affordances from this list, so a USER never sees planning-tier actions.
+    role = user.get("role", "")
+    visible = {k: v for k, v in CATALOG.items() if _function_allowed(k, role)}
+    active = {b["function_key"] for b in bound if b["function_key"] in visible}
     return {
-        "catalog": CATALOG,
+        "catalog": visible,
         "active": sorted(active),
         "letta_base_url": settings.letta_base_url,
     }
@@ -331,6 +368,10 @@ async def _family_context(conn, names: dict, task_id: str) -> str:
 async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(require_password_set)):
     if function_key not in CATALOG:
         return {"available": False, "reason": "unknown_function"}
+    if not _function_allowed(function_key, user.get("role", "")):
+        # Server-side capability gate — /ai/functions already hides these from
+        # the UI, but the API must enforce it regardless of the client.
+        raise HTTPException(403, f"role may not invoke {function_key}")
     week_id = (body.context or {}).get("week_id")
     task_id = (body.context or {}).get("task_id")
     async with rls(user) as c:

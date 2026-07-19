@@ -388,3 +388,58 @@ async def test_dependency_advisor_scopes_to_task_family_not_whole_corpus(client,
     assert "Family Parent" in prompt
     assert "Family Sibling" in prompt
     assert "Unrelated Outsider Task" not in prompt
+
+
+# ── Role→capability matrix (FUNCTION_ROLES) ─────────────────────────────────
+# The generic invoke() used to admit any authenticated user to any bound
+# function; the matrix gates each function to a role tier and /ai/functions
+# filters its catalog to what the caller may actually use.
+
+async def test_user_role_blocked_from_planning_and_elevated_tiers(client, admin_headers):
+    headers = await _user_headers(client, admin_headers, role="USER")
+    for fn in ("weekly_summary", "workload_balance", "next_week_plan",
+               "corpus_qa", "task_extract"):
+        r = await client.post(f"/ai/{fn}", json={"input": "hi"}, headers=headers)
+        assert r.status_code == 403, f"{fn}: {r.status_code} {r.text}"
+
+
+async def test_user_role_keeps_personal_tier(client, admin_headers):
+    headers = await _user_headers(client, admin_headers, role="USER")
+    # Personal-tier function passes the gate; with no binding it degrades to
+    # the normal not_configured envelope rather than 403.
+    r = await client.post("/ai/translate_bilingual", json={"input": "hello"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["reason"] == "not_configured"
+
+
+async def test_manager_gets_elevated_tier(client, admin_headers):
+    """Managers pass the access gate for every elevated function — their
+    DIFFERENTIATION from executives is grounding breadth, not denial:
+    test_ai_corpus_is_scoped_to_managers_department proves the same function
+    grounds only on the manager's own department."""
+    headers = await _user_headers(client, admin_headers, role="QC_MGR")
+    for fn in ("corpus_qa", "next_week_plan", "weekly_summary"):
+        r = await client.post(f"/ai/{fn}", json={"input": "q"}, headers=headers)
+        assert r.status_code == 200, f"{fn}: {r.text}"
+        assert r.json()["reason"] == "not_configured"
+
+
+async def test_executive_gets_planning_tier(client, admin_headers):
+    headers = await _user_headers(client, admin_headers, role="CEO")
+    r = await client.post("/ai/weekly_summary", json={"input": "summarise"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["reason"] == "not_configured"
+
+
+async def test_functions_listing_is_filtered_by_role(client, admin_headers):
+    r = await client.get("/ai/functions", headers=admin_headers)
+    assert r.status_code == 200
+    assert "weekly_summary" in r.json()["catalog"]          # ADMIN sees everything
+
+    headers = await _user_headers(client, admin_headers, role="USER")
+    r = await client.get("/ai/functions", headers=headers)
+    assert r.status_code == 200
+    cat = r.json()["catalog"]
+    assert "translate_bilingual" in cat                      # personal tier stays
+    assert "weekly_summary" not in cat                       # planning tier hidden
+    assert "corpus_qa" not in cat                            # elevated tier hidden
