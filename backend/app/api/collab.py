@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
-from app.db import rls, rls_users, tasks_admin_pool
+from app.db import rls, rls_users
 from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.notify import emit, participants
@@ -301,11 +301,14 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
     head, or (for cancel) the original requester may resolve."""
     if body.status not in ("accepted", "rejected", "cancelled"):
         raise HTTPException(422, "status must be accepted, rejected, or cancelled")
+    # Phase 1 — caller-scoped READS only. No FOR UPDATE and no writes here: a
+    # write on this connection fires the audit trigger, whose hash-chain
+    # advisory lock is held until this transaction ends — and the write phase
+    # below runs on a DIFFERENT connection, which would wait on that lock
+    # forever (observed as a live hang the first time a target-side manager
+    # accepted a handoff).
     async with rls(user) as c:
-        # FOR UPDATE: without the row lock, concurrent accept+reject both pass
-        # the proposed-status check and the task can move departments while the
-        # handoff record ends "rejected".
-        h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1 FOR UPDATE", handoff_id)
+        h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1", handoff_id)
         if h is None:
             raise HTTPException(404, "Handoff not found")
         if h["status"] != "proposed":
@@ -335,30 +338,38 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
         # Non-target resolvers still need ordinary visibility of the task.
         if not target_side:
             await _assert_scope_visible(c, str(h["task_id"]), user)
-        await c.execute(
-            "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now() WHERE id=$3",
-            body.status, user["id"], handoff_id)
+    # Phase 2 — ALL writes in one admin transaction (rls admin=True stamps the
+    # actor GUCs so the audit trigger attributes correctly; BYPASSRLS because
+    # the resolver legitimately writes a task still homed in the SOURCE dept —
+    # caller-scoped RLS would silently filter the move to 0 rows). The
+    # status='proposed' predicate replaces the old FOR UPDATE: of two racing
+    # resolvers, exactly one flips the row, the other sees 0 rows → 409.
+    async with rls(user, admin=True) as ac:
+        tag = await ac.execute(
+            "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now()"
+            " WHERE id=$3 AND org_id=$4 AND status='proposed'",
+            body.status, user["id"], handoff_id, user["org_id"])
+        if tag == "UPDATE 0":
+            raise HTTPException(409, "Handoff already resolved")
         if body.status == "accepted":
-            # Admin pool with explicit org+id filter: a USER-role department
-            # head passes the permission check but the caller-scoped RLS
-            # tasks_write policy silently filters their UPDATE to 0 rows —
-            # handoff marked accepted while the task never moved.
-            tag = await tasks_admin_pool().execute(
+            tag = await ac.execute(
                 "UPDATE tasks SET department_id=$1, updated_at=now()"
                 " WHERE id=$2 AND org_id=$3",
                 h["to_dept_id"], h["task_id"], user["org_id"])
             if tag == "UPDATE 0":
+                # rolls back the handoff flip too — never accepted-but-unmoved
                 raise HTTPException(409, "Task no longer exists — handoff not applied")
-        t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", h["task_id"])
+        t = await ac.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1 AND org_id=$2",
+                              h["task_id"], user["org_id"])
         verb_txt = {"accepted": "✓ Handoff accepted", "rejected": "✗ Handoff rejected",
                     "cancelled": "⊘ Handoff cancelled"}[body.status]
-        await c.execute(
+        await ac.execute(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], h["task_id"], user["id"], verb_txt)
         try:
-            recips = [(u, "status") for u in await participants(c, str(h["task_id"]))]
+            recips = [(u, "status") for u in await participants(ac, str(h["task_id"]))]
             recips.append((h["requested_by"], "status"))
-            await emit(c, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
+            await emit(ac, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
                        recipients=recips, task_id=h["task_id"],
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "status": body.status})
