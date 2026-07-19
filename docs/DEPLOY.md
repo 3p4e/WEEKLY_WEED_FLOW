@@ -794,3 +794,48 @@ Frontend-only, no backend/migration:
 - **Other skins' CSS stays** in `app.css`/`skins.css` (unreachable via the UI) — a
   clean revert = re-add entries to `GF.THEMES` + restore the boot whitelist.
 - SW `wwf-shell-v3.40.0`. `node --check` clean. Deploy: frontend image only.
+
+## Silent-defect audit — regression class + 3 real fixes (2026-07-19)
+
+Owner directive: audit front and backend for the bug class behind the sidebar-
+clipping incident (code that exists, is deployed, and even runs, but is
+unreachable/invisible in the UI) plus features "planned but not coded for or
+wired in," and put a lasting detection mechanism in place. Frontend-only, no
+migration:
+
+- **`web/gf/qmsregistry-view.js`** / **`qmsknow-view.js`**: both called live
+  qms-api endpoints that are permanently retired (blank API key by deliberate
+  prior decision), guaranteeing a 503 + console error on every load before
+  showing the same "retired" fallback they can show immediately. Now render
+  the fallback directly, no network round trip.
+- **`execreport-view.js`**: `_registerFullPageView` had a duplicate
+  `insertBefore` object key — JS silently kept only the last value, leaving a
+  dead line + stale comment behind. Exactly the "looks correct, isn't" pattern
+  the sidebar bug was.
+- **`assistant.js`**: new-message auto-scroll set `scrollTop` on `#asst-thread`
+  (a plain child div with no overflow rule — never scrolls) instead of
+  `#assistant-body` (the actual scrollable ancestor) — a silent no-op that left
+  new messages unrevealed until a manual scroll.
+- **Detection mechanism — `web/e2e/tests/no-clipped-content.spec.js`**: asserts
+  the structural CSS invariant directly (any container whose content overflows
+  its box must have `overflow-y: auto|scroll`) instead of relying on
+  interaction-based reachability — a Playwright `.click()` auto-scrolls an
+  `overflow:hidden` ancestor exactly like `overflow:auto`, so click-based (and
+  `GF.setView()`-based) tests can never catch this class. Verified to have
+  teeth: reverted `app.css`/`index.html` to their pre-`70dd224` state, confirmed
+  the spec fails, restored.
+
+Local gate: full Playwright suite 14/14 passed, backend pytest 386/1 passed.
+SW `wwf-shell-v3.52.0`. Built `wwf-growflow:v89`, bumped both
+`/opt/stacks/wwf_mass/compose.yaml` and `/opt/stacks/wwf_app/compose.yaml`
+frontend `v88`→`v89`, `docker compose up -d --no-deps frontend` on both stacks.
+**Live smoke green on both**: `/` 200, SW serves `wwf-shell-v3.52.0`, updated
+`qmsregistry-view.js`/`assistant.js` content confirmed served. No backend/DB
+change on either stack. **Rollback** = revert the frontend image tag to `v88`
++ `docker compose up -d --no-deps frontend` on the affected stack.
+
+Audit also surfaced two further items, tracked separately: a DocEngine
+regulatory-check pipeline defect (see below) and backend-only feature gaps
+with no frontend UI (Handoffs, Task Dependencies, External Links, QC Sampling
+Plans, a partial Facility Rooms write path; plus two silent-truncation UI spots
+— Calendar "+N" chip, Workload chip).
