@@ -293,10 +293,9 @@ GF.views.execreport = function () {
 GF.WWF._registerFullPageView({
   key: 'execreport',
   icon: 'eye',
-  insertBefore: 'coord',   // Management group of the rail (mockup nav.js)
+  insertBefore: 'report',   // Management group of the rail (mockup nav.js)
   label: () => AL('Executive Report', 'Извештај'),
   // Same gate as the backend's require_role(*ELEVATED_ROLES) on /status and
   // the document endpoints — a base USER would only collect 403s here.
   guard: () => ELEVATED_ROLES.includes((GF.API.user || {}).role),
-  insertBefore: 'report',
 });

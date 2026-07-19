@@ -48,7 +48,10 @@ GF.assistant = {
       : `<div class="asst-msg me"><div class="asst-bubble">${GF.esc(m.text)}</div></div>`).join('');
     GF.$('assistant-body').innerHTML =
       statusRow + `<div class="asst-actions">${acts}</div><div class="asst-thread" id="asst-thread">${thread}</div>`;
-    const th = GF.$('asst-thread'); if (th) th.scrollTop = th.scrollHeight;
+    // .asst-thread itself never scrolls (no overflow rule) — the scrollable
+    // ancestor is #assistant-body (.asst-body); scrolling the child was a
+    // silent no-op that left new messages unrevealed until a manual scroll.
+    const body = GF.$('assistant-body'); if (body) body.scrollTop = body.scrollHeight;
   },
 
   _push(role, text, html) { this.msgs.push({ role, text, html }); this.render(); },

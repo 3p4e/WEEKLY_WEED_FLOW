@@ -1,26 +1,29 @@
-/* qmsknow-view.js — QMS Studio: Knowledge Search (unification Phase 1).
+/* qmsknow-view.js — QMS Studio: Knowledge Search (RETIRED).
 
-   Semantic search across the QMS Creator's two Letta archives —
-   db1_regulatory (EU-GMP/ICH/WHO corpus) and db2_entity_qms (the facility's
-   own document base) — via the authed platform proxy (POST /qms/rag-query).
+   Semantic search across the QMS Creator's two Letta archives, via the old
+   qms-api proxy (POST /qms/rag-query). qms-api was retired platform-wide
+   (docs/PLATFORM-ROADMAP-2026-07.md) — its API key is blank on every stack,
+   so that endpoint 503s permanently, not intermittently. Regulatory lookups
+   now live in Document Studio's regulatory-check step (qmsstudio-view.js,
+   DocEngine-backed).
 
-   Same graceful-unavailable contract as the registry view: when qms-api is
-   not deployed the proxy answers 503 "QMS service unavailable". */
+   Previously a search fired the doomed network call every time (a guaranteed
+   503 + console error after a real wait) before showing this same message —
+   pure noise for a known outcome. Skip the request; go straight to the
+   retired state. The search bar stays (its own e2e step still fills and
+   submits it) so the interaction reads as "this used to work, here's where
+   it went" rather than the input silently vanishing. Text is pinned by
+   web/e2e/tests/qms-studio.spec.js. */
 
 (function () {
   GF.WWF._qmsk = { q: '', db: 'both', results: null, searching: false, error: null };
 
-  GF.WWF.qmsSearch = async () => {
+  GF.WWF.qmsSearch = () => {
     const st = GF.WWF._qmsk;
     const q = (GF.$('qmsk-q') ? GF.$('qmsk-q').value : st.q).trim();
     if (!q) return;
-    st.q = q; st.searching = true; st.error = null; st.results = null;
+    st.q = q; st.error = 'retired (503)'; st.results = null; st.searching = false;
     GF.render.all();
-    try {
-      st.results = await GF.API.qmsRagQuery({ query: q, database: st.db });
-    } catch (e) { st.error = e.message; }
-    st.searching = false;
-    if (GF.state.view === 'qmsknow') GF.render.all();
   };
 
   GF.WWF.qmsDb = (db) => {
