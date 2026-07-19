@@ -86,4 +86,7 @@ app.include_router(demo.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "system": "WEEKLY_WEED_FLOW API"}
+    # `demo_enabled` lets the splash decide whether to surface the "Try the
+    # demo" button — off in production, on where DEMO_ENABLED=true is set.
+    return {"status": "healthy", "system": "WEEKLY_WEED_FLOW API",
+            "demo_enabled": settings.demo_enabled}

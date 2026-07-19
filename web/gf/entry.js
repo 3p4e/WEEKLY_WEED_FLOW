@@ -57,13 +57,29 @@ GF.WWF = GF.WWF || {};
       <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
+  // The demo button is gated on the backend: it only appears where the server
+  // reports demo_enabled (test stacks), and stays hidden in production until a
+  // time-matched demo is switched on there. Rendered hidden, then revealed once
+  // /health confirms — inline display:none beats the stylesheet without any
+  // !important, so there is never a flash of the button on prod.
+  let _demoOk = null;   // null = not probed yet; true/false once /health answers
+  function revealDemoIfEnabled(el) {
+    const show = () => { const b = el.querySelector('.gf-demo-float'); if (b && _demoOk) b.style.display = ''; };
+    if (_demoOk !== null) return show();
+    fetch('/health', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { _demoOk = !!j.demo_enabled; })
+      .catch(() => { _demoOk = false; })
+      .then(show);
+  }
+
   function buildEntry(el, cardHTML, withDemo) {
     el.className = 'gf-entry-root';
     // The demo entry lives OUTSIDE the sign-in card — a fixed pill pinned to the
-    // top-right corner, always visible from the very first splash frame and
-    // never affected by the card/leaf layout (which is what buried it before).
+    // top-right corner, never affected by the card/leaf layout (which is what
+    // buried it before). Hidden until the backend confirms demo is enabled.
     const demoBtn = withDemo ? `
-        <button class="gf-demo-float" onclick="GF.DEMO.enter()"
+        <button class="gf-demo-float" style="display:none" onclick="GF.DEMO.enter()"
                 title="Sample data — separate from the real system · Примерни податоци"
                 aria-label="Try the demo">🌿 <span>Try the demo · Демо</span></button>` : '';
     el.innerHTML = `
@@ -87,6 +103,7 @@ GF.WWF = GF.WWF || {};
     if (back) { back.onclick = backToLeaf; back.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); backToLeaf(); } }; }
     const stage = $('gf-leaf-stage');
     if (stage) stage.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reveal(); } });
+    if (withDemo) revealDemoIfEnabled(el);
   }
 
   function mountLeaf() {
