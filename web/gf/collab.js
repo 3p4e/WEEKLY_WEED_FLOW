@@ -104,19 +104,19 @@ GF.WWF.postComment = async (taskId) => {
   if (!text) return;
   inp.value = '';
   try { await GF.API.addComment(taskId, text); await GF.WWF.loadCollab(taskId); }
-  catch (e) { GF.toast('Comment failed: ' + e.message, 'error'); }
+  catch (e) { GF.toast(AL('Comment failed: ', 'Коментарот не успеа: ') + e.message, 'error'); }
 };
 
 GF.WWF.doAssign = async (taskId) => {
   const sel = GF.$('assign-' + taskId); const uid = sel && sel.value;
   if (!uid) return;
   try { await GF.API.assign(taskId, uid); await GF.WWF.loadCollab(taskId); GF.toast(AL('Assigned ✓', 'Доделено ✓'), 'success'); }
-  catch (e) { GF.toast('Assign failed: ' + e.message, 'error'); }
+  catch (e) { GF.toast(AL('Assign failed: ', 'Доделувањето не успеа: ') + e.message, 'error'); }
 };
 
 GF.WWF.removeAssignee = async (taskId, userId) => {
   try { await GF.API.unassign(taskId, userId); await GF.WWF.loadCollab(taskId); }
-  catch (e) { GF.toast('Remove failed: ' + e.message, 'error'); }
+  catch (e) { GF.toast(AL('Remove failed: ', 'Отстранувањето не успеа: ') + e.message, 'error'); }
 };
 
 GF.WWF.doAck = async (taskId, accepted) => {
@@ -124,7 +124,7 @@ GF.WWF.doAck = async (taskId, accepted) => {
   if (!accepted) { reason = prompt(AL('Reason for declining (optional):', 'Причина за одбивање (опционално):')) || ''; }
   try { await GF.API.ack(taskId, accepted, reason); await GF.WWF.loadCollab(taskId);
     GF.toast(accepted ? AL('Accepted ✓', 'Прифатено ✓') : AL('Declined', 'Одбиено'), accepted ? 'success' : 'info'); }
-  catch (e) { GF.toast('Failed: ' + e.message, 'error'); }
+  catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
 };
 
 // Inject the collab section into every expanded card, above actions.

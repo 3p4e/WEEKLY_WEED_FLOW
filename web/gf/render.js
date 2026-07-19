@@ -83,8 +83,10 @@ GF.render = {
     // (_registerFullPageView) insert themselves into the right group.
     // Coordination badge = pending cross-department handoffs (handoff tasks
     // not yet ready) in the selected week. 0 → no badge renders.
+    // Archived rows (visible only with "Show archived" on) are history, not
+    // live work — keep them out of every aggregate count in this renderer.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
-      .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
+      .filter(t => !t.archived && GF.HANDOFF[t.dept] && t.status !== 'done').length;
     const unreadN = (GF.WWF && GF.WWF._notif && GF.WWF._notif.unread) || 0;
     const ops = [];
     if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
@@ -119,7 +121,7 @@ GF.render = {
 
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};
-    GF.weekTasks(GF.state.selWeek).forEach(t => { counts[t.dept] = (counts[t.dept] || 0) + 1; });
+    GF.weekTasks(GF.state.selWeek).forEach(t => { if (t.archived) return; counts[t.dept] = (counts[t.dept] || 0) + 1; });
     // A dept-scoped manager's sidebar shows only departments they can actually
     // have tasks in this week: their own, plus any department that appears via
     // a multi-departmental family (delegated subtask both sides see in full).
@@ -162,7 +164,9 @@ GF.render = {
   },
 
   dayPills() {
-    const wt = GF.weekTasks(GF.state.selWeek);
+    // Counts are live-work telemetry: archived cards still render in the
+    // lists below, but never inflate the pill numbers.
+    const wt = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);
     const counts = { All: wt.length };
     GF.DAYS.forEach(d => counts[d] = wt.filter(t => (t.days || []).includes(d)).length);
     const days = ['All', ...GF.DAYS.slice(0, 5)];
@@ -173,7 +177,9 @@ GF.render = {
   },
 
   telemetry() {
-    const all = GF.weekTasks(GF.state.selWeek);
+    // Aggregates exclude archived rows — with "Show archived" on they still
+    // render (muted) in the lists but must not skew completion/status counts.
+    const all = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);
     const n = all.length;
     const by = (s) => all.filter(t => t.status === s).length;
     const done = by('done'), rate = n ? Math.round(done / n * 100) : 0;

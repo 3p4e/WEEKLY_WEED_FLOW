@@ -241,7 +241,66 @@ GF.WWF.loadTeam = async () => {
     dept: me.department_id || null, bg: GF.WWF.colorFor(me.id), backendRole: me.role };
 };
 
+/* ── Cross-login cache hygiene ──────────────────────────────────────
+   Each view IIFE declares its GF.WWF._* state literal once at script load —
+   it survives a logout, so a re-login on the same tab would render the
+   PREVIOUS account's cached data until every lazy loader happened to refire.
+   resetCaches() mutates each known cache back to a neutral empty shape
+   (arrays → [] , data fields → null, per-id maps emptied, loading/error →
+   idle) while keeping pure UI preferences (tab/kind/filters) as they are.
+   Written defensively (typeof checks throughout) so it never throws when a
+   view file didn't load. Called at the top of loadAndRender. */
+GF.WWF.resetCaches = () => {
+  // taskId-keyed map caches: every own key IS another user's data — drop all.
+  // _collabSeq goes too, so an in-flight loadCollab from the old session can
+  // never land (its captured seq no longer matches anything).
+  ['_extras', '_collab', '_collabSeq'].forEach(k => {
+    const m = GF.WWF[k];
+    if (m && typeof m === 'object' && !Array.isArray(m)) Object.keys(m).forEach(id => { delete m[id]; });
+  });
+  // Fields that are per-id map caches INSIDE a view state (emptied in place,
+  // never nulled — their readers index them directly).
+  const MAP_FIELDS = {
+    _xr: ['docs', 'open'], _qccus: ['custody'],
+    _qcecoa: ['mapParams', 'verify', 'vhist', 'qa', 'chunks', 'chunksOpen', 'exParams'],
+  };
+  // Data-bearing fields whose "not loaded yet" shape is null (the views'
+  // lazy loaders gate on falsy) — null them even when currently a string id.
+  // _notif's items/feed are deliberately NOT here: their initial shape is []
+  // (readers call .filter on them unconditionally); its `loaded` flag drives
+  // the refetch instead.
+  const DATA_FIELDS = new Set(['data', 'docs', 'detail', 'sel', 'digest', 'plans', 'specs',
+    'samples', 'coas', 'water', 'stab', 'trn', 'rqs', 'sfr', 'rqsAll', 'pick', 'parent',
+    'ph', 'editEx', 'specParams']);
+  ['_qcs', '_qcsm', '_qccoa', '_qcecoa', '_qccus', '_qcl', '_fac', '_xr', '_apv', '_notif'].forEach(k => {
+    const st = GF.WWF[k];
+    if (!st || typeof st !== 'object') return;
+    const maps = MAP_FIELDS[k] || [];
+    Object.keys(st).forEach(f => {
+      const v = st[f];
+      if (maps.indexOf(f) >= 0) {
+        if (v && typeof v === 'object') Object.keys(v).forEach(id => { delete v[id]; });
+        else st[f] = {};
+        return;
+      }
+      if (f === 'q') { st[f] = ''; return; }
+      if (f === 'status' && typeof v === 'string') { st[f] = ''; return; }
+      if (typeof v === 'boolean') { st[f] = false; return; }                 // loading / loaded / open flags
+      if (typeof v === 'number') { if (f !== 'seq') st[f] = 0; return; }     // unread etc.; seq guards async races
+      if (f === 'error' || /Error$/.test(f)) { st[f] = null; return; }
+      if (Array.isArray(v)) { st[f] = DATA_FIELDS.has(f) ? null : []; return; }
+      if (v && typeof v === 'object') { st[f] = null; return; }              // detail / data / digest / status(_xr)
+      if (typeof v === 'string' && DATA_FIELDS.has(f)) { st[f] = null; return; }  // stale selection ids
+      // everything else (tab / kind / refDate / filter / digestWindow, nulls) keeps its value
+    });
+  });
+  // Assistant chat thread (assistant.js re-greets when msgs is empty).
+  if (GF.assistant && Array.isArray(GF.assistant.msgs)) GF.assistant.msgs.length = 0;
+};
+
 GF.WWF.loadAndRender = async () => {
+  // Never render one account's cached module data under another's session.
+  GF.WWF.resetCaches();
   const u = GF.API.user || {};
   GF.WWF.meId = u.id || 'me';
   GF.state.user = GF.WWF.meId;
@@ -412,20 +471,25 @@ GF.WWF.install = () => {
         // helper doesn't get a confusing per-person 403 for every attempted
         // change; instead, tell them up front that the change won't stick.
         const respChanged = desired.some(w => !current.includes(w)) || current.some(w => !desired.includes(w));
+        // Local state must mirror what was actually PERSISTED: when the
+        // helper-editor path is refused (info toast below), the card keeps
+        // showing the saved set — never the desired-but-rejected one.
+        let persistedHelpers = current;
         if (respChanged && t && GF.WWF.canManageTask(t)) {
           for (const who of desired) if (!current.includes(who)) {
             try { await GF.API.assign(id, who); }
-            catch (e) { GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+            catch (e) { GF.toast(AL('Could not assign ', 'Не може да се додели ') + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
           }
           for (const who of current) if (!desired.includes(who)) {
             try { await GF.API.unassign(id, who); }
-            catch (e) { GF.toast('Could not unassign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+            catch (e) { GF.toast(AL('Could not unassign ', 'Не може да се отстрани доделувањето за ') + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
           }
+          persistedHelpers = desired;
         } else if (respChanged) {
           GF.toast(AL("Only the task owner or a manager can change who's responsible.",
                       'Само сопственикот на задачата или менаџер може да ја смени одговорноста.'), 'info');
         }
-        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: desired, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
+        if (t) { const keep = { weekId: t.weekId, notes: t.notes, helpers: persistedHelpers, subCount: t.subCount, subDone: t.subDone, sessionHours: t.sessionHours };
           Object.assign(t, GF.WWF.transform(patched), keep); }
         // Only reset the shared edit-session globals / close the modal if
         // they still refer to THIS save — if the user has since opened a
@@ -465,7 +529,7 @@ GF.WWF.install = () => {
       GF.closeModal('add-modal'); GF.render.all(); GF.toast(GF.t('create_task')+' ✓','success');
       for (const who of helperIds) {
         try { await GF.API.assign(created.id, who); } catch (e) {
-          GF.toast('Could not assign ' + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
+          GF.toast(AL('Could not assign ', 'Не може да се додели ') + ((GF.PEOPLE[who]||{}).name||who) + ': ' + e.message, 'error'); }
       }
       if (helperIds.length) { await GF.WWF.loadCollab(created.id); GF.render.panels(); }
     } catch(e) { GF.toast(AL('Create failed: ','Неуспешно креирање: ')+e.message,'error'); }
@@ -486,9 +550,9 @@ GF.WWF.install = () => {
         ? 'Analyse next week\'s plan: priorities, risks, workload. Bullet points.\n\n'
         : 'Summarise this week\'s status: completed, in-progress, blockers. Bullet points.\n\n') + body;
       const r = await GF.API.ai('weekly_summary', { input: prompt, context: { week_id: wk && wk.realId, kind } });
-      const text = (r && r.available) ? r.output : ('AI agent unavailable' + (r && r.reason ? ' (' + r.reason + ')' : ''));
+      const text = (r && r.available) ? r.output : (AL('AI agent unavailable', 'АИ агентот е недостапен') + (r && r.reason ? ' (' + r.reason + ')' : ''));
       GF.$('ai-out').innerHTML = `<div class="ai-out">${GF.esc(text)}</div>`;
-    } catch(e) { GF.$('ai-out').innerHTML = `<div class="ai-out">AI error: ${GF.esc(e.message)}</div>`; }
+    } catch(e) { GF.$('ai-out').innerHTML = `<div class="ai-out">${AL('AI error', 'АИ грешка')}: ${GF.esc(e.message)}</div>`; }
   };
 
   GF.ai.paraphraseInput = async (inputId) => {
@@ -499,23 +563,23 @@ GF.WWF.install = () => {
       const r = await GF.API.ai('draft_description', { input:
         `Rewrite this task note as one clear professional sentence for a GMP cannabis facility. Keep batch/room IDs.\n\n${orig}` });
       if (r && r.available && r.output) el.value = r.output.trim();
-      else GF.toast('AI unavailable', 'info');
-    } catch (e) { GF.toast('AI error: ' + e.message, 'error'); }
+      else GF.toast(AL('AI unavailable', 'АИ е недостапен'), 'info');
+    } catch (e) { GF.toast(AL('AI error: ', 'АИ грешка: ') + e.message, 'error'); }
   };
 
   GF.ai.paraphraseTask = async (taskId) => {
-    const t = GF.task(taskId); if (!t || !t.desc) { GF.toast('Nothing to rewrite', 'info'); return; }
+    const t = GF.task(taskId); if (!t || !t.desc) { GF.toast(AL('Nothing to rewrite', 'Нема што да се преформулира'), 'info'); return; }
     GF.toast(GF.t('paraphrase') + '…', 'info');
     try {
       const r = await GF.API.ai('draft_description', { input: `Rewrite concisely for GMP cannabis: ${t.desc}` });
-      if (!(r && r.available && r.output)) { GF.toast('AI unavailable', 'info'); return; }
+      if (!(r && r.available && r.output)) { GF.toast(AL('AI unavailable', 'АИ е недостапен'), 'info'); return; }
       const rewritten = r.output.trim();
       // Only mutate local state once the backend save succeeds — otherwise a
       // failed PATCH leaves the card showing text that was never persisted.
       await GF.API.updateTask(taskId, { description: rewritten });
       t.desc = rewritten;
-      GF.render.panels(); GF.toast('Rewritten ✓', 'success');
-    } catch (e) { GF.toast('AI error: ' + e.message, 'error'); }
+      GF.render.panels(); GF.toast(AL('Rewritten ✓', 'Преформулирано ✓'), 'success');
+    } catch (e) { GF.toast(AL('AI error: ', 'АИ грешка: ') + e.message, 'error'); }
   };
 
   // Translate a task into the bilingual "Македонски | English" format the
@@ -594,9 +658,9 @@ GF.WWF.install = () => {
         try {
           await GF.API.assign(created.id, ownerMatch[0]);
           await GF.WWF.loadCollab(created.id);
-        } catch (e) { GF.toast('Could not assign ' + ownerMatch[1].name + ': ' + e.message, 'error'); }
+        } catch (e) { GF.toast(AL('Could not assign ', 'Не може да се додели ') + ownerMatch[1].name + ': ' + e.message, 'error'); }
       }
-    } catch (e) { GF.toast('Create failed: ' + e.message, 'error'); }
+    } catch (e) { GF.toast(AL('Create failed: ', 'Неуспешно креирање: ') + e.message, 'error'); }
   };
 
   // Settings modal — replaces the old logout-only gear. Tabs: Preferences,
@@ -1004,18 +1068,21 @@ GF.setActiveUser = () => GF.toast(GF.state.lang === 'mk'
 GF.WWF.showOtp = (user, otp) => {
   let el = GF.$('wwf-otp');
   if (!el) { el = document.createElement('div'); el.id = 'wwf-otp'; el.className = 'overlay'; document.body.appendChild(el); }
+  const nm = GF.esc(user.full_name || user.username);
   el.innerHTML = `
     <div class="modal" style="max-width:420px">
-      <div class="modal-head"><h3>Account created</h3>
+      <div class="modal-head"><h3>${AL('Account created', 'Сметката е креирана')}</h3>
         <button class="btn-ghost" onclick="GF.closeModal('wwf-otp')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
       <div class="modal-body">
-        <div style="font-size:13px;color:var(--ink-2);margin-bottom:14px">Share these with <b>${GF.esc(user.full_name || user.username)}</b>. They set their own password on first login; this one-time password works once.</div>
+        <div style="font-size:13px;color:var(--ink-2);margin-bottom:14px">${AL(
+          'Share these with <b>' + nm + '</b>. They set their own password on first login; this one-time password works once.',
+          'Споделете ги овие со <b>' + nm + '</b>. Лицето поставува своја лозинка при првото најавување; оваа еднократна лозинка важи само еднаш.')}</div>
         <div class="field"><label>Username</label>
           <div style="font:700 18px ui-monospace,monospace;color:var(--ink)">${GF.esc(user.username)}</div></div>
-        <div class="field" style="margin-top:12px"><label>One-time password</label>
+        <div class="field" style="margin-top:12px"><label>${AL('One-time password', 'Еднократна лозинка')}</label>
           <div style="font:800 24px ui-monospace,monospace;letter-spacing:2px;color:var(--green)">${GF.esc(otp || '—')}</div></div>
       </div>
-      <div class="modal-foot"><button class="btn btn-primary" onclick="GF.closeModal('wwf-otp')">Done</button></div>
+      <div class="modal-foot"><button class="btn btn-primary" onclick="GF.closeModal('wwf-otp')">${AL('Done', 'Готово')}</button></div>
     </div>`;
   GF.openModal('wwf-otp');
 };

@@ -35,9 +35,12 @@ GF.views = {
 
     const card = t => {
       const d = GF.dep(t.dept);
-      return `<div class="kcard" style="--dept-acc:${d.color}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+      // Archived cards get the same muted + "Archived" chip treatment as
+      // My Week, so a filtered-in archived row is never mistaken for live work.
+      return `<div class="kcard" style="--dept-acc:${d.color}${t.archived ? ';opacity:.55' : ''}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
         <div class="kcard-top">
           <span class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
+          ${t.archived ? `<span class="type-chip" title="${GF.t('archived')}">${GF.t('archived')}</span>` : ''}
           <span class="kstatus pill s-${t.status}" title="${GF.esc(GF.statusLabel(t.status))}"><span class="dot" style="background:currentColor;opacity:.75"></span>${GF.statusLabel(t.status)}</span>
         </div>
         <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
@@ -111,7 +114,9 @@ GF.views = {
 
   /* ── Dashboard: production overview ────────────────────── */
   dash() {
-    const all = GF.scopedTasks(GF.state.selWeek);
+    // Aggregate-only view: archived rows ("Show archived" on) are history —
+    // keep them out of every KPI / breakdown / workload number here.
+    const all = GF.scopedTasks(GF.state.selWeek).filter(t => !t.archived);
     const n = all.length;
     const by = s => all.filter(t => t.status === s).length;
     const rate = n ? Math.round(by('done')/n*100) : 0;
@@ -175,7 +180,9 @@ GF.views = {
      choices and the selected week. */
   exec() {
     const todayStr = GF.localDateStr(new Date());
-    const allWeek = GF.weekTasks(GF.state.selWeek);              // every department
+    // Exec KPIs / matrix / pipeline / attention are live-work aggregates —
+    // archived tasks (visible only with "Show archived" on) stay out.
+    const allWeek = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);  // every department
     const shown = allWeek.filter(t => GF.execDeptShown(t.dept)); // visible only → KPIs
     const isDone = t => t.status === 'done';
     const n = shown.length;
@@ -424,9 +431,19 @@ GF.execBrief = async () => {
   el.style.display = 'block';
   el.innerHTML = `<div class="exec-brief-load">${GF.icon('sparkle', 'icon')}${AL('Generating executive brief…', 'Генерирам извршно резиме…')}</div>`;
   try {
-    const r = await GF.API.ai('weekly_summary', { week: GF.state.selWeek });
+    // Backend InvokeReq requires `input` (see backend/app/api/ai.py) — the
+    // week rides along in `context` as the REAL backend week uuid, same as
+    // GF.ai.summary does.
+    const wk = GF.calendar.weeks[GF.state.selWeek];
+    const r = await GF.API.ai('weekly_summary', {
+      input: AL('Summarize this week for the executive team: completion, risks, blockers, cross-department handoffs. Bullet points.',
+                'Резимирај ја оваа недела за извршниот тим: завршеност, ризици, блокади, меѓусекторски предавања. Кратки точки.'),
+      context: { week_id: wk && wk.realId },
+    });
     if (r && r.available === false) {
-      el.innerHTML = `<div class="exec-brief-off">${AL('AI is not configured for this workspace.', 'АИ не е конфигуриран за овој простор.')}</div>`;
+      el.innerHTML = `<div class="exec-brief-off">${r.reason === 'letta_unreachable'
+        ? AL('The AI service is unreachable right now — try again shortly.', 'АИ сервисот моментално е недостапен — обидете се повторно наскоро.')
+        : AL('AI is not configured for this workspace.', 'АИ не е конфигуриран за овој простор.')}</div>`;
       return;
     }
     const text = (r && (r.output || r.summary || r.text)) || AL('No summary available.', 'Нема достапно резиме.');

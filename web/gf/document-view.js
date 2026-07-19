@@ -141,7 +141,7 @@ GF.WWF.aiHtml = (text) => {
   // cited ref (not pre-truncated) so this resolves identically to the
   // backend's _md_lite for the same narrative + task list.
   const pool = ((GF.state && GF.state.tasks) ? GF.state.tasks : [])
-    .concat((GF.state && GF.state.childrenByParent) ? Object.values(GF.state.childrenByParent).flat() : [])
+    .concat((GF.state && GF.state.children) ? Object.values(GF.state.children).flat() : [])
     .map(x => String(x.id || '').toLowerCase())
     .filter(Boolean)
     .sort();
