@@ -14,7 +14,9 @@
 
 (function () {
   GF.WWF._qcecoa = { docs: null, sel: null, detail: null, ph: null,
-                     specs: null, mapParams: {}, verify: {}, qa: {}, q: '', status: '', tab: 'docs',
+                     specs: null, mapParams: {}, verify: {}, vhist: {}, qa: {},
+                     chunks: {}, chunksOpen: {}, exParams: {}, editEx: null,
+                     q: '', status: '', tab: 'docs',
                      loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -56,9 +58,14 @@
 
   GF.WWF.qcEcoaPick = async (id) => {
     const st = GF.WWF._qcecoa;
-    if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcCoaDoc(id); } catch (e) { GF.toast(e.message, 'error'); }
+    if (st.sel === id) { st.sel = null; st.detail = null; st.editEx = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.editEx = null; GF.render.all();
+    try {
+      const [d, ch] = await Promise.all([
+        GF.API.qcCoaDoc(id),
+        GF.API.qcCoaChunks(id).catch(() => st.chunks[id] || [])]);
+      st.detail = d; st.chunks[id] = ch;
+    } catch (e) { GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qcecoa') GF.render.all();
   };
   GF.WWF.qcEcoaFilter = (v) => { GF.WWF._qcecoa.q = v; GF.render.all(); };
@@ -109,6 +116,50 @@
     catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
+  // Attach a specification to a doc registered without one — unblocks grade & promote.
+  GF.WWF.qcEcoaAttachSpec = async (id) => {
+    const specId = ((document.getElementById('qec-attach-spec-' + id) || {}).value || '');
+    if (!specId) return GF.toast(AL('Pick a specification', 'Изберете спецификација'), 'error');
+    try {
+      await GF.API.qcPatchCoaDoc(id, { specification_id: specId });
+      GF.toast(AL('Specification attached', 'Спецификацијата е прикачена'));
+    } catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
+  // Reviewer fix of one transcribed row (value / unit / parameter mapping).
+  GF.WWF.qcEcoaEditEx = async (eid) => {
+    const st = GF.WWF._qcecoa;
+    if (st.editEx === eid) { st.editEx = null; GF.render.all(); return; }
+    st.editEx = eid;
+    const doc = (st.detail || {}).document;
+    const specId = doc && doc.specification_id;
+    if (specId && !st.exParams[specId]) {
+      try { const s = await GF.API.qcSpec(specId); st.exParams[specId] = s.parameters || []; }
+      catch (e) { st.exParams[specId] = []; }
+    }
+    GF.render.all();
+  };
+  GF.WWF.qcEcoaSaveEx = async (docId, eid) => {
+    const gv = (i) => ((document.getElementById(i) || {}).value || '').trim();
+    const val = gv('qec-ex-val-' + eid);
+    const unit = gv('qec-ex-unit-' + eid);
+    const pid = gv('qec-ex-param-' + eid);
+    const body = {};
+    if (val === '') body.numeric_value = null;   // deliberately cleared → stays unmeasured
+    else {
+      const n = parseFloat(val);
+      if (isNaN(n)) return GF.toast(AL('Value must be numeric', 'Вредноста мора да е бројчена'), 'error');
+      body.numeric_value = n;
+    }
+    body.unit = unit || null;
+    if (pid) body.parameter_id = pid;            // re-map → server re-grades
+    try {
+      await GF.API.qcPatchExtraction(docId, eid, body);
+      GF.WWF._qcecoa.editEx = null;
+      GF.toast(AL('Updated', 'Ажурирано'));
+    } catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(docId);
+  };
   GF.WWF.qcEcoaPromote = async (id) => {
     try {
       const r = await GF.API.qcPromoteCoaDoc(id);
@@ -119,13 +170,25 @@
   };
   // Verify loop: reconcile the promoted certificate against this source doc.
   GF.WWF.qcEcoaVerify = async (docId, coaId) => {
+    const st = GF.WWF._qcecoa;
     try {
       const v = await GF.API.qcVerifyCert(coaId);
-      GF.WWF._qcecoa.verify[docId] = v;
+      st.verify[docId] = v;
+      if (st.vhist[docId]) {   // history panel open — refresh it with the new run
+        st.vhist[docId] = await GF.API.qcVerifications(coaId).catch(() => st.vhist[docId]);
+      }
       GF.toast(v.verdict === 'VERIFIED'
         ? AL('Verified — matches source', 'Потврдено — се совпаѓа со изворот')
         : AL('Discrepancy: ', 'Отстапување: ') + v.mismatches + '/' + v.checked);
     } catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
+  // Audit trail: list the recorded verification runs for the promoted certificate.
+  GF.WWF.qcEcoaVerifyHistory = async (docId, coaId) => {
+    const st = GF.WWF._qcecoa;
+    if (st.vhist[docId]) { delete st.vhist[docId]; GF.render.all(); return; }
+    try { st.vhist[docId] = await GF.API.qcVerifications(coaId); }
+    catch (e) { GF.toast(e.message, 'error'); }
     GF.render.all();
   };
 
@@ -135,8 +198,21 @@
     if (!raw) return GF.toast(AL('Paste the CoA text first', 'Прво залепете го текстот'), 'error');
     // split into chunks on blank lines
     const chunks = raw.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-    try { const r = await GF.API.qcIndexCoaChunks(docId, chunks); GF.toast(AL('Indexed', 'Индексирано') + ': ' + r.indexed); }
-    catch (e) { GF.toast(e.message, 'error'); }
+    const st = GF.WWF._qcecoa;
+    try {
+      const r = await GF.API.qcIndexCoaChunks(docId, chunks);
+      GF.toast(AL('Indexed', 'Индексирано') + ': ' + r.indexed);
+      st.chunks[docId] = await GF.API.qcCoaChunks(docId).catch(() => st.chunks[docId] || []);
+    } catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
+  GF.WWF.qcEcoaToggleChunks = async (docId) => {
+    const st = GF.WWF._qcecoa;
+    st.chunksOpen[docId] = !st.chunksOpen[docId];
+    if (st.chunksOpen[docId] && st.chunks[docId] == null) {
+      try { st.chunks[docId] = await GF.API.qcCoaChunks(docId); }
+      catch (e) { st.chunks[docId] = []; }
+    }
     GF.render.all();
   };
   GF.WWF.qcEcoaAsk = async (docId) => {
@@ -169,12 +245,27 @@
   };
 
   const detail = (d) => {
+    const st = GF.WWF._qcecoa;
     const doc = d.document;
-    const ex = (d.extractions || []).map(e => `
+    const exParams = doc.specification_id ? (st.exParams[doc.specification_id] || []) : [];
+    const ex = (d.extractions || []).map(e => {
+      const row = `
       <tr><td>${GF.esc(e.raw_label)}${e.test_name && e.test_name !== e.raw_label ? ` <span class="ana-note">→ ${GF.esc(e.test_name)}</span>` : ''}</td>
-      <td class="mono">${GF.esc(e.raw_value != null ? e.raw_value : (e.numeric_value != null ? e.numeric_value : ''))} ${GF.esc(e.unit || '')}</td>
+      <td class="mono">${GF.esc(e.numeric_value != null ? e.numeric_value : (e.raw_value != null ? e.raw_value : ''))} ${GF.esc(e.unit || '')}</td>
       <td class="mono">${e.lower_limit != null || e.upper_limit != null ? GF.esc((e.lower_limit != null ? e.lower_limit : '') + '…' + (e.upper_limit != null ? e.upper_limit : '')) : '—'}</td>
-      <td>${complyChip(e)}</td></tr>`).join('');
+      <td>${complyChip(e)}${canWrite() ? ` <button class="btn btn-sm" onclick="GF.WWF.qcEcoaEditEx('${e.id}')">${st.editEx === e.id ? AL('Cancel', 'Откажи') : AL('Edit', 'Уреди')}</button>` : ''}</td></tr>`;
+      if (!canWrite() || st.editEx !== e.id) return row;
+      return row + `
+      <tr><td colspan="4"><div class="qms-dl" style="align-items:center;flex-wrap:wrap">
+        <input id="qec-ex-val-${e.id}" value="${GF.esc(e.numeric_value != null ? e.numeric_value : '')}" placeholder="${AL('Value', 'Вредност')}" style="width:100px">
+        <input id="qec-ex-unit-${e.id}" value="${GF.esc(e.unit || '')}" placeholder="${AL('Unit', 'Единица')}" style="width:80px">
+        <select id="qec-ex-param-${e.id}">
+          <option value="">${AL('Keep parameter', 'Задржи параметар')}</option>
+          ${exParams.map(pp => `<option value="${pp.id}">${GF.esc(pp.test_name_en || pp.test_name_mk || pp.id)}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaSaveEx('${doc.id}','${e.id}')">${AL('Save', 'Зачувај')}</button>
+      </div></td></tr>`;
+    }).join('');
     const canExtract = doc.status !== 'PROMOTED' && doc.status !== 'REJECTED';
     const canPromote = (doc.status === 'EXTRACTED' || doc.status === 'REVIEWED') && !!doc.specification_id;
     return `<div class="qms-detail">
@@ -200,22 +291,45 @@
         ${canPromote ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaPromote('${doc.id}')">${AL('Promote → certificate', 'Промовирај → сертификат')}</button>` : ''}
         ${(doc.status !== 'PROMOTED' && doc.status !== 'REJECTED') ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaAdvance('${doc.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
       </div>` : ''}
-      ${!doc.specification_id ? `<div class="ana-note" style="margin-top:6px">${AL('Attach a specification to grade & promote.', 'Прикачете спецификација за оценување и промоција.')}</div>` : ''}
+      ${!doc.specification_id ? `<div class="ana-note" style="margin-top:6px">${AL('Attach a specification to grade & promote.', 'Прикачете спецификација за оценување и промоција.')}</div>
+      ${canWrite() ? `<div class="qms-dl" style="margin-top:6px;align-items:center">
+        <select id="qec-attach-spec-${doc.id}"><option value="">${AL('Specification…', 'Спецификација…')}</option>${(st.specs || []).map(s => `<option value="${s.id}">${GF.esc(s.spec_id + ' · ' + (s.material_code || ''))}</option>`).join('')}</select>
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaAttachSpec('${doc.id}')">${AL('Attach', 'Прикачи')}</button>
+      </div>` : ''}` : ''}
       ${doc.status === 'PROMOTED' && doc.promoted_coa_id ? (() => {
-        const v = GF.WWF._qcecoa.verify[doc.id];
+        const v = st.verify[doc.id];
         const vc = v ? (v.verdict === 'VERIFIED' ? 'var(--green)' : 'var(--red)') : null;
+        const h = st.vhist[doc.id];
         return `<div class="qms-dl" style="margin-top:8px;align-items:center">
           ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaVerify('${doc.id}','${doc.promoted_coa_id}')">${AL('Verify vs source', 'Провери со извор')}</button>` : ''}
+          <button class="btn btn-sm" onclick="GF.WWF.qcEcoaVerifyHistory('${doc.id}','${doc.promoted_coa_id}')">${h ? AL('Hide history', 'Скриј историја') : AL('History', 'Историја')}</button>
           ${v ? chip(AL(v.verdict === 'VERIFIED' ? 'Verified' : 'Discrepancy', v.verdict === 'VERIFIED' ? 'Потврдено' : 'Отстапување') + ' ' + (v.checked - v.mismatches) + '/' + v.checked, vc) : ''}
         </div>` +
-        (v && v.mismatches ? `<div class="ana-note" style="margin-top:4px">${v.details.filter(d => !d.match).map(d => GF.esc((d.test_name || '') + ': ' + (d.reason || 'mismatch'))).join(' · ')}</div>` : '');
+        (v && v.mismatches ? `<div class="ana-note" style="margin-top:4px">${v.details.filter(d => !d.match).map(d => GF.esc((d.test_name || '') + ': ' + (d.reason || 'mismatch'))).join(' · ')}</div>` : '') +
+        (h ? (h.length ? `<div style="margin-top:6px">${h.map(r => {
+          const ok = r.verdict === 'VERIFIED';
+          return `<div class="qms-row" style="gap:8px">
+            ${chip(AL(ok ? 'Verified' : 'Discrepancy', ok ? 'Потврдено' : 'Отстапување'), ok ? 'var(--green)' : 'var(--red)')}
+            <span class="ana-note mono">${GF.esc((r.verified_at || '').replace('T', ' ').slice(0, 16))}</span>
+            <span class="ana-note">${GF.esc(String(r.mismatches)) + '/' + GF.esc(String(r.checked))} ${AL('mismatches', 'отстапувања')}</span>
+          </div>`;
+        }).join('')}</div>`
+        : `<div class="ana-note" style="margin-top:4px">${AL('No verification runs recorded yet.', 'Сè уште нема запишани проверки.')}</div>`) : '');
       })() : ''}
       ${(() => {
-        const qa = GF.WWF._qcecoa.qa[doc.id];
+        const qa = st.qa[doc.id];
+        const ch = st.chunks[doc.id];
+        const chOpen = !!st.chunksOpen[doc.id];
         return `<div class="ana-panel" style="margin-top:10px;padding:10px">
           <div class="ana-pt" style="margin-bottom:6px">${AL('Ask the CoA (retrieval Q&A)', 'Прашај го CoA (пребарување)')}</div>
           ${canWrite() ? `<textarea id="qec-chunks-${doc.id}" rows="3" style="width:100%" placeholder="${AL('Paste CoA text — blank line separates passages, then Index', 'Залепете текст од CoA — празен ред дели пасуси, потоа Индексирај')}"></textarea>
           <button class="btn btn-sm" style="margin:6px 0" onclick="GF.WWF.qcEcoaIndexChunks('${doc.id}')">${AL('Index passages', 'Индексирај пасуси')}</button>` : ''}
+          <div style="margin:6px 0">
+            <button class="btn btn-sm" onclick="GF.WWF.qcEcoaToggleChunks('${doc.id}')">${AL('Indexed passages', 'Индексирани пасуси')}${ch ? ' (' + ch.length + ')' : ''} ${chOpen ? AL('— hide', '— скриј') : AL('— show', '— прикажи')}</button>
+            ${chOpen ? (ch && ch.length
+              ? `<div style="margin-top:6px">${ch.map(c => `<div class="qms-row" style="gap:6px"><span class="ana-note mono">#${GF.esc(String(c.chunk_index))}</span><span class="ana-note">${GF.esc((c.content || '').slice(0, 120))}${(c.content || '').length > 120 ? '…' : ''}</span></div>`).join('')}</div>`
+              : `<div class="ana-note" style="margin-top:6px">${AL('No passages indexed yet.', 'Сè уште нема индексирани пасуси.')}</div>`) : ''}
+          </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <input id="qec-q-${doc.id}" placeholder="${AL('Ask a question…', 'Постави прашање…')}" style="flex:1">
             <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaAsk('${doc.id}')">${AL('Ask', 'Прашај')}</button>
