@@ -876,10 +876,12 @@ model), used for exactly one exchange then deleted; `_resolve_model`
 extracted as the shared handle-resolution helper; `LettaClient.delete_agent`
 added. v5 adds per-section stage reporting ("regulatory-check 3.0").
 Deployed to **wwf_mass ONLY** (`growflow-docengine:v5`, prod stays on `v3`).
-Verified live: the wizard now advances section-by-section far past the old
-failure point (v4 cut peak tokens 92k→80k and doubled survival; per-section
-isolation in v5 confirmed advancing through section 6+ of 9 vs. dying
-wholesale before). Note for the record: a single section's check can still
+**Verified live end-to-end**: the full SOP wizard (QASOP-TEST-VERIFY-02, the
+exact scenario that failed deterministically before) ran all 9 sections'
+regulatory checks on ephemeral agents, passed the §6A audit, and produced a
+built `.docx` with `RESULT: PASS` (68,535 bytes, 9 paragraphs · 4 tables,
+min font 6.0 pt OK, bilingual MK+EN OK) in ~9.5 min. Note for the record: a
+single section's check can still
 run heavy if the agent's `open_files` tool loads a large regulatory document
 into core memory mid-turn — if a residual per-section overflow ever
 reappears, constrain the reg-check prompt to snippet-returning search tools
