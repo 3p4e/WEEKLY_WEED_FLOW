@@ -590,14 +590,18 @@ def _stub_de(monkeypatch, resp):
 
 async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None):
     """A CoA driven to RELEASED with the given results. Header user is the
-    analyst; qp_headers reviews (must differ from analyst) → approves → releases."""
+    analyst; qp_headers reviews (must differ from analyst) → approves → releases.
+    The default result CITES the spec parameter — the COQ completeness gate
+    counts only parameter-cited results as coverage."""
     spec = await _spec(client, headers, material=material)
-    await client.post(f"/qc/specifications/{spec['id']}/parameters",
-                      json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
-                            "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
-                            "upper_limit": 30.0}, headers=headers)
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=headers)
+    assert p.status_code == 201, p.text
     coa = await _coa(client, headers, spec["id"], batch="B-COQ")
-    for r in (results or [{"test_name": "Total THC", "result_numeric": 22.0,
+    for r in (results or [{"parameter_id": p.json()["id"], "test_name": "Total THC",
+                           "result_numeric": 22.0,
                            "lower_limit": 10.0, "upper_limit": 30.0, "unit": "%",
                            "source_document_code": "ECOA-LAB-001"}]):
         assert (await client.post(f"/qc/certificates/{coa['id']}/results",
@@ -684,6 +688,34 @@ async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
     monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _Fail(None))
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 422 and r.json()["detail"]["verify"] == "RESULT: FAIL"
+
+
+async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monkeypatch):
+    """Every spec parameter must be covered by a parameter-cited result before a
+    COQ can be issued — passing results for HALF the spec is not a conforming
+    batch, it is an incompletely-tested one."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-INC", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-INCOMPLETE")
+    p1 = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                           json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                                 "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                 "upper_limit": 30.0}, headers=admin_headers)
+    await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                      json={"test_name_en": "Moisture", "test_name_mk": "Влага",
+                            "test_method": "LOD", "unit": "%", "upper_limit": 12.0},
+                      headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-COQ-INC")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p1.json()["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0, "lower_limit": 10.0,
+                                    "upper_limit": 30.0, "unit": "%"},
+                              headers=admin_headers)).status_code == 201
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
 
 
 # ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
@@ -857,15 +889,19 @@ async def test_verify_matches_source(client, admin_headers):
 
 async def test_verify_flags_discrepancy(client, admin_headers):
     coa_id, doc_id = await _promoted_cert(client, admin_headers, "B-VER-DIFF")
-    # tamper the promoted result so it no longer matches the source extraction
-    detail = (await client.get(f"/qc/certificates/{coa_id}", headers=admin_headers)).json()
-    res_id = detail["results"][0]["id"]
-    # add a fresh result via a direct PATCH is not exposed; instead re-grade the
-    # source extraction so the source now disagrees with the promoted result
     d = (await client.get(f"/qc/coa-documents/{doc_id}", headers=admin_headers)).json()
     eid = d["extractions"][0]["id"]
-    await client.patch(f"/qc/coa-documents/{doc_id}/extractions/{eid}",
-                       json={"numeric_value": 99.0}, headers=admin_headers)
+    # a PROMOTED document's extractions are locked — the API can no longer be
+    # used to diverge source from certificate (that hole is closed)
+    r = await client.patch(f"/qc/coa-documents/{doc_id}/extractions/{eid}",
+                           json={"numeric_value": 99.0}, headers=admin_headers)
+    assert r.status_code == 409
+    # so simulate out-of-band source divergence (the scenario verify exists to
+    # catch) by editing the extraction directly in the database
+    from app.db import tasks_admin_pool
+    async with tasks_admin_pool().acquire() as c:
+        await c.execute("UPDATE qc_coa_extractions SET numeric_value=$1 WHERE id=$2",
+                        99.0, eid)
     r = await client.post(f"/qc/certificates/{coa_id}/verify", headers=admin_headers)
     assert r.status_code == 201
     v = r.json()
