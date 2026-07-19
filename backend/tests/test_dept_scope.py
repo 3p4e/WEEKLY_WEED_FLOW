@@ -130,12 +130,14 @@ async def test_manager_create_guard_and_delegation(client, admin_headers, org):
     # subtask under their own task, delegated to another department → allowed
     sub = await _mk_task(client, mgr, "delegated subtask", d2, parent_id=t["id"])
     assert str(sub["department_id"]) == d2
-    # subtask under a foreign parent, targeting a foreign department → 403
+    # subtask under a foreign parent: the parent is invisible to a d1-scoped
+    # manager, so the create is refused as 404 (existence hidden, same as
+    # GET /tasks/{id}) — it never reaches the department check
     foreign = await _mk_task(client, admin_headers, "foreign parent", d2)
     r = await client.post("/tasks", json={
         "title": "illegal delegation", "department_id": d2, "parent_id": foreign["id"],
     }, headers=mgr)
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio

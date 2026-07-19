@@ -110,16 +110,30 @@ async def test_unassign_notifies_the_ex_assignee(client, admin_headers):
 
 
 async def test_mention_in_comment_notifies_with_mentioned_reason(client, admin_headers):
-    bystander, bh = await _actor(client, admin_headers)
-    r = await client.post("/tasks", json={"title": "Mention target"}, headers=admin_headers)
+    """A mention notifies a no-stake bystander only when they can actually see
+    the task (same department). A USER in another department must NOT receive
+    the notification — its title+preview would leak a task that 404s for them."""
+    dept = (await client.post("/departments", json={"code": "mn_home", "name": "Mention Home"},
+                              headers=admin_headers)).json()
+    other = (await client.post("/departments", json={"code": "mn_away", "name": "Mention Away"},
+                               headers=admin_headers)).json()
+    bu, botp = await create_user(client, admin_headers, department_id=dept["id"])
+    bh = {"Authorization": f"Bearer {await login_and_set_password(client, bu['username'], botp)}"}
+    ou, ootp = await create_user(client, admin_headers, department_id=other["id"])
+    oh = {"Authorization": f"Bearer {await login_and_set_password(client, ou['username'], ootp)}"}
+    r = await client.post("/tasks", json={"title": "Mention target", "department_id": dept["id"]},
+                          headers=admin_headers)
     tid = r.json()["id"]
-    # the bystander has NO participation stake — only the @mention reaches them
+    # neither has a participation stake — only the @mention reaches them
     assert (await client.post(f"/tasks/{tid}/comments",
-                              json={"content": f"ping @{bystander['username']} please look"},
+                              json={"content": f"ping @{bu['username']} and @{ou['username']}"},
                               headers=admin_headers)).status_code == 201
     inbox = (await client.get("/notifications", headers=bh)).json()
     row = next(n for n in inbox if n["task_id"] == tid)
     assert row["reason"] == "mentioned"
+    # the cross-department USER gets nothing — the leak is closed
+    out_inbox = (await client.get("/notifications", headers=oh)).json()
+    assert not any(n["task_id"] == tid for n in out_inbox)
 
 
 async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):

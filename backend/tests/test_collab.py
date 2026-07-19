@@ -219,9 +219,18 @@ async def test_handoff_propose_and_accept_moves_department(client, admin_headers
     # it shows up in the task's handoff list
     lst = (await client.get(f"/tasks/{tid}/handoffs", headers=admin_headers)).json()
     assert len(lst) == 1 and lst[0]["id"] == handoff["id"]
-    # accepting it re-homes the task into the target department
+    # the PROPOSER may not accept their own handoff — the target department
+    # never consented (second-person rule); org-wide authority doesn't waive it
     r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "accepted"},
                           headers=admin_headers)
+    assert r.status_code == 403, r.text
+    # the target department's manager accepts → the task re-homes there
+    to_mgr_user, to_otp = await create_user(client, admin_headers, role="PR_MGR",
+                                            department_id=d_to["id"])
+    to_mgr_token = await login_and_set_password(client, to_mgr_user["username"], to_otp)
+    to_mgr = {"Authorization": f"Bearer {to_mgr_token}"}
+    r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "accepted"},
+                          headers=to_mgr)
     assert r.status_code == 200, r.text
     moved = (await client.get(f"/tasks/{tid}", headers=admin_headers)).json()["task"]
     assert str(moved["department_id"]) == d_to["id"]

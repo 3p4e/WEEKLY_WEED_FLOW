@@ -67,12 +67,12 @@ async def test_subtask_under_foreign_parent_never_lands_in_that_department(clien
     _, mgr = await _manager(client, admin_headers, d1)
     r = await client.post("/tasks", json={"title": "parent d2", "department_id": d2}, headers=admin_headers)
     parent = r.json()
-    # manager posts a subtask with NO department_id under a foreign parent
+    # manager posts a subtask with NO department_id under a foreign parent —
+    # the parent is invisible to a d1-scoped manager, so the create is refused
+    # as 404 (existence hidden, same as GET /tasks/{id}); the child can never
+    # land in d2 because it is never created at all
     r = await client.post("/tasks", json={"title": "child", "parent_id": parent["id"]}, headers=mgr)
-    if r.status_code == 201:
-        assert r.json()["department_id"] == d1  # forced to own scope, NOT d2
-    else:
-        assert r.status_code == 403
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
