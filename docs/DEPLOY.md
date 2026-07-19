@@ -901,3 +901,50 @@ served JS; calendar expand present; docengine v5 both workers started clean;
 `/qms/studio/questionnaires` → 401 (route live + guarded), bogus route 404.
 Both stacks now run identical images (v90 / v5). **Rollback** = revert the
 two tags to `v89`/`v3` + `docker compose up -d --no-deps frontend docengine`.
+
+## Round-2 audit UI (frontend v91 → wwf_mass + production, 2026-07-19)
+
+Owner directive: "check again for elements and features that we have not
+covered or have not been coded for in the frontend UI." Three parallel audit
+agents (route→UI matrix over every router, QC/QMS endpoint-by-endpoint
+verification, dormant-field sweep) surfaced the gaps; five parallel build
+agents + two direct edits closed every actionable one. Frontend-only, no
+backend/DB change:
+
+- **QC state machines aligned to the backend exactly** (qcsample/qcspec/
+  qccoa): Reject no longer offered where the backend 409s (IN_TEST sample,
+  ACTIVE-spec Withdraw), COLLECTED→QUARANTINE + QC_REVIEW→DRAFT +
+  REVIEWED→DRAFT kick-backs added; sample create gains sub-sample
+  (parent_id), retention flag, quantity/unit/notes.
+- **eCoA** (qcecoa): spec-attach control (was an advice-only dead end),
+  verification history list, per-extraction reviewer edit, indexed-passages
+  list.
+- **Custody** (qccustody): sample-link picker on SFR/RQS — unlocks the
+  previously unreachable chain-of-custody log + transfer form; cancellation
+  reason prompt; RQS assignee; SFR-from-RQS link.
+- **Task surface**: archive round-trip ("Show archived" toggle + Unarchive —
+  archived tasks previously vanished with no recovery), recurrence "every N"
+  + until-date, outcome text now displayed + prefilled (was write-only), all
+  8 notification filter chips, lazy Team-digest panel
+  (GET /notifications/digest finally has a UI).
+- **QMS Studio**: expandable registry rows with stored pp_verify report +
+  PASS/FAIL chip (new studioDocument wrapper), authors-only "Direct build
+  from Markdown" (POST /qms/studio/build, Mode B), the seven dead legacy
+  qms-api wrappers removed, object-shaped 422 details no longer collapse to
+  "[object Object]".
+- **Admin**: sidebar "+ Add department" (POST /departments previously had no
+  client path at all).
+
+Deliberately NOT built (documented decisions): estimated/actual-hours inputs
+(owner removed hours metrics app-wide), workflow_state UI (explicitly
+deferred GxP increment), node_kind/tree-board (its own design decision),
+hours_by_person report section (owner-removed).
+
+SW `wwf-shell-v3.54.0`. Local gate: full Playwright **14/14** (two prior red
+runs were local-infra only: the ephemeral PG16 test cluster had died, then
+missing CI-style grants — rebuilt via pg_gate.sh + CI's grant bootstrap).
+Built `wwf-growflow:v91`, bumped BOTH compose files `v90`→`v91`, recreated
+both frontends. **Live smoke green on both**: SW v3.54.0 served; round-2
+functions (qcCusLinkSample, openDeptForm, qcEcoaAttachSpec, loadDigest,
+unarchiveTask, qstuBuildRun) confirmed in served JS; prod `/health` 200.
+**Rollback** = revert the tag to `v90` on the affected stack.
