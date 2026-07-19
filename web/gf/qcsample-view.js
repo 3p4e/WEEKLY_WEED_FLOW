@@ -13,9 +13,26 @@
    insertBefore 'qms-end'. */
 
 (function () {
-  GF.WWF._qcsm = { samples: null, sel: null, detail: null, q: '', status: '', tab: 'samples',
+  GF.WWF._qcsm = { samples: null, sel: null, detail: null, detailError: null,
+                   q: '', status: '', tab: 'samples',
                    loading: false, error: null, parent: null,
+                   // Controlled-draft store for the create form: inputs render
+                   // from here so a mid-typing re-render never clobbers them.
+                   draft: null,
                    plans: null, plansLoading: false, plansError: null };
+
+  // GxP genealogy guard: st.parent set by "Add sub-sample" must not survive
+  // leaving the view — a later unrelated "Collect sample" would silently
+  // attach parent_id. Entering the view from any other view starts with no
+  // parent link and a fresh draft.
+  const _setView = GF.setView;
+  GF.setView = (v) => {
+    if (v === 'qcsample' && GF.state.view !== 'qcsample') {
+      GF.WWF._qcsm.parent = null;
+      GF.WWF._qcsm.draft = null;
+    }
+    return _setView(v);
+  };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const _QP = ['ADMIN', 'QP'];
@@ -90,14 +107,45 @@
 
   GF.WWF.qcSamplePick = async (id) => {
     const st = GF.WWF._qcsm;
-    if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcSample(id); } catch (e) { GF.toast(e.message, 'error'); }
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; GF.render.all();
+    try { st.detail = await GF.API.qcSample(id); }
+    catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qcsample') GF.render.all();
   };
-  GF.WWF.qcSampleFilter = (v) => { GF.WWF._qcsm.q = v; GF.render.all(); };
-  GF.WWF.qcSampleStatus = (v) => { GF.WWF._qcsm.status = v; GF.WWF.loadQcSamples(); };
-  GF.WWF.qcSampleTab = (t) => { GF.WWF._qcsm.tab = t; GF.render.all(); };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcSampleRetry = (id) => {
+    const st = GF.WWF._qcsm;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcSamplePick(id);
+  };
+  GF.WWF.qcSampleFilter = (v) => { GF.WWF._qcsm.q = v; GF.render.all(); GF.refocus('qsm-search'); };
+  GF.WWF.qcSampleStatus = async (v) => { GF.WWF._qcsm.status = v; await GF.WWF.loadQcSamples(); GF.refocus('qsm-status'); };
+  // Tab switches always drop a pending sub-sample parent link (GxP: it must
+  // never silently ride along into a later, unrelated collection).
+  GF.WWF.qcSampleTab = (t) => { const st = GF.WWF._qcsm; st.tab = t; st.parent = null; GF.render.all(); };
+
+  // Create-form controlled inputs: every keystroke lands in st.draft, so the
+  // values survive any re-render (filter keystrokes, tab bounces).
+  GF.WWF.qcSampleDraft = (k, v) => {
+    const st = GF.WWF._qcsm;
+    st.draft = st.draft || {};
+    st.draft[k] = v;
+  };
+  // Loud parent-link integrity check: editing batch/material away from the
+  // parent's prefill detaches the sub-sample link explicitly (never silently).
+  GF.WWF.qcSampleParentCheck = (el) => {
+    const st = GF.WWF._qcsm;
+    if (!st.parent || !el || !el.id) return;
+    const want = el.id === 'qsm-batch' ? (st.parent.batch_id || '') : (st.parent.material_code || '');
+    if (el.value === want) return;
+    st.parent = null;
+    GF.toast(AL('Sub-sample link cleared — batch/material no longer match the parent sample',
+                'Врската за под-примерок е тргната — серијата/материјалот веќе не се совпаѓаат со примерокот-родител'), 'info');
+    GF.render.all();
+    GF.refocus(el.id);
+  };
 
   GF.WWF.qcSampleMove = async (id, target) => {
     try { await GF.API.qcPatchSample(id, { status: target }); GF.toast(AL('Updated', 'Ажурирано')); }
@@ -108,21 +156,23 @@
 
   GF.WWF.qcSampleCreate = async () => {
     const st = GF.WWF._qcsm;
-    const mk = (i) => (document.getElementById(i) || {}).value || '';
-    const batch_id = mk('qsm-batch').trim(), material_code = mk('qsm-mat').trim();
+    const dr = st.draft || {};
+    // Draft first (it survives re-renders); the live input is the fallback.
+    const mk = (i, k) => (dr[k] != null ? String(dr[k]) : ((document.getElementById(i) || {}).value || ''));
+    const batch_id = mk('qsm-batch', 'batch').trim(), material_code = mk('qsm-mat', 'mat').trim();
     if (!batch_id || !material_code) return GF.toast(AL('Batch and material are required', 'Потребни се серија и материјал'), 'error');
-    const body = { batch_id, material_code, sample_type: mk('qsm-type').trim() || null,
-                   location: mk('qsm-loc').trim() || null,
-                   retention_sample: !!(document.getElementById('qsm-ret') || {}).checked };
-    const plan = mk('qsm-plan'); if (plan) body.sampling_plan_id = plan;
-    const qty = mk('qsm-qty').trim(); if (qty !== '' && !isNaN(parseFloat(qty))) body.quantity = parseFloat(qty);
-    const unit = mk('qsm-unit').trim(); if (unit) body.quantity_unit = unit;
-    const notes = mk('qsm-notes').trim(); if (notes) body.notes = notes;
+    const body = { batch_id, material_code, sample_type: mk('qsm-type', 'type').trim() || null,
+                   location: mk('qsm-loc', 'loc').trim() || null,
+                   retention_sample: dr.ret != null ? !!dr.ret : !!(document.getElementById('qsm-ret') || {}).checked };
+    const plan = mk('qsm-plan', 'plan'); if (plan) body.sampling_plan_id = plan;
+    const qty = mk('qsm-qty', 'qty').trim(); if (qty !== '' && !isNaN(parseFloat(qty))) body.quantity = parseFloat(qty);
+    const unit = mk('qsm-unit', 'unit').trim(); if (unit) body.quantity_unit = unit;
+    const notes = mk('qsm-notes', 'notes').trim(); if (notes) body.notes = notes;
     if (st.parent) body.parent_id = st.parent.id;  // aliquot / sub-sample link
     try {
       const s = await GF.API.qcCreateSample(body);
       GF.toast(s.sample_id + ' ' + AL('created', 'креирано'));
-      st.parent = null;
+      st.parent = null; st.draft = null;
       await GF.WWF.loadQcSamples(); GF.WWF.qcSamplePick(s.id);
     } catch (e) { GF.toast(e.message, 'error'); }
   };
@@ -135,6 +185,9 @@
       ? st.detail.sample : (st.samples || []).find(x => x.id === id);
     if (!s) return;
     st.parent = { id: s.id, sample_id: s.sample_id, batch_id: s.batch_id, material_code: s.material_code };
+    // Seed the controlled draft with the parent's prefill so the create form
+    // shows (and submits) the genealogy-consistent batch/material.
+    st.draft = { ...(st.draft || {}), batch: s.batch_id || '', mat: s.material_code || '' };
     st.tab = 'samples';
     GF.render.all();
   };
@@ -200,7 +253,11 @@
         <span class="qms-title">${GF.esc(s.batch_id)} <span class="ana-note">${GF.esc(s.material_code)}</span></span>
         ${stChip(s.status)}
       </div>
-      ${st.sel === s.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:50px"></div></div>`) : ''}`).join('');
+      ${st.sel === s.id ? (st.detail ? detail(st.detail) : (st.detailError
+        ? `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <span style="color:var(--red-fg,var(--red))">${GF.esc(st.detailError)}</span>
+             <button class="btn btn-sm" onclick="GF.WWF.qcSampleRetry('${s.id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`
+        : `<div class="qms-detail"><div class="mw-skel" style="height:50px"></div></div>`)) : ''}`).join('');
   };
 
   const planList = () => {
@@ -266,6 +323,10 @@
     }
     const planOptions = [{ v: '', label: AL('No plan', 'Без план') }]
       .concat((st.plans || []).map(p => ({ v: p.id, label: p.plan_id, sub: p.material_code })));
+    // Controlled values: draft first (survives re-renders), parent prefill as
+    // the fallback for the two genealogy fields.
+    const dr = st.draft || {};
+    const dv = (k, fb) => GF.esc(dr[k] != null ? dr[k] : (fb || ''));
     const create = canWrite() ? `
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${st.parent ? AL('Collect sub-sample', 'Земи под-примерок') : AL('Collect sample', 'Земи примерок')}</div>
@@ -273,16 +334,18 @@
           <b class="mono">${GF.esc(st.parent.sample_id)}</b>
           <button class="btn btn-sm" onclick="GF.WWF.qcSampleClearParent()">✕</button></div>` : ''}
         <div class="qcs-form">
-          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}" value="${GF.esc(st.parent ? st.parent.batch_id || '' : '')}">
-          <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}" value="${GF.esc(st.parent ? st.parent.material_code || '' : '')}">
-          <input id="qsm-type" placeholder="${AL('Type', 'Тип')}">
-          <input id="qsm-loc" placeholder="${AL('Location', 'Локација')}">
-          <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px">
-          <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px">
+          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}" value="${dv('batch', st.parent && st.parent.batch_id)}"
+            oninput="GF.WWF.qcSampleDraft('batch', this.value);GF.WWF.qcSampleParentCheck(this)">
+          <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}" value="${dv('mat', st.parent && st.parent.material_code)}"
+            oninput="GF.WWF.qcSampleDraft('mat', this.value);GF.WWF.qcSampleParentCheck(this)">
+          <input id="qsm-type" placeholder="${AL('Type', 'Тип')}" value="${dv('type')}" oninput="GF.WWF.qcSampleDraft('type', this.value)">
+          <input id="qsm-loc" placeholder="${AL('Location', 'Локација')}" value="${dv('loc')}" oninput="GF.WWF.qcSampleDraft('loc', this.value)">
+          <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px" value="${dv('qty')}" oninput="GF.WWF.qcSampleDraft('qty', this.value)">
+          <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px" value="${dv('unit')}" oninput="GF.WWF.qcSampleDraft('unit', this.value)">
           ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
             searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
-          <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}">
-          <label style="display:flex;align-items:center;gap:6px"><input id="qsm-ret" type="checkbox">${AL('Retention sample', 'Резервен примерок')}</label>
+          <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}" value="${dv('notes')}" oninput="GF.WWF.qcSampleDraft('notes', this.value)">
+          <label style="display:flex;align-items:center;gap:6px"><input id="qsm-ret" type="checkbox" ${dr.ret ? 'checked' : ''} onchange="GF.WWF.qcSampleDraft('ret', this.checked)">${AL('Retention sample', 'Резервен примерок')}</label>
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSampleCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';
@@ -290,8 +353,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Samples', 'Примероци')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcSampleFilter(this.value)">
-          <select onchange="GF.WWF.qcSampleStatus(this.value)">
+          <input id="qsm-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcSampleFilter(this.value)">
+          <select id="qsm-status" onchange="GF.WWF.qcSampleStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

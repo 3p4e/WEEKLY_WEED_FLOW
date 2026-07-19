@@ -7,8 +7,12 @@ window.GF = window.GF || {};
 GF.assistant = {
   msgs: [],
   scope: 'prod',
+  // Last user this thread belonged to — logging in as someone else must
+  // start a fresh thread, never replay the previous session's chat.
+  _lastUser: null,
 
   open(scope) {
+    if (this._lastUser !== GF.state.user) { this._lastUser = GF.state.user; this.msgs = []; }
     this.scope = scope || (window.APP ? APP.mode : 'prod');
     GF.$('assistant-drawer')?.classList.add('open');
     GF.$('assistant-overlay')?.classList.add('open');
@@ -156,7 +160,9 @@ GF.assistant = {
       thinking.html = null; thinking.text = answer || '—';
     } catch (e) {
       thinking.html = null;
-      thinking.text = e.message === 'no-ai' ? 'No AI backend available.' : 'AI error: ' + e.message;
+      thinking.text = e.message === 'no-ai'
+        ? AL('No AI backend available.', 'Нема достапен AI сервер.')
+        : AL('AI error: ', 'AI грешка: ') + e.message;
     }
     this.render();
   },

@@ -13,7 +13,7 @@
    zone (docs/SCOPE.md), anchored insertBefore 'qms-end'. */
 
 (function () {
-  GF.WWF._qcs = { specs: null, sel: null, detail: null, q: '', status: '',
+  GF.WWF._qcs = { specs: null, sel: null, detail: null, detailError: null, q: '', status: '',
                   loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -60,13 +60,21 @@
 
   GF.WWF.qcSpecPick = async (id) => {
     const st = GF.WWF._qcs;
-    if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcSpec(id); } catch (e) { GF.toast(e.message, 'error'); }
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; GF.render.all();
+    try { st.detail = await GF.API.qcSpec(id); }
+    catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qcspec') GF.render.all();
   };
-  GF.WWF.qcSpecFilter = (v) => { GF.WWF._qcs.q = v; GF.render.all(); };
-  GF.WWF.qcSpecStatus = (v) => { GF.WWF._qcs.status = v; GF.WWF.loadQcSpecs(); };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcSpecRetry = (id) => {
+    const st = GF.WWF._qcs;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcSpecPick(id);
+  };
+  GF.WWF.qcSpecFilter = (v) => { GF.WWF._qcs.q = v; GF.render.all(); GF.refocus('qcs-search'); };
+  GF.WWF.qcSpecStatus = async (v) => { GF.WWF._qcs.status = v; await GF.WWF.loadQcSpecs(); GF.refocus('qcs-status'); };
 
   GF.WWF.qcSpecAdvance = async (id, target) => {
     try { await GF.API.qcPatchSpec(id, { status: target }); GF.toast(AL('Advanced', 'Напреднато')); }
@@ -171,7 +179,11 @@
         <span class="qms-title">${GF.esc(s.material_name_en)} <span class="ana-note">${GF.esc(s.material_code)} v${GF.esc(String(s.version))}</span></span>
         ${stChip(s.status)}
       </div>
-      ${st.sel === s.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+      ${st.sel === s.id ? (st.detail ? detail(st.detail) : (st.detailError
+        ? `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <span style="color:var(--red-fg,var(--red))">${GF.esc(st.detailError)}</span>
+             <button class="btn btn-sm" onclick="GF.WWF.qcSpecRetry('${s.id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`
+        : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
   };
 
   GF.views.qcspec = () => {
@@ -206,8 +218,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Specifications', 'Спецификации')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcSpecFilter(this.value)">
-          <select onchange="GF.WWF.qcSpecStatus(this.value)" value="${st.status}">
+          <input id="qcs-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcSpecFilter(this.value)">
+          <select id="qcs-status" onchange="GF.WWF.qcSpecStatus(this.value)" value="${st.status}">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

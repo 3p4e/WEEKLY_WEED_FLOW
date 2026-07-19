@@ -27,7 +27,7 @@
     if (GF.state.view === 'qcleaves') GF.render.all();
   };
   GF.WWF.qclTab = (t) => { GF.WWF._qcl.tab = t; GF.WWF.loadQcLeaves(); };
-  GF.WWF.qclFilter = (v) => { GF.WWF._qcl.q = v; GF.render.all(); };
+  GF.WWF.qclFilter = (v) => { GF.WWF._qcl.q = v; GF.render.all(); GF.refocus('qcl-search'); };
 
   const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
 
@@ -160,7 +160,7 @@
     return head + zone + tabs + create + `<div class="panel ana-panel">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <div class="ana-pt" style="margin:0">${AL('Records', 'Записи')}</div>
-        <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qclFilter(this.value)"></div>
+        <input id="qcl-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qclFilter(this.value)"></div>
       ${list}</div>`;
   };
 

@@ -8,7 +8,7 @@
    write = QC_MGR / QP / execs / ADMIN. QMS Studio zone, anchored 'qms-end'. */
 
 (function () {
-  GF.WWF._qccus = { rqs: null, sfr: null, sel: null, detail: null, custody: {},
+  GF.WWF._qccus = { rqs: null, sfr: null, sel: null, detail: null, detailError: null, custody: {},
                     samples: null, pick: null, rqsAll: null,
                     q: '', status: '', tab: 'rqs', loading: false, error: null };
 
@@ -50,20 +50,27 @@
     st.loading = false;
     if (GF.state.view === 'qccustody') GF.render.all();
   };
-  GF.WWF.qcCusTab = (t) => { const st = GF.WWF._qccus; st.tab = t; st.sel = null; st.detail = null; st.status = ''; st.pick = null; GF.WWF.loadQcCustody(); };
-  GF.WWF.qcCusFilter = (v) => { GF.WWF._qccus.q = v; GF.render.all(); };
-  GF.WWF.qcCusStatus = (v) => { GF.WWF._qccus.status = v; GF.WWF.loadQcCustody(); };
+  GF.WWF.qcCusTab = (t) => { const st = GF.WWF._qccus; st.tab = t; st.sel = null; st.detail = null; st.detailError = null; st.status = ''; st.pick = null; GF.WWF.loadQcCustody(); };
+  GF.WWF.qcCusFilter = (v) => { GF.WWF._qccus.q = v; GF.render.all(); GF.refocus('qcu-search'); };
+  GF.WWF.qcCusStatus = async (v) => { GF.WWF._qccus.status = v; await GF.WWF.loadQcCustody(); GF.refocus('qcu-status'); };
 
   GF.WWF.qcCusPick = async (id) => {
     const st = GF.WWF._qccus;
-    if (st.sel === id) { st.sel = null; st.detail = null; st.pick = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; st.pick = null; GF.render.all();
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; st.pick = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; st.pick = null; GF.render.all();
     try {
       st.detail = st.tab === 'sfr' ? await GF.API.qcSfrOne(id) : await GF.API.qcRqsOne(id);
       if (st.tab === 'sfr' && st.detail.sample_id)
         st.custody[st.detail.sample_id] = await GF.API.qcCustody(st.detail.sample_id).catch(() => []);
-    } catch (e) { GF.toast(e.message, 'error'); }
+    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qccustody') GF.render.all();
+  };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcCusRetry = (id) => {
+    const st = GF.WWF._qccus;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcCusPick(id);
   };
 
   GF.WWF.qcRqsAdvance = async (id, target) => {
@@ -228,6 +235,11 @@
       ${canWrite() && r.status !== 'CANCELLED' ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">${samplePicker('sfr', r.id)}</div>` : ''}`}</div>`;
   };
 
+  // Failed detail fetch → error + one-click retry instead of a permanent skeleton.
+  const failRow = (id) => `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span style="color:var(--red-fg,var(--red))">${GF.esc(GF.WWF._qccus.detailError)}</span>
+    <button class="btn btn-sm" onclick="GF.WWF.qcCusRetry('${id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`;
+
   const listRows = () => {
     const st = GF.WWF._qccus;
     const q = st.q.trim().toLowerCase();
@@ -238,7 +250,8 @@
         <span class="mono qms-code">${GF.esc(r.sfr_number)}</span>
         <span class="qms-title">${GF.esc(r.sampling_location)} <span class="ana-note">→ ${GF.esc(r.destination_facility)}</span></span>
         ${stChip(SFR_ST, r.status)}</div>
-        ${st.sel === r.id ? (st.detail ? sfrDetail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+        ${st.sel === r.id ? (st.detail ? sfrDetail(st.detail) : (st.detailError ? failRow(r.id)
+          : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
     }
     const rows = (st.rqs || []).filter(r => !q || (r.rqs_number || '').toLowerCase().includes(q) || (r.material_code || '').toLowerCase().includes(q));
     if (!rows.length) return `<div class="ana-note">${GF.t('no_tasks')}</div>`;
@@ -246,7 +259,8 @@
       <span class="mono qms-code">${GF.esc(r.rqs_number)}</span>
       <span class="qms-title">${GF.esc(r.material_code)} <span class="ana-note">${GF.esc(r.originating_department)}</span></span>
       ${stChip(RQS_ST, r.status)}</div>
-      ${st.sel === r.id ? (st.detail ? rqsDetail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+      ${st.sel === r.id ? (st.detail ? rqsDetail(st.detail) : (st.detailError ? failRow(r.id)
+        : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
   };
 
   GF.views.qccustody = () => {
@@ -284,8 +298,8 @@
     return head + zone + tabs + create + `<div class="panel ana-panel">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <div class="ana-pt" style="margin:0">${st.tab === 'sfr' ? AL('Field records', 'Теренски записи') : AL('Sampling requests', 'Барања за мостри')}</div>
-        <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcCusFilter(this.value)">
-        <select onchange="GF.WWF.qcCusStatus(this.value)"><option value="">${AL('All statuses', 'Сите статуси')}</option>${statuses.map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <input id="qcu-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcCusFilter(this.value)">
+        <select id="qcu-status" onchange="GF.WWF.qcCusStatus(this.value)"><option value="">${AL('All statuses', 'Сите статуси')}</option>${statuses.map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
       </div>
       <div class="qms-list">${listRows()}</div></div>`;
   };

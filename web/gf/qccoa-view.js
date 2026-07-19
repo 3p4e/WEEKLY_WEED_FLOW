@@ -18,7 +18,7 @@
    anchored 'qms-end'. */
 
 (function () {
-  GF.WWF._qccoa = { coas: null, sel: null, detail: null, specParams: null,
+  GF.WWF._qccoa = { coas: null, sel: null, detail: null, detailError: null, specParams: null,
                     specs: null, samples: null, q: '', status: '',
                     loading: false, error: null };
 
@@ -75,19 +75,26 @@
 
   GF.WWF.qcCoaPick = async (id) => {
     const st = GF.WWF._qccoa;
-    if (st.sel === id) { st.sel = null; st.detail = null; st.specParams = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; st.specParams = null; GF.render.all();
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; st.specParams = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; st.specParams = null; GF.render.all();
     try {
       st.detail = await GF.API.qcCoa(id);
       // pull the linked spec's parameters so results can cite them (server
       // snapshots the limits — the spec is the single source of truth)
       const sid = st.detail.coa.specification_id;
       if (sid) st.specParams = (await GF.API.qcSpec(sid).catch(() => null) || {}).parameters || [];
-    } catch (e) { GF.toast(e.message, 'error'); }
+    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qccoa') GF.render.all();
   };
-  GF.WWF.qcCoaFilter = (v) => { GF.WWF._qccoa.q = v; GF.render.all(); };
-  GF.WWF.qcCoaStatus = (v) => { GF.WWF._qccoa.status = v; GF.WWF.loadQcCoas(); };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcCoaRetry = (id) => {
+    const st = GF.WWF._qccoa;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcCoaPick(id);
+  };
+  GF.WWF.qcCoaFilter = (v) => { GF.WWF._qccoa.q = v; GF.render.all(); GF.refocus('qco-search'); };
+  GF.WWF.qcCoaStatus = async (v) => { GF.WWF._qccoa.status = v; await GF.WWF.loadQcCoas(); GF.refocus('qco-status'); };
 
   const _reload = async (id) => {
     await GF.WWF.loadQcCoas();
@@ -238,7 +245,11 @@
         <span class="qms-title">${GF.esc(c.batch_id)} <span class="ana-note">${GF.esc(c.cert_type)}</span></span>
         ${decChip(c.decision)}${stChip(c.status)}
       </div>
-      ${st.sel === c.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+      ${st.sel === c.id ? (st.detail ? detail(st.detail) : (st.detailError
+        ? `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <span style="color:var(--red-fg,var(--red))">${GF.esc(st.detailError)}</span>
+             <button class="btn btn-sm" onclick="GF.WWF.qcCoaRetry('${c.id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`
+        : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
   };
 
   GF.views.qccoa = () => {
@@ -276,8 +287,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Certificates', 'Сертификати')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcCoaFilter(this.value)">
-          <select onchange="GF.WWF.qcCoaStatus(this.value)">
+          <input id="qco-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcCoaFilter(this.value)">
+          <select id="qco-status" onchange="GF.WWF.qcCoaStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

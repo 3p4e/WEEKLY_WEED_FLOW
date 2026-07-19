@@ -13,7 +13,7 @@
    write = QC_MGR / QP / execs / ADMIN. QMS Studio zone, anchored 'qms-end'. */
 
 (function () {
-  GF.WWF._qcecoa = { docs: null, sel: null, detail: null, ph: null,
+  GF.WWF._qcecoa = { docs: null, sel: null, detail: null, detailError: null, ph: null,
                      specs: null, mapParams: {}, verify: {}, vhist: {}, qa: {},
                      chunks: {}, chunksOpen: {}, exParams: {}, editEx: null,
                      q: '', status: '', tab: 'docs',
@@ -58,18 +58,25 @@
 
   GF.WWF.qcEcoaPick = async (id) => {
     const st = GF.WWF._qcecoa;
-    if (st.sel === id) { st.sel = null; st.detail = null; st.editEx = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; st.editEx = null; GF.render.all();
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; st.editEx = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; st.editEx = null; GF.render.all();
     try {
       const [d, ch] = await Promise.all([
         GF.API.qcCoaDoc(id),
         GF.API.qcCoaChunks(id).catch(() => st.chunks[id] || [])]);
       st.detail = d; st.chunks[id] = ch;
-    } catch (e) { GF.toast(e.message, 'error'); }
+    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qcecoa') GF.render.all();
   };
-  GF.WWF.qcEcoaFilter = (v) => { GF.WWF._qcecoa.q = v; GF.render.all(); };
-  GF.WWF.qcEcoaStatus = (v) => { GF.WWF._qcecoa.status = v; GF.WWF.loadQcEcoa(); };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcEcoaRetry = (id) => {
+    const st = GF.WWF._qcecoa;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcEcoaPick(id);
+  };
+  GF.WWF.qcEcoaFilter = (v) => { GF.WWF._qcecoa.q = v; GF.render.all(); GF.refocus('qec-search'); };
+  GF.WWF.qcEcoaStatus = async (v) => { GF.WWF._qcecoa.status = v; await GF.WWF.loadQcEcoa(); GF.refocus('qec-status'); };
   GF.WWF.qcEcoaTab = (t) => { GF.WWF._qcecoa.tab = t; GF.render.all(); };
 
   const _reload = async (id) => {
@@ -356,7 +363,11 @@
         <span class="qms-title">${GF.esc(d.batch_id)} <span class="ana-note">${GF.esc(d.source_institution || '')}</span></span>
         ${dChip(d.status)}
       </div>
-      ${st.sel === d.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+      ${st.sel === d.id ? (st.detail ? detail(st.detail) : (st.detailError
+        ? `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <span style="color:var(--red-fg,var(--red))">${GF.esc(st.detailError)}</span>
+             <button class="btn btn-sm" onclick="GF.WWF.qcEcoaRetry('${d.id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`
+        : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
   };
 
   const queueList = () => {
@@ -416,8 +427,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Documents', 'Документи')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcEcoaFilter(this.value)">
-          <select onchange="GF.WWF.qcEcoaStatus(this.value)">
+          <input id="qec-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcEcoaFilter(this.value)">
+          <select id="qec-status" onchange="GF.WWF.qcEcoaStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(DST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

@@ -34,6 +34,13 @@ GF.ICONS = {
   eye:'M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10zM10 12.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z',
   eyeOff:'M4 4l12 12M8.3 8.4a2.2 2.2 0 002.9 2.9M6.6 5.8A9 9 0 0110 4.5c5 0 8 5.5 8 5.5a15 15 0 01-2.3 2.8M4.2 7.4A14 14 0 002 10s3 5.5 8 5.5c.9 0 1.7-.1 2.5-.35',
   layers:'M10 3l7 4-7 4-7-4 7-4zM3 11l7 4 7-4M3 14l7 4 7-4',
+  award:'M10 12.5a5 5 0 100-10 5 5 0 000 10zM7.7 11.6L6.6 17.5l3.4-1.9 3.4 1.9-1.1-5.9',
+  'git-branch':'M5 2.5v10M15 7.5A7.5 7.5 0 017.5 15M15 7.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM5 17.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z',
+  'file-input':'M11.5 2.5H7A1.5 1.5 0 005.5 4v4M5.5 14v2.5A1.5 1.5 0 007 18h8a1.5 1.5 0 001.5-1.5V7.5l-5-5M11.5 2.5v5h5M2.5 11H10M7.5 8.5L10 11l-2.5 2.5',
+  droplet:'M10 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z',
+  'alert-triangle':'M8.6 3.4L2 14.8a1.6 1.6 0 001.4 2.4h13.2a1.6 1.6 0 001.4-2.4L11.4 3.4a1.6 1.6 0 00-2.8 0zM10 7.5V11M10 14h.01',
+  users:'M7.5 9.5a3 3 0 100-6 3 3 0 000 6zM2 17a5.5 5.5 0 0111 0M13.2 3.9a3 3 0 010 5.7M14.6 11.8a5.5 5.5 0 013.4 5.2',
+  file:'M11.5 2.5H6.5A1.5 1.5 0 005 4v12a1.5 1.5 0 001.5 1.5h7A1.5 1.5 0 0015 16V6l-3.5-3.5zM11.5 2.5V6H15',
 };
 GF.icon = (n, cls = 'icon', stroke) => `<svg class="${cls}" viewBox="0 0 20 20"${stroke ? ` style="stroke:${stroke}"` : ''}><path d="${GF.ICONS[n] || ''}"/></svg>`;
 
@@ -419,6 +426,19 @@ GF.filterDept = (id) => { GF.state.deptFilter = GF.state.deptFilter === id ? nul
 GF.toggleExpand = (id) => { const s = GF.state.expanded; s.has(id) ? s.delete(id) : s.add(id); GF.render.panels(); };
 GF.toggleTree = (id) => { const s = GF.state.treeOpen; s.has(id) ? s.delete(id) : s.add(id); GF.render.panels(); };
 GF.goToday = () => { GF.state.selWeek = GF.calendar.todayId; GF.state.selDay = 'All'; GF.render.all(); };
+
+// Restore focus (caret at end) to an element rebuilt by a full re-render —
+// GF.render.all() replaces #panels' innerHTML, destroying the focused search
+// box mid-typing. List views call this right after render with the input's
+// stable id. Null-safe: missing ids and non-text controls (selects) are fine.
+GF.refocus = (id) => {
+  const el = GF.$(id);
+  if (!el || typeof el.focus !== 'function') return;
+  el.focus();
+  if (typeof el.setSelectionRange === 'function' && typeof el.value === 'string') {
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+  }
+};
 
 // ── Modals + toast ──
 GF.openModal = (id) => GF.$(id).classList.add('open');

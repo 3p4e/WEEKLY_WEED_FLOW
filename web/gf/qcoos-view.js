@@ -58,8 +58,8 @@
     try { st.detail = await GF.API.qcOosOne(id); } catch (e) { GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qcoos') GF.render.all();
   };
-  GF.WWF.qcOosFilter = (v) => { GF.WWF._qcoos.q = v; GF.render.all(); };
-  GF.WWF.qcOosStatus = (v) => { GF.WWF._qcoos.status = v; GF.WWF.loadQcOos(); };
+  GF.WWF.qcOosFilter = (v) => { GF.WWF._qcoos.q = v; GF.render.all(); GF.refocus('qoo-search'); };
+  GF.WWF.qcOosStatus = async (v) => { GF.WWF._qcoos.status = v; await GF.WWF.loadQcOos(); GF.refocus('qoo-status'); };
   GF.WWF.qcOosTab = (t) => { GF.WWF._qcoos.tab = t; GF.render.all(); };
 
   const _reload = async (id) => {
@@ -271,8 +271,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Investigations', 'Истраги')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcOosFilter(this.value)">
-          <select onchange="GF.WWF.qcOosStatus(this.value)">
+          <input id="qoo-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcOosFilter(this.value)">
+          <select id="qoo-status" onchange="GF.WWF.qcOosStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

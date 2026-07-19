@@ -182,8 +182,11 @@
     const sel = qq.multi ? (st().answers[qq.key] || []).includes(v)
                          : st().answers[qq.key] === v;
     const def = typeof o === 'object' && o.default;
-    return `<span class="chip-opt ${sel ? 'on' : ''}" style="margin:2px"
-      onclick="GF.WWF.qstuPick('${qq.key}', ${qq.multi}, '${GF.esc(v).replace(/'/g, '&#39;')}')"
+    // The option value rides in data-v (HTML-escaped once); the handler reads
+    // this.dataset.v, which the parser has already HTML-decoded — a quoted
+    // JS literal here would re-decode &#39; to a raw quote and throw.
+    return `<span class="chip-opt ${sel ? 'on' : ''}" style="margin:2px" data-v="${GF.esc(v)}"
+      onclick="GF.WWF.qstuPick('${qq.key}', ${qq.multi}, this.dataset.v)"
       >${GF.esc(v)}${def && !sel ? ' ✓' : ''}</span>`;
   };
 

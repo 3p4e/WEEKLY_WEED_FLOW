@@ -11,6 +11,9 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false,
                     moreItems: false, moreFeed: false,
+                    // Last user this inbox was loaded for — a login as someone
+                    // else must reset the module state, never show their items.
+                    user: null,
                     // Team digest (GET /notifications/digest) — lazy: nothing is
                     // fetched until the panel is first opened.
                     digest: null, digestWindow: 'daily', digestOpen: false, digestLoading: false };
@@ -28,8 +31,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'ack':            return p.accepted
                                    ? AL(`${a} accepted: ${t}`, `${a} прифати: ${t}`)
                                    : AL(`${a} declined: ${t}`, `${a} одби: ${t}`);
-      case 'status_changed': return AL(`${a}: ${t} → ${GF.statusLabel ? GF.statusLabel(({pending:'pending',ongoing:'working',completed:'done'})[p.new] || p.new) : p.new}`,
-                                       `${a}: ${t} → ${p.new}`);
+      case 'status_changed': {
+        // Backend status enum → GF status key → localized label; statusLabel
+        // is language-aware, so the one expression serves both branches (the
+        // MK sentence used to print the raw English enum).
+        const sl = GF.statusLabel
+          ? GF.statusLabel(({ pending: 'pending', ongoing: 'working', completed: 'done' })[p.new] || p.new)
+          : p.new;
+        return AL(`${a}: ${t} → ${sl}`, `${a}: ${t} → ${sl}`);
+      }
       case 'report_locked':  return AL(`${a} locked the weekly ${p.kind} (${p.week_start})`,
                                        `${a} го заклучи неделниот ${p.kind === 'plan' ? 'план' : 'извештај'} (${p.week_start})`);
       case 'created':        return AL(`${a} created: ${t}`, `${a} креираше: ${t}`);
@@ -157,13 +167,13 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   GF.views.inbox = () => {
     const st = GF.WWF._notif;
-    if (!st.loaded) { GF.WWF.loadInbox(); }
+    if (!st.loaded || st.user !== GF.state.user) { GF.WWF.loadInbox(); }
     const tab = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.tab === id ? 'btn-primary on' : ''}"
       onclick="GF.WWF._notif.tab='${id}';GF.render.all()">${lbl}</button>`;
     const flt = (id, lbl) => `<span class="chip-opt ${st.filter === id ? 'on' : ''}"
       onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.WWF.loadInbox()">${lbl}</span>`;
     const items = st.filter ? st.items.filter(n => n.reason === st.filter) : st.items;
-    return `${GF.viewHead ? GF.viewHead('inbox', 'inbox') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
+    return `${GF.viewHead ? GF.viewHead('inbox', 'inbox_sub') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
       ${digestPanel()}
       <div class="ntf-bar">
         ${tab('inbox', AL('Inbox', 'Сандаче') + (st.unread ? ` (${st.unread})` : ''))}
@@ -185,9 +195,14 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   GF.WWF.loadInbox = async () => {
     const st = GF.WWF._notif;
-    // Demo mode has no notification data — the demo API router answers these
-    // paths with junk that would poison st.items (must stay an ARRAY).
-    if (GF.state && GF.state.demo) { st.items = []; st.feed = []; st.loaded = true; return; }
+    // Cross-login reset: a new session must never show the previous user's
+    // items/feed/badge while its own fetch is in flight.
+    if (st.user !== GF.state.user) {
+      st.user = GF.state.user;
+      st.items = []; st.feed = []; st.unread = 0; st.loaded = false;
+      st.moreItems = false; st.moreFeed = false;
+      st.digest = null; st.digestOpen = false; st.digestLoading = false;
+    }
     try {
       const [items, feed, uc] = await Promise.all([
         GF.API.notifications({}), GF.API.activity({}), GF.API.notifUnread()]);
@@ -220,8 +235,6 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     const st = GF.WWF._notif;
     const w = st.digestWindow;
     const empty = { window: w, by_verb: [], by_actor: [], recent: [], total: 0 };
-    // Demo mode has no events data — same guard as loadInbox.
-    if (GF.state && GF.state.demo) { st.digest = empty; GF.render.all(); return; }
     st.digestLoading = true;
     GF.render.all();
     try {
@@ -288,9 +301,9 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   // 75s poll + on-focus refresh (research: polling is correct at this scale;
   // server-side unread count is the single source of truth for the badge).
-  // Self-guarded: does nothing until a real session exists; never in demo.
+  // Self-guarded: does nothing until a real session exists.
   const tick = () => {
-    if (GF.API && GF.API.token && !(GF.state && GF.state.demo)) GF.WWF.loadInbox();
+    if (GF.API && GF.API.token) GF.WWF.loadInbox();
   };
   setInterval(tick, 75000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
