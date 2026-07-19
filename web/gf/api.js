@@ -48,6 +48,14 @@ GF.API = {
           detail = (errBody && (errBody.detail || errBody.error)) || '';
         }
       } catch (e) {}
+      // Structured error details (objects — e.g. the DocEngine verify-fail 422
+      // carries {verify, error}) ride along on err.detail; the message stays a
+      // string so every existing caller keeps working.
+      let detailObj = null;
+      if (detail && typeof detail === 'object') {
+        detailObj = detail;
+        detail = detail.error || JSON.stringify(detail);
+      }
       // A session can go from must_change_password=false to true mid-session
       // (e.g. an admin resets it) — route back to the forced-change screen
       // instead of leaving the user stuck behind a toast with no way back.
@@ -56,6 +64,7 @@ GF.API = {
       }
       const err = new Error(detail || ('HTTP ' + res.status + ' ' + path));
       err.status = res.status;
+      if (detailObj) err.detail = detailObj;
       throw err;
     }
     const ct = res.headers.get('content-type') || '';
@@ -101,13 +110,7 @@ GF.API = {
   facility()               { return this._req('GET', '/facility'); },
   analytics(weeks = 8)     { return this._req('GET', '/reports/analytics?weeks=' + weeks); },
   auditPrep(programs)      { return this._req('GET', '/reports/audit-prep' + (programs ? '?programs=' + encodeURIComponent(programs) : '')); },
-  qmsStats()               { return this._req('GET', '/qms/stats'); },
-  qmsDocuments()           { return this._req('GET', '/qms/documents'); },
-  qmsDocument(code)        { return this._req('GET', '/qms/documents/' + encodeURIComponent(code)); },
-  qmsHierarchy()           { return this._req('GET', '/qms/hierarchy'); },
-  qmsFamilies()            { return this._req('GET', '/qms/families'); },
-  qmsRagQuery(body)        { return this._req('POST', '/qms/rag-query', body); },
-  qmsDownloadUrl(path)     { return '/qms/download/' + path.split('/').map(encodeURIComponent).join('/'); },
+  // qms-api retired platform-wide — its legacy wrappers (qmsStats/qmsDocuments/qmsDocument/qmsHierarchy/qmsFamilies/qmsRagQuery/qmsDownloadUrl) were removed; QMS Studio (DocEngine) below is the successor.
   // QC LIMS — specifications (U1)
   qcSpecs(q)               { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/specifications' + (u?'?'+u:'')); },
   qcSpec(id)               { return this._req('GET', '/qc/specifications/' + id); },
@@ -181,6 +184,8 @@ GF.API = {
   studioStartWorkflow(b)   { return this._req('POST', '/qms/studio/workflows', b); },
   studioWorkflow(id)       { return this._req('GET', '/qms/studio/workflows/' + encodeURIComponent(id)); },
   studioDocuments()        { return this._req('GET', '/qms/studio/documents'); },
+  studioDocument(did)      { return this._req('GET', '/qms/studio/documents/' + encodeURIComponent(did)); },
+  studioBuild(body)        { return this._req('POST', '/qms/studio/build', body); },
   studioDocxUrl(id)        { return '/qms/studio/documents/' + encodeURIComponent(id) + '/download'; },
   studioPdfUrl(id)         { return '/qms/studio/documents/' + encodeURIComponent(id) + '/pdf'; },
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
