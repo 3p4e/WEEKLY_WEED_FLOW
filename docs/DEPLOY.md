@@ -948,3 +948,74 @@ both frontends. **Live smoke green on both**: SW v3.54.0 served; round-2
 functions (qcCusLinkSample, openDeptForm, qcEcoaAttachSpec, loadDigest,
 unarchiveTask, qstuBuildRun) confirmed in served JS; prod `/health` 200.
 **Rollback** = revert the tag to `v90` on the affected stack.
+
+## Round-3 module-by-module bug hunt (backend v61 / frontend v92 / docengine v6 → BOTH stacks, 2026-07-19)
+
+Owner directive: "check for bug in all distinct app modules … revise the app
+in every aspect." Adversarial per-module review over backend + frontend
+found 30 defects; all fixed except three documented LOWs (dependency-cycle
+race, qcOosPick skeleton sharing the now-fixed pattern, uuid nits in two
+report endpoints). Code-only — no migration (tasks DB stays at 0027).
+
+**Backend (v61):** QC record-integrity cluster — extraction PATCH now 409s
+on PROMOTED/REJECTED docs and 422s a parameter from a foreign spec (closes
+a fabricated-conformance path); CoA-doc PATCH locked after promotion;
+promote is race-safe (`WHERE promoted_coa_id IS NULL` + rollback on the
+loser); **COQ completeness gate** — every spec parameter must carry a
+parameter-cited result or the COQ 409s "not fully tested" (COQ_GEN guard
+parity). Tasks — foreign-parent child-attach refused 404 (scope
+escalation); dept-move guard covers both directions; recurrence
+double-materialize closed with FOR UPDATE + monthly anchor-day pinning;
+uuid 422 guards; payload bounds. Collab — handoff resolve rewritten: the
+proposer cannot accept their own handoff (second-person rule), the target
+department's manager/head can (previously 404'd), and **a deadlock the new
+test exposed was fixed** (all writes now in one actor-stamped
+rls(admin=True) transaction; the old shape held the audit-chain advisory
+lock on the caller's connection while a second admin connection waited on
+it forever — every real target-side accept would have hung). Mentions no
+longer leak task titles to USERs who cannot see the task. Auth — exact
+username match wins before the email fallback; new usernames may not
+contain '@'. Demo — wipe+seed serialized under one session-level advisory
+lock (concurrent /demo/start could corrupt the seed). Notifications — uuid
+guards. AI — role→capability matrix (`FUNCTION_ROLES`): personal tier for
+every authenticated user, all nine corpus/planning functions for elevated
+roles with grounding breadth scoped by department (managers get their
+dept, executives org-wide); /ai/functions filters the catalog per role.
+
+**Frontend (v92, SW v3.55.0):** exec AI brief sends real week context and
+unwraps the response envelope; per-user cache resets kill cross-login
+bleed (assistant thread, notifications, QC caches via GF.WWF.resetCaches);
+archived tasks excluded from every aggregate + muted on the Board; QC
+views keep search focus across re-renders (GF.refocus), qcsample
+stale-parent draft fixed (controlled draft state), 7 real icons replace
+placeholders, per-view detailError + one-click Retry, qmsstudio option
+chips via dataset (quote-safe), bilingual sweep incl. OTP modal + MK
+status labels, document-view childrenByParent crash fixed.
+
+**Tests:** 8 pre-round-3 tests pinned the weaker contracts and were
+aligned (COQ fixture now cites its parameter; verify-discrepancy tampers
+via direct DB update and pins the API lock; handoff accept via the target
+manager + self-accept 403; foreign-parent 404s; cross-dept mention
+silence) + a new completeness-gate regression. Gate: **392 backend tests
+green** (local PG16 two-DB cluster), **Playwright 14/14**, node --check
+clean.
+
+**Deployed to BOTH stacks** (standing owner directive "deploy full in
+production"): wwf_mass backend v60→**v61**, prod backend+scheduler
+v57→**v61** (prod backend had lagged at v57 — v58–v60 round-1/2 backend
+fixes reach prod with this cut), frontend v91→**v92** and docengine
+v5→**v6** (ephemeral reg-checker deletion catch broadened — httpx
+timeouts no longer abort successful jobs) on both. **Live smoke green on
+both**: /health 200; SW v3.55.0 served; round-3 JS (GF.refocus,
+qcSampleDraft, resetCaches, exec-brief week ctx) in served files; /tasks +
+/ai/functions 401-guarded; /qc bogus 404; /demo/start 200 on wwf_mass
+(exercises the new demo mutex live) and 404 on prod (disabled).
+**Rollback** = revert tags to v60(mass)/v57(prod)/v91/v5 on the affected
+stack + `docker compose up -d --no-deps <svc>`.
+
+Letta question (owner): answered in `docs/LETTA-DEDICATED-PLAN.md` — yes,
+a dedicated per-stack Letta instance is the right isolation; everything
+app-side is regenerable (declarative fleet + corpus migration preserving
+embeddings); cutover runbook staged as its own increment (wwf_mass first,
+prod owner-gated). Role-differentiated agent capabilities shipped in this
+cut (the FUNCTION_ROLES matrix above).
