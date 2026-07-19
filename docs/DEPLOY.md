@@ -887,3 +887,17 @@ into core memory mid-turn — if a residual per-section overflow ever
 reappears, constrain the reg-check prompt to snippet-returning search tools
 (`semantic_search_files`/`grep_files`) or detach `open_files` from the
 ephemeral clones.
+
+## Production promotion — full feature set (frontend v90 + docengine v5, 2026-07-19)
+
+Owner directive: "deploy full in production server." Promoted the
+wwf_mass-verified pair to `wwf_app`: `/opt/stacks/wwf_app/compose.yaml`
+frontend `v89`→`v90` + docengine `v3`→`v5`, `docker compose up -d --no-deps
+frontend docengine` (no backend/DB change, no migration). **Live prod smoke
+green**: `/` and `/health` 200; SW serves `wwf-shell-v3.53.0`;
+`gf/task-extras.js` 200 + registered in index.html; room-editor
+(`openRoomForm`) and sampling-plan (`qcPlanCreate`) functions present in
+served JS; calendar expand present; docengine v5 both workers started clean;
+`/qms/studio/questionnaires` → 401 (route live + guarded), bogus route 404.
+Both stacks now run identical images (v90 / v5). **Rollback** = revert the
+two tags to `v89`/`v3` + `docker compose up -d --no-deps frontend docengine`.
