@@ -341,13 +341,24 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
     batch = data["batch"]
     mcode, men, mmk = data["material"]
     qc_mgr, lab_tech, qp = person_ids["qc"], person_ids["op_qc"], person_ids["qp"]
+    # Demo PP-#### document codes come from a dedicated reserved range
+    # (…-9001), generated in Python — NEVER from nextval() — so starting or
+    # resetting the demo does not advance the shared production qc_*_id_seq
+    # counters. Each seed inserts exactly one of each entity and the wipe
+    # first clears the prior demo row, so a fixed number in the reserved
+    # range is collision-free (uniqueness is per (org_id, code)).
+    yr = today.strftime("%Y")
+
+    def dcode(kind: str) -> str:
+        return f"PP-{kind}-{yr}-9001"
+
     spec_id = await t.fetchval(
         "INSERT INTO qc_specifications(org_id, spec_id, material_code, material_name_en,"
         " material_name_mk, version, effective_date, status, thc_grade, thc_acceptance_min,"
         " thc_acceptance_max, created_by, updated_by)"
-        " VALUES ($1, 'PP-SPEC-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_spec_id_seq')::text,4,'0'),"
+        " VALUES ($1, $7,"
         "         $2,$3,$4,1,$5,'ACTIVE','GRADE_I',18,30,$6,$6) RETURNING id",
-        org_id, mcode, men, mmk, today, qc_mgr)
+        org_id, mcode, men, mmk, today, qc_mgr, dcode('SPEC'))
     p_thc = await t.fetchval(
         "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk, test_method,"
         " spec_type, lower_limit, upper_limit, unit, sorting_order, created_by)"
@@ -362,15 +373,15 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
         "INSERT INTO qc_samples(org_id, sample_id, batch_id, material_code, sample_type,"
         " material_name_en, sampling_date, status, location, quantity, quantity_unit,"
         " created_by, updated_by)"
-        " VALUES ($1, 'PP-SMP-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_sample_id_seq')::text,4,'0'),"
+        " VALUES ($1, $7,"
         "         $2,$3,'batch',$4,$5,'QUARANTINE','QC intake fridge 1',25,'g',$6,$6) RETURNING id",
-        org_id, batch, mcode, men, today - timedelta(days=1), qc_mgr)
+        org_id, batch, mcode, men, today - timedelta(days=1), qc_mgr, dcode('SMP'))
     coa_id = await t.fetchval(
         "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
         " cert_type, report_date, source_lab, analyst_id, created_by, updated_by)"
-        " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_coa_id_seq')::text,4,'0'),"
+        " VALUES ($1, $8,"
         "         $2,$3,$4,'ICOA',$5,$6,$7,$7,$7) RETURNING id",
-        org_id, batch, spec_id, sample_id, today, data["lab"], lab_tech)
+        org_id, batch, spec_id, sample_id, today, data["lab"], lab_tech, dcode('COA'))
     await t.execute(
         "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value, result_numeric,"
         " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date, created_by)"
@@ -385,9 +396,9 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
         "INSERT INTO qc_oos_records(org_id, oos_number, result_id, sample_id, batch_id, material_code,"
         " test_name, specification_value, obtained_value, oos_type, risk_level, phase, status,"
         " detection_date, detected_by_id, created_by, updated_by)"
-        " VALUES ($1, 'PP-OOS-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_oos_id_seq')::text,4,'0'),"
+        " VALUES ($1, $8,"
         "         $2,$3,$4,$5,'Moisture','<= 12 %','13.4 %','OOS','MEDIUM','I','PHASE_I',$6,$7,$7,$7) RETURNING id",
-        org_id, fail_result, sample_id, batch, mcode, today, qc_mgr)
+        org_id, fail_result, sample_id, batch, mcode, today, qc_mgr, dcode('OOS'))
     for action, details in (("opened", f"OOS opened for batch {batch} (Moisture 13.4 %)"),
                             ("status:OPEN->PHASE_I", "Phase I laboratory investigation started")):
         await t.execute(
@@ -399,17 +410,17 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
         "INSERT INTO qc_sampling_requests(org_id, rqs_number, material_code, material_name_en,"
         " batch_id, originating_department, status, requested_by_id, registered_by_id, registered_at,"
         " registration_deadline, registration_window_met, sample_id, created_by, updated_by)"
-        " VALUES ($1, 'PP-RQS-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_rqs_id_seq')::text,4,'0'),"
+        " VALUES ($1, $8,"
         "         $2,$3,$4,'cultivation','REGISTERED',$5,$6, now() - interval '20 hours',"
         "         now() + interval '4 hours', true, $7, $5,$5) RETURNING id",
-        org_id, mcode, men, batch, person_ids["cu"], qc_mgr, sample_id)
+        org_id, mcode, men, batch, person_ids["cu"], qc_mgr, sample_id, dcode('RQS'))
     sfr_id = await t.fetchval(
         "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
         " barrel_numbers, num_containers, destination_facility, status, sampled_by_id, sample_id,"
         " created_by, updated_by)"
-        " VALUES ($1, 'PP-SFR-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_sfr_id_seq')::text,4,'0'),"
+        " VALUES ($1, $6,"
         "         $2,'Flower Room 3',$3,2,'QC laboratory','COMPLETED',$4,$5,$4,$4) RETURNING id",
-        org_id, rqs_id, ["B-101", "B-102"], person_ids["op_qc"], sample_id)
+        org_id, rqs_id, ["B-101", "B-102"], person_ids["op_qc"], sample_id, dcode('SFR'))
     await t.execute(
         "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id, from_location,"
         " to_location, transfer_reason, transfer_type, sfr_id, created_by)"
@@ -420,10 +431,10 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
     await t.execute(
         "INSERT INTO qc_water_tests(org_id, water_test_id, result_date, location, grade, parameters,"
         " passed, created_by, updated_by)"
-        " VALUES ($1, 'PP-WT-' || to_char(now(),'YYYY') || '-' || lpad(nextval('qc_wt_id_seq')::text,4,'0'),"
+        " VALUES ($1, $5,"
         "         $2,'Irrigation main, Veg Room 1','TW',$3,true,$4,$4)",
         org_id, today - timedelta(days=2),
-        {"pH": 7.1, "conductivity_uScm": 480, "TOC_mgL": 0.4}, qc_mgr)
+        {"pH": 7.1, "conductivity_uScm": 480, "TOC_mgL": 0.4}, qc_mgr, dcode('WT'))
 
     row = await u.fetchrow(
         "SELECT id, org_id, role, username, full_name, password_set_at FROM profiles WHERE id=$1",
