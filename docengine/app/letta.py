@@ -78,6 +78,12 @@ class LettaClient:
             "PATCH", f"/agents/{agent_id}/sources/attach/{source_id}"
         )
 
+    async def delete_agent(self, agent_id: str) -> None:
+        """Delete an agent by id. Callers must only pass ids of agents they
+        themselves created (e.g. spawn_ephemeral's short-lived clones) — this
+        has no name guard because the delete path only ever sees an id."""
+        await self._req("DELETE", f"/agents/{agent_id}")
+
     # ---- conversation ----
     async def send_message(self, agent_id: str, text: str) -> str:
         """Send one user message; return the agent's assistant text reply."""

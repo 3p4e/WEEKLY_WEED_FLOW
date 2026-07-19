@@ -119,7 +119,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         brief = _brief(qkey, answers)
         await db.job_update(job_id, status="running", stage="generate")
 
-        from .fleet import ensure_fleet  # late import: fleet needs live Letta
+        from .fleet import ensure_fleet, spawn_ephemeral  # late import: fleet needs live Letta
 
         agents = await ensure_fleet(client)
 
@@ -156,15 +156,31 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             )
 
         # ---- per-section regulatory check ----
+        # Each section gets its OWN short-lived agent (spawn_ephemeral), used
+        # for exactly one exchange then deleted. A single persistent agent
+        # accumulates every prior section + retrieved passage into its next
+        # turn's prompt, so a 9-section SOP reliably blows the model's context
+        # window by the last section or two (observed live, twice, including
+        # against a freshly-created agent) — isolating each check per-section
+        # keeps the prompt size constant regardless of section count.
         await db.job_update(job_id, stage="regulatory-check")
         reg_findings: list[str] = []
         for s in sections:
-            finding = await client.send_message(
-                agents["gf_reg_checker"],
-                f"Check this drafted section {s['num']} of {meta['code']} against the "
-                f"regulatory corpus ({', '.join(settings.reg_sources)}). Cite only "
-                f"retrieved passages; say NO-FINDING if nothing applies.\n\n{s['content']}",
+            tmp_id = await spawn_ephemeral(
+                client, "gf_reg_checker", f"{job_id[:8]}_{s['num'].replace('.', '')}"
             )
+            try:
+                finding = await client.send_message(
+                    tmp_id,
+                    f"Check this drafted section {s['num']} of {meta['code']} against the "
+                    f"regulatory corpus ({', '.join(settings.reg_sources)}). Cite only "
+                    f"retrieved passages; say NO-FINDING if nothing applies.\n\n{s['content']}",
+                )
+            finally:
+                try:
+                    await client.delete_agent(tmp_id)
+                except LettaError as e:
+                    log.warning("failed to delete ephemeral reg-checker %s: %s", tmp_id, e)
             reg_findings.append(f"[{s['num']}] {finding.strip()}")
 
         # ---- §6A audit ----

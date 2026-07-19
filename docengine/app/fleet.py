@@ -25,6 +25,22 @@ def load_fleet() -> dict:
     return yaml.safe_load(FLEET_FILE.read_text(encoding="utf-8"))
 
 
+def _resolve_model(spec: dict, existing: list[dict]) -> tuple[str, str]:
+    """Adopt a model/embedding handle the server demonstrably accepts: prefer
+    any existing agent's llm_config over the YAML default (invented handles
+    are rejected by this server, per the handover)."""
+    model = spec["defaults"]["model"]
+    embedding = spec["defaults"]["embedding"]
+    for a in existing:
+        lc = a.get("llm_config") or {}
+        if lc.get("handle") or lc.get("model"):
+            model = lc.get("handle") or lc.get("model")
+            ec = a.get("embedding_config") or {}
+            embedding = ec.get("handle") or ec.get("embedding_model") or embedding
+            break
+    return model, embedding
+
+
 async def ensure_fleet(client: LettaClient | None = None) -> dict:
     """Idempotent. Returns {agent_name: agent_id} for the whole gf_ fleet."""
     client = client or LettaClient()
@@ -32,18 +48,7 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
     house_rules = spec["house_rules"].strip()
     existing = {a.get("name"): a for a in await client.list_agents()}
     sources = {s.get("name"): s.get("id") for s in await client.list_sources()}
-
-    # Adopt a model handle the server demonstrably accepts: prefer any
-    # existing agent's llm_config over the YAML default.
-    model = spec["defaults"]["model"]
-    embedding = spec["defaults"]["embedding"]
-    for a in existing.values():
-        lc = a.get("llm_config") or {}
-        if lc.get("handle") or lc.get("model"):
-            model = lc.get("handle") or lc.get("model")
-            ec = a.get("embedding_config") or {}
-            embedding = ec.get("handle") or ec.get("embedding_model") or embedding
-            break
+    model, embedding = _resolve_model(spec, list(existing.values()))
 
     out: dict[str, str] = {}
     for ag in spec["agents"]:
@@ -74,3 +79,44 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
             except LettaError as e:  # non-fatal: agent works, RAG degraded
                 log.warning("attach %s -> %s failed: %s", src_name, name, e)
     return out
+
+
+async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str) -> str:
+    """Create a short-lived clone of a fleet agent (same persona/sources/
+    model) for exactly ONE isolated exchange, then the caller deletes it.
+
+    Exists because a persistent Letta agent accumulates every past message
+    into the prompt sent on each new turn — fine for a single Q&A agent, but
+    fatal for a loop that sends N independent checks against the same agent
+    (each turn's system-prompt token estimate keeps growing until it exceeds
+    the model's context window; observed live at section 9 of 9 on a fresh
+    gf_reg_checker). A fresh clone per exchange keeps that estimate constant
+    regardless of how many checks the pipeline runs."""
+    spec = load_fleet()
+    house_rules = spec["house_rules"].strip()
+    ag = next(a for a in spec["agents"] if a["name"] == agent_name)
+    existing = await client.list_agents()
+    sources = {s.get("name"): s.get("id") for s in await client.list_sources()}
+    model, embedding = _resolve_model(spec, existing)
+
+    body = {
+        "name": f"{agent_name}_tmp_{name_suffix}",
+        "description": f"ephemeral clone of {agent_name} for one isolated exchange",
+        "model": model,
+        "embedding": embedding,
+        "memory_blocks": [
+            {"label": "gf_house_rules", "value": house_rules},
+            {"label": "persona", "value": ag["persona"].strip()},
+        ],
+    }
+    created = await client.create_agent(body)
+    for src_name in ag.get("sources", []):
+        sid = sources.get(src_name)
+        if not sid:
+            log.warning("source %s not found for ephemeral %s", src_name, body["name"])
+            continue
+        try:
+            await client.attach_source(created["id"], sid)
+        except LettaError as e:  # non-fatal: this one exchange loses RAG, not the whole job
+            log.warning("attach %s -> %s failed: %s", src_name, body["name"], e)
+    return created["id"]
