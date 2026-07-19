@@ -215,6 +215,7 @@ GF.render = {
           <span class="cnt">${cur.length}</span>
           <div class="spacer"></div>
           ${tagFilter}
+          <button class="btn btn-sm${GF.state.showArchived ? ' btn-primary' : ''}" onclick="GF.WWF&&GF.WWF.toggleArchived&&GF.WWF.toggleArchived()">${GF.icon('box','icon')}${GF.t('show_archived')}</button>
           <button class="btn btn-sm" onclick="GF.ai.summary('report')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_summary')}</button>
           <button class="btn btn-sm" onclick="GF.rollover()">${GF.icon('forward','icon')}${GF.t('rollover')}</button>
         </div>
@@ -248,6 +249,9 @@ GF.render = {
     const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
+    // Archived rows only appear when the "Show archived" filter is on — mark
+    // them so a muted card is never mistaken for live work.
+    const archChip = t.archived ? `<span class="type-chip" title="${GF.t('archived')}">${GF.t('archived')}</span>` : '';
     const refCode = t.ref ? `<span class="ref-code">${GF.esc(t.ref)}</span>` : '';
     // The subtask counter is the tree toggle: themes expand into their
     // documents (and documents into versions) as indented rows below the card.
@@ -273,7 +277,7 @@ GF.render = {
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
-            ${refCode}${typeChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
+            ${refCode}${typeChip}${archChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
         </div>
         <div class="card-side">
           <div class="daytags">${daytags}</div>
@@ -284,7 +288,9 @@ GF.render = {
         ${GF.icon('chevD', 'icon chev-card')}
       </div>`;
     const tree = treeOpen ? this.treeRows(t.id, 1) : '';
-    if (!exp) return `<div class="card s-${t.status}">${head}${tree}</div>`;
+    // Archived cards render muted (inline — archived is a filter state, not a skin token).
+    const archMute = t.archived ? ' style="opacity:.55"' : '';
+    if (!exp) return `<div class="card s-${t.status}"${archMute}>${head}${tree}</div>`;
 
     const noteId = 'note-' + t.id;
     // Executive input stands out: notes written by the OWNER get the strongest
@@ -311,6 +317,8 @@ GF.render = {
     const body = `
       <div class="card-body">
         ${t.status === 'stuck' && t.blocker ? `<div class="blocker">${GF.icon('flag')}<div><div class="bt">${GF.t('blocker')}: ${GF.esc(t.blocker)}</div></div></div>` : ''}
+        ${t.status === 'done' && t.outcome ? `<div class="sec-label">${GF.icon('check','icon')}${GF.t('outcome')}</div>
+        <div class="card-desc">${GF.esc(t.outcome)}</div>` : ''}
         ${t.desc ? `<div class="card-desc">${GF.esc(t.desc)}</div>` : ''}
         <div class="sec-label">${GF.icon('chat','icon')}${GF.t('notes')}</div>
         <div class="notes">${notes || ''}</div>
@@ -329,10 +337,12 @@ GF.render = {
           <div class="track" style="max-width:160px;margin:0 6px"><span style="width:${prog}%;background:${d.color}"></span></div>
           <span class="mono" style="font-size:12px;color:var(--ink-2);font-weight:600">${prog}%</span>
           <div class="spacer"></div>
-          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
+          ${t.archived
+            ? `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.unarchiveTask&&GF.WWF.unarchiveTask('${t.id}')">${GF.icon('forward','icon')}${GF.t('unarchive')}</button>`
+            : `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>`}
         </div>
       </div>`;
-    return `<div class="card s-${t.status} expanded">${head}${body}${tree}</div>`;
+    return `<div class="card s-${t.status} expanded"${archMute}>${head}${body}${tree}</div>`;
   },
 
   /* ── Tree rows: a parent's children as indented compact rows (theme →

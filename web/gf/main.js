@@ -16,6 +16,15 @@ GF.addNote = (taskId) => {
 // v2 task typology — mirrors the backend TaskType enum (see backend/app/api/tasks.py).
 GF.TASK_TYPES = ['capa', 'sop', 'validation', 'document', 'lab', 'meeting', 'admin', 'other'];
 
+// Recurrence detail row ("every N" interval + optional end date) — only
+// meaningful once a frequency is picked, so it stays hidden for "Does not
+// repeat". Called by the add-rec chooser's onPick and by worklog.js's
+// openEdit when prefilling an existing recurrence.
+GF.syncRecFields = (freq) => {
+  const row = GF.$('add-rec-extra'); if (!row) return;
+  row.style.display = freq ? '' : 'none';
+};
+
 GF.openAdd = (weekId, parentId) => {
   // openEdit (worklog.js) already checked GF.can('edit', t) — don't re-deny on
   // 'create', which could wrongly block an allowed edit if the two perms ever diverge.
@@ -73,7 +82,11 @@ GF.openAdd = (weekId, parentId) => {
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('due_date')}</label><input id="add-due" type="date"></div>
       <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label>${GF.selectField('add-rec', {
-        value: '', options: recOptions, title: GF.t('recurrence') })}</div>
+        value: '', options: recOptions, title: GF.t('recurrence'), onPick: (v) => GF.syncRecFields(v) })}</div>
+    </div>
+    <div class="row" id="add-rec-extra" style="gap:10px;display:none">
+      <div class="field" style="flex:1"><label>${GF.t('rec_every')}</label><input id="add-rec-n" type="number" min="1" max="1000" step="1" value="1"></div>
+      <div class="field" style="flex:1"><label>${GF.t('rec_until')}</label><input id="add-rec-until" type="date"></div>
     </div>
     <div class="field"><label>${GF.state.lang === 'mk' ? 'Ознаки' : 'Tags'} <span class="lbl-hint">${GF.state.lang === 'mk' ? 'одделени со запирка' : 'comma-separated'}</span></label>
       <input id="add-tags" placeholder="hlvd, tranche-1" oninput="GF.renderAddPreview&&GF.renderAddPreview()"></div>

@@ -82,6 +82,42 @@ GF.WWF.weekIndex = (t) => {
   return GF.calendar.todayId;
 };
 
+/* ── Archived visibility ───────────────────────────────────────────
+   GET /tasks hides archived rows by default (tasks.py include_archived=false);
+   the "Show archived" toggle reloads the list with include_archived=true so
+   archiving stops being a one-way trapdoor — archived cards render muted with
+   an "Archived" chip and an Unarchive action (worklog.js). */
+GF.WWF.taskQuery = () => (GF.state.showArchived ? { include_archived: true } : {});
+
+// Rebuild GF.state.tasks/children from a raw /tasks payload — the single
+// shared path for the initial load and the archived-toggle reload.
+// Children (subtasks / sub-subtasks) never render as board rows — index
+// them by parent for the tree toggle on parent cards (theme → document →
+// version). Same transform as any task; sorted oldest-first so a theme's
+// documents read chronologically. GF.state.tasks stays parents-only —
+// exec/report/board views all assume that.
+GF.WWF.applyTasks = (tasks) => {
+  GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
+  GF.state.children = {};
+  tasks.filter(t => t.parent_id).map(GF.WWF.transform).forEach(c => {
+    (GF.state.children[c.parentId] = GF.state.children[c.parentId] || []).push(c);
+  });
+  Object.values(GF.state.children).forEach(list =>
+    list.sort((a, b) => String(a.week_start || '9999').localeCompare(String(b.week_start || '9999'))));
+};
+
+GF.WWF.toggleArchived = async () => {
+  GF.state.showArchived = !GF.state.showArchived;
+  try {
+    const tasks = (await GF.API.tasks(GF.WWF.taskQuery())) || [];
+    GF.WWF.applyTasks(tasks);
+  } catch (e) {
+    GF.state.showArchived = !GF.state.showArchived;   // revert; keep the current list
+    GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error');
+  }
+  GF.render.all();
+};
+
 /* ── build the calendar from the backend's real weeks ──────────────── */
 GF.WWF.buildCalendar = (weeks) => {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -215,7 +251,7 @@ GF.WWF.loadAndRender = async () => {
   // A /weeks failure is non-fatal — buildCalendar keeps core.js's generated
   // fallback weeks — but tell the user rather than silently swallowing it.
   try { weeks = (await GF.API.weeks()) || []; } catch (e) { GF.toast(AL('Weeks: ', 'Недели: ') + e.message, 'error'); }
-  try { tasks = (await GF.API.tasks()) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
+  try { tasks = (await GF.API.tasks(GF.WWF.taskQuery())) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
   if (depts.length) {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
       // `code` rides along so dept-templates.js can resolve the department's
@@ -243,18 +279,7 @@ GF.WWF.loadAndRender = async () => {
     else if (GF.hasDeptHome && GF.hasDeptHome()) GF.state.view = 'depthome';
   }
   GF.WWF.buildCalendar(weeks);
-  GF.state.tasks = tasks.filter(t => !t.parent_id).map(GF.WWF.transform);
-  // Children (subtasks / sub-subtasks) never render as board rows — index
-  // them by parent for the tree toggle on parent cards (theme → document →
-  // version). Same transform as any task; sorted oldest-first so a theme's
-  // documents read chronologically. GF.state.tasks stays parents-only —
-  // exec/report/board views all assume that.
-  GF.state.children = {};
-  tasks.filter(t => t.parent_id).map(GF.WWF.transform).forEach(c => {
-    (GF.state.children[c.parentId] = GF.state.children[c.parentId] || []).push(c);
-  });
-  Object.values(GF.state.children).forEach(list =>
-    list.sort((a, b) => String(a.week_start || '9999').localeCompare(String(b.week_start || '9999'))));
+  GF.WWF.applyTasks(tasks);
   // If current week is empty, navigate to the most recent past week that has tasks
   if (GF.state.tasks.filter(t => t.weekId === GF.state.selWeek).length === 0 && GF.state.tasks.length > 0) {
     const taskWeeks = [...new Set(GF.state.tasks.map(t => t.weekId))]
@@ -326,7 +351,16 @@ GF.WWF.install = () => {
     const dueDate = GF.$('add-due')?.value || null;
     const refCode = (GF.$('add-ref')?.value || '').trim() || null;
     const recFreq = GF.$('add-rec')?.value || '';
-    const recurrence = recFreq ? { freq: recFreq, interval: 1 } : null;
+    // "Every N" interval + optional end date (backend _check_recurrence:
+    // interval must be an int in 1..1000, until an ISO date). Clamp
+    // client-side so a stray value degrades gracefully instead of 422-ing
+    // the whole save; `until` is omitted entirely when empty.
+    const recN = parseInt(GF.$('add-rec-n')?.value, 10);
+    const recInterval = Number.isFinite(recN) ? Math.max(1, Math.min(1000, recN)) : 1;
+    const recUntil = GF.$('add-rec-until')?.value || null;
+    const recurrence = recFreq
+      ? Object.assign({ freq: recFreq, interval: recInterval }, recUntil ? { until: recUntil } : {})
+      : null;
     // Comma-separated free tags; bounded client-side to the backend's 422
     // limits (≤32 tags, ≤64 chars each) so a long paste degrades gracefully.
     const tags = (GF.$('add-tags')?.value || '').split(',')
@@ -718,6 +752,21 @@ GF.WWF.install = () => {
 };
 
 GF.WWF.install();
+
+/* ── Board view: "Show archived" toggle in the filter area ──────────
+   views.js's board() predates the archive feature; wrap it (same
+   monkey-patch pattern as _registerFullPageView) to slot the toggle chip
+   between the view head and the lanes. */
+if (GF.views && GF.views.board) {
+  const _origBoard = GF.views.board.bind(GF.views);
+  GF.views.board = () => {
+    const chip = `<div class="chips" style="margin:0 4px 10px"><span class="chip-opt ${GF.state.showArchived ? 'on' : ''}"
+      onclick="GF.WWF.toggleArchived()">${GF.icon('box', 'icon')}${GF.t('show_archived')}</span></div>`;
+    const html = _origBoard();
+    const anchor = '<div class="kboard">';
+    return html.includes(anchor) ? html.replace(anchor, chip + anchor) : chip + html;
+  };
+}
 
 /* ── Team / account provisioning (real backend, OTP shown to admin) ── */
 // Who may create/deactivate accounts: an admin (incl. qcm.blani, an ADMIN

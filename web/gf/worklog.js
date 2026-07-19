@@ -224,7 +224,7 @@ GF.WWF.promptOutcome = (taskId) => {
   GF.$('outcome-modal-body').innerHTML = `
     <div style="font-size:13px;color:var(--ink-2);margin-bottom:12px">${AL('Task completed — add an optional outcome note?', 'Задачата е завршена — додадете белешка за резултатот?')}</div>
     <div class="field"><div class="row" style="gap:8px">
-      <input id="outcome-note" placeholder="${AL('e.g. Deviation closed, report filed', 'пр. Отстапувањето е затворено')}" style="flex:1"
+      <input id="outcome-note" value="${GF.esc(t.outcome || '')}" placeholder="${AL('e.g. Deviation closed, report filed', 'пр. Отстапувањето е затворено')}" style="flex:1"
         onkeydown="if(event.key==='Enter')GF.WWF.saveOutcome('${t.id}')">
       ${GF.WWF.micBtn('outcome-note')}</div></div>
     <div class="row" style="gap:10px">
@@ -241,7 +241,8 @@ GF.WWF.saveOutcome = async (taskId) => {
   if (!v) return;
   try {
     await GF.API.updateTask(taskId, { outcome: v });
-    const t = GF.task(taskId); if (t) t.outcome = v;
+    // Re-render so the done card's Outcome block picks the note up right away.
+    const t = GF.task(taskId); if (t) { t.outcome = v; GF.render.panels(); }
     GF.toast(GF.t('outcome') + ' ✓', 'success');
   } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
@@ -283,11 +284,28 @@ GF.WWF.archiveTask = async (taskId) => {
                   'Архивирај „' + t.title + '"? Ќе исчезне од неделните прегледи, но останува во извештаите.'))) return;
   try {
     await GF.API.updateTask(taskId, { is_archived: true });
-    GF.state.tasks = GF.state.tasks.filter(x => x.id !== taskId);
-    GF.state.expanded.delete(taskId);
+    if (GF.state.showArchived) {
+      t.archived = true;             // "Show archived" is on: keep the card, muted, with Unarchive
+    } else {
+      GF.state.tasks = GF.state.tasks.filter(x => x.id !== taskId);
+      GF.state.expanded.delete(taskId);
+    }
     GF.render.all();
     GF.toast(GF.t('archive') + ' ✓', 'success');
   } catch (e) { GF.toast(AL('Archive failed: ', 'Неуспешно архивирање: ') + e.message, 'error'); }
+};
+
+/* ── Unarchive (PATCH is_archived:false) — the way back out of the archive.
+   Only reachable from an archived card, which only renders while the Board /
+   My Week "Show archived" filter is on (GF.WWF.toggleArchived, integrate.js). */
+GF.WWF.unarchiveTask = async (taskId) => {
+  const t = GF.task(taskId); if (!t) return;
+  try {
+    await GF.API.updateTask(taskId, { is_archived: false });
+    t.archived = false;
+    GF.render.all();
+    GF.toast(GF.t('unarchive') + ' ✓', 'success');
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Edit task — reuses the add modal, submitAdd PATCHes when _editTask set ── */
@@ -308,6 +326,11 @@ GF.WWF.openEdit = (taskId) => {
   if (GF.$('add-due')) GF.$('add-due').value = t.due || '';
   if (GF.$('add-ref')) GF.$('add-ref').value = t.ref || '';
   if (GF.$('add-rec')) GF.$('add-rec').value = (t.recurrence && t.recurrence.freq) || '';
+  // Recurrence detail (interval + until) prefills from the stored object and
+  // the row only shows when a frequency is actually set.
+  if (GF.$('add-rec-n')) GF.$('add-rec-n').value = (t.recurrence && t.recurrence.interval) || 1;
+  if (GF.$('add-rec-until')) GF.$('add-rec-until').value = (t.recurrence && t.recurrence.until) || '';
+  if (GF.syncRecFields) GF.syncRecFields((t.recurrence && t.recurrence.freq) || '');
   if (GF.$('add-tags')) GF.$('add-tags').value = (t.tags || []).join(', ');
   // The dept/priority/type/recurrence fields are popup choosers (hidden input
   // + trigger button) — setting .value above needs a label sync + re-tint.

@@ -10,7 +10,10 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 (function () {
   const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false,
-                    moreItems: false, moreFeed: false };
+                    moreItems: false, moreFeed: false,
+                    // Team digest (GET /notifications/digest) — lazy: nothing is
+                    // fetched until the panel is first opened.
+                    digest: null, digestWindow: 'daily', digestOpen: false, digestLoading: false };
   const PAGE = 50;   // backend default limit on /notifications and /activity
 
   const who = (id) => (GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
@@ -53,6 +56,21 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     capa_stuck: { en: 'CAPA stuck', mk: 'CAPA блокирана' },
     validation_stuck: { en: 'Validation stuck', mk: 'Валидација блокирана' },
   };
+
+  // Digest "by action" labels — the events table's verb enum, pluralised as
+  // count headings (the per-event sentence above stays the detailed render).
+  const VERB_LBL = {
+    created: { en: 'Created', mk: 'Креирани' }, assigned: { en: 'Assigned', mk: 'Доделени' },
+    unassigned: { en: 'Unassigned', mk: 'Отстранети' }, commented: { en: 'Comments', mk: 'Коментари' },
+    status_changed: { en: 'Status changes', mk: 'Промени на статус' },
+    report_locked: { en: 'Reports locked', mk: 'Заклучени извештаи' },
+    ack: { en: 'Acknowledged', mk: 'Потврдени' }, due_soon: { en: 'Due soon', mk: 'Наскоро рок' },
+    overdue: { en: 'Overdue', mk: 'Задоцнети' },
+    batch_added: { en: 'Batches added', mk: 'Додадени серии' },
+    batch_moved: { en: 'Batches moved', mk: 'Преместени серии' },
+    batch_closed: { en: 'Batches closed', mk: 'Затворени серии' },
+  };
+  const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };
 
   const dayLabel = (iso) => {
     const d = iso.slice(0, 10), today = GF.localDateStr ? GF.localDateStr(new Date()) : new Date().toISOString().slice(0, 10);
@@ -97,6 +115,46 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     return out || `<div class="ntf-empty">${AL('All clear — nothing here.', 'Сè е чисто — нема ништо.')}</div>`;
   };
 
+  /* ── Team digest panel — "what did my team do", daily/weekly, over the
+     same dept-scoped events feed (GET /notifications/digest). Collapsed by
+     default; the digest is fetched lazily on first open, never as part of a
+     plain notifications render. */
+  const digestPanel = () => {
+    const st = GF.WWF._notif;
+    const dg = st.digest;
+    const win = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.digestWindow === id ? 'btn-primary on' : ''}"
+      onclick="event.stopPropagation();GF.WWF.setDigestWindow('${id}')">${lbl}</button>`;
+    let body = '';
+    if (st.digestOpen) {
+      if (st.digestLoading || !dg) {
+        body = `<div class="panel-body"><div class="mw-skel" style="height:52px"></div></div>`;
+      } else {
+        const verbChips = (dg.by_verb || []).map(v =>
+          `<span class="chip-opt">${GF.esc(verbLabel(v.verb))} · ${Number(v.count) || 0}</span>`).join('');
+        const actorChips = (dg.by_actor || []).map(a =>
+          `<span class="chip-opt who">${GF.avatar ? GF.avatar(a.actor_id, 18) : ''}${GF.esc(who(a.actor_id))} · ${Number(a.count) || 0}</span>`).join('');
+        const empty = `<span class="ntf-empty">${AL('No activity in this window.', 'Нема активност во овој период.')}</span>`;
+        body = `<div class="panel-body">
+          <div class="sec-label">${AL('By action', 'По дејство')}</div>
+          <div class="chips">${verbChips || empty}</div>
+          <div class="sec-label">${AL('By person', 'По лице')}</div>
+          <div class="chips chips-who">${actorChips || empty}</div>
+          <div class="sec-label">${AL('Recent', 'Неодамнешни')}</div>
+          <div class="ntf-list">${grouped((dg.recent || []).slice(0, 12), feedRow)}</div>
+        </div>`;
+      }
+    }
+    return `<div class="panel" style="margin-bottom:12px">
+      <div class="panel-head" onclick="GF.WWF.toggleDigest()" style="cursor:pointer">
+        ${GF.icon('trend', 'icon')}<span class="ttl">${AL('Team digest', 'Тимски преглед')}</span>
+        ${st.digestOpen && dg ? `<span class="cnt">${Number(dg.total) || 0}</span>` : ''}
+        <div class="spacer"></div>
+        ${st.digestOpen ? win('daily', AL('Daily', 'Дневно')) + win('weekly', AL('Weekly', 'Неделно')) : ''}
+        ${GF.icon(st.digestOpen ? 'chevU' : 'chevD', 'icon')}
+      </div>
+      ${body}</div>`;
+  };
+
   GF.views.inbox = () => {
     const st = GF.WWF._notif;
     if (!st.loaded) { GF.WWF.loadInbox(); }
@@ -106,6 +164,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.WWF.loadInbox()">${lbl}</span>`;
     const items = st.filter ? st.items.filter(n => n.reason === st.filter) : st.items;
     return `${GF.viewHead ? GF.viewHead('inbox', 'inbox') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
+      ${digestPanel()}
       <div class="ntf-bar">
         ${tab('inbox', AL('Inbox', 'Сандаче') + (st.unread ? ` (${st.unread})` : ''))}
         ${tab('feed', AL('Activity', 'Активност'))}
@@ -113,7 +172,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
         ${st.tab === 'inbox' ? `<button class="btn btn-sm" onclick="GF.WWF.notifReadAll()">${AL('Mark all read', 'Означи сè прочитано')}</button>` : ''}
       </div>
       ${st.tab === 'inbox' ? `<div class="chips" style="margin:0 4px 10px">${
-        ['assigned', 'comment', 'status', 'report'].map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
+        Object.keys(REASONS).map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
       <div class="ntf-list">${!st.loaded
         ? `<div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
            <div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
@@ -138,6 +197,47 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       st.moreItems = st.items.length === PAGE; st.moreFeed = st.feed.length === PAGE;
       if (GF.state.view === 'inbox') GF.render.all(); else GF.render.sidebar();
     } catch (e) { /* offline / unauthenticated: badge just stays stale */ }
+  };
+
+  // Digest fetch — lazy (first open) + on window switch, never on a plain
+  // notifications render. Stale-response guard mirrors openEdit's _editTask
+  // check: a slow daily response must not clobber a newer weekly one.
+  GF.WWF.toggleDigest = () => {
+    const st = GF.WWF._notif;
+    st.digestOpen = !st.digestOpen;
+    if (st.digestOpen && !st.digest && !st.digestLoading) { GF.WWF.loadDigest(); return; }
+    GF.render.all();
+  };
+
+  GF.WWF.setDigestWindow = (w) => {
+    const st = GF.WWF._notif;
+    if (st.digestWindow === w) return;
+    st.digestWindow = w; st.digest = null;
+    GF.WWF.loadDigest();
+  };
+
+  GF.WWF.loadDigest = async () => {
+    const st = GF.WWF._notif;
+    const w = st.digestWindow;
+    const empty = { window: w, by_verb: [], by_actor: [], recent: [], total: 0 };
+    // Demo mode has no events data — same guard as loadInbox.
+    if (GF.state && GF.state.demo) { st.digest = empty; GF.render.all(); return; }
+    st.digestLoading = true;
+    GF.render.all();
+    try {
+      const d = await GF.API.notifDigest(w);
+      if (GF.WWF._notif.digestWindow !== w) return;   // window switched while in flight
+      st.digest = (d && typeof d === 'object' && Array.isArray(d.recent)) ? d : empty;
+    } catch (e) {
+      if (GF.WWF._notif.digestWindow !== w) return;
+      st.digest = empty;
+      GF.toast(AL('Digest failed: ', 'Прегледот не успеа: ') + e.message, 'error');
+    } finally {
+      if (GF.WWF._notif.digestWindow === w) {
+        st.digestLoading = false;
+        GF.render.all();
+      }
+    }
   };
 
   // Cursor pagination (mockup .mw-pager): append the next page of history
