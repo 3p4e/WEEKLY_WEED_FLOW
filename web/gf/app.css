@@ -266,6 +266,14 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
   padding:2px 7px;border-radius:999px}
 .nav-badge-dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0}
 
+/* The rail has grown past a single screen's worth of items (QC LIMS + QMS
+   Studio + Facility + Analytics on top of the original nav) — .sidebar is a
+   fixed 100vh column with overflow:hidden, so without its own scroll region
+   this whole block (and everything after it: Departments, the user card)
+   silently renders below the fold with no way to reach it. min-height:0 lets
+   a flex child actually shrink to the space left after the logo header and
+   the pinned user card, instead of demanding its full content height. */
+.side-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
 .side-divider{height:1px;background:var(--line);margin:10px 16px}
 .side-label{padding:0 14px;font-size:10px;font-weight:700;letter-spacing:.6px;color:var(--ink-3);
   text-transform:uppercase;margin-bottom:6px}
