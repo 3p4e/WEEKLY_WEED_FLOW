@@ -32,10 +32,15 @@
     SUPERSEDED: { en: 'Superseded', mk: 'Заменето', c: 'var(--ink-3)' },
     WITHDRAWN: { en: 'Withdrawn', mk: 'Повлечено', c: 'var(--red)' },
   };
-  // legal forward move offered as a one-click "advance" button
+  // legal moves, mirroring backend qc.py _SPEC_TRANSITIONS — the UI never
+  // offers a transition the server would 409. NEXT is the forward chain;
+  // BACK is the one allowed kick-back (QC review findings return the spec to
+  // authoring); WITHDRAWN is reachable from every non-terminal state EXCEPT
+  // ACTIVE (an active spec is superseded by a new version, never withdrawn).
   const NEXT = { INITIATED: 'DRAFT', DRAFT: 'QC_REVIEW', QC_REVIEW: 'QA_APPROVED',
                  QA_APPROVED: 'NUMBERED', NUMBERED: 'TRAINED', TRAINED: 'ACTIVE',
                  ACTIVE: 'UNDER_CHANGE', UNDER_CHANGE: 'ACTIVE' };
+  const BACK = { QC_REVIEW: 'DRAFT' };
   const stChip = (s) => {
     const m = ST[s] || { en: s || '—', mk: s || '—', c: 'var(--ink-3)' };
     return `<span class="chip-opt" style="border-color:${m.c};color:${m.c}">${GF.esc(AL(m.en, m.mk))}</span>`;
@@ -145,7 +150,8 @@
         <span>${AL('THC grade', 'ТХЦ одделение')}</span><b>${GF.esc(s.thc_grade || '—')}</b>
       </div>
       ${nxt && canWrite() ? `<div class="qms-dl"><button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSpecAdvance('${s.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(nxt)}</button>
-        ${s.status !== 'WITHDRAWN' && s.status !== 'SUPERSEDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','WITHDRAWN')">${AL('Withdraw', 'Повлечи')}</button>` : ''}</div>` : ''}
+        ${BACK[s.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','${BACK[s.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
+        ${!['ACTIVE', 'WITHDRAWN', 'SUPERSEDED'].includes(s.status) ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','WITHDRAWN')">${AL('Withdraw', 'Повлечи')}</button>` : ''}</div>` : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test parameters', 'Тест параметри')}</div>
       ${paramRows(d)}
     </div>`;

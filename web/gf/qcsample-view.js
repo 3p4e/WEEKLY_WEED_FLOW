@@ -14,7 +14,7 @@
 
 (function () {
   GF.WWF._qcsm = { samples: null, sel: null, detail: null, q: '', status: '', tab: 'samples',
-                   loading: false, error: null,
+                   loading: false, error: null, parent: null,
                    plans: null, plansLoading: false, plansError: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -34,12 +34,23 @@
     REJECTED: { en: 'Rejected', mk: 'Одбиено', c: 'var(--red)' },
     QUARANTINE: { en: 'Quarantine', mk: 'Карантин', c: 'var(--amber)' },
   };
-  // legal forward moves the UI offers (mirror of the backend map's happy path)
-  const NEXT = {
-    COLLECTED: ['IN_TRANSIT', 'RECEIVED'], IN_TRANSIT: ['RECEIVED'], RECEIVED: ['IN_TEST'],
-    IN_TEST: ['TESTED', 'QUARANTINE'], TESTED: ['REVIEWED', 'QUARANTINE'], REVIEWED: ['APPROVED'],
-    APPROVED: ['RELEASED'], QUARANTINE: ['IN_TEST'],
+  // EXACT mirror of backend qc.py _SAMPLE_TRANSITIONS — the single source of
+  // legal moves; the UI never offers a target the server would 409. Note
+  // IN_TEST cannot go straight to REJECTED (it exits via TESTED/QUARANTINE),
+  // and COLLECTED may be quarantined directly. REJECTED renders as the
+  // distinct Reject affordance, not an advance button.
+  const LEGAL = {
+    COLLECTED: ['IN_TRANSIT', 'RECEIVED', 'QUARANTINE', 'REJECTED'],
+    IN_TRANSIT: ['RECEIVED', 'REJECTED'],
+    RECEIVED: ['IN_TEST', 'REJECTED'],
+    IN_TEST: ['TESTED', 'QUARANTINE'],
+    TESTED: ['REVIEWED', 'QUARANTINE', 'REJECTED'],
+    REVIEWED: ['APPROVED', 'REJECTED'],
+    APPROVED: ['RELEASED', 'REJECTED'],
+    QUARANTINE: ['IN_TEST', 'REJECTED'],
+    RELEASED: [], REJECTED: [],
   };
+  // release / reject are Qualified-Person decisions (qc.py _QP_TRANSITION_TARGETS)
   const QP_TARGETS = { RELEASED: 1, REJECTED: 1 };
   const stChip = (s) => {
     const m = ST[s] || { en: s, mk: s, c: 'var(--ink-3)' };
@@ -96,18 +107,38 @@
   };
 
   GF.WWF.qcSampleCreate = async () => {
+    const st = GF.WWF._qcsm;
     const mk = (i) => (document.getElementById(i) || {}).value || '';
     const batch_id = mk('qsm-batch').trim(), material_code = mk('qsm-mat').trim();
     if (!batch_id || !material_code) return GF.toast(AL('Batch and material are required', 'Потребни се серија и материјал'), 'error');
     const body = { batch_id, material_code, sample_type: mk('qsm-type').trim() || null,
-                   location: mk('qsm-loc').trim() || null };
+                   location: mk('qsm-loc').trim() || null,
+                   retention_sample: !!(document.getElementById('qsm-ret') || {}).checked };
     const plan = mk('qsm-plan'); if (plan) body.sampling_plan_id = plan;
+    const qty = mk('qsm-qty').trim(); if (qty !== '' && !isNaN(parseFloat(qty))) body.quantity = parseFloat(qty);
+    const unit = mk('qsm-unit').trim(); if (unit) body.quantity_unit = unit;
+    const notes = mk('qsm-notes').trim(); if (notes) body.notes = notes;
+    if (st.parent) body.parent_id = st.parent.id;  // aliquot / sub-sample link
     try {
       const s = await GF.API.qcCreateSample(body);
       GF.toast(s.sample_id + ' ' + AL('created', 'креирано'));
+      st.parent = null;
       await GF.WWF.loadQcSamples(); GF.WWF.qcSamplePick(s.id);
     } catch (e) { GF.toast(e.message, 'error'); }
   };
+
+  // "Add sub-sample" on a sample's detail — pre-links the create form to that
+  // parent (the form shows the parent code and sends parent_id on create).
+  GF.WWF.qcSampleSubOf = (id) => {
+    const st = GF.WWF._qcsm;
+    const s = (st.detail && st.detail.sample && st.detail.sample.id === id)
+      ? st.detail.sample : (st.samples || []).find(x => x.id === id);
+    if (!s) return;
+    st.parent = { id: s.id, sample_id: s.sample_id, batch_id: s.batch_id, material_code: s.material_code };
+    st.tab = 'samples';
+    GF.render.all();
+  };
+  GF.WWF.qcSampleClearParent = () => { GF.WWF._qcsm.parent = null; GF.render.all(); };
 
   GF.WWF.qcPlanCreate = async () => {
     const mk = (i) => (document.getElementById(i) || {}).value || '';
@@ -126,8 +157,12 @@
 
   const detail = (d) => {
     const s = d.sample;
-    const moves = (NEXT[s.status] || []).filter(t => !QP_TARGETS[t] || canQP());
-    const canReject = !['RELEASED', 'REJECTED'].includes(s.status) && canQP();
+    // only backend-legal targets (LEGAL mirrors qc.py); QP-only targets are
+    // hidden from non-QP writers — the backend would 403/409 anything else.
+    const legal = LEGAL[s.status] || [];
+    const moves = legal.filter(t => t !== 'REJECTED' && (!QP_TARGETS[t] || canQP()));
+    const canReject = legal.includes('REJECTED') && canQP();
+    const parent = s.parent_id ? (GF.WWF._qcsm.samples || []).find(x => x.id === s.parent_id) : null;
     const kids = (d.children || []).map(k => `<div class="qms-row"><span class="mono qms-code">${GF.esc(k.sample_id)}</span><span class="qms-title">${GF.esc(k.batch_id)}</span>${stChip(k.status)}</div>`).join('');
     return `<div class="qms-detail">
       <div class="qms-dgrid">
@@ -136,12 +171,16 @@
         <span>${AL('Material', 'Материјал')}</span><b>${GF.esc(s.material_code)}</b>
         <span>${AL('Status', 'Статус')}</span><b>${stChip(s.status)}</b>
         <span>${AL('Location', 'Локација')}</span><b>${GF.esc(s.location || '—')}</b>
+        ${s.parent_id ? `<span>${AL('Sub-sample of', 'Под-примерок од')}</span><b class="mono">${GF.esc(parent ? parent.sample_id : s.parent_id)}</b>` : ''}
+        ${s.quantity != null ? `<span>${AL('Quantity', 'Количина')}</span><b>${GF.esc(String(s.quantity))} ${GF.esc(s.quantity_unit || '')}</b>` : ''}
         ${s.sampling_plan_id ? `<span>${AL('Sampling plan', 'План за земање мостри')}</span><b class="mono">${GF.esc(planLabel(s.sampling_plan_id))}</b>` : ''}
         ${s.retention_sample ? `<span>${AL('Retention', 'Резерва')}</span><b>✓</b>` : ''}
+        ${s.notes ? `<span>${AL('Notes', 'Белешки')}</span><b>${GF.esc(s.notes)}</b>` : ''}
       </div>
-      ${canWrite() && (moves.length || canReject) ? `<div class="qms-dl">
+      ${canWrite() ? `<div class="qms-dl">
         ${moves.map(t => `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSampleMove('${s.id}','${t}')">${GF.esc(AL((ST[t]||{}).en || t, (ST[t]||{}).mk || t))}</button>`).join('')}
         ${canReject ? `<button class="btn btn-sm" onclick="GF.WWF.qcSampleMove('${s.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
+        <button class="btn btn-sm" onclick="GF.WWF.qcSampleSubOf('${s.id}')">${AL('Add sub-sample', 'Додади под-примерок')}</button>
       </div>` : ''}
       ${kids ? `<div style="margin-top:10px" class="ana-pt">${AL('Sub-samples', 'Под-примероци')}</div>${kids}` : ''}
     </div>`;
@@ -229,14 +268,21 @@
       .concat((st.plans || []).map(p => ({ v: p.id, label: p.plan_id, sub: p.material_code })));
     const create = canWrite() ? `
       <div class="panel ana-panel" style="margin-bottom:12px">
-        <div class="ana-pt" style="margin-bottom:8px">${AL('Collect sample', 'Земи примерок')}</div>
+        <div class="ana-pt" style="margin-bottom:8px">${st.parent ? AL('Collect sub-sample', 'Земи под-примерок') : AL('Collect sample', 'Земи примерок')}</div>
+        ${st.parent ? `<div class="ana-note" style="margin-bottom:8px">${AL('Aliquot / sub-sample of', 'Аликвот / под-примерок од')}
+          <b class="mono">${GF.esc(st.parent.sample_id)}</b>
+          <button class="btn btn-sm" onclick="GF.WWF.qcSampleClearParent()">✕</button></div>` : ''}
         <div class="qcs-form">
-          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}">
-          <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}">
+          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}" value="${GF.esc(st.parent ? st.parent.batch_id || '' : '')}">
+          <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}" value="${GF.esc(st.parent ? st.parent.material_code || '' : '')}">
           <input id="qsm-type" placeholder="${AL('Type', 'Тип')}">
           <input id="qsm-loc" placeholder="${AL('Location', 'Локација')}">
+          <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px">
+          <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px">
           ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
             searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
+          <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}">
+          <label style="display:flex;align-items:center;gap:6px"><input id="qsm-ret" type="checkbox">${AL('Retention sample', 'Резервен примерок')}</label>
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSampleCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';

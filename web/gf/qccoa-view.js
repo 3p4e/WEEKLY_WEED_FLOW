@@ -35,8 +35,11 @@
     APPROVED: { en: 'Approved', mk: 'Одобрено', c: 'var(--teal,var(--blue))' },
     RELEASED: { en: 'Released', mk: 'Ослободено', c: 'var(--green)' },
   };
-  // legal forward move + which targets are Qualified-Person-only (mirror backend)
+  // legal moves, mirroring backend qc.py _COA_TRANSITIONS / _COA_QP_TARGETS:
+  // NEXT is the forward chain, BACK the one allowed kick-back (REVIEWED may
+  // return to DRAFT on review findings — a writer move, not QP-gated).
   const NEXT = { DRAFT: 'REVIEWED', REVIEWED: 'APPROVED', APPROVED: 'RELEASED' };
+  const BACK = { REVIEWED: 'DRAFT' };
   const QP_TARGETS = { APPROVED: 1, RELEASED: 1 };
   const CERT_TYPES = ['ICOA', 'ECOA', 'COQ', 'WATER', 'OTHER'];
 
@@ -208,6 +211,7 @@
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
         ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>` : ''}
+        ${BACK[c.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaAdvance('${c.id}','${BACK[c.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
         ${c.status !== 'DRAFT' && c.status !== 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
       </div>` : ''}
