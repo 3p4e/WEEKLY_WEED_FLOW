@@ -86,9 +86,15 @@ Priority order; SOP citations are the binding source.
    `CoQ-PP-YYYY-NNNN` / `QCCoA-…`; ours are `PP-ECOA-…`/`PP-COA-…`.
    Decide: migrate display format or amend the SOP (owner call — codes
    are already issued on both sides).
-10. **Mandatory-field manifest for the CoQ render** (WHO TRS 1010 +
-    Annex 16 + §9.3) — a content manifest check before issuing (our
-    pp_verify gates style, not GMP content completeness).
+10. ~~**Mandatory-field manifest for the CoQ render** (WHO TRS 1010 +
+    Annex 16 + §9.3)~~ ✅ **DONE (increment 6, backend v67, no migration)** —
+    `_coq_manifest()` gates `generate_coq` with a deterministic
+    content-completeness check (layered on the existing data/completeness/
+    pp_verify gates): material name, specification reference, batch number,
+    report date, recorded PASS disposition, authorised approver, testing
+    laboratory (eCoA-sourced only), and an analytical-method reference per
+    reported test (computed Ph. Eur. 3028 totals excused — they cite their
+    monograph). A gap → 409 naming each absent element; nothing is invented.
 11. **iCoA as a distinct record type** — internal CoA with analyst +
     Head-of-QC signature capture, merged with eCoA results in the
     parameter master (the URS: "first-class, not an afterthought").

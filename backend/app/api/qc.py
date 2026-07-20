@@ -1109,6 +1109,48 @@ def _coq_cell(s) -> str:
     return str(s).replace("|||", "/").replace("~~", "-").replace("|", "/")
 
 
+def _coq_manifest(coa: dict, spec: dict, params_by_id: dict, results: list,
+                  lab: dict | None) -> list:
+    """WHO TRS 1010 (model certificate of analysis) + Annex 16 / QCSOP 012 §9.3
+    mandatory-CONTENT manifest: the required elements a Certificate of Quality
+    must carry before it can be issued — a content-completeness gate layered on
+    top of the house-style (pp_verify) and GxP data/completeness gates. Returns
+    the list of absent mandatory elements (empty = ready to issue). Deterministic;
+    fabricates nothing — a missing element is reported, never invented."""
+    missing = []
+    spec = spec or {}
+    if not (spec.get("material_name_en") or spec.get("material_name_mk") or spec.get("material_code")):
+        missing.append("material / product name")
+    if not spec.get("spec_id"):
+        missing.append("specification reference")
+    if not coa.get("batch_id"):
+        missing.append("batch number")
+    if not coa.get("report_date"):
+        missing.append("report date")
+    # A COQ asserts conformance; the disposition of record must say so.
+    if coa.get("decision") != "PASS":
+        missing.append("recorded PASS disposition")
+    if not coa.get("approver_id"):
+        missing.append("authorised approver")
+    # WHO: an externally-sourced certificate must identify the testing lab.
+    if coa.get("cert_type") == "ECOA" and not (lab or coa.get("source_lab")):
+        missing.append("testing laboratory")
+    # WHO: every reported test needs an analytical-method reference (a computed
+    # total already cites its monograph in the source column).
+    no_method = []
+    for r in results:
+        if str(r.get("source_document_code") or "").startswith("Пресметано"):
+            continue
+        p = params_by_id.get(str(r.get("parameter_id"))) or {}
+        if not (p.get("test_method") or p.get("pharmacopoeia_ref")):
+            nm = r.get("test_name") or "?"
+            if nm not in no_method:
+                no_method.append(nm)
+    if no_method:
+        missing.append("analytical method for: " + ", ".join(no_method[:5]))
+    return missing
+
+
 def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
                   lab: dict | None = None, scope_note: str | None = None) -> str:
     """Assemble the Certificate of Quality as DocEngine bilingual Markdown
@@ -1251,6 +1293,15 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             409, f"{len(missing)} specification parameter(s) have no result ({names}"
                  f"{'…' if len(missing) > 5 else ''}) — batch is not fully tested")
     params_by_id = {str(p["id"]): dict(p) for p in params}
+    # WHO TRS 1010 / Annex 16 §9.3 mandatory-content gate: refuse to issue a
+    # certificate missing a required content element (never silently emit an
+    # incomplete GMP record).
+    manifest_missing = _coq_manifest(dict(coa), dict(spec) if spec else {},
+                                     params_by_id, results, lab)
+    if manifest_missing:
+        raise HTTPException(
+            409, "Certificate is missing WHO/Annex-16 mandatory content: "
+                 + "; ".join(manifest_missing))
     # ISO 17025 scope advisory (URS Chapter 7): a result whose method is outside
     # the issuing lab's accredited scope is a quality signal for the reviewer.
     # Non-blocking — it is surfaced as a COQ footnote and in the response, never

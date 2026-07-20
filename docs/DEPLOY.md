@@ -1311,3 +1311,36 @@ tasks DBs before the image flip. Deployed backend v65→**v66** (prod
 scheduler too) + frontend v96→**v97**. **Rollback** = revert tags to v65/v96
 (+ `alembic -n tasks downgrade 0031` — all additive; image-only rollback
 also safe).
+
+## URS increment 6 (backend v67 → BOTH stacks, NO migration/frontend, 2026-07-20)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 10 — the **CoQ mandatory-content
+manifest** (WHO TRS 1010 model certificate of analysis + EU GMP Annex 16 /
+QCSOP 012 §9.3). A deterministic content-completeness gate layered on top of
+the existing data (all-results-comply), completeness (every spec parameter
+covered), and DocEngine `pp_verify` house-style gates — it refuses to issue a
+Certificate of Quality that is missing a required certificate element, and
+names each absent element (never invents one).
+
+- **Backend only** — no migration, no schema change, no frontend change.
+  `_coq_manifest()` in `qc.py` checks, before the DocEngine call in
+  `generate_coq`: material / product name, specification reference, batch
+  number, report date, recorded PASS disposition, an authorised approver, the
+  testing laboratory (eCoA-sourced certificates only), and an analytical-method
+  reference per reported test (`test_method` or a pharmacopoeia reference;
+  computed Ph. Eur. 3028 totals are skipped — they cite their monograph in the
+  source column). A gap → **409** with the list of missing elements.
+
+Gate: **411 backend tests green** (2 new: a released, fully-tested,
+all-complying certificate still blocked when the report date + disposition
+are absent, then issuing once supplied; a method-less spec parameter blocked
+by name). No migration → no drift/reversibility check; no frontend → no
+node --check / SW bump. Deployed backend v66→**v67** to BOTH stacks (wwf_mass
+`backend`; wwf_app `backend` + `scheduler`); frontend unchanged at v97.
+**Live behavioral smoke on wwf-mass** (tt.qc.mgr analyst + tt.qp reviewer):
+a RELEASED cert missing report date + disposition → 409 naming both, then a
+real DocEngine-issued 201 once supplied; a method-less parameter → 409 naming
+the analytical-method gap and the test. Prod (wwf_app) verified: /health 200,
+/qc auth-gated (401, not 404/500), clean startup. **Rollback** = revert the
+image tag to v67→**v66** on both compose files + `docker compose up -d
+--no-deps backend[ scheduler]` (image-only; nothing else changed).

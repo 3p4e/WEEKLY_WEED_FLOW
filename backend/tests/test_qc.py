@@ -599,13 +599,16 @@ async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results
                                 "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
                                 "upper_limit": 30.0}, headers=headers)
     assert p.status_code == 201, p.text
-    coa = await _coa(client, headers, spec["id"], batch="B-COQ")
+    # report_date + PASS disposition are WHO/Annex-16 mandatory COQ content
+    coa = await _coa(client, headers, spec["id"], batch="B-COQ", report_date="2026-07-01")
     for r in (results or [{"parameter_id": p.json()["id"], "test_name": "Total THC",
                            "result_numeric": 22.0,
                            "lower_limit": 10.0, "upper_limit": 30.0, "unit": "%",
                            "source_document_code": "ECOA-LAB-001"}]):
         assert (await client.post(f"/qc/certificates/{coa['id']}/results",
                                   json=r, headers=headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp_headers)).status_code == 200, tgt
@@ -734,6 +737,78 @@ async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monk
     assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
 
 
+# ── URS increment 6 — CoQ mandatory-content manifest (WHO TRS 1010 / Annex 16 §9.3)
+async def test_coq_manifest_blocks_missing_content(client, admin_headers, monkeypatch):
+    """A RELEASED certificate whose results all comply and whose spec is fully
+    tested still cannot be issued as a CoQ if it is missing mandatory certificate
+    CONTENT — here the report date and the recorded PASS disposition. The gate
+    names each absent element and fabricates none; supplying them lets the same
+    certificate issue."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-MAN", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-MANIFEST")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                                "test_method": "HPLC", "unit": "%",
+                                "lower_limit": 10.0, "upper_limit": 30.0},
+                          headers=admin_headers)
+    assert p.status_code == 201
+    # deliberately created with NO report_date and the disposition left unset
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-COQ-MAN")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0, "lower_limit": 10.0,
+                                    "upper_limit": 30.0, "unit": "%",
+                                    "source_document_code": "ECOA-LAB-9"},
+                              headers=admin_headers)).status_code == 201
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert "mandatory content" in detail
+    assert "report date" in detail and "PASS disposition" in detail
+    # the CoQ is refused because content is absent, not because the batch failed —
+    # recording the report date + disposition lifts the gate (nothing invented)
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"report_date": "2026-07-02", "decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+
+
+async def test_coq_manifest_requires_method(client, admin_headers, monkeypatch):
+    """WHO TRS 1010: every reported test on the CoQ must cite an analytical
+    method. A spec parameter carrying neither a test_method nor a pharmacopoeia
+    reference blocks issuance and the gate names the offending test."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-NM", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-NOMETHOD")
+    # parameter with no method and no pharmacopoeia reference
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Assay", "test_name_mk": "Анализа",
+                                "unit": "%", "lower_limit": 90.0, "upper_limit": 110.0},
+                          headers=admin_headers)
+    assert p.status_code == 201
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-COQ-NM",
+                     report_date="2026-07-01")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p.json()["id"], "test_name": "Assay",
+                                    "result_numeric": 99.0, "lower_limit": 90.0,
+                                    "upper_limit": 110.0, "unit": "%",
+                                    "source_document_code": "ECOA-LAB-10"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "analytical method" in r.json()["detail"] and "Assay" in r.json()["detail"]
+
+
 # ── URS increment 2 — certificate supersession (QCSOP 012 §6.7) ─────────────
 async def test_coa_revision_supersession_chain(client, admin_headers):
     """QCSOP 012 §6.7: an approved certificate is immutable — a correction is a
@@ -807,12 +882,14 @@ async def _computed_spec(client, headers, material="PH3028", lo=10.0, hi=30.0):
 
 async def _release_with_components(client, headers, qp, spec, pa, pb, batch,
                                    a_val=1.5, b_val=20.0):
-    coa = await _coa(client, headers, spec["id"], batch=batch)
+    coa = await _coa(client, headers, spec["id"], batch=batch, report_date="2026-07-01")
     for pid, name, val in ((pa["id"], "Delta-9-THC", a_val), (pb["id"], "THCA", b_val)):
         assert (await client.post(f"/qc/certificates/{coa['id']}/results",
                                   json={"parameter_id": pid, "test_name": name,
                                         "result_numeric": val, "unit": "%"},
                                   headers=headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
@@ -991,7 +1068,8 @@ async def test_coq_flags_out_of_scope(client, admin_headers, monkeypatch):
     p_out = await client.post(f"/qc/specifications/{spec['id']}/parameters",
                               json={"test_name_en": "Moisture", "test_method": "LOD",
                                     "unit": "%", "upper_limit": 12.0}, headers=admin_headers)
-    coa = await _coa(client, admin_headers, spec["id"], batch="B-SCOPE", laboratory_id=lab["id"])
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SCOPE",
+                     laboratory_id=lab["id"], report_date="2026-07-01")
     for p, name, val in ((p_in, "Total THC", 22.0), (p_out, "Moisture", 8.0)):
         assert (await client.post(f"/qc/certificates/{coa['id']}/results",
                                   json={"parameter_id": p.json()["id"], "test_name": name,
@@ -1002,6 +1080,8 @@ async def test_coq_flags_out_of_scope(client, admin_headers, monkeypatch):
     by_name = {r["test_name"]: r for r in detail["results"]}
     assert by_name["Total THC"]["in_scope"] is True
     assert by_name["Moisture"]["in_scope"] is False
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
