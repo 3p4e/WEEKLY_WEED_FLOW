@@ -100,7 +100,7 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   };
 
-  // Parse a textarea of "Label | value | unit" lines into extraction items.
+  // Parse a textarea of "Label | value | unit | lab verdict" lines into extraction items.
   GF.WWF.qcEcoaSubmitExtractions = async (id) => {
     const raw = ((document.getElementById('qec-extract') || {}).value || '').trim();
     if (!raw) return GF.toast(AL('Paste the CoA fields first', 'Прво залепете ги полињата'), 'error');
@@ -109,6 +109,7 @@
       const it = { raw_label: parts[0] };
       if (parts[1]) { it.raw_value = parts[1]; const n = parseFloat(parts[1]); if (!isNaN(n)) it.numeric_value = n; }
       if (parts[2]) it.unit = parts[2];
+      if (parts[3]) it.lab_verdict = parts[3];   // lab's stated verdict — reference only
       return it;
     }).filter(it => it.raw_label);
     if (!items.length) return;
@@ -260,7 +261,7 @@
       <tr><td>${GF.esc(e.raw_label)}${e.test_name && e.test_name !== e.raw_label ? ` <span class="ana-note">→ ${GF.esc(e.test_name)}</span>` : ''}</td>
       <td class="mono">${GF.esc(e.numeric_value != null ? e.numeric_value : (e.raw_value != null ? e.raw_value : ''))} ${GF.esc(e.unit || '')}</td>
       <td class="mono">${e.lower_limit != null || e.upper_limit != null ? GF.esc((e.lower_limit != null ? e.lower_limit : '') + '…' + (e.upper_limit != null ? e.upper_limit : '')) : '—'}</td>
-      <td>${complyChip(e)}${canWrite() ? ` <button class="btn btn-sm" onclick="GF.WWF.qcEcoaEditEx('${e.id}')">${st.editEx === e.id ? AL('Cancel', 'Откажи') : AL('Edit', 'Уреди')}</button>` : ''}</td></tr>`;
+      <td>${complyChip(e)}${e.lab_verdict ? ` <span class="ana-note"${e.lab_verdict_mismatch ? ' style="color:var(--red);font-weight:600"' : ''}>${AL('lab', 'лаб')}: ${GF.esc(e.lab_verdict)}${e.lab_verdict_mismatch ? ' ⚠ ' + AL('disagrees', 'несогласување') : ''}</span>` : ''}${canWrite() ? ` <button class="btn btn-sm" onclick="GF.WWF.qcEcoaEditEx('${e.id}')">${st.editEx === e.id ? AL('Cancel', 'Откажи') : AL('Edit', 'Уреди')}</button>` : ''}</td></tr>`;
       if (!canWrite() || st.editEx !== e.id) return row;
       return row + `
       <tr><td colspan="4"><div class="qms-dl" style="align-items:center;flex-wrap:wrap">
@@ -289,8 +290,8 @@
         <tbody>${ex || `<tr><td colspan="4" class="ana-note">${AL('No fields transcribed yet', 'Сè уште нема пренесени полиња')}</td></tr>`}</tbody></table>
       ${canWrite() && canExtract ? `
       <div class="ana-panel" style="margin-top:10px;padding:10px">
-        <div class="ana-pt" style="margin-bottom:6px">${AL('Transcribe fields (one per line: Label | value | unit)', 'Пренеси полиња (по еден ред: Ознака | вредност | единица)')}</div>
-        <textarea id="qec-extract" rows="4" style="width:100%" placeholder="Total THC | 22.0 | %"></textarea>
+        <div class="ana-pt" style="margin-bottom:6px">${AL('Transcribe fields (one per line: Label | value | unit | lab verdict)', 'Пренеси полиња (по еден ред: Ознака | вредност | единица | лаб. заклучок)')}</div>
+        <textarea id="qec-extract" rows="4" style="width:100%" placeholder="Total THC | 22.0 | % | Pass"></textarea>
         <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="GF.WWF.qcEcoaSubmitExtractions('${doc.id}')">${AL('Grade against spec', 'Оцени според спец.')}</button>
       </div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">

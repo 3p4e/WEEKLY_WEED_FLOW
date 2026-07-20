@@ -38,7 +38,11 @@ _QP_ROLES = (ADMIN, "QP")
 # Issuing the Certificate of Quality is a QC Manager function (the QC Manager
 # signs it), not an Annex-16 release decision — QP may also issue one (QP
 # outranks QC_MGR on the quality side) and ADMIN as system operator.
-_COQ_ROLES = (ADMIN, "QC_MGR", "QP")
+# Issuing the COQ is a QC act: compiled and approved within QC (QCSOP 012
+# §6.4) — the Qualified Person RECEIVES the approved COQ as an input to the
+# separate Annex 16 release decision and does not sign or issue it (Head-of-QC
+# URS, docs/URS-COQ-GAP-ANALYSIS-2026-07.md).
+_COQ_ROLES = (ADMIN, "QC_MGR")
 
 _SPEC_STATUSES = (
     "INITIATED", "DRAFT", "QC_REVIEW", "QA_APPROVED", "NUMBERED",
@@ -856,6 +860,17 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             raise HTTPException(404, "Certificate not found")
         if coa["status"] != "RELEASED":
             raise HTTPException(409, "A COQ is issued only from a RELEASED certificate")
+        # QCSOP 012 §6.4.1/§6.6 (URS gate): no COQ for a batch with an open OOS
+        # investigation — the COQ is compiled only on the investigation-
+        # confirmed result set. Explicit, logged reason; never a silent pass.
+        open_oos = await c.fetchval(
+            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
+            coa["batch_id"])
+        if open_oos:
+            raise HTTPException(
+                409, f"{open_oos} open OOS investigation(s) on batch {coa['batch_id']}"
+                     " — a COQ cannot be issued until the investigation is closed"
+                     " (QCSOP 012 §6.4.1)")
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
                                 coa["specification_id"])
         params = await c.fetch(
@@ -1317,6 +1332,10 @@ class ExtractionIn(BaseModel):
     unit: str | None = Field(default=None, max_length=60)
     confidence: float | None = None
     source_page: int | None = None
+    # The lab's own stated verdict, verbatim as printed on the eCoA
+    # ("Pass", "Conforms", "Does not comply", …). Reference-only per QCSOP 012
+    # §6.3.2 — conformance of record is always computed in-house.
+    lab_verdict: str | None = Field(default=None, max_length=60)
 
 
 class ExtractionsIn(BaseModel):
@@ -1330,6 +1349,7 @@ class ExtractionPatch(BaseModel):
     numeric_value: float | None = None
     unit: str | None = Field(default=None, max_length=60)
     test_name: str | None = Field(default=None, max_length=300)
+    lab_verdict: str | None = Field(default=None, max_length=60)
 
 
 class PlaceholderPatch(BaseModel):
@@ -1354,7 +1374,22 @@ def _ecoa_out(r: dict) -> dict:
     }
 
 
+def _lab_verdict_bool(v: str | None) -> bool | None:
+    """Best-effort reading of the lab's stated verdict for the reconciliation
+    flag. Deliberately conservative: anything ambiguous returns None and no
+    mismatch is computed — the flag must never manufacture a disagreement."""
+    if not v:
+        return None
+    t = v.strip().lower()
+    if t in ("no", "не") or any(n in t for n in ("not", "non", "fail", "oos", "не ")):
+        return False
+    if any(p in t for p in ("pass", "conform", "compl", "задоволува", "соодветств")):
+        return True
+    return None
+
+
 def _extract_out(r: dict) -> dict:
+    lab = _lab_verdict_bool(r.get("lab_verdict"))
     return {
         "id": str(r["id"]), "document_id": str(r["document_id"]), "raw_label": r["raw_label"],
         "raw_value": r["raw_value"], "numeric_value": r["numeric_value"], "unit": r["unit"],
@@ -1362,6 +1397,11 @@ def _extract_out(r: dict) -> dict:
         "test_name": r["test_name"], "lower_limit": r["lower_limit"], "upper_limit": r["upper_limit"],
         "complies": r["complies"], "grade_status": r["grade_status"],
         "confidence": r["confidence"], "source_page": r["source_page"],
+        "lab_verdict": r.get("lab_verdict"),
+        # True only when BOTH sides state a verdict and they disagree — the
+        # QCSOP 012 §6.3.2 reconciliation surfaced instead of silently dropped.
+        "lab_verdict_mismatch": (lab is not None and r["complies"] is not None
+                                 and lab != r["complies"]),
     }
 
 
@@ -1542,11 +1582,12 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
             row = await c.fetchrow(
                 "INSERT INTO qc_coa_extractions(org_id, document_id, raw_label, raw_value,"
                 " numeric_value, unit, parameter_id, test_name, lower_limit, upper_limit,"
-                " complies, grade_status, confidence, source_page, created_by, updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15) RETURNING *",
+                " complies, grade_status, confidence, source_page, lab_verdict,"
+                " created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
                 user["org_id"], doc_id, item.raw_label, item.raw_value, item.numeric_value,
                 item.unit, pid, test_name, lo, hi, complies, grade, item.confidence,
-                item.source_page, user["id"])
+                item.source_page, item.lab_verdict, user["id"])
             out.append(_extract_out(dict(row)))
         if doc["status"] == "UPLOADED":
             await c.execute(
@@ -1604,11 +1645,14 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
             grade = "graded" if numeric is not None else "unknown"
         else:
             complies, grade = None, "unmapped"
+        lab_verdict = patch["lab_verdict"] if "lab_verdict" in patch else row["lab_verdict"]
         row = await c.fetchrow(
             "UPDATE qc_coa_extractions SET parameter_id=$1, test_name=$2, numeric_value=$3,"
             " unit=$4, lower_limit=$5, upper_limit=$6, complies=$7, grade_status=$8,"
-            " updated_by=$9, updated_at=now() WHERE id=$10 AND document_id=$11 RETURNING *",
-            pid, test_name, numeric, unit, lo, hi, complies, grade, user["id"], eid, doc_id)
+            " lab_verdict=$9, updated_by=$10, updated_at=now()"
+            " WHERE id=$11 AND document_id=$12 RETURNING *",
+            pid, test_name, numeric, unit, lo, hi, complies, grade, lab_verdict,
+            user["id"], eid, doc_id)
     return _extract_out(dict(row))
 
 

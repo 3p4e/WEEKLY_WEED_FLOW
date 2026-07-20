@@ -649,9 +649,10 @@ async def test_coq_blocks_on_noncompliant_result(client, admin_headers, monkeypa
 
 
 async def test_coq_is_qc_mgr_gated(client, admin_headers, monkeypatch):
-    """Issuing the COQ is a QC Manager function (QC Manager signs it) — QP may
-    also issue one; a non-QC manager (any other department, or an executive)
-    may not."""
+    """Issuing the COQ is a QC act (compiled and approved within QC, QCSOP 012
+    §6.4). The Qualified Person RECEIVES the approved COQ as an input to the
+    separate Annex 16 release decision — the QP does not issue it, and neither
+    does a non-QC manager or an executive."""
     _stub_de(monkeypatch, {"document_id": "DE-COQ-2", "verify": "RESULT: PASS"})
     _, qp = await _actor(client, admin_headers, "QP")
     coa = await _released_coa(client, admin_headers, qp, material="COQ-ROLE")
@@ -661,12 +662,27 @@ async def test_coq_is_qc_mgr_gated(client, admin_headers, monkeypatch):
     _, ceo = await _actor(client, admin_headers, "CEO")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=ceo)).status_code == 403      # executive is not a GMP quality role
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=qp)).status_code == 403       # QP receives, never issues
     _, qc_mgr = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=qc_mgr)).status_code == 201   # QC Manager issues the COQ
-    coa2 = await _released_coa(client, admin_headers, qp, material="COQ-ROLE-2")
-    assert (await client.post(f"/qc/certificates/{coa2['id']}/coq",
-                              headers=qp)).status_code == 201       # QP may also issue one
+
+
+async def test_coq_blocked_by_open_oos(client, admin_headers, monkeypatch):
+    """QCSOP 012 §6.4.1: no COQ for a batch with an open OOS investigation —
+    only the investigation-confirmed result set may be certified."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-OOS", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-OOS")
+    oos = await _oos(client, admin_headers, batch="B-COQ")   # same batch as _released_coa
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "OOS" in r.json()["detail"]
+    # QP closes the investigation → the COQ may now be issued
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"},
+                               headers=qp)).status_code == 200
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
 
 
 async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
@@ -760,6 +776,37 @@ async def test_ecoa_register_grades_and_discovers(client, admin_headers):
     # the unknown label is now in the discovery queue
     ph = (await client.get("/qc/coa-placeholders", headers=admin_headers)).json()
     assert any(p["raw_label"] == "Mystery Assay" and p["status"] == "OPEN" for p in ph)
+
+
+async def test_ecoa_lab_verdict_reference_only(client, admin_headers):
+    """QCSOP 012 §6.3.2: the lab's stated verdict is captured verbatim as
+    reference, never as the conformance of record — and a disagreement with
+    the in-house determination is surfaced as a mismatch flag."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-LABV")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-LABV")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [
+                              # out of the 10-30 range → OUR verdict False; lab claims Pass
+                              {"raw_label": "Total THC", "numeric_value": 99.0,
+                               "unit": "%", "lab_verdict": "Pass"},
+                          ]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    e = r.json()["extractions"][0]
+    assert e["complies"] is False                 # in-house determination wins
+    assert e["lab_verdict"] == "Pass"             # lab's claim kept verbatim
+    assert e["lab_verdict_mismatch"] is True      # disagreement surfaced
+    # reviewer corrects the value into range → verdicts now agree, flag clears
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}/extractions/{e['id']}",
+                           json={"numeric_value": 22.0}, headers=admin_headers)
+    assert r.status_code == 200
+    e2 = r.json()
+    assert e2["complies"] is True and e2["lab_verdict_mismatch"] is False
+    # an extraction with no stated lab verdict never computes a mismatch
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Total THC", "numeric_value": 99.0}]},
+                          headers=admin_headers)
+    e3 = r.json()["extractions"][0]
+    assert e3["lab_verdict"] is None and e3["lab_verdict_mismatch"] is False
 
 
 async def test_ecoa_unmeasured_is_unknown_not_fabricated(client, admin_headers):

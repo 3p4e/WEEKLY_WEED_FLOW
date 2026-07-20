@@ -442,6 +442,7 @@ CREATE TABLE public.qc_coa_extractions (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    lab_verdict text,
     CONSTRAINT qc_coa_extractions_grade_check CHECK ((grade_status = ANY (ARRAY['unmapped'::text, 'graded'::text, 'unknown'::text])))
 );
 
