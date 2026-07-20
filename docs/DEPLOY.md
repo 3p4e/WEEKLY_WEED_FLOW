@@ -1019,3 +1019,60 @@ app-side is regenerable (declarative fleet + corpus migration preserving
 embeddings); cutover runbook staged as its own increment (wwf_mass first,
 prod owner-gated). Role-differentiated agent capabilities shipped in this
 cut (the FUNCTION_ROLES matrix above).
+
+## Dedicated per-stack Letta — wwf_mass cutover (2026-07-20)
+
+Executed docs/LETTA-DEDICATED-PLAN.md §3 for wwf_mass (prod stays on the
+shared server, owner-gated). New compose services `letta-db`
+(pgvector/pgvector:pg15, volume `wwf_mass_letta_pgdata`) + `letta`
+(`letta/letta:0.16.8-wwf` — a retag of the exact running shared-server
+image digest), internal-network-only, secrets in
+`/opt/stacks/wwf_mass/.letta.env` / `.letta-db.env` (0600, per-stack API
+key — the shared master key is no longer in this stack). **Memory-capped**
+(1400m / 384m): the host has no swap and ~1.7GB free at cutover; the
+cgroup limits contain any runaway (observed steady-state: letta ~555MiB,
+db ~152MiB, host ~1.0GB available after).
+
+Corpus migrated by verbatim row copy (both instances use letta's default
+org/user ids and identical alembic head `1c28e167b74f`): `sources` (3) +
+`files` (361) + `file_contents` (361) + `source_passages` (**12,331** —
+DB1_REGULATORY 2,999, DB3_PP_CURRENT_unified 8,682,
+GrowFlow_Weekly_Snapshots 650), embeddings byte-identical, source ids
+preserved (so id-pinned env like LETTA_SNAPSHOT_SOURCE_ID keeps working).
+Also copied: the two BYOK `providers` rows + their 19 `provider_models`
+(agents reference provider `deepseek-prod`, which lives in the DB, not
+env — without it the LLM calls 401'd). One-time fix on first boot:
+`CREATE EXTENSION vector` in the fresh DB (letta's migration assumes it).
+
+Consumers repointed (`LETTA_BASE_URL=http://letta:8283` + new key):
+docengine.env + app.env (backups `*.bak-shared-letta` beside them —
+**rollback = restore those two files + `docker compose up -d --no-deps
+backend docengine`**; the shared server is untouched throughout). Note
+this re-enables the mass backend's always-on AI layer (previously
+black-holed to 127.0.0.1:9) against the dedicated instance. The gf_*
+fleet (8) was recreated declaratively by `ensure_fleet`; the 5 planner
+agents (`planner-weekly-report`, `planner-task-rewrite`,
+`wwf_weekly_coordinator`, `wwf-bilingual-translator`,
+`planner-template-narrative`) were mirror-created from the shared
+server's configs (mapping in `/root/wwf-build-r3/planner-id-mapping.json`)
+and all 9 `ai_agent_bindings` rows rebound to the new ids.
+
+**Two real docengine bugs surfaced by the cutover, fixed → v7/v8**
+(deployed to BOTH stacks; behavior-preserving on the shared server):
+`_resolve_model` adopted a bare embedding model name from mirrored agents
+(422 on every create), and `spawn_ephemeral` resolved its model from
+whichever agent listed first instead of the base agent it clones (landed
+on a deepseek thinking-mode 400 while the base agent's gpt-4o-mini config
+works). Ephemeral clones now inherit the base agent's own handles.
+
+**Smoke green on the dedicated instance**: reg-checker semantic search
+cites real DB1 passages (EudraLex Ch.6 quarantine; ephemeral clone cites
+EudraLex Part I Ch.5) with clean clone deletion; app-level
+`/ai/translate_bilingual` via the rebound bindings returns bilingual
+MK|EN; `weekly_snapshot.py --once` uploaded the digest to the dedicated
+snapshot source (demo org excluded). The dedicated fleet runs
+`openai/gpt-4o-mini` (created on an empty instance → fleet.yaml default);
+the planners run `deepseek-prod/deepseek-v4-flash` exactly as on shared.
+Full SOP-wizard run left for owner acceptance. Prod cutover = same
+runbook at the owner's go; shared-server app agents stay frozen (not
+deleted) until both stacks run a clean week.

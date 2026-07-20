@@ -69,6 +69,12 @@ wwf_mass stack                          wwf_app (prod) stack
 
 ### Cutover runbook (wwf_mass first, prod owner-gated)
 
+**STATUS 2026-07-20: steps 1-6 EXECUTED on wwf_mass** — see the
+"Dedicated per-stack Letta" section in docs/DEPLOY.md for the full record
+(vector-extension bootstrap, BYOK provider-row copy, the two fleet.py
+fixes → docengine v8, memory caps, rollback). Prod (step 7) remains
+owner-gated on the shared server.
+
 1. Add `letta` + `letta-db` services to the stack compose (internal network,
    own volume, healthcheck).
 2. Migrate the two corpus sources: passage-level copy (option a) —
