@@ -138,6 +138,9 @@ GF.API = {
   qcAddResult(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/results', b); },
   qcGenerateCoq(id)        { return this._req('POST', '/qc/certificates/' + id + '/coq'); },
   qcReviseCoa(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/revise', b); },
+  // QC LIMS — certificate register (QCLB 020 §6.13)
+  qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
+  qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },
 
   qcOos(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/oos' + (u?'?'+u:'')); },
   qcOosOne(id)             { return this._req('GET', '/qc/oos/' + id); },

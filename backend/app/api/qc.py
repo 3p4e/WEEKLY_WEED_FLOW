@@ -749,6 +749,11 @@ class CoaPatch(BaseModel):
     source_lab: str | None = Field(default=None, max_length=200)
     laboratory_id: str | None = None
     report_date: date | None = None
+    # QCLB 020 §6.13 register fields — where the original is filed + the
+    # retention window. Nullable; never back-filled with an invented value.
+    retention_start: date | None = None
+    retention_expiry: date | None = None
+    archive_ref: str | None = Field(default=None, max_length=300)
     notes: str | None = Field(default=None, max_length=4000)
     status: str | None = None            # guarded lifecycle transition
     decision: str | None = None          # PASS | FAIL
@@ -786,6 +791,9 @@ def _coa_out(r: dict) -> dict:
         "coq_generated_at": r["coq_generated_at"].isoformat() if r["coq_generated_at"] else None,
         "supersedes_id": str(r["supersedes_id"]) if r.get("supersedes_id") else None,
         "revision_reason": r.get("revision_reason"),
+        "retention_start": r["retention_start"].isoformat() if r.get("retention_start") else None,
+        "retention_expiry": r["retention_expiry"].isoformat() if r.get("retention_expiry") else None,
+        "archive_ref": r.get("archive_ref"),
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -1002,11 +1010,13 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             if target == "APPROVED":
                 extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
         fields, args = [], []
-        _NULLABLE = {"source_lab", "laboratory_id", "report_date", "notes", "decision"}
+        _NULLABLE = {"source_lab", "laboratory_id", "report_date", "retention_start",
+                     "retention_expiry", "archive_ref", "notes", "decision"}
+        _DATE_COLS = {"report_date", "retention_start", "retention_expiry"}
         for col, val in patch.items():
             if val is None and col not in _NULLABLE:
                 continue
-            if col == "report_date":
+            if col in _DATE_COLS:
                 args.append(val); fields.append(f"{col}=${len(args)}::date")
             else:
                 args.append(val); fields.append(f"{col}=${len(args)}")
@@ -1285,6 +1295,122 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
     return {"coa_number": coa["coa_number"], "document_id": doc_id,
             "verify": build.get("verify"), "bytes": build.get("bytes"),
             "out_of_scope": out_of_scope}
+
+
+# ── Certificate register (QCLB 020 §6.13) ───────────────────────────────────
+# A read layer over qc_certificates — no new table. Serves the §6.13 canned
+# queries (by quarter / type / lab; pending; OOS-linked; end-of-retention) with
+# each row enriched by its OOS + supersession cross-references and retention
+# window, plus a numbering-gap data-integrity report. The register year is the
+# YYYY embedded in the certificate number (PP-COA-YYYY-NNNN) — the authoritative
+# issue year, independent of an editable report_date.
+_RETENTION_MODES = ("expiring", "expired")
+
+
+@router.get("/register")
+async def certificate_register(
+        year: int | None = None, quarter: int | None = None,
+        cert_type: str | None = None, laboratory_id: str | None = None,
+        pending: bool = False, oos_linked: bool = False,
+        retention: str | None = None, within_days: int = 90,
+        user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    if cert_type is not None and cert_type not in _CERT_TYPES:
+        raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
+    if retention is not None and retention not in _RETENTION_MODES:
+        raise HTTPException(422, f"retention must be one of: {', '.join(_RETENTION_MODES)}")
+    if quarter is not None and quarter not in (1, 2, 3, 4):
+        raise HTTPException(422, "quarter must be 1–4")
+    _uuid_or_422(laboratory_id, "laboratory_id")
+    within_days = max(0, min(within_days, 3650))
+    clauses, args = [], []
+    if year is not None:
+        args.append(str(year)); clauses.append(f"split_part(coa_number, '-', 3) = ${len(args)}")
+    if quarter is not None:
+        args.append(quarter)
+        clauses.append(f"report_date IS NOT NULL AND extract(quarter FROM report_date) = ${len(args)}")
+    if cert_type is not None:
+        args.append(cert_type); clauses.append(f"cert_type = ${len(args)}")
+    if laboratory_id is not None:
+        args.append(laboratory_id); clauses.append(f"laboratory_id = ${len(args)}")
+    if pending:
+        clauses.append("status NOT IN ('RELEASED', 'SUPERSEDED')")
+    if oos_linked:
+        clauses.append("EXISTS (SELECT 1 FROM qc_oos_records o WHERE o.batch_id = qc_certificates.batch_id)")
+    if retention == "expired":
+        clauses.append("retention_expiry IS NOT NULL AND retention_expiry < CURRENT_DATE")
+    elif retention == "expiring":
+        args.append(within_days)
+        clauses.append(f"retention_expiry IS NOT NULL AND retention_expiry >= CURRENT_DATE"
+                       f" AND retention_expiry <= CURRENT_DATE + ${len(args)}::int")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            f"SELECT * FROM qc_certificates{where} ORDER BY coa_number DESC", *args)
+        rows = [dict(r) for r in rows]
+        ids = [r["id"] for r in rows]
+        batches = list({r["batch_id"] for r in rows if r["batch_id"]})
+        lab_ids = list({r["laboratory_id"] for r in rows if r["laboratory_id"]})
+        # bulk enrich (avoid N+1): open-OOS per batch, superseded-by per id, lab names
+        oos_open = {}
+        if batches:
+            for o in await c.fetch(
+                    "SELECT batch_id, count(*) n FROM qc_oos_records"
+                    " WHERE batch_id = ANY($1) AND status <> 'CLOSED' GROUP BY batch_id", batches):
+                oos_open[o["batch_id"]] = o["n"]
+        superseded_by = {}
+        if ids:
+            for s in await c.fetch(
+                    "SELECT supersedes_id, coa_number FROM qc_certificates"
+                    " WHERE supersedes_id = ANY($1) AND status IN ('RELEASED', 'SUPERSEDED')", ids):
+                superseded_by[str(s["supersedes_id"])] = s["coa_number"]
+        lab_names = {}
+        if lab_ids:
+            for l in await c.fetch(
+                    "SELECT id, name FROM qc_laboratories WHERE id = ANY($1)", lab_ids):
+                lab_names[str(l["id"])] = l["name"]
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r["id"]), "coa_number": r["coa_number"], "batch_id": r["batch_id"],
+            "cert_type": r["cert_type"], "status": r["status"], "decision": r["decision"],
+            "report_date": r["report_date"].isoformat() if r["report_date"] else None,
+            "laboratory": lab_names.get(str(r["laboratory_id"])) if r["laboratory_id"] else None,
+            "retention_start": r["retention_start"].isoformat() if r["retention_start"] else None,
+            "retention_expiry": r["retention_expiry"].isoformat() if r["retention_expiry"] else None,
+            "archive_ref": r["archive_ref"],
+            "supersedes_id": str(r["supersedes_id"]) if r["supersedes_id"] else None,
+            "superseded_by": superseded_by.get(str(r["id"])),
+            "open_oos": oos_open.get(r["batch_id"], 0),
+            "coq_document_id": r["coq_document_id"],
+        })
+    return out
+
+
+@router.get("/register/gaps")
+async def register_numbering_gaps(year: int, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Numbering-gap data-integrity report (§6.13): within a year's issued
+    PP-COA-YYYY-NNNN range, which numbers are absent. A gap is a flag to
+    investigate against the archive — NOT proof of a missing record: the
+    PP-COA sequence is shared across tenants on this database, so a gap may
+    simply be a certificate issued to another organisation (RLS hides it)."""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT coa_number FROM qc_certificates WHERE split_part(coa_number, '-', 3) = $1",
+            str(year))
+    nums = sorted(int(r["coa_number"].rsplit("-", 1)[-1]) for r in rows
+                  if r["coa_number"].rsplit("-", 1)[-1].isdigit())
+    if not nums:
+        return {"year": year, "issued": 0, "min": None, "max": None, "gaps": [],
+                "note": "No certificates issued in this year."}
+    present = set(nums)
+    missing = [n for n in range(nums[0], nums[-1] + 1) if n not in present]
+    return {
+        "year": year, "issued": len(nums), "min": nums[0], "max": nums[-1],
+        "gaps": [f"PP-COA-{year}-{n:04d}" for n in missing],
+        "note": ("The PP-COA sequence is shared across tenants on this database; a gap may"
+                 " reflect a certificate issued to another organisation rather than a missing"
+                 " record. Investigate each gap against the archive."),
+    }
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -1033,6 +1033,81 @@ async def test_ecoa_doc_promote_carries_laboratory(client, admin_headers):
     assert cert["coa"]["laboratory_id"] == lab["id"]
 
 
+# ── URS increment 4 — certificate register (QCLB 020 §6.13) ─────────────────
+async def test_certificate_register_filters(client, admin_headers):
+    lab = await _lab(client, admin_headers, name="Register Lab")
+    spec = await _spec(client, admin_headers, material="REG-MAT")
+    icoa = await _coa(client, admin_headers, spec["id"], batch="B-REG-A",
+                      cert_type="ICOA", laboratory_id=lab["id"])
+    ecoa = await _coa(client, admin_headers, spec["id"], batch="B-REG-B", cert_type="ECOA")
+    year = int(icoa["coa_number"].split("-")[2])
+    # set retention (expired) + archive ref on the ICOA
+    r = await client.patch(f"/qc/certificates/{icoa['id']}",
+                           json={"retention_start": "2020-01-01", "retention_expiry": "2021-01-01",
+                                 "archive_ref": "BINDER-7"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["archive_ref"] == "BINDER-7"
+
+    reg = (await client.get("/qc/register", headers=admin_headers)).json()
+    codes = {x["coa_number"] for x in reg}
+    assert icoa["coa_number"] in codes and ecoa["coa_number"] in codes
+    row = next(x for x in reg if x["coa_number"] == icoa["coa_number"])
+    assert row["laboratory"] == "Register Lab" and row["archive_ref"] == "BINDER-7"
+
+    # cert_type filter
+    only_icoa = (await client.get("/qc/register?cert_type=ICOA", headers=admin_headers)).json()
+    assert all(x["cert_type"] == "ICOA" for x in only_icoa)
+    assert icoa["coa_number"] in {x["coa_number"] for x in only_icoa}
+    assert ecoa["coa_number"] not in {x["coa_number"] for x in only_icoa}
+
+    # pending (both are DRAFT → in-progress)
+    pend = (await client.get("/qc/register?pending=true", headers=admin_headers)).json()
+    assert {icoa["coa_number"], ecoa["coa_number"]} <= {x["coa_number"] for x in pend}
+
+    # retention=expired returns the ICOA (expiry in the past)
+    exp = (await client.get("/qc/register?retention=expired", headers=admin_headers)).json()
+    assert icoa["coa_number"] in {x["coa_number"] for x in exp}
+    assert ecoa["coa_number"] not in {x["coa_number"] for x in exp}
+
+    # year filter (the register year is the YYYY in the number)
+    yr = (await client.get(f"/qc/register?year={year}", headers=admin_headers)).json()
+    assert icoa["coa_number"] in {x["coa_number"] for x in yr}
+    # prior year: our certs are absent from that register slice
+    prev = (await client.get(f"/qc/register?year={year - 1}", headers=admin_headers)).json()
+    assert icoa["coa_number"] not in {x["coa_number"] for x in prev}
+
+    # bad enum → 422
+    assert (await client.get("/qc/register?cert_type=NOPE", headers=admin_headers)).status_code == 422
+    assert (await client.get("/qc/register?retention=maybe", headers=admin_headers)).status_code == 422
+    assert (await client.get("/qc/register?quarter=5", headers=admin_headers)).status_code == 422
+
+
+async def test_register_oos_linked(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="REG-OOS")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-REG-OOS")
+    await _oos(client, admin_headers, batch="B-REG-OOS")   # open OOS on the same batch
+    reg = (await client.get("/qc/register?oos_linked=true", headers=admin_headers)).json()
+    row = next((x for x in reg if x["coa_number"] == coa["coa_number"]), None)
+    assert row is not None and row["open_oos"] >= 1
+    # a cert whose batch has no OOS is excluded from the oos_linked view
+    clean = await _coa(client, admin_headers, spec["id"], batch="B-REG-CLEAN")
+    assert clean["coa_number"] not in {x["coa_number"] for x in reg}
+
+
+async def test_register_numbering_gaps(client, admin_headers):
+    """The gap report lists absent numbers within a year's issued range. Our own
+    issued numbers are never reported as gaps; the shared-sequence caveat is
+    surfaced in the note (a gap may be another tenant's allocation)."""
+    spec = await _spec(client, admin_headers, material="REG-GAP")
+    made = [await _coa(client, admin_headers, spec["id"], batch=f"B-GAP-{i}") for i in range(3)]
+    year = int(made[0]["coa_number"].split("-")[2])
+    g = (await client.get(f"/qc/register/gaps?year={year}", headers=admin_headers)).json()
+    assert g["year"] == year and g["issued"] >= 3
+    assert g["min"] is not None and g["max"] >= g["min"]
+    mine = {m["coa_number"] for m in made}
+    assert not (mine & set(g["gaps"]))          # none of our own numbers are "gaps"
+    assert "shared across tenants" in g["note"]
+
+
 # ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
 async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
     spec = await _spec(client, headers, material=material)

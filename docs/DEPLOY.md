@@ -1245,3 +1245,40 @@ Deployed backend v63→**v64** (prod scheduler too) + frontend v94→**v95**.
 **Rollback** = revert tags to v63/v94 (+ `alembic -n tasks downgrade
 0029` — all additive; image-only rollback also safe since laboratory_id
 is nullable and unread by v63).
+
+## URS increment 4 (backend v65 / frontend v96 / migration 0031 → BOTH stacks, 2026-07-20)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 6 — the **certificate register**
+(QCLB 020 §6.13), a pure read layer over the certificates plus the register
+retention fields:
+
+- **Retention fields** (migration 0031): `qc_certificates` gains
+  `retention_start`, `retention_expiry` (dates) and `archive_ref` — where
+  the original is filed and its retention window. Nullable, settable via the
+  certificate PATCH; never back-filled with an invented value (immutable-
+  record safety).
+- **`GET /qc/register`** — the §6.13 canned queries as query params: `year`
+  (the YYYY in PP-COA-YYYY-NNNN — the authoritative issue year), `quarter`,
+  `cert_type`, `laboratory_id`, `pending` (in-progress = not RELEASED/
+  SUPERSEDED), `oos_linked` (batch has an OOS record), `retention=expiring|
+  expired`. Each row is enriched with the OOS cross-reference (`open_oos`
+  count), the supersession cross-references (`supersedes_id` +
+  `superseded_by` number), the retention window, archive ref, and the
+  resolved laboratory name — all bulk-fetched (no N+1).
+- **`GET /qc/register/gaps?year=YYYY`** — numbering-gap data-integrity
+  report: within the year's issued range, which PP-COA numbers are absent.
+  Honest about the shared-sequence caveat (a gap may be another tenant's
+  allocation on the DB-global sequence — a flag to investigate against the
+  archive, never asserted as a lost record).
+- Frontend: new **QC Register** view (`qcregister-view.js`) with the canned-
+  query filter bar + a numbering-gaps panel; retention/archive fields
+  editable on the certificate; api.js qcRegister/qcRegisterGaps, i18n,
+  SW v3.59.0.
+
+Gate: **407 backend tests green** (3 new: register filters + retention +
+year, OOS-linked, numbering-gaps), migration 0031 up/down/base clean,
+schema.tasks.sql dump-diff EXACT vs alembic head, node --check. Migration
+applied to BOTH tasks DBs before the image flip. Deployed backend v64→**v65**
+(prod scheduler too) + frontend v95→**v96**. **Rollback** = revert tags to
+v64/v95 (+ `alembic -n tasks downgrade 0030` — all additive; image-only
+rollback also safe).

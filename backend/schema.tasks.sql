@@ -339,6 +339,9 @@ CREATE TABLE public.qc_certificates (
     supersedes_id uuid,
     revision_reason text,
     laboratory_id uuid,
+    retention_start date,
+    retention_expiry date,
+    archive_ref text,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
     CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text])))
