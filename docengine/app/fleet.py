@@ -36,7 +36,13 @@ def _resolve_model(spec: dict, existing: list[dict]) -> tuple[str, str]:
         if lc.get("handle") or lc.get("model"):
             model = lc.get("handle") or lc.get("model")
             ec = a.get("embedding_config") or {}
-            embedding = ec.get("handle") or ec.get("embedding_model") or embedding
+            cand = ec.get("handle") or ec.get("embedding_model") or ""
+            # Adopt only a real provider/model handle. Agents imported or
+            # mirrored from another instance carry a bare embedding model name
+            # ("text-embedding-3-small"), which POST /agents rejects as an
+            # embedding handle — a bare name must not displace the YAML default.
+            if "/" in cand:
+                embedding = cand
             break
     return model, embedding
 
