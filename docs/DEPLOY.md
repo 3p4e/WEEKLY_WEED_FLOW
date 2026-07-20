@@ -1129,3 +1129,38 @@ request): per-sample A/B/C potency grading NOT built — the approved QCSOP
 disagrees, and they do not define it; e-signatures stay retired
 (DocEngine-superseded, per the SUMA assimilation decision) — a Part-11
 style e-sig layer remains a future owner-driven compliance increment.
+
+## URS increment 1 (backend v62 / frontend v93 / migration 0028 → BOTH stacks, 2026-07-20)
+
+First build increment from the Head-of-QC URS comparison
+(docs/URS-COQ-GAP-ANALYSIS-2026-07.md) — the three smallest,
+highest-compliance-value items:
+
+- **OOS gate on COQ generation** (QCSOP 012 §6.4.1/§6.6): `generate_coq`
+  now 409s while any open (non-CLOSED) OOS investigation exists on the
+  certificate's batch, naming the batch and count — the COQ compiles only
+  the investigation-confirmed result set.
+- **COQ issuing is a QC act**: `_COQ_ROLES` drops QP (now ADMIN + QC_MGR).
+  Per QCSOP 012 §6.4/Annex 16 the Qualified Person RECEIVES the approved
+  COQ as input to the separate release decision and does not sign or
+  issue it.
+- **Lab's verdict captured as reference** (§6.3.2, migration 0028):
+  `qc_coa_extractions.lab_verdict` stores the lab's stated pass/fail
+  verbatim; conformance of record stays computed in-house; a conservative
+  `lab_verdict_mismatch` flag surfaces disagreement (EN+MK verdict
+  wording recognised; ambiguous text never manufactures a mismatch).
+  Transcription format gains an optional 4th segment (`Label | value |
+  unit | lab verdict`); mismatch badge in the eCoA view; SW v3.56.0.
+
+Gate: **394 backend tests green** (incl. 3 new: OOS-gated COQ open→closed
+round trip, QP 403 on issuing, lab-verdict capture/mismatch/clear),
+migration 0028 up/down clean, node --check. Migration applied to BOTH
+tasks DBs (mass + prod at alembic **0028**) before the image flip.
+Deployed backend v61→**v62** (prod scheduler too) + frontend v92→**v93**
+on both stacks. **Live behavioral smoke on wwf-mass**: released cert with
+open OOS → COQ 409 citing the batch; QP → 403; QP closes OOS → QC_MGR
+COQ 201 with a real DocEngine build (PP-COA-2026-0030, RESULT: PASS,
+bilingual OK); lab_verdict "Pass" vs in-house FAIL → mismatch=true.
+Prod smoke: health 200, SW v3.56.0, new JS served. **Rollback** = revert
+tags to v61/v92 (+ `alembic -n tasks downgrade 0027` — the column is
+additive, so rollback of images alone is also safe).
