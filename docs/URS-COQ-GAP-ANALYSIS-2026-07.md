@@ -74,8 +74,11 @@ Priority order; SOP citations are the binding source.
    supersession cross-refs per row; `GET /qc/register/gaps` is the
    numbering-gap data-integrity report (honest about the shared-sequence
    caveat — a gap flags an investigation, never asserts a lost record).
-7. **5-working-day eCoA review clock** (§6.3.1) — same pattern as the
-   RQS 24h registration window already built.
+7. ~~**5-working-day eCoA review clock** (§6.3.1)~~ ✅ **DONE (increment 5,
+   mig 0032, v66/v97)** — `qc_coa_documents.review_deadline` stamped 5
+   working days ahead at registration; `reviewed_at` + `review_window_met`
+   stamped on the REVIEWED transition; computed `review_overdue` flag +
+   view badges. Same deadline-window control as the 24h RQS window.
 8. **Lab's stated verdict captured as reference** (`acceptance_as
    _reported`) and reconciled — we currently recompute but do not retain
    the lab's own pass/fail for the reconciliation record.
