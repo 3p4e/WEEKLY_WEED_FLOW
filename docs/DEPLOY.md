@@ -1076,3 +1076,56 @@ the planners run `deepseek-prod/deepseek-v4-flash` exactly as on shared.
 Full SOP-wizard run left for owner acceptance. Prod cutover = same
 runbook at the owner's go; shared-server app agents stay frozen (not
 deleted) until both stacks run a clean week.
+
+## Dedicated Letta promoted to its own stack + PRODUCTION cutover (2026-07-20)
+
+Owner: "proceed with all best choices for the app." The dedicated instance
+moved out of wwf_mass into its own lifecycle: **`/opt/stacks/wwf_letta`**
+(`wwf-letta` + `wwf-letta-db`, same pinned image/volume/secrets — the
+volume `wwf_mass_letta_pgdata` is referenced as external, data survived the
+move intact). The `letta` service joins BOTH app networks
+(`wwf_mass_internal` + `weekly_weed_flow_internal`) with DNS alias `letta`,
+so every consumer's `LETTA_BASE_URL=http://letta:8283` works from either
+stack and neither app stack owns the Letta lifecycle. One instance serves
+the whole app — this matches the owner's stated goal (app memory isolated
+from every other Letta use on the host) and the host cannot safely fit a
+third Letta (16GB, no swap; steady state after cutover: letta ~645MiB,
+db ~62MiB, ~1.0GB available).
+
+**PRODUCTION cut over to it**: `/opt/stacks/wwf_app/{app,docengine}.env`
+repointed (base URL + per-app key; backups `*.bak-shared-letta` beside
+them), the three planner env ids updated to the mirrored agents (a sixth
+agent the prod env referenced — `planner-next-week-plan`, deepseek-v4-pro —
+was mirrored on demand), all 9 prod `ai_agent_bindings` rebound, and
+backend + scheduler + docengine recreated. The scheduler's boot log proved
+the loop end-to-end: `planner_prompts` found the mirrored agents already
+at wwf-prompts/v4, the snapshot source self-attached to the coordinator,
+and the due scan ran. Prod smoke: translator agent returns bilingual MK|EN
+from the prod backend; `weekly_snapshot.py --once` ran (pins correctly
+idempotent — this week's already exist from Thursday).
+
+**Per-stack agent-state isolation on the one instance**: wwf_mass got its
+own clones of all six planner agents (`*-mass` suffix, ids in
+`/root/wwf-build-r3/mass-agent-set.json`) and its own snapshot source
+(`GrowFlow_Weekly_Snapshots_MASS`), with mass bindings + env rebound to
+them — test-stack invokes can no longer grow the production agents'
+conversation memory or pollute prod grounding. Cross-uploaded/duplicate
+digest passages were deleted from the prod snapshot source (back to
+exactly the 650 migrated + future scheduler uploads). The gf_* DocEngine
+fleet stays shared between stacks (same topology as the shared-server era;
+the hot reg-check path is ephemeral-per-exchange) — namespacing it
+per-stack is a noted future nicety, not a correctness need.
+
+**The shared multi-project Letta server now serves NOTHING in this app.**
+The app's original agents there are left frozen as a rollback target
+(rollback = restore the four `*.bak-shared-letta` env files + revert the
+binding UPDATEs + `docker compose up -d --no-deps backend scheduler
+docengine` per stack). After a clean production week they can be deleted
+in a separately-confirmed op (LETTA-OPS-BACKLOG discipline).
+
+**Product decisions resolved by standing owner rules** (reversible on
+request): per-sample A/B/C potency grading NOT built — the approved QCSOP
+001–024 are the regulatory authority where the qc-lims-ao prototype
+disagrees, and they do not define it; e-signatures stay retired
+(DocEngine-superseded, per the SUMA assimilation decision) — a Part-11
+style e-sig layer remains a future owner-driven compliance increment.
