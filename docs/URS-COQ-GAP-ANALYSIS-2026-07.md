@@ -67,10 +67,13 @@ Priority order; SOP citations are the binding source.
    (P…) → packaging batch, with CoQ-level inheritance of ancestor-batch
    results (blending question = owner decision D2). Sharpens the old
    "batch lineage" backlog item with the real code taxonomy.
-6. **Register completeness (QCLB 020, §6.13)** — retention start/expiry,
-   archive ref, OOS cross-ref, supersession cross-ref, the §6.13 canned
-   queries (per quarter/type/lab; pending; OOS-linked; end-of-retention)
-   and **numbering-gap detection** as a data-integrity report.
+6. ~~**Register completeness (QCLB 020, §6.13)**~~ ✅ **DONE (increment 4,
+   mig 0031, v65/v96)** — retention start/expiry + archive_ref on the
+   certificate; `GET /qc/register` serves the §6.13 canned queries (year/
+   quarter/type/lab; pending; OOS-linked; end-of-retention) with OOS +
+   supersession cross-refs per row; `GET /qc/register/gaps` is the
+   numbering-gap data-integrity report (honest about the shared-sequence
+   caveat — a gap flags an investigation, never asserts a lost record).
 7. **5-working-day eCoA review clock** (§6.3.1) — same pattern as the
    RQS 24h registration window already built.
 8. **Lab's stated verdict captured as reference** (`acceptance_as
