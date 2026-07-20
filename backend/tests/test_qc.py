@@ -734,6 +734,184 @@ async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monk
     assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
 
 
+# ── URS increment 2 — certificate supersession (QCSOP 012 §6.7) ─────────────
+async def test_coa_revision_supersession_chain(client, admin_headers):
+    """QCSOP 012 §6.7: an approved certificate is immutable — a correction is a
+    NEW certificate (new number) carrying supersedes_id + revision_reason; when
+    the revision is RELEASED the original flips to terminal SUPERSEDED (never
+    deleted)."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="SUP-MAT")
+    # direct SUPERSEDED is refused — only releasing a revision sets it
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "SUPERSEDED"},
+                           headers=admin_headers)
+    assert r.status_code == 409
+    # a revision needs a real reason
+    r = await client.post(f"/qc/certificates/{coa['id']}/revise", json={"reason": "typo"},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post(f"/qc/certificates/{coa['id']}/revise",
+                          json={"reason": "Transcription error in THC result"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    rev = r.json()
+    assert rev["status"] == "DRAFT" and rev["supersedes_id"] == coa["id"]
+    assert rev["coa_number"].startswith("PP-COA-") and rev["coa_number"] != coa["coa_number"]
+    assert rev["revision_reason"] == "Transcription error in THC result"
+    # the result set is carried forward so the correction edits the real state
+    detail = (await client.get(f"/qc/certificates/{rev['id']}", headers=admin_headers)).json()
+    assert len(detail["results"]) == 1 and detail["results"][0]["test_name"] == "Total THC"
+    # a second open revision of the same original is refused
+    r = await client.post(f"/qc/certificates/{coa['id']}/revise",
+                          json={"reason": "Second correction attempt"}, headers=admin_headers)
+    assert r.status_code == 409 and "revision already exists" in r.json()["detail"]
+    # release the revision → the original flips to SUPERSEDED
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{rev['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    orig = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()["coa"]
+    assert orig["status"] == "SUPERSEDED"
+    # SUPERSEDED is terminal — no further transitions
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"},
+                           headers=admin_headers)
+    assert r.status_code == 409
+    # only a RELEASED certificate can be revised
+    spec = await _spec(client, admin_headers, material="SUP-DRAFT")
+    draft = await _coa(client, admin_headers, spec["id"], batch="B-SUP-D")
+    r = await client.post(f"/qc/certificates/{draft['id']}/revise",
+                          json={"reason": "Should not be possible"}, headers=admin_headers)
+    assert r.status_code == 409
+
+
+# ── URS increment 2 — computed total THC/CBD (Ph. Eur. 3028) ────────────────
+async def _computed_spec(client, headers, material="PH3028", lo=10.0, hi=30.0):
+    """A spec with two measured component parameters (Δ9-THC neutral + THCA
+    acid) and one computed total_thc parameter derived from them."""
+    spec = await _spec(client, headers, material=material)
+    base = f"/qc/specifications/{spec['id']}/parameters"
+    a = await client.post(base, json={"test_name_en": "Delta-9-THC", "test_method": "HPLC",
+                                      "unit": "%"}, headers=headers)
+    b = await client.post(base, json={"test_name_en": "THCA", "test_method": "HPLC",
+                                      "unit": "%"}, headers=headers)
+    assert a.status_code == 201 and b.status_code == 201
+    t = await client.post(base, json={"test_name_en": "Total THC", "test_name_mk": "Вкупен ТХЦ",
+                                      "test_method": "Ph. Eur. 3028", "unit": "%",
+                                      "lower_limit": lo, "upper_limit": hi,
+                                      "computed_kind": "total_thc",
+                                      "component_a_id": a.json()["id"],
+                                      "component_b_id": b.json()["id"]}, headers=headers)
+    assert t.status_code == 201, t.text
+    assert t.json()["computed_kind"] == "total_thc"
+    return spec, a.json(), b.json(), t.json()
+
+
+async def _release_with_components(client, headers, qp, spec, pa, pb, batch,
+                                   a_val=1.5, b_val=20.0):
+    coa = await _coa(client, headers, spec["id"], batch=batch)
+    for pid, name, val in ((pa["id"], "Delta-9-THC", a_val), (pb["id"], "THCA", b_val)):
+        assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                                  json={"parameter_id": pid, "test_name": name,
+                                        "result_numeric": val, "unit": "%"},
+                                  headers=headers)).status_code == 201
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    return coa
+
+
+async def test_coq_computes_total_thc(client, admin_headers, monkeypatch):
+    """Ph. Eur. 3028: total THC = Δ9-THC + 0.877 × THCA, DERIVED by the engine
+    from the component results at COQ time — never transcribed. The computed
+    row covers its spec parameter and cites the monograph as its source."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-3028", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PH3028")
+    coa = await _release_with_components(client, admin_headers, qp, spec, pa, pb, "B-3028")
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    md = _FakeDE.last_markdown
+    # 1.5 + 0.877 × 20.0 = 19.04 — in spec (10–30), cited to the monograph
+    assert "19.04" in md and "Ph. Eur. 3028" in md and "Total THC" in md
+
+
+async def test_coq_computed_total_fail_blocks(client, admin_headers, monkeypatch):
+    """A computed total outside its limits is a non-conforming batch — the COQ
+    is refused by the comply gate, exactly like a measured OOS result."""
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PH3028-F", hi=15.0)
+    coa = await _release_with_components(client, admin_headers, qp, spec, pa, pb, "B-3028-F")
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "comply" in r.json()["detail"]
+
+
+async def test_coq_computed_missing_component_blocks(client, admin_headers, monkeypatch):
+    """A computed total with an unmeasured component is NOT covered — the
+    completeness gate refuses the COQ (the batch is not fully tested); the
+    engine never derives a value from a partial component set."""
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PH3028-M")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-3028-M")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pa["id"], "test_name": "Delta-9-THC",
+                                    "result_numeric": 1.5, "unit": "%"},
+                              headers=admin_headers)).status_code == 201
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
+
+
+async def test_computed_param_validation(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="COMP-VAL")
+    base = f"/qc/specifications/{spec['id']}/parameters"
+    a = (await client.post(base, json={"test_name_en": "Delta-9-THC"}, headers=admin_headers)).json()
+    b = (await client.post(base, json={"test_name_en": "THCA"}, headers=admin_headers)).json()
+    # unknown kind
+    r = await client.post(base, json={"test_name_en": "T", "computed_kind": "total_cbg",
+                                      "component_a_id": a["id"], "component_b_id": b["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # computed without components
+    r = await client.post(base, json={"test_name_en": "T", "computed_kind": "total_thc"},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # the same component twice
+    r = await client.post(base, json={"test_name_en": "T", "computed_kind": "total_thc",
+                                      "component_a_id": a["id"], "component_b_id": a["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # a component from a DIFFERENT spec
+    other = await _spec(client, admin_headers, material="COMP-VAL-2")
+    oa = (await client.post(f"/qc/specifications/{other['id']}/parameters",
+                            json={"test_name_en": "Foreign"}, headers=admin_headers)).json()
+    r = await client.post(base, json={"test_name_en": "T", "computed_kind": "total_thc",
+                                      "component_a_id": oa["id"], "component_b_id": b["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # component ids without computed_kind
+    r = await client.post(base, json={"test_name_en": "T", "component_a_id": a["id"],
+                                      "component_b_id": b["id"]}, headers=admin_headers)
+    assert r.status_code == 422
+    # a computed parameter cannot itself be a component
+    t = await client.post(base, json={"test_name_en": "Total THC", "computed_kind": "total_thc",
+                                      "component_a_id": a["id"], "component_b_id": b["id"]},
+                          headers=admin_headers)
+    assert t.status_code == 201, t.text
+    r = await client.post(base, json={"test_name_en": "T2", "computed_kind": "total_cbd",
+                                      "component_a_id": t.json()["id"], "component_b_id": b["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # transcribing a result AGAINST the computed parameter is forbidden
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-COMP-VAL")
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"parameter_id": t.json()["id"], "test_name": "Total THC",
+                                "result_numeric": 20.0}, headers=admin_headers)
+    assert r.status_code == 422 and "computed" in r.json()["detail"]
+
+
 # ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
 async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
     spec = await _spec(client, headers, material=material)

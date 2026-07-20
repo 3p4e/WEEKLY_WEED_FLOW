@@ -1164,3 +1164,47 @@ bilingual OK); lab_verdict "Pass" vs in-house FAIL → mismatch=true.
 Prod smoke: health 200, SW v3.56.0, new JS served. **Rollback** = revert
 tags to v61/v92 (+ `alembic -n tasks downgrade 0027` — the column is
 additive, so rollback of images alone is also safe).
+
+## URS increment 2 (backend v63 / frontend v94 / migration 0029 → BOTH stacks, 2026-07-20)
+
+Second increment from docs/URS-COQ-GAP-ANALYSIS-2026-07.md (items 2 + 3):
+
+- **Certificate supersession chain** (QCSOP 012 §6.7, migration 0029):
+  `qc_certificates` gains `supersedes_id` + `revision_reason` and the new
+  terminal status **SUPERSEDED**. A RELEASED certificate is immutable —
+  `POST /qc/certificates/{id}/revise {reason}` creates a NEW certificate
+  (new PP-COA number, DRAFT) carrying the full copied result set and the
+  supersession link; only ONE open revision may exist at a time; when the
+  revision is RELEASED the original flips to SUPERSEDED automatically
+  (never deleted). Direct PATCH to SUPERSEDED is refused. Frontend:
+  "Revise (supersede)" button on a RELEASED cert, supersedes/reason rows
+  in the detail grid, SUPERSEDED chip.
+- **Computed total THC/CBD** (Ph. Eur. 3028): `qc_spec_parameters` gains
+  `computed_kind` (total_thc | total_cbd) + `component_a_id` (neutral
+  form) + `component_b_id` (acid form). The COQ engine derives
+  `a + 0.877 × b` at compile time from the component results — a derived
+  total is never transcribed (entering a result against a computed
+  parameter is a 422). The computed row joins the same comply +
+  completeness gates (an OOS total blocks the COQ; a missing component
+  leaves the batch "not fully tested") and renders on the COQ cited to
+  the monograph ("Пресметано / Computed — Ph. Eur. 3028"). Component
+  validation: same spec, distinct, not themselves computed. Frontend:
+  computed-kind + component pickers in the spec parameter form, Σ chip
+  on computed rows; SW v3.57.0.
+
+Gate: **399 backend tests green** (5 new: supersession chain round trip,
+computed COQ w/ 19.04 in the markdown, failing computed total 409,
+missing component 409, computed-param validation 422 matrix), migration
+0029 up/down/base clean, schema.tasks.sql dump-diff EXACT vs alembic
+head, node --check. Migration applied to BOTH tasks DBs (mass + prod at
+alembic **0029**) before the image flip. Deployed backend v62→**v63**
+(prod scheduler too) + frontend v93→**v94** on both stacks. **Live
+behavioral smoke on wwf-mass 21/21** (tt.qc.mgr/tt.qp): computed spec
+PP-SPEC-2026-0030 (bad kind 422, transcribe-computed 422) → cert
+PP-COA-2026-0031 with component results only → RELEASED → COQ 201 (real
+DocEngine build over the derived total) → direct SUPERSEDED 409 →
+revise 201 (PP-COA-2026-0032, DRAFT, results copied) → second revise
+409 → revision RELEASED → origin auto-SUPERSEDED → origin terminal 409.
+Prod smoke: health 200, SW v3.57.0, qcReviseCoa served. **Rollback** =
+revert tags to v62/v93 (+ `alembic -n tasks downgrade 0028` — all
+additive, image-only rollback also safe).

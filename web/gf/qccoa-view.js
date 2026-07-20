@@ -34,6 +34,7 @@
     REVIEWED: { en: 'Reviewed', mk: 'Прегледано', c: 'var(--violet)' },
     APPROVED: { en: 'Approved', mk: 'Одобрено', c: 'var(--teal,var(--blue))' },
     RELEASED: { en: 'Released', mk: 'Ослободено', c: 'var(--green)' },
+    SUPERSEDED: { en: 'Superseded', mk: 'Заменето', c: 'var(--ink-3)' },
   };
   // legal moves, mirroring backend qc.py _COA_TRANSITIONS / _COA_QP_TARGETS:
   // NEXT is the forward chain, BACK the one allowed kick-back (REVIEWED may
@@ -124,6 +125,18 @@
     } catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
+  // QCSOP 012 §6.7 — a RELEASED certificate is immutable; a correction is a NEW
+  // certificate (new number) that supersedes the original when it is released.
+  GF.WWF.qcCoaRevise = async (id) => {
+    const reason = prompt(AL('Reason for the revision (min 5 characters):',
+                             'Причина за ревизијата (мин 5 знаци):'));
+    if (!reason) return;
+    try {
+      const rev = await GF.API.qcReviseCoa(id, { reason });
+      GF.toast(AL('Revision created: ', 'Ревизија создадена: ') + rev.coa_number);
+    } catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
   GF.WWF.qcCoaDlCoq = async (docId, kind) => {
     const url = kind === 'pdf' ? GF.API.studioPdfUrl(docId) : GF.API.studioDocxUrl(docId);
     try {
@@ -202,6 +215,12 @@
       <tbody>${rows || `<tr><td colspan="4" class="ana-note">${AL('No results yet', 'Сè уште нема резултати')}</td></tr>`}${addRow}</tbody></table>`;
   };
 
+  // Resolve a supersedes_id to its human certificate number from the loaded list.
+  const coaNumById = (id) => {
+    const hit = ((GF.WWF._qccoa.coas) || []).find(x => x.id === id);
+    return hit ? hit.coa_number : id;
+  };
+
   const detail = (d) => {
     const c = d.coa;
     const nxt = NEXT[c.status];
@@ -214,13 +233,16 @@
         <span>${AL('Status', 'Статус')}</span><b>${stChip(c.status)}</b>
         <span>${AL('Decision', 'Одлука')}</span><b>${decChip(c.decision)}</b>
         ${c.source_lab ? `<span>${AL('Lab', 'Лабораторија')}</span><b>${GF.esc(c.source_lab)}</b>` : ''}
+        ${c.supersedes_id ? `<span>${AL('Supersedes', 'Заменува')}</span><b class="mono">${GF.esc(coaNumById(c.supersedes_id))}</b>` : ''}
+        ${c.revision_reason ? `<span>${AL('Revision reason', 'Причина за ревизија')}</span><b>${GF.esc(c.revision_reason)}</b>` : ''}
       </div>
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
         ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>` : ''}
         ${BACK[c.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaAdvance('${c.id}','${BACK[c.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
-        ${c.status !== 'DRAFT' && c.status !== 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
+        ${c.status !== 'DRAFT' && c.status !== 'RELEASED' && c.status !== 'SUPERSEDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
+        ${c.status === 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaRevise('${c.id}')">${AL('Revise (supersede)', 'Ревидирај (замени)')}</button>` : ''}
       </div>` : ''}
       ${c.status === 'RELEASED' && canCoq() ? `<div class="qms-dl" style="margin-top:8px">
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaGenerateCoq('${c.id}')">${AL('Generate COQ', 'Генерирај COQ')}</button>

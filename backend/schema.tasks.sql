@@ -336,9 +336,11 @@ CREATE TABLE public.qc_certificates (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     coq_document_id text,
     coq_generated_at timestamp with time zone,
+    supersedes_id uuid,
+    revision_reason text,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
-    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text])))
+    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text])))
 );
 
 ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
@@ -909,7 +911,11 @@ CREATE TABLE public.qc_spec_parameters (
     test_location text,
     sorting_order integer DEFAULT 0 NOT NULL,
     created_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    computed_kind text,
+    component_a_id uuid,
+    component_b_id uuid,
+    CONSTRAINT qc_spec_parameters_computed_kind_check CHECK (((computed_kind IS NULL) OR (computed_kind = ANY (ARRAY['total_thc'::text, 'total_cbd'::text]))))
 );
 
 ALTER TABLE ONLY public.qc_spec_parameters FORCE ROW LEVEL SECURITY;
@@ -2343,6 +2349,14 @@ ALTER TABLE ONLY public.qc_certificates
 
 
 --
+-- Name: qc_certificates qc_certificates_supersedes_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_supersedes_id_fkey FOREIGN KEY (supersedes_id) REFERENCES public.qc_certificates(id);
+
+
+--
 -- Name: qc_chain_of_custody qc_chain_of_custody_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2524,6 +2538,22 @@ ALTER TABLE ONLY public.qc_samples
 
 ALTER TABLE ONLY public.qc_sampling_requests
     ADD CONSTRAINT qc_sampling_requests_sample_fkey FOREIGN KEY (sample_id) REFERENCES public.qc_samples(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_spec_parameters qc_spec_parameters_component_a_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_component_a_id_fkey FOREIGN KEY (component_a_id) REFERENCES public.qc_spec_parameters(id);
+
+
+--
+-- Name: qc_spec_parameters qc_spec_parameters_component_b_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_spec_parameters
+    ADD CONSTRAINT qc_spec_parameters_component_b_id_fkey FOREIGN KEY (component_b_id) REFERENCES public.qc_spec_parameters(id);
 
 
 --

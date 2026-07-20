@@ -49,6 +49,9 @@ _SPEC_STATUSES = (
     "TRAINED", "ACTIVE", "UNDER_CHANGE", "SUPERSEDED", "WITHDRAWN",
 )
 _THC_GRADES = ("GRADE_I", "GRADE_II", "GRADE_III", "GRADE_IV", "GRADE_V")
+# Ph. Eur. 3028 derived totals: total = neutral (a) + 0.877 × acid (b).
+_COMPUTED_KINDS = ("total_thc", "total_cbd")
+_ACID_FACTOR = 0.877
 
 # The prototype's spec lifecycle transition map (spec_lifecycle_service.py):
 # forward chain + the two allowed reversals; WITHDRAWN is reachable from any
@@ -124,6 +127,13 @@ class ParamIn(BaseModel):
     pharmacopoeia_ref: str | None = Field(default=None, max_length=200)
     test_location: str | None = Field(default=None, max_length=120)
     sorting_order: int = Field(default=0, ge=0, le=1000)
+    # Ph. Eur. 3028 derived parameters: total THC = Δ9-THC + 0.877 × THCA
+    # (total CBD analogously). component_a = neutral form, component_b = acid
+    # form; the COQ engine computes a + 0.877·b deterministically — a derived
+    # value is never transcribed.
+    computed_kind: str | None = None                 # total_thc | total_cbd
+    component_a_id: str | None = None
+    component_b_id: str | None = None
 
 
 def _check_grade(g: str | None) -> None:
@@ -152,6 +162,9 @@ def _param_out(r: dict) -> dict:
         "upper_limit": float(r["upper_limit"]) if r["upper_limit"] is not None else None,
         "unit": r["unit"], "pharmacopoeia_ref": r["pharmacopoeia_ref"],
         "test_location": r["test_location"], "sorting_order": r["sorting_order"],
+        "computed_kind": r.get("computed_kind"),
+        "component_a_id": str(r["component_a_id"]) if r.get("component_a_id") else None,
+        "component_b_id": str(r["component_b_id"]) if r.get("component_b_id") else None,
     }
 
 
@@ -271,6 +284,14 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
 @router.post("/specifications/{spec_id}/parameters", status_code=201)
 async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(spec_id, "Specification")
+    if body.computed_kind is not None and body.computed_kind not in _COMPUTED_KINDS:
+        raise HTTPException(422, f"computed_kind must be one of: {', '.join(_COMPUTED_KINDS)}")
+    if body.computed_kind is not None and not (body.component_a_id and body.component_b_id):
+        raise HTTPException(422, "A computed parameter requires component_a_id and component_b_id")
+    if body.computed_kind is None and (body.component_a_id or body.component_b_id):
+        raise HTTPException(422, "component ids are only valid with computed_kind")
+    _uuid_or_422(body.component_a_id, "component_a_id")
+    _uuid_or_422(body.component_b_id, "component_b_id")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
         if spec is None:
@@ -278,14 +299,29 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
         if spec["status"] not in _EDITABLE_STATUSES:
             raise HTTPException(409, f"Parameters may only change while the spec is being authored"
                                      f" ({', '.join(sorted(_EDITABLE_STATUSES))})")
+        if body.computed_kind is not None:
+            comps = await c.fetch(
+                "SELECT id, spec_id, computed_kind FROM qc_spec_parameters WHERE id = ANY($1::uuid[])",
+                [body.component_a_id, body.component_b_id])
+            by_id = {str(r["id"]): r for r in comps}
+            for label, cid in (("component_a_id", body.component_a_id),
+                               ("component_b_id", body.component_b_id)):
+                comp = by_id.get(cid)
+                if comp is None or str(comp["spec_id"]) != spec_id:
+                    raise HTTPException(422, f"{label} must reference a parameter of the same specification")
+                if comp["computed_kind"] is not None:
+                    raise HTTPException(422, f"{label} must reference a measured parameter, not a computed one")
+            if body.component_a_id == body.component_b_id:
+                raise HTTPException(422, "component_a_id and component_b_id must differ")
         row = await c.fetchrow(
             "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk,"
             " test_method, spec_type, lower_limit, upper_limit, unit, pharmacopoeia_ref,"
-            " test_location, sorting_order, created_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *",
+            " test_location, sorting_order, created_by, computed_kind, component_a_id, component_b_id)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *",
             user["org_id"], spec_id, body.test_name_en, body.test_name_mk, body.test_method,
             body.spec_type, body.lower_limit, body.upper_limit, body.unit, body.pharmacopoeia_ref,
-            body.test_location, body.sorting_order, user["id"])
+            body.test_location, body.sorting_order, user["id"],
+            body.computed_kind, body.component_a_id, body.component_b_id)
     return _param_out(dict(row))
 
 
@@ -514,7 +550,7 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
 # ════════════════════════════════════════════════════════════════════════════
 # QC LIMS U3 — certificates of analysis + test results (certification cluster)
 # ════════════════════════════════════════════════════════════════════════════
-_COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED")
+_COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED")
 _CERT_TYPES = ("ICOA", "ECOA", "COQ", "WATER", "OTHER")
 # CoA lifecycle: author → second-person review → QP approve → release.
 _COA_TRANSITIONS = {
@@ -522,6 +558,9 @@ _COA_TRANSITIONS = {
     "REVIEWED": {"APPROVED", "DRAFT"},   # kick back to DRAFT on review findings
     "APPROVED": {"RELEASED"},
     "RELEASED": set(),
+    # Terminal. Reached ONLY via the revise flow (releasing a revision flips
+    # its origin RELEASED→SUPERSEDED); never a direct PATCH target.
+    "SUPERSEDED": set(),
 }
 # Approve + release the certificate — Qualified-Person decisions (Annex 16).
 _COA_QP_TARGETS = {"APPROVED", "RELEASED"}
@@ -576,6 +615,8 @@ def _coa_out(r: dict) -> dict:
         "approver_id": str(r["approver_id"]) if r["approver_id"] else None,
         "coq_document_id": r["coq_document_id"],
         "coq_generated_at": r["coq_generated_at"].isoformat() if r["coq_generated_at"] else None,
+        "supersedes_id": str(r["supersedes_id"]) if r.get("supersedes_id") else None,
+        "revision_reason": r.get("revision_reason"),
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -681,12 +722,18 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
         # parameter's limits (the spec is the single source of truth).
         if body.parameter_id:
             p = await c.fetchrow(
-                "SELECT spec_id, lower_limit, upper_limit, unit FROM qc_spec_parameters WHERE id=$1",
+                "SELECT spec_id, lower_limit, upper_limit, unit, computed_kind"
+                " FROM qc_spec_parameters WHERE id=$1",
                 body.parameter_id)
             if p is None:
                 raise HTTPException(422, "Unknown spec parameter")
             if coa["specification_id"] is not None and p["spec_id"] != coa["specification_id"]:
                 raise HTTPException(422, "Parameter does not belong to this certificate's specification")
+            # Ph. Eur. 3028: a derived total is COMPUTED by the engine at COQ
+            # time from its component results — transcribing one is forbidden.
+            if p["computed_kind"] is not None:
+                raise HTTPException(422, "This parameter is computed (Ph. Eur. 3028 derived total)"
+                                         " — enter its component results instead")
             # Snapshot EACH side independently: a caller who supplies only one
             # limit must still inherit the spec's other bound, or a partial
             # override would silently disable it (an over-limit value passing as
@@ -727,7 +774,8 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
     if "decision" in patch and patch["decision"] is not None and patch["decision"] not in ("PASS", "FAIL"):
         raise HTTPException(422, "decision must be PASS or FAIL")
     async with rls(user) as c:
-        cur = await c.fetchrow("SELECT status, analyst_id FROM qc_certificates WHERE id=$1", coa_id)
+        cur = await c.fetchrow(
+            "SELECT status, analyst_id, supersedes_id FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
         extra_sql, extra_args = [], []
@@ -735,6 +783,9 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             target = patch["status"]
             if target not in _COA_STATUSES:
                 raise HTTPException(422, "Unknown status")
+            if target == "SUPERSEDED":
+                # only the revise flow retires a certificate (QCSOP 012 §6.7)
+                raise HTTPException(409, "SUPERSEDED is set by releasing a revision, not directly")
             if target not in _COA_TRANSITIONS.get(cur["status"], set()):
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
             if target in _COA_QP_TARGETS and user["role"] not in _QP_ROLES:
@@ -772,6 +823,62 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
         row = await c.fetchrow(
             f"UPDATE qc_certificates SET {', '.join(fields)}, updated_at=now()"
             f" WHERE id=${len(args)} RETURNING *", *args)
+        # Releasing a revision retires its origin: RELEASED → SUPERSEDED in the
+        # same transaction, so the register never shows two live certificates
+        # for the same correction chain (QCSOP 012 §6.7). Status-guarded so a
+        # replayed release can't touch an already-superseded origin.
+        if patch.get("status") == "RELEASED" and cur["supersedes_id"]:
+            await c.execute(
+                "UPDATE qc_certificates SET status='SUPERSEDED', updated_by=$1, updated_at=now()"
+                " WHERE id=$2 AND status='RELEASED'", user["id"], cur["supersedes_id"])
+    return _coa_out(dict(row))
+
+
+class ReviseIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=2000)
+
+
+@router.post("/certificates/{coa_id}/revise", status_code=201)
+async def revise_certificate(coa_id: str, body: ReviseIn,
+                             user: dict = Depends(require_role(*_WRITERS))):
+    """QCSOP 012 §6.7: an approved certificate is immutable — a correction is a
+    NEW certificate with a NEW number, carrying "Supersedes [n] — reason".
+    The revision starts as a DRAFT copy (results included, so the compiler
+    corrects from the current state); the original stays RELEASED until the
+    revision is itself RELEASED, at which point it flips to SUPERSEDED."""
+    _uuid_or_404(coa_id, "Certificate")
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
+        if cur is None:
+            raise HTTPException(404, "Certificate not found")
+        if cur["status"] != "RELEASED":
+            raise HTTPException(409, f"Only a RELEASED certificate is revised — this one is"
+                                     f" {cur['status']} (edit or re-review it directly)")
+        open_rev = await c.fetchval(
+            "SELECT coa_number FROM qc_certificates WHERE supersedes_id=$1"
+            " AND status <> 'SUPERSEDED' LIMIT 1", coa_id)
+        if open_rev:
+            raise HTTPException(409, f"A revision already exists ({open_rev})")
+        row = await c.fetchrow(
+            "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id,"
+            " sample_id, cert_type, report_date, source_lab, notes, analyst_id,"
+            " supersedes_id, revision_reason, created_by, updated_by)"
+            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$9,$9) RETURNING *",
+            user["org_id"], cur["batch_id"], cur["specification_id"], cur["sample_id"],
+            cur["cert_type"], cur["report_date"], cur["source_lab"], cur["notes"],
+            user["id"], coa_id, body.reason)
+        # carry the result set forward so the correction edits the real state
+        await c.execute(
+            "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
+            " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
+            " result_date, source_document_code, source_document_date, source_institution,"
+            " created_by)"
+            " SELECT org_id, $1, parameter_id, test_name, result_value, result_numeric,"
+            " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date,"
+            " source_document_code, source_document_date, source_institution, $2"
+            " FROM qc_results WHERE coa_id=$3", row["id"], user["id"], coa_id)
     return _coa_out(dict(row))
 
 
@@ -877,8 +984,33 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", coa["specification_id"])
         results = await c.fetch(
             "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+    results = [dict(r) for r in results]
     if not results:
         raise HTTPException(409, "The certificate has no results to certify")
+    # Ph. Eur. 3028 derived totals: a computed parameter's value is derived HERE
+    # from its two component results (total = neutral + 0.877 × acid) — never
+    # transcribed. The synthetic row joins the same comply/completeness gates
+    # below and renders on the COQ marked as computed. A missing component
+    # simply leaves the total uncovered, so the completeness gate names it.
+    by_param = {str(r["parameter_id"]): r for r in results if r["parameter_id"]}
+    for p in params:
+        if not p["computed_kind"] or str(p["id"]) in by_param:
+            continue
+        ra = by_param.get(str(p["component_a_id"])) if p["component_a_id"] else None
+        rb = by_param.get(str(p["component_b_id"])) if p["component_b_id"] else None
+        if not (ra and rb and ra["result_numeric"] is not None and rb["result_numeric"] is not None):
+            continue
+        val = round(float(ra["result_numeric"]) + _ACID_FACTOR * float(rb["result_numeric"]), 2)
+        lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
+        hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
+        complies, _st = _evaluate(val, lo, hi)
+        results.append({
+            "parameter_id": p["id"], "test_name": p["test_name_en"] or p["test_name_mk"],
+            "result_value": None, "result_numeric": val, "unit": p["unit"],
+            "lower_limit": lo, "upper_limit": hi, "complies": complies,
+            "source_document_code": "Пресметано / Computed — Ph. Eur. 3028",
+            "source_institution": None,
+        })
     # GxP data gate: never issue a conformant COQ over a FAIL or an unmeasured
     # (complies is None → 'unknown') result.
     unmet = [r for r in results if r["complies"] is not True]
@@ -897,8 +1029,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             409, f"{len(missing)} specification parameter(s) have no result ({names}"
                  f"{'…' if len(missing) > 5 else ''}) — batch is not fully tested")
     params_by_id = {str(p["id"]): dict(p) for p in params}
-    md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id,
-                       [dict(r) for r in results])
+    md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id, results)
     # DocEngine build (house-style PASS gate). A pp_verify FAIL surfaces as 422.
     build = (await docengine.de_forward(
         "POST", "/build",

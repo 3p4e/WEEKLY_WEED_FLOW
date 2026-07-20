@@ -111,6 +111,15 @@
                    test_method: mk('qcp-method').trim() || null, unit: mk('qcp-unit').trim() || null,
                    lower_limit: num('qcp-lo'), upper_limit: num('qcp-hi'),
                    pharmacopoeia_ref: mk('qcp-ref').trim() || null };
+    // Ph. Eur. 3028 derived total: computed from two measured components
+    // (a = neutral form, b = acid form) — the engine derives a + 0.877·b at
+    // COQ time; a computed parameter is never transcribed.
+    const ck = mk('qcp-computed');
+    if (ck) {
+      body.computed_kind = ck;
+      body.component_a_id = mk('qcp-comp-a') || null;
+      body.component_b_id = mk('qcp-comp-b') || null;
+    }
     try {
       await GF.API.qcAddSpecParam(id, body);
       GF.WWF._qcs.detail = await GF.API.qcSpec(id);
@@ -125,17 +134,32 @@
 
   const paramRows = (d) => {
     const editable = ['INITIATED', 'DRAFT', 'QC_REVIEW'].includes(d.spec.status);
+    const computedNote = (p) => !p.computed_kind ? '' :
+      `<div class="ana-note">Σ ${p.computed_kind === 'total_thc'
+        ? AL('Total THC — computed (Ph. Eur. 3028)', 'Вкупен ТХЦ — пресметано (Ph. Eur. 3028)')
+        : AL('Total CBD — computed (Ph. Eur. 3028)', 'Вкупен ЦБД — пресметано (Ph. Eur. 3028)')}</div>`;
     const rows = (d.parameters || []).map(p => `
       <tr>
-        <td>${GF.esc(p.test_name_en)}${p.test_name_mk ? `<div class="ana-note">${GF.esc(p.test_name_mk)}</div>` : ''}</td>
+        <td>${GF.esc(p.test_name_en)}${p.test_name_mk ? `<div class="ana-note">${GF.esc(p.test_name_mk)}</div>` : ''}${computedNote(p)}</td>
         <td>${GF.esc(p.test_method || '—')}</td>
         <td class="mono">${p.lower_limit != null ? GF.esc(String(p.lower_limit)) : '—'} … ${p.upper_limit != null ? GF.esc(String(p.upper_limit)) : '—'} ${GF.esc(p.unit || '')}</td>
         <td>${GF.esc(p.pharmacopoeia_ref || '—')}</td>
         ${editable && canWrite() ? `<td><button class="btn btn-sm" onclick="GF.WWF.qcSpecDelParam('${d.spec.id}','${p.id}')">✕</button></td>` : '<td></td>'}
       </tr>`).join('');
+    // component pickers for a computed total — only measured params qualify
+    const comps = (d.parameters || []).filter(p => !p.computed_kind);
+    const compOpts = (lbl) => `<option value="">${lbl}</option>` +
+      comps.map(p => `<option value="${p.id}">${GF.esc(p.test_name_en)}</option>`).join('');
     const addRow = (editable && canWrite()) ? `
       <tr class="qcp-add">
-        <td><input id="qcp-en" placeholder="${AL('Test (EN)', 'Тест (АНГ)')}"><input id="qcp-mk" placeholder="${AL('Test (MK)', 'Тест (МК)')}"></td>
+        <td><input id="qcp-en" placeholder="${AL('Test (EN)', 'Тест (АНГ)')}"><input id="qcp-mk" placeholder="${AL('Test (MK)', 'Тест (МК)')}">
+          <select id="qcp-computed" style="margin-top:4px">
+            <option value="">${AL('Measured', 'Мерено')}</option>
+            <option value="total_thc">${AL('Computed: total THC', 'Пресметано: вкупен ТХЦ')}</option>
+            <option value="total_cbd">${AL('Computed: total CBD', 'Пресметано: вкупен ЦБД')}</option>
+          </select>
+          ${comps.length ? `<select id="qcp-comp-a">${compOpts(AL('Component a (neutral)…', 'Компонента а (неутрална)…'))}</select>
+          <select id="qcp-comp-b">${compOpts(AL('Component b (acid)…', 'Компонента б (киселинска)…'))}</select>` : ''}</td>
         <td><input id="qcp-method" placeholder="${AL('Method', 'Метод')}"></td>
         <td><input id="qcp-lo" placeholder="${AL('min', 'мин')}" style="width:60px"> <input id="qcp-hi" placeholder="${AL('max', 'макс')}" style="width:60px"> <input id="qcp-unit" placeholder="${AL('unit', 'ед')}" style="width:56px"></td>
         <td><input id="qcp-ref" placeholder="Ph.Eur."></td>
