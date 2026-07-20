@@ -57,10 +57,12 @@ Priority order; SOP citations are the binding source.
 3. **Derived-value computation** — total THC = Δ9-THC + 0.877×THCA (Ph.
    Eur. 3028), total CBD analogously, computed by the engine from acid/
    neutral components, never transcribed.
-4. **Laboratory entity** (Chapter 7) — accreditation body/number, ISO
-   17025 scope (flag out-of-scope results), quality-agreement ref, and
-   **per-lab locale** (the decimal-comma defence) replacing the free-text
-   `source_institution`.
+4. ~~**Laboratory entity** (Chapter 7)~~ ✅ **DONE (increment 3, mig 0030,
+   v64/v95)** — `qc_laboratories` master (accreditation body/number, ISO
+   17025 scope with out-of-scope result flagging, quality-agreement ref,
+   per-lab decimal separator + locale); `laboratory_id` on certificates +
+   eCoA docs; the free-text `source_institution`/`source_lab` kept alongside
+   (immutable-record safety), with the structured lab preferred on the COQ.
 5. **Batch genealogy chain** — variety → cultivation (AB…) → processing
    (P…) → packaging batch, with CoQ-level inheritance of ancestor-batch
    results (blending question = owner decision D2). Sharpens the old
