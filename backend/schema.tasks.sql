@@ -419,6 +419,9 @@ CREATE TABLE public.qc_coa_documents (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     laboratory_id uuid,
+    review_deadline date,
+    reviewed_at timestamp with time zone,
+    review_window_met boolean,
     CONSTRAINT qc_coa_documents_status_check CHECK ((status = ANY (ARRAY['UPLOADED'::text, 'EXTRACTED'::text, 'REVIEWED'::text, 'PROMOTED'::text, 'REJECTED'::text])))
 );
 

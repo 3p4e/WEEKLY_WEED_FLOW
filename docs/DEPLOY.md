@@ -1282,3 +1282,32 @@ applied to BOTH tasks DBs before the image flip. Deployed backend v64→**v65**
 (prod scheduler too) + frontend v95→**v96**. **Rollback** = revert tags to
 v64/v95 (+ `alembic -n tasks downgrade 0030` — all additive; image-only
 rollback also safe).
+
+## URS increment 5 (backend v66 / frontend v97 / migration 0032 → BOTH stacks, 2026-07-20)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 7 — the **5-working-day eCoA
+review clock** (QCSOP 012 §6.3.1), the same deadline-window control already
+built for the 24-hour RQS registration window:
+
+- **Migration 0032**: `qc_coa_documents` gains `review_deadline` (date),
+  `reviewed_at` (timestamptz), `review_window_met` (bool). At registration
+  the deadline is stamped 5 working days ahead — from any weekday exactly 7
+  calendar days (5 business days always cross one weekend; a weekend
+  registration rolls to Monday first, never starting the clock on a
+  non-working day). On the transition to REVIEWED, `reviewed_at` + a
+  `review_window_met = (CURRENT_DATE <= review_deadline)` verdict are
+  stamped.
+- `_ecoa_out` exposes the three fields plus a computed `review_overdue`
+  (still awaiting review AND the deadline has passed).
+- Frontend: the eCoA intake detail shows "Review by <date>" with an
+  in-window / late / overdue chip, and the document list flags overdue
+  items; SW v3.60.0.
+
+Gate: **409 backend tests green** (2 new: on-time review → window met + not
+overdue; back-dated deadline → overdue while pending, then window-not-met
+after a late review), migration 0032 up/down/base clean, schema.tasks.sql
+dump-diff EXACT vs alembic head, node --check. Migration applied to BOTH
+tasks DBs before the image flip. Deployed backend v65→**v66** (prod
+scheduler too) + frontend v96→**v97**. **Rollback** = revert tags to v65/v96
+(+ `alembic -n tasks downgrade 0031` — all additive; image-only rollback
+also safe).

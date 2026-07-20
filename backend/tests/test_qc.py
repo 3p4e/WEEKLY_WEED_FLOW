@@ -1108,6 +1108,46 @@ async def test_register_numbering_gaps(client, admin_headers):
     assert "shared across tenants" in g["note"]
 
 
+# ── URS increment 5 — 5-working-day eCoA review clock (§6.3.1) ──────────────
+async def test_ecoa_review_clock_met(client, admin_headers):
+    """Registration stamps a 5-working-day review deadline; a review inside the
+    window records review_window_met = True (and is not overdue)."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="CLOCK-MET")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-CLOCK-MET")
+    assert doc["review_deadline"] is not None and doc["review_window_met"] is None
+    assert doc["review_overdue"] is False
+    # 5 working days is at least 7 calendar days ahead of today
+    import datetime as _dt
+    assert _dt.date.fromisoformat(doc["review_deadline"]) >= _dt.date.today() + _dt.timedelta(days=7)
+    # walk to REVIEWED (on time) → window met, reviewed_at stamped
+    assert (await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "EXTRACTED"},
+                               headers=admin_headers)).status_code == 200
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "REVIEWED"},
+                           headers=admin_headers)
+    assert r.status_code == 200
+    got = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()["document"]
+    assert got["review_window_met"] is True and got["reviewed_at"] is not None
+    assert got["review_overdue"] is False
+
+
+async def test_ecoa_review_clock_missed_and_overdue(client, admin_headers):
+    """A document whose deadline has passed reads as overdue while awaiting
+    review; reviewing it after the deadline records review_window_met = False."""
+    from app.db import tasks_admin_pool
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="CLOCK-MISS")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-CLOCK-MISS")
+    # backdate the deadline to yesterday (as if 5 working days have elapsed)
+    await tasks_admin_pool().execute(
+        "UPDATE qc_coa_documents SET review_deadline = CURRENT_DATE - 1 WHERE id=$1", doc["id"])
+    got = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()["document"]
+    assert got["review_overdue"] is True and got["review_window_met"] is None
+    # reviewing now (after the deadline) records the missed window, not overdue
+    await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "EXTRACTED"}, headers=admin_headers)
+    await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "REVIEWED"}, headers=admin_headers)
+    got = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()["document"]
+    assert got["review_window_met"] is False and got["review_overdue"] is False
+
+
 # ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
 async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
     spec = await _spec(client, headers, material=material)

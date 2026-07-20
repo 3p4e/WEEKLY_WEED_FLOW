@@ -1860,6 +1860,15 @@ def _ecoa_out(r: dict) -> dict:
         "report_date": r["report_date"].isoformat() if r["report_date"] else None,
         "status": r["status"],
         "promoted_coa_id": str(r["promoted_coa_id"]) if r["promoted_coa_id"] else None,
+        # §6.3.1 review clock
+        "review_deadline": r["review_deadline"].isoformat() if r.get("review_deadline") else None,
+        "reviewed_at": r["reviewed_at"].isoformat() if r.get("reviewed_at") else None,
+        "review_window_met": r.get("review_window_met"),
+        # overdue = still awaiting review AND the deadline has passed (computed)
+        "review_overdue": bool(
+            r.get("review_deadline") and r.get("review_window_met") is None
+            and r["status"] in ("UPLOADED", "EXTRACTED")
+            and r["review_deadline"] < date.today()),
         "notes": r["notes"],
         "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
     }
@@ -1950,10 +1959,18 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
         row = await c.fetchrow(
             "INSERT INTO qc_coa_documents(org_id, doc_number, source_institution, laboratory_id,"
             " batch_id, material_code, specification_id, sample_id, original_filename, mime_type,"
-            " storage_ref, page_count, report_date, notes, uploaded_by, created_by, updated_by)"
+            " storage_ref, page_count, report_date, notes, review_deadline, uploaded_by,"
+            " created_by, updated_by)"
             " VALUES ($1, 'PP-ECOA-' || to_char(now(),'YYYY') || '-' ||"
             "         lpad(nextval('qc_ecoa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13,$14,$14,$14) RETURNING *",
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13,"
+            # QCSOP 012 §6.3.1: 5 working days to review. From any weekday that
+            # is exactly 7 calendar days (5 business days always cross one
+            # weekend); a weekend registration rolls to Monday first (lenient —
+            # the clock never starts on a non-working day).
+            "         (CURRENT_DATE + CASE extract(isodow FROM CURRENT_DATE)::int"
+            "            WHEN 6 THEN 2 WHEN 7 THEN 1 ELSE 0 END + 7)::date,"
+            "         $14,$14,$14) RETURNING *",
             user["org_id"], body.source_institution, body.laboratory_id, body.batch_id,
             body.material_code, body.specification_id, body.sample_id, body.original_filename,
             body.mime_type, body.storage_ref, body.page_count, body.report_date, body.notes,
@@ -1980,6 +1997,7 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             # certificate — rebinding its spec/sample/metadata afterwards would
             # break the provenance the verify loop reconciles against.
             raise HTTPException(409, f"Document is {cur['status']} — locked")
+        review_stamp = False
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
             if target not in _DOC_STATUSES:
@@ -1990,6 +2008,7 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
                 raise HTTPException(409, "Use POST /coa-documents/{id}/promote to promote")
             if target not in _DOC_TRANSITIONS.get(cur["status"], set()):
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+            review_stamp = (target == "REVIEWED")
         if body.specification_id:
             if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
                 raise HTTPException(422, "Unknown specification")
@@ -2003,6 +2022,11 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
                 args.append(val); fields.append(f"{col}=${len(args)}::date")
             else:
                 args.append(val); fields.append(f"{col}=${len(args)}")
+        # §6.3.1: stamp the review timestamp + whether it landed inside the
+        # 5-working-day window (met iff reviewed on/before the deadline).
+        if review_stamp:
+            fields.append("reviewed_at=now()")
+            fields.append("review_window_met=(CURRENT_DATE <= review_deadline)")
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

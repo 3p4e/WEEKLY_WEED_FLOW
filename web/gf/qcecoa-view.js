@@ -283,6 +283,10 @@
         <span>${AL('Source lab', 'Изворна лаб.')}</span><b>${GF.esc(doc.source_institution || '—')}</b>
         <span>${AL('Status', 'Статус')}</span><b>${dChip(doc.status)}</b>
         ${doc.material_code ? `<span>${AL('Material', 'Материјал')}</span><b>${GF.esc(doc.material_code)}</b>` : ''}
+        ${doc.review_deadline ? `<span>${AL('Review by', 'Прегледај до')}</span><b class="mono">${GF.esc(doc.review_deadline)}${
+            doc.review_overdue ? ` <span class="chip-opt" style="border-color:var(--red);color:var(--red)">${AL('overdue', 'задоцнето')}</span>`
+            : doc.review_window_met === true ? ` <span class="chip-opt" style="border-color:var(--green);color:var(--green)">${AL('in window', 'во рок')}</span>`
+            : doc.review_window_met === false ? ` <span class="chip-opt" style="border-color:var(--amber);color:var(--amber)">${AL('late', 'доцна')}</span>` : ''}</b>` : ''}
         ${doc.promoted_coa_id ? `<span>${AL('Certificate', 'Сертификат')}</span><b><a href="#" onclick="GF.setView&&GF.setView('qccoa');return false">${AL('promoted', 'промовиран')}</a></b>` : ''}
       </div>
       <table class="qcp-table" style="margin-top:10px"><thead><tr>
@@ -362,6 +366,7 @@
       <div class="qms-row ${st.sel === d.id ? 'on' : ''}" onclick="GF.WWF.qcEcoaPick('${d.id}')">
         <span class="mono qms-code">${GF.esc(d.doc_number)}</span>
         <span class="qms-title">${GF.esc(d.batch_id)} <span class="ana-note">${GF.esc(d.source_institution || '')}</span></span>
+        ${d.review_overdue ? `<span class="chip-opt" style="border-color:var(--red);color:var(--red)">${AL('review overdue', 'преглед задоцнет')}</span>` : ''}
         ${dChip(d.status)}
       </div>
       ${st.sel === d.id ? (st.detail ? detail(st.detail) : (st.detailError
