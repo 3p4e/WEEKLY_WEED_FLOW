@@ -19,7 +19,7 @@
 
 (function () {
   GF.WWF._qccoa = { coas: null, sel: null, detail: null, detailError: null, specParams: null,
-                    specs: null, samples: null, q: '', status: '',
+                    specs: null, samples: null, labs: null, q: '', status: '',
                     loading: false, error: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
@@ -69,6 +69,7 @@
       // create-form pickers (best-effort; a failure here shouldn't blank the page)
       if (st.specs === null) st.specs = await GF.API.qcSpecs({}).catch(() => []);
       if (st.samples === null) st.samples = await GF.API.qcSamples({}).catch(() => []);
+      if (st.labs === null) st.labs = await GF.API.qcLabs({ status: 'ACTIVE' }).catch(() => []);
     } catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'qccoa') GF.render.all();
@@ -160,6 +161,7 @@
     const body = { batch_id, specification_id, cert_type: mk('qco-type') || 'ICOA' };
     const smp = mk('qco-sample'); if (smp) body.sample_id = smp;
     const lab = mk('qco-lab').trim(); if (lab) body.source_lab = lab;
+    const labid = mk('qco-labid'); if (labid) body.laboratory_id = labid;
     try {
       const coa = await GF.API.qcCreateCoa(body);
       GF.toast(coa.coa_number + ' ' + AL('created', 'креирано'));
@@ -192,7 +194,7 @@
     const editable = d.coa.status === 'DRAFT';
     const rows = (d.results || []).map(r => `
       <tr>
-        <td>${GF.esc(r.test_name)}</td>
+        <td>${GF.esc(r.test_name)}${r.in_scope === false ? ` <span class="chip-opt" title="${AL('Method outside the lab ISO 17025 scope', 'Метод надвор од ISO 17025 опсегот')}" style="border-color:var(--amber);color:var(--amber)">${AL('out of scope', 'вон опсег')}</span>` : ''}</td>
         <td class="mono">${r.result_value != null ? GF.esc(r.result_value) : (r.result_numeric != null ? GF.esc(String(r.result_numeric)) : '—')} ${GF.esc(r.unit || '')}</td>
         <td class="mono">${r.lower_limit != null ? GF.esc(String(r.lower_limit)) : '—'} … ${r.upper_limit != null ? GF.esc(String(r.upper_limit)) : '—'}</td>
         <td>${compliesChip(r.complies)}</td>
@@ -232,7 +234,7 @@
         <span>${AL('Type', 'Тип')}</span><b>${GF.esc(c.cert_type)}</b>
         <span>${AL('Status', 'Статус')}</span><b>${stChip(c.status)}</b>
         <span>${AL('Decision', 'Одлука')}</span><b>${decChip(c.decision)}</b>
-        ${c.source_lab ? `<span>${AL('Lab', 'Лабораторија')}</span><b>${GF.esc(c.source_lab)}</b>` : ''}
+        ${d.laboratory ? `<span>${AL('Laboratory', 'Лабораторија')}</span><b>${GF.esc(d.laboratory.name)}${d.laboratory.accreditation_number ? ` <span class="ana-note">${GF.esc(d.laboratory.accreditation_number)}</span>` : ''}</b>` : (c.source_lab ? `<span>${AL('Lab', 'Лабораторија')}</span><b>${GF.esc(c.source_lab)}</b>` : '')}
         ${c.supersedes_id ? `<span>${AL('Supersedes', 'Заменува')}</span><b class="mono">${GF.esc(coaNumById(c.supersedes_id))}</b>` : ''}
         ${c.revision_reason ? `<span>${AL('Revision reason', 'Причина за ревизија')}</span><b>${GF.esc(c.revision_reason)}</b>` : ''}
       </div>
@@ -293,6 +295,8 @@
       `<option value="${s.id}">${GF.esc(s.spec_id)} · ${GF.esc(s.material_code)}</option>`).join('');
     const sampleOpts = (st.samples || []).map(s =>
       `<option value="${s.id}">${GF.esc(s.sample_id)} · ${GF.esc(s.batch_id)}</option>`).join('');
+    const labOpts = (st.labs || []).map(l =>
+      `<option value="${l.id}">${GF.esc(l.name)}${l.accreditation_body ? ' · ' + GF.esc(l.accreditation_body) : ''}</option>`).join('');
     const create = canWrite() ? `
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('New certificate', 'Нов сертификат')}</div>
@@ -301,7 +305,8 @@
           <select id="qco-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
           <select id="qco-type">${CERT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
           <select id="qco-sample"><option value="">${AL('Link sample (optional)', 'Поврзи примерок (опц.)')}</option>${sampleOpts}</select>
-          <input id="qco-lab" placeholder="${AL('Source lab (optional)', 'Лабораторија (опц.)')}">
+          <select id="qco-labid"><option value="">${AL('Accredited lab (optional)', 'Акред. лабораторија (опц.)')}</option>${labOpts}</select>
+          <input id="qco-lab" placeholder="${AL('Source lab text (optional)', 'Лабораторија текст (опц.)')}">
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';

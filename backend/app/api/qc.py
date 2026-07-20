@@ -548,6 +548,170 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# Laboratories — accredited external labs (master data, URS Chapter 7)
+# ════════════════════════════════════════════════════════════════════════════
+# The structured replacement for the free-text source_institution/source_lab
+# provenance strings: accreditation body/number, ISO 17025 scope (so a result
+# run on a method the lab is NOT accredited for can be flagged), the quality-
+# agreement reference, and the lab's decimal separator (the decimal-comma
+# defence — a German lab writes 1,5 for 1.5). Reference master data, so the
+# lifecycle is the simple ACTIVE/INACTIVE pair.
+_LAB_STATUSES = ("ACTIVE", "INACTIVE")
+_DECIMAL_SEPS = (".", ",")
+
+
+class LabIn(BaseModel):
+    name: str = Field(max_length=300)
+    accreditation_body: str | None = Field(default=None, max_length=200)
+    accreditation_number: str | None = Field(default=None, max_length=200)
+    # ISO 17025 accredited scope — the method / test tokens the lab is
+    # accredited to run. A result whose method is absent is flagged out of
+    # scope (advisory; never fabricated, never auto-failed).
+    iso17025_scope: list[str] = Field(default_factory=list, max_length=200)
+    quality_agreement_ref: str | None = Field(default=None, max_length=200)
+    locale: str | None = Field(default=None, max_length=20)
+    decimal_separator: str = "."
+    country: str | None = Field(default=None, max_length=120)
+    contact: str | None = Field(default=None, max_length=400)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class LabPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=300)
+    accreditation_body: str | None = Field(default=None, max_length=200)
+    accreditation_number: str | None = Field(default=None, max_length=200)
+    iso17025_scope: list[str] | None = Field(default=None, max_length=200)
+    quality_agreement_ref: str | None = Field(default=None, max_length=200)
+    locale: str | None = Field(default=None, max_length=20)
+    decimal_separator: str | None = None
+    country: str | None = Field(default=None, max_length=120)
+    contact: str | None = Field(default=None, max_length=400)
+    status: str | None = None                 # ACTIVE | INACTIVE
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+def _lab_out(r: dict) -> dict:
+    scope = r["iso17025_scope"]
+    if isinstance(scope, str):
+        import json as _json
+        scope = _json.loads(scope or "[]")
+    return {
+        "id": str(r["id"]), "lab_code": r["lab_code"], "name": r["name"],
+        "accreditation_body": r["accreditation_body"],
+        "accreditation_number": r["accreditation_number"],
+        "iso17025_scope": scope or [],
+        "quality_agreement_ref": r["quality_agreement_ref"],
+        "locale": r["locale"], "decimal_separator": r["decimal_separator"],
+        "country": r["country"], "contact": r["contact"],
+        "status": r["status"], "notes": r["notes"],
+        "updated_at": r["updated_at"].isoformat(),
+    }
+
+
+def _lab_scope_set(scope) -> set:
+    """Normalised set of the lab's accredited method/test tokens (empty when the
+    lab declares no scope — then nothing is flagged, since we cannot judge)."""
+    if isinstance(scope, str):
+        import json as _json
+        scope = _json.loads(scope or "[]")
+    return {_norm(s) for s in (scope or []) if _norm(s)}
+
+
+def _norm(s) -> str:
+    return " ".join((s or "").split()).lower()
+
+
+def _result_in_scope(scope_set: set, method, test_name) -> bool:
+    """A result is in the lab's ISO 17025 scope when the lab declares no scope
+    (unjudgeable → not flagged) OR its method / test name is an accredited
+    token. Advisory only — an out-of-scope result is a quality signal, never an
+    automatic OOS, and is never fabricated away."""
+    if not scope_set:
+        return True
+    return _norm(method) in scope_set or _norm(test_name) in scope_set
+
+
+async def _resolve_lab(c, org_id, lab_id):
+    """422 unless the lab exists in this org; returns its row (or None if no id)."""
+    if not lab_id:
+        return None
+    lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1", lab_id)
+    if lab is None:
+        raise HTTPException(422, "Unknown laboratory")
+    return lab
+
+
+@router.get("/laboratories")
+async def list_labs(status: str | None = None, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    clauses, args = [], []
+    if status:
+        args.append(status); clauses.append(f"status=${len(args)}")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    async with rls(user) as c:
+        rows = await c.fetch(f"SELECT * FROM qc_laboratories{where} ORDER BY name", *args)
+    return [_lab_out(dict(r)) for r in rows]
+
+
+@router.get("/laboratories/{lab_id}")
+async def get_lab(lab_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(lab_id, "Laboratory")
+    async with rls(user) as c:
+        lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1", lab_id)
+    if lab is None:
+        raise HTTPException(404, "Laboratory not found")
+    return _lab_out(dict(lab))
+
+
+@router.post("/laboratories", status_code=201)
+async def create_lab(body: LabIn, user: dict = Depends(require_role(*_WRITERS))):
+    if body.decimal_separator not in _DECIMAL_SEPS:
+        raise HTTPException(422, "decimal_separator must be '.' or ','")
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "INSERT INTO qc_laboratories(org_id, lab_code, name, accreditation_body,"
+            " accreditation_number, iso17025_scope, quality_agreement_ref, locale,"
+            " decimal_separator, country, contact, notes, created_by, updated_by)"
+            " VALUES ($1, 'PP-LAB-' || to_char(now(),'YYYY') || '-' ||"
+            "         lpad(nextval('qc_lab_id_seq')::text, 4, '0'),"
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *",
+            user["org_id"], body.name, body.accreditation_body, body.accreditation_number,
+            [s for s in body.iso17025_scope if s], body.quality_agreement_ref, body.locale,
+            body.decimal_separator, body.country, body.contact, body.notes, user["id"])
+    return _lab_out(dict(row))
+
+
+@router.patch("/laboratories/{lab_id}")
+async def update_lab(lab_id: str, body: LabPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(lab_id, "Laboratory")
+    patch = body.model_dump(exclude_unset=True)
+    if patch.get("status") is not None and patch["status"] not in _LAB_STATUSES:
+        raise HTTPException(422, f"status must be one of: {', '.join(_LAB_STATUSES)}")
+    if patch.get("decimal_separator") is not None and patch["decimal_separator"] not in _DECIMAL_SEPS:
+        raise HTTPException(422, "decimal_separator must be '.' or ','")
+    if "iso17025_scope" in patch and patch["iso17025_scope"] is not None:
+        patch["iso17025_scope"] = [s for s in patch["iso17025_scope"] if s]
+    # name is NOT nullable; everything else may be cleared to null.
+    _NULLABLE = {"accreditation_body", "accreditation_number", "quality_agreement_ref",
+                 "locale", "country", "contact", "notes"}
+    sets, args = [], []
+    for col, val in patch.items():
+        if val is None and col not in _NULLABLE:
+            continue
+        args.append(val); sets.append(f"{col}=${len(args)}")
+    if not sets:
+        raise HTTPException(422, "No fields to update")
+    args.append(user["id"]); sets.append(f"updated_by=${len(args)}")
+    sets.append("updated_at=now()")
+    args.append(lab_id)
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            f"UPDATE qc_laboratories SET {', '.join(sets)} WHERE id=${len(args)} RETURNING *", *args)
+    if row is None:
+        raise HTTPException(404, "Laboratory not found")
+    return _lab_out(dict(row))
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # QC LIMS U3 — certificates of analysis + test results (certification cluster)
 # ════════════════════════════════════════════════════════════════════════════
 _COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED")
@@ -575,11 +739,15 @@ class CoaIn(BaseModel):
     cert_type: str = "ICOA"
     report_date: date | None = None
     source_lab: str | None = Field(default=None, max_length=200)
+    # The accredited laboratory that issued the source data (URS Chapter 7);
+    # the structured replacement for the free-text source_lab, kept alongside it.
+    laboratory_id: str | None = None
     notes: str | None = Field(default=None, max_length=4000)
 
 
 class CoaPatch(BaseModel):
     source_lab: str | None = Field(default=None, max_length=200)
+    laboratory_id: str | None = None
     report_date: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
     status: str | None = None            # guarded lifecycle transition
@@ -610,6 +778,7 @@ def _coa_out(r: dict) -> dict:
         "report_date": r["report_date"].isoformat() if r["report_date"] else None,
         "status": r["status"], "decision": r["decision"], "cert_type": r["cert_type"],
         "source_lab": r["source_lab"],
+        "laboratory_id": str(r["laboratory_id"]) if r.get("laboratory_id") else None,
         "analyst_id": str(r["analyst_id"]) if r["analyst_id"] else None,
         "reviewer_id": str(r["reviewer_id"]) if r["reviewer_id"] else None,
         "approver_id": str(r["approver_id"]) if r["approver_id"] else None,
@@ -672,7 +841,28 @@ async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
             raise HTTPException(404, "Certificate not found")
         results = await c.fetch(
             "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
-    return {"coa": _coa_out(dict(coa)), "results": [_result_out(dict(r)) for r in results]}
+        lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1",
+                               coa["laboratory_id"]) if coa["laboratory_id"] else None
+        # method per cited spec parameter, for the scope check below
+        pmethods = {}
+        pids = [r["parameter_id"] for r in results if r["parameter_id"]]
+        if pids:
+            prows = await c.fetch(
+                "SELECT id, test_method FROM qc_spec_parameters WHERE id = ANY($1::uuid[])", pids)
+            pmethods = {str(p["id"]): p["test_method"] for p in prows}
+    # ISO 17025 scope flag: when the issuing lab declares an accredited scope,
+    # mark each result whose method/test is not accredited (advisory, per URS
+    # Chapter 7 — surfaced for the reviewer, never an automatic OOS).
+    scope = _lab_scope_set(lab["iso17025_scope"]) if lab else set()
+    out_results = []
+    for r in results:
+        d = _result_out(dict(r))
+        method = pmethods.get(str(r["parameter_id"])) if r["parameter_id"] else None
+        d["in_scope"] = _result_in_scope(scope, method, r["test_name"]) if scope else None
+        out_results.append(d)
+    return {"coa": _coa_out(dict(coa)),
+            "laboratory": _lab_out(dict(lab)) if lab else None,
+            "results": out_results}
 
 
 @router.post("/certificates", status_code=201)
@@ -681,6 +871,7 @@ async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS)))
         raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
     _uuid_or_422(body.specification_id, "specification_id")
     _uuid_or_422(body.sample_id, "sample_id")
+    _uuid_or_422(body.laboratory_id, "laboratory_id")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id)
         if spec is None:
@@ -689,14 +880,16 @@ async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS)))
             s = await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id)
             if s is None:
                 raise HTTPException(422, "Unknown sample")
+        await _resolve_lab(c, user["org_id"], body.laboratory_id)
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
-            " cert_type, report_date, source_lab, notes, analyst_id, created_by, updated_by)"
+            " cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
+            " created_by, updated_by)"
             " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
             "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6::date,$7,$8,$9,$9,$9) RETURNING *",
+            "         $2,$3,$4,$5,$6::date,$7,$8,$9,$10,$10,$10) RETURNING *",
             user["org_id"], body.batch_id, body.specification_id, body.sample_id, body.cert_type,
-            body.report_date, body.source_lab, body.notes, user["id"])
+            body.report_date, body.source_lab, body.laboratory_id, body.notes, user["id"])
     return _coa_out(dict(row))
 
 
@@ -773,11 +966,15 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
     patch = body.model_dump(exclude_unset=True)
     if "decision" in patch and patch["decision"] is not None and patch["decision"] not in ("PASS", "FAIL"):
         raise HTTPException(422, "decision must be PASS or FAIL")
+    if patch.get("laboratory_id") is not None:
+        _uuid_or_422(patch["laboratory_id"], "laboratory_id")
     async with rls(user) as c:
         cur = await c.fetchrow(
             "SELECT status, analyst_id, supersedes_id FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
+        if patch.get("laboratory_id") is not None:
+            await _resolve_lab(c, user["org_id"], patch["laboratory_id"])
         extra_sql, extra_args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -805,7 +1002,7 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             if target == "APPROVED":
                 extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
         fields, args = [], []
-        _NULLABLE = {"source_lab", "report_date", "notes", "decision"}
+        _NULLABLE = {"source_lab", "laboratory_id", "report_date", "notes", "decision"}
         for col, val in patch.items():
             if val is None and col not in _NULLABLE:
                 continue
@@ -861,14 +1058,14 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
             raise HTTPException(409, f"A revision already exists ({open_rev})")
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id,"
-            " sample_id, cert_type, report_date, source_lab, notes, analyst_id,"
+            " sample_id, cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
             " supersedes_id, revision_reason, created_by, updated_by)"
             " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
             "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$9,$9) RETURNING *",
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$10,$10) RETURNING *",
             user["org_id"], cur["batch_id"], cur["specification_id"], cur["sample_id"],
-            cur["cert_type"], cur["report_date"], cur["source_lab"], cur["notes"],
-            user["id"], coa_id, body.reason)
+            cur["cert_type"], cur["report_date"], cur["source_lab"], cur["laboratory_id"],
+            cur["notes"], user["id"], coa_id, body.reason)
         # carry the result set forward so the correction edits the real state
         await c.execute(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
@@ -902,7 +1099,8 @@ def _coq_cell(s) -> str:
     return str(s).replace("|||", "/").replace("~~", "-").replace("|", "/")
 
 
-def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list) -> str:
+def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
+                  lab: dict | None = None, scope_note: str | None = None) -> str:
     """Assemble the Certificate of Quality as DocEngine bilingual Markdown
     (doctype: FORM → the annex renderer: navy banners, [[FORM:grid]] metadata,
     [[TABLE]] results). Every result line carries its source document. House
@@ -923,13 +1121,24 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list) -> s
     title = "# Сертификат за квалитет|Certificate of Quality\n\n"
     def frow(mk, en, val):
         return f"{mk}~~{en} ||| {c(val)}\n"
+    # Prefer the structured accredited laboratory (URS Chapter 7) over the
+    # free-text source_lab; show its accreditation so the certificate carries
+    # the lab's ISO 17025 credential, not just a name.
+    if lab:
+        lab_line = lab.get("name") or ""
+        accr = " / ".join(x for x in (lab.get("accreditation_body"),
+                                      lab.get("accreditation_number")) if x)
+        if accr:
+            lab_line = f"{lab_line} ({accr})"
+    else:
+        lab_line = coa.get("source_lab") or ""
     grid = ("[[FORM:grid]]\n"
             + frow("Број на сертификат", "Certificate number", coa["coa_number"])
             + frow("Серија", "Batch", coa["batch_id"])
             + frow("Материјал", "Material", material)
             + frow("Спецификација", "Specification", spec.get("spec_id"))
             + frow("Датум на извештај", "Report date", coa.get("report_date") or "")
-            + frow("Извор (лабораторија)", "Source lab", coa.get("source_lab") or "")
+            + frow("Извор (лабораторија)", "Source lab", lab_line)
             + frow("Одлука", "Disposition", f"{v_mk} / {v_en}")
             + "[[/FORM]]\n\n")
     tbl = ("[[TABLE:data]]\n"
@@ -950,8 +1159,9 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list) -> s
                 f"{c(limits)} ||| {c(val)} ||| {st} ||| {c(src)}\n")
     tbl += "[[/TABLE]]\n\n"
     conform = f"**{v_mk}** според одобрената спецификација.|||**{v_en}** against the approved specification.\n\n"
+    note = (f"_{scope_note}_\n\n") if scope_note else ""
     footer = "МК ГМП сертифицирано постројение|||MK GMP Certified Facility\n"
-    return head + title + grid + tbl + conform + footer
+    return head + title + grid + tbl + conform + note + footer
 
 
 @router.post("/certificates/{coa_id}/coq", status_code=201)
@@ -984,6 +1194,8 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", coa["specification_id"])
         results = await c.fetch(
             "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
+        lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1",
+                               coa["laboratory_id"]) if coa["laboratory_id"] else None
     results = [dict(r) for r in results]
     if not results:
         raise HTTPException(409, "The certificate has no results to certify")
@@ -1029,7 +1241,24 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             409, f"{len(missing)} specification parameter(s) have no result ({names}"
                  f"{'…' if len(missing) > 5 else ''}) — batch is not fully tested")
     params_by_id = {str(p["id"]): dict(p) for p in params}
-    md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id, results)
+    # ISO 17025 scope advisory (URS Chapter 7): a result whose method is outside
+    # the issuing lab's accredited scope is a quality signal for the reviewer.
+    # Non-blocking — it is surfaced as a COQ footnote and in the response, never
+    # an automatic OOS (that would fabricate a verdict the data doesn't support).
+    scope = _lab_scope_set(lab["iso17025_scope"]) if lab else set()
+    out_of_scope = []
+    if scope:
+        for r in results:
+            p = params_by_id.get(str(r.get("parameter_id"))) or {}
+            if not _result_in_scope(scope, p.get("test_method"), r.get("test_name")):
+                out_of_scope.append(r.get("test_name") or "?")
+    scope_note = None
+    if out_of_scope:
+        names = ", ".join(out_of_scope[:5])
+        scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
+                      f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
+    md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id, results,
+                       lab=dict(lab) if lab else None, scope_note=scope_note)
     # DocEngine build (house-style PASS gate). A pp_verify FAIL surfaces as 422.
     build = (await docengine.de_forward(
         "POST", "/build",
@@ -1054,7 +1283,8 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         except Exception:
             pass
     return {"coa_number": coa["coa_number"], "document_id": doc_id,
-            "verify": build.get("verify"), "bytes": build.get("bytes")}
+            "verify": build.get("verify"), "bytes": build.get("bytes"),
+            "out_of_scope": out_of_scope}
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1435,6 +1665,7 @@ def _norm_label(s: str | None) -> str:
 class CoaDocIn(BaseModel):
     batch_id: str = Field(max_length=200)
     source_institution: str | None = Field(default=None, max_length=200)
+    laboratory_id: str | None = None
     material_code: str | None = Field(default=None, max_length=120)
     specification_id: str | None = None
     sample_id: str | None = None
@@ -1448,6 +1679,7 @@ class CoaDocIn(BaseModel):
 
 class CoaDocPatch(BaseModel):
     source_institution: str | None = Field(default=None, max_length=200)
+    laboratory_id: str | None = None
     material_code: str | None = Field(default=None, max_length=120)
     specification_id: str | None = None
     sample_id: str | None = None
@@ -1492,7 +1724,9 @@ class PlaceholderPatch(BaseModel):
 def _ecoa_out(r: dict) -> dict:
     return {
         "id": str(r["id"]), "doc_number": r["doc_number"], "batch_id": r["batch_id"],
-        "source_institution": r["source_institution"], "material_code": r["material_code"],
+        "source_institution": r["source_institution"],
+        "laboratory_id": str(r["laboratory_id"]) if r.get("laboratory_id") else None,
+        "material_code": r["material_code"],
         "specification_id": str(r["specification_id"]) if r["specification_id"] else None,
         "sample_id": str(r["sample_id"]) if r["sample_id"] else None,
         "original_filename": r["original_filename"], "mime_type": r["mime_type"],
@@ -1578,6 +1812,7 @@ async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVA
 async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_422(body.specification_id, "specification_id")
     _uuid_or_422(body.sample_id, "sample_id")
+    _uuid_or_422(body.laboratory_id, "laboratory_id")
     async with rls(user) as c:
         if body.specification_id:
             if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
@@ -1585,16 +1820,18 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
         if body.sample_id:
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
                 raise HTTPException(422, "Unknown sample")
+        await _resolve_lab(c, user["org_id"], body.laboratory_id)
         row = await c.fetchrow(
-            "INSERT INTO qc_coa_documents(org_id, doc_number, source_institution, batch_id,"
-            " material_code, specification_id, sample_id, original_filename, mime_type,"
+            "INSERT INTO qc_coa_documents(org_id, doc_number, source_institution, laboratory_id,"
+            " batch_id, material_code, specification_id, sample_id, original_filename, mime_type,"
             " storage_ref, page_count, report_date, notes, uploaded_by, created_by, updated_by)"
             " VALUES ($1, 'PP-ECOA-' || to_char(now(),'YYYY') || '-' ||"
             "         lpad(nextval('qc_ecoa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$13,$13) RETURNING *",
-            user["org_id"], body.source_institution, body.batch_id, body.material_code,
-            body.specification_id, body.sample_id, body.original_filename, body.mime_type,
-            body.storage_ref, body.page_count, body.report_date, body.notes, user["id"])
+            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13,$14,$14,$14) RETURNING *",
+            user["org_id"], body.source_institution, body.laboratory_id, body.batch_id,
+            body.material_code, body.specification_id, body.sample_id, body.original_filename,
+            body.mime_type, body.storage_ref, body.page_count, body.report_date, body.notes,
+            user["id"])
     return _ecoa_out(dict(row))
 
 
@@ -1605,10 +1842,13 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
     patch = body.model_dump(exclude_unset=True)
     _uuid_or_422(patch.get("specification_id"), "specification_id")
     _uuid_or_422(patch.get("sample_id"), "sample_id")
+    _uuid_or_422(patch.get("laboratory_id"), "laboratory_id")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
         if cur is None:
             raise HTTPException(404, "eCoA document not found")
+        if patch.get("laboratory_id") is not None:
+            await _resolve_lab(c, user["org_id"], patch["laboratory_id"])
         if cur["status"] in ("PROMOTED", "REJECTED"):
             # A promoted document is the source-of-record for a minted
             # certificate — rebinding its spec/sample/metadata afterwards would
@@ -1628,8 +1868,8 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1", body.specification_id) is None:
                 raise HTTPException(422, "Unknown specification")
         fields, args = [], []
-        _NULLABLE = {"source_institution", "material_code", "specification_id", "sample_id",
-                     "report_date", "notes"}
+        _NULLABLE = {"source_institution", "laboratory_id", "material_code", "specification_id",
+                     "sample_id", "report_date", "notes"}
         for col, val in patch.items():
             if val is None and col not in _NULLABLE:
                 continue
@@ -1862,12 +2102,13 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             raise HTTPException(409, "No mapped results to promote — map the discovered fields first")
         coa = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
-            " cert_type, report_date, source_lab, notes, analyst_id, created_by, updated_by)"
+            " cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
+            " created_by, updated_by)"
             " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
             "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,'ECOA',$5::date,$6,$7,$8,$8,$8) RETURNING *",
+            "         $2,$3,$4,'ECOA',$5::date,$6,$7,$8,$9,$9,$9) RETURNING *",
             user["org_id"], doc["batch_id"], doc["specification_id"], doc["sample_id"],
-            doc["report_date"], doc["source_institution"],
+            doc["report_date"], doc["source_institution"], doc["laboratory_id"],
             f"Promoted from {doc['doc_number']}", user["id"])
         for m in mapped:
             _, st = _evaluate(m["numeric_value"], m["lower_limit"], m["upper_limit"])

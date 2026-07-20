@@ -1208,3 +1208,40 @@ revise 201 (PP-COA-2026-0032, DRAFT, results copied) → second revise
 Prod smoke: health 200, SW v3.57.0, qcReviseCoa served. **Rollback** =
 revert tags to v62/v93 (+ `alembic -n tasks downgrade 0028` — all
 additive, image-only rollback also safe).
+
+## URS increment 3 (backend v64 / frontend v95 / migration 0030 → BOTH stacks, 2026-07-20)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 4 — the **accredited laboratory
+entity** (Chapter 7), the structured replacement for the free-text
+`source_institution`/`source_lab` provenance strings:
+
+- **`qc_laboratories`** master table (migration 0030, `PP-LAB-YYYY-NNNN`,
+  ACTIVE/INACTIVE): name, accreditation body + number, **ISO 17025 scope**
+  (jsonb list of accredited method/test tokens), quality-agreement ref, and
+  the lab's **decimal separator** (the decimal-comma defence — a German lab
+  writes 1,5 for 1.5) + locale. Full CRUD + role gating (read = elevated,
+  write = QC_MGR/QP/execs/ADMIN).
+- **`laboratory_id`** added (nullable, ON DELETE SET NULL) to
+  `qc_certificates` and `qc_coa_documents`; wired through create/patch/
+  revise/promote (a promoted eCoA carries its lab onto the minted cert). The
+  free-text columns are KEPT — they carry transcribed provenance and a GxP
+  record is immutable.
+- **ISO 17025 scope flag**: a result whose method is outside the issuing
+  lab's accredited scope is flagged `in_scope: false` in the certificate
+  detail and listed in the COQ response `out_of_scope` + a bilingual COQ
+  footnote. Advisory only — never an automatic OOS, never fabricated away.
+  The COQ grid now shows the structured lab (name + accreditation) in place
+  of the free-text source_lab.
+- Frontend: new **QC Laboratories** registry (`qclab-view.js`, nav in the
+  QMS Studio zone), accredited-lab picker on the certificate create form,
+  laboratory + "out of scope" badge in the certificate detail; SW v3.58.0.
+
+Gate: **404 backend tests green** (5 new: lab CRUD + validation, role
+gating, cert↔lab link + detail resolution, COQ out-of-scope flag,
+eCoA-promote carries the lab), migration 0030 up/down/base clean,
+schema.tasks.sql regenerated + dump-diff EXACT vs alembic head, node
+--check. Migration applied to BOTH tasks DBs before the image flip.
+Deployed backend v63→**v64** (prod scheduler too) + frontend v94→**v95**.
+**Rollback** = revert tags to v63/v94 (+ `alembic -n tasks downgrade
+0029` — all additive; image-only rollback also safe since laboratory_id
+is nullable and unread by v63).

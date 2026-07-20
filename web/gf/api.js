@@ -118,6 +118,11 @@ GF.API = {
   qcPatchSpec(id, b)       { return this._req('PATCH', '/qc/specifications/' + id, b); },
   qcAddSpecParam(id, b)    { return this._req('POST', '/qc/specifications/' + id + '/parameters', b); },
   qcDeleteSpecParam(id, pid){ return this._req('DELETE', '/qc/specifications/' + id + '/parameters/' + pid); },
+  // QC LIMS — accredited laboratories (URS Chapter 7)
+  qcLabs(q)                { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/laboratories' + (u?'?'+u:'')); },
+  qcLab(id)                { return this._req('GET', '/qc/laboratories/' + id); },
+  qcCreateLab(b)           { return this._req('POST', '/qc/laboratories', b); },
+  qcPatchLab(id, b)        { return this._req('PATCH', '/qc/laboratories/' + id, b); },
   // QC LIMS — samples + sampling plans (U2)
   qcSamples(q)             { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/samples' + (u?'?'+u:'')); },
   qcSample(id)             { return this._req('GET', '/qc/samples/' + id); },

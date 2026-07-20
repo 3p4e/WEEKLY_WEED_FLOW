@@ -338,6 +338,7 @@ CREATE TABLE public.qc_certificates (
     coq_generated_at timestamp with time zone,
     supersedes_id uuid,
     revision_reason text,
+    laboratory_id uuid,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
     CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text])))
@@ -414,6 +415,7 @@ CREATE TABLE public.qc_coa_documents (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    laboratory_id uuid,
     CONSTRAINT qc_coa_documents_status_check CHECK ((status = ANY (ARRAY['UPLOADED'::text, 'EXTRACTED'::text, 'REVIEWED'::text, 'PROMOTED'::text, 'REJECTED'::text])))
 );
 
@@ -523,6 +525,49 @@ CREATE TABLE public.qc_field_placeholders (
 );
 
 ALTER TABLE ONLY public.qc_field_placeholders FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_lab_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.qc_lab_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: qc_laboratories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_laboratories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    lab_code text NOT NULL,
+    name text NOT NULL,
+    accreditation_body text,
+    accreditation_number text,
+    iso17025_scope jsonb DEFAULT '[]'::jsonb NOT NULL,
+    quality_agreement_ref text,
+    locale text,
+    decimal_separator text DEFAULT '.'::text NOT NULL,
+    country text,
+    contact text,
+    status text DEFAULT 'ACTIVE'::text NOT NULL,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_laboratories_decimal_sep_check CHECK ((decimal_separator = ANY (ARRAY['.'::text, ','::text]))),
+    CONSTRAINT qc_laboratories_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text])))
+);
+
+ALTER TABLE ONLY public.qc_laboratories FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1430,6 +1475,22 @@ ALTER TABLE ONLY public.qc_field_placeholders
 
 
 --
+-- Name: qc_laboratories qc_laboratories_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_laboratories
+    ADD CONSTRAINT qc_laboratories_code_key UNIQUE (org_id, lab_code);
+
+
+--
+-- Name: qc_laboratories qc_laboratories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_laboratories
+    ADD CONSTRAINT qc_laboratories_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_oos_notifications qc_oos_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1828,6 +1889,13 @@ CREATE INDEX qc_field_placeholders_status_idx ON public.qc_field_placeholders US
 
 
 --
+-- Name: qc_laboratories_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_laboratories_status_idx ON public.qc_laboratories USING btree (org_id, status);
+
+
+--
 -- Name: qc_oos_notifications_oos_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2136,6 +2204,13 @@ CREATE TRIGGER audit_qc_field_placeholders AFTER INSERT OR DELETE OR UPDATE ON p
 
 
 --
+-- Name: qc_laboratories audit_qc_laboratories; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_laboratories AFTER INSERT OR DELETE OR UPDATE ON public.qc_laboratories FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_oos_notifications audit_qc_oos_notifications; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2333,6 +2408,14 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: qc_certificates qc_certificates_laboratory_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_certificates
+    ADD CONSTRAINT qc_certificates_laboratory_fkey FOREIGN KEY (laboratory_id) REFERENCES public.qc_laboratories(id) ON DELETE SET NULL;
+
+
+--
 -- Name: qc_certificates qc_certificates_sample_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2378,6 +2461,14 @@ ALTER TABLE ONLY public.qc_chain_of_custody
 
 ALTER TABLE ONLY public.qc_coa_chunks
     ADD CONSTRAINT qc_coa_chunks_document_fkey FOREIGN KEY (document_id) REFERENCES public.qc_coa_documents(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coa_documents qc_coa_documents_laboratory_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coa_documents
+    ADD CONSTRAINT qc_coa_documents_laboratory_fkey FOREIGN KEY (laboratory_id) REFERENCES public.qc_laboratories(id) ON DELETE SET NULL;
 
 
 --
@@ -2833,6 +2924,13 @@ CREATE POLICY org_isolation ON public.qc_field_placeholders USING ((org_id = app
 
 
 --
+-- Name: qc_laboratories org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_laboratories USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_oos_notifications org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3019,6 +3117,12 @@ ALTER TABLE public.qc_coa_verifications ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_field_placeholders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_laboratories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_laboratories ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_oos_notifications; Type: ROW SECURITY; Schema: public; Owner: -

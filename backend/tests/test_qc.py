@@ -912,6 +912,127 @@ async def test_computed_param_validation(client, admin_headers):
     assert r.status_code == 422 and "computed" in r.json()["detail"]
 
 
+# ── URS increment 3 — accredited laboratory entity (Chapter 7) ──────────────
+async def _lab(client, headers, name="Contract Lab GmbH", **extra):
+    body = {"name": name, **extra}
+    r = await client.post("/qc/laboratories", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_laboratory_crud(client, admin_headers):
+    lab = await _lab(client, admin_headers, name="Eurofins MK",
+                     accreditation_body="IARM", accreditation_number="LT-045",
+                     iso17025_scope=["HPLC", "GC-MS"], decimal_separator=",",
+                     locale="mk-MK", quality_agreement_ref="QA-2026-07")
+    assert lab["lab_code"].startswith("PP-LAB-") and lab["status"] == "ACTIVE"
+    assert lab["iso17025_scope"] == ["HPLC", "GC-MS"] and lab["decimal_separator"] == ","
+    assert lab["accreditation_body"] == "IARM"
+    # list + get
+    r = await client.get("/qc/laboratories", headers=admin_headers)
+    assert r.status_code == 200 and any(x["id"] == lab["id"] for x in r.json())
+    r = await client.get(f"/qc/laboratories/{lab['id']}", headers=admin_headers)
+    assert r.status_code == 200 and r.json()["name"] == "Eurofins MK"
+    # patch: deactivate + amend scope
+    r = await client.patch(f"/qc/laboratories/{lab['id']}",
+                           json={"status": "INACTIVE", "iso17025_scope": ["HPLC"]},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["status"] == "INACTIVE"
+    assert r.json()["iso17025_scope"] == ["HPLC"]
+    # bad decimal separator + bad status → 422
+    assert (await client.post("/qc/laboratories", json={"name": "X", "decimal_separator": ";"},
+                              headers=admin_headers)).status_code == 422
+    assert (await client.patch(f"/qc/laboratories/{lab['id']}", json={"status": "ARCHIVED"},
+                               headers=admin_headers)).status_code == 422
+
+
+async def test_laboratory_role_gating(client, admin_headers):
+    lab = await _lab(client, admin_headers, name="Role Lab")
+    _, user_h = await _actor(client, admin_headers, "USER")
+    assert (await client.get("/qc/laboratories", headers=user_h)).status_code == 403
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    assert (await client.get("/qc/laboratories", headers=cu_h)).status_code == 200   # elevated read
+    assert (await client.post("/qc/laboratories", json={"name": "Nope"},
+                              headers=cu_h)).status_code == 403
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post("/qc/laboratories", json={"name": "QC Lab"},
+                              headers=qc_h)).status_code == 201
+
+
+async def test_certificate_links_laboratory(client, admin_headers):
+    lab = await _lab(client, admin_headers, name="Linked Lab")
+    spec = await _spec(client, admin_headers, material="LAB-LINK")
+    coa = await _coa(client, admin_headers, spec["id"], laboratory_id=lab["id"])
+    assert coa["laboratory_id"] == lab["id"]
+    # detail resolves the laboratory object
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert detail["laboratory"]["id"] == lab["id"] and detail["laboratory"]["name"] == "Linked Lab"
+    # unknown laboratory → 422
+    import uuid as _uuid
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B-BAD-LAB", "specification_id": spec["id"],
+                                "laboratory_id": str(_uuid.uuid4())}, headers=admin_headers)
+    assert r.status_code == 422 and "laboratory" in r.json()["detail"].lower()
+
+
+async def test_coq_flags_out_of_scope(client, admin_headers, monkeypatch):
+    """URS Chapter 7: a result run on a method outside the lab's ISO 17025 scope
+    is flagged on the COQ — advisory, never a block. In-scope results carry no
+    flag."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-SCOPE", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    # lab accredited for HPLC only
+    lab = await _lab(client, admin_headers, name="Scope Lab", iso17025_scope=["HPLC"])
+    spec = await _spec(client, admin_headers, material="SCOPE-MAT")
+    p_in = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                             json={"test_name_en": "Total THC", "test_method": "HPLC",
+                                   "unit": "%", "lower_limit": 10.0, "upper_limit": 30.0},
+                             headers=admin_headers)
+    p_out = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                              json={"test_name_en": "Moisture", "test_method": "LOD",
+                                    "unit": "%", "upper_limit": 12.0}, headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SCOPE", laboratory_id=lab["id"])
+    for p, name, val in ((p_in, "Total THC", 22.0), (p_out, "Moisture", 8.0)):
+        assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                                  json={"parameter_id": p.json()["id"], "test_name": name,
+                                        "result_numeric": val}, headers=admin_headers)
+                ).status_code == 201
+    # detail flags the LOD result out of scope, the HPLC one in scope
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    by_name = {r["test_name"]: r for r in detail["results"]}
+    assert by_name["Total THC"]["in_scope"] is True
+    assert by_name["Moisture"]["in_scope"] is False
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["out_of_scope"] == ["Moisture"]
+    md = _FakeDE.last_markdown
+    assert "ISO 17025" in md and "Moisture" in md
+    # the structured lab (name + accreditation) shows in the grid, not source_lab
+    assert "Scope Lab" in md
+
+
+async def test_ecoa_doc_promote_carries_laboratory(client, admin_headers):
+    lab = await _lab(client, admin_headers, name="Promote Lab")
+    spec, param = await _ecoa_spec_with_param(client, admin_headers, material="LAB-PROMO")
+    r = await client.post("/qc/coa-documents",
+                          json={"batch_id": "B-LAB-PROMO", "specification_id": spec["id"],
+                                "laboratory_id": lab["id"], "source_institution": "Promote Lab"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["laboratory_id"] == lab["id"]
+    doc = r.json()
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": 20.0}]},
+                      headers=admin_headers)
+    prom = await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=admin_headers)
+    assert prom.status_code == 201, prom.text
+    cert = (await client.get(f"/qc/certificates/{prom.json()['coa_id']}",
+                             headers=admin_headers)).json()
+    assert cert["coa"]["laboratory_id"] == lab["id"]
+
+
 # ── Phase 3 U2 — eCOA ingestion ─────────────────────────────────────────────
 async def _ecoa_spec_with_param(client, headers, material="ECOA-MAT"):
     spec = await _spec(client, headers, material=material)
