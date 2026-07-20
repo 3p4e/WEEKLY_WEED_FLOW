@@ -104,6 +104,19 @@ async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str
     existing = await client.list_agents()
     sources = {s.get("name"): s.get("id") for s in await client.list_sources()}
     model, embedding = _resolve_model(spec, existing)
+    # The clone must run the SAME model as the agent it clones ("same persona/
+    # sources/model") — the global adoption above picks whatever agent happens
+    # to list first, which on a mixed instance (fleet + mirrored planners) can
+    # be a different provider whose tool-loop behavior differs from the base
+    # agent's proven config.
+    base = next((a for a in existing if a.get("name") == agent_name), None)
+    if base:
+        lc = base.get("llm_config") or {}
+        if lc.get("handle") or lc.get("model"):
+            model = lc.get("handle") or lc.get("model")
+        cand = (base.get("embedding_config") or {}).get("handle") or ""
+        if "/" in cand:
+            embedding = cand
 
     body = {
         "name": f"{agent_name}_tmp_{name_suffix}",
