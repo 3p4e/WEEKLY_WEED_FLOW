@@ -105,6 +105,7 @@ def upgrade() -> None:
             created_at timestamp with time zone DEFAULT now() NOT NULL,
             updated_at timestamp with time zone DEFAULT now() NOT NULL,
             CONSTRAINT qc_coq_pkey PRIMARY KEY (id),
+            CONSTRAINT qc_coq_number_key UNIQUE (org_id, coq_number),
             CONSTRAINT qc_coq_status_check CHECK (status = ANY
                 (ARRAY['DRAFT'::text, 'APPROVED'::text, 'VOIDED'::text])),
             CONSTRAINT qc_coq_spec_fkey FOREIGN KEY (specification_id)
@@ -114,6 +115,11 @@ def upgrade() -> None:
     )
     _canon("qc_coq", [
         "CREATE INDEX qc_coq_batch_idx ON public.qc_coq USING btree (org_id, batch_id)",
+        # one live APPROVED CoQ per (batch, spec) — two divergent approved
+        # aggregations would hand the QP conflicting release inputs.
+        "CREATE UNIQUE INDEX qc_coq_one_approved_idx ON public.qc_coq"
+        " USING btree (org_id, batch_id, specification_id)"
+        " WHERE (status = 'APPROVED'::text)",
     ])
 
     # ── C5 — qc_coq_sources (source-certificate citation list)

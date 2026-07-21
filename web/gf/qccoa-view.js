@@ -337,7 +337,7 @@
         ${c.analysis_start_date || c.analysis_end_date ? `<span>${AL('Analysis period', 'Период на анализа')}</span><b class="mono">${GF.esc(c.analysis_start_date || '…')} → ${GF.esc(c.analysis_end_date || '…')}</b>` : ''}
         ${c.sampling_location ? `<span>${AL('Sampling location', 'Локација на мострирање')}</span><b>${GF.esc(c.sampling_location)}</b>` : ''}
         ${c.issue_language ? `<span>${AL('Language', 'Јазик')}</span><b>${GF.esc(c.issue_language)}${c.issue_language === 'EN-MK' ? (c.translation_verified_at ? ` <span class="ana-note" style="color:var(--green)">✓ ${AL('translation verified', 'преводот верификуван')}</span>` : ` <span class="ana-note">${AL('translation unverified', 'преводот неверификуван')}</span>`) : ''}</b>` : ''}
-        ${d.drafted_same_working_day === false ? `<span>${AL('Drafting (§6.2.1)', 'Изготвување (§6.2.1)')}</span><b class="ana-note" style="color:var(--orange)">${AL('not drafted same working day', 'не е изготвен истиот работен ден')}</b>` : ''}
+        ${d.drafted_same_day === false ? `<span>${AL('Drafting (§6.2.1)', 'Изготвување (§6.2.1)')}</span><b class="ana-note" style="color:var(--orange)">${AL('not drafted same day', 'не е изготвен истиот ден')}</b>` : ''}
       </div>
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">

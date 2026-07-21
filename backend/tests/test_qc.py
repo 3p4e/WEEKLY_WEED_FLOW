@@ -2646,9 +2646,18 @@ async def test_coq_non_conforming_batch_never_renders(client, admin_headers, mon
     assert r.status_code == 409 and "not conform" in r.json()["detail"]
 
 
-async def test_coq_open_oos_blocks_compile_and_logs_deviation(client, admin_headers):
+async def _deviation_count(org_id, reason):
+    """§6.16 deviations are events — count them directly (the emits are wrapped
+    in except-pass, so only a DB-level assertion proves the record survived)."""
+    from app.db import tasks_admin_pool
+    return await tasks_admin_pool().fetchval(
+        "SELECT count(*) FROM events WHERE org_id=$1 AND verb='qc_deviation'"
+        " AND params->>'reason'=$2", org_id, reason)
+
+
+async def test_coq_open_oos_blocks_compile_and_logs_deviation(client, admin_headers, org):
     """§6.4.1 + §6.16 (C8) — an open OOS on the batch blocks compilation, and the
-    blocked attempt is itself recorded as a deviation."""
+    blocked attempt is itself recorded as a deviation EVENT that survives the 409."""
     _, qp = await _actor(client, admin_headers, "QP")
     spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-OOS")
     await _approved_coa(client, admin_headers, qp, spec["id"], "B-OOSQ", [
@@ -2658,6 +2667,140 @@ async def test_coq_open_oos_blocks_compile_and_logs_deviation(client, admin_head
     r = await client.post("/qc/coq", json={"batch_id": "B-OOSQ", "specification_id": spec["id"]},
                           headers=admin_headers)
     assert r.status_code == 409 and "§6.16" in r.json()["detail"]
+    assert await _deviation_count(org["org_id"], "coq_compile_on_open_oos") >= 1
+
+
+async def test_coq_oos_blocks_approval_and_render(client, admin_headers, monkeypatch, org):
+    """§6.4.1 — the OOS state is re-checked at APPROVAL and at ISSUANCE, not just
+    at compile: an OOS opened after compilation blocks both, each recording a
+    §6.16 deviation."""
+    _stub_de(monkeypatch, {"document_id": "DE-NEVER-OOS", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    # review path: compile clean, THEN open the OOS, then try to approve
+    spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-OOSR")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-OOSR", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.0},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0}])
+    coq = (await client.post("/qc/coq", json={"batch_id": "B-OOSR", "specification_id": spec["id"]},
+                             headers=admin_headers)).json()
+    await _oos(client, admin_headers, batch="B-OOSR")
+    r = await client.post(f"/qc/coq/{coq['id']}/review", headers=qc)
+    assert r.status_code == 409 and "§6.16" in r.json()["detail"]
+    assert await _deviation_count(org["org_id"], "coq_approve_on_open_oos") >= 1
+    # render path: compile + approve clean, THEN open the OOS, then try to render
+    spec2, pa2, pb2 = await _coq_spec_two_params(client, admin_headers, material="COQA-OOSR2")
+    await _approved_coa(client, admin_headers, qp, spec2["id"], "B-OOSR2", [
+        {"parameter_id": pa2["id"], "test_name": "Total THC", "result_numeric": 22.0},
+        {"parameter_id": pb2["id"], "test_name": "Moisture", "result_numeric": 8.0}])
+    coq2 = (await client.post("/qc/coq", json={"batch_id": "B-OOSR2", "specification_id": spec2["id"]},
+                              headers=admin_headers)).json()
+    assert (await client.post(f"/qc/coq/{coq2['id']}/review", headers=qc)).status_code == 200
+    await _oos(client, admin_headers, batch="B-OOSR2")
+    r = await client.post(f"/qc/coq/{coq2['id']}/render", headers=admin_headers)
+    assert r.status_code == 409 and "§6.16" in r.json()["detail"]
+    assert await _deviation_count(org["org_id"], "coq_render_on_open_oos") >= 1
+
+
+async def test_coq_masked_fail_requires_oos_trail(client, admin_headers):
+    """§6.4.1 — a failing result superseded by a later passing re-test must not
+    silently vanish: compilation refuses unless the batch carries an OOS trail
+    (closed investigation or an explicit oos_reference on the CoQ)."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-MASK")
+    # cert A: THC fails (99 vs 10–30); cert B: full passing re-test
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-MASK", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 99.0}],
+        decision="FAIL")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-MASK", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.0},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0}])
+    r = await client.post("/qc/coq", json={"batch_id": "B-MASK", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "re-test" in r.json()["detail"], r.text
+    # citing the investigation explicitly satisfies the trail requirement
+    r = await client.post("/qc/coq", json={"batch_id": "B-MASK", "specification_id": spec["id"],
+                                           "oos_reference": "PP-OOS-2026-0099"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["overall_conform"] is True and r.json()["oos_reference"]
+
+
+async def test_coq_empty_spec_never_certifies(client, admin_headers):
+    """GxP — a spec with no parameters must never compile a vacuously-conformant
+    CoQ (an empty results table certifies nothing)."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQA-EMPTY")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-EMPTY", [])
+    r = await client.post("/qc/coq", json={"batch_id": "B-EMPTY", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "no parameters" in r.json()["detail"]
+
+
+async def test_coq_single_approved_per_batch_and_spec(client, admin_headers):
+    """Two divergent APPROVED CoQs for one batch+spec would hand the QP
+    conflicting release inputs — the second approval is refused."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-DUP")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-DUP", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.0},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0}])
+    c1 = (await client.post("/qc/coq", json={"batch_id": "B-DUP", "specification_id": spec["id"]},
+                            headers=admin_headers)).json()
+    c2 = (await client.post("/qc/coq", json={"batch_id": "B-DUP", "specification_id": spec["id"]},
+                            headers=admin_headers)).json()
+    assert (await client.post(f"/qc/coq/{c1['id']}/review", headers=qc)).status_code == 200
+    r = await client.post(f"/qc/coq/{c2['id']}/review", headers=qc)
+    assert r.status_code == 409 and "already exists" in r.json()["detail"]
+    # voiding the first frees the slot for the second
+    assert (await client.post(f"/qc/coq/{c1['id']}/void", json={"reason": "recompiled"},
+                              headers=qc)).status_code == 200
+    assert (await client.post(f"/qc/coq/{c2['id']}/review", headers=qc)).status_code == 200
+
+
+async def test_coq_checklist_gate_survives_revision(client, admin_headers):
+    """§6.3.2 — the checklist gate matches through the SUPERSESSION CHAIN: a
+    promoted eCoA certificate that is later revised (new id) still traces back
+    to its promoted original, so a routine revise→release cycle cannot slip
+    un-reviewed external data past the gate."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, param = await _ecoa_spec_with_param(client, admin_headers, material="COQA-REVCL")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-REVCL")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0,
+                                       "unit": "%"}]}, headers=admin_headers)
+    out = (await client.post(f"/qc/coa-documents/{doc['id']}/promote",
+                             headers=admin_headers)).json()
+    assert (await client.patch(f"/qc/certificates/{out['coa_id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{out['coa_id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200
+    # revise the promoted certificate; releasing the revision retires the origin
+    rev = (await client.post(f"/qc/certificates/{out['coa_id']}/revise",
+                             json={"reason": "transcription correction"},
+                             headers=admin_headers)).json()
+    assert (await client.patch(f"/qc/certificates/{rev['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{rev['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200
+    # the origin is SUPERSEDED and out of the source set; the revision carries
+    # the same external data — the gate must still find the promoted original
+    r = await client.post("/qc/coq", json={"batch_id": "B-REVCL", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "QCT 018" in r.json()["detail"], r.text
+    # accepting the checklist clears the whole chain
+    assert (await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                             json={"sample_id_match": True, "method_per_tqa": True,
+                                   "units_per_spec": True, "conformance_by_pp": True},
+                             headers=admin_headers)).status_code == 200
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                              json={"outcome": "ACCEPTED"}, headers=admin_headers)).status_code == 200
+    r = await client.post("/qc/coq", json={"batch_id": "B-REVCL", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
 
 
 async def test_certificate_c6_analysis_range_and_c7_language(client, admin_headers):
@@ -2686,6 +2829,11 @@ async def test_certificate_c6_analysis_range_and_c7_language(client, admin_heade
     _, qc = await _actor(client, admin_headers, "QC_MGR")
     r = await client.post(f"/qc/certificates/{coa['id']}/translation-verified", headers=qc)
     assert r.status_code == 200 and r.json()["translation_verified_by"] and r.json()["translation_verified_at"]
+    # a subsequent CONTENT edit invalidates the verification — the stamp attests
+    # THIS text, not a prior revision of it (§6.7)
+    r = await client.patch(f"/qc/certificates/{coa['id']}",
+                           json={"sampling_location": "Drying room 3"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["translation_verified_by"] is None
     # an English-only issue has no translation to verify
     r = await client.patch(f"/qc/certificates/{coa['id']}", json={"issue_language": "EN"},
                            headers=admin_headers)
@@ -2694,10 +2842,10 @@ async def test_certificate_c6_analysis_range_and_c7_language(client, admin_heade
                               headers=qc)).status_code == 409
 
 
-async def test_edit_archived_certificate_records_deviation(client, admin_headers):
+async def test_edit_archived_certificate_records_deviation(client, admin_headers, org):
     """§6.16 (C8) — an attempted edit of an archived (voided) certificate is
-    refused AND the attempt is recorded as a deviation (the 409 must not roll
-    the deviation event back)."""
+    refused AND the attempt is recorded as a deviation EVENT that survives the
+    409 (emitted in its own transaction)."""
     spec = await _spec(client, admin_headers, material="C8-MAT")
     coa = await _coa(client, admin_headers, spec["id"], batch="B-C8")
     _, qc = await _actor(client, admin_headers, "QC_MGR")
@@ -2707,3 +2855,4 @@ async def test_edit_archived_certificate_records_deviation(client, admin_headers
     r = await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                            headers=admin_headers)
     assert r.status_code == 409 and "§6.16" in r.json()["detail"]
+    assert await _deviation_count(org["org_id"], "edit_archived_certificate") >= 1
