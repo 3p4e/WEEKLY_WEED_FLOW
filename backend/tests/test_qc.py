@@ -2504,6 +2504,13 @@ async def test_coq_compile_aggregates_batch(client, admin_headers):
     r2 = await client.post("/qc/coq", json={"batch_id": "B-AGG", "specification_id": spec["id"]},
                            headers=admin_headers)
     assert int(r2.json()["coq_number"].rsplit("-", 1)[1]) == seq + 2
+    # the gap report scans the SHARED series across both tables — the numbers
+    # held by aggregation records must never read as missing certificates.
+    yr = coq["coq_number"].rsplit("-", 2)[1]
+    g = (await client.get(f"/qc/register/gaps?year={yr}&cert_type=COQ",
+                          headers=admin_headers)).json()
+    s = g["by_series"].get("CoQ-PP") or {}
+    assert s.get("issued", 0) >= 3 and s.get("gaps") == []
 
 
 async def test_coq_compile_prerequisites(client, admin_headers):

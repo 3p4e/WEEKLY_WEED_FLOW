@@ -1949,6 +1949,13 @@ async def register_numbering_gaps(year: int, cert_type: str | None = None,
     async with rls(user) as c:
         rows = await c.fetch(
             f"SELECT coa_number, cert_type FROM qc_certificates WHERE {where}", *args)
+        # The CoQ-PP series is SHARED with the per-batch aggregation records
+        # (qc_coq, C5) — their numbers must join the scan or every aggregation
+        # CoQ would read as a false gap in the certificate-side series.
+        if cert_type is None or cert_type == "COQ":
+            rows = list(rows) + list(await c.fetch(
+                "SELECT coq_number AS coa_number, 'COQ'::text AS cert_type"
+                " FROM qc_coq WHERE split_part(coq_number, '-', 3) = $1", str(year)))
     series: dict[str, dict] = {}
     for r in rows:
         seq = r["coa_number"].rsplit("-", 1)[-1]
