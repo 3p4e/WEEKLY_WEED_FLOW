@@ -1712,25 +1712,67 @@ Voided, re-void → 409; eCoA checklist PENDING → accept-incomplete 422 → co
 compose files to v75/v105 (backups `compose.yaml.bak.v75v105`) + `alembic -n tasks downgrade
 0039` on each db-tasks (additive; drops cleanly — image-only rollback is also safe).
 
-## 2026-07-21 — QCSOP 012 v3 Increment B (C2 certificate numbering) — backend v77 / frontend v106 (no migration)
+## 2026-07-21 — QCSOP 012 v3 Increments B+C (C2 numbering + C5 CoQ aggregation + Tier 3 C6/C7/C8) — backend v77 / frontend v107 / migration 0041
 
-Code-only. Replaces the shared global `qc_coa_id_seq` counter with advisory-locked
-per-(org, cert_type, year) sequential numbering (§6.13), mirroring the RQS-ordinal
-pattern (QCSOP 011).
+The rest of the QCSOP 012 alignment, shipped as one unit to BOTH stacks
+(commits `98bb49a` → `fb07522`).
 
-- New certificates mint under a per-type prefix — `iCoA-PP-YYYY-NNNN` /
-  `eCoA-PP-YYYY-NNNN` / `CoQ-PP-YYYY-NNNN` / `WCoA-PP-…` / `CoA-PP-…`
-  (WATER/OTHER) — reset to 0001 each 1 January, gap-free within the lock.
-- **Forward-only**: every certificate minted before this change keeps its
-  `PP-COA-YYYY-NNNN` number untouched — the two formats simply coexist in the
-  register from here on (issued records are immutable).
-- `/qc/register/gaps` upgraded to be per-numbering-**series** aware (identified
-  by the number's own prefix, not just its `cert_type` column), so the format
-  transition never mixes the legacy counter with a new one into a false
-  "hundreds of certificates missing" reading; accepts an optional `cert_type`
-  filter.
+**B — C2 per-type/per-year certificate numbering (§6.13).** Replaces the shared
+global `qc_coa_id_seq` counter with advisory-locked per-(org, cert_type, year)
+sequential numbering: `iCoA-PP-YYYY-NNNN` / `eCoA-PP-…` / `CoQ-PP-…` /
+`WCoA-PP-…` / `CoA-PP-…`, reset to 0001 each 1 January, gap-free within the
+lock. **Forward-only**: pre-existing `PP-COA-YYYY-NNNN` numbers are untouched
+(issued records are immutable) — the formats coexist in the register.
+`/qc/register/gaps` is per-numbering-SERIES aware (by the number's own prefix)
+and scans the shared CoQ-PP series across BOTH tables (see C5), so neither the
+format transition nor an aggregation CoQ ever reads as a false gap.
 
-Gate: full backend suite **444 passed** (+1: per-type series advance
-independently + gap report stays series-clean), schema.tasks.sql dump-diff EXACT
-(no migration), node --check. **Adversarial review** run on the diff pre-deploy.
-Deployed backend v76→**v77** (prod scheduler too); frontend unchanged (v106).
+**C — C5 per-batch CoQ aggregation (§6.4).** New tables `qc_coq` /
+`qc_coq_sources` / `qc_coq_lines` (mig 0041, facility canon): the Certificate
+of Quality as the SOP defines it — a per-BATCH record consolidating every
+iCoA + eCoA result against the specification, one line per spec parameter,
+each citing its source certificate + testing lab. Compiled by QC → reviewed
+and approved by the Head of QC (second person — the compiler cannot approve
+their own compilation; NO QP signature: input TO the QP release decision).
+Endpoints: list/get/compile/review/void/render. Compile is ONE atomic
+transaction enforcing the §6.4.1 prerequisites: ≥1 APPROVED/RELEASED source
+cert; ACCEPTED QCT 018 checklist on every promoted eCoA source, matched
+through the WHOLE supersession chain (a revise→release cycle can't slip past
+§6.3.2); full spec-parameter coverage (Ph. Eur. 3028 derived totals computed,
+never transcribed); a failing result superseded by a re-test demands an OOS
+trail; no open OOS (re-checked at approval AND at issuance) — every blocked
+attempt emits a §6.16 deviation in its own transaction. The CoQ-PP number
+series is SHARED with certificate-type-COQ records under one advisory lock +
+`UNIQUE (org_id, coq_number)`; a partial unique index enforces one APPROVED
+CoQ per (batch, spec). Render (APPROVED + conforming only) reuses the
+PASS-gated DocEngine house-template pipeline. Coexists with the established
+single-certificate CoQ render — nothing removed.
+
+**Tier 3.** C6 (§6.2.2): analysis date range + sampling location on the
+certificate; honest `drafted_same_day` timeliness flag from real timestamps.
+C7 (§6.7): controlled issue language (EN / EN-MK) + second-person translation
+verification, invalidated by any later content edit. C8 (§6.16): blocked
+edits of archived certificates and blocked CoQ actions on open-OOS batches
+record deviations that survive the 4xx.
+
+Frontend v107 (SW v3.70.0): batch-CoQ panel in QC Certificates
+(compile/detail with lines+sources/review/void/render/download), C6/C7
+inputs + verify-translation button.
+
+Gate: full backend suite **458 passed** (fresh PG16 two-DB cluster; alembic
+head; schema.tasks.sql dump-diff EXACT; downgrade base clean), node --check.
+**Adversarial review** on the full B+C+Tier-3 diff: 12 findings (6 MAJOR),
+all fixed pre-deploy (`fb07522`) with regression tests.
+Deployed: migration 0040→**0041** on BOTH db-tasks; backend v76→**v77**
+(mass backend + prod backend + prod scheduler); frontend v106→**v107** (both).
+**Live smoke 30/30 ALL GREEN** (smoke_inc16): both stacks serve v3.70.0 + the
+CoQ panel; on wwf-mass with tt.qc.mgr/tt.qp — iCoA minted `iCoA-PP-2026-0001`
+(C2) → C6 range/location + C7 language 422/self-verify 403/second-person 200 →
+cert APPROVED → CoQ compiled `CoQ-PP-2026-0001` (1 line citing the iCoA, 1
+source) → cert-type-COQ minted `CoQ-PP-2026-0002` (shared series live) →
+compiler self-review 403 → HoQC approve 200 → **real DocEngine render 201**
+(document persisted) → C8 frozen-edit 409 with §6.16 deviation note.
+**Rollback** = revert both compose files to v76/v106 (backups
+`compose.yaml.bak.v76v106`) + `alembic -n tasks downgrade 0040` on each
+db-tasks (new isolated tables + additive columns; image-only rollback is also
+safe — v76 never touches qc_coq).

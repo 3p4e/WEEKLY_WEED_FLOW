@@ -1726,6 +1726,14 @@ ALTER TABLE ONLY public.qc_coq_lines
 
 
 --
+-- Name: qc_coq qc_coq_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_number_key UNIQUE (org_id, coq_number);
+
+
+--
 -- Name: qc_coq qc_coq_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2238,6 +2246,13 @@ CREATE INDEX qc_coq_batch_idx ON public.qc_coq USING btree (org_id, batch_id);
 --
 
 CREATE INDEX qc_coq_lines_coq_idx ON public.qc_coq_lines USING btree (org_id, coq_id);
+
+
+--
+-- Name: qc_coq_one_approved_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_coq_one_approved_idx ON public.qc_coq USING btree (org_id, batch_id, specification_id) WHERE (status = 'APPROVED'::text);
 
 
 --
