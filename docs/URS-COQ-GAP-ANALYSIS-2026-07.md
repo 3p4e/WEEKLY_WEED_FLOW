@@ -183,7 +183,20 @@ Priority order; SOP citations are the binding source.
 Draft Annex 22 / revised Annex 11 adoption was expected ~mid-2026 —
 i.e., around now. The platform's AI-boundary story (deterministic
 record path, assistive AI, dedicated instance, role-gated functions)
-is aligned, but should be written up as a formal **intended-use
-statement + AI inventory** per the URS's §10.4 when the owner starts
-the validation file (URS Phase 0 artefacts: approved URS, FMEA,
-validation plan).
+is aligned. ✅ **The formal intended-use statement + AI inventory (§10.4)
+is written** — see **`docs/VALIDATION-PLAN-2026-07.md`** (the Phase-0
+validation basis: intended-use, AI inventory, GAMP-5 categorisation, FMEA,
+IQ/OQ/PQ approach, and the requirement→implementation→test traceability
+matrix). It is grounded strictly in the as-built system; the approved URS,
+executed IQ/OQ/PQ signatures, and QA approval remain owner-side to complete
+the validation file.
+
+## 6. Backlog status (2026-07-21)
+
+**Every URS gap item (1–12) plus the reopened e-signature requirement is now
+resolved** — DONE (increments 1–10, migrations 0028–0036, deployed to both
+stacks) or a recorded decision (items 9, 11 remainder; D2/D3 resolved). The
+Phase-0 validation basis is documented. Remaining forward work is owner-gated:
+OCR/extraction (D5), CoQ template parity (D1), local-AI migration (D5), the
+held Letta ops, and a possible TMS sign-off module — see
+`docs/VALIDATION-PLAN-2026-07.md` §12.
