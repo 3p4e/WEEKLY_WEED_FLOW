@@ -632,6 +632,88 @@ async def test_coq_generates_from_released_cert(client, admin_headers, monkeypat
     assert "ECOA-LAB-001" in md          # every line maps back to its source doc
 
 
+async def test_coq_layout_has_house_template_sections(client, admin_headers, monkeypatch):
+    """D1 layout parity: the assembled CoQ carries the approved house-template
+    structure — the identity meta grid, the §01/§02 navy section banners, the
+    batch disposition, the QC compliance statement, and the signatures block."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-L", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-LAYOUT")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    for token in ("Certificate №", "01 Analytical Results", "02 Laboratory",
+                  "Overall Batch Disposition", "QC Compliance Statement", "Signatures",
+                  "Manufacturer", "Purely Plant DOOEL", "№~~№"):
+        assert token in md, token
+    # numbers are labelled with the numero sign, never the "No." abbreviation
+    assert "№" in md and "No." not in md
+
+
+async def test_coq_metadata_roundtrips_and_renders(client, admin_headers, monkeypatch):
+    """The CoQ house-template metadata (mig 0038) round-trips through the
+    certificate and surfaces on the rendered CoQ; an unset field is simply
+    absent — never fabricated."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-M", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="COQ-META")
+    meta = {"cultivation_batch": "AB092501", "product_code": "PP-sFP-THC15:CBD1",
+            "packaging": "400.0 g ±3% · Triplex Alu Bag", "manufacture_date": "2025-12-01",
+            "expiry_date": "2026-12-01", "botanical_type": "Hybrid · Indica-dominant",
+            "chemotype": "THC-dominant chemotype"}
+    # metadata is editable on a released cert (it's descriptive, not a result)
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json=meta, headers=admin_headers)).status_code == 200
+    got = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()["coa"]
+    for k, v in meta.items():
+        assert got[k] == v, k
+    assert got["retest_date"] is None                     # unset stays null
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    assert "AB092501" in md and "Hybrid · Indica-dominant" in md
+    assert "Triplex Alu Bag" in md and "THC-dominant chemotype" in md
+
+
+async def test_coq_source_crossref_derived_from_provenance(client, admin_headers, monkeypatch):
+    """§02 lab cross-reference is derived from the results' cited provenance —
+    each distinct external source lettered A, B…, in-house 'Q' — with no new
+    schema and nothing fabricated."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-X", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-XREF")
+    params = []
+    for nm in ("Assay", "Heavy Metals", "Foreign Matter"):
+        p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                              json={"test_name_en": nm, "test_method": "Ph. Eur.",
+                                    "unit": "%", "lower_limit": 0.0, "upper_limit": 100.0},
+                              headers=admin_headers)
+        params.append(p.json()["id"])
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-XREF", report_date="2026-07-01")
+    rows = [  # two external sources + one measured in-house (no cited source)
+        {"parameter_id": params[0], "test_name": "Assay", "result_numeric": 22.0,
+         "unit": "%", "source_document_code": "PPK26005", "source_institution": "UKIM Pharmacy"},
+        {"parameter_id": params[1], "test_name": "Heavy Metals", "result_numeric": 1.0,
+         "unit": "%", "source_document_code": "84/2026", "source_institution": "JZU IJZ"},
+        {"parameter_id": params[2], "test_name": "Foreign Matter", "result_numeric": 0.1,
+         "unit": "%"},
+    ]
+    for r in rows:
+        assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                                  json=r, headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    assert "UKIM Pharmacy" in md and "JZU IJZ" in md      # both external labs traced
+    assert "PPK26005" in md and "84/2026" in md           # each source's CoA code
+    assert "internal release control" in md               # the in-house 'Q' row
+
+
 async def test_coq_only_from_released(client, admin_headers, monkeypatch):
     _stub_de(monkeypatch, {"document_id": "X"})
     spec = await _spec(client, admin_headers, material="COQ-DRAFT")

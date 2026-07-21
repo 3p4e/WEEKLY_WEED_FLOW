@@ -125,6 +125,21 @@
     catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
+  // CoQ metadata — patch the house-template product/identity fields. An empty
+  // input clears the field (sent as null); a date input already yields YYYY-MM-DD.
+  GF.WWF.qcCoaSaveMeta = async (id) => {
+    const g = (s) => { const el = document.getElementById('qcm-' + s); return el ? el.value.trim() : ''; };
+    const body = {
+      cultivation_batch: g('cultivation') || null, product_code: g('product') || null,
+      packaging: g('packaging') || null, botanical_type: g('botanical') || null,
+      chemotype: g('chemotype') || null, manufacture_date: g('mfg') || null,
+      packaging_date: g('pkgd') || null, expiry_date: g('exp') || null,
+      retest_date: g('retest') || null,
+    };
+    try { await GF.API.qcPatchCoa(id, body); GF.toast(AL('CoQ metadata saved', 'CoQ метаподатоци зачувани')); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
 
   // Certificate of Quality — render a released cert to a house-style .docx via
   // the DocEngine (PASS-gated); QP-only (mirrors the backend gate).
@@ -286,6 +301,15 @@
         ${d.laboratory ? `<span>${AL('Laboratory', 'Лабораторија')}</span><b>${GF.esc(d.laboratory.name)}${d.laboratory.accreditation_number ? ` <span class="ana-note">${GF.esc(d.laboratory.accreditation_number)}</span>` : ''}</b>` : (c.source_lab ? `<span>${AL('Lab', 'Лабораторија')}</span><b>${GF.esc(c.source_lab)}</b>` : '')}
         ${c.supersedes_id ? `<span>${AL('Supersedes', 'Заменува')}</span><b class="mono">${GF.esc(coaNumById(c.supersedes_id))}</b>` : ''}
         ${c.revision_reason ? `<span>${AL('Revision reason', 'Причина за ревизија')}</span><b>${GF.esc(c.revision_reason)}</b>` : ''}
+        ${c.cultivation_batch ? `<span>${AL('Cultivation batch', 'Серија на одгледување')}</span><b class="mono">${GF.esc(c.cultivation_batch)}</b>` : ''}
+        ${c.product_code ? `<span>${AL('Product code', 'Код на производ')}</span><b class="mono">${GF.esc(c.product_code)}</b>` : ''}
+        ${c.packaging ? `<span>${AL('Packaging', 'Пакување')}</span><b>${GF.esc(c.packaging)}</b>` : ''}
+        ${c.manufacture_date ? `<span>${AL('Mfg. date', 'Датум на производство')}</span><b class="mono">${GF.esc(c.manufacture_date)}</b>` : ''}
+        ${c.packaging_date ? `<span>${AL('Packaging date', 'Датум на пакување')}</span><b class="mono">${GF.esc(c.packaging_date)}</b>` : ''}
+        ${c.expiry_date ? `<span>${AL('Expiry date', 'Рок на употреба')}</span><b class="mono">${GF.esc(c.expiry_date)}</b>` : ''}
+        ${c.retest_date ? `<span>${AL('Retest date', 'Датум на ретест')}</span><b class="mono">${GF.esc(c.retest_date)}</b>` : ''}
+        ${c.botanical_type ? `<span>${AL('Botanical type', 'Ботанички тип')}</span><b>${GF.esc(c.botanical_type)}</b>` : ''}
+        ${c.chemotype ? `<span>${AL('Chemotype', 'Хемотип')}</span><b>${GF.esc(c.chemotype)}</b>` : ''}
       </div>
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
@@ -300,10 +324,34 @@
         ${c.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','docx')">${AL('COQ .docx', 'COQ .docx')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','pdf')">${AL('COQ PDF', 'COQ PDF')}</button>` : ''}
       </div>` : ''}
+      ${canWrite() && c.status !== 'SUPERSEDED' ? coqMetaPanel(c) : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test results', 'Тест резултати')}</div>
       ${resultRows(d)}
       ${signaturesPanel(d)}
     </div>`;
+  };
+
+  // CoQ house-template metadata (mig 0038) — the product/identity meta grid the
+  // Certificate of Quality renders. All optional; blank stays blank on the CoQ.
+  const coqMetaPanel = (c) => {
+    const t = (k, def) => GF.esc(c[k] || def || '');
+    const inp = (id, k, ph, type) =>
+      `<input id="qcm-${id}" type="${type || 'text'}" placeholder="${ph}" value="${t(k)}">`;
+    return `<details class="qms-meta" style="margin-top:10px">
+      <summary class="ana-pt" style="cursor:pointer">${AL('CoQ metadata', 'CoQ метаподатоци')}</summary>
+      <div class="qcs-form" style="margin-top:8px">
+        ${inp('cultivation', 'cultivation_batch', AL('Cultivation batch', 'Серија на одгледување'))}
+        ${inp('product', 'product_code', AL('Product code', 'Код на производ'))}
+        ${inp('packaging', 'packaging', AL('Packaging', 'Пакување'))}
+        ${inp('botanical', 'botanical_type', AL('Botanical type', 'Ботанички тип'))}
+        ${inp('chemotype', 'chemotype', AL('Chemotype', 'Хемотип'))}
+        <label class="ana-note">${AL('Mfg.', 'Произв.')} ${inp('mfg', 'manufacture_date', '', 'date')}</label>
+        <label class="ana-note">${AL('Packaged', 'Спакувано')} ${inp('pkgd', 'packaging_date', '', 'date')}</label>
+        <label class="ana-note">${AL('Expiry', 'Рок')} ${inp('exp', 'expiry_date', '', 'date')}</label>
+        <label class="ana-note">${AL('Retest', 'Ретест')} ${inp('retest', 'retest_date', '', 'date')}</label>
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaSaveMeta('${c.id}')">${AL('Save', 'Зачувај')}</button>
+      </div>
+    </details>`;
   };
 
   const coaList = () => {

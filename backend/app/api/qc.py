@@ -757,6 +757,18 @@ class CoaPatch(BaseModel):
     retention_start: date | None = None
     retention_expiry: date | None = None
     archive_ref: str | None = Field(default=None, max_length=300)
+    # CoQ house-template metadata (CoQ_Template_v02_VariationF meta grid). All
+    # nullable — the CoQ renderer surfaces each when present, omits it when not;
+    # GxP: an unknown value stays blank for a human, never fabricated.
+    cultivation_batch: str | None = Field(default=None, max_length=120)
+    product_code: str | None = Field(default=None, max_length=120)
+    packaging: str | None = Field(default=None, max_length=200)
+    packaging_date: date | None = None
+    manufacture_date: date | None = None
+    expiry_date: date | None = None
+    retest_date: date | None = None
+    botanical_type: str | None = Field(default=None, max_length=120)
+    chemotype: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=4000)
     status: str | None = None            # guarded lifecycle transition
     decision: str | None = None          # PASS | FAIL
@@ -802,6 +814,17 @@ def _coa_out(r: dict) -> dict:
         "retention_start": r["retention_start"].isoformat() if r.get("retention_start") else None,
         "retention_expiry": r["retention_expiry"].isoformat() if r.get("retention_expiry") else None,
         "archive_ref": r.get("archive_ref"),
+        # CoQ house-template metadata (mig 0038) — surfaced on the certificate
+        # record and the rendered Certificate of Quality.
+        "cultivation_batch": r.get("cultivation_batch"),
+        "product_code": r.get("product_code"),
+        "packaging": r.get("packaging"),
+        "packaging_date": r["packaging_date"].isoformat() if r.get("packaging_date") else None,
+        "manufacture_date": r["manufacture_date"].isoformat() if r.get("manufacture_date") else None,
+        "expiry_date": r["expiry_date"].isoformat() if r.get("expiry_date") else None,
+        "retest_date": r["retest_date"].isoformat() if r.get("retest_date") else None,
+        "botanical_type": r.get("botanical_type"),
+        "chemotype": r.get("chemotype"),
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -1032,8 +1055,12 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                 extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
         fields, args = [], []
         _NULLABLE = {"source_lab", "laboratory_id", "report_date", "retention_start",
-                     "retention_expiry", "archive_ref", "notes", "decision"}
-        _DATE_COLS = {"report_date", "retention_start", "retention_expiry"}
+                     "retention_expiry", "archive_ref", "notes", "decision",
+                     "cultivation_batch", "product_code", "packaging", "packaging_date",
+                     "manufacture_date", "expiry_date", "retest_date",
+                     "botanical_type", "chemotype"}
+        _DATE_COLS = {"report_date", "retention_start", "retention_expiry",
+                      "packaging_date", "manufacture_date", "expiry_date", "retest_date"}
         for col, val in patch.items():
             if val is None and col not in _NULLABLE:
                 continue
@@ -1172,18 +1199,136 @@ def _coq_manifest(coa: dict, spec: dict, params_by_id: dict, results: list,
     return missing
 
 
+# CoQ house constants (CoQ_Template_v02_VariationF) — the manufacturer identity
+# and the internal-QC lab wording are fixed facility facts, not per-certificate
+# data. House disposition wording is 'MK GMP Certified Facility' (never EU GMP).
+_COQ_MANUFACTURER = ("Purely Plant DOOEL · Industriska ulica 9, br. 9, s. Kojlija 1043"
+                     " · Petrovec-Skopje, North Macedonia")
+_GRADE_LABEL = {"GRADE_I": "Grade I", "GRADE_II": "Grade II", "GRADE_III": "Grade III",
+                "GRADE_IV": "Grade IV", "GRADE_V": "Grade V"}
+# maps a captured e-signature meaning to its CoQ signing-role label (mk~~en)
+_COQ_SIG_ROLE = {
+    "AUTHORED": "Изготвил~~Prepared by", "REVIEWED": "Прегледал~~Reviewed by",
+    "APPROVED": "Одобрил~~Approved by", "RELEASED": "Пуштил~~Released by",
+    "VERIFIED": "Верификувал~~Verified by", "COQ_ISSUED": "Издал CoQ~~CoQ issued by",
+}
+
+
+def _d(x) -> str:
+    """Render a date/None as an ISO string (empty for None)."""
+    return x.isoformat() if hasattr(x, "isoformat") else (str(x) if x else "")
+
+
+def _coq_potency(spec: dict) -> str:
+    """The cannabinoid strength line from the specification's THC acceptance
+    window + grade. Empty when the spec carries neither — never invented."""
+    parts = []
+    lo, hi = spec.get("thc_acceptance_min"), spec.get("thc_acceptance_max")
+    if lo is not None and hi is not None:
+        parts.append(f"THC {lo}–{hi}%")
+    elif lo is not None:
+        parts.append(f"THC ≥ {lo}%")
+    elif hi is not None:
+        parts.append(f"THC ≤ {hi}%")
+    g = _GRADE_LABEL.get(spec.get("thc_grade") or "")
+    if g:
+        parts.append(g)
+    return " · ".join(parts)
+
+
+def _coq_sources(results: list, lab: dict | None):
+    """Derive the §02 Laboratory & CoA cross-reference from the results' cited
+    provenance, and the per-row source letter for §01. Each distinct external
+    source (institution + document code + issue date) gets a letter A, B, C…;
+    results measured in-house carry 'Q'; a Ph. Eur. derived total carries '∑'.
+    Derivation only — a source with no cited document simply shows blanks; no
+    lab, accreditation, code, or date is ever fabricated.
+
+    Returns (letters, crossref_rows, has_internal, has_computed)."""
+    lab_name = ((lab or {}).get("name") or "").strip()
+    lab_accr = " · ".join(x for x in ((lab or {}).get("accreditation_body"),
+                                      (lab or {}).get("accreditation_number")) if x)
+
+    def classify(r):
+        code = str(r.get("source_document_code") or "").strip()
+        inst = str(r.get("source_institution") or "").strip()
+        if code.startswith("Пресметано") or code.startswith("Computed"):
+            return "computed", None
+        if not inst and not code:
+            return "internal", ("Q",)
+        return "external", ("E", inst, code, _d(r.get("source_document_date")))
+
+    ext_order, groups, has_internal = [], {}, False
+    for idx, r in enumerate(results):
+        kind, key = classify(r)
+        if kind == "computed":
+            continue
+        if kind == "internal":
+            has_internal = True
+        if key not in groups:
+            groups[key] = {"kind": kind, "params": [], "r": r}
+            if kind == "external":
+                ext_order.append(key)
+        groups[key]["params"].append(idx + 1)          # 1-based §01 row №
+
+    keyletter = {}
+    if has_internal:
+        keyletter[("Q",)] = "Q"
+    for i, k in enumerate(ext_order):
+        keyletter[k] = chr(ord("A") + i)               # A, B, C…
+
+    letters = []
+    for r in results:
+        kind, key = classify(r)
+        letters.append("∑" if kind == "computed" else keyletter.get(key, "—"))
+
+    def pstr(ps):
+        return ", ".join(str(p) for p in ps)
+
+    crossref = []
+    if has_internal:
+        crossref.append({
+            "letter": "Q",
+            "lab": "Внатрешна QC лабораторија, Purely Plant~~Purely Plant in-house QC Laboratory",
+            "accreditation": "МК ГМП · внатрешна контрола~~MK GMP · internal release control",
+            "code": "—", "issued": "—", "params": pstr(groups[("Q",)]["params"]),
+        })
+    for k in ext_order:
+        g = groups[k]
+        r = g["r"]
+        inst = str(r.get("source_institution") or "").strip() or "—"
+        # attach the certificate's structured ISO-17025 credential only when this
+        # source's name matches the certificate's registered lab (best-effort).
+        accr = lab_accr if (lab_name and inst.lower() == lab_name.lower()) else "—"
+        crossref.append({
+            "letter": keyletter[k], "lab": inst, "accreditation": accr,
+            "code": str(r.get("source_document_code") or "—"),
+            "issued": _d(r.get("source_document_date")) or "—",
+            "params": pstr(g["params"]),
+        })
+    return letters, crossref, has_internal, any(x == "∑" for x in letters)
+
+
 def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
-                  lab: dict | None = None, scope_note: str | None = None) -> str:
-    """Assemble the Certificate of Quality as DocEngine bilingual Markdown
-    (doctype: FORM → the annex renderer: navy banners, [[FORM:grid]] metadata,
-    [[TABLE]] results). Every result line carries its source document. House
-    wording is 'MK GMP Certified Facility' (never 'EU GMP'); no value is
-    fabricated — an unknown result renders '—'."""
+                  lab: dict | None = None, scope_note: str | None = None,
+                  sigs: list | None = None, signer_names: dict | None = None) -> str:
+    """Assemble the Certificate of Quality as DocEngine bilingual Markdown in the
+    approved house layout (CoQ_Template_v02_VariationF): product/identity meta
+    grid → §01 Analytical Results (№ · parameter · method · acceptance · result ·
+    source-letter) → §02 Laboratory & CoA cross-reference (each source traced
+    once) → batch disposition → QC compliance statement → e-signatures. The
+    doctype is FORM, so the DocEngine annex renderer supplies the logo header,
+    navy #2B547E section banners, and the 'MK GMP Certified Facility' footer.
+    GxP: no value is fabricated — an unknown field is omitted, an unknown result
+    renders '—'; the caller's data / completeness / manifest gates run first."""
     c = _coq_cell
-    material = f"{spec.get('material_name_mk') or ''} / {spec.get('material_name_en') or spec.get('material_code') or ''}"
+    material = " / ".join(x for x in (spec.get("material_name_mk"),
+                                      spec.get("material_name_en") or spec.get("material_code")) if x)
     decision = coa.get("decision") or ""
-    v_mk = "СЕРИЈАТА ЗАДОВОЛУВА" if decision == "PASS" else "СЕРИЈАТА НЕ ЗАДОВОЛУВА"
-    v_en = "This batch CONFORMS" if decision == "PASS" else "This batch does NOT conform"
+    v_mk = "СЕРИЈАТА ЗАДОВОЛУВА — Одобрено за пуштање" if decision == "PASS" \
+        else "СЕРИЈАТА НЕ ЗАДОВОЛУВА"
+    v_en = "Conforms to Specification — Approved for Release" if decision == "PASS" \
+        else "This batch does NOT conform"
     head = ("<!--HEADERDATA\n"
             "doctype: FORM\n"
             f"code: {c(coa['coa_number'])}\n"
@@ -1192,49 +1337,137 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
             "en_title: Certificate of Quality\n"
             "-->\n\n")
     title = "# Сертификат за квалитет|Certificate of Quality\n\n"
-    def frow(mk, en, val):
-        return f"{mk}~~{en} ||| {c(val)}\n"
-    # Prefer the structured accredited laboratory (URS Chapter 7) over the
-    # free-text source_lab; show its accreditation so the certificate carries
-    # the lab's ISO 17025 credential, not just a name.
+
+    # ── product / identity meta grid ────────────────────────────────────────
+    bot = [x for x in (coa.get("botanical_type"),) if x] + \
+        ["Flos Cannabis Sativae L.", "Ph. Eur. mon. 3028 (Cannabis flos)"] + \
+        [x for x in (coa.get("chemotype"),) if x]
+    spec_ref = spec.get("spec_id") or ""
+    if spec.get("version"):
+        spec_ref = f"{spec_ref} · v{spec['version']}".strip(" ·")
     if lab:
         lab_line = lab.get("name") or ""
-        accr = " / ".join(x for x in (lab.get("accreditation_body"),
+        accr = " · ".join(x for x in (lab.get("accreditation_body"),
                                       lab.get("accreditation_number")) if x)
-        if accr:
-            lab_line = f"{lab_line} ({accr})"
+        lab_line = f"{lab_line} ({accr})" if accr else lab_line
     else:
         lab_line = coa.get("source_lab") or ""
-    grid = ("[[FORM:grid]]\n"
-            + frow("№ на сертификат", "Certificate №", coa["coa_number"])
-            + frow("Серија", "Batch", coa["batch_id"])
-            + frow("Материјал", "Material", material)
-            + frow("Спецификација", "Specification", spec.get("spec_id"))
-            + frow("Датум на извештај", "Report date", coa.get("report_date") or "")
-            + frow("Извор (лабораторија)", "Source lab", lab_line)
-            + frow("Одлука", "Disposition", f"{v_mk} / {v_en}")
-            + "[[/FORM]]\n\n")
-    tbl = ("[[TABLE:data]]\n"
-           "Тест~~Test ||| Метод~~Method ||| Граници~~Acceptance ||| "
-           "Резултат~~Result ||| Статус~~Status ||| Извор~~Source\n")
-    for r in results:
+    grid_rows = [
+        ("№ на сертификат", "Certificate №", coa.get("coa_number"), True),
+        ("Материјал", "Material", material, True),
+        ("Ботаничко потекло", "Botanical origin", " · ".join(bot), False),
+        ("Јачина", "Potency", _coq_potency(spec), False),
+        ("Производна серија", "Production batch", coa.get("batch_id"), True),
+        ("Серија на одгледување", "Cultivation batch", coa.get("cultivation_batch"), False),
+        ("Код на производ", "Product code", coa.get("product_code"), False),
+        ("Спецификација", "Specification", spec_ref, True),
+        ("Пакување", "Packaging", coa.get("packaging"), False),
+        ("Датум на пакување", "Packaging date", _d(coa.get("packaging_date")), False),
+        ("Датум на производство", "Mfg. date", _d(coa.get("manufacture_date")), False),
+        ("Рок на употреба", "Expiry date", _d(coa.get("expiry_date")), False),
+        ("Датум на ретест", "Retest date", _d(coa.get("retest_date")), False),
+        ("Датум на извештај", "Report date", _d(coa.get("report_date")), True),
+        ("Лабораторија", "Laboratory", lab_line, False),
+        ("Производител", "Manufacturer", _COQ_MANUFACTURER, True),
+    ]
+    grid = "[[FORM:grid]]\n"
+    for mk, en, val, required in grid_rows:
+        sval = (str(val).strip() if val is not None else "")
+        if sval or required:
+            grid += f"{mk}~~{en} ||| {c(sval) or '—'}\n"
+    grid += "[[/FORM]]\n\n"
+
+    # ── §01 analytical results (№ · parameter · method · acceptance · result · src) ──
+    letters, crossref, has_internal, has_computed = _coq_sources(results, lab)
+    s01 = ("# 01 Аналитички резултати|01 Analytical Results\n\n"
+           "[[TABLE:data]]\n"
+           "№~~№ ||| Параметар~~Parameter ||| Метод~~Method ||| "
+           "Спецификација~~Acceptance ||| Резултат~~Result ||| Извор~~Src\n")
+    for i, r in enumerate(results):
         p = params_by_id.get(str(r.get("parameter_id"))) or {}
+        method = p.get("test_method") or p.get("pharmacopoeia_ref") or ""
         lo, hi = r.get("lower_limit"), r.get("upper_limit")
         limits = "—" if lo is None and hi is None else \
             f"{'' if lo is None else lo} … {'' if hi is None else hi}"
         val = r.get("result_value") or ("" if r.get("result_numeric") is None
                                         else str(r["result_numeric"]))
         val = (f"{val} {r.get('unit') or ''}").strip() or "—"
-        st = {True: "PASS", False: "OOS"}.get(r.get("complies"), "—")
-        src = r.get("source_document_code") or r.get("source_institution") \
-            or coa.get("source_lab") or "—"
-        tbl += (f"{c(r.get('test_name'))} ||| {c(p.get('test_method') or '')} ||| "
-                f"{c(limits)} ||| {c(val)} ||| {st} ||| {c(src)}\n")
-    tbl += "[[/TABLE]]\n\n"
-    conform = f"**{v_mk}** според одобрената спецификација.|||**{v_en}** against the approved specification.\n\n"
+        s01 += (f"{i + 1} ||| {c(r.get('test_name'))} ||| {c(method)} ||| "
+                f"{c(limits)} ||| {c(val)} ||| {letters[i]}\n")
+    s01 += "[[/TABLE]]\n\n"
+    if has_computed:
+        s01 += ("_∑ — Вкупен THC/CBD е пресметан како збир на киселинската и"
+                " декарбоксилираната форма (Ph. Eur. 2.2.29)._"
+                "|||_∑ — Total THC/CBD is computed as the sum of the acidic and"
+                " decarboxylated forms (Ph. Eur. 2.2.29)._\n\n")
+    if has_internal:
+        s01 += ("_Q — Странска материја и макроскопска идентификација ги изведува"
+                " внатрешната QC служба на Purely Plant пред земање мостра за"
+                " финалното QC пуштање (QCSOP-005 v.02)._"
+                "|||_Q — Foreign Matter and Macroscopic Identification are performed"
+                " by the in-house Purely Plant QC Department prior to sampling for"
+                " final QC release testing (QCSOP-005 v.02)._\n\n")
+
+    # ── §02 laboratory & CoA cross-reference (each source traced once) ───────
+    s02 = ("# 02 Лаборатории и вкрстена референца на CoA|"
+           "02 Laboratory & Certificate of Analysis Cross-Reference\n\n"
+           "[[TABLE:data]]\n"
+           "Извор~~Src ||| Лабораторија~~Laboratory ||| Акредитација~~Accreditation ||| "
+           "Код на CoA~~CoA code ||| Издадено~~Issued ||| Параметри №~~Params №\n")
+    for x in crossref:
+        # x['lab'] and x['accreditation'] may already carry an mk~~en pair (the
+        # internal-QC row); pass them through untouched, sanitize the rest.
+        lab_cell = x["lab"] if "~~" in x["lab"] else c(x["lab"])
+        accr_cell = x["accreditation"] if "~~" in x["accreditation"] else c(x["accreditation"])
+        s02 += (f"{x['letter']} ||| {lab_cell} ||| {accr_cell} ||| "
+                f"{c(x['code'])} ||| {c(x['issued'])} ||| {c(x['params'])}\n")
+    s02 += "[[/TABLE]]\n\n"
+
+    # ── disposition + QC compliance statement ───────────────────────────────
+    verdict = (f"**Севкупна диспозиција на серијата: {v_mk}.**"
+               f"|||**Overall Batch Disposition: {v_en}.**\n\n")
+    comp = ("**Изјава за усогласеност на QC.** Оваа серија е произведена, спакувана и"
+            " тестирана во согласност со одобрението за ставање на пазар и МК ГМП"
+            " прописите на Република Северна Македонија (МАЛМЕД). Сите аналитички"
+            " резултати од внатрешната QC служба и од надворешни ISO/IEC 17025"
+            " акредитирани лаборатории се усогласени со критериумите за прифаќање и"
+            " со Ph. Eur. монографија 3028."
+            "|||**QC Compliance Statement.** This batch was manufactured, packaged and"
+            " tested in compliance with the Marketing Authorisation and MK GMP"
+            " regulations of the Republic of North Macedonia (MALMED). All analytical"
+            " results from the in-house QC Department and from outsourced ISO/IEC 17025"
+            " accredited laboratories conform to the acceptance criteria and Ph. Eur."
+            " Monograph 3028.\n\n")
     note = (f"_{scope_note}_\n\n") if scope_note else ""
+
+    # ── e-signatures (Annex 11) ─────────────────────────────────────────────
+    sig = "# Потписи|Signatures\n\n"
+    sig_rows = []
+    for s in (sigs or []):
+        role = _COQ_SIG_ROLE.get(s.get("meaning"), s.get("meaning") or "—")
+        sig_rows.append((role, s.get("signer_name") or "—", s.get("signer_role") or "—",
+                         (s.get("signed_at") or "")[:10] or "—"))
+    if not sig_rows and signer_names:
+        # no captured e-signatures — fall back to the certificate's roles of
+        # record (name resolved; the exact per-role date isn't stored → '—').
+        for label, key in (("Изготвил~~Prepared by", "analyst"),
+                           ("Прегледал~~Reviewed by", "reviewer"),
+                           ("Одобрил~~Approved by", "approver")):
+            nm = signer_names.get(key)
+            if nm:
+                sig_rows.append((label, nm, "—", "—"))
+    if sig_rows:
+        sig += ("[[TABLE:data]]\n"
+                "Улога~~Role ||| Потписник~~Signatory ||| Функција~~Function ||| Датум~~Date\n")
+        for role, name, fn, dt in sig_rows:
+            sig += f"{role} ||| {c(name)} ||| {c(fn)} ||| {c(dt)}\n"
+        sig += "[[/TABLE]]\n\n"
+    else:
+        sig += ("_Потпишано и пуштено во GrowFlow (Annex 11 ревизиона трага)._"
+                "|||_Signed and released in GrowFlow (Annex 11 audit trail)._\n\n")
+
     footer = "МК ГМП сертифицирано постројение|||MK GMP Certified Facility\n"
-    return head + title + grid + tbl + conform + note + footer
+    return head + title + grid + s01 + s02 + verdict + comp + note + sig + footer
 
 
 @router.post("/certificates/{coa_id}/coq", status_code=201)
@@ -1269,7 +1502,25 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             "SELECT * FROM qc_results WHERE coa_id=$1 ORDER BY created_at", coa_id)
         lab = await c.fetchrow("SELECT * FROM qc_laboratories WHERE id=$1",
                                coa["laboratory_id"]) if coa["laboratory_id"] else None
+        # Annex 11 e-signatures captured on this certificate — rendered in the
+        # CoQ signature block (name · function · meaning · date).
+        sigs = await c.fetch(
+            "SELECT * FROM qc_signatures WHERE object_type='qc_certificate' AND object_id=$1"
+            " ORDER BY signed_at", coa_id)
     results = [dict(r) for r in results]
+    sigs = [_sig_out(dict(s)) for s in sigs]
+    # Resolve the certificate's roles-of-record (analyst / reviewer / approver)
+    # to names, so the signature block has a truthful fallback when no explicit
+    # e-signature was captured. Names live in the separate users DB.
+    signer_names = {}
+    _role_ids = {k: coa.get(f"{k}_id") for k in ("analyst", "reviewer", "approver")}
+    _uids = [str(v) for v in _role_ids.values() if v]
+    if _uids:
+        prows = await users_admin_pool().fetch(
+            "SELECT id, full_name FROM profiles WHERE id = ANY($1::uuid[]) AND is_deleted=false",
+            _uids)
+        _by_id = {str(p["id"]): p["full_name"] for p in prows}
+        signer_names = {k: _by_id.get(str(v)) for k, v in _role_ids.items() if v and _by_id.get(str(v))}
     if not results:
         raise HTTPException(409, "The certificate has no results to certify")
     # Ph. Eur. 3028 derived totals: a computed parameter's value is derived HERE
@@ -1340,7 +1591,8 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
                       f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
     md = _coq_markdown(dict(coa), dict(spec) if spec else {}, params_by_id, results,
-                       lab=dict(lab) if lab else None, scope_note=scope_note)
+                       lab=dict(lab) if lab else None, scope_note=scope_note,
+                       sigs=sigs, signer_names=signer_names)
     # DocEngine build (house-style PASS gate). A pp_verify FAIL surfaces as 422.
     build = (await docengine.de_forward(
         "POST", "/build",
