@@ -1204,6 +1204,10 @@ def _coq_manifest(coa: dict, spec: dict, params_by_id: dict, results: list,
 # data. House disposition wording is 'MK GMP Certified Facility' (never EU GMP).
 _COQ_MANUFACTURER = ("Purely Plant DOOEL · Industriska ulica 9, br. 9, s. Kojlija 1043"
                      " · Petrovec-Skopje, North Macedonia")
+# Cannabis-flower certificate types — only these carry the Cannabis flos species
+# line + Ph. Eur. monograph 3028 conformance. A WATER/OTHER CoQ must not assert a
+# botanical identity or monograph it doesn't have (GxP: never fabricated).
+_COQ_CANNABIS_CERTS = {"ICOA", "ECOA", "COQ"}
 _GRADE_LABEL = {"GRADE_I": "Grade I", "GRADE_II": "Grade II", "GRADE_III": "Grade III",
                 "GRADE_IV": "Grade IV", "GRADE_V": "Grade V"}
 # maps a captured e-signature meaning to its CoQ signing-role label (mk~~en)
@@ -1287,8 +1291,11 @@ def _coq_sources(results: list, lab: dict | None):
 
     crossref = []
     if has_internal:
+        # the only row whose lab/accreditation carry a PRE-BUILT bilingual mk~~en
+        # pair — flagged raw so the renderer passes it through un-sanitized. Every
+        # external row's lab/accreditation is user free-text and must be sanitized.
         crossref.append({
-            "letter": "Q",
+            "letter": "Q", "raw": True,
             "lab": "Внатрешна QC лабораторија, Purely Plant~~Purely Plant in-house QC Laboratory",
             "accreditation": "МК ГМП · внатрешна контрола~~MK GMP · internal release control",
             "code": "—", "issued": "—", "params": pstr(groups[("Q",)]["params"]),
@@ -1339,9 +1346,11 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     title = "# Сертификат за квалитет|Certificate of Quality\n\n"
 
     # ── product / identity meta grid ────────────────────────────────────────
-    bot = [x for x in (coa.get("botanical_type"),) if x] + \
-        ["Flos Cannabis Sativae L.", "Ph. Eur. mon. 3028 (Cannabis flos)"] + \
-        [x for x in (coa.get("chemotype"),) if x]
+    cannabis = coa.get("cert_type") in _COQ_CANNABIS_CERTS
+    bot = [x for x in (coa.get("botanical_type"),) if x]
+    if cannabis:
+        bot += ["Flos Cannabis Sativae L.", "Ph. Eur. mon. 3028 (Cannabis flos)"]
+    bot += [x for x in (coa.get("chemotype"),) if x]
     spec_ref = spec.get("spec_id") or ""
     if spec.get("version"):
         spec_ref = f"{spec_ref} · v{spec['version']}".strip(" ·")
@@ -1415,10 +1424,11 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
            "Извор~~Src ||| Лабораторија~~Laboratory ||| Акредитација~~Accreditation ||| "
            "Код на CoA~~CoA code ||| Издадено~~Issued ||| Параметри №~~Params №\n")
     for x in crossref:
-        # x['lab'] and x['accreditation'] may already carry an mk~~en pair (the
-        # internal-QC row); pass them through untouched, sanitize the rest.
-        lab_cell = x["lab"] if "~~" in x["lab"] else c(x["lab"])
-        accr_cell = x["accreditation"] if "~~" in x["accreditation"] else c(x["accreditation"])
+        # ONLY the flagged internal-QC row carries a pre-built mk~~en pair; every
+        # external value is user free-text and is sanitized (a raw ||| / ~~ / | in
+        # a lab name must never inject a column or fabricate a bilingual split).
+        lab_cell = x["lab"] if x.get("raw") else c(x["lab"])
+        accr_cell = x["accreditation"] if x.get("raw") else c(x["accreditation"])
         s02 += (f"{x['letter']} ||| {lab_cell} ||| {accr_cell} ||| "
                 f"{c(x['code'])} ||| {c(x['issued'])} ||| {c(x['params'])}\n")
     s02 += "[[/TABLE]]\n\n"
@@ -1426,18 +1436,21 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     # ── disposition + QC compliance statement ───────────────────────────────
     verdict = (f"**Севкупна диспозиција на серијата: {v_mk}.**"
                f"|||**Overall Batch Disposition: {v_en}.**\n\n")
+    # the Ph. Eur. 3028 monograph clause is asserted only for cannabis-flower
+    # certificates (a water/other CoQ conforms to its own spec, not to 3028).
+    mono_mk = " и со Ph. Eur. монографија 3028" if cannabis else ""
+    mono_en = " and Ph. Eur. Monograph 3028" if cannabis else ""
     comp = ("**Изјава за усогласеност на QC.** Оваа серија е произведена, спакувана и"
             " тестирана во согласност со одобрението за ставање на пазар и МК ГМП"
             " прописите на Република Северна Македонија (МАЛМЕД). Сите аналитички"
             " резултати од внатрешната QC служба и од надворешни ISO/IEC 17025"
-            " акредитирани лаборатории се усогласени со критериумите за прифаќање и"
-            " со Ph. Eur. монографија 3028."
+            " акредитирани лаборатории се усогласени со критериумите за прифаќање"
+            f"{mono_mk}."
             "|||**QC Compliance Statement.** This batch was manufactured, packaged and"
             " tested in compliance with the Marketing Authorisation and MK GMP"
             " regulations of the Republic of North Macedonia (MALMED). All analytical"
             " results from the in-house QC Department and from outsourced ISO/IEC 17025"
-            " accredited laboratories conform to the acceptance criteria and Ph. Eur."
-            " Monograph 3028.\n\n")
+            f" accredited laboratories conform to the acceptance criteria{mono_en}.\n\n")
     note = (f"_{scope_note}_\n\n") if scope_note else ""
 
     # ── e-signatures (Annex 11) ─────────────────────────────────────────────

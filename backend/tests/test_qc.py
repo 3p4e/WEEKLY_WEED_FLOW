@@ -714,6 +714,68 @@ async def test_coq_source_crossref_derived_from_provenance(client, admin_headers
     assert "internal release control" in md               # the in-house 'Q' row
 
 
+async def test_coq_crossref_sanitizes_source_separators(client, admin_headers, monkeypatch):
+    """A free-text source_institution containing raw DSL separators (~~, |||)
+    must be sanitized in the §02 table — never split into a fabricated bilingual
+    pair or an injected column. Only the fixed internal-QC row is bilingual."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-SEP", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-SEP")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Assay", "test_method": "Ph. Eur.",
+                                "unit": "%", "lower_limit": 0.0, "upper_limit": 100.0},
+                          headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SEP", report_date="2026-07-01")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p.json()["id"], "test_name": "Assay",
+                                    "result_numeric": 22.0, "unit": "%",
+                                    "source_document_code": "AB|||CD",
+                                    "source_institution": "Alfa~~Beta ||| Labs"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+    # find the §02 rows in the assembled markdown; the external row must have the
+    # canonical 6 columns (Src · Lab · Accreditation · Code · Issued · Params №)
+    md = _FakeDE.last_markdown
+    sec = md.split("02 Laboratory")[1]
+    ext = [ln for ln in sec.splitlines() if ln.startswith("A ||| ")]
+    assert ext and ext[0].count("|||") == 5, ext        # not shifted by injection
+    assert "Alfa~~Beta" not in md and "Alfa-Beta" in md  # ~~ neutralised, not split
+
+
+async def test_coq_water_cert_omits_cannabis_species_and_monograph(client, admin_headers, monkeypatch):
+    """A non-cannabis-flower certificate (cert_type WATER/OTHER) must NOT assert
+    the Cannabis flos species or Ph. Eur. 3028 conformance — that identity would
+    be fabricated for a product that doesn't have it."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-W", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-WATER")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Conductivity", "test_method": "Ph. Eur. 2.2.38",
+                                "unit": "µS/cm", "upper_limit": 5.1}, headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-WATER",
+                     report_date="2026-07-01", cert_type="WATER")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p.json()["id"], "test_name": "Conductivity",
+                                    "result_numeric": 1.2, "upper_limit": 5.1, "unit": "µS/cm"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
+                              headers=admin_headers)).status_code == 201
+    md = _FakeDE.last_markdown
+    assert "Cannabis Sativae" not in md and "3028" not in md   # no fabricated identity
+    assert "Certificate of Quality" in md                      # still a valid CoQ
+
+
 async def test_coq_only_from_released(client, admin_headers, monkeypatch):
     _stub_de(monkeypatch, {"document_id": "X"})
     spec = await _spec(client, admin_headers, material="COQ-DRAFT")
