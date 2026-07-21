@@ -1696,7 +1696,18 @@ Additive, non-breaking.
   already grades every value). **Adversarial review** on the diff pre-deploy.
 
 Gate: full backend suite **443 passed** (+3: void lifecycle+role, checklist
-accept/lock+role, register SOP-status labels), migration 0040 up/down/base clean,
-schema.tasks.sql dump-diff EXACT, node --check. Migration applied to BOTH tasks DBs
-(0039→0040) before the image flip. Deployed backend v75→**v76** (prod scheduler too) +
-frontend v105→**v106**.
+accept/lock+role, register SOP-status labels; +void-immutability assertions),
+migration 0040 up/down/base clean, schema.tasks.sql dump-diff EXACT, node --check.
+**Adversarial review** on the diff found + fixed two integrity defects pre-deploy:
+(1) `qc_ecoa_checklist` had only a non-unique index, so a concurrent double-PUT could
+create two review rows — added `UNIQUE(org_id, document_id)` + a per-document advisory
+xact-lock in the upsert; (2) `update_coa` left a VOIDED/SUPERSEDED certificate's
+substantive fields PATCH-editable — now frozen (only retention/archive register fields
+remain maintainable). Migration applied to BOTH tasks DBs (0039→0040) before the image
+flip. Deployed backend v75→**v76** (prod scheduler too) + frontend v105→**v106**.
+**Live smoke 18/18** on both stacks: SW v3.69.0 + the void/checklist/register controls
+served; on wwf-mass the full behavioural chain (tt.qc.mgr) — void → VOIDED + `sop_status`
+Voided, re-void → 409; eCoA checklist PENDING → accept-incomplete 422 → complete → ACCEPTED
++ reviewer → locked edit 409; register rows carry `sop_status`. **Rollback** = revert both
+compose files to v75/v105 (backups `compose.yaml.bak.v75v105`) + `alembic -n tasks downgrade
+0039` on each db-tasks (additive; drops cleanly — image-only rollback is also safe).
