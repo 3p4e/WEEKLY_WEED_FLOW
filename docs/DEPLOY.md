@@ -1656,4 +1656,13 @@ rejection, §6.1.4 field validation, QC-registrar gate, release-related→QP + n
 SFR-requires-registered-RQS, sample taxonomy+retention, non-conforming flag), migration
 0039 up/down/base clean, schema.tasks.sql dump-diff EXACT, node --check. Migration
 applied to BOTH tasks DBs (0038→0039) before the image flip. Deployed backend v74→**v75**
-(prod scheduler too) + frontend v104→**v105**.
+(prod scheduler too) + frontend v104→**v105**. **Live smoke 19/19** on both stacks: SW
+v3.68.0 + the §6.1 custody controls + §6.2.1 sample taxonomy served on each; on wwf-mass
+the full behavioural chain (tt.qc.mgr) — RQS minted `PP-QC-F-001.A01/2026-001`, incomplete
+register→422, complete register→200 with control № `001/26_RQS`, SFR against an
+unregistered RQS→409, against the registered one→201 with equipment + receipt round-trip,
+sample created kind `RET`+retention, bad kind→422, non-conforming flag set, custody
+transfer with condition confirmation. **Rollback** = revert both compose files to
+v74/v104 (backups `compose.yaml.bak.v74v104`) + `alembic -n tasks downgrade 0038` on each
+db-tasks (additive columns drop cleanly; an image-only rollback is also safe — the new
+columns are harmless unused to v74).
