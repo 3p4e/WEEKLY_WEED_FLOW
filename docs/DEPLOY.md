@@ -1567,3 +1567,41 @@ stale "Accreditation no."; on wwf-mass a CoQ was re-rendered from RELEASED
 PP-COA-2026-0042 through the DocEngine — **201 with the № labels, pp_verify
 PASS gate held** (doc 6de36086). **Rollback** = revert tags to v72/v102
 (cosmetic-only change).
+
+## 2026-07-21 — D1 Certificate of Quality layout parity — backend v74 / frontend v104
+
+Rewrites the CoQ DocEngine-markdown generator (`_coq_markdown`, `backend/app/api/qc.py`)
+into the approved house layout (`CoQ_Template_v02_VariationF`): product/identity meta
+grid → §01 analytical results (№ + per-row source letter Q/A/B/∑) → §02 Laboratory &
+CoA cross-reference **derived from each result's cited provenance** (no new tables) →
+batch disposition → QC compliance statement → Annex-11 e-signatures. Number labels use
+№ (design directive). Rendered through the real DocEngine → `pp_verify RESULT: PASS`
+(6.0pt floor, bilingual MK+EN).
+
+- **Migration 0038** (additive, nullable — no CHECK): `qc_certificates` gains
+  `cultivation_batch, product_code, packaging, packaging_date, manufacture_date,
+  expiry_date, retest_date, botanical_type, chemotype`. Threaded through
+  `CoaPatch`/`_coa_out`/`update_coa` (`_NULLABLE`+`_DATE_COLS`). `generate_coq` now
+  fetches `qc_signatures` + resolves analyst/reviewer/approver names for the signature
+  block. Existing RLS/audit/grants cover the new columns.
+- **Frontend**: `qccoa-view.js` gains a collapsible "CoQ metadata" editor + display
+  (`GF.WWF.qcCoaSaveMeta`). SW v3.66.0→**v3.67.0**.
+- **GxP**: unknown fields render blank / are omitted — never fabricated; the five
+  existing `generate_coq` gates (comply · completeness · WHO/Annex-16 manifest · open-OOS
+  · pp_verify) are unchanged. **Adversarial review** (4 lenses × verify) confirmed +
+  fixed two fabrication risks pre-deploy: (a) §02 cell sanitization was gated on a `~~`
+  content-sniff → a free-text lab name with a raw separator could inject a column /
+  fabricate a bilingual split; now the internal-QC row is flagged raw explicitly and all
+  external values are always sanitized. (b) the Cannabis-flos species + Ph. Eur. 3028
+  monograph were hardcoded for every cert type → a WATER/OTHER CoQ asserted a botanical
+  identity it lacked; now gated to cannabis-flower cert types.
+
+Gate: full backend suite **431 passed** (+5 CoQ tests, incl. separator-sanitization +
+WATER-cert-omits-species), migration 0038 up/down/base clean, schema.tasks.sql dump-diff
+EXACT, node --check. Migration applied to BOTH tasks DBs (0037→0038) before the image
+flip. Deployed backend v73→**v74** (prod scheduler too) + frontend v103→**v104**. **Live
+smoke 10/10** on both stacks: SW v3.67.0 + CoQ-metadata editor served; on wwf-mass a CoQ
+re-rendered (PP-COA-2026-0042 → DocEngine doc, 13 tables, `RESULT: PASS`) and the
+metadata round-tripped. **Rollback** = revert tags to v73/v103 (+ `alembic -n tasks
+downgrade 0037` — additive columns drop cleanly; image-only rollback also safe, the
+columns are harmless unused).
