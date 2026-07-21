@@ -932,6 +932,28 @@ CREATE SEQUENCE public.qc_sfr_id_seq
 
 
 --
+-- Name: qc_signatures; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_signatures (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    object_type text NOT NULL,
+    object_id uuid NOT NULL,
+    signer_id uuid NOT NULL,
+    signer_name text NOT NULL,
+    signer_role text,
+    meaning text NOT NULL,
+    statement text,
+    signed_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_signatures_meaning_check CHECK ((meaning = ANY (ARRAY['AUTHORED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'VERIFIED'::text, 'COQ_ISSUED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_signatures FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_spec_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -1618,6 +1640,14 @@ ALTER TABLE ONLY public.qc_sampling_requests
 
 
 --
+-- Name: qc_signatures qc_signatures_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_signatures
+    ADD CONSTRAINT qc_signatures_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_spec_parameters qc_spec_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1994,6 +2024,13 @@ CREATE INDEX qc_sampling_requests_status_idx ON public.qc_sampling_requests USIN
 
 
 --
+-- Name: qc_signatures_object_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_signatures_object_idx ON public.qc_signatures USING btree (org_id, object_type, object_id);
+
+
+--
 -- Name: qc_spec_parameters_spec_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2278,6 +2315,13 @@ CREATE TRIGGER audit_qc_sampling_plans AFTER INSERT OR DELETE OR UPDATE ON publi
 --
 
 CREATE TRIGGER audit_qc_sampling_requests AFTER INSERT OR DELETE OR UPDATE ON public.qc_sampling_requests FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_signatures audit_qc_signatures; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_signatures AFTER INSERT OR DELETE OR UPDATE ON public.qc_signatures FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -3001,6 +3045,13 @@ CREATE POLICY org_isolation ON public.qc_sampling_requests USING ((org_id = app.
 
 
 --
+-- Name: qc_signatures org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_signatures USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_spec_parameters org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3184,6 +3235,12 @@ ALTER TABLE public.qc_sampling_plans ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_sampling_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_signatures; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_signatures ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_spec_parameters; Type: ROW SECURITY; Schema: public; Owner: -

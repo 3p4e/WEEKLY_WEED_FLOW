@@ -1404,6 +1404,61 @@ async def test_result_lab_verdict_manual_reference_only(client, admin_headers):
     assert r2.json()["lab_verdict"] is None and r2.json()["lab_verdict_mismatch"] is False
 
 
+# ── URS increment 8 — Annex 11 electronic signatures (URS §14 / item 11) ────
+async def test_certificate_esignature_records_and_lists(client, admin_headers):
+    """A re-authenticated signature is recorded against the certificate carrying
+    the signer's name, the meaning, and the time; it is listed on the cert and in
+    the detail. The admin's account password is TestPassword123456 (conftest)."""
+    spec = await _spec(client, admin_headers, material="SIG-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIG")
+    r = await client.post(f"/qc/certificates/{coa['id']}/sign",
+                          json={"password": "TestPassword123456", "meaning": "APPROVED",
+                                "statement": "Reviewed and approved."}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    s = r.json()
+    assert s["meaning"] == "APPROVED" and s["signer_name"] == "Test Admin" and s["signed_at"]
+    assert s["object_type"] == "qc_certificate" and s["object_id"] == coa["id"]
+    # a second meaning appends a second signature (append-only attestation log)
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={"password": "TestPassword123456", "meaning": "RELEASED"},
+                              headers=admin_headers)).status_code == 201
+    lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures", headers=admin_headers)).json()
+    assert [x["meaning"] for x in lst] == ["APPROVED", "RELEASED"]
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert len(detail["signatures"]) == 2
+
+
+async def test_certificate_esignature_reauth_required(client, admin_headers):
+    """Annex 11 §14 — the signature is only applied if the signer re-authenticates;
+    a wrong password records nothing."""
+    spec = await _spec(client, admin_headers, material="SIG-REAUTH")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIG-RA")
+    r = await client.post(f"/qc/certificates/{coa['id']}/sign",
+                          json={"password": "wrong-password", "meaning": "APPROVED"},
+                          headers=admin_headers)
+    assert r.status_code == 401
+    lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures", headers=admin_headers)).json()
+    assert lst == []                              # nothing recorded on a failed re-auth
+
+
+async def test_certificate_esignature_validates_meaning_and_gates(client, admin_headers):
+    spec = await _spec(client, admin_headers, material="SIG-VAL")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIG-VAL")
+    # an unknown meaning is rejected
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={"password": "TestPassword123456", "meaning": "WHATEVER"},
+                              headers=admin_headers)).status_code == 422
+    # signing is a QC-writer act — a base USER cannot sign (nor read the domain)
+    _, user = await _actor(client, admin_headers, "USER")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={"password": "NewPassword123456", "meaning": "APPROVED"},
+                              headers=user)).status_code == 403
+    # a bogus certificate id is a 404, not a 500
+    assert (await client.post("/qc/certificates/not-a-uuid/sign",
+                              json={"password": "TestPassword123456", "meaning": "APPROVED"},
+                              headers=admin_headers)).status_code == 404
+
+
 async def test_ecoa_promote_needs_spec_and_mapped_results(client, admin_headers):
     # no spec → cannot certify
     doc = await _ecoa_doc(client, admin_headers, batch="B-NOSPEC")

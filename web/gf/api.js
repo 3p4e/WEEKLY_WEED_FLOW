@@ -162,6 +162,9 @@ GF.API = {
   qcPatchPlaceholder(id, b){ return this._req('PATCH', '/qc/coa-placeholders/' + id, b); },
   qcVerifyCert(id)         { return this._req('POST', '/qc/certificates/' + id + '/verify'); },
   qcVerifications(id)      { return this._req('GET', '/qc/certificates/' + id + '/verifications'); },
+  // Annex 11 electronic signatures (re-authenticated attestation on a certificate)
+  qcSign(id, b)            { return this._req('POST', '/qc/certificates/' + id + '/sign', b); },
+  qcSignatures(id)         { return this._req('GET', '/qc/certificates/' + id + '/signatures'); },
   // Custody cluster (U5) — sampling requests (RQS), field records (SFR), chain of custody
   qcRqs(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-requests' + (u?'?'+u:'')); },
   qcRqsOne(id)             { return this._req('GET', '/qc/sampling-requests/' + id); },

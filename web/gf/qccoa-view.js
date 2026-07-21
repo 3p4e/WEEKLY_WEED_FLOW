@@ -200,6 +200,22 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   };
 
+  GF.WWF.qcCoaSign = async (id) => {
+    const mk = (i) => (document.getElementById(i) || {}).value || '';
+    const password = mk('qcsig-pw');
+    if (!password) return GF.toast(AL('Enter your password to sign', 'Внесете лозинка за потпис'), 'error');
+    const body = { meaning: mk('qcsig-meaning') || 'APPROVED', password,
+                   statement: mk('qcsig-stmt').trim() || null };
+    try {
+      const s = await GF.API.qcSign(id, body);
+      GF.toast(AL('Signed', 'Потпишано') + ': ' + s.meaning);
+      GF.WWF._qccoa.detail = await GF.API.qcCoa(id);
+      GF.render.all();
+    } catch (e) {
+      GF.toast(e.status === 401 ? AL('Re-authentication failed', 'Неуспешна автентикација') : e.message, 'error');
+    }
+  };
+
   const resultRows = (d) => {
     const editable = d.coa.status === 'DRAFT';
     const rows = (d.results || []).map(r => `
@@ -225,6 +241,29 @@
       <th>${AL('Test', 'Тест')}</th><th>${AL('Result', 'Резултат')}</th>
       <th>${AL('Limits', 'Граници')}</th><th>${AL('Complies', 'Задоволува')}</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" class="ana-note">${AL('No results yet', 'Сè уште нема резултати')}</td></tr>`}${addRow}</tbody></table>`;
+  };
+
+  // Annex 11 electronic-signature panel: the immutable list of signatures on
+  // this certificate + a re-authenticated signing form (writer only).
+  const SIG_MEANINGS = ['AUTHORED', 'REVIEWED', 'APPROVED', 'RELEASED', 'VERIFIED', 'COQ_ISSUED'];
+  const signaturesPanel = (d) => {
+    const sigs = (d.signatures || []).map(s => `
+      <div class="qms-dgrid" style="margin:2px 0">
+        <span class="chip-opt" style="border-color:var(--accent);color:var(--accent)">${GF.esc(s.meaning)}</span>
+        <b>${GF.esc(s.signer_name)}${s.signer_role ? ` <span class="ana-note">${GF.esc(s.signer_role)}</span>` : ''}</b>
+        <span class="ana-note mono">${GF.esc((s.signed_at || '').replace('T', ' ').slice(0, 16))}</span>
+        ${s.statement ? `<span class="ana-note">“${GF.esc(s.statement)}”</span>` : '<span></span>'}
+      </div>`).join('');
+    const form = canWrite() ? `
+      <div class="qms-dl" style="margin-top:6px;align-items:center;gap:6px;flex-wrap:wrap">
+        <select id="qcsig-meaning">${SIG_MEANINGS.map(m => `<option value="${m}">${m}</option>`).join('')}</select>
+        <input id="qcsig-stmt" placeholder="${AL('meaning / note (optional)', 'значење / белешка (опц.)')}" style="min-width:150px">
+        <input id="qcsig-pw" type="password" placeholder="${AL('your password', 'вашата лозинка')}" style="width:130px">
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaSign('${d.coa.id}')">${AL('Sign', 'Потпиши')}</button>
+        <span class="ana-note">${AL('Re-authenticate to sign (Annex 11).', 'Повторна автентикација за потпис (Анекс 11).')}</span>
+      </div>` : '';
+    return `<div style="margin-top:12px" class="ana-pt">${AL('Electronic signatures', 'Електронски потписи')}</div>
+      ${sigs || `<div class="ana-note">${AL('No signatures yet', 'Сè уште нема потписи')}</div>`}${form}`;
   };
 
   // Resolve a supersedes_id to its human certificate number from the loaded list.
@@ -263,6 +302,7 @@
       </div>` : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test results', 'Тест резултати')}</div>
       ${resultRows(d)}
+      ${signaturesPanel(d)}
     </div>`;
   };
 

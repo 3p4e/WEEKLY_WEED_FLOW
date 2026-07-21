@@ -72,8 +72,8 @@ async def purge_org(org_id) -> None:
                   # QC LIMS — children before parents; the cert→spec FK is
                   # RESTRICT, so certificates (and their CASCADE results) must
                   # go before specifications.
-                  "qc_results", "qc_certificates", "qc_spec_parameters", "qc_samples",
-                  "qc_sampling_plans", "qc_specifications",
+                  "qc_signatures", "qc_results", "qc_certificates", "qc_spec_parameters",
+                  "qc_samples", "qc_sampling_plans", "qc_specifications",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)

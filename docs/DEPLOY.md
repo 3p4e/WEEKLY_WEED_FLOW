@@ -1378,3 +1378,40 @@ minted certificate keeps our FAIL, carries "Pass", and records the disagreement.
 Prod (wwf_app) verified: /health 200, /qc auth-gated (401), clean startup.
 **Rollback** = revert tags to v67/v97 (+ `alembic -n tasks downgrade 0032` — all
 additive; image-only rollback also safe since the column is nullable).
+
+## URS increment 8 (backend v69 / frontend v99 / migration 0034 → BOTH stacks, 2026-07-21)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md §3 (e-signatures REOPENED → required by URS
+10.2/§14) + item 11 (iCoA analyst + Head-of-QC signature capture) — **Annex 11
+electronic signatures for QC approvals**.
+
+- **Migration 0034**: append-only `qc_signatures` (facility canon: uuid PK +
+  org_id, FORCE/ENABLE RLS `org_isolation`, `audit_qc_signatures` trigger,
+  `(org_id, object_type, object_id)` index, guarded GRANT). Columns: polymorphic
+  `object_type`/`object_id` link, `signer_id`, `signer_name`/`signer_role`
+  (snapshot at sign time), `meaning` (CHECK: AUTHORED/REVIEWED/APPROVED/RELEASED/
+  VERIFIED/COQ_ISSUED), `statement`, `signed_at`.
+- **Backend**: `POST /qc/certificates/{id}/sign` — the signer RE-AUTHENTICATES
+  (their account password, verified against the users-DB profile hash — Annex 11
+  §14 "executed by the signer"); a wrong password applies nothing (401). Records
+  the name, role, meaning, and time, permanently linked to the certificate.
+  `GET /qc/certificates/{id}/signatures` + the signatures folded into the cert
+  detail. Distinct from the hash-chained audit_log (which records the mutation) —
+  this is the deliberate attestation; the certificate's lifecycle/second-person
+  gates are unchanged. Write-gated to the QC writers.
+- **Frontend**: an "Electronic signatures" panel on the certificate detail listing
+  the signatures (meaning · name · role · time · note) and a re-authenticated
+  signing form (meaning select + optional note + password). SW v3.61.0→**v3.62.0**.
+
+Gate: **416 backend tests green** (3 new: a re-authenticated signature records +
+lists with name/meaning/time and appends; a wrong password records nothing (401);
+an unknown meaning is 422, a USER cannot sign (403), a bogus cert id is 404),
+migration 0034 up/down/base clean, schema.tasks.sql dump-diff EXACT vs alembic
+head (qc_signatures + its RLS/trigger/index only), node --check. Migration 0034
+applied to BOTH tasks DBs before the image flip. Deployed backend v68→**v69**
+(prod scheduler too) + frontend v98→**v99**. **Live behavioral smoke on wwf-mass**
+(tt.qc.mgr): re-authenticated sign → 201 carrying signer name + meaning + time;
+a second meaning appends; wrong password → 401 recording nothing; unknown meaning
+→ 422. Prod (wwf_app) verified: /health 200, /qc signatures auth-gated (401),
+clean startup. **Rollback** = revert tags to v68/v98 (+ `alembic -n tasks
+downgrade 0033` — new isolated table; image-only rollback also safe).

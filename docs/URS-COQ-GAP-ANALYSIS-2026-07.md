@@ -103,19 +103,24 @@ Priority order; SOP citations are the binding source.
 11. **iCoA as a distinct record type** — internal CoA with analyst +
     Head-of-QC signature capture, merged with eCoA results in the
     parameter master (the URS: "first-class, not an afterthought").
+    Partly DONE: the record type already exists (`cert_type` ICOA/ECOA,
+    results unified in `qc_results`), and the **signature-capture** half is
+    delivered by the Annex 11 e-signature increment (§3 below, increment 8).
+    Remaining: a dedicated iCoA authoring surface if the owner wants one
+    beyond the shared certificate flow.
 12. **PDF originals custody** (Phase-2 of the old backlog, unchanged):
     store the source eCoA with SHA-256, and when OCR arrives, page/bbox
     traceability per extracted value.
 
 ## 3. Conflicts / decisions the URS resolves or reopens
 
-- **E-signatures: REOPENED → required.** The URS (10.2, §14) requires
-  Annex 11-compliant e-signatures for QC approvals (name, meaning,
-  date/time, linked to record) — the earlier "retired as DocEngine-
-  superseded" decision no longer stands for the QC approval path. QP
-  qualified e-signature (eIDAS) stays OUTSIDE the app, in the release
-  act. → New build item; the sign-off fits the deferred workflow_state
-  increment.
+- **E-signatures: REOPENED → required.** ✅ **DONE (increment 8, mig 0034,
+  v69/v99)** — Annex 11-compliant e-signatures for QC approvals: `POST
+  /qc/certificates/{id}/sign` records a re-authenticated (§14 "executed by the
+  signer") attestation carrying name, meaning, date/time, permanently linked to
+  the certificate, in an append-only `qc_signatures` log; surfaced on the cert
+  detail with a signing panel. The QP qualified e-signature (eIDAS) stays
+  OUTSIDE the app, in the separate release act (unchanged).
 - **Per-sample potency grading: SETTLED as spec-level.** The URS's
   grade_tier model puts Grade I–V THC criteria on the specification,
   not per-sample — matching what we built and closing the qc-lims-ao
