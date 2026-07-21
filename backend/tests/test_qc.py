@@ -1977,6 +1977,38 @@ async def test_rqs_release_related_escalates_to_qp(client, admin_headers):
     assert r.status_code == 200 and r.json()["release_related"] is True
 
 
+async def test_release_related_flag_cannot_be_dropped_to_dodge_qp(client, admin_headers):
+    """§6.1.2 segregation of duties — a non-QP writer must not be able to clear
+    the release-related flag, either in the register PATCH or beforehand, to
+    register a QP-reserved request itself."""
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    rqs = await _rqs(client, qc_h, batch_id="B-DODGE", release_related=True, **_RQS_COMPLETE)
+    # same-PATCH attempt: flip the flag false while registering → 403 (can't clear)
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                           json={"status": "REGISTERED", "release_related": False}, headers=qc_h)
+    assert r.status_code == 403
+    # two-step attempt: clear the flag first → 403 (only QP may clear it)
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                           json={"release_related": False}, headers=qc_h)
+    assert r.status_code == 403 and "6.1.2" in r.text
+    # the QP legitimately registers it
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=qp_h)
+    assert r.status_code == 200
+
+
+async def test_registration_rejects_blank_and_zero_fields(client, admin_headers):
+    """§6.1.6 completeness — whitespace-only mandatory strings and a zero sample
+    count do not satisfy the gate."""
+    rqs = await _rqs(client, admin_headers, batch_id="   ", num_samples=0,
+                     required_tests=["POTENCY"], storage_location="  ",
+                     material_status="QUARANTINE", spec_reference="\t")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=admin_headers)
+    assert r.status_code == 422
+    body = r.text
+    assert "batch_id" in body and "num_samples" in body and "storage_location" in body and "spec_reference" in body
+
+
 async def test_sfr_requires_registered_rqs(client, admin_headers):
     """§6.1.1 (MAJOR) — no sampling may be recorded without a registered RQS.
     The rqs_id is required, must exist, and must be past OPEN."""

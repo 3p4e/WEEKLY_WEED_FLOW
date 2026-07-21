@@ -3317,6 +3317,13 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
         # being set, else the value already on the record.
         def eff(col):
             return patch[col] if col in patch else cur[col]
+        # §6.1.2 segregation of duties — the release-related flag is what forces
+        # QP registration, so a non-QP writer must not be able to LOWER it (which
+        # would demote the request out of the QP's remit). Raising it is fine.
+        if (patch.get("release_related") is False and cur["release_related"]
+                and user["role"] not in _QP_ROLES):
+            raise HTTPException(403, "only the Qualified Person may clear the release-related"
+                                     " flag on a sampling request (§6.1.2)")
         fields, args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -3327,17 +3334,26 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
             args.append(target); fields.append(f"status=${len(args)}")
             if target == "REGISTERED":
                 # §3 / §6.1.6 — registration into the MLL is a QC-Head act; a
-                # release-related request (§6.1.2) escalates to the QP.
-                if eff("release_related"):
+                # release-related request (§6.1.2) escalates to the QP. Evaluate
+                # the flag against the current OR patched value so it cannot be
+                # dropped in the same PATCH to dodge the escalation.
+                if cur["release_related"] or eff("release_related"):
                     if user["role"] not in _QP_ROLES:
                         raise HTTPException(403, "a release-related RQS is registered by the"
                                                  " Qualified Person (§6.1.2)")
                 elif user["role"] not in _QC_REGISTRAR:
                     raise HTTPException(403, "RQS registration into the MLL is a QC function"
                                              " (QC Manager / QP) — §6.1.6")
-                # §6.1.6(b) completeness gate — an incomplete RQS is not registered.
-                missing = [m for m in _RQS_MANDATORY
-                           if eff(m) in (None, "", []) or (m == "required_tests" and not eff(m))]
+                # §6.1.6(b) completeness gate — an incomplete RQS is not
+                # registered. A blank value is null, empty, or whitespace-only;
+                # the sample count must be a positive integer.
+                def _blank(v):
+                    if v is None or v == [] or v == {}:
+                        return True
+                    return isinstance(v, str) and not v.strip()
+                missing = [m for m in _RQS_MANDATORY if _blank(eff(m))]
+                if "num_samples" not in missing and (eff("num_samples") or 0) <= 0:
+                    missing.append("num_samples")
                 if missing:
                     raise HTTPException(422, "RQS is incomplete — cannot register (§6.1.6):"
                                              f" missing {', '.join(missing)}")
@@ -3349,7 +3365,9 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
                 cseq = await c.fetchval(
                     "SELECT coalesce(max((regexp_match(qc_control_number, '^([0-9]+)/'))[1]::int), 0) + 1"
                     " FROM qc_sampling_requests WHERE org_id=$1"
-                    " AND qc_control_number LIKE '%/' || $2 || '_RQS'", user["org_id"], yy)
+                    # the literal underscore is escaped so LIKE treats it as a
+                    # character, not the single-char wildcard.
+                    " AND qc_control_number LIKE '%/' || $2 || '\\_RQS'", user["org_id"], yy)
                 args.append(f"{cseq:03d}/{yy}_RQS"); fields.append(f"qc_control_number=${len(args)}")
                 args.append(user["id"]); fields.append(f"registered_by_id=${len(args)}")
                 fields.append("registered_at=now()")

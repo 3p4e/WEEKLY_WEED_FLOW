@@ -1642,11 +1642,18 @@ chain-of-custody → sample to the SOP's control points.
 - **GxP**: unknown values stay null for a human — never fabricated; issued RQS numbers
   are never renumbered; the completeness gate is enforced at registration (§6.1.6
   model), not at submission, so a draft may be incomplete. **Adversarial review**
-  (SQL/GxP/injection/serializer lenses) run on the diff pre-deploy.
+  (SQL/GxP/injection/serializer lenses) run on the diff pre-deploy confirmed the
+  mechanics (INSERT alignment, advisory-lock effectiveness, no injection/500 path) and
+  found + fixed one MEDIUM segregation-of-duties gap and two minor ones: (1) the §6.1.2
+  QP escalation keyed on the *patched* `release_related`, so a `QC_MGR` could clear the
+  flag (same PATCH or beforehand) and self-register a QP-reserved request — the flag is
+  now QP-only to lower and the gate evaluates current-OR-patched; (2) the §6.1.6
+  completeness check now rejects whitespace-only strings and a zero sample count; (3) the
+  control-number `LIKE` now escapes the literal `_` so it is not a wildcard.
 
-Gate: full backend suite **438 passed** (+7 new: RQS completeness gate, §6.1.4 field
-validation, QC-registrar gate, release-related→QP, SFR-requires-registered-RQS, sample
-taxonomy+retention, non-conforming flag), migration 0039 up/down/base clean,
-schema.tasks.sql dump-diff EXACT, node --check. Migration applied to BOTH tasks DBs
-(0038→0039) before the image flip. Deployed backend v74→**v75** (prod scheduler too) +
-frontend v104→**v105**.
+Gate: full backend suite **440 passed** (+9 new: RQS completeness gate + blank/zero
+rejection, §6.1.4 field validation, QC-registrar gate, release-related→QP + no-dodge,
+SFR-requires-registered-RQS, sample taxonomy+retention, non-conforming flag), migration
+0039 up/down/base clean, schema.tasks.sql dump-diff EXACT, node --check. Migration
+applied to BOTH tasks DBs (0038→0039) before the image flip. Deployed backend v74→**v75**
+(prod scheduler too) + frontend v104→**v105**.
