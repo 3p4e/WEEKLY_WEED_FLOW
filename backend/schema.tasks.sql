@@ -1275,6 +1275,27 @@ ALTER TABLE ONLY public.task_progress FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: task_workflow_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.task_workflow_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    action text NOT NULL,
+    from_state text NOT NULL,
+    to_state text NOT NULL,
+    actor_id uuid NOT NULL,
+    actor_role text,
+    remark text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT task_workflow_events_action_check CHECK ((action = ANY (ARRAY['SUBMIT'::text, 'APPROVE'::text, 'REJECT'::text, 'BLOCK'::text, 'UNBLOCK'::text])))
+);
+
+ALTER TABLE ONLY public.task_workflow_events FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: tasks; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1844,6 +1865,14 @@ ALTER TABLE ONLY public.task_progress
 
 
 --
+-- Name: task_workflow_events task_workflow_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_workflow_events
+    ADD CONSTRAINT task_workflow_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tasks tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2176,6 +2205,13 @@ CREATE INDEX task_progress_task_idx ON public.task_progress USING btree (task_id
 
 
 --
+-- Name: task_workflow_events_task_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX task_workflow_events_task_idx ON public.task_workflow_events USING btree (org_id, task_id);
+
+
+--
 -- Name: tasks_dept_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2467,6 +2503,13 @@ CREATE TRIGGER audit_task_dependencies AFTER INSERT OR DELETE OR UPDATE ON publi
 --
 
 CREATE TRIGGER audit_task_prog AFTER INSERT OR DELETE OR UPDATE ON public.task_progress FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: task_workflow_events audit_task_workflow_events; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_workflow_events AFTER INSERT OR DELETE OR UPDATE ON public.task_workflow_events FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2851,6 +2894,14 @@ ALTER TABLE ONLY public.task_progress
 
 
 --
+-- Name: task_workflow_events task_workflow_events_task_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.task_workflow_events
+    ADD CONSTRAINT task_workflow_events_task_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+
+--
 -- Name: tasks tasks_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3225,6 +3276,13 @@ CREATE POLICY org_isolation ON public.task_links USING ((org_id = app.current_or
 
 
 --
+-- Name: task_workflow_events org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.task_workflow_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: work_sessions org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3423,6 +3481,12 @@ ALTER TABLE public.task_links ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.task_progress ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: task_workflow_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.task_workflow_events ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: tasks; Type: ROW SECURITY; Schema: public; Owner: -

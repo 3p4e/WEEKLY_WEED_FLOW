@@ -168,6 +168,9 @@ GF.API = {
   // Source-document custody (item 12) — store the original with a SHA-256
   qcUploadOriginal(docId, b) { return this._req('POST', '/qc/coa-documents/' + docId + '/originals', b); },
   qcOriginalDlUrl(fileId)  { return '/qc/document-files/' + encodeURIComponent(fileId) + '/download'; },
+  // Workflow sign-off (SUMA v2): submit → approve/reject + QP quality block
+  taskWorkflow(id)         { return this._req('GET', '/tasks/' + id + '/workflow'); },
+  taskWorkflowAct(id, b)   { return this._req('POST', '/tasks/' + id + '/workflow', b); },
   // Batch genealogy (item 5) — variety→cultivation→processing→packaging, m:n blending
   qcGenealogy(batch)       { return this._req('GET', '/qc/genealogy/' + encodeURIComponent(batch)); },
   qcGenInherited(batch)    { return this._req('GET', '/qc/genealogy/' + encodeURIComponent(batch) + '/inherited-results'); },

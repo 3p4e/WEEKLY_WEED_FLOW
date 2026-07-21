@@ -446,7 +446,10 @@ class TaskPatch(BaseModel):
     description: str | None = Field(default=None, max_length=10000)
     status: Status | None = None
     priority: Priority | None = None
-    workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    # workflow_state is deliberately NOT patchable: the sign-off lifecycle
+    # (SUMA v2) moves only through POST /tasks/{id}/workflow so every
+    # transition is second-person-checked and evidenced in
+    # task_workflow_events. A raw write would bypass the record.
     task_type: TaskType | None = None
     node_kind: NodeKind | None = None
     department: str | None = Field(default=None, max_length=120)
@@ -857,3 +860,115 @@ async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(requ
     if res.split()[-1] == "0":
         raise HTTPException(404, "Dependency not found")
     return {"ok": True}
+
+
+# ── Workflow sign-off (SUMA v2 assimilation) ─────────────────────────────────
+# draft → submitted → approved | rejected (rejected → resubmittable), plus a
+# qp_blocked quality hold (QP/ADMIN only; lifting returns to draft for rework).
+# Every transition is a row in the append-only task_workflow_events record; the
+# approver must be a different person than the submitter (second-person rule);
+# a rejection or block without a remark is refused — an unexplained verdict is
+# not a record. workflow_state itself is not patchable (see TaskPatch).
+_WF_ACTIONS = ("SUBMIT", "APPROVE", "REJECT", "BLOCK", "UNBLOCK")
+_WF_QP = (ADMIN, "QP")
+
+
+class WorkflowIn(BaseModel):
+    action: str
+    remark: str | None = Field(default=None, max_length=2000)
+
+
+def _wf_event_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "action": r["action"],
+        "from_state": r["from_state"], "to_state": r["to_state"],
+        "actor_id": str(r["actor_id"]), "actor_role": r["actor_role"],
+        "remark": r["remark"],
+        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+    }
+
+
+@router.get("/tasks/{task_id}/workflow")
+async def list_workflow_events(task_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    async with rls(user) as c:
+        t = await c.fetchrow(
+            "SELECT id, workflow_state FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        rows = await c.fetch(
+            "SELECT * FROM task_workflow_events WHERE task_id=$1 ORDER BY created_at", task_id)
+    return {"workflow_state": t["workflow_state"],
+            "events": [_wf_event_out(dict(r)) for r in rows]}
+
+
+@router.post("/tasks/{task_id}/workflow", status_code=201)
+async def workflow_transition(task_id: str, body: WorkflowIn,
+                              user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    action = (body.action or "").upper()
+    if action not in _WF_ACTIONS:
+        raise HTTPException(422, f"action must be one of: {', '.join(_WF_ACTIONS)}")
+    remark = (body.remark or "").strip() or None
+    if action in ("REJECT", "BLOCK") and not remark:
+        raise HTTPException(422, "A remark is required to reject or block")
+    async with rls(user) as c:
+        t = await c.fetchrow(
+            "SELECT id, title, department_id, workflow_state FROM tasks"
+            " WHERE id=$1 AND is_deleted=false", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        cur = t["workflow_state"] or "draft"
+        role = user["role"]
+        if action == "SUBMIT":
+            # Any in-scope participant may submit; a legacy free-text state is
+            # treated as draft (the column was a passthrough before 0037).
+            if cur in ("submitted", "qp_blocked"):
+                raise HTTPException(409, f"Cannot submit from state '{cur}'")
+            new = "submitted"
+        elif action in ("APPROVE", "REJECT"):
+            if role not in ELEVATED_ROLES:
+                raise HTTPException(403, "Sign-off is a manager decision")
+            if cur != "submitted":
+                raise HTTPException(409, f"Cannot {action.lower()} from state '{cur}'")
+            # Second-person rule: the approver must not be the person who
+            # submitted (the actor of the most recent SUBMIT event).
+            submitter = await c.fetchval(
+                "SELECT actor_id FROM task_workflow_events WHERE task_id=$1 AND action='SUBMIT'"
+                " ORDER BY created_at DESC LIMIT 1", task_id)
+            if submitter is not None and str(submitter) == str(user["id"]):
+                raise HTTPException(403, "The sign-off must be a different person than the submitter")
+            new = "approved" if action == "APPROVE" else "rejected"
+        elif action == "BLOCK":
+            if role not in _WF_QP:
+                raise HTTPException(403, "A quality block is a Qualified-Person act")
+            if cur == "qp_blocked":
+                raise HTTPException(409, "Task is already blocked")
+            new = "qp_blocked"
+        else:  # UNBLOCK
+            if role not in _WF_QP:
+                raise HTTPException(403, "Lifting a quality block is a Qualified-Person act")
+            if cur != "qp_blocked":
+                raise HTTPException(409, "Task is not blocked")
+            new = "draft"   # rework + resubmission after a quality hold
+        row = await c.fetchrow(
+            "INSERT INTO task_workflow_events(org_id, task_id, action, from_state, to_state,"
+            " actor_id, actor_role, remark) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], task_id, action, cur, new, user["id"], role, remark)
+        await c.execute(
+            "UPDATE tasks SET workflow_state=$1, updated_by=$2, updated_at=now() WHERE id=$3",
+            new, user["id"], task_id)
+        try:
+            who = await participants(c, task_id)
+            await emit(c, user, verb="workflow_" + action.lower(), object_type="task",
+                       object_id=task_id, recipients=[(u, "workflow") for u in who],
+                       task_id=task_id, department_id=t["department_id"],
+                       params={"title": t["title"], "from": cur, "to": new,
+                               **({"remark": remark} if remark else {})})
+        except Exception:
+            pass
+    out = _wf_event_out(dict(row))
+    out["workflow_state"] = new
+    return out

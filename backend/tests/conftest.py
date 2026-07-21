@@ -68,7 +68,8 @@ async def purge_org(org_id) -> None:
     must never be edited)."""
     t = tasks_admin_pool()
     for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs", "task_comments",
-                  "task_assignees", "task_links", "work_sessions", "task_progress",
+                  "task_workflow_events", "task_assignees", "task_links", "work_sessions",
+                  "task_progress",
                   # QC LIMS — children before parents; the cert→spec FK is
                   # RESTRICT, so certificates (and their CASCADE results) must
                   # go before specifications.

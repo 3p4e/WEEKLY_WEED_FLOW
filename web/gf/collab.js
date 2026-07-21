@@ -63,6 +63,7 @@ GF.WWF.renderCollabInner = (t) => {
   }
 
   return `
+    ${GF.WWF.workflowSection(t, c)}
     <div class="sec-label">${GF.icon('at','icon')}${AL('Assignees', 'Доделени')}</div>
     <div class="deps">${chips || `<span style="font-size:12px;color:var(--ink-3)">${AL('Nobody assigned.', 'Никој не е доделен.')}</span>`}</div>
     ${assignRow}
@@ -84,13 +85,14 @@ GF.WWF.loadCollab = async (taskId) => {
   const seq = (GF.WWF._collabSeq[taskId] = (GF.WWF._collabSeq[taskId] || 0) + 1);
   let result;
   try {
-    const [comments, assignees] = await Promise.all([
+    const [comments, assignees, wf] = await Promise.all([
       GF.API.comments(taskId).catch(() => []),
       GF.API.assignees(taskId).catch(() => []),
+      GF.API.taskWorkflow(taskId).catch(() => null),
     ]);
-    result = { comments: comments || [], assignees: assignees || [], loaded: true };
+    result = { comments: comments || [], assignees: assignees || [], wf, loaded: true };
   } catch (e) {
-    result = { comments: [], assignees: [], loaded: true };
+    result = { comments: [], assignees: [], wf: null, loaded: true };
   }
   if (GF.WWF._collabSeq[taskId] !== seq) return;  // a newer call already resolved
   GF.WWF._collab[taskId] = result;
@@ -105,6 +107,66 @@ GF.WWF.postComment = async (taskId) => {
   inp.value = '';
   try { await GF.API.addComment(taskId, text); await GF.WWF.loadCollab(taskId); }
   catch (e) { GF.toast(AL('Comment failed: ', 'Коментарот не успеа: ') + e.message, 'error'); }
+};
+
+/* ── Workflow sign-off (SUMA v2): submit → approve/reject + QP quality block.
+   The lifecycle only moves through POST /tasks/{id}/workflow; the strip shows
+   the state, the actions the current role may take, and the event history
+   (the sign-off record — actor, role, remark, time). ─────────────────────── */
+GF.WWF._wfMeta = {
+  draft:      { en: 'Draft',       mk: 'Нацрт',        c: 'var(--ink-3)' },
+  submitted:  { en: 'Submitted',   mk: 'Поднесено',    c: 'var(--blue)' },
+  approved:   { en: 'Approved',    mk: 'Одобрено',     c: 'var(--green)' },
+  rejected:   { en: 'Rejected',    mk: 'Одбиено',      c: '#E5484D' },
+  qp_blocked: { en: 'QP blocked',  mk: 'QP блокирано', c: 'var(--amber,#f0a020)' },
+};
+
+GF.WWF.workflowSection = (t, c) => {
+  const wf = c && c.wf;
+  if (!wf) return '';
+  const st = wf.workflow_state || 'draft';
+  const m = GF.WWF._wfMeta[st] || { en: st, mk: st, c: 'var(--ink-3)' };
+  const role = (GF.API.user || {}).role;
+  const elevated = !!role && role !== 'USER';
+  const qp = role === 'QP' || role === 'ADMIN';
+  const btn = (act, label, color) =>
+    `<button class="mini-btn" style="color:${color}" onclick="GF.WWF.wfAct('${t.id}','${act}')">${label}</button>`;
+  const actions = [];
+  if (st !== 'submitted' && st !== 'qp_blocked') actions.push(btn('submit', AL('Submit', 'Поднеси'), 'var(--blue)'));
+  if (elevated && st === 'submitted') {
+    actions.push(btn('approve', AL('Approve', 'Одобри'), 'var(--green)'));
+    actions.push(btn('reject', AL('Reject', 'Одбиј'), '#E5484D'));
+  }
+  if (qp && st !== 'qp_blocked') actions.push(btn('block', AL('QP block', 'QP блок'), 'var(--amber,#f0a020)'));
+  if (qp && st === 'qp_blocked') actions.push(btn('unblock', AL('Lift block', 'Тргни блок'), 'var(--green)'));
+  const events = (wf.events || []).length ? wf.events.map(e => `
+    <div class="note" style="align-items:flex-start">
+      <span class="nd" style="min-width:0;flex:0 0 auto">${GF.esc(e.action)}</span>
+      <span style="flex:1">${GF.esc(e.actor_role || '')}${e.remark ? ' — ' + GF.esc(e.remark) : ''}</span>
+      <span style="font-size:10px;color:var(--ink-3);white-space:nowrap">${GF.esc(GF.WWF._when(e.created_at))}</span>
+    </div>`).join('') : `<div style="font-size:12px;color:var(--ink-3)">${AL('No sign-off events yet.', 'Сè уште нема настани.')}</div>`;
+  return `
+    <div class="sec-label">${GF.icon('check', 'icon')}${AL('Sign-off', 'Одобрување')}
+      <span class="dep-chip" style="margin-left:6px;color:${m.c};border-color:${m.c}">${GF.esc(AL(m.en, m.mk))}</span>
+    </div>
+    <div class="note-input" style="flex-wrap:wrap;gap:6px">
+      <input id="wf-remark-${t.id}" placeholder="${AL('Remark (required to reject/block)…', 'Забелешка (задолжителна за одбивање/блок)…')}" style="flex:1;min-width:140px">
+      ${actions.join('')}
+    </div>
+    <div class="notes">${events}</div>`;
+};
+
+GF.WWF.wfAct = async (taskId, action) => {
+  const inp = GF.$('wf-remark-' + taskId);
+  const remark = (inp && inp.value.trim()) || null;
+  if ((action === 'reject' || action === 'block') && !remark) {
+    return GF.toast(AL('A remark is required to reject or block', 'Потребна е забелешка за одбивање или блок'), 'error');
+  }
+  try {
+    await GF.API.taskWorkflowAct(taskId, { action, ...(remark ? { remark } : {}) });
+    GF.toast(AL('Sign-off recorded', 'Одобрувањето е запишано'));
+    await GF.WWF.loadCollab(taskId);
+  } catch (e) { GF.toast(e.message, 'error'); }
 };
 
 GF.WWF.doAssign = async (taskId) => {

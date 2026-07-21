@@ -1496,3 +1496,47 @@ ancestor's RELEASED result is surfaced as inheritable. Prod (wwf_app) verified:
 /health 200, /qc genealogy auth-gated (401), SW v3.64.0. **Rollback** = revert
 tags to v70/v100 (+ `alembic -n tasks downgrade 0035` — new isolated table;
 image-only rollback also safe).
+
+## TMS T5 (backend v72 / frontend v102 / migration 0037 → BOTH stacks, 2026-07-21)
+
+**SUMA v2 assimilation — workflow sign-off.** The last un-incorporated delta
+from the SUMA ISO17025 corpus: its provisioned-but-unwired
+workflow_state / task_remarks / QP-block layer, activated natively on the WWF
+task model. `tasks.workflow_state` (inert since the v2 baseline) now carries a
+real lifecycle:
+
+    draft → submitted → approved | rejected (rejected → resubmittable)
+    qp_blocked: a QP/ADMIN quality hold from any state; lifting → draft
+
+- **Migration 0037**: append-only `task_workflow_events` (action CHECK
+  SUBMIT/APPROVE/REJECT/BLOCK/UNBLOCK, from/to states, actor id + role
+  snapshot, remark, FK→tasks CASCADE, FORCE/ENABLE RLS + audit trigger +
+  `(org_id, task_id)` index + guarded GRANT). No CHECK on
+  `tasks.workflow_state` itself — the column was a free-text passthrough so
+  live rows may hold arbitrary strings; the lifecycle is app-enforced and a
+  legacy value is treated as draft on the first submit.
+- **Backend**: `POST /tasks/{id}/workflow` {action, remark} + `GET` (state +
+  event history). Second-person rule: the approver must differ from the most
+  recent submitter. A reject or block **requires a remark** (an unexplained
+  verdict is not a record). Block/unblock are QP/ADMIN-only. Scope via the
+  shared `_assert_scope_visible`; participants notified via `emit()`
+  (`workflow_*` verbs). The raw `workflow_state` field is **removed from
+  TaskPatch** — the lifecycle cannot be bypassed.
+- **Frontend**: a "Sign-off" strip in the expanded task card (collab section) —
+  state chip, role-appropriate actions (Submit / Approve / Reject / QP block /
+  Lift block), a remark input, and the event history (action · role · remark ·
+  time). SW v3.64.0→**v3.65.0**.
+
+Gate: **426 backend tests green** (4 new in test_workflow.py: happy path +
+second-person 403; reject-requires-remark + resubmit; QP block/unblock role
+gates; no-PATCH-bypass + input guards), migration 0037 up/down/base clean,
+schema.tasks.sql dump-diff EXACT vs alembic head, node --check. Migration
+applied to BOTH tasks DBs before the image flip. Deployed backend v71→**v72**
+(prod scheduler too) + frontend v101→**v102**. **Live behavioral smoke on
+wwf-mass 12/12** (tt.qc.mgr submit + tt.qp sign-off): draft→submitted,
+self-approve 403, remark-less reject 422, reject→resubmit→approve, QP
+block/unblock with 409 while held, raw PATCH cannot move the state, and the
+full six-event record retained. Prod (wwf_app) verified: /health 200, workflow
+endpoint auth-gated (401), SW v3.65.0. **Rollback** = revert tags to v71/v101
+(+ `alembic -n tasks downgrade 0036` — isolated new table; image-only rollback
+also safe; workflow_state values persist harmlessly either way).
