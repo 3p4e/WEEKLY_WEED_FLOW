@@ -138,6 +138,7 @@ GF.API = {
   qcAddResult(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/results', b); },
   qcGenerateCoq(id)        { return this._req('POST', '/qc/certificates/' + id + '/coq'); },
   qcReviseCoa(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/revise', b); },
+  qcVoidCoa(id, reason)    { return this._req('POST', '/qc/certificates/' + id + '/void', { reason }); },
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },
@@ -160,6 +161,10 @@ GF.API = {
   qcPromoteCoaDoc(id)      { return this._req('POST', '/qc/coa-documents/' + id + '/promote'); },
   qcPlaceholders(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/coa-placeholders' + (u?'?'+u:'')); },
   qcPatchPlaceholder(id, b){ return this._req('PATCH', '/qc/coa-placeholders/' + id, b); },
+  // External CoA Review Checklist (QCT 018) — QCSOP 012 §6.3.2
+  qcChecklist(id)          { return this._req('GET', '/qc/coa-documents/' + id + '/checklist'); },
+  qcSaveChecklist(id, b)   { return this._req('PUT', '/qc/coa-documents/' + id + '/checklist', b); },
+  qcDecideChecklist(id, b) { return this._req('POST', '/qc/coa-documents/' + id + '/checklist/decide', b); },
   qcVerifyCert(id)         { return this._req('POST', '/qc/certificates/' + id + '/verify'); },
   qcVerifications(id)      { return this._req('GET', '/qc/certificates/' + id + '/verifications'); },
   // Annex 11 electronic signatures (re-authenticated attestation on a certificate)

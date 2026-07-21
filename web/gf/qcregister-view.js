@@ -67,7 +67,7 @@
         <td class="mono">${GF.esc(r.coa_number)}</td>
         <td>${GF.esc(r.batch_id)}</td>
         <td>${GF.esc(r.cert_type)}</td>
-        <td>${stChip(r.status)}</td>
+        <td>${stChip(r.status)}${r.sop_status ? ` <span class="ana-note">${GF.esc(r.sop_status)}</span>` : ''}</td>
         <td>${GF.esc(r.laboratory || '—')}</td>
         <td class="mono">${r.retention_expiry ? GF.esc(r.retention_expiry) : '—'}</td>
         <td>${GF.esc(r.archive_ref || '—')}</td>

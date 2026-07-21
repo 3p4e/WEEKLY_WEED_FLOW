@@ -35,6 +35,7 @@
     APPROVED: { en: 'Approved', mk: 'Одобрено', c: 'var(--teal,var(--blue))' },
     RELEASED: { en: 'Released', mk: 'Ослободено', c: 'var(--green)' },
     SUPERSEDED: { en: 'Superseded', mk: 'Заменето', c: 'var(--ink-3)' },
+    VOIDED: { en: 'Voided', mk: 'Поништено', c: 'var(--red)' },
   };
   // legal moves, mirroring backend qc.py _COA_TRANSITIONS / _COA_QP_TARGETS:
   // NEXT is the forward chain, BACK the one allowed kick-back (REVIEWED may
@@ -160,6 +161,17 @@
       const rev = await GF.API.qcReviseCoa(id, { reason });
       GF.toast(AL('Revision created: ', 'Ревизија создадена: ') + rev.coa_number);
     } catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
+  // §6.6 — void a fundamentally-invalid certificate (wrong batch / wrong sample).
+  // Head-of-QC act; a written reason is mandatory; the record is retained.
+  GF.WWF.qcCoaVoid = async (id) => {
+    const reason = prompt(AL('This voids the certificate (wrong batch / wrong sample). It stays archived. Reason:',
+                             'Ова го поништува сертификатот (погрешна серија / примерок). Останува архивиран. Причина:'));
+    if (reason === null) return;
+    if (!reason.trim() || reason.trim().length < 3) return GF.toast(AL('A reason is required', 'Потребна е причина'), 'error');
+    try { await GF.API.qcVoidCoa(id, reason.trim()); GF.toast(AL('Certificate voided', 'Сертификатот е поништен')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
     await _reload(id);
   };
   GF.WWF.qcCoaDlCoq = async (docId, kind) => {
@@ -318,7 +330,9 @@
         ${c.status !== 'DRAFT' && c.status !== 'RELEASED' && c.status !== 'SUPERSEDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
         ${c.status === 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaRevise('${c.id}')">${AL('Revise (supersede)', 'Ревидирај (замени)')}</button>` : ''}
+        ${canCoq() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVoid('${c.id}')" title="${AL('Wrong batch / wrong sample — §6.6', 'Погрешна серија / примерок — §6.6')}">${AL('Void', 'Поништи')}</button>` : ''}
       </div>` : ''}
+      ${c.status === 'VOIDED' && c.void_reason ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('Voided', 'Поништено')} — ${GF.esc(c.void_reason)}</div>` : ''}
       ${c.status === 'RELEASED' && canCoq() ? `<div class="qms-dl" style="margin-top:8px">
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaGenerateCoq('${c.id}')">${AL('Generate COQ', 'Генерирај COQ')}</button>
         ${c.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','docx')">${AL('COQ .docx', 'COQ .docx')}</button>

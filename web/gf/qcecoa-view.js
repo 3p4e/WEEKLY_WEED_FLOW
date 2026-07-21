@@ -16,8 +16,11 @@
   GF.WWF._qcecoa = { docs: null, sel: null, detail: null, detailError: null, ph: null,
                      specs: null, mapParams: {}, verify: {}, vhist: {}, qa: {},
                      chunks: {}, chunksOpen: {}, exParams: {}, editEx: null,
+                     checklist: {},                 // QCT 018 review checklist per doc id
                      q: '', status: '', tab: 'docs',
                      loading: false, error: null };
+  const _HOQC = ['ADMIN', 'QC_MGR', 'QP'];
+  const canHoqc = () => _HOQC.includes((GF.API.user || {}).role);
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
@@ -214,6 +217,33 @@
     } catch (e) { GF.toast(e.message, 'error'); }
     GF.render.all();
   };
+  // ── External CoA Review Checklist (QCT 018) — §6.3.2 ──
+  GF.WWF.qcEcoaChecklistLoad = async (docId) => {
+    const st = GF.WWF._qcecoa;
+    try { st.checklist[docId] = await GF.API.qcChecklist(docId) || {}; }
+    catch (e) { st.checklist[docId] = {}; }
+    GF.render.all();
+  };
+  GF.WWF.qcEcoaChecklistSave = async (docId) => {
+    const cb = (id) => !!(document.getElementById(id) || {}).checked;
+    const body = {
+      sample_id_match: cb('qec-cl-sid-' + docId),
+      method_per_tqa: cb('qec-cl-mth-' + docId),
+      units_per_spec: cb('qec-cl-uni-' + docId),
+      conformance_by_pp: cb('qec-cl-cbp-' + docId),
+      discrepancies: ((document.getElementById('qec-cl-dsc-' + docId) || {}).value || '').trim() || null,
+    };
+    try { GF.WWF._qcecoa.checklist[docId] = await GF.API.qcSaveChecklist(docId, body); GF.toast(AL('Checklist saved', 'Листата е зачувана')); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
+  GF.WWF.qcEcoaChecklistDecide = async (docId, outcome) => {
+    if (outcome === 'REJECTED' && !confirm(AL('Reject this eCoA? It should then be voided and replaced by the contract lab.',
+                                              'Одбиј го овој eCoA? Треба да се поништи и замени од договорната лабораторија.'))) return;
+    try { GF.WWF._qcecoa.checklist[docId] = await GF.API.qcDecideChecklist(docId, { outcome }); GF.toast(AL('Recorded', 'Запишано')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    GF.render.all();
+  };
   GF.WWF.qcEcoaToggleChunks = async (docId) => {
     const st = GF.WWF._qcecoa;
     st.chunksOpen[docId] = !st.chunksOpen[docId];
@@ -283,6 +313,33 @@
     await GF.WWF.loadQcEcoa();
   };
 
+  // §6.3.2 External CoA Review Checklist (QCT 018) panel. Lazily loads once per
+  // doc; the HoQC signs ACCEPTED/REJECTED which locks it.
+  const checklistPanel = (doc) => {
+    const st = GF.WWF._qcecoa;
+    const cl = st.checklist[doc.id];
+    if (cl === undefined) { GF.WWF.qcEcoaChecklistLoad(doc.id); return `<div class="ana-note" style="margin-top:8px">${AL('Loading review checklist…', 'Се вчитува листата…')}</div>`; }
+    const decided = cl && cl.outcome && cl.outcome !== 'PENDING';
+    const chk = (id, k, label) =>
+      `<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="${id}" ${cl && cl[k] ? 'checked' : ''} ${decided ? 'disabled' : ''}>${label}</label>`;
+    return `<div class="ana-panel" style="margin-top:10px;padding:10px">
+      <div class="ana-pt" style="margin-bottom:6px">${AL('External CoA review checklist (QCT 018 · §6.3.2)', 'Листа за преглед на надворешен CoA (QCT 018 · §6.3.2)')}
+        ${decided ? `<span class="chip-opt" style="border-color:${cl.outcome === 'ACCEPTED' ? 'var(--green)' : 'var(--red)'};color:${cl.outcome === 'ACCEPTED' ? 'var(--green)' : 'var(--red)'}">${GF.esc(cl.outcome)}</span>` : ''}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${chk('qec-cl-sid-' + doc.id, 'sample_id_match', AL('Sample ID matches the PP submission record', 'ИД на примерок се совпаѓа со записот на ПП'))}
+        ${chk('qec-cl-mth-' + doc.id, 'method_per_tqa', AL('Each parameter uses the method agreed in the TQA', 'Секој параметар го користи договорениот метод (TQA)'))}
+        ${chk('qec-cl-uni-' + doc.id, 'units_per_spec', AL('Results expressed in the PP specification units', 'Резултатите се во единиците од спец. на ПП'))}
+        ${chk('qec-cl-cbp-' + doc.id, 'conformance_by_pp', AL('Conformance determined by Purely Plant (not taken from the eCoA)', 'Усогласеноста ја утврди Пјурели Плант (не од eCoA)'))}
+        <input id="qec-cl-dsc-${doc.id}" placeholder="${AL('Discrepancies / flags (resolve before accepting)', 'Несовпаѓања / знаменца (реши пред прифаќање)')}" value="${GF.esc((cl && cl.discrepancies) || '')}" ${decided ? 'disabled' : ''}>
+      </div>
+      ${!decided ? `<div class="qms-dl" style="margin-top:8px">
+        ${canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaChecklistSave('${doc.id}')">${AL('Save checklist', 'Зачувај листа')}</button>` : ''}
+        ${canHoqc() ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaChecklistDecide('${doc.id}','ACCEPTED')">${AL('Accept (sign)', 'Прифати (потпиши)')}</button>
+          <button class="btn btn-sm" onclick="GF.WWF.qcEcoaChecklistDecide('${doc.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
+      </div>` : `<div class="ana-note" style="margin-top:6px">${AL('Signed & locked', 'Потпишано и заклучено')}${cl.reviewed_at ? ' · ' + GF.esc(String(cl.reviewed_at).slice(0, 10)) : ''}</div>`}
+    </div>`;
+  };
+
   const detail = (d) => {
     const st = GF.WWF._qcecoa;
     const doc = d.document;
@@ -334,6 +391,7 @@
         ${canPromote ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaPromote('${doc.id}')">${AL('Promote → certificate', 'Промовирај → сертификат')}</button>` : ''}
         ${(doc.status !== 'PROMOTED' && doc.status !== 'REJECTED') ? `<button class="btn btn-sm" onclick="GF.WWF.qcEcoaAdvance('${doc.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
       </div>` : ''}
+      ${doc.status !== 'REJECTED' ? checklistPanel(doc) : ''}
       ${!doc.specification_id ? `<div class="ana-note" style="margin-top:6px">${AL('Attach a specification to grade & promote.', 'Прикачете спецификација за оценување и промоција.')}</div>
       ${canWrite() ? `<div class="qms-dl" style="margin-top:6px;align-items:center">
         <select id="qec-attach-spec-${doc.id}"><option value="">${AL('Specification…', 'Спецификација…')}</option>${(st.specs || []).map(s => `<option value="${s.id}">${GF.esc(s.spec_id + ' · ' + (s.material_code || ''))}</option>`).join('')}</select>

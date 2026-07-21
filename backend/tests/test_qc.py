@@ -647,6 +647,91 @@ async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results
     return coa
 
 
+# ── QCSOP 012 v3 — Tier 1 (Void + External CoA Review Checklist + register) ──
+async def test_void_certificate(client, admin_headers):
+    """§6.6 — a fundamentally-invalid certificate is VOIDED with a written reason
+    by the Head of QC; the record is retained; it cannot be voided twice, and a
+    non-QC writer may not void."""
+    spec = await _spec(client, admin_headers, material="VOID-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-VOID")
+    # a reason is mandatory (min length) → 422
+    r = await client.post(f"/qc/certificates/{coa['id']}/void", json={"reason": ""}, headers=admin_headers)
+    assert r.status_code == 422
+    # a non-QC writer (executive) cannot void
+    _, ceo = await _actor(client, admin_headers, "CEO")
+    r = await client.post(f"/qc/certificates/{coa['id']}/void",
+                          json={"reason": "wrong batch identified"}, headers=ceo)
+    assert r.status_code == 403
+    # the QC Manager voids it
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.post(f"/qc/certificates/{coa['id']}/void",
+                          json={"reason": "wrong sample tested"}, headers=qc)
+    assert r.status_code == 200 and r.json()["status"] == "VOIDED"
+    assert r.json()["void_reason"] == "wrong sample tested" and r.json()["voided_by"]
+    assert r.json()["sop_status"] == "Voided"
+    # a voided certificate cannot be voided again, revised, or generate a CoQ
+    assert (await client.post(f"/qc/certificates/{coa['id']}/void",
+                              json={"reason": "again"}, headers=qc)).status_code == 409
+    assert (await client.post(f"/qc/certificates/{coa['id']}/revise",
+                              json={"reason": "cannot revise a voided certificate"}, headers=qc)).status_code == 409
+    # it is still retained/readable (never deleted)
+    assert (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).status_code == 200
+
+
+async def test_ecoa_review_checklist(client, admin_headers):
+    """§6.3.2 — the External CoA Review Checklist (QCT 018): the reviewer fills the
+    affirmations, the Head of QC signs ACCEPTED only when all are affirmed with no
+    open discrepancies, and a decided checklist is locked."""
+    doc = await _ecoa_doc(client, admin_headers, batch="B-CL-1")
+    # no checklist yet
+    assert (await client.get(f"/qc/coa-documents/{doc['id']}/checklist", headers=admin_headers)).json() is None
+    # fill it, but with a discrepancy + one affirmation missing
+    r = await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                         json={"sample_id_match": True, "method_per_tqa": True,
+                               "units_per_spec": True, "conformance_by_pp": False,
+                               "discrepancies": "Pb units differ"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["outcome"] == "PENDING"
+    # cannot ACCEPT while an affirmation is false / a discrepancy is open
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                          json={"outcome": "ACCEPTED"}, headers=qc)
+    assert r.status_code == 422
+    # a plain writer cannot decide (HoQC act)
+    _, ceo = await _actor(client, admin_headers, "CEO")
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                              json={"outcome": "ACCEPTED"}, headers=ceo)).status_code == 403
+    # clear the discrepancy + affirm all, then accept
+    r = await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                         json={"conformance_by_pp": True, "discrepancies": ""}, headers=admin_headers)
+    assert r.status_code == 200
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                          json={"outcome": "ACCEPTED"}, headers=qc)
+    assert r.status_code == 200 and r.json()["outcome"] == "ACCEPTED" and r.json()["reviewed_by"]
+    # locked: no further edits, no re-decide
+    assert (await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                             json={"notes": "x"}, headers=admin_headers)).status_code == 409
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                              json={"outcome": "REJECTED"}, headers=qc)).status_code == 409
+
+
+async def test_register_sop_status_labels(client, admin_headers):
+    """§6.13 — the register presents the SOP status vocabulary. A released cert is
+    'Issued'; a released revision is 'Revised'."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="REG-SOP")
+    reg = (await client.get("/qc/register", headers=admin_headers)).json()
+    row = next(x for x in reg if x["id"] == coa["id"])
+    assert row["sop_status"] == "Issued"
+    rev = (await client.post(f"/qc/certificates/{coa['id']}/revise",
+                             json={"reason": "typo in units"}, headers=admin_headers)).json()
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{rev['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    reg = (await client.get("/qc/register", headers=admin_headers)).json()
+    assert next(x for x in reg if x["id"] == rev["id"])["sop_status"] == "Revised"
+    assert next(x for x in reg if x["id"] == coa["id"])["sop_status"] == "Superseded"
+
+
 async def test_coq_generates_from_released_cert(client, admin_headers, monkeypatch):
     _stub_de(monkeypatch, {"document_id": "DE-COQ-1", "verify": "RESULT: PASS", "bytes": 4096})
     _, qp = await _actor(client, admin_headers, "QP")

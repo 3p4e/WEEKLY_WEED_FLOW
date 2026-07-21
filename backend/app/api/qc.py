@@ -732,8 +732,27 @@ async def update_lab(lab_id: str, body: LabPatch, user: dict = Depends(require_r
 # ════════════════════════════════════════════════════════════════════════════
 # QC LIMS U3 — certificates of analysis + test results (certification cluster)
 # ════════════════════════════════════════════════════════════════════════════
-_COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED")
+_COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED", "VOIDED")
 _CERT_TYPES = ("ICOA", "ECOA", "COQ", "WATER", "OTHER")
+# QCSOP 012 §6.6 — a fundamentally-invalid certificate (wrong batch / wrong
+# sample) is VOIDED with a written reason. VOIDED is reached only via the void
+# endpoint (HoQC/QP act), never a PATCH target; an already-retired certificate
+# (SUPERSEDED) or an already-voided one cannot be voided again.
+_VOIDABLE = {"DRAFT", "REVIEWED", "APPROVED", "RELEASED"}
+# §Responsibilities — the Head of QC authorizes corrections, reissuance, and
+# voiding of certificates, and reviews eCoAs.
+_HOQC = (ADMIN, "QC_MGR", "QP")
+# §6.13 — present the internal lifecycle under the SOP's Certificate Issuance
+# Register status vocabulary (Draft / Issued / Accepted / Revised / Superseded /
+# Voided). A released certificate that supersedes another is a "Revised" issue.
+_SOP_STATUS = {"DRAFT": "Draft", "REVIEWED": "Under Review", "APPROVED": "Approved",
+               "RELEASED": "Issued", "SUPERSEDED": "Superseded", "VOIDED": "Voided"}
+
+
+def _coa_sop_status(status, supersedes_id) -> str:
+    if status == "RELEASED" and supersedes_id:
+        return "Revised"
+    return _SOP_STATUS.get(status, status)
 # CoA lifecycle: author → second-person review → QP approve → release.
 _COA_TRANSITIONS = {
     "DRAFT": {"REVIEWED"},
@@ -840,6 +859,12 @@ def _coa_out(r: dict) -> dict:
         "retest_date": r["retest_date"].isoformat() if r.get("retest_date") else None,
         "botanical_type": r.get("botanical_type"),
         "chemotype": r.get("chemotype"),
+        # §6.13 Certificate Issuance Register status label
+        "sop_status": _coa_sop_status(r["status"], r.get("supersedes_id")),
+        # §6.6 void disposition
+        "void_reason": r.get("void_reason"),
+        "voided_by": str(r["voided_by"]) if r.get("voided_by") else None,
+        "voided_at": r["voided_at"].isoformat() if r.get("voided_at") else None,
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -1149,6 +1174,33 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
             " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date,"
             " source_document_code, source_document_date, source_institution, $2"
             " FROM qc_results WHERE coa_id=$3", row["id"], user["id"], coa_id)
+    return _coa_out(dict(row))
+
+
+class VoidIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+@router.post("/certificates/{coa_id}/void")
+async def void_certificate(coa_id: str, body: VoidIn,
+                           user: dict = Depends(require_role(*_HOQC))):
+    """QCSOP 012 §6.6 — void a fundamentally-invalid certificate (e.g. wrong
+    batch identified, wrong sample tested). Authorised by the Head of QC in
+    writing (a reason is mandatory). The original record is NOT deleted — it is
+    retained, archived, with the voiding decision (GxP: issued records are
+    immutable). An already-superseded or already-voided certificate cannot be
+    voided; use revise for a correction to a valid certificate."""
+    _uuid_or_404(coa_id, "Certificate")
+    async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_certificates WHERE id=$1", coa_id)
+        if cur is None:
+            raise HTTPException(404, "Certificate not found")
+        if cur["status"] not in _VOIDABLE:
+            raise HTTPException(409, f"a {cur['status']} certificate cannot be voided")
+        row = await c.fetchrow(
+            "UPDATE qc_certificates SET status='VOIDED', void_reason=$1, voided_by=$2,"
+            " voided_at=now(), updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",
+            body.reason.strip(), user["id"], coa_id)
     return _coa_out(dict(row))
 
 
@@ -1685,7 +1737,7 @@ async def certificate_register(
     if laboratory_id is not None:
         args.append(laboratory_id); clauses.append(f"laboratory_id = ${len(args)}")
     if pending:
-        clauses.append("status NOT IN ('RELEASED', 'SUPERSEDED')")
+        clauses.append("status NOT IN ('RELEASED', 'SUPERSEDED', 'VOIDED')")
     if oos_linked:
         clauses.append("EXISTS (SELECT 1 FROM qc_oos_records o WHERE o.batch_id = qc_certificates.batch_id)")
     if retention == "expired":
@@ -1725,6 +1777,7 @@ async def certificate_register(
         out.append({
             "id": str(r["id"]), "coa_number": r["coa_number"], "batch_id": r["batch_id"],
             "cert_type": r["cert_type"], "status": r["status"], "decision": r["decision"],
+            "sop_status": _coa_sop_status(r["status"], r["supersedes_id"]),
             "report_date": r["report_date"].isoformat() if r["report_date"] else None,
             "laboratory": lab_names.get(str(r["laboratory_id"])) if r["laboratory_id"] else None,
             "retention_start": r["retention_start"].isoformat() if r["retention_start"] else None,
@@ -2613,6 +2666,126 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             f"UPDATE qc_coa_documents SET {', '.join(fields)}, updated_at=now()"
             f" WHERE id=${len(args)} RETURNING *", *args)
     return _ecoa_out(dict(row))
+
+
+# ── External CoA Review Checklist (QCT 018 / Annex A03) — QCSOP 012 §6.3.2 ──
+# The mandated per-field review of an incoming eCoA: sample-id match, method per
+# the technical quality agreement, units per the PP specification, an explicit
+# affirmation that Purely Plant (not the eCoA) determined conformance, and any
+# discrepancy flags. One checklist per eCoA document; the Head of QC signs the
+# ACCEPTED / REJECTED outcome, which locks it (an issued review is immutable).
+_CHECKLIST_OUTCOMES = ("PENDING", "ACCEPTED", "REJECTED")
+
+
+class ChecklistIn(BaseModel):
+    sample_id_match: bool | None = None
+    method_per_tqa: bool | None = None
+    units_per_spec: bool | None = None
+    conformance_by_pp: bool | None = None
+    discrepancies: str | None = Field(default=None, max_length=4000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ChecklistDecision(BaseModel):
+    outcome: str                                   # ACCEPTED | REJECTED
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+def _checklist_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "document_id": str(r["document_id"]),
+        "sample_id_match": r["sample_id_match"], "method_per_tqa": r["method_per_tqa"],
+        "units_per_spec": r["units_per_spec"], "conformance_by_pp": r["conformance_by_pp"],
+        "discrepancies": r["discrepancies"], "notes": r["notes"], "outcome": r["outcome"],
+        "reviewed_by": str(r["reviewed_by"]) if r["reviewed_by"] else None,
+        "reviewed_at": r["reviewed_at"].isoformat() if r["reviewed_at"] else None,
+        "updated_at": r["updated_at"].isoformat(),
+    }
+
+
+@router.get("/coa-documents/{doc_id}/checklist")
+async def get_checklist(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(doc_id, "eCoA document")
+    async with rls(user) as c:
+        if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
+            raise HTTPException(404, "eCoA document not found")
+        row = await c.fetchrow(
+            "SELECT * FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
+    return _checklist_out(dict(row)) if row else None
+
+
+@router.put("/coa-documents/{doc_id}/checklist")
+async def upsert_checklist(doc_id: str, body: ChecklistIn,
+                           user: dict = Depends(require_role(*_WRITERS))):
+    """Fill in / update the §6.3.2 review checklist for an eCoA document. Editable
+    until the Head of QC signs the outcome; a decided (ACCEPTED/REJECTED) checklist
+    is locked."""
+    _uuid_or_404(doc_id, "eCoA document")
+    patch = body.model_dump(exclude_unset=True)
+    async with rls(user) as c:
+        if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
+            raise HTTPException(404, "eCoA document not found")
+        cur = await c.fetchrow("SELECT * FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
+        if cur and cur["outcome"] != "PENDING":
+            raise HTTPException(409, f"checklist already {cur['outcome']} — locked")
+        if cur is None:
+            row = await c.fetchrow(
+                "INSERT INTO qc_ecoa_checklist(org_id, document_id, sample_id_match,"
+                " method_per_tqa, units_per_spec, conformance_by_pp, discrepancies, notes,"
+                " created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *",
+                user["org_id"], doc_id, patch.get("sample_id_match"), patch.get("method_per_tqa"),
+                patch.get("units_per_spec"), patch.get("conformance_by_pp"),
+                patch.get("discrepancies"), patch.get("notes"), user["id"])
+        else:
+            fields, args = [], []
+            for col in ("sample_id_match", "method_per_tqa", "units_per_spec",
+                        "conformance_by_pp", "discrepancies", "notes"):
+                if col in patch:
+                    args.append(patch[col]); fields.append(f"{col}=${len(args)}")
+            if not fields:
+                return _checklist_out(dict(cur))
+            args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+            args.append(cur["id"])
+            row = await c.fetchrow(
+                f"UPDATE qc_ecoa_checklist SET {', '.join(fields)}, updated_at=now()"
+                f" WHERE id=${len(args)} RETURNING *", *args)
+    return _checklist_out(dict(row))
+
+
+@router.post("/coa-documents/{doc_id}/checklist/decide")
+async def decide_checklist(doc_id: str, body: ChecklistDecision,
+                           user: dict = Depends(require_role(*_HOQC))):
+    """§6.3.2 — the Head of QC signs the eCoA review outcome. ACCEPTED requires
+    every checklist affirmation to be true and no discrepancies; REJECTED records
+    the rejection (the eCoA is then voided and replaced by the contract lab). The
+    decision stamps the reviewer + time and locks the checklist."""
+    _uuid_or_404(doc_id, "eCoA document")
+    if body.outcome not in ("ACCEPTED", "REJECTED"):
+        raise HTTPException(422, "outcome must be ACCEPTED or REJECTED")
+    async with rls(user) as c:
+        if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
+            raise HTTPException(404, "eCoA document not found")
+        cur = await c.fetchrow("SELECT * FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
+        if cur is None:
+            raise HTTPException(409, "complete the checklist before deciding")
+        if cur["outcome"] != "PENDING":
+            raise HTTPException(409, f"checklist already {cur['outcome']}")
+        if body.outcome == "ACCEPTED":
+            # §6.3.2 — accept only a complete, discrepancy-free checklist.
+            affirmations = (cur["sample_id_match"], cur["method_per_tqa"],
+                            cur["units_per_spec"], cur["conformance_by_pp"])
+            if not all(a is True for a in affirmations):
+                raise HTTPException(422, "every checklist field must be affirmed (true) to accept")
+            if (cur["discrepancies"] or "").strip():
+                raise HTTPException(422, "resolve the recorded discrepancies before accepting"
+                                         " (they must be cleared in writing per §6.3.2)")
+        note = body.notes.strip() if body.notes else None
+        row = await c.fetchrow(
+            "UPDATE qc_ecoa_checklist SET outcome=$1, reviewed_by=$2, reviewed_at=now(),"
+            " notes=COALESCE($3, notes), updated_by=$2, updated_at=now() WHERE id=$4 RETURNING *",
+            body.outcome, user["id"], note, cur["id"])
+    return _checklist_out(dict(row))
 
 
 @router.post("/coa-documents/{doc_id}/extractions", status_code=201)

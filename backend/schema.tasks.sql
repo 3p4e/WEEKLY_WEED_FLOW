@@ -373,9 +373,12 @@ CREATE TABLE public.qc_certificates (
     retest_date date,
     botanical_type text,
     chemotype text,
+    void_reason text,
+    voided_by uuid,
+    voided_at timestamp with time zone,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
-    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text])))
+    CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text, 'VOIDED'::text])))
 );
 
 ALTER TABLE ONLY public.qc_certificates FORCE ROW LEVEL SECURITY;
@@ -547,6 +550,33 @@ CREATE TABLE public.qc_document_files (
 );
 
 ALTER TABLE ONLY public.qc_document_files FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_ecoa_checklist; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_ecoa_checklist (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    sample_id_match boolean,
+    method_per_tqa boolean,
+    units_per_spec boolean,
+    conformance_by_pp boolean,
+    discrepancies text,
+    notes text,
+    outcome text DEFAULT 'PENDING'::text NOT NULL,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_ecoa_checklist_outcome_check CHECK ((outcome = ANY (ARRAY['PENDING'::text, 'ACCEPTED'::text, 'REJECTED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_ecoa_checklist FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1608,6 +1638,14 @@ ALTER TABLE ONLY public.qc_document_files
 
 
 --
+-- Name: qc_ecoa_checklist qc_ecoa_checklist_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_ecoa_checklist
+    ADD CONSTRAINT qc_ecoa_checklist_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_field_placeholders qc_field_placeholders_label_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2068,6 +2106,13 @@ CREATE INDEX qc_document_files_object_idx ON public.qc_document_files USING btre
 
 
 --
+-- Name: qc_ecoa_checklist_document_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_ecoa_checklist_document_idx ON public.qc_ecoa_checklist USING btree (org_id, document_id);
+
+
+--
 -- Name: qc_field_placeholders_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2401,6 +2446,13 @@ CREATE TRIGGER audit_qc_coa_extractions AFTER INSERT OR DELETE OR UPDATE ON publ
 --
 
 CREATE TRIGGER audit_qc_coa_verifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_verifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_ecoa_checklist audit_qc_ecoa_checklist; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_ecoa_checklist AFTER INSERT OR DELETE OR UPDATE ON public.qc_ecoa_checklist FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2746,6 +2798,14 @@ ALTER TABLE ONLY public.qc_coa_verifications
 
 ALTER TABLE ONLY public.qc_coa_verifications
     ADD CONSTRAINT qc_coa_verifications_document_fkey FOREIGN KEY (source_document_id) REFERENCES public.qc_coa_documents(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_ecoa_checklist qc_ecoa_checklist_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_ecoa_checklist
+    ADD CONSTRAINT qc_ecoa_checklist_document_fkey FOREIGN KEY (document_id) REFERENCES public.qc_coa_documents(id) ON DELETE CASCADE;
 
 
 --
@@ -3160,6 +3220,13 @@ CREATE POLICY org_isolation ON public.qc_document_files USING ((org_id = app.cur
 
 
 --
+-- Name: qc_ecoa_checklist org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_ecoa_checklist USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_field_placeholders org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3380,6 +3447,12 @@ ALTER TABLE public.qc_coa_verifications ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_document_files ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_ecoa_checklist; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_ecoa_checklist ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_field_placeholders; Type: ROW SECURITY; Schema: public; Owner: -
