@@ -1065,6 +1065,17 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             "SELECT status, analyst_id, supersedes_id FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
+        # QCSOP 012 §6.6 — a retired certificate (VOIDED or SUPERSEDED) is archived
+        # and immutable. Only the register-keeping fields (retention window +
+        # archive location) may still be maintained; the substantive record is
+        # frozen. (A same-value status echo is a no-op, not an edit.)
+        if cur["status"] in ("VOIDED", "SUPERSEDED"):
+            _REGISTER_ONLY = {"retention_start", "retention_expiry", "archive_ref"}
+            frozen = [k for k, v in patch.items()
+                      if k not in _REGISTER_ONLY and not (k == "status" and v == cur["status"])]
+            if frozen:
+                raise HTTPException(409, f"a {cur['status']} certificate is archived and immutable —"
+                                         " only the retention/archive register fields may be updated")
         if patch.get("laboratory_id") is not None:
             await _resolve_lab(c, user["org_id"], patch["laboratory_id"])
         extra_sql, extra_args = [], []
@@ -2725,6 +2736,10 @@ async def upsert_checklist(doc_id: str, body: ChecklistIn,
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
             raise HTTPException(404, "eCoA document not found")
+        # serialise the read-then-insert so two concurrent PUTs can't both create
+        # a checklist for the same document (the UNIQUE(org_id, document_id) is the
+        # hard backstop; this avoids a unique-violation 500 on the race).
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"ecoacl:{user['org_id']}:{doc_id}")
         cur = await c.fetchrow("SELECT * FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
         if cur and cur["outcome"] != "PENDING":
             raise HTTPException(409, f"checklist already {cur['outcome']} — locked")

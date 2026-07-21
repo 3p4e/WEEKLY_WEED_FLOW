@@ -676,6 +676,12 @@ async def test_void_certificate(client, admin_headers):
                               json={"reason": "cannot revise a voided certificate"}, headers=qc)).status_code == 409
     # it is still retained/readable (never deleted)
     assert (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).status_code == 200
+    # §6.6 immutability — a voided record's substantive fields are frozen, but the
+    # retention/archive register fields may still be maintained.
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 409
+    assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                               json={"archive_ref": "SHELF-A-12"}, headers=admin_headers)).status_code == 200
 
 
 async def test_ecoa_review_checklist(client, admin_headers):

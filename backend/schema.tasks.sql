@@ -1638,6 +1638,14 @@ ALTER TABLE ONLY public.qc_document_files
 
 
 --
+-- Name: qc_ecoa_checklist qc_ecoa_checklist_document_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_ecoa_checklist
+    ADD CONSTRAINT qc_ecoa_checklist_document_key UNIQUE (org_id, document_id);
+
+
+--
 -- Name: qc_ecoa_checklist qc_ecoa_checklist_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 

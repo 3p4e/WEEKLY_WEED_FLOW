@@ -68,6 +68,9 @@ def upgrade() -> None:
             updated_at timestamp with time zone DEFAULT now() NOT NULL,
             CONSTRAINT qc_ecoa_checklist_pkey PRIMARY KEY (id),
             CONSTRAINT qc_ecoa_checklist_outcome_check CHECK (outcome = ANY (ARRAY[%s])),
+            -- §6.3.2 one review checklist per eCoA document (DB-enforced so a
+            -- concurrent double-PUT cannot create a second, editable review).
+            CONSTRAINT qc_ecoa_checklist_document_key UNIQUE (org_id, document_id),
             CONSTRAINT qc_ecoa_checklist_document_fkey FOREIGN KEY (document_id)
                 REFERENCES public.qc_coa_documents(id) ON DELETE CASCADE
         )
