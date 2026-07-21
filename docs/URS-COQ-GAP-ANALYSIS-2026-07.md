@@ -47,16 +47,16 @@ the URS specifies (proposer → 100% human verify → commit).
 
 Priority order; SOP citations are the binding source.
 
-1. **OOS gate on CoQ generation** (QCSOP 012 §6.4.1/§6.6; URS 9.1) —
-   `generate_coq` does not check for an open OOS on the batch. Highest
-   value, smallest change: 409 with an explicit reason when an open OOS
-   references the batch.
-2. **Supersession chain for certificates/CoQs** (§6.7) — Revised/
-   Superseded statuses, new number + "Supersedes [n] — reason", original
-   never deleted. We lock but do not supersede.
-3. **Derived-value computation** — total THC = Δ9-THC + 0.877×THCA (Ph.
-   Eur. 3028), total CBD analogously, computed by the engine from acid/
-   neutral components, never transcribed.
+1. ~~**OOS gate on CoQ generation** (QCSOP 012 §6.4.1/§6.6; URS 9.1)~~
+   ✅ **DONE (increment 1, mig 0028)** — `generate_coq` raises 409 with an
+   explicit reason when an open OOS references the batch.
+2. ~~**Supersession chain for certificates/CoQs** (§6.7)~~ ✅ **DONE
+   (increment 2, mig 0029)** — Revised/Superseded statuses via the revise flow,
+   new number + "Supersedes [n] — reason", original never deleted.
+3. ~~**Derived-value computation** — total THC = Δ9-THC + 0.877×THCA (Ph.
+   Eur. 3028), total CBD analogously~~ ✅ **DONE (increment 2, mig 0029)** —
+   computed by the engine from acid/neutral component results at CoQ time,
+   never transcribed; the synthetic row joins the comply/completeness gates.
 4. ~~**Laboratory entity** (Chapter 7)~~ ✅ **DONE (increment 3, mig 0030,
    v64/v95)** — `qc_laboratories` master (accreditation body/number, ISO
    17025 scope with out-of-scope result flagging, quality-agreement ref,
