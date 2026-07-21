@@ -284,7 +284,7 @@ async def _coa(client, headers, spec_id, batch="B-COA-1", **extra):
 async def test_create_and_get_coa(client, admin_headers):
     spec = await _spec(client, admin_headers, material="COA-MAT")
     coa = await _coa(client, admin_headers, spec["id"])
-    assert coa["coa_number"].startswith("PP-COA-") and coa["status"] == "DRAFT"
+    assert coa["coa_number"].startswith("iCoA-PP-") and coa["status"] == "DRAFT"
     assert coa["cert_type"] == "ICOA" and coa["specification_id"] == spec["id"]
     r = await client.get("/qc/certificates", headers=admin_headers)
     assert r.status_code == 200 and any(x["id"] == coa["id"] for x in r.json())
@@ -1098,7 +1098,7 @@ async def test_coa_revision_supersession_chain(client, admin_headers):
     assert r.status_code == 201, r.text
     rev = r.json()
     assert rev["status"] == "DRAFT" and rev["supersedes_id"] == coa["id"]
-    assert rev["coa_number"].startswith("PP-COA-") and rev["coa_number"] != coa["coa_number"]
+    assert rev["coa_number"].startswith("iCoA-PP-") and rev["coa_number"] != coa["coa_number"]
     assert rev["revision_reason"] == "Transcription error in THC result"
     # the result set is carried forward so the correction edits the real state
     detail = (await client.get(f"/qc/certificates/{rev['id']}", headers=admin_headers)).json()
@@ -1453,6 +1453,32 @@ async def test_register_numbering_gaps(client, admin_headers):
     mine = {m["coa_number"] for m in made}
     assert not (mine & set(g["gaps"]))          # none of our own numbers are "gaps"
     assert "shared across tenants" in g["note"]
+
+
+async def test_certificate_numbering_per_type_series(client, admin_headers):
+    """QCSOP 012 §6.13 (C2) — new certificates mint under a per-cert-type prefix
+    (iCoA-PP / CoQ-PP / …), each type keeping its own independent per-year
+    counter, and the numbering-gap report never mixes two unrelated series."""
+    spec = await _spec(client, admin_headers, material="NUM-MAT")
+    icoa1 = await _coa(client, admin_headers, spec["id"], batch="B-NUM-I1")
+    assert icoa1["coa_number"].startswith("iCoA-PP-")
+    icoa2 = await _coa(client, admin_headers, spec["id"], batch="B-NUM-I2")
+    seq1 = int(icoa1["coa_number"].rsplit("-", 1)[-1])
+    seq2 = int(icoa2["coa_number"].rsplit("-", 1)[-1])
+    assert seq2 == seq1 + 1                      # the ICOA series advances by exactly one
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B-NUM-Q", "specification_id": spec["id"], "cert_type": "COQ"},
+                          headers=admin_headers)
+    coq = r.json()
+    assert coq["coa_number"].startswith("CoQ-PP-")   # a distinct series, distinct prefix
+    # scoping the gap report to a type keeps its series clean of the other type's numbers
+    year = int(icoa1["coa_number"].split("-")[2])
+    g = (await client.get(f"/qc/register/gaps?year={year}&cert_type=ICOA", headers=admin_headers)).json()
+    assert g["min"] is not None and all(x.startswith("iCoA-PP-") for x in g["gaps"])
+    assert {icoa1["coa_number"], icoa2["coa_number"]} & set(g["gaps"]) == set()
+    assert coq["coa_number"] not in set(g["gaps"])
+    r = await client.get(f"/qc/register/gaps?year={year}&cert_type=NOPE", headers=admin_headers)
+    assert r.status_code == 422
 
 
 # ── URS increment 5 — 5-working-day eCoA review clock (§6.3.1) ──────────────

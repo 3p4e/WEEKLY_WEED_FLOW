@@ -734,6 +734,31 @@ async def update_lab(lab_id: str, body: LabPatch, user: dict = Depends(require_r
 # ════════════════════════════════════════════════════════════════════════════
 _COA_STATUSES = ("DRAFT", "REVIEWED", "APPROVED", "RELEASED", "SUPERSEDED", "VOIDED")
 _CERT_TYPES = ("ICOA", "ECOA", "COQ", "WATER", "OTHER")
+# QCSOP 012 §6.13 — per-type, per-year, strictly monotonic certificate numbering
+# (the Certificate Issuance Register requirement). Prefixes follow the SOP's own
+# literal examples ("eCoA-PP-[YYYY]-[NNNN]", "CoQ-PP-[YYYY]-[NNNN]" — §6.3.1/§6.4.2)
+# extended by symmetry to every cert_type; WATER/OTHER get a generic CoA prefix
+# since the SOP does not name a distinct record type for them.
+_CERT_PREFIX = {"ICOA": "iCoA-PP", "ECOA": "eCoA-PP", "COQ": "CoQ-PP",
+                "WATER": "WCoA-PP", "OTHER": "CoA-PP"}
+
+
+async def _mint_cert_number(c, org_id: str, cert_type: str) -> str:
+    """Advisory-locked per-(org, cert_type, year) sequential number, reset to
+    0001 each 1 January — gap-free within the lock, never reused/reassigned.
+    Forward-only: pre-existing 'PP-COA-YYYY-NNNN' numbers (minted before this
+    format existed) are immutable and untouched; only newly issued certificates
+    mint under the new per-type prefix, so the two formats coexist in the
+    register by design."""
+    prefix = _CERT_PREFIX.get(cert_type, "CoA-PP")
+    yr = await c.fetchval("SELECT to_char(now(),'YYYY')")
+    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"certnum:{org_id}:{cert_type}:{yr}")
+    seq = await c.fetchval(
+        "SELECT coalesce(max((regexp_match(coa_number, '-([0-9]+)$'))[1]::int), 0) + 1"
+        " FROM qc_certificates WHERE org_id=$1 AND cert_type=$2"
+        " AND coa_number LIKE $3 || '-' || $4 || '-%'",
+        org_id, cert_type, prefix, yr)
+    return f"{prefix}-{yr}-{seq:04d}"
 # QCSOP 012 §6.6 — a fundamentally-invalid certificate (wrong batch / wrong
 # sample) is VOIDED with a written reason. VOIDED is reached only via the void
 # endpoint (HoQC/QP act), never a PATCH target; an already-retired certificate
@@ -971,15 +996,15 @@ async def create_coa(body: CoaIn, user: dict = Depends(require_role(*_WRITERS)))
             if s is None:
                 raise HTTPException(422, "Unknown sample")
         await _resolve_lab(c, user["org_id"], body.laboratory_id)
+        coa_number = await _mint_cert_number(c, user["org_id"], body.cert_type)
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
             " cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
             " created_by, updated_by)"
-            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
-            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6::date,$7,$8,$9,$10,$10,$10) RETURNING *",
-            user["org_id"], body.batch_id, body.specification_id, body.sample_id, body.cert_type,
-            body.report_date, body.source_lab, body.laboratory_id, body.notes, user["id"])
+            " VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$11,$11) RETURNING *",
+            user["org_id"], coa_number, body.batch_id, body.specification_id, body.sample_id,
+            body.cert_type, body.report_date, body.source_lab, body.laboratory_id,
+            body.notes, user["id"])
     return _coa_out(dict(row))
 
 
@@ -1165,14 +1190,13 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
             " AND status <> 'SUPERSEDED' LIMIT 1", coa_id)
         if open_rev:
             raise HTTPException(409, f"A revision already exists ({open_rev})")
+        coa_number = await _mint_cert_number(c, user["org_id"], cur["cert_type"])
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id,"
             " sample_id, cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
             " supersedes_id, revision_reason, created_by, updated_by)"
-            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
-            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$10,$10) RETURNING *",
-            user["org_id"], cur["batch_id"], cur["specification_id"], cur["sample_id"],
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$11,$11) RETURNING *",
+            user["org_id"], coa_number, cur["batch_id"], cur["specification_id"], cur["sample_id"],
             cur["cert_type"], cur["report_date"], cur["source_lab"], cur["laboratory_id"],
             cur["notes"], user["id"], coa_id, body.reason)
         # carry the result set forward so the correction edits the real state
@@ -1717,8 +1741,10 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
 # queries (by quarter / type / lab; pending; OOS-linked; end-of-retention) with
 # each row enriched by its OOS + supersession cross-references and retention
 # window, plus a numbering-gap data-integrity report. The register year is the
-# YYYY embedded in the certificate number (PP-COA-YYYY-NNNN) — the authoritative
-# issue year, independent of an editable report_date.
+# YYYY embedded in the certificate number (legacy 'PP-COA-YYYY-NNNN' or, since
+# the QCSOP 012 §6.13 numbering alignment (C2), the per-type 'iCoA-PP-YYYY-NNNN'
+# / 'eCoA-PP-…' / 'CoQ-PP-…' — the year always sits in dash-position 3 either
+# way) — the authoritative issue year, independent of an editable report_date.
 _RETENTION_MODES = ("expiring", "expired")
 
 
@@ -1803,29 +1829,59 @@ async def certificate_register(
 
 
 @router.get("/register/gaps")
-async def register_numbering_gaps(year: int, user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    """Numbering-gap data-integrity report (§6.13): within a year's issued
-    PP-COA-YYYY-NNNN range, which numbers are absent. A gap is a flag to
-    investigate against the archive — NOT proof of a missing record: the
-    PP-COA sequence is shared across tenants on this database, so a gap may
-    simply be a certificate issued to another organisation (RLS hides it)."""
+async def register_numbering_gaps(year: int, cert_type: str | None = None,
+                                  user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Numbering-gap data-integrity report (§6.13). Certificate numbering is
+    per-(org, cert_type, year) since the QCSOP 012 alignment (C2); certificates
+    minted before that change instead share one legacy 'PP-COA-' sequence. Each
+    independent numbering SERIES — identified by its own prefix, e.g. 'PP-COA',
+    'iCoA-PP', 'eCoA-PP', 'CoQ-PP' — is gapped separately, so the format
+    transition never produces a false "hundreds of certificates missing"
+    reading from mixing two unrelated counters. Pass cert_type to scope to one
+    certificate type; omit to see every series present that year. A gap is a
+    flag to investigate against the archive — NOT proof of a missing record:
+    numbering is shared across tenants on this database, so a gap may simply
+    belong to another organisation (RLS hides it)."""
+    if cert_type is not None and cert_type not in _CERT_TYPES:
+        raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
+    args = [str(year)]
+    where = "split_part(coa_number, '-', 3) = $1"
+    if cert_type is not None:
+        args.append(cert_type)
+        where += " AND cert_type = $2"
     async with rls(user) as c:
         rows = await c.fetch(
-            "SELECT coa_number FROM qc_certificates WHERE split_part(coa_number, '-', 3) = $1",
-            str(year))
-    nums = sorted(int(r["coa_number"].rsplit("-", 1)[-1]) for r in rows
-                  if r["coa_number"].rsplit("-", 1)[-1].isdigit())
-    if not nums:
+            f"SELECT coa_number, cert_type FROM qc_certificates WHERE {where}", *args)
+    series: dict[str, dict] = {}
+    for r in rows:
+        seq = r["coa_number"].rsplit("-", 1)[-1]
+        if not seq.isdigit():
+            continue
+        prefix = r["coa_number"].rsplit("-", 2)[0]
+        series.setdefault(prefix, {"cert_type": r["cert_type"], "nums": []})["nums"].append(int(seq))
+    if not series:
         return {"year": year, "issued": 0, "min": None, "max": None, "gaps": [],
-                "note": "No certificates issued in this year."}
-    present = set(nums)
-    missing = [n for n in range(nums[0], nums[-1] + 1) if n not in present]
+                "by_series": {}, "note": "No certificates issued in this year."}
+    by_series, all_gaps, total = {}, [], 0
+    for prefix, entry in series.items():
+        nums = sorted(entry["nums"])
+        present = set(nums)
+        missing = [n for n in range(nums[0], nums[-1] + 1) if n not in present]
+        gaps = [f"{prefix}-{year}-{n:04d}" for n in missing]
+        by_series[prefix] = {"cert_type": entry["cert_type"], "issued": len(nums),
+                             "min": nums[0], "max": nums[-1], "gaps": gaps}
+        all_gaps.extend(gaps)
+        total += len(nums)
+    only = next(iter(by_series.values())) if len(by_series) == 1 else None
     return {
-        "year": year, "issued": len(nums), "min": nums[0], "max": nums[-1],
-        "gaps": [f"PP-COA-{year}-{n:04d}" for n in missing],
-        "note": ("The PP-COA sequence is shared across tenants on this database; a gap may"
-                 " reflect a certificate issued to another organisation rather than a missing"
-                 " record. Investigate each gap against the archive."),
+        "year": year, "issued": total,
+        "min": only["min"] if only else None, "max": only["max"] if only else None,
+        "gaps": all_gaps, "by_series": by_series,
+        "note": ("Numbering is per certificate-type series since the QCSOP 012 §6.13"
+                 " alignment; each series (prefix) is gapped independently. The sequence is"
+                 " shared across tenants on this database, so a gap may reflect a certificate"
+                 " issued to another organisation rather than a missing record — investigate"
+                 " each against the archive."),
     }
 
 
@@ -3016,14 +3072,13 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         mapped = [dict(r) for r in rows if r["parameter_id"] is not None]
         if not mapped:
             raise HTTPException(409, "No mapped results to promote — map the discovered fields first")
+        coa_number = await _mint_cert_number(c, user["org_id"], "ECOA")
         coa = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
             " cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
             " created_by, updated_by)"
-            " VALUES ($1, 'PP-COA-' || to_char(now(),'YYYY') || '-' ||"
-            "         lpad(nextval('qc_coa_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,'ECOA',$5::date,$6,$7,$8,$9,$9,$9) RETURNING *",
-            user["org_id"], doc["batch_id"], doc["specification_id"], doc["sample_id"],
+            " VALUES ($1,$2,$3,$4,$5,'ECOA',$6::date,$7,$8,$9,$10,$10,$10) RETURNING *",
+            user["org_id"], coa_number, doc["batch_id"], doc["specification_id"], doc["sample_id"],
             doc["report_date"], doc["source_institution"], doc["laboratory_id"],
             f"Promoted from {doc['doc_number']}", user["id"])
         for m in mapped:
