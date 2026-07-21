@@ -230,6 +230,37 @@
     catch (e) { GF.toast(e.message, 'error'); }
     GF.render.all();
   };
+  // Source-document custody (item 12): store the original PDF with a SHA-256.
+  GF.WWF.qcEcoaUploadOriginal = async (docId, inputEl) => {
+    const file = inputEl && inputEl.files && inputEl.files[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { inputEl.value = ''; return GF.toast(AL('File exceeds 20 MB', 'Датотеката надминува 20 MB'), 'error'); }
+    try {
+      const b64 = await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result).split(',', 2)[1] || '');
+        fr.onerror = () => rej(new Error('read failed'));
+        fr.readAsDataURL(file);
+      });
+      await GF.API.qcUploadOriginal(docId, { filename: file.name, content_type: file.type || null, content_b64: b64 });
+      GF.toast(AL('Original stored', 'Оригиналот е зачуван'));
+      if (GF.WWF._qcecoa.sel === docId) GF.WWF._qcecoa.detail = await GF.API.qcCoaDoc(docId).catch(() => null);
+      GF.render.all();
+    } catch (e) { GF.toast(e.status === 413 ? AL('File too large', 'Датотеката е преголема') : e.message, 'error'); }
+    finally { if (inputEl) inputEl.value = ''; }
+  };
+  GF.WWF.qcEcoaDlOriginal = async (fileId, filename) => {
+    try {
+      const res = await fetch(GF.API.qcOriginalDlUrl(fileId), { headers: { Authorization: 'Bearer ' + GF.API.token } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (res.headers.get('X-Integrity') === 'MISMATCH') GF.toast(AL('⚠ Integrity check failed — stored bytes changed', '⚠ Проверката на интегритет не успеа'), 'error');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = filename || 'original';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { GF.toast(e.message, 'error'); }
+  };
 
   // Placeholder queue — map a discovered label to a spec parameter or ignore it.
   GF.WWF.qcEcoaPickSpec = async (phId, specId) => {
@@ -349,6 +380,19 @@
           ${qa ? (qa.grounded
             ? `<div style="margin-top:8px">${qa.passages.map(p => `<div class="qms-row" style="flex-direction:column;align-items:flex-start;gap:2px"><span class="ana-note mono">[${GF.esc(p.doc_number)}#${GF.esc(String(p.chunk_index))}] · ${GF.esc(String(p.score))}</span><span>${GF.esc(p.content)}</span></div>`).join('')}</div>`
             : `<div class="ana-note" style="margin-top:8px">${AL('No matching passages — nothing to ground an answer on.', 'Нема совпаѓачки пасуси — нема на што да се заснова одговорот.')}</div>`) : ''}
+        </div>`;
+      })()}
+      ${(() => {
+        const files = d.originals || [];
+        const rows = files.map(f => `<div class="qms-row" style="gap:8px;align-items:center">
+          <span class="qms-title">${GF.esc(f.filename)} <span class="ana-note">${GF.esc(String(Math.round((f.size_bytes || 0) / 1024)))} KB</span></span>
+          <span class="ana-note mono" title="SHA-256">${GF.esc((f.sha256 || '').slice(0, 12))}…</span>
+          <button class="btn btn-sm" onclick="GF.WWF.qcEcoaDlOriginal('${f.id}','${GF.esc((f.filename || 'original').replace(/'/g, ''))}')">${AL('Download', 'Преземи')}</button>
+        </div>`).join('');
+        return `<div class="ana-panel" style="margin-top:10px;padding:10px">
+          <div class="ana-pt" style="margin-bottom:6px">${AL('Original documents (SHA-256 custody)', 'Оригинални документи (SHA-256 старателство)')}</div>
+          ${rows || `<div class="ana-note">${AL('No original stored — attach the source PDF for the record.', 'Нема зачуван оригинал — прикачете го изворниот PDF за евиденција.')}</div>`}
+          ${canWrite() ? `<div style="margin-top:6px"><input type="file" id="qec-orig-${doc.id}" onchange="GF.WWF.qcEcoaUploadOriginal('${doc.id}', this)"></div>` : ''}
         </div>`;
       })()}
     </div>`;

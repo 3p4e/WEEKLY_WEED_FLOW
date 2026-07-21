@@ -1493,6 +1493,48 @@ async def test_ecoa_promote_via_patch_is_refused(client, admin_headers):
     assert r.status_code == 200 and r.json()["status"] == "REVIEWED"
 
 
+# ── URS increment 9 — source-document custody + SHA-256 (item 12) ────────────
+async def test_coa_original_upload_download_and_integrity(client, admin_headers):
+    """The original source PDF is stored with a server-computed SHA-256, listed
+    on the eCoA, and downloadable with an integrity verdict re-hashed on read."""
+    import base64 as _b64, hashlib as _hl
+    doc = await _ecoa_doc(client, admin_headers, batch="B-ORIG")
+    blob = b"%PDF-1.4 fake certificate bytes \x00\x01\x02 end"
+    digest = _hl.sha256(blob).hexdigest()
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/originals",
+                          json={"filename": "supplier_coa.pdf", "content_type": "application/pdf",
+                                "content_b64": _b64.b64encode(blob).decode()}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    f = r.json()
+    assert f["sha256"] == digest and f["size_bytes"] == len(blob) and f["filename"] == "supplier_coa.pdf"
+    # listed on the doc + folded into the detail
+    lst = (await client.get(f"/qc/coa-documents/{doc['id']}/originals", headers=admin_headers)).json()
+    assert len(lst) == 1 and lst[0]["sha256"] == digest
+    detail = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()
+    assert len(detail["originals"]) == 1
+    # download returns the exact bytes + an integrity-OK header
+    dl = await client.get(f"/qc/document-files/{f['id']}/download", headers=admin_headers)
+    assert dl.status_code == 200 and dl.content == blob
+    assert dl.headers["x-integrity"] == "OK" and dl.headers["x-content-sha256"] == digest
+
+
+async def test_coa_original_rejects_bad_input_and_is_gated(client, admin_headers):
+    doc = await _ecoa_doc(client, admin_headers, batch="B-ORIG-BAD")
+    # not valid base64 → 422
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/originals",
+                              json={"filename": "x.pdf", "content_b64": "!!!not base64!!!"},
+                              headers=admin_headers)).status_code == 422
+    # write-gated — a base USER cannot upload
+    _, user = await _actor(client, admin_headers, "USER")
+    import base64 as _b64
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/originals",
+                              json={"filename": "x.pdf", "content_b64": _b64.b64encode(b"hi").decode()},
+                              headers=user)).status_code == 403
+    # a bogus file id download is a 404, not a 500
+    assert (await client.get("/qc/document-files/not-a-uuid/download",
+                             headers=admin_headers)).status_code == 404
+
+
 async def test_ecoa_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)

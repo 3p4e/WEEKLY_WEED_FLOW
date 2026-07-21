@@ -495,6 +495,28 @@ ALTER TABLE ONLY public.qc_coa_verifications FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_document_files; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_document_files (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    object_type text NOT NULL,
+    object_id uuid NOT NULL,
+    filename text NOT NULL,
+    content_type text,
+    size_bytes integer NOT NULL,
+    sha256 text NOT NULL,
+    content bytea NOT NULL,
+    uploaded_by uuid,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_document_files_size_check CHECK ((size_bytes >= 0))
+);
+
+ALTER TABLE ONLY public.qc_document_files FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_ecoa_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -1488,6 +1510,14 @@ ALTER TABLE ONLY public.qc_coa_verifications
 
 
 --
+-- Name: qc_document_files qc_document_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_document_files
+    ADD CONSTRAINT qc_document_files_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_field_placeholders qc_field_placeholders_label_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1916,6 +1946,13 @@ CREATE INDEX qc_coa_extractions_document_idx ON public.qc_coa_extractions USING 
 --
 
 CREATE INDEX qc_coa_verifications_coa_idx ON public.qc_coa_verifications USING btree (org_id, coa_id);
+
+
+--
+-- Name: qc_document_files_object_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_document_files_object_idx ON public.qc_document_files USING btree (org_id, object_type, object_id);
 
 
 --
@@ -2968,6 +3005,13 @@ CREATE POLICY org_isolation ON public.qc_coa_verifications USING ((org_id = app.
 
 
 --
+-- Name: qc_document_files org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_document_files USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_field_placeholders org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3169,6 +3213,12 @@ ALTER TABLE public.qc_coa_extractions ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_coa_verifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_document_files; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_document_files ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_field_placeholders; Type: ROW SECURITY; Schema: public; Owner: -

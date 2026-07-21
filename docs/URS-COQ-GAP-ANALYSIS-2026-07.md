@@ -108,9 +108,14 @@ Priority order; SOP citations are the binding source.
     delivered by the Annex 11 e-signature increment (§3 below, increment 8).
     Remaining: a dedicated iCoA authoring surface if the owner wants one
     beyond the shared certificate flow.
-12. **PDF originals custody** (Phase-2 of the old backlog, unchanged):
-    store the source eCoA with SHA-256, and when OCR arrives, page/bbox
-    traceability per extracted value.
+12. ~~**PDF originals custody**~~ ✅ **DONE (increment 9, mig 0035, v70/v100)**
+    — `qc_document_files` stores the source document as bytea with a
+    server-computed SHA-256; `POST /qc/coa-documents/{id}/originals` (20 MB cap)
+    + `GET /qc/document-files/{id}/download` re-hashes on read and reports an
+    `X-Integrity` verdict; the eCoA intake carries an upload/download custody
+    panel. Insert-only; the custody act + digest are recorded in the hash-chained
+    audit_log via emit() (the blob itself is kept out of the chain). Page/bbox
+    traceability per extracted value attaches here when OCR lands.
 
 ## 3. Conflicts / decisions the URS resolves or reopens
 

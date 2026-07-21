@@ -165,6 +165,9 @@ GF.API = {
   // Annex 11 electronic signatures (re-authenticated attestation on a certificate)
   qcSign(id, b)            { return this._req('POST', '/qc/certificates/' + id + '/sign', b); },
   qcSignatures(id)         { return this._req('GET', '/qc/certificates/' + id + '/signatures'); },
+  // Source-document custody (item 12) — store the original with a SHA-256
+  qcUploadOriginal(docId, b) { return this._req('POST', '/qc/coa-documents/' + docId + '/originals', b); },
+  qcOriginalDlUrl(fileId)  { return '/qc/document-files/' + encodeURIComponent(fileId) + '/download'; },
   // Custody cluster (U5) — sampling requests (RQS), field records (SFR), chain of custody
   qcRqs(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-requests' + (u?'?'+u:'')); },
   qcRqsOne(id)             { return this._req('GET', '/qc/sampling-requests/' + id); },

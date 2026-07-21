@@ -14,10 +14,12 @@ stored NULL for a human to fill. Every table is audited by the shared
 hash-chained trigger. Human ids are `PP-SPEC-YYYY-NNNN`, stamped server-side
 from a Postgres sequence so the audit trail attributes the number.
 """
+import base64
+import hashlib
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app import docengine
@@ -2009,8 +2011,103 @@ async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVA
             raise HTTPException(404, "eCoA document not found")
         rows = await c.fetch(
             "SELECT * FROM qc_coa_extractions WHERE document_id=$1 ORDER BY created_at", doc_id)
+        files = await c.fetch(
+            "SELECT id, org_id, object_type, object_id, filename, content_type, size_bytes,"
+            " sha256, uploaded_by, uploaded_at FROM qc_document_files"
+            " WHERE object_type='qc_coa_document' AND object_id=$1 ORDER BY uploaded_at", doc_id)
     return {"document": _ecoa_out(dict(doc)),
-            "extractions": [_extract_out(dict(r)) for r in rows]}
+            "extractions": [_extract_out(dict(r)) for r in rows],
+            "originals": [_file_out(dict(f)) for f in files]}
+
+
+# ── Source-document custody (item 12): store the original with a SHA-256 ─────
+_MAX_FILE_BYTES = 20 * 1024 * 1024   # 20 MB decoded — a scanned CoA fits easily
+
+
+class FileUploadIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=300)
+    content_type: str | None = Field(default=None, max_length=120)
+    content_b64: str = Field(min_length=1)
+
+
+def _file_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "object_type": r["object_type"], "object_id": str(r["object_id"]),
+        "filename": r["filename"], "content_type": r["content_type"],
+        "size_bytes": r["size_bytes"], "sha256": r["sha256"],
+        "uploaded_by": str(r["uploaded_by"]) if r["uploaded_by"] else None,
+        "uploaded_at": r["uploaded_at"].isoformat() if r["uploaded_at"] else None,
+    }
+
+
+@router.post("/coa-documents/{doc_id}/originals", status_code=201)
+async def upload_coa_original(doc_id: str, body: FileUploadIn,
+                             user: dict = Depends(require_role(*_WRITERS))):
+    """Store the ORIGINAL source document (the supplier eCoA PDF) alongside the
+    transcribed record with a server-computed SHA-256 (ALCOA+ 'Original'). The
+    file is written once and never mutated; its digest is recorded in the global
+    audit chain via emit(), so a later re-hash on download detects tampering."""
+    _uuid_or_404(doc_id, "eCoA document")
+    try:
+        raw = base64.b64decode(body.content_b64, validate=True)
+    except Exception:
+        raise HTTPException(422, "content_b64 is not valid base64")
+    if not raw:
+        raise HTTPException(422, "The uploaded file is empty")
+    if len(raw) > _MAX_FILE_BYTES:
+        raise HTTPException(413, f"File exceeds the {_MAX_FILE_BYTES // (1024 * 1024)} MB limit")
+    digest = hashlib.sha256(raw).hexdigest()
+    async with rls(user) as c:
+        doc = await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id)
+        if doc is None:
+            raise HTTPException(404, "eCoA document not found")
+        row = await c.fetchrow(
+            "INSERT INTO qc_document_files(org_id, object_type, object_id, filename,"
+            " content_type, size_bytes, sha256, content, uploaded_by)"
+            " VALUES ($1,'qc_coa_document',$2,$3,$4,$5,$6,$7,$8)"
+            " RETURNING id, org_id, object_type, object_id, filename, content_type,"
+            "           size_bytes, sha256, uploaded_by, uploaded_at",
+            user["org_id"], doc_id, body.filename, body.content_type, len(raw), digest,
+            raw, user["id"])
+        try:
+            await emit(c, user, verb="coa_original_stored", object_type="qc_coa_document",
+                       object_id=doc_id, recipients=[],
+                       params={"filename": body.filename, "sha256": digest, "size": len(raw)})
+        except Exception:
+            pass
+    return _file_out(dict(row))
+
+
+@router.get("/coa-documents/{doc_id}/originals")
+async def list_coa_originals(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(doc_id, "eCoA document")
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT id, org_id, object_type, object_id, filename, content_type, size_bytes,"
+            " sha256, uploaded_by, uploaded_at FROM qc_document_files"
+            " WHERE object_type='qc_coa_document' AND object_id=$1 ORDER BY uploaded_at", doc_id)
+    return [_file_out(dict(r)) for r in rows]
+
+
+@router.get("/document-files/{file_id}/download")
+async def download_document_file(file_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Return the stored original bytes. Re-hashes on the way out and reports the
+    integrity verdict in an `X-Integrity` header (OK / MISMATCH) — a MISMATCH
+    means the stored bytes no longer match the SHA-256 recorded at upload."""
+    _uuid_or_404(file_id, "Document file")
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "SELECT filename, content_type, sha256, content FROM qc_document_files WHERE id=$1",
+            file_id)
+    if row is None:
+        raise HTTPException(404, "Document file not found")
+    data = bytes(row["content"])
+    integrity = "OK" if hashlib.sha256(data).hexdigest() == row["sha256"] else "MISMATCH"
+    safe_name = (row["filename"] or "download").replace('"', "").replace("\\", "").replace("\n", "")
+    return Response(
+        content=data, media_type=row["content_type"] or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"',
+                 "X-Integrity": integrity, "X-Content-SHA256": row["sha256"]})
 
 
 @router.post("/coa-documents", status_code=201)

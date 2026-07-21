@@ -1415,3 +1415,44 @@ a second meaning appends; wrong password → 401 recording nothing; unknown mean
 → 422. Prod (wwf_app) verified: /health 200, /qc signatures auth-gated (401),
 clean startup. **Rollback** = revert tags to v68/v98 (+ `alembic -n tasks
 downgrade 0033` — new isolated table; image-only rollback also safe).
+
+## URS increment 9 (backend v70 / frontend v100 / migration 0035 → BOTH stacks, 2026-07-21)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 12 — **source-document custody +
+SHA-256** (ALCOA+ "Original"): store the supplier eCoA PDF alongside the
+transcribed record with a server-computed digest.
+
+- **Migration 0035**: `qc_document_files` — polymorphic (`object_type`/
+  `object_id`) file store: `filename`, `content_type`, `size_bytes`, `sha256`,
+  `content` **bytea**, `uploaded_by`, `uploaded_at`. FORCE/ENABLE RLS
+  `org_isolation` + `(org_id, object_type, object_id)` index + guarded GRANT.
+  **DELIBERATELY no row-level audit trigger** — the shared `app.fn_audit_row()`
+  serialises the whole row (`to_jsonb(NEW)`) into the hash chain, and a
+  multi-megabyte bytea would bloat every audit entry; RLS still applies, the
+  custody ACT is audited via `emit()`, and the SHA-256 is the integrity anchor.
+- **Backend**: `POST /qc/coa-documents/{id}/originals` (base64 JSON, **20 MB**
+  cap → 413; invalid base64 → 422) decodes, computes SHA-256, stores, and emits
+  `coa_original_stored` (filename + sha256) into audit_log. `GET
+  .../originals` lists metadata (no bytes); the originals are folded into the
+  eCoA doc detail. `GET /qc/document-files/{id}/download` returns the bytes,
+  **re-hashing on read** and reporting the verdict in an `X-Integrity`
+  (OK/MISMATCH) + `X-Content-SHA256` header. Insert-only (no update/delete
+  path). Write-gated to the QC writers; download read-gated (ELEVATED).
+- **Frontend**: an "Original documents (SHA-256 custody)" panel on the eCoA
+  intake detail — a file picker uploads (base64 via FileReader), each stored
+  original shows filename · size · SHA-256 prefix · Download (with a toast on
+  an integrity MISMATCH). SW v3.62.0→**v3.63.0**.
+
+Gate: **418 backend tests green** (2 new: upload → server SHA-256 + list + folded
+into detail + download exact bytes with integrity-OK; invalid base64 → 422, USER
+cannot upload → 403, bogus file id → 404), migration 0035 up/down/base clean,
+schema.tasks.sql dump-diff EXACT vs alembic head (qc_document_files + RLS/index
+only — no trigger), node --check. Migration 0035 applied to BOTH tasks DBs before
+the image flip. Deployed backend v69→**v70** (prod scheduler too) + frontend
+v99→**v100**. **Live behavioral smoke on wwf-mass** (tt.qc.mgr): a PDF stored →
+server-computed SHA-256 matches + listed + folded into the detail; download
+returns the exact bytes with `X-Integrity: OK`; invalid base64 → 422. Prod
+(wwf_app) verified: /health 200, /qc originals auth-gated (401). **Note:** stored
+originals enlarge the tasks-DB pg_dump backups (bounded by the 20 MB/file cap).
+**Rollback** = revert tags to v69/v99 (+ `alembic -n tasks downgrade 0034` — new
+isolated table; image-only rollback also safe).
