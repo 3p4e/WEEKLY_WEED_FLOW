@@ -31,6 +31,15 @@
   };
   const SFR_NEXT = { CREATED: 'IN_FIELD', IN_FIELD: 'COMPLETED' };
   const XFER = ['FIELD_TO_LAB', 'LAB_INTERNAL', 'LAB_TO_DISPOSAL', 'STABILITY_TRANSFER'];
+  // QCSOP 011 §6.1.4 vocabularies (mirror the backend enums)
+  const RQS_TESTS = ['POTENCY', 'LOD', 'FM', 'MICRO', 'HEAVY_METALS', 'PESTICIDES', 'MYCOTOXINS', 'OTHER'];
+  const RQS_MATERIAL_ST = ['QUARANTINE', 'IN_PROCESS', 'OTHER'];
+  // The §6.1.4 fields that must be present before an RQS can be REGISTERED
+  // (the completeness gate the backend enforces at §6.1.6).
+  const RQS_MANDATORY = ['batch_id', 'num_samples', 'required_tests', 'storage_location', 'material_status', 'spec_reference'];
+  const rqsIncomplete = (r) => RQS_MANDATORY.filter(m =>
+    m === 'required_tests' ? !(r.required_tests && r.required_tests.length)
+      : (r[m] === null || r[m] === undefined || r[m] === ''));
 
   const chip = (t, c) => `<span class="chip-opt" style="border-color:${c};color:${c}">${GF.esc(t)}</span>`;
   const stChip = (m, s) => { const x = m[s] || { en: s || '—', mk: s || '—', c: 'var(--ink-3)' }; return chip(AL(x.en, x.mk), x.c); };
@@ -90,30 +99,72 @@
     catch (e) { GF.toast(e.message, 'error'); }
     GF.WWF._qccus.sel = null; GF.WWF._qccus.detail = null; await GF.WWF.loadQcCustody();
   };
+  // §6.2.3 / §6.3.2 — record the sampling equipment and the ambient/received
+  // conditions on the field record.
+  GF.WWF.qcSfrReceipt = async (id) => {
+    const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
+    const body = {};
+    ['sampling_equipment', 'ambient_conditions', 'received_condition'].forEach(k => { const v = mk('qcu-r-' + k); if (v) body[k] = v; });
+    if (!Object.keys(body).length) return GF.toast(AL('Nothing to save', 'Ништо за зачувување'));
+    try { await GF.API.qcPatchSfr(id, body); GF.toast(AL('Saved', 'Зачувано')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    const st = GF.WWF._qccus; st.sel = null; st.detail = null;
+    await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(id);
+  };
   GF.WWF.qcRqsCreate = async () => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
     const material_code = mk('qcu-mat'), originating_department = mk('qcu-dept');
     if (!material_code || !originating_department) return GF.toast(AL('Material and department are required', 'Потребни се материјал и оддел'), 'error');
     const body = { material_code, originating_department };
-    ['material_name_en', 'material_name_mk', 'batch_id', 'assigned_sp_type'].forEach(k => { const v = mk('qcu-' + k); if (v) body[k] = v; });
+    ['material_name_en', 'material_name_mk', 'batch_id', 'assigned_sp_type',
+     'priority_justification', 'storage_location', 'spec_reference'].forEach(k => { const v = mk('qcu-' + k); if (v) body[k] = v; });
+    const ns = mk('qcu-num_samples'); if (ns) body.num_samples = parseInt(ns, 10);
+    const pri = mk('qcu-priority'); if (pri) body.priority = pri;
+    const mst = mk('qcu-material_status'); if (mst) body.material_status = mst;
+    const relEl = document.getElementById('qcu-release_related'); if (relEl && relEl.checked) body.release_related = true;
+    const tsel = document.getElementById('qcu-required_tests');
+    if (tsel) { const t = Array.from(tsel.selectedOptions).map(o => o.value); if (t.length) body.required_tests = t; }
     try { const r = await GF.API.qcCreateRqs(body); GF.toast(r.rqs_number + ' ' + AL('opened', 'отворено')); await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(r.id); }
     catch (e) { GF.toast(e.message, 'error'); }
+  };
+  // Fill in the §6.1.4 mandatory fields on an OPEN draft before registration.
+  GF.WWF.qcRqsEdit = async (id) => {
+    const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
+    const body = {};
+    ['batch_id', 'storage_location', 'spec_reference'].forEach(k => { const v = mk('qcu-e-' + k); if (v) body[k] = v; });
+    const ns = mk('qcu-e-num_samples'); if (ns) body.num_samples = parseInt(ns, 10);
+    const mst = mk('qcu-e-material_status'); if (mst) body.material_status = mst;
+    const pri = mk('qcu-e-priority'); if (pri) body.priority = pri;
+    const pj = mk('qcu-e-priority_justification'); if (pj) body.priority_justification = pj;
+    const tsel = document.getElementById('qcu-e-required_tests');
+    if (tsel) { const t = Array.from(tsel.selectedOptions).map(o => o.value); if (t.length) body.required_tests = t; }
+    if (!Object.keys(body).length) return GF.toast(AL('Nothing to save', 'Ништо за зачувување'));
+    try { await GF.API.qcPatchRqs(id, body); GF.toast(AL('Saved', 'Зачувано')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    const st = GF.WWF._qccus; st.sel = null; st.detail = null;
+    await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(id);
   };
   GF.WWF.qcSfrCreate = async () => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
     const sampling_location = mk('qcu-loc'), destination_facility = mk('qcu-dest');
+    const rqs = mk('qcu-rqs');
     if (!sampling_location || !destination_facility) return GF.toast(AL('Location and destination are required', 'Потребни се локација и дестинација'), 'error');
-    const body = { sampling_location, destination_facility };
+    // §6.1.1 — no sampling without a registered RQS: the link is required.
+    if (!rqs) return GF.toast(AL('A registered sampling request is required (QCSOP 011 §6.1.1)', 'Потребно е регистрирано барање за мостри (QCSOP 011 §6.1.1)'), 'error');
+    const body = { sampling_location, destination_facility, rqs_id: rqs };
     const coords = mk('qcu-coords'); if (coords) body.sampling_coordinates = coords;
     const nc = mk('qcu-nc'); if (nc) body.num_containers = parseInt(nc, 10) || null;
     const barrels = mk('qcu-barrels'); if (barrels) body.barrel_numbers = barrels.split(',').map(s => s.trim()).filter(Boolean);
-    const rqs = mk('qcu-rqs'); if (rqs) body.rqs_id = rqs;
+    const equip = mk('qcu-equip'); if (equip) body.sampling_equipment = equip;
     try { const r = await GF.API.qcCreateSfr(body); GF.toast(r.sfr_number + ' ' + AL('created', 'создадено')); await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(r.id); }
     catch (e) { GF.toast(e.message, 'error'); }
   };
   GF.WWF.qcCusLogTransfer = async (sampleId) => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
     const body = { transfer_type: mk('qcu-xtype') || null, to_location: mk('qcu-xto') || null, transfer_reason: mk('qcu-xreason') || null };
+    // §6.3.1 — the condition confirmed at the handoff.
+    const cond = mk('qcu-xcond'); if (cond) body.sample_condition = cond;
+    const okv = mk('qcu-xok'); if (okv) body.condition_ok = okv === 'yes';
     try { await GF.API.qcAddCustody(sampleId, body); GF.toast(AL('Transfer logged', 'Трансферот е запишан')); GF.WWF._qccus.custody[sampleId] = await GF.API.qcCustody(sampleId).catch(() => []); GF.render.all(); }
     catch (e) { GF.toast(e.message, 'error'); }
   };
@@ -178,41 +229,69 @@
       <button class="btn btn-sm" onclick="GF.WWF.qcCusPickerClose()">${AL('Close', 'Затвори')}</button>`;
   };
 
+  const PRI_LBL = { ROUTINE: { en: 'Routine', mk: 'Рутинско', c: 'var(--ink-3)' }, URGENT: { en: 'Urgent', mk: 'Итно', c: 'var(--red)' } };
   const rqsDetail = (r) => {
     const nxt = RQS_NEXT[r.status];
     const open = r.status !== 'COMPLETED' && r.status !== 'CANCELLED';
     const people = Object.keys(GF.PEOPLE || {}).filter(pid => !(GF.PEOPLE[pid] || {}).inactive);
+    // §6.1.6 completeness gate — what still blocks registration (only relevant while OPEN).
+    const missing = r.status === 'OPEN' ? rqsIncomplete(r) : [];
+    const registerBlocked = nxt === 'REGISTERED' && missing.length;
     return `<div class="qms-detail"><div class="qms-dgrid">
-      <span>${AL('RQS', 'RQS')}</span><b class="mono">${GF.esc(r.rqs_number)}</b>
+      <span>${AL('RQS №', 'RQS №')}</span><b class="mono">${GF.esc(r.rqs_number)}</b>
+      ${r.qc_control_number ? `<span>${AL('QC control №', 'КК контролен №')}</span><b class="mono">${GF.esc(r.qc_control_number)}</b>` : ''}
       <span>${AL('Material', 'Материјал')}</span><b>${GF.esc(r.material_code)}</b>
       <span>${AL('Department', 'Оддел')}</span><b>${GF.esc(r.originating_department)}</b>
-      <span>${AL('Status', 'Статус')}</span><b>${stChip(RQS_ST, r.status)}</b>
+      <span>${AL('Status', 'Статус')}</span><b>${stChip(RQS_ST, r.status)} ${r.priority === 'URGENT' ? stChip(PRI_LBL, r.priority) : ''}</b>
       ${r.batch_id ? `<span>${AL('Batch', 'Серија')}</span><b>${GF.esc(r.batch_id)}</b>` : ''}
+      ${r.num_samples != null ? `<span>${AL('№ samples', 'Бр. мостри')}</span><b>${r.num_samples}</b>` : ''}
+      ${(r.required_tests && r.required_tests.length) ? `<span>${AL('Required tests', 'Потребни тестови')}</span><b>${GF.esc(r.required_tests.join(', '))}</b>` : ''}
+      ${r.material_status ? `<span>${AL('Material status', 'Статус на материјал')}</span><b>${GF.esc(r.material_status)}</b>` : ''}
+      ${r.storage_location ? `<span>${AL('Storage', 'Складирање')}</span><b>${GF.esc(r.storage_location)}</b>` : ''}
+      ${r.spec_reference ? `<span>${AL('Spec ref.', 'Спец. реф.')}</span><b>${GF.esc(r.spec_reference)}</b>` : ''}
+      ${r.priority_justification ? `<span>${AL('Urgency reason', 'Причина за итност')}</span><b>${GF.esc(r.priority_justification)}</b>` : ''}
+      ${r.release_related ? `<span>${AL('Release-related', 'Поврзано со ослободување')}</span><b>${chip(AL('yes — QP registers', 'да — QP регистрира'), 'var(--violet)')}</b>` : ''}
       <span>${AL('Reg. deadline', 'Рок за рег.')}</span><b class="mono">${dt(r.registration_deadline)}</b>
       ${r.registered_at ? `<span>${AL('Registered', 'Регистрирано')}</span><b class="mono">${dt(r.registered_at)} ${r.registration_window_met === false ? chip(AL('late', 'доцна'), 'var(--red)') : (r.registration_window_met ? chip(AL('on time', 'навреме'), 'var(--green)') : '')}</b>` : ''}
       ${r.assigned_to_id ? `<span>${AL('Assigned to', 'Доделено на')}</span><b>${GF.esc(((GF.PEOPLE || {})[r.assigned_to_id] || {}).name || r.assigned_to_id)}</b>` : ''}
       ${r.sample_id ? `<span>${AL('Sample', 'Примерок')}</span><b class="mono">${sampleRef(r.sample_id)}</b>` : ''}
       ${r.cancellation_reason ? `<span>${AL('Cancel reason', 'Причина за откажување')}</span><b>${GF.esc(r.cancellation_reason)}</b>` : ''}
-    </div>${canWrite() && nxt ? `<div class="qms-dl" style="margin-top:8px">
-      <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcRqsAdvance('${r.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((RQS_ST[nxt]||{}).en, (RQS_ST[nxt]||{}).mk))}</button>
+    </div>${registerBlocked ? `<div class="ana-note" style="margin-top:8px;color:var(--orange)">${AL('Cannot register — QCSOP 011 §6.1.6 requires:', 'Не може да се регистрира — QCSOP 011 §6.1.6 бара:')} ${GF.esc(missing.join(', '))}</div>` : ''}${canWrite() && nxt ? `<div class="qms-dl" style="margin-top:8px">
+      <button class="btn btn-sm btn-primary" ${registerBlocked ? 'disabled title="' + GF.esc(AL('Complete the §6.1.4 fields first', 'Прво пополнете ги полињата §6.1.4')) + '"' : ''} onclick="GF.WWF.qcRqsAdvance('${r.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((RQS_ST[nxt]||{}).en, (RQS_ST[nxt]||{}).mk))}</button>
       ${r.status !== 'COMPLETED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcRqsAdvance('${r.id}','CANCELLED')">${AL('Cancel', 'Откажи')}</button>` : ''}
     </div>` : ''}${canWrite() && open ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
       ${r.sample_id ? '' : samplePicker('rqs', r.id)}
       <select id="qcu-assignee"><option value="">${AL('assignee…', 'одговорен…')}</option>${people.map(pid =>
         `<option value="${pid}" ${r.assigned_to_id === pid ? 'selected' : ''}>${GF.esc(((GF.PEOPLE || {})[pid] || {}).name || pid)}</option>`).join('')}</select>
       <button class="btn btn-sm" onclick="GF.WWF.qcRqsAssign('${r.id}')">${AL('Assign', 'Додели')}</button>
-    </div>` : ''}</div>`;
+    </div>` : ''}${canWrite() && r.status === 'OPEN' ? `<div class="ana-note" style="margin-top:6px">${AL('Complete the §6.1.4 fields:', 'Пополнете ги полињата §6.1.4:')}
+      <div class="qcs-form" style="margin-top:4px">
+        <input id="qcu-e-batch_id" placeholder="${AL('Batch', 'Серија')}" value="${GF.esc(r.batch_id || '')}">
+        <input id="qcu-e-num_samples" type="number" min="0" placeholder="${AL('№ samples', 'Бр. мостри')}" value="${r.num_samples != null ? r.num_samples : ''}">
+        <input id="qcu-e-storage_location" placeholder="${AL('Storage location', 'Локација за складирање')}" value="${GF.esc(r.storage_location || '')}">
+        <input id="qcu-e-spec_reference" placeholder="${AL('Specification reference', 'Референца на спец.')}" value="${GF.esc(r.spec_reference || '')}">
+        <select id="qcu-e-material_status"><option value="">${AL('material status…', 'статус на материјал…')}</option>${RQS_MATERIAL_ST.map(s => `<option value="${s}" ${r.material_status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <select id="qcu-e-priority"><option value="">${AL('priority…', 'приоритет…')}</option>${RQS_PRIORITIES_KV()}</select>
+        <input id="qcu-e-priority_justification" placeholder="${AL('Urgency justification (if URGENT)', 'Оправдување за итност (ако е ИТНО)')}" value="${GF.esc(r.priority_justification || '')}">
+        <select id="qcu-e-required_tests" multiple size="4" title="${AL('Ctrl/Cmd-click to pick multiple', 'Ctrl/Cmd-клик за повеќе')}">${RQS_TESTS.map(t => `<option value="${t}" ${(r.required_tests || []).includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <button class="btn btn-sm" onclick="GF.WWF.qcRqsEdit('${r.id}')">${AL('Save §6.1.4 fields', 'Зачувај §6.1.4 полиња')}</button>
+      </div></div>` : ''}</div>`;
   };
+  const RQS_PRIORITIES_KV = () => `<option value="ROUTINE">${AL('Routine', 'Рутинско')}</option><option value="URGENT">${AL('Urgent', 'Итно')}</option>`;
 
+  const condChip = (ok) => ok === true ? chip(AL('intact', 'исправно'), 'var(--green)')
+    : (ok === false ? chip(AL('compromised', 'нарушено'), 'var(--red)') : '');
   const custodyPanel = (sampleId) => {
     const rows = (GF.WWF._qccus.custody[sampleId] || []);
-    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td><td>${GF.esc(x.to_location || '')}</td><td>${GF.esc(x.transfer_reason || '')}</td></tr>`).join('');
+    const list = rows.map(x => `<tr><td class="mono">${dt(x.transferred_at)}</td><td>${GF.esc(x.transfer_type || '—')}</td><td>${GF.esc(x.to_location || '')}</td><td>${GF.esc(x.transfer_reason || '')}</td><td>${GF.esc(x.sample_condition || '')} ${condChip(x.condition_ok)}</td></tr>`).join('');
     return `<div style="margin-top:12px" class="ana-pt">${AL('Chain of custody', 'Ланец на чување')}</div>
-      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th></tr></thead>
-      <tbody>${list || `<tr><td colspan="4" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
+      <table class="qcp-table"><thead><tr><th>${AL('When', 'Кога')}</th><th>${AL('Type', 'Тип')}</th><th>${AL('To', 'До')}</th><th>${AL('Reason', 'Причина')}</th><th>${AL('Condition', 'Состојба')}</th></tr></thead>
+      <tbody>${list || `<tr><td colspan="5" class="ana-note">${AL('No custody transfers', 'Нема трансфери')}</td></tr>`}</tbody></table>
       ${canWrite() ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
         <select id="qcu-xtype"><option value="">${AL('type…', 'тип…')}</option>${XFER.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
         <input id="qcu-xto" placeholder="${AL('to location', 'до локација')}"><input id="qcu-xreason" placeholder="${AL('reason', 'причина')}" style="flex:1">
+        <input id="qcu-xcond" placeholder="${AL('condition at handoff', 'состојба при предавање')}">
+        <select id="qcu-xok"><option value="">${AL('intact?', 'исправно?')}</option><option value="yes">${AL('intact', 'исправно')}</option><option value="no">${AL('compromised', 'нарушено')}</option></select>
         <button class="btn btn-sm" onclick="GF.WWF.qcCusLogTransfer('${sampleId}')">+ ${AL('Log transfer', 'Запиши трансфер')}</button>
       </div>` : ''}`;
   };
@@ -220,17 +299,26 @@
   const sfrDetail = (r) => {
     const nxt = SFR_NEXT[r.status];
     return `<div class="qms-detail"><div class="qms-dgrid">
-      <span>${AL('SFR', 'SFR')}</span><b class="mono">${GF.esc(r.sfr_number)}</b>
+      <span>${AL('SFR №', 'SFR №')}</span><b class="mono">${GF.esc(r.sfr_number)}</b>
       <span>${AL('Location', 'Локација')}</span><b>${GF.esc(r.sampling_location)}</b>
       <span>${AL('Destination', 'Дестинација')}</span><b>${GF.esc(r.destination_facility)}</b>
       <span>${AL('Status', 'Статус')}</span><b>${stChip(SFR_ST, r.status)}</b>
       ${(r.barrel_numbers && r.barrel_numbers.length) ? `<span>${AL('Barrels', 'Буриња')}</span><b>${GF.esc(r.barrel_numbers.join(', '))}</b>` : ''}
       ${r.num_containers != null ? `<span>${AL('Containers', 'Контејнери')}</span><b>${r.num_containers}</b>` : ''}
+      ${r.sampling_equipment ? `<span>${AL('Equipment', 'Опрема')}</span><b>${GF.esc(r.sampling_equipment)}</b>` : ''}
+      ${r.ambient_conditions ? `<span>${AL('Ambient cond.', 'Амбиентални усл.')}</span><b>${GF.esc(r.ambient_conditions)}</b>` : ''}
+      ${r.received_condition ? `<span>${AL('Received cond.', 'Состојба при прием')}</span><b>${GF.esc(r.received_condition)}</b>` : ''}
       ${r.sample_id ? `<span>${AL('Sample', 'Примерок')}</span><b class="mono">${sampleRef(r.sample_id)}</b>` : ''}
     </div>${canWrite() && nxt ? `<div class="qms-dl" style="margin-top:8px">
       <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSfrAdvance('${r.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((SFR_ST[nxt]||{}).en, (SFR_ST[nxt]||{}).mk))}</button>
       ${r.status !== 'COMPLETED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcSfrAdvance('${r.id}','CANCELLED')">${AL('Cancel', 'Откажи')}</button>` : ''}
-    </div>` : ''}
+    </div>` : ''}${canWrite() && r.status !== 'CANCELLED' ? `<div class="ana-note" style="margin-top:6px">${AL('Equipment & receipt conditions (§6.2.3 / §6.3.2):', 'Опрема и услови при прием (§6.2.3 / §6.3.2):')}
+      <div class="qcs-form" style="margin-top:4px">
+        <input id="qcu-r-sampling_equipment" placeholder="${AL('Sampling equipment', 'Опрема за земање мостри')}" value="${GF.esc(r.sampling_equipment || '')}">
+        <input id="qcu-r-ambient_conditions" placeholder="${AL('Ambient conditions', 'Амбиентални услови')}" value="${GF.esc(r.ambient_conditions || '')}">
+        <input id="qcu-r-received_condition" placeholder="${AL('Condition at receipt', 'Состојба при прием')}" value="${GF.esc(r.received_condition || '')}">
+        <button class="btn btn-sm" onclick="GF.WWF.qcSfrReceipt('${r.id}')">${AL('Save receipt', 'Зачувај прием')}</button>
+      </div></div>` : ''}
     ${r.sample_id ? custodyPanel(r.sample_id) : `<div class="ana-note" style="margin-top:8px">${AL('Link a sample to record its chain of custody.', 'Поврзете примерок за да се води ланецот на чување.')}</div>
       ${canWrite() && r.status !== 'CANCELLED' ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">${samplePicker('sfr', r.id)}</div>` : ''}`}</div>`;
   };
@@ -276,22 +364,33 @@
     </div>`;
     if (st.loading || (!st.rqs && !st.sfr && !st.error)) return head + zone + tabs + `<div class="mw-skel" style="height:60px;margin-bottom:10px"></div><div class="mw-skel" style="height:200px"></div>`;
     if (st.error) return head + zone + tabs + `<div class="panel" style="padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span><button class="btn btn-sm" onclick="GF.WWF.loadQcCustody()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
-    const rqsOpen = (st.rqsAll || []).filter(x => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
+    // §6.1.1 — a field record may only be raised against a REGISTERED (or
+    // already in-progress) RQS. OPEN drafts and cancelled/completed ones are
+    // excluded from the required picker.
+    const rqsReg = (st.rqsAll || []).filter(x => x.status === 'REGISTERED' || x.status === 'IN_PROGRESS');
     const create = canWrite() ? (st.tab === 'sfr' ? `
       <div class="panel ana-panel" style="margin-bottom:12px"><div class="ana-pt" style="margin-bottom:8px">${AL('New field record', 'Нов теренски запис')}</div>
+        ${rqsReg.length ? '' : `<div class="ana-note" style="margin-bottom:8px;color:var(--orange)">${AL('No registered sampling request available — register an RQS first (QCSOP 011 §6.1.1).', 'Нема регистрирано барање за мостри — прво регистрирајте RQS (QCSOP 011 §6.1.1).')}</div>`}
         <div class="qcs-form">
+          <select id="qcu-rqs"><option value="">${AL('Registered sampling request (required)', 'Регистрирано барање за мостри (задолжително)')}</option>${rqsReg.map(x =>
+            `<option value="${x.id}">${GF.esc(x.rqs_number + ' — ' + x.material_code + (x.qc_control_number ? ' · ' + x.qc_control_number : ''))}</option>`).join('')}</select>
           ${fld('qcu-loc', AL('Sampling location', 'Локација'))}${fld('qcu-dest', AL('Destination facility', 'Дестинација'))}
           ${fld('qcu-coords', AL('GPS (lat,long)', 'ГПС'))}${fld('qcu-barrels', AL('Barrels (comma-sep)', 'Буриња (запирки)'))}
-          <input id="qcu-nc" type="number" min="0" placeholder="${AL('# containers', '# контејнери')}">
-          <select id="qcu-rqs"><option value="">${AL('From sampling request (opt.)', 'Од барање за мостри (опц.)')}</option>${rqsOpen.map(x =>
-            `<option value="${x.id}">${GF.esc(x.rqs_number + ' — ' + x.material_code)}</option>`).join('')}</select>
-          <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSfrCreate()">${GF.t('create_task') || 'Create'}</button>
+          <input id="qcu-nc" type="number" min="0" placeholder="${AL('№ containers', 'Бр. контејнери')}">
+          ${fld('qcu-equip', AL('Sampling equipment', 'Опрема за земање мостри'))}
+          <button class="btn btn-sm btn-primary" ${rqsReg.length ? '' : 'disabled'} onclick="GF.WWF.qcSfrCreate()">${GF.t('create_task') || 'Create'}</button>
         </div></div>` : `
       <div class="panel ana-panel" style="margin-bottom:12px"><div class="ana-pt" style="margin-bottom:8px">${AL('New sampling request', 'Ново барање за мостри')}</div>
         <div class="qcs-form">
           ${fld('qcu-mat', AL('Material code', 'Код на материјал'))}${fld('qcu-dept', AL('Originating department', 'Оддел'))}
           ${fld('qcu-material_name_en', AL('Material (EN)', 'Материјал (EN)'))}${fld('qcu-material_name_mk', AL('Material (MK)', 'Материјал (MK)'))}
-          ${fld('qcu-batch_id', AL('Batch (optional)', 'Серија (опц.)'))}${fld('qcu-assigned_sp_type', AL('SP type (SP_01..)', 'СП тип'))}
+          ${fld('qcu-batch_id', AL('Batch', 'Серија'))}<input id="qcu-num_samples" type="number" min="0" placeholder="${AL('№ of samples', 'Бр. на мостри')}">
+          ${fld('qcu-storage_location', AL('Storage location', 'Локација за складирање'))}${fld('qcu-spec_reference', AL('Specification reference', 'Референца на спец.'))}
+          <select id="qcu-material_status"><option value="">${AL('material status…', 'статус на материјал…')}</option>${RQS_MATERIAL_ST.map(s => `<option value="${s}">${s}</option>`).join('')}</select>
+          <select id="qcu-priority"><option value="">${AL('priority (routine)', 'приоритет (рутинско)')}</option>${RQS_PRIORITIES_KV()}</select>
+          ${fld('qcu-priority_justification', AL('Urgency justification', 'Оправдување за итност'))}${fld('qcu-assigned_sp_type', AL('SP type (SP_01..)', 'СП тип'))}
+          <select id="qcu-required_tests" multiple size="4" title="${AL('Ctrl/Cmd-click to pick multiple tests', 'Ctrl/Cmd-клик за повеќе тестови')}">${RQS_TESTS.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+          <label class="ana-note" style="display:flex;align-items:center;gap:6px"><input id="qcu-release_related" type="checkbox">${AL('Release-related (QP registers)', 'Поврзано со ослободување (QP регистрира)')}</label>
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcRqsCreate()">${GF.t('create_task') || 'Create'}</button>
         </div></div>`) : '';
     const statuses = st.tab === 'sfr' ? Object.keys(SFR_ST) : Object.keys(RQS_ST);

@@ -399,6 +399,8 @@ CREATE TABLE public.qc_chain_of_custody (
     sfr_id uuid,
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sample_condition text,
+    condition_ok boolean,
     CONSTRAINT qc_chain_of_custody_type_check CHECK (((transfer_type IS NULL) OR (transfer_type = ANY (ARRAY['FIELD_TO_LAB'::text, 'LAB_INTERNAL'::text, 'LAB_TO_DISPOSAL'::text, 'STABILITY_TRANSFER'::text]))))
 );
 
@@ -812,6 +814,9 @@ CREATE TABLE public.qc_sample_field_records (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    sampling_equipment text,
+    ambient_conditions text,
+    received_condition text,
     CONSTRAINT qc_sample_field_records_status_check CHECK ((status = ANY (ARRAY['CREATED'::text, 'IN_FIELD'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
 );
 
@@ -889,6 +894,11 @@ CREATE TABLE public.qc_samples (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    sample_kind text,
+    retention_expiry date,
+    non_conforming boolean DEFAULT false NOT NULL,
+    non_conforming_reason text,
+    CONSTRAINT qc_samples_kind_check CHECK (((sample_kind IS NULL) OR (sample_kind = ANY (ARRAY['PC'::text, 'MB'::text, 'EXT'::text, 'RET'::text, 'STAB'::text, 'RT'::text, 'CC'::text])))),
     CONSTRAINT qc_samples_status_check CHECK ((status = ANY (ARRAY['COLLECTED'::text, 'IN_TRANSIT'::text, 'RECEIVED'::text, 'IN_TEST'::text, 'TESTED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'REJECTED'::text, 'QUARANTINE'::text])))
 );
 
@@ -965,6 +975,18 @@ CREATE TABLE public.qc_sampling_requests (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    qc_control_number text,
+    num_samples integer,
+    required_tests jsonb DEFAULT '[]'::jsonb NOT NULL,
+    priority text DEFAULT 'ROUTINE'::text NOT NULL,
+    priority_justification text,
+    storage_location text,
+    material_status text,
+    specification_id uuid,
+    spec_reference text,
+    release_related boolean DEFAULT false NOT NULL,
+    CONSTRAINT qc_rqs_material_status_check CHECK (((material_status IS NULL) OR (material_status = ANY (ARRAY['QUARANTINE'::text, 'IN_PROCESS'::text, 'OTHER'::text])))),
+    CONSTRAINT qc_rqs_priority_check CHECK ((priority = ANY (ARRAY['ROUTINE'::text, 'URGENT'::text]))),
     CONSTRAINT qc_sampling_requests_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'REGISTERED'::text, 'IN_PROGRESS'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
 );
 

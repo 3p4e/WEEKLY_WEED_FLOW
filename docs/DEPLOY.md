@@ -1605,3 +1605,48 @@ re-rendered (PP-COA-2026-0042 → DocEngine doc, 13 tables, `RESULT: PASS`) and 
 metadata round-tripped. **Rollback** = revert tags to v73/v103 (+ `alembic -n tasks
 downgrade 0037` — additive columns drop cleanly; image-only rollback also safe, the
 columns are harmless unused).
+
+## 2026-07-21 — QCSOP 011 v3 sampling alignment — backend v75 / frontend v105 / migration 0039
+
+Remediates the gaps found in the app's adherence assessment against the governing SOP
+**QCSOP 011 v3.0** (QC Sampling). Aligns the sampling cluster RQS → SFR →
+chain-of-custody → sample to the SOP's control points.
+
+- **Migration 0039** (additive, nullable / defaulted — 19 columns + 3 CHECKs):
+  `qc_sampling_requests` gains the §6.1.4 mandatory fields (`num_samples`,
+  `required_tests` jsonb, `priority`+`priority_justification`, `storage_location`,
+  `material_status`, `specification_id`, `spec_reference`), the §6.1.6 MLL control
+  number (`qc_control_number`), and the §6.1.2 `release_related` flag;
+  `qc_sample_field_records` gains §6.2.3/§6.3.2 `sampling_equipment` /
+  `ambient_conditions` / `received_condition`; `qc_chain_of_custody` gains §6.3.1
+  `sample_condition` / `condition_ok`; `qc_samples` gains §6.2.1 `sample_kind`
+  taxonomy (PC/MB/EXT/RET/STAB/RT/CC), §7.0 `retention_expiry`, and §6.7
+  `non_conforming` / `non_conforming_reason`. Existing RLS / audit trigger / grants
+  cover the new columns.
+- **Backend** (`backend/app/api/qc.py`): **§6.1.1 (MAJOR)** — a field record now
+  *requires* a linked RQS (`rqs_id` mandatory) that is **REGISTERED** (else 409): no
+  sampling without a registered request. **§6.1.3** — the RQS ordinal becomes
+  `PP-QC-F-001.A01/YYYY-NNN` (per-year, advisory-locked, gap-free; **forward-only** —
+  issued `PP-RQS-*` numbers are immutable and left untouched). **§6.1.6** — REGISTER is
+  a QC-Head act (`ADMIN`/`QC_MGR`/`QP`), gated by a completeness check over the §6.1.4
+  fields, and mints the MLL control number `NNN/YY_RQS`; **§6.1.2** a release-related
+  RQS escalates registration to the QP. Sample-kind is validated against the §6.2.1
+  enumeration; custody + receipt + non-conforming fields round-trip.
+- **Frontend**: `qccustody-view.js` — the RQS form + an OPEN-draft §6.1.4 editor, a
+  live completeness hint that disables **Register** until the mandatory fields are
+  present, control-№ display, a **required** registered-RQS picker on the SFR form
+  (+ equipment) and a receipt-conditions editor, and condition capture on each custody
+  handoff. `qcsample-view.js` — sample-type + retention-expiry on collection, and a
+  flag/clear non-conforming affordance. Number labels use № (design directive).
+  SW v3.67.0→**v3.68.0**.
+- **GxP**: unknown values stay null for a human — never fabricated; issued RQS numbers
+  are never renumbered; the completeness gate is enforced at registration (§6.1.6
+  model), not at submission, so a draft may be incomplete. **Adversarial review**
+  (SQL/GxP/injection/serializer lenses) run on the diff pre-deploy.
+
+Gate: full backend suite **438 passed** (+7 new: RQS completeness gate, §6.1.4 field
+validation, QC-registrar gate, release-related→QP, SFR-requires-registered-RQS, sample
+taxonomy+retention, non-conforming flag), migration 0039 up/down/base clean,
+schema.tasks.sql dump-diff EXACT, node --check. Migration applied to BOTH tasks DBs
+(0038→0039) before the image flip. Deployed backend v74→**v75** (prod scheduler too) +
+frontend v104→**v105**.

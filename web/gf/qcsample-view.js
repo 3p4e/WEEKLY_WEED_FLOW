@@ -74,6 +74,18 @@
     return `<span class="chip-opt" style="border-color:${m.c};color:${m.c}">${GF.esc(AL(m.en, m.mk))}</span>`;
   };
 
+  // QCSOP 011 §6.2.1 sample-type taxonomy (mirrors backend's _SAMPLE_KINDS)
+  const KIND = {
+    PC:   { en: 'Primary control', mk: 'Примарна контрола' },
+    MB:   { en: 'Microbiology', mk: 'Микробиологија' },
+    EXT:  { en: 'External lab', mk: 'Надворешна лаб.' },
+    RET:  { en: 'Retention', mk: 'Резерва' },
+    STAB: { en: 'Stability', mk: 'Стабилност' },
+    RT:   { en: 'Retest', mk: 'Ретест' },
+    CC:   { en: 'Counter-check', mk: 'Контра-проверка' },
+  };
+  const kindLabel = (k) => { const m = KIND[k]; return m ? AL(m.en, m.mk) : k; };
+
   // sampling-plan frequency vocabulary (mirrors backend's _FREQUENCIES)
   const FREQ = {
     EVERY_BATCH: { en: 'Every batch', mk: 'Секоја серија', c: 'var(--blue)' },
@@ -154,6 +166,24 @@
     if (GF.WWF._qcsm.sel === id) { GF.WWF._qcsm.detail = await GF.API.qcSample(id).catch(() => null); GF.render.all(); }
   };
 
+  // §6.7 — flag / clear a non-conforming sample (a distinct signal from the
+  // lifecycle status; carries a reason).
+  GF.WWF.qcSampleFlagNC = async (id) => {
+    const reason = prompt(AL('Non-conformance reason:', 'Причина за неусогласеност:'));
+    if (reason === null) return;
+    if (!reason.trim()) return GF.toast(AL('A reason is required', 'Потребна е причина'), 'error');
+    try { await GF.API.qcPatchSample(id, { non_conforming: true, non_conforming_reason: reason.trim() }); GF.toast(AL('Flagged non-conforming', 'Означено како неусогласено')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    await GF.WWF.loadQcSamples();
+    if (GF.WWF._qcsm.sel === id) { GF.WWF._qcsm.detail = await GF.API.qcSample(id).catch(() => null); GF.render.all(); }
+  };
+  GF.WWF.qcSampleClearNC = async (id) => {
+    try { await GF.API.qcPatchSample(id, { non_conforming: false, non_conforming_reason: null }); GF.toast(AL('Cleared', 'Исчистено')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    await GF.WWF.loadQcSamples();
+    if (GF.WWF._qcsm.sel === id) { GF.WWF._qcsm.detail = await GF.API.qcSample(id).catch(() => null); GF.render.all(); }
+  };
+
   GF.WWF.qcSampleCreate = async () => {
     const st = GF.WWF._qcsm;
     const dr = st.draft || {};
@@ -167,6 +197,8 @@
     const plan = mk('qsm-plan', 'plan'); if (plan) body.sampling_plan_id = plan;
     const qty = mk('qsm-qty', 'qty').trim(); if (qty !== '' && !isNaN(parseFloat(qty))) body.quantity = parseFloat(qty);
     const unit = mk('qsm-unit', 'unit').trim(); if (unit) body.quantity_unit = unit;
+    const kind = mk('qsm-kind', 'kind').trim(); if (kind) body.sample_kind = kind;
+    const rex = mk('qsm-retexp', 'retexp').trim(); if (rex) body.retention_expiry = rex;
     const notes = mk('qsm-notes', 'notes').trim(); if (notes) body.notes = notes;
     if (st.parent) body.parent_id = st.parent.id;  // aliquot / sub-sample link
     try {
@@ -222,18 +254,23 @@
         <span>${AL('Sample', 'Примерок')}</span><b class="mono">${GF.esc(s.sample_id)}</b>
         <span>${AL('Batch', 'Серија')}</span><b>${GF.esc(s.batch_id)}</b>
         <span>${AL('Material', 'Материјал')}</span><b>${GF.esc(s.material_code)}</b>
-        <span>${AL('Status', 'Статус')}</span><b>${stChip(s.status)}</b>
+        <span>${AL('Status', 'Статус')}</span><b>${stChip(s.status)}${s.non_conforming ? ' ' + chip(AL('non-conforming', 'неусогласено'), 'var(--red)') : ''}</b>
         <span>${AL('Location', 'Локација')}</span><b>${GF.esc(s.location || '—')}</b>
+        ${s.sample_kind ? `<span>${AL('Sample type', 'Тип на мостра')}</span><b>${GF.esc(s.sample_kind)} · ${GF.esc(kindLabel(s.sample_kind))}</b>` : ''}
         ${s.parent_id ? `<span>${AL('Sub-sample of', 'Под-примерок од')}</span><b class="mono">${GF.esc(parent ? parent.sample_id : s.parent_id)}</b>` : ''}
         ${s.quantity != null ? `<span>${AL('Quantity', 'Количина')}</span><b>${GF.esc(String(s.quantity))} ${GF.esc(s.quantity_unit || '')}</b>` : ''}
         ${s.sampling_plan_id ? `<span>${AL('Sampling plan', 'План за земање мостри')}</span><b class="mono">${GF.esc(planLabel(s.sampling_plan_id))}</b>` : ''}
         ${s.retention_sample ? `<span>${AL('Retention', 'Резерва')}</span><b>✓</b>` : ''}
+        ${s.retention_expiry ? `<span>${AL('Retention expiry', 'Истек на резерва')}</span><b class="mono">${GF.esc(s.retention_expiry)}</b>` : ''}
+        ${s.non_conforming && s.non_conforming_reason ? `<span>${AL('NC reason', 'Причина за НЦ')}</span><b>${GF.esc(s.non_conforming_reason)}</b>` : ''}
         ${s.notes ? `<span>${AL('Notes', 'Белешки')}</span><b>${GF.esc(s.notes)}</b>` : ''}
       </div>
       ${canWrite() ? `<div class="qms-dl">
         ${moves.map(t => `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSampleMove('${s.id}','${t}')">${GF.esc(AL((ST[t]||{}).en || t, (ST[t]||{}).mk || t))}</button>`).join('')}
         ${canReject ? `<button class="btn btn-sm" onclick="GF.WWF.qcSampleMove('${s.id}','REJECTED')">${AL('Reject', 'Одбиј')}</button>` : ''}
         <button class="btn btn-sm" onclick="GF.WWF.qcSampleSubOf('${s.id}')">${AL('Add sub-sample', 'Додади под-примерок')}</button>
+        ${s.non_conforming ? `<button class="btn btn-sm" onclick="GF.WWF.qcSampleClearNC('${s.id}')">${AL('Clear NC', 'Тргни НЦ')}</button>`
+          : `<button class="btn btn-sm" onclick="GF.WWF.qcSampleFlagNC('${s.id}')">${AL('Flag non-conforming', 'Означи неусогласено')}</button>`}
       </div>` : ''}
       ${kids ? `<div style="margin-top:10px" class="ana-pt">${AL('Sub-samples', 'Под-примероци')}</div>${kids}` : ''}
     </div>`;
@@ -342,6 +379,8 @@
           <input id="qsm-loc" placeholder="${AL('Location', 'Локација')}" value="${dv('loc')}" oninput="GF.WWF.qcSampleDraft('loc', this.value)">
           <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px" value="${dv('qty')}" oninput="GF.WWF.qcSampleDraft('qty', this.value)">
           <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px" value="${dv('unit')}" oninput="GF.WWF.qcSampleDraft('unit', this.value)">
+          <select id="qsm-kind" onchange="GF.WWF.qcSampleDraft('kind', this.value)"><option value="">${AL('sample type…', 'тип на мостра…')}</option>${Object.keys(KIND).map(k => `<option value="${k}" ${dr.kind === k ? 'selected' : ''}>${k} · ${GF.esc(kindLabel(k))}</option>`).join('')}</select>
+          <input id="qsm-retexp" type="date" title="${AL('Retention expiry', 'Истек на резерва')}" value="${dv('retexp')}" oninput="GF.WWF.qcSampleDraft('retexp', this.value)">
           ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
             searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
           <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}" value="${dv('notes')}" oninput="GF.WWF.qcSampleDraft('notes', this.value)">

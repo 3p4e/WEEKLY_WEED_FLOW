@@ -227,6 +227,38 @@ async def test_sample_role_gating(client, admin_headers):
     assert r.status_code == 403                                                 # non-QC manager can't write
 
 
+async def test_sample_kind_taxonomy_and_retention(client, admin_headers):
+    """QCSOP 011 §6.2.1 sample-type taxonomy + §7.0 retention expiry."""
+    s = await _sample(client, admin_headers, batch="B-KIND-1",
+                      sample_kind="RET", retention_expiry="2027-12-31")
+    assert s["sample_kind"] == "RET" and s["retention_expiry"] == "2027-12-31"
+    # a bad kind is rejected on create and on patch
+    r = await client.post("/qc/samples",
+                          json={"batch_id": "B-KIND-2", "material_code": "M", "sample_kind": "ZZ"},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "6.2.1" in r.text
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"sample_kind": "ZZ"}, headers=admin_headers)
+    assert r.status_code == 422
+    # a valid kind updates
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"sample_kind": "STAB"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["sample_kind"] == "STAB"
+
+
+async def test_sample_non_conforming_flag(client, admin_headers):
+    """§6.7 — a sample can be flagged non-conforming with a reason and cleared."""
+    s = await _sample(client, admin_headers, batch="B-NC-1")
+    assert s["non_conforming"] is False
+    r = await client.patch(f"/qc/samples/{s['id']}",
+                           json={"non_conforming": True, "non_conforming_reason": "seal breach in transit"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["non_conforming"] is True
+    assert r.json()["non_conforming_reason"] == "seal breach in transit"
+    # clearing sets it back and nulls the reason
+    r = await client.patch(f"/qc/samples/{s['id']}",
+                           json={"non_conforming": False, "non_conforming_reason": None}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["non_conforming"] is False and r.json()["non_conforming_reason"] is None
+
+
 async def test_sampling_plan_create_and_list(client, admin_headers):
     r = await client.post("/qc/sampling-plans",
                           json={"material_code": "CANN-FLOS-D", "sampling_frequency": "EVERY_BATCH"},
@@ -1841,6 +1873,12 @@ async def test_verify_is_write_gated(client, admin_headers):
 
 
 # ── QC-U5 — custody cluster (RQS + SFR + chain of custody) ──────────────────
+# QCSOP 011 §6.1.4 mandatory registration fields — an RQS must carry all of
+# these before the QC Head may register it into the MLL (§6.1.6 completeness gate).
+_RQS_COMPLETE = dict(num_samples=2, required_tests=["POTENCY"], storage_location="QC store",
+                     material_status="QUARANTINE", spec_reference="SPEC-REF/2026")
+
+
 async def _rqs(client, headers, **extra):
     body = {"material_code": "CANN-FLOS-D", "originating_department": "Production", **extra}
     r = await client.post("/qc/sampling-requests", json=body, headers=headers)
@@ -1848,14 +1886,25 @@ async def _rqs(client, headers, **extra):
     return r.json()
 
 
+async def _rqs_registered(client, headers, **extra):
+    """A §6.1.4-complete RQS advanced to REGISTERED — the precondition for an SFR."""
+    body = {"batch_id": extra.pop("batch_id", "B-REG"), **_RQS_COMPLETE, **extra}
+    rqs = await _rqs(client, headers, **body)
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 async def test_rqs_lifecycle_and_24h_window(client, admin_headers):
-    rqs = await _rqs(client, admin_headers, batch_id="B-RQS-1")
-    assert rqs["rqs_number"].startswith("PP-RQS-") and rqs["status"] == "OPEN"
+    # §6.1.3 Request Ordinal format PP-QC-F-001.A01/YYYY-NNN
+    rqs = await _rqs(client, admin_headers, batch_id="B-RQS-1", **_RQS_COMPLETE)
+    assert rqs["rqs_number"].startswith("PP-QC-F-001.A01/") and rqs["status"] == "OPEN"
     assert rqs["registration_deadline"] is not None  # requested_at + 24h
-    # register within the window → REGISTERED, window met
+    # register within the window → REGISTERED, window met, control number minted
     r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=admin_headers)
     assert r.status_code == 200 and r.json()["status"] == "REGISTERED"
     assert r.json()["registration_window_met"] is True and r.json()["registered_at"]
+    assert r.json()["qc_control_number"] and r.json()["qc_control_number"].endswith("_RQS")  # §6.1.6 MLL control №
     # assign → IN_PROGRESS (defaults assignee to the actor), then complete
     r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "IN_PROGRESS"}, headers=admin_headers)
     assert r.status_code == 200 and r.json()["assigned_to_id"] and r.json()["assigned_at"]
@@ -1869,18 +1918,107 @@ async def test_rqs_illegal_transition(client, admin_headers):
     assert r.status_code == 409  # OPEN -> COMPLETED not allowed
 
 
+async def test_rqs_registration_requires_mandatory_fields(client, admin_headers):
+    """§6.1.6 completeness gate — an incomplete RQS cannot be registered; the
+    missing §6.1.4 fields are named, and filling them lets registration proceed."""
+    rqs = await _rqs(client, admin_headers, batch_id="B-INC-1")   # batch only, else empty
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=admin_headers)
+    assert r.status_code == 422 and "6.1.6" in r.text
+    # fill the mandatory fields, then registration succeeds
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json=dict(_RQS_COMPLETE), headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["qc_control_number"]
+
+
+async def test_rqs_field_validation(client, admin_headers):
+    """§6.1.4 enumerations are validated; an URGENT request needs a justification."""
+    r = await client.post("/qc/sampling-requests",
+                          json={"material_code": "M", "originating_department": "D", "required_tests": ["NOPE"]},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "required_tests" in r.text
+    r = await client.post("/qc/sampling-requests",
+                          json={"material_code": "M", "originating_department": "D", "material_status": "BOGUS"},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/qc/sampling-requests",
+                          json={"material_code": "M", "originating_department": "D", "priority": "URGENT"},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "justification" in r.text
+    r = await client.post("/qc/sampling-requests",
+                          json={"material_code": "M", "originating_department": "D",
+                                "priority": "URGENT", "priority_justification": "stability pull due"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["priority"] == "URGENT"
+
+
+async def test_rqs_registration_is_qc_role_gated(client, admin_headers):
+    """§3/§6.1.6 — registration into the MLL is a QC-Head act. A non-QC writer
+    (executive) may raise an RQS but may not register it."""
+    _, ceo_h = await _actor(client, admin_headers, "CEO")
+    rqs = await _rqs(client, ceo_h, batch_id="B-CEO-1", **_RQS_COMPLETE)   # executive may create
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=ceo_h)
+    assert r.status_code == 403 and "6.1.6" in r.text
+    # the QC Manager may
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=qc_h)
+    assert r.status_code == 200
+
+
+async def test_rqs_release_related_escalates_to_qp(client, admin_headers):
+    """§6.1.2 — a release-related RQS is registered by the Qualified Person, not
+    the QC Manager."""
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    rqs = await _rqs(client, qc_h, batch_id="B-REL-1", release_related=True, **_RQS_COMPLETE)
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=qc_h)
+    assert r.status_code == 403 and "6.1.2" in r.text
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=qp_h)
+    assert r.status_code == 200 and r.json()["release_related"] is True
+
+
+async def test_sfr_requires_registered_rqs(client, admin_headers):
+    """§6.1.1 (MAJOR) — no sampling may be recorded without a registered RQS.
+    The rqs_id is required, must exist, and must be past OPEN."""
+    # missing rqs_id → 422 (required field)
+    r = await client.post("/qc/field-records",
+                          json={"sampling_location": "GH", "destination_facility": "QC Lab"},
+                          headers=admin_headers)
+    assert r.status_code == 422
+    # an OPEN (unregistered) RQS → 409
+    rqs = await _rqs(client, admin_headers, batch_id="B-SFR-OPEN", **_RQS_COMPLETE)
+    r = await client.post("/qc/field-records",
+                          json={"rqs_id": rqs["id"], "sampling_location": "GH", "destination_facility": "QC Lab"},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "6.1.1" in r.text
+    # register it → the SFR is now accepted
+    assert (await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                               json={"status": "REGISTERED"}, headers=admin_headers)).status_code == 200
+    r = await client.post("/qc/field-records",
+                          json={"rqs_id": rqs["id"], "sampling_location": "GH", "destination_facility": "QC Lab"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 async def test_sfr_create_and_lifecycle(client, admin_headers):
-    rqs = await _rqs(client, admin_headers, batch_id="B-SFR-1")
+    rqs = await _rqs_registered(client, admin_headers, batch_id="B-SFR-1")
     r = await client.post("/qc/field-records", json={
         "rqs_id": rqs["id"], "sampling_location": "Greenhouse 3",
         "sampling_coordinates": "41.99,21.43", "barrel_numbers": ["B-01", "B-02"],
         "num_containers": 2, "destination_facility": "QC Lab",
+        "sampling_equipment": "SS scoop / sterile bag",
         "planned_departure": "2026-07-16T08:00:00Z"}, headers=admin_headers)
     assert r.status_code == 201, r.text
     sfr = r.json()
     assert sfr["sfr_number"].startswith("PP-SFR-") and sfr["status"] == "CREATED"
     assert sfr["barrel_numbers"] == ["B-01", "B-02"] and sfr["num_containers"] == 2
-    assert sfr["rqs_id"] == rqs["id"]
+    assert sfr["rqs_id"] == rqs["id"] and sfr["sampling_equipment"] == "SS scoop / sterile bag"
+    # §6.3.2 receipt fields round-trip on PATCH
+    r = await client.patch(f"/qc/field-records/{sfr['id']}",
+                           json={"ambient_conditions": "22°C / 45% RH", "received_condition": "intact, sealed"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["ambient_conditions"] == "22°C / 45% RH"
+    assert r.json()["received_condition"] == "intact, sealed"
     for tgt in ("IN_FIELD", "COMPLETED"):
         r = await client.patch(f"/qc/field-records/{sfr['id']}", json={"status": tgt}, headers=admin_headers)
         assert r.status_code == 200 and r.json()["status"] == tgt, tgt
@@ -1890,9 +2028,12 @@ async def test_chain_of_custody_append_and_list(client, admin_headers):
     sample = await _sample(client, admin_headers, batch="B-CUST-1")
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
         "to_location": "QC Lab - Cabinet A", "transfer_reason": "Testing",
-        "transfer_type": "FIELD_TO_LAB"}, headers=admin_headers)
+        "transfer_type": "FIELD_TO_LAB",
+        "sample_condition": "seal intact", "condition_ok": True}, headers=admin_headers)
     assert r.status_code == 201, r.text
     assert r.json()["from_user_id"]  # defaults to the acting user
+    # §6.3.1 condition confirmation round-trips
+    assert r.json()["sample_condition"] == "seal intact" and r.json()["condition_ok"] is True
     lst = (await client.get(f"/qc/samples/{sample['id']}/custody", headers=admin_headers)).json()
     assert len(lst) == 1 and lst[0]["transfer_type"] == "FIELD_TO_LAB"
     # bad transfer_type rejected; missing sample 404
@@ -2043,10 +2184,12 @@ async def test_placeholder_rejects_unknown_parameter_without_status(client, admi
 
 
 async def test_sfr_rqs_reject_unknown_sample(client, admin_headers):
-    # create_sfr with a bad sample_id → 422 (not a raw FK 500)
+    # create_sfr against a registered RQS but a bad sample_id → 422 (not a raw FK 500)
+    reg = await _rqs_registered(client, admin_headers, batch_id="B-HARD-REG")
     r = await client.post("/qc/field-records",
-                          json={"sampling_location": "GH", "destination_facility": "QC Lab",
-                                "sample_id": _FAKE_UUID}, headers=admin_headers)
+                          json={"rqs_id": reg["id"], "sampling_location": "GH",
+                                "destination_facility": "QC Lab", "sample_id": _FAKE_UUID},
+                          headers=admin_headers)
     assert r.status_code == 422, r.text
     # update_rqs / update_sfr with a bad sample_id → 422
     rqs = await _rqs(client, admin_headers, batch_id="B-HARD-RQS")
@@ -2054,7 +2197,8 @@ async def test_sfr_rqs_reject_unknown_sample(client, admin_headers):
                            json={"sample_id": _FAKE_UUID}, headers=admin_headers)
     assert r.status_code == 422, r.text
     sfr = (await client.post("/qc/field-records",
-                             json={"sampling_location": "GH2", "destination_facility": "QC Lab"},
+                             json={"rqs_id": reg["id"], "sampling_location": "GH2",
+                                   "destination_facility": "QC Lab"},
                              headers=admin_headers)).json()
     r = await client.patch(f"/qc/field-records/{sfr['id']}",
                            json={"sample_id": _FAKE_UUID}, headers=admin_headers)
@@ -2134,7 +2278,9 @@ async def test_malformed_uuid_returns_4xx_not_500(client, admin_headers):
     assert (await client.get("/qc/specifications/not-a-uuid", headers=admin_headers)).status_code == 404
     assert (await client.get("/qc/samples/xyz", headers=admin_headers)).status_code == 404
     assert (await client.get("/qc/certificates/nope", headers=admin_headers)).status_code == 404
+    reg = await _rqs_registered(client, admin_headers, batch_id="B-HARD-UUID")
     r = await client.post("/qc/field-records",
-                          json={"sampling_location": "Field A", "destination_facility": "Lab",
-                                "sampled_by_id": "not-a-uuid"}, headers=admin_headers)
+                          json={"rqs_id": reg["id"], "sampling_location": "Field A",
+                                "destination_facility": "Lab", "sampled_by_id": "not-a-uuid"},
+                          headers=admin_headers)
     assert r.status_code == 422, r.text
