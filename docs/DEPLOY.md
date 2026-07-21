@@ -1711,3 +1711,26 @@ Voided, re-void → 409; eCoA checklist PENDING → accept-incomplete 422 → co
 + reviewer → locked edit 409; register rows carry `sop_status`. **Rollback** = revert both
 compose files to v75/v105 (backups `compose.yaml.bak.v75v105`) + `alembic -n tasks downgrade
 0039` on each db-tasks (additive; drops cleanly — image-only rollback is also safe).
+
+## 2026-07-21 — QCSOP 012 v3 Increment B (C2 certificate numbering) — backend v77 / frontend v106 (no migration)
+
+Code-only. Replaces the shared global `qc_coa_id_seq` counter with advisory-locked
+per-(org, cert_type, year) sequential numbering (§6.13), mirroring the RQS-ordinal
+pattern (QCSOP 011).
+
+- New certificates mint under a per-type prefix — `iCoA-PP-YYYY-NNNN` /
+  `eCoA-PP-YYYY-NNNN` / `CoQ-PP-YYYY-NNNN` / `WCoA-PP-…` / `CoA-PP-…`
+  (WATER/OTHER) — reset to 0001 each 1 January, gap-free within the lock.
+- **Forward-only**: every certificate minted before this change keeps its
+  `PP-COA-YYYY-NNNN` number untouched — the two formats simply coexist in the
+  register from here on (issued records are immutable).
+- `/qc/register/gaps` upgraded to be per-numbering-**series** aware (identified
+  by the number's own prefix, not just its `cert_type` column), so the format
+  transition never mixes the legacy counter with a new one into a false
+  "hundreds of certificates missing" reading; accepts an optional `cert_type`
+  filter.
+
+Gate: full backend suite **444 passed** (+1: per-type series advance
+independently + gap report stays series-clean), schema.tasks.sql dump-diff EXACT
+(no migration), node --check. **Adversarial review** run on the diff pre-deploy.
+Deployed backend v76→**v77** (prod scheduler too); frontend unchanged (v106).
