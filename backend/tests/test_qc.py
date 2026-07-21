@@ -1358,6 +1358,52 @@ async def test_ecoa_promote_creates_certificate_with_provenance(client, admin_he
     assert d["document"]["status"] == "PROMOTED" and d["document"]["promoted_coa_id"] == out["coa_id"]
 
 
+# ── URS increment 7 — lab-verdict onto the permanent record (completes item 8)
+async def test_promote_carries_lab_verdict_onto_result(client, admin_headers):
+    """The lab's stated verdict captured at eCoA extraction (mig 0028) must
+    survive onto the promoted qc_result, so the lab-vs-in-house reconciliation
+    lives on the permanent certificate — not just in the intake queue. Here the
+    lab claims Pass on an out-of-spec value: the certificate keeps our FAIL
+    determination AND records the disagreement."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-LABV-PROMO")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-LABV-PROMO")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [
+                          # out of the 10-30 range → our verdict FAIL; lab printed "Pass"
+                          {"raw_label": "Total THC", "numeric_value": 99.0,
+                           "unit": "%", "lab_verdict": "Pass"},
+                      ]}, headers=admin_headers)
+    out = (await client.post(f"/qc/coa-documents/{doc['id']}/promote",
+                             headers=admin_headers)).json()
+    res = (await client.get(f"/qc/certificates/{out['coa_id']}",
+                            headers=admin_headers)).json()["results"][0]
+    assert res["lab_verdict"] == "Pass"           # carried onto the permanent record
+    assert res["complies"] is False               # our determination, unchanged
+    assert res["lab_verdict_mismatch"] is True     # the disagreement is on the record
+
+
+async def test_result_lab_verdict_manual_reference_only(client, admin_headers):
+    """A manually-entered (iCoA) result can carry the lab's stated verdict; it is
+    surfaced with a reconciliation flag and NEVER alters the in-house `complies`
+    (QCSOP 012 §6.3.2 — conformance is determined by Purely Plant)."""
+    spec, p = await _ecoa_spec_with_param(client, admin_headers, material="RES-LABV")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-RES-LABV")
+    # lab claims Fail but the value is in the 10-30 range → we determine PASS
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"parameter_id": p["id"], "test_name": "Total THC",
+                                "result_numeric": 22.0, "lab_verdict": "Fail"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["complies"] is True and body["status"] == "pass"   # value-driven, not lab-driven
+    assert body["lab_verdict"] == "Fail" and body["lab_verdict_mismatch"] is True
+    # a result with no stated lab verdict never computes a mismatch
+    r2 = await client.post(f"/qc/certificates/{coa['id']}/results",
+                           json={"parameter_id": p["id"], "test_name": "Total THC",
+                                 "result_numeric": 25.0}, headers=admin_headers)
+    assert r2.json()["lab_verdict"] is None and r2.json()["lab_verdict_mismatch"] is False
+
+
 async def test_ecoa_promote_needs_spec_and_mapped_results(client, admin_headers):
     # no spec → cannot certify
     doc = await _ecoa_doc(client, admin_headers, batch="B-NOSPEC")

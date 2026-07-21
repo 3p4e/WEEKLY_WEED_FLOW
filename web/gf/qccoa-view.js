@@ -54,6 +54,15 @@
     if (v === false) return `<span class="chip-opt" style="border-color:var(--red);color:var(--red)">✗ ${AL('Fail', 'Не задоволува')}</span>`;
     return `<span class="chip-opt" style="border-color:var(--ink-3);color:var(--ink-3)">— ${AL('Unknown', 'Непознато')}</span>`;
   };
+  // The lab's own stated verdict (reference), plus a mismatch badge when it
+  // disagrees with our determination (QCSOP 012 §6.3.2 — reconciliation record).
+  const labVerdictRef = (r) => {
+    if (!r.lab_verdict) return '';
+    const mm = r.lab_verdict_mismatch
+      ? ` <span class="chip-opt" title="${AL('The lab’s stated verdict disagrees with our determination', 'Изјавениот наод на лабораторијата се разликува од нашата определба')}" style="border-color:var(--amber);color:var(--amber)">⚠ ${AL('disagrees', 'се разликува')}</span>`
+      : '';
+    return `<div class="ana-note" style="margin-top:3px">${AL('Lab', 'Лаб')}: ${GF.esc(r.lab_verdict)}${mm}</div>`;
+  };
   const decChip = (d) => {
     if (d === 'PASS') return `<span class="chip-opt" style="border-color:var(--green);color:var(--green)">PASS</span>`;
     if (d === 'FAIL') return `<span class="chip-opt" style="border-color:var(--red);color:var(--red)">FAIL</span>`;
@@ -177,7 +186,8 @@
     const test_name = (param ? param.test_name_en : mk('qcr-name').trim());
     if (!test_name) return GF.toast(AL('Test name required', 'Потребно е име на тест'), 'error');
     const body = { test_name, result_value: mk('qcr-val').trim() || null,
-                   result_numeric: num('qcr-num'), unit: mk('qcr-unit').trim() || null };
+                   result_numeric: num('qcr-num'), unit: mk('qcr-unit').trim() || null,
+                   lab_verdict: mk('qcr-labv').trim() || null };
     if (param) {
       body.parameter_id = pid;               // server snapshots the param's limits
     } else {
@@ -197,7 +207,7 @@
         <td>${GF.esc(r.test_name)}${r.in_scope === false ? ` <span class="chip-opt" title="${AL('Method outside the lab ISO 17025 scope', 'Метод надвор од ISO 17025 опсегот')}" style="border-color:var(--amber);color:var(--amber)">${AL('out of scope', 'вон опсег')}</span>` : ''}</td>
         <td class="mono">${r.result_value != null ? GF.esc(r.result_value) : (r.result_numeric != null ? GF.esc(String(r.result_numeric)) : '—')} ${GF.esc(r.unit || '')}</td>
         <td class="mono">${r.lower_limit != null ? GF.esc(String(r.lower_limit)) : '—'} … ${r.upper_limit != null ? GF.esc(String(r.upper_limit)) : '—'}</td>
-        <td>${compliesChip(r.complies)}</td>
+        <td>${compliesChip(r.complies)}${labVerdictRef(r)}</td>
       </tr>`).join('');
     const params = GF.WWF._qccoa.specParams || [];
     const paramOpts = params.length
@@ -209,7 +219,7 @@
         <td>${params.length ? `<select id="qcr-param" style="margin-bottom:4px">${paramOpts}</select>` : ''}<input id="qcr-name" placeholder="${AL('Test name', 'Име на тест')}"></td>
         <td><input id="qcr-val" placeholder="${AL('value / n.d.', 'вредност / н.о.')}" style="width:88px"> <input id="qcr-num" placeholder="${AL('numeric', 'број')}" style="width:70px"> <input id="qcr-unit" placeholder="${AL('unit', 'ед')}" style="width:52px"></td>
         <td><input id="qcr-lo" placeholder="${AL('min', 'мин')}" style="width:56px"> <input id="qcr-hi" placeholder="${AL('max', 'макс')}" style="width:56px"></td>
-        <td><button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAddResult('${d.coa.id}')">+</button></td>
+        <td><input id="qcr-labv" placeholder="${AL('lab verdict', 'наод на лаб')}" title="${AL('The lab’s own stated pass/fail — reference only', 'Изјавениот наод на лабораторијата — само за референца')}" style="width:84px;margin-bottom:4px"> <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAddResult('${d.coa.id}')">+</button></td>
       </tr>` : '';
     return `<table class="qcp-table"><thead><tr>
       <th>${AL('Test', 'Тест')}</th><th>${AL('Result', 'Резултат')}</th>

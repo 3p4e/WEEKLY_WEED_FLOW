@@ -773,6 +773,11 @@ class ResultIn(BaseModel):
     source_document_code: str | None = Field(default=None, max_length=120)
     source_document_date: date | None = None
     source_institution: str | None = Field(default=None, max_length=200)
+    # The lab's OWN stated pass/fail as printed on the source certificate —
+    # captured verbatim for the reconciliation record, reference-only. Purely
+    # Plant's in-house `complies` is the determination; this never feeds it
+    # (QCSOP 012 §6.3.2). A disagreement is surfaced, never silently discarded.
+    lab_verdict: str | None = Field(default=None, max_length=60)
 
 
 def _coa_out(r: dict) -> dict:
@@ -813,6 +818,13 @@ def _result_out(r: dict) -> dict:
         "source_document_date":
             r["source_document_date"].isoformat() if r["source_document_date"] else None,
         "source_institution": r["source_institution"],
+        # Lab's stated verdict (reference) + the reconciliation flag: True only
+        # when the lab's own pass/fail disagrees with our determination — a
+        # signal for the reviewer, never a change to `complies`.
+        "lab_verdict": r.get("lab_verdict"),
+        "lab_verdict_mismatch": (
+            _lab_verdict_bool(r.get("lab_verdict")) is not None and r["complies"] is not None
+            and _lab_verdict_bool(r.get("lab_verdict")) != r["complies"]),
     }
 
 
@@ -947,11 +959,13 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
         row = await c.fetchrow(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
             " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
-            " result_date, source_document_code, source_document_date, source_institution, created_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$12) RETURNING *",
+            " result_date, source_document_code, source_document_date, source_institution,"
+            " lab_verdict, created_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$12) RETURNING *",
             user["org_id"], coa_id, body.parameter_id, body.test_name, body.result_value,
             body.result_numeric, body.unit, lo, hi, complies, status, user["id"], body.result_date,
-            body.source_document_code, body.source_document_date, body.source_institution)
+            body.source_document_code, body.source_document_date, body.source_institution,
+            body.lab_verdict)
         # OOS hook: a failing result quarantines the linked sample.
         if complies is False and coa["sample_id"]:
             smp = await c.fetchrow("SELECT id, status FROM qc_samples WHERE id=$1", coa["sample_id"])
@@ -2316,12 +2330,12 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             await c.execute(
                 "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
                 " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
-                " source_document_code, source_institution, created_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$12)",
+                " source_document_code, source_institution, lab_verdict, created_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$12)",
                 user["org_id"], coa["id"], m["parameter_id"],
                 m["test_name"] or m["raw_label"], m["raw_value"], m["numeric_value"], m["unit"],
                 m["lower_limit"], m["upper_limit"], m["complies"], st, user["id"],
-                doc["doc_number"], doc["source_institution"])
+                doc["doc_number"], doc["source_institution"], m["lab_verdict"])
         # Optimistic re-assert (same TOCTOU defense generate_coq uses): the
         # promoted_coa_id IS NULL predicate makes concurrent promotes race-safe
         # — the loser's UPDATE matches 0 rows and the whole transaction (its

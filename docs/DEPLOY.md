@@ -1344,3 +1344,37 @@ the analytical-method gap and the test. Prod (wwf_app) verified: /health 200,
 /qc auth-gated (401, not 404/500), clean startup. **Rollback** = revert the
 image tag to v67→**v66** on both compose files + `docker compose up -d
 --no-deps backend[ scheduler]` (image-only; nothing else changed).
+
+## URS increment 7 (backend v68 / frontend v98 / migration 0033 → BOTH stacks, 2026-07-21)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 8 — carry the **lab's stated verdict
+onto the permanent certificate record**, completing the reconciliation begun at
+eCoA extraction (mig 0028). The lab's own pass/fail was captured + reconciled at
+extraction, but was DROPPED at promotion into a certificate — the reconciliation
+lived only in transient staging and never reached the released record.
+
+- **Migration 0033**: `qc_results.lab_verdict` (text, nullable, reference-only —
+  it never feeds the in-house `complies` determination, QCSOP 012 §6.3.2).
+- `promote_coa_document` now carries the source extraction's `lab_verdict` onto
+  the promoted result; `add_result` accepts it for a manually-entered (iCoA)
+  result; `_result_out` exposes `lab_verdict` + a computed `lab_verdict_mismatch`
+  (True only when the lab's verdict disagrees with our determination — a reviewer
+  signal, never a change to the verdict).
+- Frontend: the certificate result grid shows a subdued "Lab: <verdict>"
+  reference under the Complies chip with an amber "⚠ disagrees" badge on a
+  mismatch; the manual add-result row gains an optional lab-verdict input. SW
+  v3.60.0→**v3.61.0**.
+
+Gate: **413 backend tests green** (2 new: the lab verdict survives promotion onto
+the certificate with the mismatch on the record; a manual result carries it,
+reference-only, never altering `complies`), migration 0033 up/down/base clean,
+schema.tasks.sql dump-diff EXACT vs alembic head (one appended column), node
+--check. Migration 0033 applied to BOTH tasks DBs before the image flip.
+Deployed backend v67→**v68** (prod scheduler too) + frontend v97→**v98**.
+**Live behavioral smoke on wwf-mass** (tt.qc.mgr): a manual result with the lab
+claiming Fail on an in-spec value → our PASS kept + lab verdict retained + mismatch
+flagged; an eCoA promoted with the lab claiming Pass on an out-of-spec value → the
+minted certificate keeps our FAIL, carries "Pass", and records the disagreement.
+Prod (wwf_app) verified: /health 200, /qc auth-gated (401), clean startup.
+**Rollback** = revert tags to v67/v97 (+ `alembic -n tasks downgrade 0032` — all
+additive; image-only rollback also safe since the column is nullable).

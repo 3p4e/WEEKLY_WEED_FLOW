@@ -710,6 +710,7 @@ CREATE TABLE public.qc_results (
     source_document_code text,
     source_document_date date,
     source_institution text,
+    lab_verdict text,
     CONSTRAINT qc_results_status_check CHECK ((status = ANY (ARRAY['pass'::text, 'fail'::text, 'marginal'::text, 'unknown'::text])))
 );
 

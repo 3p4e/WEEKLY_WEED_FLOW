@@ -79,9 +79,14 @@ Priority order; SOP citations are the binding source.
    working days ahead at registration; `reviewed_at` + `review_window_met`
    stamped on the REVIEWED transition; computed `review_overdue` flag +
    view badges. Same deadline-window control as the 24h RQS window.
-8. **Lab's stated verdict captured as reference** (`acceptance_as
-   _reported`) and reconciled — we currently recompute but do not retain
-   the lab's own pass/fail for the reconciliation record.
+8. ~~**Lab's stated verdict captured as reference** (`acceptance_as
+   _reported`) and reconciled~~ ✅ **DONE (increment 1 mig 0028 + increment 7
+   mig 0033, v68/v98)** — the lab's own pass/fail is captured verbatim on the
+   eCoA extraction (`qc_coa_extractions.lab_verdict`) and reconciled there
+   (`lab_verdict_mismatch`); increment 7 carries it onto the promoted result
+   (`qc_results.lab_verdict`) and settable on a manual iCoA result, so the
+   reconciliation lives on the permanent certificate — reference-only, it never
+   feeds the in-house `complies` determination (QCSOP 012 §6.3.2).
 9. **Code-pattern alignment** — SOP patterns are `eCoA-PP-YYYY-NNNN` /
    `CoQ-PP-YYYY-NNNN` / `QCCoA-…`; ours are `PP-ECOA-…`/`PP-COA-…`.
    Decide: migrate display format or amend the SOP (owner call — codes
