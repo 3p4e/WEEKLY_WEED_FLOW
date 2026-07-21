@@ -1535,6 +1535,94 @@ async def test_coa_original_rejects_bad_input_and_is_gated(client, admin_headers
                              headers=admin_headers)).status_code == 404
 
 
+# ── URS increment 10 — batch genealogy (item 5, D2 = blending / m:n) ─────────
+async def _edge(client, headers, parent, child, relation="GENERIC"):
+    r = await client.post("/qc/genealogy",
+                          json={"parent_batch_id": parent, "child_batch_id": child, "relation": relation},
+                          headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def test_genealogy_chain_and_inherited_results(client, admin_headers, monkeypatch):
+    """variety → cultivation → processing → packaging: ancestors/descendants
+    resolve recursively, and a finished-pack batch can see the RELEASED-cert
+    results of its ancestor lots (QCSOP 012 D3 inheritance)."""
+    V, AB, P, PACK = "VAR-KUSH", "AB-2026-01", "P-2026-09", "PACK-2026-77"
+    await _edge(client, admin_headers, V, AB, "CULTIVATION")
+    await _edge(client, admin_headers, AB, P, "PROCESSING")
+    await _edge(client, admin_headers, P, PACK, "PACKAGING")
+    g = (await client.get(f"/qc/genealogy/{PACK}", headers=admin_headers)).json()
+    assert [e["parent_batch_id"] for e in g["parents"]] == [P]
+    anc = {a["batch_id"]: a["depth"] for a in g["ancestors"]}
+    assert anc == {P: 1, AB: 2, V: 3}
+    gv = (await client.get(f"/qc/genealogy/{V}", headers=admin_headers)).json()
+    assert {d["batch_id"] for d in gv["descendants"]} == {AB, P, PACK}
+    # a RELEASED certificate on the AB ancestor → inheritable by PACK
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="GEN-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch=AB, report_date="2026-07-01")
+    await client.post(f"/qc/certificates/{coa['id']}/results",
+                      json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                            "result_numeric": 22.0, "lower_limit": 10.0, "upper_limit": 30.0},
+                      headers=admin_headers)
+    await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": tgt},
+                                   headers=qp)).status_code == 200
+    inh = (await client.get(f"/qc/genealogy/{PACK}/inherited-results", headers=admin_headers)).json()
+    assert AB in inh["ancestors"]
+    assert any(b["from_batch_id"] == AB and b["coa_number"] == coa["coa_number"]
+               and b["results"][0]["test_name"] == "Total THC" for b in inh["inherited"])
+
+
+async def test_genealogy_blend_multiple_parents(client, admin_headers):
+    """Decision D2 — a packaging lot BLENDED from two processing lots has both
+    as parents (m:n), and both appear among its ancestors."""
+    await _edge(client, admin_headers, "P-A", "PACK-BLEND", "BLEND")
+    await _edge(client, admin_headers, "P-B", "PACK-BLEND", "BLEND")
+    g = (await client.get("/qc/genealogy/PACK-BLEND", headers=admin_headers)).json()
+    assert {e["parent_batch_id"] for e in g["parents"]} == {"P-A", "P-B"}
+    assert {a["batch_id"] for a in g["ancestors"]} == {"P-A", "P-B"}
+
+
+async def test_genealogy_cycle_and_validation_guards(client, admin_headers):
+    await _edge(client, admin_headers, "C-A", "C-B")
+    await _edge(client, admin_headers, "C-B", "C-C")
+    # C-C → C-A would close a cycle (A is an ancestor of C)
+    assert (await client.post("/qc/genealogy",
+                              json={"parent_batch_id": "C-C", "child_batch_id": "C-A"},
+                              headers=admin_headers)).status_code == 409
+    # a self-edge is rejected
+    assert (await client.post("/qc/genealogy",
+                              json={"parent_batch_id": "C-A", "child_batch_id": "C-A"},
+                              headers=admin_headers)).status_code == 422
+    # a duplicate edge is rejected
+    assert (await client.post("/qc/genealogy",
+                              json={"parent_batch_id": "C-A", "child_batch_id": "C-B"},
+                              headers=admin_headers)).status_code == 409
+    # an unknown relation is rejected
+    assert (await client.post("/qc/genealogy",
+                              json={"parent_batch_id": "C-X", "child_batch_id": "C-Y", "relation": "NOPE"},
+                              headers=admin_headers)).status_code == 422
+
+
+async def test_genealogy_is_write_gated_and_deletable(client, admin_headers):
+    _, user = await _actor(client, admin_headers, "USER")
+    assert (await client.post("/qc/genealogy",
+                              json={"parent_batch_id": "G-1", "child_batch_id": "G-2"},
+                              headers=user)).status_code == 403
+    edge = await _edge(client, admin_headers, "G-1", "G-2")
+    assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 204
+    g = (await client.get("/qc/genealogy/G-2", headers=admin_headers)).json()
+    assert g["parents"] == []
+
+
 async def test_ecoa_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)

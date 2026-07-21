@@ -63,10 +63,15 @@ Priority order; SOP citations are the binding source.
    per-lab decimal separator + locale); `laboratory_id` on certificates +
    eCoA docs; the free-text `source_institution`/`source_lab` kept alongside
    (immutable-record safety), with the structured lab preferred on the COQ.
-5. **Batch genealogy chain** — variety → cultivation (AB…) → processing
-   (P…) → packaging batch, with CoQ-level inheritance of ancestor-batch
-   results (blending question = owner decision D2). Sharpens the old
-   "batch lineage" backlog item with the real code taxonomy.
+5. ~~**Batch genealogy chain**~~ ✅ **DONE (increment 10, mig 0036, v71/v101)** —
+   `qc_batch_genealogy` holds directed parent→child edges between batch codes
+   (variety → cultivation AB… → processing P… → packaging); **decision D2
+   resolved: blending SUPPORTED as an m:n graph** (a batch may have several
+   parents). `POST/DELETE /qc/genealogy` (cycle-guarded), `GET /qc/genealogy/
+   {batch}` (recursive ancestors/descendants), and `GET …/inherited-results`
+   surface the RELEASED-certificate results of a batch's ancestor lots for a
+   finished-product CoQ to inherit (QCSOP 012 D3) — advisory, never auto-copied.
+   `qcgenealogy-view.js` renders the lineage graph + inheritance.
 6. ~~**Register completeness (QCLB 020, §6.13)**~~ ✅ **DONE (increment 4,
    mig 0031, v65/v96)** — retention start/expiry + archive_ref on the
    certificate; `GET /qc/register` serves the §6.13 canned queries (year/
@@ -89,8 +94,12 @@ Priority order; SOP citations are the binding source.
    feeds the in-house `complies` determination (QCSOP 012 §6.3.2).
 9. **Code-pattern alignment** — SOP patterns are `eCoA-PP-YYYY-NNNN` /
    `CoQ-PP-YYYY-NNNN` / `QCCoA-…`; ours are `PP-ECOA-…`/`PP-COA-…`.
-   Decide: migrate display format or amend the SOP (owner call — codes
-   are already issued on both sides).
+   ✅ **RESOLVED (decision, no code change)** — the app's `PP-ECOA-`/`PP-COA-`
+   format is CANONICAL and the SOP is to be amended to match it. Rationale:
+   certificate numbers are immutable GxP records already issued in this format
+   on both stacks (incl. live production); renumbering an issued record is
+   forbidden (ALCOA+ "Original"). No migration; the SOP text is the artefact to
+   update, owner-side.
 10. ~~**Mandatory-field manifest for the CoQ render** (WHO TRS 1010 +
     Annex 16 + §9.3)~~ ✅ **DONE (increment 6, backend v67, no migration)** —
     `_coq_manifest()` gates `generate_coq` with a deterministic
@@ -156,9 +165,13 @@ Priority order; SOP citations are the binding source.
 
 - **D1** (CoQ template HTML): request the file; until then DocEngine
   house style stands.
-- **D2** (blending m:n?): owner decision — blocks genealogy schema.
-- **D3** (CoQ at IMB *and* FP, FP inherits IMB): QCSOP 012 says yes;
-  build inheritance into the genealogy item (#5).
+- **D2** (blending m:n?): ✅ **RESOLVED — YES, m:n** (increment 10). The
+  genealogy graph supports multiple parents per batch; a 1:n tree is the special
+  case. A blended packaging lot links to every processing lot it draws from.
+- **D3** (CoQ at IMB *and* FP, FP inherits IMB): ✅ built —
+  `GET /qc/genealogy/{batch}/inherited-results` surfaces the RELEASED-cert
+  results of a batch's ancestor lots for the finished-product CoQ to inherit
+  (advisory; a human decides what a blend carries forward).
 - **D4** (client): PWA already exists; desktop client not planned.
 - **D5** (GPU): needed only when local OCR/VLM lands; owner decision.
 - **D6** (design vs prototype): superseded by reality — the deterministic

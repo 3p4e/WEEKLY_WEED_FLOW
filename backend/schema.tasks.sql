@@ -311,6 +311,28 @@ ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_batch_genealogy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_batch_genealogy (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    parent_batch_id text NOT NULL,
+    child_batch_id text NOT NULL,
+    relation text DEFAULT 'GENERIC'::text NOT NULL,
+    quantity numeric,
+    unit text,
+    notes text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_batch_genealogy_no_self CHECK ((parent_batch_id <> child_batch_id)),
+    CONSTRAINT qc_batch_genealogy_relation_check CHECK ((relation = ANY (ARRAY['CULTIVATION'::text, 'PROCESSING'::text, 'PACKAGING'::text, 'BLEND'::text, 'GENERIC'::text])))
+);
+
+ALTER TABLE ONLY public.qc_batch_genealogy FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_certificates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1446,6 +1468,22 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: qc_batch_genealogy qc_batch_genealogy_edge_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_batch_genealogy
+    ADD CONSTRAINT qc_batch_genealogy_edge_key UNIQUE (org_id, parent_batch_id, child_batch_id);
+
+
+--
+-- Name: qc_batch_genealogy qc_batch_genealogy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_batch_genealogy
+    ADD CONSTRAINT qc_batch_genealogy_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_certificates qc_certificates_coa_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1886,6 +1924,20 @@ CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org
 
 
 --
+-- Name: qc_batch_genealogy_child_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_batch_genealogy_child_idx ON public.qc_batch_genealogy USING btree (org_id, child_batch_id);
+
+
+--
+-- Name: qc_batch_genealogy_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_batch_genealogy_parent_idx ON public.qc_batch_genealogy USING btree (org_id, parent_batch_id);
+
+
+--
 -- Name: qc_certificates_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2233,6 +2285,13 @@ CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoff
 --
 
 CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.plant_batches FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_batch_genealogy audit_qc_batch_genealogy; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_batch_genealogy AFTER INSERT OR DELETE OR UPDATE ON public.qc_batch_genealogy FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2963,6 +3022,13 @@ CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current
 
 
 --
+-- Name: qc_batch_genealogy org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_batch_genealogy USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_certificates org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3177,6 +3243,12 @@ ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY progress_rw ON public.task_progress USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
+
+--
+-- Name: qc_batch_genealogy; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_batch_genealogy ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_certificates; Type: ROW SECURITY; Schema: public; Owner: -

@@ -1456,3 +1456,43 @@ returns the exact bytes with `X-Integrity: OK`; invalid base64 → 422. Prod
 originals enlarge the tasks-DB pg_dump backups (bounded by the 20 MB/file cap).
 **Rollback** = revert tags to v69/v99 (+ `alembic -n tasks downgrade 0034` — new
 isolated table; image-only rollback also safe).
+
+## URS increment 10 (backend v71 / frontend v101 / migration 0036 → BOTH stacks, 2026-07-21)
+
+docs/URS-COQ-GAP-ANALYSIS-2026-07.md item 5 — **batch genealogy chain**
+(variety → cultivation AB… → processing P… → packaging), with CoQ-level
+inheritance of ancestor results (QCSOP 012 D3). **Decision D2 (blending):
+SUPPORTED as an m:n graph** — a batch may have multiple parents (a blended
+packaging lot) and multiple children; a 1:n tree is the special case.
+
+- **Migration 0036**: `qc_batch_genealogy` — directed parent→child edges between
+  batch codes (`relation` CHECK: CULTIVATION/PROCESSING/PACKAGING/BLEND/GENERIC,
+  `quantity`/`unit` for blend proportions). FORCE/ENABLE RLS + audit trigger +
+  `(org_id, child)` & `(org_id, parent)` indices + `UNIQUE(org_id, parent,
+  child)` + `CHECK(parent <> child)` + guarded GRANT.
+- **Backend**: `POST /qc/genealogy` adds an edge, **refusing any edge that would
+  close a cycle** (a recursive-CTE descendants walk of the proposed child) →
+  409; self-edge → 422; duplicate → 409. `DELETE /qc/genealogy/{id}`. `GET
+  /qc/genealogy/{batch}` returns direct parents/children + recursive ancestors/
+  descendants (with min-depth). `GET /qc/genealogy/{batch}/inherited-results`
+  resolves the ancestor batches and surfaces their RELEASED-certificate results
+  (advisory — never auto-copied into a certificate; a human decides what a blend
+  carries forward). Read = ELEVATED; write = QC writers.
+- **Frontend**: new **`qcgenealogy-view.js`** ("Batch genealogy", QMS Studio
+  zone) — look up a batch, see its lineage graph (clickable ancestor/descendant
+  chips, edge list with delete), add edges (parent→child + relation), and the
+  inheritable ancestor-result tables. i18n `qc_genealogy`; index.html + sw
+  precache; SW v3.63.0→**v3.64.0**.
+
+Gate: **422 backend tests green** (4 new: chain resolution + inheritance; m:n
+blend with two parents; cycle/self/duplicate/relation guards; write-gating +
+delete), migration 0036 up/down/base clean, schema.tasks.sql dump-diff EXACT vs
+alembic head, node --check. Migration 0036 applied to BOTH tasks DBs before the
+image flip. Deployed backend v70→**v71** (prod scheduler too) + frontend
+v100→**v101**. **Live behavioral smoke on wwf-mass** (tt.qc.mgr + tt.qp): a
+variety→cultivation→processing→packaging chain resolves ancestors with depth and
+descendants; a blended lot shows both parents; a back-edge → 409 cycle; an
+ancestor's RELEASED result is surfaced as inheritable. Prod (wwf_app) verified:
+/health 200, /qc genealogy auth-gated (401), SW v3.64.0. **Rollback** = revert
+tags to v70/v100 (+ `alembic -n tasks downgrade 0035` — new isolated table;
+image-only rollback also safe).

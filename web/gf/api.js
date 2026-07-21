@@ -168,6 +168,11 @@ GF.API = {
   // Source-document custody (item 12) — store the original with a SHA-256
   qcUploadOriginal(docId, b) { return this._req('POST', '/qc/coa-documents/' + docId + '/originals', b); },
   qcOriginalDlUrl(fileId)  { return '/qc/document-files/' + encodeURIComponent(fileId) + '/download'; },
+  // Batch genealogy (item 5) — variety→cultivation→processing→packaging, m:n blending
+  qcGenealogy(batch)       { return this._req('GET', '/qc/genealogy/' + encodeURIComponent(batch)); },
+  qcGenInherited(batch)    { return this._req('GET', '/qc/genealogy/' + encodeURIComponent(batch) + '/inherited-results'); },
+  qcGenAddEdge(b)          { return this._req('POST', '/qc/genealogy', b); },
+  qcGenDelEdge(id)         { return this._req('DELETE', '/qc/genealogy/' + id); },
   // Custody cluster (U5) — sampling requests (RQS), field records (SFR), chain of custody
   qcRqs(q)                 { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/sampling-requests' + (u?'?'+u:'')); },
   qcRqsOne(id)             { return this._req('GET', '/qc/sampling-requests/' + id); },
