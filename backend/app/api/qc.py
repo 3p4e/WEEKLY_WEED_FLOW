@@ -1206,7 +1206,7 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     else:
         lab_line = coa.get("source_lab") or ""
     grid = ("[[FORM:grid]]\n"
-            + frow("Број на сертификат", "Certificate number", coa["coa_number"])
+            + frow("№ на сертификат", "Certificate №", coa["coa_number"])
             + frow("Серија", "Batch", coa["batch_id"])
             + frow("Материјал", "Material", material)
             + frow("Спецификација", "Specification", spec.get("spec_id"))

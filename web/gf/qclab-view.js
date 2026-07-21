@@ -146,7 +146,7 @@
         <div class="qcs-form">
           <input id="qcl-name" placeholder="${AL('Laboratory name', 'Име на лабораторија')}">
           <input id="qcl-body" placeholder="${AL('Accreditation body', 'Акредитационо тело')}">
-          <input id="qcl-num" placeholder="${AL('Accreditation no.', 'Акред. број')}">
+          <input id="qcl-num" placeholder="${AL('Accreditation №', 'Акредитација №')}">
           <input id="qcl-scope" placeholder="${AL('ISO 17025 scope (comma-sep methods)', 'ISO 17025 опсег (методи, запирка)')}" style="min-width:220px">
           <input id="qcl-qa" placeholder="${AL('Quality agreement ref', 'Реф. договор за квалитет')}">
           <input id="qcl-locale" placeholder="${AL('Locale (e.g. de-DE)', 'Локал (пр. de-DE)')}" style="width:110px">

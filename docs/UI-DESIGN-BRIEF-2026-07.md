@@ -295,6 +295,13 @@ documents contain versions/reworks). On the board:
 7. **Bilingual:** never design a component that only fits the English string.
 8. **PWA:** the app is installable with a service-worker shell; avoid
    viewport-height tricks that break standalone mode.
+9. **Numero sign (standing owner directive, 2026-07-21):** wherever a design
+   element labels a number — column headers, form placeholders, document
+   field labels — use **№** (U+2116), never "No.", "No", "no.", "Nr." or
+   "бр."/"Број" as the abbreviation. Applies to both languages (№ is
+   language-neutral) and to every generated document (CoQ, registers,
+   forms) as well as UI chrome. Existing surfaces were swept 2026-07-21;
+   all future design work must use № from the start.
 
 ---
 

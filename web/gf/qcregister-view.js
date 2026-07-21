@@ -75,7 +75,7 @@
         <td>${r.superseded_by ? `<span class="ana-note">→ ${GF.esc(r.superseded_by)}</span>` : (r.supersedes_id ? `<span class="ana-note">${AL('revision', 'ревизија')}</span>` : '—')}</td>
       </tr>`).join('');
     return `<div style="overflow-x:auto"><table class="qcp-table"><thead><tr>
-      <th>${AL('Number', 'Број')}</th><th>${AL('Batch', 'Серија')}</th><th>${AL('Type', 'Тип')}</th>
+      <th>№</th><th>${AL('Batch', 'Серија')}</th><th>${AL('Type', 'Тип')}</th>
       <th>${AL('Status', 'Статус')}</th><th>${AL('Laboratory', 'Лабораторија')}</th>
       <th>${AL('Retention', 'Чување')}</th><th>${AL('Archive', 'Архива')}</th>
       <th>OOS</th><th>${AL('Supersession', 'Замена')}</th></tr></thead>

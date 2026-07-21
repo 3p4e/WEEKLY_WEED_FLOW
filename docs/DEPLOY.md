@@ -1540,3 +1540,30 @@ full six-event record retained. Prod (wwf_app) verified: /health 200, workflow
 endpoint auth-gated (401), SW v3.65.0. **Rollback** = revert tags to v71/v101
 (+ `alembic -n tasks downgrade 0036` — isolated new table; image-only rollback
 also safe; workflow_state values persist harmlessly either way).
+
+## 2026-07-21 — № typography sweep (standing owner directive) — backend v73 / frontend v103
+
+**Standing design directive (owner, 2026-07-21):** every design element that
+labels a number uses the numero sign **№** (U+2116) — never "No.", "No",
+"no.", "Nr." or the "бр." abbreviation. Language-neutral (same glyph in EN
+and MK), applies to UI chrome AND generated documents, and to ALL future
+design work (recorded as hard constraint №9 in
+`docs/UI-DESIGN-BRIEF-2026-07.md`). No schema change — no migration.
+
+- **Swept sites** (the imported reference corpora — `qms-creator/` SOP
+  archives, vendored `pp-document-suite` — are historical records and were
+  deliberately NOT touched): certificate-register column header
+  `Number/Број` → **№** (`qcregister-view.js`); laboratory form placeholder
+  `Accreditation no. / Акред. број` → **Accreditation № / Акредитација №**
+  (`qclab-view.js`); CoQ form-grid label `Certificate number / Број на
+  сертификат` → **Certificate № / № на сертификат** (`_coq_markdown`,
+  `backend/app/api/qc.py`). SW v3.65.0→**v3.66.0**.
+
+Gate: full backend suite **426 green**, schema dump-diff EXACT, migration
+up/down/base clean (no new migration), node --check. Deployed backend
+v72→**v73** (both stacks, prod scheduler too) + frontend v102→**v103**.
+**Live smoke 12/12**: both stacks serve SW v3.66.0 + № in both views with no
+stale "Accreditation no."; on wwf-mass a CoQ was re-rendered from RELEASED
+PP-COA-2026-0042 through the DocEngine — **201 with the № labels, pp_verify
+PASS gate held** (doc 6de36086). **Rollback** = revert tags to v72/v102
+(cosmetic-only change).
