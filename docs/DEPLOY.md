@@ -1666,3 +1666,37 @@ transfer with condition confirmation. **Rollback** = revert both compose files t
 v74/v104 (backups `compose.yaml.bak.v74v104`) + `alembic -n tasks downgrade 0038` on each
 db-tasks (additive columns drop cleanly; an image-only rollback is also safe — the new
 columns are harmless unused to v74).
+
+## 2026-07-21 — QCSOP 012 v3 Tier 1 (CoA/CoQ compliance) — backend v76 / frontend v106 / migration 0040
+
+First tranche of the QCSOP 012 v3 (Certificate of Analysis & Certificate of Quality —
+Issuance and Management) adherence remediation (assessment: `docs/QCSOP-012-ADHERENCE-2026-07.md`).
+Additive, non-breaking.
+
+- **Migration 0040**: `qc_certificates` gains the §6.6 **VOIDED** disposition
+  (`void_reason` / `voided_by` / `voided_at`; status CHECK widened); new
+  `qc_ecoa_checklist` (facility canon) — the §6.3.2 **External CoA Review Checklist
+  (QCT 018)** as a first-class record.
+- **Backend** (`qc.py`): **§6.6** `POST /qc/certificates/{id}/void` — Head-of-QC-only
+  (`ADMIN`/`QC_MGR`/`QP`), a written reason is mandatory, voidable from
+  DRAFT/REVIEWED/APPROVED/RELEASED (not SUPERSEDED/VOIDED); the record is retained
+  (never deleted) and a voided cert can neither be revised nor generate a CoQ.
+  **§6.3.2** `GET`/`PUT /coa-documents/{id}/checklist` + `POST …/checklist/decide` —
+  the reviewer records the affirmations (sample-id match, method-per-TQA,
+  units-per-spec, an explicit "conformance determined by Purely Plant" affirmation)
+  and discrepancy flags; the HoQC signs **ACCEPTED** only when all affirmations are
+  true and no discrepancy is open, or **REJECTED**; a decided checklist is locked.
+  **§6.13** the register + `_coa_out` carry a `sop_status` under the SOP status
+  vocabulary (Draft / Under Review / Approved / Issued / Revised / Superseded /
+  Voided); the pending filter excludes VOIDED.
+- **Frontend**: `qccoa-view` void button (HoQC); `qcecoa-view` review-checklist panel;
+  `qcregister-view` SOP-status label. SW v3.68.0→**v3.69.0**.
+- **GxP**: issued records immutable (void is a status+reason, never a delete);
+  "conformance determined by PP, never taken from the eCoA" preserved (the server
+  already grades every value). **Adversarial review** on the diff pre-deploy.
+
+Gate: full backend suite **443 passed** (+3: void lifecycle+role, checklist
+accept/lock+role, register SOP-status labels), migration 0040 up/down/base clean,
+schema.tasks.sql dump-diff EXACT, node --check. Migration applied to BOTH tasks DBs
+(0039→0040) before the image flip. Deployed backend v75→**v76** (prod scheduler too) +
+frontend v105→**v106**.
