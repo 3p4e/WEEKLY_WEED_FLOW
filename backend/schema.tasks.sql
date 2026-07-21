@@ -376,8 +376,15 @@ CREATE TABLE public.qc_certificates (
     void_reason text,
     voided_by uuid,
     voided_at timestamp with time zone,
+    analysis_start_date date,
+    analysis_end_date date,
+    sampling_location text,
+    issue_language text DEFAULT 'EN-MK'::text NOT NULL,
+    translation_verified_by uuid,
+    translation_verified_at timestamp with time zone,
     CONSTRAINT qc_certificates_cert_type_check CHECK ((cert_type = ANY (ARRAY['ICOA'::text, 'ECOA'::text, 'COQ'::text, 'WATER'::text, 'OTHER'::text]))),
     CONSTRAINT qc_certificates_decision_check CHECK (((decision IS NULL) OR (decision = ANY (ARRAY['PASS'::text, 'FAIL'::text])))),
+    CONSTRAINT qc_certificates_language_check CHECK ((issue_language = ANY (ARRAY['EN'::text, 'EN-MK'::text]))),
     CONSTRAINT qc_certificates_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'SUPERSEDED'::text, 'VOIDED'::text])))
 );
 
@@ -528,6 +535,87 @@ CREATE TABLE public.qc_coa_verifications (
 );
 
 ALTER TABLE ONLY public.qc_coa_verifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coq; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coq (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coq_number text NOT NULL,
+    batch_id text NOT NULL,
+    product_name text,
+    manufacture_date date,
+    batch_size text,
+    specification_id uuid NOT NULL,
+    spec_reference text,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    overall_conform boolean,
+    comments text,
+    oos_reference text,
+    compiled_by uuid,
+    compiled_at timestamp with time zone,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    void_reason text,
+    voided_by uuid,
+    voided_at timestamp with time zone,
+    coq_document_id text,
+    coq_generated_at timestamp with time zone,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_coq_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'VOIDED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_coq FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coq_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coq_lines (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coq_id uuid NOT NULL,
+    parameter_id uuid,
+    parameter_name text NOT NULL,
+    test_method text,
+    acceptance_criterion text,
+    result_value text,
+    result_numeric numeric,
+    unit text,
+    complies boolean,
+    testing_lab text,
+    source_coa_id uuid,
+    source_coa_number text,
+    sorting_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_coq_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_coq_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_coq_sources (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    coq_id uuid NOT NULL,
+    coa_id uuid NOT NULL,
+    coa_number text NOT NULL,
+    cert_type text,
+    issue_date date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.qc_coq_sources FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1630,6 +1718,38 @@ ALTER TABLE ONLY public.qc_coa_verifications
 
 
 --
+-- Name: qc_coq_lines qc_coq_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_lines
+    ADD CONSTRAINT qc_coq_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_coq qc_coq_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_coq_sources qc_coq_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_sources
+    ADD CONSTRAINT qc_coq_sources_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_coq_sources qc_coq_sources_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_sources
+    ADD CONSTRAINT qc_coq_sources_unique UNIQUE (org_id, coq_id, coa_id);
+
+
+--
 -- Name: qc_document_files qc_document_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2107,6 +2227,27 @@ CREATE INDEX qc_coa_verifications_coa_idx ON public.qc_coa_verifications USING b
 
 
 --
+-- Name: qc_coq_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coq_batch_idx ON public.qc_coq USING btree (org_id, batch_id);
+
+
+--
+-- Name: qc_coq_lines_coq_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coq_lines_coq_idx ON public.qc_coq_lines USING btree (org_id, coq_id);
+
+
+--
+-- Name: qc_coq_sources_coq_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_coq_sources_coq_idx ON public.qc_coq_sources USING btree (org_id, coq_id);
+
+
+--
 -- Name: qc_document_files_object_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2454,6 +2595,27 @@ CREATE TRIGGER audit_qc_coa_extractions AFTER INSERT OR DELETE OR UPDATE ON publ
 --
 
 CREATE TRIGGER audit_qc_coa_verifications AFTER INSERT OR DELETE OR UPDATE ON public.qc_coa_verifications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_coq audit_qc_coq; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coq AFTER INSERT OR DELETE OR UPDATE ON public.qc_coq FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_coq_lines audit_qc_coq_lines; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coq_lines AFTER INSERT OR DELETE OR UPDATE ON public.qc_coq_lines FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_coq_sources audit_qc_coq_sources; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_coq_sources AFTER INSERT OR DELETE OR UPDATE ON public.qc_coq_sources FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2806,6 +2968,38 @@ ALTER TABLE ONLY public.qc_coa_verifications
 
 ALTER TABLE ONLY public.qc_coa_verifications
     ADD CONSTRAINT qc_coa_verifications_document_fkey FOREIGN KEY (source_document_id) REFERENCES public.qc_coa_documents(id) ON DELETE SET NULL;
+
+
+--
+-- Name: qc_coq_lines qc_coq_lines_coq_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_lines
+    ADD CONSTRAINT qc_coq_lines_coq_fkey FOREIGN KEY (coq_id) REFERENCES public.qc_coq(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coq_sources qc_coq_sources_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_sources
+    ADD CONSTRAINT qc_coq_sources_coa_fkey FOREIGN KEY (coa_id) REFERENCES public.qc_certificates(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qc_coq_sources qc_coq_sources_coq_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq_sources
+    ADD CONSTRAINT qc_coq_sources_coq_fkey FOREIGN KEY (coq_id) REFERENCES public.qc_coq(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coq qc_coq_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_spec_fkey FOREIGN KEY (specification_id) REFERENCES public.qc_specifications(id) ON DELETE RESTRICT;
 
 
 --
@@ -3221,6 +3415,27 @@ CREATE POLICY org_isolation ON public.qc_coa_verifications USING ((org_id = app.
 
 
 --
+-- Name: qc_coq org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coq USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_coq_lines org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coq_lines USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_coq_sources org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_coq_sources USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_document_files org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3449,6 +3664,24 @@ ALTER TABLE public.qc_coa_extractions ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.qc_coa_verifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coq; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coq ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coq_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coq_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_coq_sources; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_coq_sources ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: qc_document_files; Type: ROW SECURITY; Schema: public; Owner: -

@@ -136,8 +136,20 @@
       chemotype: g('chemotype') || null, manufacture_date: g('mfg') || null,
       packaging_date: g('pkgd') || null, expiry_date: g('exp') || null,
       retest_date: g('retest') || null,
+      // QCSOP 012 §6.2.2 (C6) — analysis date range + sampling location
+      analysis_start_date: g('anstart') || null, analysis_end_date: g('anend') || null,
+      sampling_location: g('samploc') || null,
     };
+    // §6.7 (C7) — issue language is a select, never cleared to null
+    const lang = g('lang'); if (lang) body.issue_language = lang;
     try { await GF.API.qcPatchCoa(id, body); GF.toast(AL('CoQ metadata saved', 'CoQ метаподатоци зачувани')); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    await _reload(id);
+  };
+  // §6.7 (C7) — a second qualified reviewer confirms the bilingual issue's
+  // translation against the English source (backend rejects the analyst).
+  GF.WWF.qcCoaVerifyTranslation = async (id) => {
+    try { await GF.API.qcTranslationVerified(id); GF.toast(AL('Translation verified', 'Преводот е верификуван')); }
     catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
@@ -322,6 +334,10 @@
         ${c.retest_date ? `<span>${AL('Retest date', 'Датум на ретест')}</span><b class="mono">${GF.esc(c.retest_date)}</b>` : ''}
         ${c.botanical_type ? `<span>${AL('Botanical type', 'Ботанички тип')}</span><b>${GF.esc(c.botanical_type)}</b>` : ''}
         ${c.chemotype ? `<span>${AL('Chemotype', 'Хемотип')}</span><b>${GF.esc(c.chemotype)}</b>` : ''}
+        ${c.analysis_start_date || c.analysis_end_date ? `<span>${AL('Analysis period', 'Период на анализа')}</span><b class="mono">${GF.esc(c.analysis_start_date || '…')} → ${GF.esc(c.analysis_end_date || '…')}</b>` : ''}
+        ${c.sampling_location ? `<span>${AL('Sampling location', 'Локација на мострирање')}</span><b>${GF.esc(c.sampling_location)}</b>` : ''}
+        ${c.issue_language ? `<span>${AL('Language', 'Јазик')}</span><b>${GF.esc(c.issue_language)}${c.issue_language === 'EN-MK' ? (c.translation_verified_at ? ` <span class="ana-note" style="color:var(--green)">✓ ${AL('translation verified', 'преводот верификуван')}</span>` : ` <span class="ana-note">${AL('translation unverified', 'преводот неверификуван')}</span>`) : ''}</b>` : ''}
+        ${d.drafted_same_working_day === false ? `<span>${AL('Drafting (§6.2.1)', 'Изготвување (§6.2.1)')}</span><b class="ana-note" style="color:var(--orange)">${AL('not drafted same working day', 'не е изготвен истиот работен ден')}</b>` : ''}
       </div>
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
@@ -331,6 +347,7 @@
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
         ${c.status === 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaRevise('${c.id}')">${AL('Revise (supersede)', 'Ревидирај (замени)')}</button>` : ''}
         ${canCoq() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVoid('${c.id}')" title="${AL('Wrong batch / wrong sample — §6.6', 'Погрешна серија / примерок — §6.6')}">${AL('Void', 'Поништи')}</button>` : ''}
+        ${c.issue_language === 'EN-MK' && !c.translation_verified_at && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVerifyTranslation('${c.id}')" title="${AL('Second reviewer confirms the MK translation vs the EN source — §6.7', 'Втор прегледувач го потврдува МК преводот наспроти EN изворот — §6.7')}">${AL('Verify translation', 'Верификувај превод')}</button>` : ''}
       </div>` : ''}
       ${c.status === 'VOIDED' && c.void_reason ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('Voided', 'Поништено')} — ${GF.esc(c.void_reason)}</div>` : ''}
       ${c.status === 'RELEASED' && canCoq() ? `<div class="qms-dl" style="margin-top:8px">
@@ -363,6 +380,13 @@
         <label class="ana-note">${AL('Packaged', 'Спакувано')} ${inp('pkgd', 'packaging_date', '', 'date')}</label>
         <label class="ana-note">${AL('Expiry', 'Рок')} ${inp('exp', 'expiry_date', '', 'date')}</label>
         <label class="ana-note">${AL('Retest', 'Ретест')} ${inp('retest', 'retest_date', '', 'date')}</label>
+        <label class="ana-note">${AL('Analysis from', 'Анализа од')} ${inp('anstart', 'analysis_start_date', '', 'date')}</label>
+        <label class="ana-note">${AL('Analysis to', 'Анализа до')} ${inp('anend', 'analysis_end_date', '', 'date')}</label>
+        ${inp('samploc', 'sampling_location', AL('Sampling location (§6.2.2)', 'Локација на мострирање (§6.2.2)'))}
+        <label class="ana-note">${AL('Language', 'Јазик')} <select id="qcm-lang">
+          <option value="EN-MK" ${c.issue_language !== 'EN' ? 'selected' : ''}>EN-MK</option>
+          <option value="EN" ${c.issue_language === 'EN' ? 'selected' : ''}>EN</option>
+        </select></label>
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaSaveMeta('${c.id}')">${AL('Save', 'Зачувај')}</button>
       </div>
     </details>`;
@@ -388,9 +412,159 @@
         : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('');
   };
 
+  // ── QCSOP 012 §6.4 (C5) — per-batch Certificate of Quality aggregation ────
+  // The CoQ consolidates every iCoA/eCoA result for a batch against the spec:
+  // compiled by QC, reviewed and approved by the Head of QC (second person —
+  // the compiler cannot approve their own compilation), NO QP signature (it is
+  // an input TO the QP batch-release decision). Coexists with the per-
+  // certificate CoQ render above.
+  GF.WWF._qccoq = { list: null, sel: null, detail: null, loading: false, error: null };
+
+  GF.WWF.loadQcCoqs = async () => {
+    const st = GF.WWF._qccoq;
+    st.loading = true; st.error = null;
+    try { st.list = await GF.API.qcCoqs({}); }
+    catch (e) { st.error = e.message; }
+    st.loading = false;
+    if (GF.state.view === 'qccoa') GF.render.all();
+  };
+  const _creload = async (id) => {
+    await GF.WWF.loadQcCoqs();
+    if (GF.WWF._qccoq.sel === id) {
+      GF.WWF._qccoq.detail = await GF.API.qcCoqOne(id).catch(() => null);
+      GF.render.all();
+    }
+  };
+  GF.WWF.qcCoqPick = async (id) => {
+    const st = GF.WWF._qccoq;
+    if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; GF.render.all();
+    try { st.detail = await GF.API.qcCoqOne(id); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    if (GF.state.view === 'qccoa') GF.render.all();
+  };
+  GF.WWF.qcCoqCompile = async () => {
+    const g = (i) => (document.getElementById(i) || {}).value || '';
+    const batch_id = g('qcq-batch').trim(), specification_id = g('qcq-spec');
+    if (!batch_id || !specification_id) {
+      return GF.toast(AL('Batch and specification are required', 'Потребни се серија и спецификација'), 'error');
+    }
+    const body = { batch_id, specification_id };
+    const pn = g('qcq-product').trim(); if (pn) body.product_name = pn;
+    const bs = g('qcq-size').trim(); if (bs) body.batch_size = bs;
+    const md = g('qcq-mfg'); if (md) body.manufacture_date = md;
+    try {
+      const coq = await GF.API.qcCompileCoq(body);
+      GF.toast(AL('CoQ compiled: ', 'CoQ составен: ') + coq.coq_number);
+      await GF.WWF.loadQcCoqs(); GF.WWF.qcCoqPick(coq.id);
+    } catch (e) { GF.toast(e.message, 'error'); }
+  };
+  GF.WWF.qcCoqReview = async (id) => {
+    try { await GF.API.qcReviewCoq(id); GF.toast(AL('CoQ approved (HoQC)', 'CoQ одобрен (Раководител на КК)')); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    await _creload(id);
+  };
+  GF.WWF.qcCoqVoid = async (id) => {
+    const reason = prompt(AL('This voids the CoQ (wrong batch / wrong sources). Reason:',
+                             'Ова го поништува CoQ (погрешна серија / извори). Причина:'));
+    if (reason === null) return;
+    if (!reason.trim() || reason.trim().length < 3) return GF.toast(AL('A reason is required', 'Потребна е причина'), 'error');
+    try { await GF.API.qcVoidCoq(id, reason.trim()); GF.toast(AL('CoQ voided', 'CoQ поништен')); }
+    catch (e) { return GF.toast(e.message, 'error'); }
+    await _creload(id);
+  };
+  GF.WWF.qcCoqRender = async (id) => {
+    try { await GF.API.qcRenderCoq(id); GF.toast(AL('CoQ document generated', 'CoQ документ генериран')); }
+    catch (e) { GF.toast(e.message, 'error'); }
+    await _creload(id);
+  };
+
+  const coqLineRows = (d) => {
+    const rows = (d.lines || []).map(ln => `<tr>
+      <td>${GF.esc(ln.parameter_name)}${ln.test_method ? `<div class="ana-note">${GF.esc(ln.test_method)}</div>` : ''}</td>
+      <td class="mono">${GF.esc(ln.acceptance_criterion || '—')}</td>
+      <td class="mono">${GF.esc(ln.result_value || (ln.result_numeric !== null && ln.result_numeric !== undefined ? String(ln.result_numeric) : '—'))} ${GF.esc(ln.unit || '')}</td>
+      <td>${compliesChip(ln.complies)}</td>
+      <td class="mono">${GF.esc(ln.source_coa_number || '—')}${ln.testing_lab ? `<div class="ana-note">${GF.esc(ln.testing_lab)}</div>` : ''}</td>
+    </tr>`).join('');
+    return `<table class="qcp-table"><thead><tr>
+      <th>${AL('Parameter', 'Параметар')}</th><th>${AL('Acceptance', 'Критериум')}</th>
+      <th>${AL('Result', 'Резултат')}</th><th>${AL('Complies', 'Задоволува')}</th>
+      <th>${AL('Source', 'Извор')}</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="ana-note">${AL('No lines', 'Нема редови')}</td></tr>`}</tbody></table>`;
+  };
+
+  const coqDetail = (d) => {
+    const q = d.coq;
+    const srcs = (d.sources || []).map(s =>
+      `<span class="chip-opt mono" title="${GF.esc(s.cert_type || '')}">${GF.esc(s.coa_number)}</span>`).join(' ');
+    return `<div class="qms-detail">
+      <div class="qms-dgrid">
+        <span>CoQ</span><b class="mono">${GF.esc(q.coq_number)}</b>
+        <span>${AL('Batch', 'Серија')}</span><b>${GF.esc(q.batch_id)}</b>
+        <span>${AL('Status', 'Статус')}</span><b>${stChip(q.status)}</b>
+        <span>${AL('Conforms', 'Задоволува')}</span><b>${compliesChip(q.overall_conform)}</b>
+        ${q.spec_reference ? `<span>${AL('Specification', 'Спецификација')}</span><b class="mono">${GF.esc(q.spec_reference)}</b>` : ''}
+        ${q.product_name ? `<span>${AL('Product', 'Производ')}</span><b>${GF.esc(q.product_name)}</b>` : ''}
+        ${q.manufacture_date ? `<span>${AL('Mfg. date', 'Датум на производство')}</span><b class="mono">${GF.esc(q.manufacture_date)}</b>` : ''}
+        ${q.batch_size ? `<span>${AL('Batch size', 'Големина на серија')}</span><b>${GF.esc(q.batch_size)}</b>` : ''}
+        ${q.oos_reference ? `<span>${AL('OOS reference', 'OOS референца')}</span><b class="mono">${GF.esc(q.oos_reference)}</b>` : ''}
+        ${q.comments ? `<span>${AL('Comments', 'Коментари')}</span><b>${GF.esc(q.comments)}</b>` : ''}
+      </div>
+      ${q.status === 'VOIDED' && q.void_reason ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('Voided', 'Поништено')} — ${GF.esc(q.void_reason)}</div>` : ''}
+      ${srcs ? `<div style="margin-top:8px" class="ana-note">${AL('Source certificates', 'Изворни сертификати')}: ${srcs}</div>` : ''}
+      ${canCoq() ? `<div class="qms-dl" style="margin-top:8px">
+        ${q.status === 'DRAFT' ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqReview('${q.id}')" title="${AL('HoQC review — the compiler cannot approve their own compilation (§6.4.3)', 'Преглед од Раководител на КК — составувачот не може да ја одобри сопствената компилација (§6.4.3)')}">${AL('Approve (HoQC review)', 'Одобри (преглед РКК)')}</button>` : ''}
+        ${q.status === 'APPROVED' && q.overall_conform === true ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqRender('${q.id}')">${AL('Generate CoQ document', 'Генерирај CoQ документ')}</button>` : ''}
+        ${q.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(q.coq_document_id)}','docx')">CoQ .docx</button>
+          <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(q.coq_document_id)}','pdf')">CoQ PDF</button>` : ''}
+        ${q.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoqVoid('${q.id}')">${AL('Void', 'Поништи')}</button>` : ''}
+      </div>` : ''}
+      <div style="margin-top:12px" class="ana-pt">${AL('Aggregated results (one row per spec parameter)', 'Агрегирани резултати (еден ред по параметар)')}</div>
+      ${coqLineRows(d)}
+    </div>`;
+  };
+
+  const coqPanel = () => {
+    const st = GF.WWF._qccoa, cq = GF.WWF._qccoq;
+    if (cq.error) {
+      return `<div class="panel ana-panel" style="margin-top:12px"><div class="ana-pt">${AL('Batch CoQ (QCSOP 012 §6.4)', 'CoQ по серија (QCSOP 012 §6.4)')}</div>
+        <div style="color:var(--red-fg,var(--red))">${GF.esc(cq.error)}</div>
+        <button class="btn btn-sm" onclick="GF.WWF.loadQcCoqs()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
+    }
+    const specOpts = (st.specs || []).map(s =>
+      `<option value="${s.id}">${GF.esc(s.spec_id)} · ${GF.esc(s.material_code)}</option>`).join('');
+    const compile = canWrite() ? `
+      <div class="qcs-form" style="margin-bottom:10px">
+        <input id="qcq-batch" placeholder="${AL('Batch id', 'Серија')}">
+        <select id="qcq-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
+        <input id="qcq-product" placeholder="${AL('Product name (opt.)', 'Име на производ (опц.)')}">
+        <input id="qcq-size" placeholder="${AL('Batch size (opt.)', 'Големина (опц.)')}">
+        <label class="ana-note">${AL('Mfg.', 'Произв.')} <input id="qcq-mfg" type="date"></label>
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqCompile()" title="${AL('Consolidates every approved/released iCoA + eCoA result for the batch against the specification', 'Ги консолидира сите одобрени/ослободени iCoA + eCoA резултати за серијата според спецификацијата')}">${AL('Compile CoQ', 'Состави CoQ')}</button>
+      </div>` : '';
+    const rows = (cq.list || []).map(q => `
+      <div class="qms-row ${cq.sel === q.id ? 'on' : ''}" onclick="GF.WWF.qcCoqPick('${q.id}')">
+        <span class="mono qms-code">${GF.esc(q.coq_number)}</span>
+        <span class="qms-title">${GF.esc(q.batch_id)}${q.spec_reference ? ` <span class="ana-note">${GF.esc(q.spec_reference)}</span>` : ''}</span>
+        ${compliesChip(q.overall_conform)}${stChip(q.status)}
+      </div>
+      ${cq.sel === q.id ? (cq.detail ? coqDetail(cq.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('');
+    return `<div class="panel ana-panel" style="margin-top:12px">
+      <div class="ana-pt" style="margin-bottom:8px">${AL('Batch CoQ — per-batch aggregation (QCSOP 012 §6.4)', 'CoQ по серија — агрегација по серија (QCSOP 012 §6.4)')}</div>
+      <div class="ana-note" style="margin-bottom:8px">${AL(
+        'One line per specification parameter, each citing its source certificate. Compiled by QC, approved by the Head of QC; an input to the QP release decision.',
+        'Еден ред по параметар од спецификацијата, секој со цитиран изворен сертификат. Составува КК, одобрува Раководителот на КК; влез за одлуката на КЛ за пуштање.')}</div>
+      ${compile}
+      <div class="qms-list">${cq.loading && !cq.list ? `<div class="mw-skel" style="height:60px"></div>`
+        : (rows || `<div class="ana-note">${AL('No batch CoQs yet', 'Сè уште нема CoQ по серија')}</div>`)}</div>
+    </div>`;
+  };
+
   GF.views.qccoa = () => {
     const st = GF.WWF._qccoa;
     if (!st.coas && !st.loading && !st.error) GF.WWF.loadQcCoas();
+    if (!GF.WWF._qccoq.list && !GF.WWF._qccoq.loading && !GF.WWF._qccoq.error) GF.WWF.loadQcCoqs();
     const head = GF.viewHead('qc_coas', 'qc_coas_sub');
     const zone = `<div class="qms-zone">${AL(
       'QMS Studio — certificates of analysis. Every result is judged against the specification; approve / release is a Qualified-Person decision.',

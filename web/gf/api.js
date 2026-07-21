@@ -139,6 +139,14 @@ GF.API = {
   qcGenerateCoq(id)        { return this._req('POST', '/qc/certificates/' + id + '/coq'); },
   qcReviseCoa(id, b)       { return this._req('POST', '/qc/certificates/' + id + '/revise', b); },
   qcVoidCoa(id, reason)    { return this._req('POST', '/qc/certificates/' + id + '/void', { reason }); },
+  qcTranslationVerified(id){ return this._req('POST', '/qc/certificates/' + id + '/translation-verified'); },
+  // QCSOP 012 §6.4 — per-batch Certificate of Quality aggregation (C5)
+  qcCoqs(q)                { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/coq' + (u?'?'+u:'')); },
+  qcCoqOne(id)             { return this._req('GET', '/qc/coq/' + id); },
+  qcCompileCoq(b)          { return this._req('POST', '/qc/coq', b); },
+  qcReviewCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/review'); },
+  qcVoidCoq(id, reason)    { return this._req('POST', '/qc/coq/' + id + '/void', { reason }); },
+  qcRenderCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/render'); },
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },

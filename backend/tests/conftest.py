@@ -72,7 +72,9 @@ async def purge_org(org_id) -> None:
                   "task_progress",
                   # QC LIMS — children before parents; the cert→spec FK is
                   # RESTRICT, so certificates (and their CASCADE results) must
-                  # go before specifications.
+                  # go before specifications. The CoQ aggregation cites certs
+                  # (RESTRICT) and specs (RESTRICT), so it goes before both.
+                  "qc_coq_lines", "qc_coq_sources", "qc_coq",
                   "qc_batch_genealogy", "qc_document_files", "qc_signatures", "qc_results",
                   "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_sampling_plans",
                   "qc_specifications",
