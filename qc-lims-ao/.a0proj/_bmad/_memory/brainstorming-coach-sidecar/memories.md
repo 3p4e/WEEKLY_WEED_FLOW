@@ -1,2 +1,0 @@
-# brainstorming-coach memories
-

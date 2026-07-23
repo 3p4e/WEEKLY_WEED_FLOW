@@ -43,3 +43,10 @@ docengine/.pytest_cache/
 docengine/.venv/
 .coverage
 htmlcov/
+
+# agent scratch / never commit credentials
+.a0proj/
+**/.a0proj/
+*cookies*.txt
+*cookies*.json
+auth_url.txt

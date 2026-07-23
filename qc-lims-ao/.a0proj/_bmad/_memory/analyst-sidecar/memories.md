@@ -1,2 +1,0 @@
-# analyst memories
-
