@@ -41,3 +41,5 @@ docengine/__pycache__/
 docengine/**/__pycache__/
 docengine/.pytest_cache/
 docengine/.venv/
+.coverage
+htmlcov/
