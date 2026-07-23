@@ -15,7 +15,7 @@ self-notify guard is a no-op for it).
 from datetime import date
 
 from app.db import rls, rls_users, users_admin_pool
-from app.notify import emit
+from app.notify import safe_emit
 
 
 async def _admin_users() -> list[dict]:
@@ -57,7 +57,7 @@ async def run_for_org(admin: dict, today: date) -> dict:
             recipients = [(str(u), "due") for u in [t["user_id"], *t["assignees"]] if u]
             if verb == "overdue":
                 recipients += [(m, "due") for m in await _dept_managers(admin, t["department_id"])]
-            await emit(c, admin, verb=verb, object_type="task", object_id=t["id"],
+            await safe_emit(c, admin, verb=verb, object_type="task", object_id=t["id"],
                        recipients=recipients, task_id=t["id"],
                        department_id=t["department_id"],
                        params={"title": t["title"], "due": t["due_date"].isoformat()})

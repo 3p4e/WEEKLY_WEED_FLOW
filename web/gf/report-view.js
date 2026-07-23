@@ -313,7 +313,7 @@ GF.WWF.renderReport = () => {
           <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span>
           <span style="flex:1;font-size:13px;font-weight:500;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${GF.esc(t.department || '')}</span>
-          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${col}1A;border-radius:6px">${GF.esc(t.status)}</span>
+          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${col}1A;border-radius:6px">${GF.esc(GF.statusLabel ? GF.statusLabel(t.status) : t.status)}</span>
         </div>`;
       }).join('')}
     </div>`;

@@ -441,8 +441,20 @@ GF.refocus = (id) => {
 };
 
 // ── Modals + toast ──
-GF.openModal = (id) => GF.$(id).classList.add('open');
-GF.closeModal = (id) => GF.$(id).classList.remove('open');
+// Focus management (a11y): remember what had focus when a modal opens and restore
+// it on close, so keyboard focus is never orphaned on the now-hidden dialog.
+GF.openModal = (id) => {
+  GF._modalReturnFocus = document.activeElement;
+  GF.$(id).classList.add('open');
+};
+GF.closeModal = (id) => {
+  GF.$(id).classList.remove('open');
+  const back = GF._modalReturnFocus;
+  GF._modalReturnFocus = null;
+  if (back && typeof back.focus === 'function' && document.contains(back)) {
+    try { back.focus(); } catch (e) {}
+  }
+};
 GF.toast = (msg, type = 'info') => {
   const c = GF.$('toasts'); if (!c) return;
   const el = document.createElement('div');

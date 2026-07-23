@@ -12,7 +12,7 @@ import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible, _uuid_or_422
 from app.config import settings
@@ -134,7 +134,10 @@ def _function_allowed(function_key: str, role: str) -> bool:
 
 
 class InvokeReq(BaseModel):
-    input: str
+    # LOW: cap the free-text prompt so an unbounded body can't drive LLM
+    # cost / a memory-DoS at the Letta layer (32 KB is generous for any
+    # interactive request the UI issues).
+    input: str = Field(max_length=32_768)
     context: dict | None = None
 
 

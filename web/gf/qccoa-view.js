@@ -179,9 +179,14 @@
   GF.WWF.qcCoaRevise = async (id) => {
     const reason = prompt(AL('Reason for the revision (min 5 characters):',
                              'Причина за ревизијата (мин 5 знаци):'));
-    if (!reason) return;
+    if (reason === null) return;
+    // match the backend's min_length=5 so a too-short reason gets a friendly
+    // toast instead of a raw 422 from the server.
+    if (reason.trim().length < 5)
+      return GF.toast(AL('A reason of at least 5 characters is required',
+                         'Потребна е причина од најмалку 5 знаци'), 'error');
     try {
-      const rev = await GF.API.qcReviseCoa(id, { reason });
+      const rev = await GF.API.qcReviseCoa(id, { reason: reason.trim() });
       GF.toast(AL('Revision created: ', 'Ревизија создадена: ') + rev.coa_number);
     } catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);

@@ -33,7 +33,7 @@ from app.db import rls, rls_users
 from app.deps import dept_scope, is_dept_scoped_role, require_role
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
-from app.notify import emit
+from app.notify import safe_emit
 from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
@@ -849,14 +849,29 @@ async def patch_section(doc_id: str, key: str, body: SectionReq,
     full-document upload."""
     _require_uuid(doc_id)
     async with rls(user) as c:
-        row = await c.fetchrow(
-            "SELECT * FROM weekly_documents WHERE id=$1 AND status='draft'", doc_id)
-        if row is None:
-            exists = await c.fetchval("SELECT status FROM weekly_documents WHERE id=$1", doc_id)
-            if exists == "locked":
+        # Plain read first to establish existence + scope + status. A locked row is
+        # deliberately NOT FOR-UPDATE-lockable (mig 0008's immutability policy
+        # forbids updating it), so we must not FOR UPDATE it here or it would read
+        # as "missing" and hide the real 409. Scope-guard BEFORE distinguishing
+        # locked-vs-missing, so a locked document is not an existence oracle to a
+        # caller outside its department.
+        meta = await c.fetchrow(
+            "SELECT status, department_id FROM weekly_documents WHERE id=$1", doc_id)
+        if meta is None:
+            raise HTTPException(404, "Document not found")
+        _scope_guard(user, meta)
+        if meta["status"] != "draft":
+            if meta["status"] == "locked":
                 raise HTTPException(409, "Locked documents are immutable")
             raise HTTPException(404, "Document not found")
-        _scope_guard(user, row)
+        # FOR UPDATE the draft row (now lockable): this is a read-modify-write of
+        # the whole content jsonb, so the row must stay locked until commit or two
+        # concurrent section approvals each read the same content and the second
+        # write clobbers the first (lost update).
+        row = await c.fetchrow(
+            "SELECT * FROM weekly_documents WHERE id=$1 AND status='draft' FOR UPDATE", doc_id)
+        if row is None:
+            raise HTTPException(409, "Document is no longer editable")
         content = row["content"]
         if isinstance(content, str):
             content = json.loads(content)
@@ -924,7 +939,7 @@ async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED
                      if pr["role"] in execs
                      or (row["department_id"] and pr["department_id"] == row["department_id"]
                          and pr["role"].endswith("_MGR"))]
-            await emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
+            await safe_emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
                        recipients=rcpts, department_id=row["department_id"],
                        params={"kind": row["kind"], "week_start": str(row["week_start"])})
         except Exception:

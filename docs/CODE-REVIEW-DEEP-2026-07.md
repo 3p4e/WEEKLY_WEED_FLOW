@@ -328,3 +328,50 @@ verify checks linkage not content — is real and distinct.)*
 production stacks; five parallel adversarial module reviews (QC lifecycle,
 auth/RLS, TMS, facility/custody/audit, frontend). All ✅ items re-verified against
 current code or live requests before publication.*
+
+---
+
+## 9. Remediation status (2026-07-23)
+
+The P0→P2 roadmap from §8 was executed on branch
+`claude/weekly-read-flow-setup-yft7if` (commits `2e713aa`, `a7dd839`, and the P2
+follow-up). Gate for each batch: `schema.tasks.sql` drift-clean, alembic up/down
+clean, full pytest on a fresh PG16 two-DB cluster, `node --check` on changed views.
+
+**P0 — DONE** (`2e713aa` / `ca9b588` / `b0bb79e`): C-SEC-1 (cookie jar removed +
+gitignored — account-side session revocation remains a manual owner action),
+C-GxP-1 + H3 (issued-cert set-once freeze + CLOSED-OOS disposition gate), H7 (11
+UUID guards), H4 (mig 0042 `workflow` reason + custody append-only policy).
+
+**P1 — DONE** (`a7dd839`): H1 (promote requires ACCEPTED §6.3.2 checklist;
+REJECTED voids the doc; generate_coq defense-in-depth), H6 (spec-scoped eCoA
+auto-map), H2 (sample second-person TESTED→REVIEWED + batch-release OOS gate, mig
+0042 `tested_by`/`reviewed_by`), H5 (honest CoQ signature block), M1 (AI scope +
+uuid guard), M2 (qms proxy traversal reject), M4 (snapshot AT TIME ZONE), M5
+(external_ref → 409), M6 (audit `/verify` hash recompute + head anchor), M8
+(RFC-5987 filename), M9 (OOS-ack recipient membership + `acknowledged_by_id`).
+M10 frontend QC-view races were fixed in `2e713aa`.
+
+**P2 — PARTIAL (this batch):** `safe_emit()` with logging (kills the
+silent-swallow class behind H4; swept across qc/tasks/collab/documents/facility/
+duescan); `/ai/{fn}` input cap; `/qc/register/gaps` year bounds; base64 size cap
+before decode; `revise_certificate` carries `lab_verdict`; `patch_section` FOR
+UPDATE + scope-guard-before-locked-oracle; frontend revise-reason min-5 +
+report status-chip label + modal focus restore.
+
+**P2 — DEFERRED (tracked, not yet done), with rationale:**
+- `qc.py` monolith split — explicitly its own reviewed refactor (roadmap §10).
+- Leaf transition guards (stability/transport) + water `passed` server-grading —
+  the latter needs a limit model for the free-form water jsonb params.
+- Genealogy/dependency cycle checks are TOCTOU (advisory-lock fix) + genealogy
+  edge delete guard + custody from→to continuity.
+- Login limiter resolved-account key; `assign()` 400-masking; `export_range.pdf`
+  4xx validation; recurrence `week_id` upsert; weekly-report mid-week overdue.
+- Full i18n of auth screens / error toasts; SW `skipWaiting`+`claim` version-mix.
+- **Owner/SOP input needed:** approver≠reviewer separation on the certificate
+  lifecycle ("confirm against SOP", §5); Ph. Eur. 3028 component-order guard is
+  advisory (the app fixes A=neutral/B=acid at spec authoring).
+
+**Deploy:** none of the above is deployed yet — both live stacks remain at their
+prior images. Deployment (migration 0042 + backend + frontend to wwf_mass and, on
+the owner's go, production) is a separate owner-gated step.

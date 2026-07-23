@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.db import rls
 from app.deps import require_role
-from app.notify import emit
+from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
 router = APIRouter(prefix="/facility", tags=["facility"])
@@ -171,7 +171,7 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
             user["org_id"], body.room_id, body.strain, body.plant_count,
             body.phase, body.phase_since, body.note, user["id"])
         try:
-            await emit(c, user, verb="batch_added", object_type="plant_batch",
+            await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
                        object_id=row["id"], recipients=[],
                        params={"strain": row["strain"], "plant_count": row["plant_count"],
                                "phase": row["phase"], "room": room["name"]})
@@ -226,7 +226,7 @@ async def update_batch(batch_id: str, body: BatchPatch,
             verb = "batch_closed" if closed else ("batch_moved" if moved else None)
             if verb:
                 room = await c.fetchrow("SELECT name FROM rooms WHERE id=$1", row["room_id"])
-                await emit(c, user, verb=verb, object_type="plant_batch",
+                await safe_emit(c, user, verb=verb, object_type="plant_batch",
                            object_id=row["id"], recipients=[],
                            params={"strain": row["strain"], "plant_count": row["plant_count"],
                                    "phase": row["phase"], "room": room["name"] if room else "",

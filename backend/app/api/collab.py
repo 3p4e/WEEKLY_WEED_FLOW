@@ -16,7 +16,7 @@ from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
 from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
-from app.notify import emit, participants
+from app.notify import participants, safe_emit
 from app.roster import display_name, roster
 
 # @username mentions in comments — usernames are the login handles
@@ -115,7 +115,7 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
                              if r["role"] != "USER"
                              or (task_dept and str(r["department_id"] or "") == task_dept)
                              or str(r["id"]) in who_set]
-            await emit(c, user, verb="commented", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="commented", object_type="task", object_id=task_id,
                        recipients=[(u, "mentioned") for u in mentioned]
                                   + [(u, "comment") for u in who],
                        task_id=task_id,
@@ -176,7 +176,7 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
         # the event also feeds the shared activity stream.
         try:
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
-            await emit(c, user, verb="assigned", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="assigned", object_type="task", object_id=task_id,
                        recipients=[(body.user_id, "assigned")], task_id=task_id,
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else "")})
@@ -197,7 +197,7 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         if res.split()[-1] != "0":
             try:
                 t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
-                await emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
+                await safe_emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
                            recipients=[(assignee_id, "assigned")], task_id=task_id,
                            department_id=t["department_id"] if t else None,
                            params={"title": (t["title"] if t else "")})
@@ -228,7 +228,7 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
         try:
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             who = await participants(c, task_id)
-            await emit(c, user, verb="ack", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="ack", object_type="task", object_id=task_id,
                        recipients=[(u, "status") for u in who], task_id=task_id,
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "accepted": body.accepted})
@@ -277,7 +277,7 @@ async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(re
             recips = [(u, "status") for u in await participants(c, task_id)]
             if dst["head_user_id"]:
                 recips.append((dst["head_user_id"], "status"))
-            await emit(c, user, verb="handoff", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="handoff", object_type="task", object_id=task_id,
                        recipients=recips, task_id=task_id, department_id=body.to_dept_id,
                        params={"title": t["title"], "to_dept": dst["name"]})
         except Exception:
@@ -369,7 +369,7 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
         try:
             recips = [(u, "status") for u in await participants(ac, str(h["task_id"]))]
             recips.append((h["requested_by"], "status"))
-            await emit(ac, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
+            await safe_emit(ac, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
                        recipients=recips, task_id=h["task_id"],
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "status": body.status})

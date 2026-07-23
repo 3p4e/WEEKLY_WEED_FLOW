@@ -20,13 +20,13 @@ import uuid
 from datetime import date, datetime
 from urllib.parse import quote as _urlquote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app import docengine
 from app.db import rls, users_admin_pool
 from app.deps import require_role
-from app.notify import emit
+from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 from app.security import verify_password
 
@@ -224,7 +224,7 @@ async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS)
                 raise HTTPException(409, "A specification with this material_code + version already exists")
             raise
         try:
-            await emit(c, user, verb="spec_created", object_type="qc_specification",
+            await safe_emit(c, user, verb="spec_created", object_type="qc_specification",
                        object_id=row["id"], recipients=[],
                        params={"spec_id": row["spec_id"], "material_code": row["material_code"]})
         except Exception:
@@ -524,7 +524,7 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
             body.quantity, body.quantity_unit, body.retention_sample, body.sample_kind,
             body.retention_expiry, body.parent_id, body.sampling_plan_id, body.notes, user["id"])
         try:
-            await emit(c, user, verb="sample_collected", object_type="qc_sample",
+            await safe_emit(c, user, verb="sample_collected", object_type="qc_sample",
                        object_id=row["id"], recipients=[],
                        params={"sample_id": row["sample_id"], "batch_id": row["batch_id"]})
         except Exception:
@@ -1137,7 +1137,7 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
                     "UPDATE qc_samples SET status='QUARANTINE', updated_by=$1, updated_at=now() WHERE id=$2",
                     user["id"], coa["sample_id"])
                 try:
-                    await emit(c, user, verb="sample_quarantined", object_type="qc_sample",
+                    await safe_emit(c, user, verb="sample_quarantined", object_type="qc_sample",
                                object_id=coa["sample_id"], recipients=[],
                                params={"test_name": body.test_name})
                 except Exception:
@@ -1226,7 +1226,7 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
         archived = frozen_status in _ARCHIVED_STATUSES
         async with rls(user) as c2:
             try:
-                await emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
+                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
                            object_id=coa_id, recipients=[],
                            params={"reason": "edit_archived_certificate" if archived
                                              else "edit_issued_certificate",
@@ -1364,10 +1364,10 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
             " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
             " result_date, source_document_code, source_document_date, source_institution,"
-            " created_by)"
+            " lab_verdict, created_by)"
             " SELECT org_id, $1, parameter_id, test_name, result_value, result_numeric,"
             " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date,"
-            " source_document_code, source_document_date, source_institution, $2"
+            " source_document_code, source_document_date, source_institution, lab_verdict, $2"
             " FROM qc_results WHERE coa_id=$3", row["id"], user["id"], coa_id)
     return _coa_out(dict(row))
 
@@ -1815,7 +1815,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         # the 409 cannot roll the event back.
         async with rls(user) as c2:
             try:
-                await emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
+                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
                            object_id=coa_id, recipients=[],
                            params={"reason": "coq_on_open_oos", "batch_id": coa["batch_id"],
                                    "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
@@ -1943,7 +1943,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         if stamped is None:
             raise HTTPException(409, "Certificate is no longer RELEASED — COQ not recorded")
         try:
-            await emit(c, user, verb="coq_generated", object_type="qc_certificate",
+            await safe_emit(c, user, verb="coq_generated", object_type="qc_certificate",
                        object_id=coa_id, recipients=[],
                        params={"coa_number": coa["coa_number"], "document_id": doc_id})
         except Exception:
@@ -2046,7 +2046,8 @@ async def certificate_register(
 
 
 @router.get("/register/gaps")
-async def register_numbering_gaps(year: int, cert_type: str | None = None,
+async def register_numbering_gaps(year: int = Query(..., ge=2000, le=2100),
+                                  cert_type: str | None = None,
                                   user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """Numbering-gap data-integrity report (§6.13). Certificate numbering is
     per-(org, cert_type, year) since the QCSOP 012 alignment (C2); certificates
@@ -2318,7 +2319,7 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
             " VALUES ($1,$2,'opened',$3,$4)",
             user["org_id"], row["id"], user["id"], f"{row['oos_type']} opened for batch {row['batch_id']}")
         try:
-            await emit(c, user, verb="oos_opened", object_type="qc_oos_record",
+            await safe_emit(c, user, verb="oos_opened", object_type="qc_oos_record",
                        object_id=row["id"], recipients=[],
                        params={"oos_number": row["oos_number"], "batch_id": row["batch_id"]})
         except Exception:
@@ -2689,12 +2690,16 @@ async def get_coa_document(doc_id: str, user: dict = Depends(require_role(*ELEVA
 
 # ── Source-document custody (item 12): store the original with a SHA-256 ─────
 _MAX_FILE_BYTES = 20 * 1024 * 1024   # 20 MB decoded — a scanned CoA fits easily
+# base64 expands 3 bytes → 4 chars; cap the encoded field at the request-validation
+# layer so an oversize body is rejected BEFORE it is base64-decoded into memory
+# (LOW: the decode-then-check order materialized the whole payload first).
+_MAX_B64_LEN = 4 * ((_MAX_FILE_BYTES + 2) // 3) + 4
 
 
 class FileUploadIn(BaseModel):
     filename: str = Field(min_length=1, max_length=300)
     content_type: str | None = Field(default=None, max_length=120)
-    content_b64: str = Field(min_length=1)
+    content_b64: str = Field(min_length=1, max_length=_MAX_B64_LEN)
 
 
 def _file_out(r: dict) -> dict:
@@ -2737,7 +2742,7 @@ async def upload_coa_original(doc_id: str, body: FileUploadIn,
             user["org_id"], doc_id, body.filename, body.content_type, len(raw), digest,
             raw, user["id"])
         try:
-            await emit(c, user, verb="coa_original_stored", object_type="qc_coa_document",
+            await safe_emit(c, user, verb="coa_original_stored", object_type="qc_coa_document",
                        object_id=doc_id, recipients=[],
                        params={"filename": body.filename, "sha256": digest, "size": len(raw)})
         except Exception:
@@ -3411,7 +3416,7 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         if tag == "UPDATE 0":
             raise HTTPException(409, "Document was already promoted")
         try:
-            await emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
+            await safe_emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
                        object_id=doc_id, recipients=[],
                        params={"doc_number": doc["doc_number"], "coa_number": coa["coa_number"],
                                "results": len(mapped)})
@@ -3503,7 +3508,7 @@ async def verify_certificate(coa_id: str, user: dict = Depends(require_role(*_WR
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
             user["org_id"], coa_id, doc["id"], verdict, len(results), mismatches, details, user["id"])
         try:
-            await emit(c, user, verb="coa_verified", object_type="qc_certificate",
+            await safe_emit(c, user, verb="coa_verified", object_type="qc_certificate",
                        object_id=coa_id, recipients=[],
                        params={"verdict": verdict, "checked": len(results), "mismatches": mismatches})
         except Exception:
@@ -3576,7 +3581,7 @@ async def sign_certificate(coa_id: str, body: SignIn,
             prof["full_name"] or user.get("username") or "—", user["role"], body.meaning,
             body.statement)
         try:
-            await emit(c, user, verb="coa_signed", object_type="qc_certificate",
+            await safe_emit(c, user, verb="coa_signed", object_type="qc_certificate",
                        object_id=coa_id, recipients=[], params={"meaning": body.meaning})
         except Exception:
             pass
@@ -4625,7 +4630,7 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         # cannot roll the event back.
         async with rls(user) as c2:
             try:
-                await emit(c2, user, verb="qc_deviation", object_type="qc_specification",
+                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_specification",
                            object_id=str(spec["id"]), recipients=[],
                            params={"reason": "coq_compile_on_open_oos", "batch_id": body.batch_id,
                                    "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
@@ -4769,7 +4774,7 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
             ln["result_numeric"], ln["unit"], ln["complies"], ln["testing_lab"],
             ln["source_coa_id"], ln["source_coa_number"], ln["sorting_order"])
     try:
-        await emit(c, user, verb="coq_compiled", object_type="qc_coq",
+        await safe_emit(c, user, verb="coq_compiled", object_type="qc_coq",
                    object_id=str(row["id"]), recipients=[],
                    params={"coq_number": coq_number, "batch_id": body.batch_id,
                            "overall_conform": overall, "sources": len(cited_cert_ids)})
@@ -4816,7 +4821,7 @@ async def review_coq(coq_id: str, user: dict = Depends(require_role(*_HOQC))):
                 "UPDATE qc_coq SET status='APPROVED', reviewed_by=$1, reviewed_at=now(),"
                 " updated_by=$1, updated_at=now() WHERE id=$2 RETURNING *", user["id"], coq_id)
             try:
-                await emit(c, user, verb="coq_reviewed", object_type="qc_coq",
+                await safe_emit(c, user, verb="coq_reviewed", object_type="qc_coq",
                            object_id=coq_id, recipients=[],
                            params={"coq_number": row["coq_number"]})
             except Exception:
@@ -4826,7 +4831,7 @@ async def review_coq(coq_id: str, user: dict = Depends(require_role(*_HOQC))):
         # the deviation event back.
         async with rls(user) as c2:
             try:
-                await emit(c2, user, verb="qc_deviation", object_type="qc_coq",
+                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
                            object_id=coq_id, recipients=[],
                            params={"reason": "coq_approve_on_open_oos", "batch_id": cur["batch_id"],
                                    "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
@@ -4856,7 +4861,7 @@ async def void_coq(coq_id: str, body: VoidIn, user: dict = Depends(require_role(
             " updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",
             body.reason.strip(), user["id"], coq_id)
         try:
-            await emit(c, user, verb="coq_voided", object_type="qc_coq",
+            await safe_emit(c, user, verb="coq_voided", object_type="qc_coq",
                        object_id=coq_id, recipients=[],
                        params={"coq_number": row["coq_number"], "reason": body.reason.strip()})
         except Exception:
@@ -4909,7 +4914,7 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         # §6.16 (C8) — recorded in its own transaction, before the 409.
         async with rls(user) as c2:
             try:
-                await emit(c2, user, verb="qc_deviation", object_type="qc_coq",
+                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
                            object_id=coq_id, recipients=[],
                            params={"reason": "coq_render_on_open_oos", "batch_id": coq["batch_id"],
                                    "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
@@ -4983,7 +4988,7 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         if stamped is None:
             raise HTTPException(409, "CoQ is no longer APPROVED — document not recorded")
         try:
-            await emit(c, user, verb="coq_rendered", object_type="qc_coq",
+            await safe_emit(c, user, verb="coq_rendered", object_type="qc_coq",
                        object_id=coq_id, recipients=[],
                        params={"coq_number": coq["coq_number"], "document_id": doc_id})
         except Exception:

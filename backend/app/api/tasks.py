@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from app.automation import canned_recipients
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
-from app.notify import emit, participants
+from app.notify import participants, safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import classify, session_hours
 
@@ -439,7 +439,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
         # Slack/Linear defaults — but the shared activity stream shows it,
         # which is what makes exec-created work visible to the org.
         try:
-            await emit(c, user, verb="created", object_type="task", object_id=row["id"],
+            await safe_emit(c, user, verb="created", object_type="task", object_id=row["id"],
                        recipients=[], task_id=row["id"], department_id=row["department_id"],
                        params={"title": row["title"]})
         except Exception:
@@ -658,7 +658,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
                 # instead of the generic "status" one.
                 canned = await canned_recipients(user, row["task_type"], row["status"])
                 recipients = canned + [(u, "status") for u in who]
-                await emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
+                await safe_emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
                            recipients=recipients, task_id=task_id,
                            department_id=row["department_id"],
                            params={"title": row["title"], "old": prev_status, "new": row["status"]})
@@ -972,7 +972,7 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
             new, user["id"], task_id)
         try:
             who = await participants(c, task_id)
-            await emit(c, user, verb="workflow_" + action.lower(), object_type="task",
+            await safe_emit(c, user, verb="workflow_" + action.lower(), object_type="task",
                        object_id=task_id, recipients=[(u, "workflow") for u in who],
                        task_id=task_id, department_id=t["department_id"],
                        params={"title": t["title"], "from": cur, "to": new,
