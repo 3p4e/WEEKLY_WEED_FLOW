@@ -171,12 +171,22 @@ GF.WWF.showLogin = (msg) => {
 };
 GF.WWF.doLogin = async () => {
   const u = (GF.$('wwf-u')||{}).value, p = (GF.$('wwf-p')||{}).value;
-  const m = GF.$('wwf-login-msg'); if (m) m.textContent = 'Signing in…';
+  const m = GF.$('wwf-login-msg');
+  if (m) m.textContent = GF.state.lang === 'mk' ? 'Најавување…' : 'Signing in…';
   try {
     const data = await GF.API.login(u, p);
     if (data.user && data.user.must_change_password) { GF.WWF.showChangePw(p); return; }
     GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
-  } catch (e) { if (m) m.textContent = e.message === 'unauthorized' ? 'Invalid username or password' : ('Error: ' + e.message); }
+  } catch (e) {
+    if (!m) return;
+    if (e.message === 'unauthorized') {
+      m.textContent = GF.state.lang === 'mk' ? 'Погрешно корисничко име или лозинка' : 'Invalid username or password';
+    } else if (e.status === 429) {
+      m.textContent = GF.state.lang === 'mk' ? 'Премногу обиди — обидете се повторно подоцна' : e.message;
+    } else {
+      m.textContent = (GF.state.lang === 'mk' ? 'Грешка: ' : 'Error: ') + e.message;
+    }
+  }
 };
 
 /* ── first-login password change (must_change_password) ────────────── */
@@ -203,14 +213,15 @@ GF.WWF.showChangePw = (currentPw) => {
 GF.WWF.doChangePw = async () => {
   const a = (GF.$('wwf-np')||{}).value || '', b = (GF.$('wwf-np2')||{}).value || '';
   const m = GF.$('wwf-login-msg');
-  if (a.length < 8) { if (m) m.textContent = 'Password must be at least 8 characters'; return; }
-  if (a !== b) { if (m) m.textContent = 'Passwords do not match'; return; }
-  if (m) m.textContent = 'Saving…';
+  const mk = GF.state.lang === 'mk';
+  if (a.length < 8) { if (m) m.textContent = mk ? 'Лозинката мора да има најмалку 8 карактери' : 'Password must be at least 8 characters'; return; }
+  if (a !== b) { if (m) m.textContent = mk ? 'Лозинките не се совпаѓаат' : 'Passwords do not match'; return; }
+  if (m) m.textContent = mk ? 'Зачувување…' : 'Saving…';
   try {
     await GF.API.changePassword(a, GF.WWF._curPw);
     try { GF.API.user = await GF.API.me(); sessionStorage.setItem('wwf_user', JSON.stringify(GF.API.user)); } catch (e) {}
     GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
-  } catch (e) { if (m) m.textContent = 'Error: ' + e.message; }
+  } catch (e) { if (m) m.textContent = (mk ? 'Грешка: ' : 'Error: ') + e.message; }
 };
 
 /* ── load real data + render ───────────────────────────────────────── */

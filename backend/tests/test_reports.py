@@ -1,5 +1,8 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
+from datetime import date, timedelta
+
+from app.api.weekwindow import fri_thu
 from app.db import tasks_admin_pool
 from tests.conftest import create_user, login_and_set_password
 
@@ -24,6 +27,39 @@ async def test_weekly_report_summary_counts_postponed_tasks(client, admin_header
         + summary["pending"] + summary["review"] + summary["postponed"]
     )
     assert accounted == summary["total"]
+
+
+async def test_report_overdue_excludes_tasks_due_later_this_same_week(client, admin_headers):
+    """A task due LATER in a still-in-progress week is not overdue yet — the
+    cutoff is real 'today', not the week's Thursday end boundary (a report
+    viewed mid-week used to wrongly count it as already overdue). Uses a
+    ref_date whose Fri->Thu window ends well after real 'today' so the
+    assertion doesn't depend on which day of the week the suite happens to
+    run on; the overdue query itself isn't week-bounded, so a genuinely
+    past-due task is unaffected by which ref_date is passed."""
+    today = date.today()
+    future_ref = today + timedelta(days=10)
+    _fri, thu = fri_thu(future_ref)
+    assert thu > today  # sanity: the window's end must actually be in the future
+
+    r = await client.post("/tasks", json={
+        "title": "Due later this week", "status": "pending", "due_date": thu.isoformat()},
+        headers=admin_headers)
+    assert r.status_code == 201, r.text
+    not_yet_due_id = r.json()["id"]
+
+    r = await client.post("/tasks", json={
+        "title": "Actually overdue", "status": "pending",
+        "due_date": (today - timedelta(days=1)).isoformat()}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    overdue_id = r.json()["id"]
+
+    r = await client.get("/reports/weekly", params={"ref_date": future_ref.isoformat()}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    overdue_ids = {t["id"] for t in r.json()["overdue"]}
+    assert overdue_id in overdue_ids
+    assert not_yet_due_id not in overdue_ids, \
+        "a task due later THIS SAME week must not be counted overdue before its due date arrives"
 
 
 async def test_invalid_ref_date_returns_422(client, admin_headers):

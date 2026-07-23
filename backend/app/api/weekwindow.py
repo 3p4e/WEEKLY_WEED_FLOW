@@ -27,6 +27,20 @@ def fri_thu(ref: date) -> tuple[date, date]:
     return fri, fri + timedelta(days=6)
 
 
+async def ensure_week(conn, org_id, day: date):
+    """id of the ISO (Mon->Sun) calendar week containing *day*, creating the
+    row if the org hasn't seeded that far ahead. ON CONFLICT DO UPDATE is a
+    no-op field-set purely so RETURNING id works on the existing row."""
+    iso_year, iso_week, _ = day.isocalendar()
+    monday = day - timedelta(days=day.weekday())
+    return await conn.fetchval(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
+        " VALUES ($1,$2,$3,$4,$5)"
+        " ON CONFLICT (org_id, iso_year, iso_week) DO UPDATE SET iso_year=EXCLUDED.iso_year"
+        " RETURNING id",
+        org_id, iso_year, iso_week, monday, monday + timedelta(days=6))
+
+
 def num(v) -> float:
     if v is None:
         return 0.0

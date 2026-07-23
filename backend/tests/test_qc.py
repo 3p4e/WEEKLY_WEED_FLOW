@@ -1978,6 +1978,34 @@ async def test_genealogy_is_write_gated_and_deletable(client, admin_headers):
     assert g["parents"] == []
 
 
+async def test_genealogy_edge_delete_blocked_by_issued_certificate(client, admin_headers, monkeypatch):
+    """An edge feeding a RELEASED certificate's batch is part of that issued
+    document's traceable lineage — removing it would silently rewrite history
+    for a record already handed out, so it's refused once issued."""
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="GDEL-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=admin_headers)
+    edge = await _edge(client, admin_headers, "GDEL-PARENT", "GDEL-CHILD")
+    coa = await _coa(client, admin_headers, spec["id"], batch="GDEL-CHILD", report_date="2026-07-01")
+    await client.post(f"/qc/certificates/{coa['id']}/results",
+                      json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                            "result_numeric": 22.0, "lower_limit": 10.0, "upper_limit": 30.0},
+                      headers=admin_headers)
+    await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    # DRAFT: still deletable
+    assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 204
+    edge = await _edge(client, admin_headers, "GDEL-PARENT", "GDEL-CHILD")
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": tgt},
+                                   headers=qp)).status_code == 200
+    # RELEASED: the lineage is locked
+    assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 409
+
+
 async def test_ecoa_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)
@@ -2256,6 +2284,26 @@ async def test_chain_of_custody_append_and_list(client, admin_headers):
     assert r.status_code == 404
 
 
+async def test_custody_continuity_enforced(client, admin_headers):
+    """Each new handoff must start with whoever the chain last recorded as
+    HAVING custody — a break (skipping a custodian) is refused."""
+    sample = await _sample(client, admin_headers, batch="B-CUST-2")
+    other, _ = await _actor(client, admin_headers, "USER")
+    admin_me = (await client.get("/auth/me", headers=admin_headers)).json()
+    # first entry: admin -> other (to_user_id = other's id)
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "to_user_id": other["id"], "transfer_type": "FIELD_TO_LAB"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # a THIRD entry that doesn't start from "other" breaks the chain
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "from_user_id": admin_me["id"], "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+    assert r.status_code == 409
+    # the correct continuation (from_user_id = other, the actual current custodian) succeeds
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "from_user_id": other["id"], "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 async def test_custody_cluster_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/sampling-requests",
@@ -2295,6 +2343,9 @@ async def test_stability_study_lifecycle(client, admin_headers):
     # bad type / status rejected
     assert (await client.post("/qc/stability-studies", json={"study_type": "XX", "material_code": "M"}, headers=admin_headers)).status_code == 422
     assert (await client.patch(f"/qc/stability-studies/{st['id']}", json={"status": "BOGUS"}, headers=admin_headers)).status_code == 422
+    # CLOSED is terminal — reopening it is an illegal transition
+    r = await client.patch(f"/qc/stability-studies/{st['id']}", json={"status": "IN_PROGRESS"}, headers=admin_headers)
+    assert r.status_code == 409
 
 
 async def test_sample_transport_forms(client, admin_headers):
@@ -2313,6 +2364,11 @@ async def test_sample_transport_forms(client, admin_headers):
     assert tr2["status"] == "in_transit" and tr2["forms"]["sar"] is True and tr2["forms"]["tmcoc"] is True
     assert tr2["tracking"] == "DHL-123"
     assert (await client.patch(f"/qc/transports/{tr['id']}", json={"status": "beamed"}, headers=admin_headers)).status_code == 422
+    # linear, forward-only: cannot un-ship (in_transit -> draft)
+    assert (await client.patch(f"/qc/transports/{tr['id']}", json={"status": "draft"}, headers=admin_headers)).status_code == 409
+    # cannot skip a stage (draft -> received)
+    tr3 = (await client.post("/qc/transports", json={"sample_id": "PP-SMP-2026-0002"}, headers=admin_headers)).json()
+    assert (await client.patch(f"/qc/transports/{tr3['id']}", json={"status": "received"}, headers=admin_headers)).status_code == 409
 
 
 async def test_qc_leaves_write_gated(client, admin_headers):

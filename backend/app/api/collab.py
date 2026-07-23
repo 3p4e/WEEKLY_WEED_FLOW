@@ -163,15 +163,18 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
                 body.user_id, user["org_id"])
         if target is None:
             raise HTTPException(404, "User not found in this organization")
-        try:
-            await c.execute(
-                "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
-                "VALUES ($1,$2,$3,$4,$5) "
-                "ON CONFLICT (task_id, user_id) DO UPDATE SET "
-                "role=EXCLUDED.role, accepted=NULL, accepted_at=NULL",
-                task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
-        except Exception as e:  # unique violation etc.
-            raise HTTPException(400, f"Could not assign: {type(e).__name__}")
+        # The ON CONFLICT already absorbs the only unique constraint on this
+        # table (task_id, user_id) — there is no legitimate business error left
+        # to translate into a 400 here. A broad except that did so used to mask
+        # real failures (a dropped connection, a serialization conflict) behind
+        # a misleading "Could not assign: <ExceptionClassName>" instead of
+        # letting them surface as the 500s they actually are.
+        await c.execute(
+            "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
+            "VALUES ($1,$2,$3,$4,$5) "
+            "ON CONFLICT (task_id, user_id) DO UPDATE SET "
+            "role=EXCLUDED.role, accepted=NULL, accepted_at=NULL",
+            task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
         # Awareness (best-effort): the assignee gets an inbox notification;
         # the event also feeds the shared activity stream.
         try:

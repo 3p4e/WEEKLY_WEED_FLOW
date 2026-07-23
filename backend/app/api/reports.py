@@ -148,7 +148,12 @@ async def weekly_report(
                 b[classify(s["started_at"])] += h
                 b["total"] += h
 
-            over_args: list = [thu + timedelta(days=1)]
+            # A task due later THIS SAME week isn't overdue yet — clamp the
+            # cutoff to real "today" when the report covers a week still in
+            # progress (thu+1 is in the future), matching the per-op overdue
+            # semantics used elsewhere in this file (due_date < today).
+            # Viewing a past week's report is unaffected (thu+1 <= today there).
+            over_args: list = [min(date.today(), thu + timedelta(days=1))]
             over_clause = ""
             if department_id:
                 over_args.append(department_id)

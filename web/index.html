@@ -256,6 +256,18 @@
 // PWA: register the version-keyed service worker (sw.js) — app shell works offline.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // sw.js calls skipWaiting()+clients.claim() so a new deploy takes over
+  // instantly (by design — see sw.js's VERSION comment), but that means an
+  // ALREADY-OPEN tab keeps running its old in-memory JS/DOM under the new
+  // worker for a moment: a stale-code/new-shell version mix. Reload once
+  // control actually changes hands so that window is momentary rather than a
+  // lingering mismatched session; guarded so a mid-reload SW swap can't loop.
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    location.reload();
+  });
 }
 </script>
 </body>

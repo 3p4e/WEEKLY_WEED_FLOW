@@ -14,6 +14,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.weekwindow import ensure_week
 from app.automation import canned_recipients
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
@@ -526,12 +527,14 @@ async def _materialize_recurrence(c, row) -> dict | None:
         return None
     next_week_start = _advance(row["week_start"], rec) if row["week_start"] else None
     # Resolve the next instance's calendar week so it still shows up in
-    # ?week_id= week views (it lands in a different week than the completed one).
+    # ?week_id= week views (it lands in a different week than the completed
+    # one). ensure_week UPSERTs the row instead of a plain SELECT — a
+    # recurrence can advance past however far the org's calendar_weeks has
+    # been seeded, and a plain SELECT miss would silently orphan the new task
+    # with week_id=NULL even though next_week_start is a well-defined date.
     next_week_id = None
     if next_week_start is not None:
-        next_week_id = await c.fetchval(
-            "SELECT id FROM calendar_weeks WHERE org_id=$1 AND starts_on=$2",
-            row["org_id"], next_week_start)
+        next_week_id = await ensure_week(c, row["org_id"], next_week_start)
     new = await c.fetchrow(
         "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
         " task_type,node_kind,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"

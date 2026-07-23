@@ -60,6 +60,24 @@ async def test_assign_malformed_uuid_returns_422_not_500(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_reassigning_the_same_pair_upserts_cleanly(client, admin_headers):
+    """assign() relies on ON CONFLICT (task_id, user_id) DO UPDATE for a
+    repeat assignment — no exception path should be reachable there, so
+    posting the same pair twice (e.g. to change role) must succeed both
+    times, not surface a masked/misleading error."""
+    r = await client.post("/tasks", json={"title": "Reassign me", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    user, otp = await create_user(client, admin_headers)
+    r = await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"], "role": "assignee"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    r = await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"], "role": "reviewer"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    lst = (await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)).json()
+    assert next(a for a in lst if a["user_id"] == user["id"])["role"] == "reviewer"
+
+
 async def test_assignee_can_write_task_they_are_assigned_to(client, admin_headers):
     """The core RLS regression test: a plain USER who is assigned to a task
     (but doesn't own it and has no elevated role) must be able to persist a

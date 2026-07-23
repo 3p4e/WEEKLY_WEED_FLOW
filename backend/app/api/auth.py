@@ -144,7 +144,6 @@ def _public(row) -> dict:
 async def login(body: LoginReq, request: Request):
     ip = request.client.host if request.client else "unknown"
     identifier = body.email.lower()
-    _rate_limit_check(f"id:{identifier}", f"ip:{ip}")
 
     # Username match takes strict precedence over email match. The combined
     # (username=$1 OR email=$1) fetchrow had no ORDER BY, and email carries no
@@ -158,6 +157,15 @@ async def login(body: LoginReq, request: Request):
         row = await users_admin_pool().fetchrow(
             "SELECT * FROM profiles WHERE email=$1 AND is_deleted=false"
             " ORDER BY created_at LIMIT 1", body.email)
+    # Rate-limit on the RESOLVED account id when one exists, not the raw typed
+    # string — otherwise the same account is reachable through two separate
+    # buckets (its username vs. its email, or case variants), doubling an
+    # attacker's effective attempt budget against one profile. An identifier
+    # that resolves to no account falls back to the typed string, which is the
+    # only key available for a nonexistent login.
+    id_key = f"id:{row['id']}" if row is not None else f"id:{identifier}"
+    _rate_limit_check(id_key, f"ip:{ip}")
+
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     # Always pay the bcrypt cost, even on a miss (unknown/inactive user) —
     # short-circuiting before it is a timing side-channel that lets an
@@ -165,7 +173,7 @@ async def login(body: LoginReq, request: Request):
     active = row is not None and row["is_active"]
     ok = verify_password(body.password, row["password_hash"] if active else None)
     if not active or not ok:
-        _rate_limit_record_failure(f"ip:{ip}", f"id:{identifier}")
+        _rate_limit_record_failure(f"ip:{ip}", id_key)
         # Forensic trail — audit_log is trigger-driven and never sees a failed
         # login. Identifier is what the client TYPED (may or may not exist);
         # never log the password.
@@ -173,7 +181,7 @@ async def login(body: LoginReq, request: Request):
             "event": "login_failed", "identifier": identifier, "ip": ip,
             "reason": "inactive_or_unknown" if not active else "bad_password"}})
         raise invalid
-    _rate_limit_clear(f"ip:{ip}", f"id:{identifier}")
+    _rate_limit_clear(f"ip:{ip}", id_key)
     days = settings.remember_device_expire_days if body.remember_device else None
     pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
     token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)

@@ -254,6 +254,19 @@ async def test_export_range_pdf(client, admin_headers, org):
     assert "PREVIEW" in r.headers.get("content-disposition", "")
 
 
+async def test_export_range_pdf_validation_errors(client, admin_headers, org):
+    """content is entirely client-supplied on this endpoint (there's no stored
+    row to read) — a malformed kind or period.start must be a clean 422, not
+    an unhandled crash inside the ribbon renderer's date.fromisoformat()."""
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "invoice", "content": {}}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "report", "content": {"period": {"start": "not-a-date"}}},
+                          headers=admin_headers)
+    assert r.status_code == 422
+
+
 async def test_preview_and_range_export_operator_denied(client, admin_headers, org):
     """Custom-range preview/export is an org-wide snapshot — base USER denied."""
     user, otp = await create_user(client, admin_headers, role="USER")

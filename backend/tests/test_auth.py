@@ -1,4 +1,6 @@
 """P1 — account provisioning, forced first-login password change, RBAC gates."""
+import uuid
+
 from app.db import users_admin_pool
 from tests.conftest import create_user, login_and_set_password
 
@@ -565,3 +567,28 @@ async def test_owner_sees_org_wide_tasks_and_departments(client, admin_headers):
     # And the same for the other RLS-gated reads the app boots with.
     assert (await client.get("/departments", headers=headers)).status_code == 200
     assert (await client.get("/audit", headers=headers)).status_code == 200
+
+
+async def test_login_rate_limit_keys_on_resolved_account_not_typed_string(client, admin_headers):
+    """Two different login strings for the SAME account (its username vs. its
+    email) must share one rate-limit bucket, keyed on the resolved account id
+    — otherwise an attacker doubles their effective attempt budget by
+    switching which string they submit for the same profile."""
+    username = f"ratekey_{uuid.uuid4().hex[:8]}"
+    email = f"{username}@example.test"
+    r = await client.post("/auth/users", json={
+        "username": username, "full_name": "Rate Key Test", "role": "USER", "email": email,
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    otp = r.json()["otp"]
+    await login_and_set_password(client, username, otp)
+    # Exhaust the 8-attempt per-account bucket via the USERNAME.
+    for _ in range(8):
+        r = await client.post("/auth/login", json={"email": username, "password": "wrong-password"})
+        assert r.status_code == 401
+    # The 9th attempt, submitted via the EMAIL (a different typed string, same
+    # resolved account), must already be rate-limited — if it opened a fresh
+    # bucket keyed on the raw string instead of the resolved id, this would
+    # still return 401 instead of 429.
+    r = await client.post("/auth/login", json={"email": email, "password": "wrong-password"})
+    assert r.status_code == 429

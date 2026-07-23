@@ -318,6 +318,38 @@ async def test_recurring_next_instance_carries_week_id(client, admin_headers, or
     assert any(t["id"] == nxt["id"] for t in r.json())
 
 
+async def test_recurring_next_instance_creates_missing_calendar_week(client, admin_headers, org):
+    """A weekly recurrence can advance past however far calendar_weeks has
+    been seeded — the next instance must still land in a real week
+    (ensure_week upserts the row), not get silently orphaned with
+    week_id=NULL the way a plain SELECT-miss used to leave it."""
+    await tasks_admin_pool().execute(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
+        " ($1,2026,20,'2026-05-11','2026-05-17')", org["org_id"])
+    weeks = {w["iso_week"]: w for w in (await client.get("/weeks", headers=admin_headers)).json()}
+    wk_a = weeks[20]
+    assert 21 not in weeks, "test setup: iso_week 21 must not exist yet"
+
+    r = await client.post("/tasks", json={
+        "title": "Weekly line check 2", "status": "ongoing",
+        "recurrence": {"freq": "weekly", "interval": 1},
+        "week_id": wk_a["id"], "week_start": "2026-05-11", "due_date": "2026-05-15"},
+        headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+
+    r = await client.patch(f"/tasks/{task_id}", json={"status": "completed"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    nxt = r.json().get("next_instance")
+    assert nxt is not None
+    assert nxt["week_id"] is not None, \
+        "next instance was orphaned (week_id NULL) instead of upserting the missing week"
+    assert str(nxt["week_start"]) == "2026-05-18"
+
+    weeks_after = {w["iso_week"]: w for w in (await client.get("/weeks", headers=admin_headers)).json()}
+    assert 21 in weeks_after and weeks_after[21]["id"] == nxt["week_id"]
+
+
 async def test_delete_link_requires_task_visibility(client, admin_headers):
     """Regression (IDOR): task_links' only RLS policy is org_isolation, so
     delete_link must look the task up under RLS first — otherwise any org

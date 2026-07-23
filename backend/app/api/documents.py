@@ -1524,11 +1524,23 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
     _pdf_html — every field is HTML-escaped there, so client-supplied content
     cannot inject markup or a server-side fetch. Always a DRAFT (a preview is
     never a locked submitted record)."""
+    if body.kind not in ("report", "plan"):
+        raise HTTPException(422, "kind must be 'report' or 'plan'")
     content = body.content or {}
-    kind = content.get("kind") or body.kind or "report"
     period = content.get("period") or {}
+    start_s = period.get("start")
+    if start_s is not None:
+        # content.ribbon (when present) feeds this straight into
+        # _ribbon_svg's date.fromisoformat() with no validation upstream of
+        # here — a malformed value crashed that into a raw 500 instead of a
+        # clean 422 on this entirely client-supplied preview payload.
+        try:
+            date.fromisoformat(start_s)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "content.period.start must be ISO format YYYY-MM-DD")
+    kind = content.get("kind") if content.get("kind") in ("report", "plan") else body.kind
     doc = {"content": content, "status": "preview", "kind": kind,
-           "week_start": period.get("start") or _today().isoformat(),
+           "week_start": start_s or _today().isoformat(),
            "locked_by": None, "locked_at": None}
     people = await roster(user)
     try:

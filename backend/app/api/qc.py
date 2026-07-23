@@ -2827,6 +2827,13 @@ async def add_genealogy_edge(body: GenealogyIn, user: dict = Depends(require_rol
     if body.relation not in _GENEALOGY_RELATIONS:
         raise HTTPException(422, f"relation must be one of: {', '.join(_GENEALOGY_RELATIONS)}")
     async with rls(user) as c:
+        # Serialize genealogy writes per-org: the cycle check below reads the
+        # graph, then the INSERT commits a new edge — two concurrent edges that
+        # only close a cycle TOGETHER would each see a pre-insert graph and both
+        # pass, so lock out other genealogy writers in this org for the
+        # duration of this transaction (same pattern as cert numbering/RQS
+        # ordering elsewhere in this file).
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"genealogy:{user['org_id']}")
         # cycle guard: parent must NOT already be a descendant of child
         cyc = await c.fetchval(
             "WITH RECURSIVE d AS ("
@@ -2853,9 +2860,20 @@ async def add_genealogy_edge(body: GenealogyIn, user: dict = Depends(require_rol
 async def delete_genealogy_edge(edge_id: str, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(edge_id, "Genealogy edge")
     async with rls(user) as c:
-        tag = await c.execute("DELETE FROM qc_batch_genealogy WHERE id=$1", edge_id)
-    if tag == "DELETE 0":
-        raise HTTPException(404, "Genealogy edge not found")
+        edge = await c.fetchrow(
+            "SELECT parent_batch_id, child_batch_id FROM qc_batch_genealogy WHERE id=$1", edge_id)
+        if edge is None:
+            raise HTTPException(404, "Genealogy edge not found")
+        # An issued (APPROVED/RELEASED) certificate's batch lineage is part of
+        # its traceable record — removing an edge that feeds it would silently
+        # rewrite history for a document already handed out.
+        issued = await c.fetchval(
+            "SELECT 1 FROM qc_certificates WHERE batch_id = ANY($1) AND status = ANY($2) LIMIT 1",
+            [edge["parent_batch_id"], edge["child_batch_id"]], list(_ISSUED_FROZEN))
+        if issued:
+            raise HTTPException(409, "That edge feeds an issued (APPROVED/RELEASED) certificate's"
+                                     " batch lineage and cannot be removed")
+        await c.execute("DELETE FROM qc_batch_genealogy WHERE id=$1", edge_id)
     return Response(status_code=204)
 
 
@@ -4079,12 +4097,22 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
         if body.sfr_id:
             if await c.fetchrow("SELECT id FROM qc_sample_field_records WHERE id=$1", body.sfr_id) is None:
                 raise HTTPException(422, "Unknown field record")
+        from_user = body.from_user_id or user["id"]
+        # Append-only continuity: this handoff must start with whoever the
+        # chain last recorded as HAVING custody — otherwise a transfer could
+        # silently skip a custodian (a break in the field-to-lab chain).
+        prev = await c.fetchrow(
+            "SELECT to_user_id FROM qc_chain_of_custody WHERE sample_id=$1"
+            " ORDER BY transferred_at DESC LIMIT 1", sample_id)
+        if prev is not None and prev["to_user_id"] is not None and str(prev["to_user_id"]) != str(from_user):
+            raise HTTPException(409, "Custody continuity broken: the last recorded transfer for this"
+                                     " sample ended with a different custodian than this entry's from_user_id")
         row = await c.fetchrow(
             "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id,"
             " from_location, to_location, transfer_reason, transfer_type, sfr_id,"
             " sample_condition, condition_ok, created_by)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
-            user["org_id"], sample_id, body.from_user_id or user["id"], body.to_user_id,
+            user["org_id"], sample_id, from_user, body.to_user_id,
             body.from_location, body.to_location, body.transfer_reason, body.transfer_type,
             body.sfr_id, body.sample_condition, body.condition_ok, user["id"])
     return _custody_out(dict(row))
@@ -4097,7 +4125,12 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
 _WATER_GRADES = ("TW", "BW", "TR", "RO")
 _STAB_TYPES = ("LT", "ACC", "INT")
 _STAB_STATUSES = ("IN_PROGRESS", "CLOSED")
+# One-way: a closed stability study is a concluded record (shelf_life is its
+# outcome) — reopening it would let a conclusion be silently walked back.
+_STAB_TRANSITIONS = {"IN_PROGRESS": {"CLOSED"}, "CLOSED": set()}
 _TRN_STATUSES = ("draft", "in_transit", "received")
+# Linear, forward-only: a transport cannot un-ship or un-receive itself.
+_TRN_TRANSITIONS = {"draft": {"in_transit"}, "in_transit": {"received"}, "received": set()}
 
 
 class WaterIn(BaseModel):
@@ -4286,13 +4319,18 @@ async def update_stability(sid: str, body: StabilityPatch, user: dict = Depends(
     fields, args = _patch_update(patch, {"protocol", "schedule", "report", "shelf_life", "notes"})
     if not fields:
         return {"ok": True, "noop": True}
-    args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
-    args.append(sid)
     async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_stability_studies WHERE id=$1", sid)
+        if cur is None:
+            raise HTTPException(404, "Stability study not found")
+        target = patch.get("status")
+        if target is not None and target != cur["status"]:
+            if target not in _STAB_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(sid)
         row = await c.fetchrow(
             f"UPDATE qc_stability_studies SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)} RETURNING *", *args)
-        if row is None:
-            raise HTTPException(404, "Stability study not found")
     return _stab_out(dict(row))
 
 
@@ -4332,13 +4370,18 @@ async def update_transport(tid: str, body: TransportPatch, user: dict = Depends(
         patch, {"external_lab", "tracking", "notes"}, {"shipped_date", "expected_date"})
     if not fields:
         return {"ok": True, "noop": True}
-    args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
-    args.append(tid)
     async with rls(user) as c:
+        cur = await c.fetchrow("SELECT status FROM qc_sample_transports WHERE id=$1", tid)
+        if cur is None:
+            raise HTTPException(404, "Transport not found")
+        target = patch.get("status")
+        if target is not None and target != cur["status"]:
+            if target not in _TRN_TRANSITIONS.get(cur["status"], set()):
+                raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(tid)
         row = await c.fetchrow(
             f"UPDATE qc_sample_transports SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)} RETURNING *", *args)
-        if row is None:
-            raise HTTPException(404, "Transport not found")
     return _trn_out(dict(row))
 
 

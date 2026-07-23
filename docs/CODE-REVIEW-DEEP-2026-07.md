@@ -359,19 +359,59 @@ before decode; `revise_certificate` carries `lab_verdict`; `patch_section` FOR
 UPDATE + scope-guard-before-locked-oracle; frontend revise-reason min-5 +
 report status-chip label + modal focus restore.
 
-**P2 — DEFERRED (tracked, not yet done), with rationale:**
+**P2 — REMAINDER, DONE (follow-on batch, no schema change):** every item from
+the prior batch's deferred list that didn't need an owner/SOP call is now fixed:
+- Leaf transition guards — `qc_stability_studies` (`IN_PROGRESS→CLOSED` only,
+  terminal) and `qc_sample_transports` (linear `draft→in_transit→received`,
+  no skip/reverse) now use the same `_XXX_TRANSITIONS` guard pattern as every
+  other QC lifecycle in this file. Water `passed` server-grading stays
+  deferred (see below) — it's a real design gap, not an oversight.
+- Genealogy cycle-check TOCTOU closed with a per-org
+  `pg_advisory_xact_lock` (same idiom as cert numbering/RQS ordering)
+  around the check-then-insert. Genealogy edge delete now refuses to remove
+  an edge feeding an APPROVED/RELEASED certificate's batch lineage (409) —
+  an issued document's traceability can't be silently rewritten.
+- Custody continuity enforced: a new chain-of-custody entry's effective
+  `from_user_id` must match the previous entry's `to_user_id` for that
+  sample, or 409 — a handoff can no longer skip a custodian.
+- Login rate limiter now keys on the resolved account id (falling back to
+  the typed identifier only when nothing resolves), so username vs. email
+  vs. case variants of one account share a single attempt bucket instead of
+  each getting a fresh one.
+- `assign()`'s broad `except Exception → 400` removed — `ON CONFLICT
+  (task_id, user_id) DO UPDATE` already absorbs the only real constraint
+  conflict, so the catch was masking genuine 500s as a misleading 400.
+- `export_range_pdf` validates `kind` and `content.period.start` before
+  they reach `_ribbon_svg`'s unguarded `date.fromisoformat()` — a malformed
+  client-supplied preview payload gets 422, not a 500.
+- Recurrence's next-instance week resolution now calls a new shared
+  `ensure_week()` (`app/api/weekwindow.py`, same upsert idiom as
+  `weekly_snapshot.py`'s `_ensure_week`) instead of a plain `SELECT` — a
+  recurrence advancing past however far `calendar_weeks` is seeded no
+  longer orphans the new task with `week_id=NULL`.
+- The weekly report's overdue cutoff is `min(today, thu+1)` instead of
+  always `thu+1` — a task due later in a still-in-progress week is no
+  longer counted overdue before its date arrives; a report on an already-
+  elapsed week is unaffected.
+- Auth screens (splash sign-in card, first-login password-change card, and
+  their toasts/errors in `entry.js`/`integrate.js`) are now bilingual
+  EN/МК, matching the rest of the app.
+- SW version-mix: `index.html`'s registration now reloads once on
+  `controllerchange` (guarded against loops) — `skipWaiting()`+
+  `clients.claim()` still hand control to a new worker instantly, but an
+  already-open tab no longer keeps running stale in-memory JS under it.
+
+**P2 — still deferred, with rationale:**
 - `qc.py` monolith split — explicitly its own reviewed refactor (roadmap §10).
-- Leaf transition guards (stability/transport) + water `passed` server-grading —
-  the latter needs a limit model for the free-form water jsonb params.
-- Genealogy/dependency cycle checks are TOCTOU (advisory-lock fix) + genealogy
-  edge delete guard + custody from→to continuity.
-- Login limiter resolved-account key; `assign()` 400-masking; `export_range.pdf`
-  4xx validation; recurrence `week_id` upsert; weekly-report mid-week overdue.
-- Full i18n of auth screens / error toasts; SW `skipWaiting`+`claim` version-mix.
+- Water `passed` server-grading — needs a limit/acceptance-range model for
+  the free-form water jsonb params before the server can safely auto-grade
+  instead of trusting the human-entered value; inventing limits here would
+  itself be a fabrication risk.
 - **Owner/SOP input needed:** approver≠reviewer separation on the certificate
   lifecycle ("confirm against SOP", §5); Ph. Eur. 3028 component-order guard is
   advisory (the app fixes A=neutral/B=acid at spec authoring).
 
-**Deploy:** none of the above is deployed yet — both live stacks remain at their
-prior images. Deployment (migration 0042 + backend + frontend to wwf_mass and, on
-the owner's go, production) is a separate owner-gated step.
+**Deploy:** none of the above (either P2 batch) is deployed yet — both live
+stacks remain at their prior images. Deployment (migration 0042 + backend +
+frontend to wwf_mass and, on the owner's go, production) is a separate
+owner-gated step.

@@ -17,6 +17,7 @@ GF.WWF = GF.WWF || {};
   let entrySkin = 'dark'; // the random skin showcased on the current splash
 
   const $ = (id) => (window.GF && GF.$ ? GF.$(id) : document.getElementById(id));
+  const AL = (en, mk) => (GF.state && GF.state.lang === 'mk' ? mk : en);
 
   // The splash/login screen showcases a RANDOM skin each time it's shown — the
   // leaf, glows and accents take that skin's palette. Restricted to the dark
@@ -38,22 +39,23 @@ GF.WWF = GF.WWF || {};
   function loginCardHTML() {
     return `
       <div class="gf-card-title">Weekly Weed Flow</div>
-      <div class="gf-card-sub">Sign in to continue</div>
-      <input id="wwf-u" class="gf-in" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
-      <input id="wwf-p" class="gf-in" type="password" placeholder="Password" autocomplete="current-password"
+      <div class="gf-card-sub">${AL('Sign in to continue', 'Најавете се за да продолжите')}</div>
+      <input id="wwf-u" class="gf-in" placeholder="${AL('Username', 'Корисничко име')}" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <input id="wwf-p" class="gf-in" type="password" placeholder="${AL('Password', 'Лозинка')}" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
-      <button class="gf-btn" onclick="GF.WWF.doLogin()">Sign in</button>
+      <button class="gf-btn" onclick="GF.WWF.doLogin()">${AL('Sign in', 'Најави се')}</button>
       <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
   function changePwCardHTML() {
     return `
-      <div class="gf-card-title">Set a new password</div>
-      <div class="gf-card-sub">First login — choose a password (min 8 characters).</div>
-      <input id="wwf-np" class="gf-in" type="password" placeholder="New password" autocomplete="new-password">
-      <input id="wwf-np2" class="gf-in" type="password" placeholder="Confirm password" autocomplete="new-password"
+      <div class="gf-card-title">${AL('Set a new password', 'Постави нова лозинка')}</div>
+      <div class="gf-card-sub">${AL('First login — choose a password (min 8 characters).',
+                                     'Прва пријава — изберете лозинка (мин. 8 карактери).')}</div>
+      <input id="wwf-np" class="gf-in" type="password" placeholder="${AL('New password', 'Нова лозинка')}" autocomplete="new-password">
+      <input id="wwf-np2" class="gf-in" type="password" placeholder="${AL('Confirm password', 'Потврди лозинка')}" autocomplete="new-password"
              onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()">
-      <button class="gf-btn" onclick="GF.WWF.doChangePw()">Set password &amp; continue</button>
+      <button class="gf-btn" onclick="GF.WWF.doChangePw()">${AL('Set password &amp; continue', 'Постави лозинка и продолжи')}</button>
       <div id="wwf-login-msg" class="gf-msg"></div>`;
   }
 
