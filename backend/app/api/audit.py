@@ -142,26 +142,70 @@ async def audit_tables(user: dict = Depends(require_role(*_ELEVATED))):
             for t, n in sorted(counts.items(), key=lambda kv: -kv[1])]
 
 
+# M6: verify RECOMPUTES each row's entry_hash from the stored columns and
+# compares it to the recorded hash — not just the prev_hash⇄entry_hash pointer
+# linkage. The recompute mirrors app.fn_audit_row's payload EXACTLY:
+#   COALESCE(prev_hash,'') || actor || action || table_name || record_id
+#   || created_at::text || new_values::text || old_values::text
+# The trigger's actor is COALESCE(current_setting('app.user_id',true),'system').
+# For a real user the app SETs it to the canonical uuid text → the stored user_id;
+# `user_id::text` reproduces it. For a system/admin write the actor is either ''
+# (the empty-string placeholder a custom GUC reverts to on a connection that has
+# had it set with SET LOCAL — the common warm-pool case) or 'system' (a
+# never-set connection). Both leave user_id NULL and are indistinguishable from
+# the stored row, so a NULL-user_id row is accepted if EITHER reconstruction
+# matches — no false break, while a genuine content edit matches NEITHER. This
+# catches an in-place edit of old_values/new_values that left the hash columns
+# intact (the precise BYPASSRLS/DBA tamper a hash chain exists to detect). It
+# also anchors the head (row 1 must have an empty prev_hash) so head truncation
+# surfaces, and retains the pointer-linkage / middle-deletion check. created_at
+# renders under the same server TimeZone the writes used (neither the app nor the
+# admin pool overrides it), reproducing the trigger's now()::text.
 _CHAIN_SQL = """
 WITH chained AS (
-  SELECT id, entry_hash, prev_hash,
-         lag(entry_hash) OVER (ORDER BY id) AS prior_entry
+  SELECT id, entry_hash, prev_hash, user_id, action, table_name, record_id,
+         old_values, new_values, created_at,
+         lag(entry_hash) OVER (ORDER BY id) AS prior_entry,
+         row_number()   OVER (ORDER BY id) AS rn
   FROM audit_log
+),
+recomputed AS (
+  SELECT id, entry_hash, prev_hash, prior_entry, rn,
+         encode(digest(convert_to(
+             COALESCE(prev_hash,'') || COALESCE(user_id::text,'')
+             || action || table_name || COALESCE(record_id,'')
+             || created_at::text
+             || COALESCE(new_values::text,'') || COALESCE(old_values::text,''),
+           'UTF8'), 'sha256'), 'hex') AS calc_empty,
+         encode(digest(convert_to(
+             COALESCE(prev_hash,'') || COALESCE(user_id::text,'system')
+             || action || table_name || COALESCE(record_id,'')
+             || created_at::text
+             || COALESCE(new_values::text,'') || COALESCE(old_values::text,''),
+           'UTF8'), 'sha256'), 'hex') AS calc_system
+  FROM chained
+),
+broken AS (
+  SELECT id, rn,
+         (calc_empty <> entry_hash AND calc_system <> entry_hash)           AS hash_bad,
+         (prior_entry IS NOT NULL AND COALESCE(prev_hash,'') <> prior_entry) AS link_bad,
+         (rn = 1 AND COALESCE(prev_hash,'') <> '')                          AS head_bad
+  FROM recomputed
 )
-SELECT count(*)                                                       AS total,
-       count(*) FILTER (
-         WHERE prior_entry IS NOT NULL
-           AND COALESCE(prev_hash,'') <> prior_entry)                 AS breaks,
-       min(id) FILTER (
-         WHERE prior_entry IS NOT NULL
-           AND COALESCE(prev_hash,'') <> prior_entry)                 AS first_break
-FROM chained
+SELECT count(*)                                              AS total,
+       count(*) FILTER (WHERE hash_bad)                      AS hash_breaks,
+       count(*) FILTER (WHERE link_bad)                      AS link_breaks,
+       count(*) FILTER (WHERE head_bad)                      AS head_breaks,
+       count(*) FILTER (WHERE hash_bad OR link_bad OR head_bad) AS breaks,
+       min(id)  FILTER (WHERE hash_bad OR link_bad OR head_bad) AS first_break
+FROM broken
 """
 
 
 @router.get("/verify")
 async def verify_chain(user: dict = Depends(require_role("ADMIN"))):
-    """Validate both global hash chains (each row links the prior one).
+    """Validate both global hash chains: recompute each row's hash from its stored
+    columns AND check pointer linkage + head anchoring.
 
     Runs over the admin pools because each chain spans every org — verifying
     only the org-visible subset would report false breaks where other-org
@@ -173,6 +217,9 @@ async def verify_chain(user: dict = Depends(require_role("ADMIN"))):
             "ok": (row["breaks"] or 0) == 0,
             "total": row["total"],
             "breaks": row["breaks"] or 0,
+            "hash_breaks": row["hash_breaks"] or 0,
+            "link_breaks": row["link_breaks"] or 0,
+            "head_breaks": row["head_breaks"] or 0,
             "first_break_id": row["first_break"],
         }
     return {"ok": out["users"]["ok"] and out["tasks"]["ok"], **out}

@@ -429,3 +429,21 @@ async def test_task_tree_returns_hierarchy(client, admin_headers):
     assert ids[child]["node_kind"] == "annex"
     # 'tree' must not be captured as a task id (route ordering)
     assert all(n["id"] != "tree" for n in tree)
+
+
+async def test_external_ref_duplicate_is_409_not_500(client, admin_headers):
+    """M5: a repeated external_ref (an at-least-once integration retry) must map to
+    409, not an uncaught 500 — the unique index is what signals idempotency."""
+    r = await client.post("/tasks", json={"title": "Imported once", "status": "pending",
+                                           "external_ref": "ext-dup-001"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # a second create with the same external_ref collides on tasks_org_external_ref_key
+    r = await client.post("/tasks", json={"title": "Imported again", "status": "pending",
+                                          "external_ref": "ext-dup-001"}, headers=admin_headers)
+    assert r.status_code == 409, r.text
+    # PATCHing another task onto an already-used external_ref is also a 409
+    other = (await client.post("/tasks", json={"title": "Another", "status": "pending"},
+                               headers=admin_headers)).json()
+    r = await client.patch(f"/tasks/{other['id']}", json={"external_ref": "ext-dup-001"},
+                           headers=admin_headers)
+    assert r.status_code == 409, r.text

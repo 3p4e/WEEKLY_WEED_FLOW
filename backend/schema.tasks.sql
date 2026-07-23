@@ -1017,6 +1017,8 @@ CREATE TABLE public.qc_samples (
     retention_expiry date,
     non_conforming boolean DEFAULT false NOT NULL,
     non_conforming_reason text,
+    tested_by uuid,
+    reviewed_by uuid,
     CONSTRAINT qc_samples_kind_check CHECK (((sample_kind IS NULL) OR (sample_kind = ANY (ARRAY['PC'::text, 'MB'::text, 'EXT'::text, 'RET'::text, 'STAB'::text, 'RT'::text, 'CC'::text])))),
     CONSTRAINT qc_samples_status_check CHECK ((status = ANY (ARRAY['COLLECTED'::text, 'IN_TRANSIT'::text, 'RECEIVED'::text, 'IN_TEST'::text, 'TESTED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'REJECTED'::text, 'QUARANTINE'::text])))
 );

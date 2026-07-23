@@ -1,14 +1,12 @@
 """P2 — the audit trail's tamper-evidence claim, precisely.
 
-/audit/verify walks the hash chain checking that each row's prev_hash
-matches the entry_hash of the row before it (the baselines' app.fn_audit_row
-trigger writes both at insert time). That's a real, useful guarantee: it
-catches a row being deleted or reordered. It is a *narrower* guarantee than
-"tamper-evident" might suggest, though — entry_hash is never recomputed
-from a row's own current content, so editing old_values/new_values in place
-without touching the hash columns is invisible to /verify. Both properties
-are pinned below so the distinction stays visible in the test suite, not
-just in a docstring.
+/audit/verify (as of M6) RECOMPUTES each row's entry_hash from its stored
+columns and compares it to the recorded hash, AND checks that each row's
+prev_hash matches the entry_hash of the row before it, AND anchors the head
+row. So it catches: a row deleted or reordered (linkage), an in-place edit
+of old_values/new_values that left the hash columns intact (recompute), and
+head truncation (anchor). The tests below pin all three, plus the clean-chain
+baseline.
 """
 from app.db import tasks_admin_pool, users_admin_pool
 from tests.conftest import create_user
@@ -175,29 +173,36 @@ async def test_verify_reports_ok_when_chain_intact(client, admin_headers):
     assert body["tasks"]["first_break_id"] is None
 
 
-async def test_verify_does_not_detect_in_place_content_tampering(client, admin_headers):
-    """Documents the real gap: /verify never recomputes entry_hash from a
-    row's own content, so editing old_values/new_values without touching
-    entry_hash/prev_hash passes verification. Safe to run anywhere — it
-    never touches the hash columns, so it can't break chain linkage for
-    any other test."""
+async def test_verify_detects_in_place_content_tampering(client, admin_headers):
+    """M6: /verify now recomputes entry_hash from the row's own content, so a
+    direct edit of new_values that leaves the hash columns intact is DETECTED —
+    the precise BYPASSRLS/DBA tamper a hash chain exists to catch. The original
+    content is restored at the end so the chain is left clean for later tests (the
+    linkage never changed, so nothing downstream is affected either way)."""
     r = await client.post("/tasks", json={"title": "Tamper target", "status": "pending"}, headers=admin_headers)
     task_id = r.json()["id"]
     row = await tasks_admin_pool().fetchrow(
-        "SELECT id FROM audit_log WHERE table_name='tasks' AND record_id=$1 AND action='INSERT'", task_id)
+        "SELECT id, new_values FROM audit_log WHERE table_name='tasks' AND record_id=$1 AND action='INSERT'",
+        task_id)
     assert row is not None
+    original = row["new_values"]
     tampered = {"title": "SOMEONE EDITED THIS ROW DIRECTLY", "status": "pending"}
     await tasks_admin_pool().execute("UPDATE audit_log SET new_values=$1 WHERE id=$2", tampered, row["id"])
-
-    r = await client.get("/audit/verify", headers=admin_headers)
-    assert r.status_code == 200
-    # This is the gap, asserted explicitly rather than implied: content was
-    # altered but the chain still reports intact.
-    assert r.json()["ok"] is True
-
-    r = await client.get(f"/audit?table_name=tasks&record_id={task_id}", headers=admin_headers)
-    tampered_entry = next(e for e in r.json() if e["id"] == row["id"] and e["source"] == "tasks")
-    assert tampered_entry["new_values"]["title"] == "SOMEONE EDITED THIS ROW DIRECTLY"
+    try:
+        r = await client.get("/audit/verify", headers=admin_headers)
+        assert r.status_code == 200
+        body = r.json()
+        # the recompute no longer matches the recorded hash → the chain is flagged
+        assert body["ok"] is False
+        assert body["tasks"]["ok"] is False
+        assert body["tasks"]["hash_breaks"] >= 1
+        assert body["tasks"]["first_break_id"] is not None
+    finally:
+        # restore the row's content so the recompute matches again
+        await tasks_admin_pool().execute(
+            "UPDATE audit_log SET new_values=$1 WHERE id=$2", original, row["id"])
+    # the chain verifies clean again once the content is restored
+    assert (await client.get("/audit/verify", headers=admin_headers)).json()["ok"] is True
 
 
 async def test_verify_detects_a_deleted_row(client, admin_headers):

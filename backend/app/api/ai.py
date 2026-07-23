@@ -14,6 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.api.tasks import _assert_scope_visible, _uuid_or_422
 from app.config import settings
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
@@ -379,6 +380,12 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
             "SELECT letta_agent_id FROM ai_agent_bindings"
             " WHERE function_key=$1 AND is_active=true ORDER BY scope LIMIT 1", function_key)
         if function_key == "dependency_advisor" and task_id:
+            # M1: the task_id is a caller-supplied BODY param, so the structural
+            # {task_id}-path scope test never covered it. Guard the uuid (garbage
+            # → 422, not a 500) and enforce department scope — a dept-scoped
+            # manager must not read another department's task family via the agent.
+            _uuid_or_422(task_id, "task_id")
+            await _assert_scope_visible(c, task_id, user)
             context = await _family_context(c, await roster(user), task_id)
         elif function_key in _DATA_FUNCS:
             context = await _task_context(c, await roster(user), week_id=week_id, dept=dept_scope(user))

@@ -443,3 +443,15 @@ async def test_functions_listing_is_filtered_by_role(client, admin_headers):
     assert "translate_bilingual" in cat                      # personal tier stays
     assert "weekly_summary" not in cat                       # planning tier hidden
     assert "corpus_qa" not in cat                            # elevated tier hidden
+
+
+async def test_dependency_advisor_rejects_garbage_task_id(client, admin_headers):
+    """M1: the dependency_advisor task_id is a caller-supplied BODY param. It is
+    uuid-guarded (garbage → 422, not an asyncpg cast 500) before the family-context
+    load, and the same code path runs _assert_scope_visible so a dept-scoped manager
+    cannot read another department's task family through the agent."""
+    r = await client.post("/ai/dependency_advisor",
+                          json={"input": "suggest dependencies",
+                                "context": {"task_id": "not-a-uuid"}},
+                          headers=admin_headers)
+    assert r.status_code == 422

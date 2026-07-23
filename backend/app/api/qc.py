@@ -18,6 +18,7 @@ import base64
 import hashlib
 import uuid
 from datetime import date, datetime
+from urllib.parse import quote as _urlquote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
@@ -432,6 +433,8 @@ def _sample_out(r: dict) -> dict:
         "non_conforming": r["non_conforming"], "non_conforming_reason": r["non_conforming_reason"],
         "parent_id": str(r["parent_id"]) if r["parent_id"] else None,
         "sampling_plan_id": str(r["sampling_plan_id"]) if r["sampling_plan_id"] else None,
+        "tested_by": str(r["tested_by"]) if r.get("tested_by") else None,
+        "reviewed_by": str(r["reviewed_by"]) if r.get("reviewed_by") else None,
         "notes": r["notes"], "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -533,8 +536,10 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
 async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(sample_id, "Sample")
     patch = body.model_dump(exclude_unset=True)
+    stamp: list[tuple[str, object]] = []
     async with rls(user) as c:
-        cur = await c.fetchrow("SELECT status FROM qc_samples WHERE id=$1", sample_id)
+        cur = await c.fetchrow(
+            "SELECT status, batch_id, tested_by FROM qc_samples WHERE id=$1", sample_id)
         if cur is None:
             raise HTTPException(404, "Sample not found")
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
@@ -546,6 +551,29 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
             # release / reject are a QP-level decision
             if target in _QP_TRANSITION_TARGETS and user["role"] not in _QP_ROLES:
                 raise HTTPException(403, f"{target} is a Qualified-Person decision")
+            # H2 (second person): the reviewer of test results must not be the
+            # analyst who produced them — mirrors the certificate reviewer≠analyst
+            # control. Stamp who tested (→TESTED) and who reviewed (→REVIEWED).
+            if target == "TESTED":
+                stamp.append(("tested_by", user["id"]))
+            if target == "REVIEWED":
+                if cur["tested_by"] and str(cur["tested_by"]) == str(user["id"]):
+                    raise HTTPException(
+                        403, "The reviewer of a tested sample must differ from the"
+                             " analyst who tested it (second-person review)")
+                stamp.append(("reviewed_by", user["id"]))
+            # H2 (batch-release OOS gate): a sample cannot be RELEASED while an OOS
+            # investigation on its batch is still open — the exact condition every
+            # CoQ path already blocks. A failing result auto-quarantines, but the
+            # QUARANTINE→…→RELEASED path was otherwise reachable with an OOS OPEN.
+            if target == "RELEASED" and cur["batch_id"]:
+                open_oos = await c.fetchval(
+                    "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
+                    cur["batch_id"])
+                if open_oos:
+                    raise HTTPException(
+                        409, f"{open_oos} open OOS investigation(s) on batch {cur['batch_id']}"
+                             " — the sample cannot be released until they are closed")
         if patch.get("sample_kind") is not None and patch["sample_kind"] not in _SAMPLE_KINDS:
             raise HTTPException(422, f"sample_kind must be one of: {', '.join(_SAMPLE_KINDS)} (QCSOP 011 §6.2.1)")
         fields, args = [], []
@@ -554,6 +582,8 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
         for col, val in patch.items():
             if val is None and col not in _NULLABLE:
                 continue
+            args.append(val); fields.append(f"{col}=${len(args)}")
+        for col, val in stamp:
             args.append(val); fields.append(f"{col}=${len(args)}")
         if not fields:
             return {"ok": True, "noop": True}
@@ -1716,24 +1746,32 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
         role = _COQ_SIG_ROLE.get(s.get("meaning"), s.get("meaning") or "—")
         sig_rows.append((role, s.get("signer_name") or "—", s.get("signer_role") or "—",
                          (s.get("signed_at") or "")[:10] or "—"))
-    if not sig_rows and signer_names:
-        # no captured e-signatures — fall back to the certificate's roles of
-        # record (name resolved; the exact per-role date isn't stored → '—').
-        for label, key in (("Изготвил~~Prepared by", "analyst"),
-                           ("Прегледал~~Reviewed by", "reviewer"),
-                           ("Одобрил~~Approved by", "approver")):
-            nm = signer_names.get(key)
-            if nm:
-                sig_rows.append((label, nm, "—", "—"))
     if sig_rows:
+        # ONLY genuine captured Annex-11 e-signatures populate the signatory
+        # table — a name in the Signatory column asserts an executed signature.
         sig += ("[[TABLE:data]]\n"
                 "Улога~~Role ||| Потписник~~Signatory ||| Функција~~Function ||| Датум~~Date\n")
         for role, name, fn, dt in sig_rows:
             sig += f"{role} ||| {c(name)} ||| {c(fn)} ||| {c(dt)}\n"
         sig += "[[/TABLE]]\n\n"
     else:
-        sig += ("_Потпишано и пуштено во GrowFlow (Annex 11 ревизиона трага)._"
-                "|||_Signed and released in GrowFlow (Annex 11 audit trail)._\n\n")
+        # H5: no e-signature was captured. NEVER fabricate a signatory table from
+        # the lifecycle roles-of-record — that would assert Prepared/Reviewed/
+        # Approved signatures that were never executed. State honestly that
+        # responsibility is attributed via the Annex-11 audit trail (not e-signed),
+        # and name the roles of record as an explicit non-signature attribution.
+        sig += ("_Оваа серија е обработена во GrowFlow со целосна Annex 11 ревизиона"
+                " трага; долунаведените лица се одговорни според евиденцијата, но"
+                " документот не носи електронски потпис._"
+                "|||_This batch was processed in GrowFlow under a complete Annex 11"
+                " audit trail; the persons below are responsible per the record,"
+                " but this document carries no electronic signature._\n\n")
+        for mk, en, key in (("Изготвил", "Prepared by", "analyst"),
+                            ("Прегледал", "Reviewed by", "reviewer"),
+                            ("Одобрил", "Approved by", "approver")):
+            nm = (signer_names or {}).get(key)
+            if nm:
+                sig += f"{mk}: {c(nm)}|||{en}: {c(nm)}\n\n"
 
     footer = "МК ГМП сертифицирано постројение|||MK GMP Certified Facility\n"
     return head + title + grid + s01 + s02 + verdict + comp + note + sig + footer
@@ -1752,6 +1790,19 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             raise HTTPException(404, "Certificate not found")
         if coa["status"] != "RELEASED":
             raise HTTPException(409, "A COQ is issued only from a RELEASED certificate")
+        # H1 (defense-in-depth): if this certificate was promoted from an ingested
+        # eCoA, that source document's §6.3.2 checklist must be ACCEPTED before a
+        # CoQ is rendered. The promote path now enforces this too, but this closes
+        # the gap for any certificate promoted before the promote-gate landed.
+        src_doc = await c.fetchrow(
+            "SELECT id, doc_number FROM qc_coa_documents WHERE promoted_coa_id=$1", coa_id)
+        if src_doc is not None:
+            src_cl = await c.fetchrow(
+                "SELECT outcome FROM qc_ecoa_checklist WHERE document_id=$1", src_doc["id"])
+            if src_cl is None or src_cl["outcome"] != "ACCEPTED":
+                raise HTTPException(
+                    409, f"Source eCoA {src_doc['doc_number']} lacks an ACCEPTED §6.3.2"
+                         " review checklist (QCT-018) — cannot certify")
         # QCSOP 012 §6.4.1/§6.6 (URS gate): no COQ for a batch with an open OOS
         # investigation — the COQ is compiled only on the investigation-
         # confirmed result set. Explicit, logged reason; never a silent pass.
@@ -2173,6 +2224,7 @@ def _notif_out(r: dict) -> dict:
         "id": str(r["id"]), "part": r["part"], "recipients": r["recipients"],
         "message": r["message"], "acknowledged": r["acknowledged"],
         "acknowledged_at": r["acknowledged_at"].isoformat() if r["acknowledged_at"] else None,
+        "acknowledged_by_id": str(r["acknowledged_by_id"]) if r.get("acknowledged_by_id") else None,
         "sent_by_id": str(r["sent_by_id"]) if r["sent_by_id"] else None,
         "sent_at": r["sent_at"].isoformat(),
     }
@@ -2397,17 +2449,43 @@ async def add_oos_notification(oos_id: str, body: OosNotifyIn,
     return _notif_out(dict(row))
 
 
+def _ack_authorized(user: dict, recipients) -> bool:
+    """M9: a GxP acknowledgement must be made by an addressed recipient. ADMIN
+    (the system administrator, a QP-equivalent QC writer) may always ack; an
+    unaddressed notification (empty recipients) has no membership to enforce.
+    Otherwise the caller must match a recipient by username, full name, or role
+    (case-insensitive; an email-style recipient also matches on its local part)."""
+    if user.get("role") == ADMIN or not recipients:
+        return True
+    ident = {str(v).strip().lower() for v in
+             (user.get("username"), user.get("full_name"), user.get("role")) if v}
+    for r in recipients:
+        rl = str(r).strip().lower()
+        if rl and (rl in ident or rl.split("@")[0] in ident):
+            return True
+    return False
+
+
 @router.post("/oos/{oos_id}/notifications/{notif_id}/ack")
 async def ack_oos_notification(oos_id: str, notif_id: str,
                                user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(oos_id, "OOS record")
     _uuid_or_404(notif_id, "Notification")
     async with rls(user) as c:
-        row = await c.fetchrow(
-            "UPDATE qc_oos_notifications SET acknowledged=true, acknowledged_at=now()"
-            " WHERE id=$1 AND oos_id=$2 RETURNING *", notif_id, oos_id)
-        if row is None:
+        cur = await c.fetchrow(
+            "SELECT recipients FROM qc_oos_notifications WHERE id=$1 AND oos_id=$2",
+            notif_id, oos_id)
+        if cur is None:
             raise HTTPException(404, "Notification not found")
+        # M9: enforce recipient membership + attribute WHO acknowledged — an
+        # acknowledgement that records neither the recipient nor the acknowledger
+        # is a forgeable GxP act.
+        if not _ack_authorized(user, cur["recipients"]):
+            raise HTTPException(403, "Only an addressed recipient may acknowledge this notification")
+        row = await c.fetchrow(
+            "UPDATE qc_oos_notifications SET acknowledged=true, acknowledged_at=now(),"
+            " acknowledged_by_id=$3 WHERE id=$1 AND oos_id=$2 RETURNING *",
+            notif_id, oos_id, user["id"])
     return _notif_out(dict(row))
 
 
@@ -2692,10 +2770,17 @@ async def download_document_file(file_id: str, user: dict = Depends(require_role
         raise HTTPException(404, "Document file not found")
     data = bytes(row["content"])
     integrity = "OK" if hashlib.sha256(data).hexdigest() == row["sha256"] else "MISMATCH"
-    safe_name = (row["filename"] or "download").replace('"', "").replace("\\", "").replace("\n", "")
+    raw_name = (row["filename"] or "download").replace('"', "").replace("\\", "").replace("\n", "")
+    # M8: Starlette latin-1-encodes header values, so a Cyrillic filename (routine
+    # here) in a bare filename="…" raises UnicodeEncodeError → 500. Emit an RFC-5987
+    # filename*=UTF-8'' value for the real name plus an ASCII-only fallback for old
+    # clients (non-latin-1 chars in the fallback are dropped, never crash).
+    ascii_name = raw_name.encode("ascii", "ignore").decode("ascii") or "download"
+    disposition = (f"attachment; filename=\"{ascii_name}\"; "
+                   f"filename*=UTF-8''{_urlquote(raw_name)}")
     return Response(
         content=data, media_type=row["content_type"] or "application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"',
+        headers={"Content-Disposition": disposition,
                  "X-Integrity": integrity, "X-Content-SHA256": row["sha256"]})
 
 
@@ -3045,6 +3130,14 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
             "UPDATE qc_ecoa_checklist SET outcome=$1, reviewed_by=$2, reviewed_at=now(),"
             " notes=COALESCE($3, notes), updated_by=$2, updated_at=now() WHERE id=$4 RETURNING *",
             body.outcome, user["id"], note, cur["id"])
+        # H1: a REJECTED review voids the eCoA (its docstring's promise, which the
+        # code never fulfilled) — drive the still-open document to REJECTED so it
+        # can no longer be promoted. An already-terminal doc (PROMOTED/REJECTED) is
+        # left untouched.
+        if body.outcome == "REJECTED":
+            await c.execute(
+                "UPDATE qc_coa_documents SET status='REJECTED', updated_by=$1, updated_at=now()"
+                " WHERE id=$2 AND status NOT IN ('PROMOTED','REJECTED')", user["id"], doc_id)
     return _checklist_out(dict(row))
 
 
@@ -3090,7 +3183,17 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
             nlabel = _norm_label(item.raw_label)
             param = None
             if nlabel in mapped_by_label:
-                param = param_by_id.get(str(mapped_by_label[nlabel]))
+                candidate = param_by_id.get(str(mapped_by_label[nlabel]))
+                # H6 (spec-scoped auto-map): a label previously mapped (org-wide,
+                # cross-document) must only auto-apply when its parameter belongs
+                # to THIS document's specification. Otherwise a label once mapped
+                # to spec A's parameter would grade a spec-B value against spec A's
+                # limits, and promote() would insert that wrong `complies` straight
+                # onto the certificate — bypassing the same-spec guard the manual
+                # add_result / update_extraction paths enforce.
+                if (candidate is not None and doc["specification_id"] is not None
+                        and str(candidate.get("spec_id")) == str(doc["specification_id"])):
+                    param = candidate
             if param is None:
                 param = by_name.get(nlabel)
             if param is not None:
@@ -3259,6 +3362,19 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             raise HTTPException(409, "Document already promoted")
         if not doc["specification_id"]:
             raise HTTPException(409, "Promotion needs a specification to certify against")
+        # H1 (§6.3.2 QCT-018 gate): an external CoA becomes a native certificate
+        # ONLY after its review checklist is signed ACCEPTED by the Head of QC.
+        # Without this, a PENDING / absent / explicitly-REJECTED checklist could
+        # still be promoted into a DRAFT→…→RELEASED certificate usable standalone
+        # and via get_inherited_results — un-vetted external data entering the GMP
+        # record. The CoQ-aggregation compile enforced this; single-doc promote did
+        # not.
+        cl = await c.fetchrow(
+            "SELECT outcome FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
+        if cl is None or cl["outcome"] != "ACCEPTED":
+            raise HTTPException(
+                409, f"eCoA {doc['doc_number']} needs an ACCEPTED §6.3.2 review"
+                     " checklist (QCT-018) before promotion")
         rows = await c.fetch(
             "SELECT * FROM qc_coa_extractions WHERE document_id=$1 ORDER BY created_at", doc_id)
         mapped = [dict(r) for r in rows if r["parameter_id"] is not None]

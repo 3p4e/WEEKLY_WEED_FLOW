@@ -427,6 +427,12 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                 body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
                 body.estimated_hours, body.progress,
             )
+        except asyncpg.UniqueViolationError:
+            # M5: a repeated external_ref (at-least-once integration retry) hits
+            # tasks_org_external_ref_key. The unique index signals idempotency was
+            # intended, so map to 409 (not an uncaught 500) — the caller can treat
+            # it as "already imported".
+            raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
         # Feed-only awareness (NO recipients): creation never notifies —
@@ -625,6 +631,10 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
             row = await c.fetchrow(
                 f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
                 f" AND is_deleted=false RETURNING *", *args)
+        except asyncpg.UniqueViolationError:
+            # M5: patching external_ref to a value another task already carries
+            # would otherwise 500 — surface the collision as a 409.
+            raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
             raise HTTPException(422, "Unknown department, week, or parent task")
         if row is None:

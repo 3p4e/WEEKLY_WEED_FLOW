@@ -127,6 +127,13 @@ async def download(path: str, user: dict = Depends(_require_elevated)):
     output/ directory; length-cap here keeps abuse out of the upstream."""
     if len(path) > 512:
         raise HTTPException(status_code=422, detail="Path too long")
+    # M2: {path:path} allows slashes, and httpx RFC-3986 joins collapse `../`, so
+    # an un-validated path (e.g. `../../api/workflows`) would reach arbitrary
+    # internal qms-api endpoints the allowlist exists to block. Reject traversal
+    # and absolute paths before forwarding — this download is confined to the
+    # upstream's output/ directory.
+    if path.startswith(("/", "\\")) or "\\" in path or ".." in path.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
     r = await _forward_get(f"/api/download/{path}")
     return Response(
         content=r.content,

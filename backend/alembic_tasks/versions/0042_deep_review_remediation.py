@@ -11,6 +11,9 @@ Schema half of the 2026-07 deep-review fixes (docs/CODE-REVIEW-DEEP-2026-07.md):
   so every approval alert was silently dropped by emit()'s savepoint.
 - M9: `qc_oos_notifications.acknowledged_by_id` — an OOS acknowledgement must
   record WHO acknowledged (attributable GxP act), not just a bare flag.
+- H2: `qc_samples.tested_by` / `qc_samples.reviewed_by` — capture who tested and
+  who reviewed a sample, so the TESTED→REVIEWED transition can enforce a
+  second-person review (reviewer≠analyst), mirroring the certificate control.
 - LOW (custody): `qc_chain_of_custody` becomes DB-enforced append-only — the
   single all-command `org_isolation` policy is split into SELECT + INSERT only,
   so FORCE RLS denies UPDATE/DELETE (matching the audit_log pattern); a custody
@@ -46,6 +49,10 @@ def upgrade() -> None:
     # ── M9 — record who acknowledged an OOS notification
     op.execute("ALTER TABLE public.qc_oos_notifications ADD COLUMN acknowledged_by_id uuid")
 
+    # ── H2 — capture the analyst/reviewer of record for second-person review
+    op.execute("ALTER TABLE public.qc_samples ADD COLUMN tested_by uuid")
+    op.execute("ALTER TABLE public.qc_samples ADD COLUMN reviewed_by uuid")
+
     # ── LOW — qc_chain_of_custody append-only (SELECT + INSERT only)
     op.execute("DROP POLICY org_isolation ON public.qc_chain_of_custody")
     op.execute("CREATE POLICY org_isolation_select ON public.qc_chain_of_custody"
@@ -60,6 +67,9 @@ def downgrade() -> None:
     op.execute("CREATE POLICY org_isolation ON public.qc_chain_of_custody"
                " USING ((org_id = app.current_org_id()))"
                " WITH CHECK ((org_id = app.current_org_id()))")
+
+    op.execute("ALTER TABLE public.qc_samples DROP COLUMN reviewed_by")
+    op.execute("ALTER TABLE public.qc_samples DROP COLUMN tested_by")
 
     op.execute("ALTER TABLE public.qc_oos_notifications DROP COLUMN acknowledged_by_id")
 
