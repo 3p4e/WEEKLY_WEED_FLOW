@@ -623,7 +623,8 @@ async def test_oos_role_gating(client, admin_headers):
 
 
 # ── Phase 3 U1 — Certificate of Quality (COQ) generation ────────────────────
-from app.api import qc as _qc_mod          # noqa: E402
+from app.api.qc import coq_docx as _qc_mod          # noqa: E402
+from app.api.qc import coq_aggregation as _qc_agg_mod  # noqa: E402
 from app.config import settings as _settings  # noqa: E402
 
 
@@ -660,6 +661,7 @@ class _FakeDE:
 def _stub_de(monkeypatch, resp):
     monkeypatch.setattr(_settings, "docengine_api_key", "test-de-key")
     monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _FakeDE(resp))
+    monkeypatch.setattr(_qc_agg_mod, "_coq_client", lambda timeout=20.0: _FakeDE(resp))
 
 
 async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None):
@@ -1018,6 +1020,7 @@ async def test_coq_surfaces_verify_fail(client, admin_headers, monkeypatch):
                     return {"detail": {"verify": "RESULT: FAIL", "error": "verify FAILED"}}
             return _R()
     monkeypatch.setattr(_qc_mod, "_coq_client", lambda timeout=20.0: _Fail(None))
+    monkeypatch.setattr(_qc_agg_mod, "_coq_client", lambda timeout=20.0: _Fail(None))
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 422 and r.json()["detail"]["verify"] == "RESULT: FAIL"
 

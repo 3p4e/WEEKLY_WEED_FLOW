@@ -318,8 +318,9 @@ verify checks linkage not content — is real and distinct.)*
 **P2 — this quarter:**
 9. The LOW batch (transition guards, cycle-check locks, patch_section FOR UPDATE,
    base64 cap, custody append-only policy, unbounded inputs, i18n, focus restore).
-10. `safe_emit()` with logging (kills the silent-swallow class behind H4);
-    `qc.py` split (the MI-0.00 monolith behind most GxP findings); coverage gate.
+10. `safe_emit()` with logging (kills the silent-swallow class behind H4) —
+    ✅ done; `qc.py` split (the MI-0.00 monolith behind most GxP findings) —
+    ✅ done (§9); coverage gate — still open.
 
 ---
 
@@ -401,8 +402,31 @@ the prior batch's deferred list that didn't need an owner/SOP call is now fixed:
   `clients.claim()` still hand control to a new worker instantly, but an
   already-open tab no longer keeps running stale in-memory JS under it.
 
+**P2 — `qc.py` monolith split — DONE.** The 5040-line, 86-route, MI-0.00
+monolith is now `backend/app/api/qc/` — a 15-file package (`common.py` +
+14 domain modules: `specs`, `samples`, `laboratories`, `certificates`,
+`signatures`, `coq_docx`, `cert_register`, `oos`, `ecoa`, `genealogy`,
+`custody`, `leaves`, `coa_qa`, `coq_aggregation`), largest file 864 lines
+(`ecoa.py`), `__init__.py` re-exporting the shared `router` and importing
+every submodule for route-registration side effects. Extraction was
+AST-driven and verbatim (every function/class/assignment sliced by exact
+line span from the original, not retyped) to eliminate transcription risk
+on a GxP-regulated router; only new import headers were authored. Verified:
+every one of the 258 original top-level symbols assigned to exactly one
+file; every one of the 86 original `@router.*` routes present in the new
+package with an identical (method, path) — diffed programmatically against
+the original, zero drops/dupes/changes; every extracted function/class body
+confirmed byte-identical to its original source span (independent
+verification script, not the split script re-run); `ruff` clean on
+undefined-names/redefinitions (F821/F811/F823/F822) and unused-imports
+(F401, autofixed); `bandit -ll -ii` clean (matches the CI security-scan
+gate). Full local gate green: schema-drift clean (no schema change), alembic
+up/down clean, and the full backend suite **477 passed** (identical count
+to pre-split) — two `test_qc.py` monkeypatches (`_coq_client`) were updated
+to patch the two submodules (`coq_docx`, `coq_aggregation`) that now each
+hold their own bound reference, the only test change required.
+
 **P2 — still deferred, with rationale:**
-- `qc.py` monolith split — explicitly its own reviewed refactor (roadmap §10).
 - Water `passed` server-grading — needs a limit/acceptance-range model for
   the free-form water jsonb params before the server can safely auto-grade
   instead of trusting the human-entered value; inventing limits here would

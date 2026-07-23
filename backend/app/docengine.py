@@ -3,7 +3,8 @@
 The GrowFlow DocEngine (docengine/) is an internal-only container: the WWF
 backend is its sole caller and injects the `X-API-Key` server-side (the key
 never reaches the browser). Both the QMS Studio proxy (app/api/qms.py) and the
-certificate pipeline (app/api/qc.py — COQ generation) talk to it, so the client
+certificate pipeline (app/api/qc/coq_docx.py + coq_aggregation.py — COQ
+generation) talk to it, so the client
 + the "surface the upstream's own detail, mask 5xx as 503" behaviour live here
 once. `client_factory` is the seam tests monkeypatch to stand in a fake client.
 """
