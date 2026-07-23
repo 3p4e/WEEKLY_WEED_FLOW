@@ -96,3 +96,21 @@ async def test_workflow_state_not_patchable_and_guards(client, admin_headers):
                               json={"user_id": plain_user["id"]},
                               headers=admin_headers)).status_code in (200, 201)
     assert (await _wf(client, plain, task["id"], "approve")).status_code == 403
+
+
+async def test_workflow_transition_delivers_notification(client, admin_headers):
+    """H4 (deep-review) — a workflow sign-off must reach participants' inboxes.
+    The reason='workflow' notification was silently dropped by emit()'s savepoint
+    because the CHECK constraint rejected it; migration 0042 permits it."""
+    user, _otp = await create_user(client, admin_headers, role="USER")
+    utoken = await login_and_set_password(client, user["username"], _otp)
+    uh = {"Authorization": f"Bearer {utoken}"}
+    task = await _task(client, admin_headers, title="Notify on submit")
+    # assign the task to U, then submit as admin → U is a participant
+    assert (await client.post(f"/tasks/{task['id']}/assignees", json={"user_id": user["id"]},
+                              headers=admin_headers)).status_code == 201
+    assert (await _wf(client, admin_headers, task["id"], "submit")).status_code == 201
+    # U now has a workflow-reason notification (previously dropped → empty)
+    notes = (await client.get("/notifications?reason=workflow", headers=uh)).json()
+    items = notes if isinstance(notes, list) else notes.get("items", notes.get("notifications", []))
+    assert any(n.get("reason") == "workflow" for n in items), items

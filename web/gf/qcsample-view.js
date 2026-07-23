@@ -100,10 +100,14 @@
   GF.WWF.loadQcSamples = async () => {
     const st = GF.WWF._qcsm;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.samples = await GF.API.qcSamples(q);
-    } catch (e) { st.error = e.message; }
+      const samples = await GF.API.qcSamples(q);
+      if (my !== st.lseq) return;
+      st.samples = samples;
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcsample') GF.render.all();
   };
@@ -121,9 +125,9 @@
     const st = GF.WWF._qcsm;
     if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; st.detailError = null; GF.render.all();
-    try { st.detail = await GF.API.qcSample(id); }
-    catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qcsample') GF.render.all();
+    try { const d = await GF.API.qcSample(id); if (st.sel === id) st.detail = d; }
+    catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
+    if (st.sel === id && GF.state.view === 'qcsample') GF.render.all();
   };
   // Retry after a failed detail fetch: clearing sel first lets pick() take the
   // select path again, so one click re-fetches the same row.

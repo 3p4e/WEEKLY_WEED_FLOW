@@ -73,14 +73,20 @@
   GF.WWF.loadQcCoas = async () => {
     const st = GF.WWF._qccoa;
     st.loading = true; st.error = null;
+    // request-sequence token: a rapid filter change must not let an earlier
+    // response overwrite a later one (the list would then contradict the filter).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.coas = await GF.API.qcCoas(q);
+      const coas = await GF.API.qcCoas(q);
+      if (my !== st.lseq) return;                 // superseded by a newer load
+      st.coas = coas;
       // create-form pickers (best-effort; a failure here shouldn't blank the page)
       if (st.specs === null) st.specs = await GF.API.qcSpecs({}).catch(() => []);
       if (st.samples === null) st.samples = await GF.API.qcSamples({}).catch(() => []);
       if (st.labs === null) st.labs = await GF.API.qcLabs({ status: 'ACTIVE' }).catch(() => []);
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qccoa') GF.render.all();
   };
@@ -90,13 +96,18 @@
     if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; st.specParams = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; st.detailError = null; st.specParams = null; GF.render.all();
     try {
-      st.detail = await GF.API.qcCoa(id);
+      const d = await GF.API.qcCoa(id);
+      if (st.sel !== id) return;                  // another row was picked meanwhile
+      st.detail = d;
       // pull the linked spec's parameters so results can cite them (server
       // snapshots the limits — the spec is the single source of truth)
-      const sid = st.detail.coa.specification_id;
-      if (sid) st.specParams = (await GF.API.qcSpec(sid).catch(() => null) || {}).parameters || [];
-    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qccoa') GF.render.all();
+      const sid = d.coa.specification_id;
+      if (sid) {
+        const sp = (await GF.API.qcSpec(sid).catch(() => null) || {}).parameters || [];
+        if (st.sel === id) st.specParams = sp;
+      }
+    } catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
+    if (st.sel === id && GF.state.view === 'qccoa') GF.render.all();
   };
   // Retry after a failed detail fetch: clearing sel first lets pick() take the
   // select path again, so one click re-fetches the same row.
@@ -439,9 +450,9 @@
     const st = GF.WWF._qccoq;
     if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcCoqOne(id); }
-    catch (e) { GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qccoa') GF.render.all();
+    try { const d = await GF.API.qcCoqOne(id); if (st.sel === id) st.detail = d; }
+    catch (e) { if (st.sel === id) GF.toast(e.message, 'error'); }
+    if (st.sel === id && GF.state.view === 'qccoa') GF.render.all();
   };
   GF.WWF.qcCoqCompile = async () => {
     const g = (i) => (document.getElementById(i) || {}).value || '';

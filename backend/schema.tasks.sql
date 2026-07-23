@@ -279,7 +279,7 @@ CREATE TABLE public.notifications (
     read_at timestamp with time zone,
     done_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text, 'capa_stuck'::text, 'validation_stuck'::text])))
+    CONSTRAINT notifications_reason_check CHECK ((reason = ANY (ARRAY['assigned'::text, 'mentioned'::text, 'comment'::text, 'status'::text, 'due'::text, 'report'::text, 'capa_stuck'::text, 'validation_stuck'::text, 'workflow'::text])))
 );
 
 ALTER TABLE ONLY public.notifications FORCE ROW LEVEL SECURITY;
@@ -777,6 +777,7 @@ CREATE TABLE public.qc_oos_notifications (
     acknowledged_at timestamp with time zone,
     sent_by_id uuid,
     sent_at timestamp with time zone DEFAULT now() NOT NULL,
+    acknowledged_by_id uuid,
     CONSTRAINT qc_oos_notifications_part_check CHECK ((part = ANY (ARRAY['A'::text, 'B'::text, 'C'::text, 'D'::text])))
 );
 
@@ -3395,13 +3396,6 @@ CREATE POLICY org_isolation ON public.qc_certificates USING ((org_id = app.curre
 
 
 --
--- Name: qc_chain_of_custody org_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY org_isolation ON public.qc_chain_of_custody USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
-
-
---
 -- Name: qc_coa_chunks org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3623,6 +3617,20 @@ CREATE POLICY org_isolation ON public.task_workflow_events USING ((org_id = app.
 --
 
 CREATE POLICY org_isolation ON public.work_sessions USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_chain_of_custody org_isolation_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_insert ON public.qc_chain_of_custody FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_chain_of_custody org_isolation_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_select ON public.qc_chain_of_custody FOR SELECT USING ((org_id = app.current_org_id()));
 
 
 --

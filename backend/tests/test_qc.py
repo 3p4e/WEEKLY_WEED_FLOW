@@ -472,11 +472,21 @@ async def test_oos_lifecycle_and_qp_close_gate(client, admin_headers):
     for tgt in ("PHASE_I", "PHASE_II"):
         r = await client.patch(f"/qc/oos/{oos['id']}", json={"status": tgt}, headers=qc_h)
         assert r.status_code == 200 and r.json()["status"] == tgt
-    # CLOSE is a QP decision — QC manager is refused, QP allowed
+    # a Phase-II OOS cannot be closed hollow — disposition + root cause +
+    # impact assessment are mandatory (§6.x)
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"},
+                               headers=qp_h)).status_code == 409
+    assert (await client.patch(f"/qc/oos/{oos['id']}",
+                               json={"disposition": "REJECT", "disposition_reason": "confirmed",
+                                     "root_cause_description": "miscalibrated balance"},
+                               headers=qp_h)).status_code == 200
+    # CLOSE is a QP decision — QC manager is refused even with the fields set
     assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"},
                                headers=qc_h)).status_code == 403
-    _, qp_h = await _actor(client, admin_headers, "QP")
-    r = await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"}, headers=qp_h)
+    r = await client.patch(f"/qc/oos/{oos['id']}",
+                           json={"status": "CLOSED", "impact_assessment": "no other batch affected"},
+                           headers=qp_h)
     assert r.status_code == 200 and r.json()["status"] == "CLOSED"
     assert r.json()["closed_at"] is not None
     # register recorded each transition
@@ -948,8 +958,12 @@ async def test_coq_blocked_by_open_oos(client, admin_headers, monkeypatch):
     oos = await _oos(client, admin_headers, batch="B-COQ")   # same batch as _released_coa
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "OOS" in r.json()["detail"]
-    # QP closes the investigation → the COQ may now be issued
-    assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": "CLOSED"},
+    # QP closes the investigation (with a disposition + root cause) → the COQ
+    # may now be issued
+    assert (await client.patch(f"/qc/oos/{oos['id']}",
+                               json={"status": "CLOSED", "disposition": "RELEASE",
+                                     "disposition_reason": "invalidated, retest in spec",
+                                     "root_cause_description": "sampling error"},
                                headers=qp)).status_code == 200
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=admin_headers)).status_code == 201
@@ -2856,3 +2870,82 @@ async def test_edit_archived_certificate_records_deviation(client, admin_headers
                            headers=admin_headers)
     assert r.status_code == 409 and "§6.16" in r.json()["detail"]
     assert await _deviation_count(org["org_id"], "edit_archived_certificate") >= 1
+
+
+# ── Deep-review remediation (2026-07) ───────────────────────────────────────
+async def test_released_certificate_content_is_frozen(client, admin_headers, org):
+    """C-GxP-1 — an APPROVED/RELEASED certificate's ANALYTICAL record of record
+    is immutable (a correction is a revision); CHANGING a recorded value is
+    refused and logged as a §6.16 deviation. Set-once: back-filling a blank
+    mandatory field is an audited correction; register fields update in place."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="FREEZE-MAT")
+    # CHANGING the recorded decision (PASS→FAIL) on a released cert is refused
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "FAIL"},
+                           headers=admin_headers)
+    assert r.status_code == 409 and "immutable" in r.json()["detail"]
+    assert await _deviation_count(org["org_id"], "edit_issued_certificate") >= 1
+    # changing a recorded report_date is refused; clearing it is refused
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"report_date": "2020-01-01"},
+                               headers=admin_headers)).status_code == 409
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": None},
+                               headers=admin_headers)).status_code == 409
+    # set-once: a blank analytical field (sampling_location was never set) may be
+    # back-filled once — an audited correction, not a mutation
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"sampling_location": "Drying room 2"},
+                               headers=admin_headers)).status_code == 200
+    # …but now that it holds a value, changing it is refused
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"sampling_location": "elsewhere"},
+                               headers=admin_headers)).status_code == 409
+    # the register fields remain freely maintainable in place
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"archive_ref": "SHELF-B-2"},
+                               headers=admin_headers)).status_code == 200
+    d = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert d["coa"]["decision"] == "PASS" and d["coa"]["archive_ref"] == "SHELF-B-2"
+
+
+async def test_approved_certificate_freeze_allows_release_transition(client, admin_headers):
+    """The freeze must not block the legitimate APPROVED→RELEASED QP transition
+    (a status move on an issued cert is permitted; content edits are not)."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="FRZ-REL")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-FRZ", report_date="2026-07-01")
+    await client.post(f"/qc/certificates/{coa['id']}/results",
+                      json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                            "result_numeric": 22.0}, headers=admin_headers)
+    await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qp)).status_code == 200
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
+                               headers=qp)).status_code == 200
+    # content edit on the APPROVED cert is refused …
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "FAIL"},
+                               headers=qp)).status_code == 409
+    # … but the QP can still release it
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=qp)
+    assert r.status_code == 200 and r.json()["status"] == "RELEASED"
+
+
+async def test_missing_uuid_guards_return_4xx_not_500(client, admin_headers):
+    """H7 — a malformed {id} on these endpoints must be a clean 404/422, never a
+    500 from asyncpg trying to cast the value to uuid."""
+    assert (await client.patch("/qc/water-tests/not-a-uuid", json={"passed": True},
+                               headers=admin_headers)).status_code == 404
+    assert (await client.patch("/qc/stability-studies/not-a-uuid", json={"status": "CLOSED"},
+                               headers=admin_headers)).status_code == 404
+    assert (await client.patch("/qc/sample-transports/not-a-uuid", json={"status": "draft"},
+                               headers=admin_headers)).status_code == 404
+    assert (await client.get("/qc/certificates/not-a-uuid/verifications",
+                             headers=admin_headers)).status_code == 404
+    assert (await client.post("/qc/certificates/not-a-uuid/verify",
+                              headers=admin_headers)).status_code == 404
+    assert (await client.get("/qc/coa-documents/not-a-uuid/chunks",
+                             headers=admin_headers)).status_code == 404
+    assert (await client.post("/qc/coa-documents/not-a-uuid/extractions", json={"items": []},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.post("/qc/coa-qa", json={"question": "x", "document_id": "not-a-uuid"},
+                              headers=admin_headers)).status_code == 422

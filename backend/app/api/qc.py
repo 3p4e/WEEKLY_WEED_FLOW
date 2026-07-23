@@ -1115,6 +1115,58 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
     return _result_out(dict(row))
 
 
+# QCSOP 012 §6.6/§6.7 — an ISSUED certificate is immutable. VOIDED/SUPERSEDED
+# are fully archived (register fields only, no lifecycle move); APPROVED/RELEASED
+# are issued (a legal forward status transition + register fields are still
+# permitted, but no substantive content edit — a correction is a NEW certificate
+# via /revise). A same-value status echo is a no-op, never an edit.
+_REGISTER_ONLY = {"retention_start", "retention_expiry", "archive_ref"}
+# CoQ house-template presentation metadata (the product-identity grid) is filled
+# in at CoQ-generation time, which happens AFTER release — it describes the
+# document, not the analytical determination, so it stays maintainable on an
+# issued certificate (the ANALYTICAL record below never is).
+_COQ_TEMPLATE_META = {"cultivation_batch", "product_code", "packaging", "packaging_date",
+                      "manufacture_date", "expiry_date", "retest_date",
+                      "botanical_type", "chemotype"}
+# What may still be edited on a frozen certificate. Everything else — the
+# analytical record: decision, report_date, analysis_start/end_date,
+# sampling_location, source_lab, laboratory_id, issue_language, notes — is
+# immutable once the certificate is issued (correct it with a revision, §6.7).
+_ISSUED_EDITABLE = _REGISTER_ONLY | _COQ_TEMPLATE_META
+_ARCHIVED_STATUSES = ("VOIDED", "SUPERSEDED")
+_ISSUED_FROZEN = ("APPROVED", "RELEASED")
+_FROZEN_STATUSES = _ARCHIVED_STATUSES + _ISSUED_FROZEN
+
+
+def _frozen_content_edit(patch: dict, cur: dict) -> bool:
+    """True when `patch` would change the immutable analytical record of a
+    frozen (issued/archived) certificate. Rules:
+      • register + CoQ-template fields are always editable (issued certs);
+      • a status change is allowed only on an ISSUED cert (legality enforced by
+        the transition map) — never on an archived one;
+      • analytical fields (decision, dates, sampling location, lab, language,
+        notes) are SET-ONCE on an issued cert: back-filling a currently-blank
+        mandatory value is an audited correction, but changing a value already
+        of record — or clearing one — requires a revision (§6.7). An archived
+        (VOIDED/SUPERSEDED) cert freezes everything but the register fields."""
+    status = cur["status"]
+    issued = status in _ISSUED_FROZEN
+    allowed = _ISSUED_EDITABLE if issued else _REGISTER_ONLY
+    for k, v in patch.items():
+        if k in allowed:
+            continue
+        if k == "status":
+            if v == status:
+                continue                       # same-value echo
+            if issued:
+                continue                       # a real transition attempt on an issued cert
+            return True                        # status move on an archived cert
+        if issued and cur.get(k) in (None, "") and v not in (None, ""):
+            continue                           # set-once: back-fill a blank analytical field
+        return True                            # change/clear of a recorded value, or archived edit
+    return False
+
+
 @router.patch("/certificates/{coa_id}")
 async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_404(coa_id, "Certificate")
@@ -1128,48 +1180,45 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
     frozen_status = None
     async with rls(user) as c:
         cur = await c.fetchrow(
-            "SELECT status, analyst_id, supersedes_id FROM qc_certificates WHERE id=$1", coa_id)
+            "SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
-        # QCSOP 012 §6.6 — a retired certificate (VOIDED or SUPERSEDED) is archived
-        # and immutable. Only the register-keeping fields (retention window +
-        # archive location) may still be maintained; the substantive record is
-        # frozen. (A same-value status echo is a no-op, not an edit.)
-        if cur["status"] in ("VOIDED", "SUPERSEDED"):
-            _REGISTER_ONLY = {"retention_start", "retention_expiry", "archive_ref"}
-            frozen = [k for k, v in patch.items()
-                      if k not in _REGISTER_ONLY and not (k == "status" and v == cur["status"])]
-            if frozen:
-                frozen_status = cur["status"]
+        # §6.6/§6.7 — an issued (APPROVED/RELEASED) or archived (VOIDED/SUPERSEDED)
+        # certificate is immutable: a substantive content edit is refused (a
+        # correction is a NEW certificate via /revise). Register fields + a legal
+        # status transition (issued certs only) remain permitted.
+        if cur["status"] in _FROZEN_STATUSES and _frozen_content_edit(patch, dict(cur)):
+            frozen_status = cur["status"]
     if frozen_status:
-        # §6.16 (C8) — an attempted edit of an archived certificate is itself a
+        # §6.16 (C8) — an attempted edit of a frozen certificate is itself a
         # reportable deviation (QASOP 010), not just a rejected request. Recorded
         # in a fresh transaction: the 409 must not roll the event back.
+        archived = frozen_status in _ARCHIVED_STATUSES
         async with rls(user) as c2:
             try:
                 await emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
                            object_id=coa_id, recipients=[],
-                           params={"reason": "edit_archived_certificate",
+                           params={"reason": "edit_archived_certificate" if archived
+                                             else "edit_issued_certificate",
                                    "status": frozen_status, "sop": "QCSOP 012 §6.16"})
             except Exception:
                 pass
-        raise HTTPException(409, f"a {frozen_status} certificate is archived and immutable —"
-                                 " only the retention/archive register fields may be updated"
+        noun = "archived" if archived else "issued"
+        raise HTTPException(409, f"a {frozen_status} certificate is {noun} and immutable —"
+                                 " correct it with a revision (/revise); only the retention/"
+                                 "archive register fields may be updated in place"
                                  " (attempt recorded as a deviation, §6.16)")
     async with rls(user) as c:
         cur = await c.fetchrow(
-            "SELECT status, analyst_id, supersedes_id FROM qc_certificates WHERE id=$1", coa_id)
+            "SELECT * FROM qc_certificates WHERE id=$1", coa_id)
         if cur is None:
             raise HTTPException(404, "Certificate not found")
-        # TOCTOU guard: the certificate can be archived (voided/superseded)
-        # between the frozen check above and this transaction — the same
-        # freeze must hold here or a racing edit lands on an immutable record.
-        if cur["status"] in ("VOIDED", "SUPERSEDED"):
-            _REGISTER_ONLY = {"retention_start", "retention_expiry", "archive_ref"}
-            if [k for k, v in patch.items()
-                    if k not in _REGISTER_ONLY and not (k == "status" and v == cur["status"])]:
-                raise HTTPException(409, f"a {cur['status']} certificate is archived and immutable —"
-                                         " only the retention/archive register fields may be updated")
+        # TOCTOU guard: the certificate can become frozen (approved/released/
+        # voided/superseded) between the check above and this transaction — the
+        # same freeze must hold here or a racing edit lands on an immutable record.
+        if cur["status"] in _FROZEN_STATUSES and _frozen_content_edit(patch, dict(cur)):
+            raise HTTPException(409, f"a {cur['status']} certificate is immutable —"
+                                     " correct it with a revision; only register fields update in place")
         if patch.get("laboratory_id") is not None:
             await _resolve_lab(c, user["org_id"], patch["laboratory_id"])
         extra_sql, extra_args = [], []
@@ -2236,7 +2285,9 @@ async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_r
     if patch.get("disposition") is not None and patch["disposition"] not in _OOS_DISPOSITIONS:
         raise HTTPException(422, "Unknown disposition")
     async with rls(user) as c:
-        cur = await c.fetchrow("SELECT status FROM qc_oos_records WHERE id=$1", oos_id)
+        cur = await c.fetchrow(
+            "SELECT status, disposition, root_cause_description, impact_assessment"
+            " FROM qc_oos_records WHERE id=$1", oos_id)
         if cur is None:
             raise HTTPException(404, "OOS record not found")
         # Setting a batch disposition is a Qualified-Person decision.
@@ -2258,6 +2309,20 @@ async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_r
                 extra_sql.append("phase_i_completed_by_id=$PLACEHOLDER")
                 extra_sql.append("phase_i_completed_at=now()")
             if target == "CLOSED":
+                # §6.x — an OOS is not closed until it is investigated: a batch
+                # disposition and a documented root cause are mandatory, and a
+                # Phase-II close additionally needs its impact assessment. The
+                # effective value is the patch's, or the already-stored one.
+                eff_disp = patch.get("disposition", cur["disposition"])
+                eff_rc = patch.get("root_cause_description", cur["root_cause_description"])
+                eff_impact = patch.get("impact_assessment", cur["impact_assessment"])
+                if not (eff_disp and str(eff_disp).strip()):
+                    raise HTTPException(409, "an OOS cannot be closed without a batch disposition"
+                                             " (RELEASE/REJECT/REPROCESS/RETAIN) — §6.x")
+                if not (eff_rc and str(eff_rc).strip()):
+                    raise HTTPException(409, "an OOS cannot be closed without a documented root cause")
+                if cur["status"] == "PHASE_II" and not (eff_impact and str(eff_impact).strip()):
+                    raise HTTPException(409, "a Phase-II OOS cannot be closed without an impact assessment")
                 extra_args.append(user["id"])
                 extra_sql.append("closed_by_id=$PLACEHOLDER")
                 extra_sql.append("closed_at=now()")
@@ -2991,6 +3056,7 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
     name), server-graded against that parameter's limits, and — when no
     mapping is found — queued in `qc_field_placeholders` for a human. Sets the
     document status to EXTRACTED."""
+    _uuid_or_404(doc_id, "eCoA document")
     async with rls(user) as c:
         doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
         if doc is None:
@@ -3068,6 +3134,7 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
                             user: dict = Depends(require_role(*_WRITERS))):
     """Reviewer fix: map an extraction to a spec parameter (re-grades against
     that parameter's limits) and/or correct the value/unit."""
+    _uuid_or_404(doc_id, "eCoA document"); _uuid_or_404(eid, "Extraction")
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
         doc = await c.fetchrow(
@@ -3141,6 +3208,7 @@ async def update_placeholder(ph_id: str, body: PlaceholderPatch,
                              user: dict = Depends(require_role(*_WRITERS))):
     """Resolve a discovered field: MAP it to a spec parameter (future CoAs then
     auto-map that label) or IGNORE it."""
+    _uuid_or_404(ph_id, "Placeholder")
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT status FROM qc_field_placeholders WHERE id=$1", ph_id)
@@ -3264,6 +3332,7 @@ def _verify_out(r: dict) -> dict:
 
 @router.get("/certificates/{coa_id}/verifications")
 async def list_verifications(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         rows = await c.fetch(
             "SELECT * FROM qc_coa_verifications WHERE coa_id=$1 ORDER BY verified_at DESC", coa_id)
@@ -3275,6 +3344,7 @@ async def verify_certificate(coa_id: str, user: dict = Depends(require_role(*_WR
     """Reconcile a promoted certificate against its source eCoA and record the
     verdict. 409 if the certificate was not promoted from an ingested document
     (nothing to reconcile against)."""
+    _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT id FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
@@ -4041,6 +4111,7 @@ async def create_water(body: WaterIn, user: dict = Depends(require_role(*_WRITER
 
 @router.patch("/water-tests/{wid}")
 async def update_water(wid: str, body: WaterPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(wid, "Water test")
     patch = body.model_dump(exclude_unset=True)
     fields, args = _patch_update(patch, {"ooe", "notes"}, {"result_date"})
     if not fields:
@@ -4087,6 +4158,7 @@ async def create_stability(body: StabilityIn, user: dict = Depends(require_role(
 
 @router.patch("/stability-studies/{sid}")
 async def update_stability(sid: str, body: StabilityPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(sid, "Stability study")
     patch = body.model_dump(exclude_unset=True)
     if "status" in patch and patch["status"] is not None and patch["status"] not in _STAB_STATUSES:
         raise HTTPException(422, f"status must be one of: {', '.join(_STAB_STATUSES)}")
@@ -4131,6 +4203,7 @@ async def create_transport(body: TransportIn, user: dict = Depends(require_role(
 
 @router.patch("/transports/{tid}")
 async def update_transport(tid: str, body: TransportPatch, user: dict = Depends(require_role(*_WRITERS))):
+    _uuid_or_404(tid, "Transport")
     patch = body.model_dump(exclude_unset=True)
     if "status" in patch and patch["status"] is not None and patch["status"] not in _TRN_STATUSES:
         raise HTTPException(422, f"status must be one of: {', '.join(_TRN_STATUSES)}")
@@ -4174,6 +4247,7 @@ def _chunk_out(r: dict) -> dict:
 
 @router.get("/coa-documents/{doc_id}/chunks")
 async def list_chunks(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    _uuid_or_404(doc_id, "eCoA document")
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
             raise HTTPException(404, "eCoA document not found")
@@ -4186,6 +4260,7 @@ async def list_chunks(doc_id: str, user: dict = Depends(require_role(*ELEVATED_R
 async def index_chunks(doc_id: str, body: ChunksIn, user: dict = Depends(require_role(*_WRITERS))):
     """(Re)index a document's text chunks for retrieval. Replaces any existing
     chunks for the document so re-indexing is idempotent."""
+    _uuid_or_404(doc_id, "eCoA document")
     norm = []
     for i, ch in enumerate(body.chunks):
         if isinstance(ch, str):
@@ -4213,6 +4288,8 @@ async def coa_qa(body: QaIn, user: dict = Depends(require_role(*ELEVATED_ROLES))
     """Retrieve the top-ranked CoA passages for a question (full-text), org-scoped
     (and document-scoped if `document_id` is given). Returns the cited passages
     and a grounded answer assembled strictly from them — never fabricated."""
+    if body.document_id:
+        _uuid_or_422(body.document_id, "document_id")
     args = [body.question]
     doc_clause = ""
     if body.document_id:

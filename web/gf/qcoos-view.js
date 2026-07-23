@@ -42,11 +42,15 @@
   GF.WWF.loadQcOos = async () => {
     const st = GF.WWF._qcoos;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.rows = await GF.API.qcOos(q);
+      const rows = await GF.API.qcOos(q);
+      if (my !== st.lseq) return;
+      st.rows = rows;
       st.capa = await GF.API.qcCapa({}).catch(() => []);
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcoos') GF.render.all();
   };
@@ -55,8 +59,9 @@
     const st = GF.WWF._qcoos;
     if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcOosOne(id); } catch (e) { GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qcoos') GF.render.all();
+    try { const d = await GF.API.qcOosOne(id); if (st.sel === id) st.detail = d; }
+    catch (e) { if (st.sel === id) GF.toast(e.message, 'error'); }
+    if (st.sel === id && GF.state.view === 'qcoos') GF.render.all();
   };
   GF.WWF.qcOosFilter = (v) => { GF.WWF._qcoos.q = v; GF.render.all(); GF.refocus('qoo-search'); };
   GF.WWF.qcOosStatus = async (v) => { GF.WWF._qcoos.status = v; await GF.WWF.loadQcOos(); GF.refocus('qoo-status'); };

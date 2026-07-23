@@ -49,12 +49,16 @@
   GF.WWF.loadQcEcoa = async () => {
     const st = GF.WWF._qcecoa;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.docs = await GF.API.qcCoaDocs(q);
+      const docs = await GF.API.qcCoaDocs(q);
+      if (my !== st.lseq) return;
+      st.docs = docs;
       st.ph = await GF.API.qcPlaceholders({ status: 'OPEN' }).catch(() => []);
       if (!st.specs) st.specs = await GF.API.qcSpecs({}).catch(() => []);
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcecoa') GF.render.all();
   };
@@ -67,9 +71,9 @@
       const [d, ch] = await Promise.all([
         GF.API.qcCoaDoc(id),
         GF.API.qcCoaChunks(id).catch(() => st.chunks[id] || [])]);
-      st.detail = d; st.chunks[id] = ch;
-    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qcecoa') GF.render.all();
+      if (st.sel === id) { st.detail = d; st.chunks[id] = ch; }
+    } catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
+    if (st.sel === id && GF.state.view === 'qcecoa') GF.render.all();
   };
   // Retry after a failed detail fetch: clearing sel first lets pick() take the
   // select path again, so one click re-fetches the same row.

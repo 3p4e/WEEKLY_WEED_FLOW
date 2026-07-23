@@ -48,14 +48,22 @@
   GF.WWF.loadQcCustody = async () => {
     const st = GF.WWF._qccus;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       if (st.tab === 'sfr') {
-        st.sfr = await GF.API.qcSfr(st.status ? { status: st.status } : {});
+        const sfr = await GF.API.qcSfr(st.status ? { status: st.status } : {});
+        if (my !== st.lseq) return;
+        st.sfr = sfr;
         // Open RQS feed the optional "from sampling request" picker on the
         // create form; a failure keeps the previous list (field stays optional).
         if (canWrite()) st.rqsAll = await GF.API.qcRqs({}).catch(() => st.rqsAll);
-      } else st.rqs = await GF.API.qcRqs(st.status ? { status: st.status } : {});
-    } catch (e) { st.error = e.message; }
+      } else {
+        const rqs = await GF.API.qcRqs(st.status ? { status: st.status } : {});
+        if (my !== st.lseq) return;
+        st.rqs = rqs;
+      }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qccustody') GF.render.all();
   };
@@ -68,11 +76,13 @@
     if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; st.pick = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; st.detailError = null; st.pick = null; GF.render.all();
     try {
-      st.detail = st.tab === 'sfr' ? await GF.API.qcSfrOne(id) : await GF.API.qcRqsOne(id);
-      if (st.tab === 'sfr' && st.detail.sample_id)
-        st.custody[st.detail.sample_id] = await GF.API.qcCustody(st.detail.sample_id).catch(() => []);
-    } catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qccustody') GF.render.all();
+      const d = st.tab === 'sfr' ? await GF.API.qcSfrOne(id) : await GF.API.qcRqsOne(id);
+      if (st.sel !== id) return;                  // another row was picked meanwhile
+      st.detail = d;
+      if (st.tab === 'sfr' && d.sample_id)
+        st.custody[d.sample_id] = await GF.API.qcCustody(d.sample_id).catch(() => []);
+    } catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
+    if (st.sel === id && GF.state.view === 'qccustody') GF.render.all();
   };
   // Retry after a failed detail fetch: clearing sel first lets pick() take the
   // select path again, so one click re-fetches the same row.

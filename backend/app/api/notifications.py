@@ -32,7 +32,7 @@ router = APIRouter(tags=["notifications"])
 # (migration 0016 widened it for the canned automation rules; this regex
 # had gone stale, 422-ing a filter on the very reasons the CI-visible
 # feature added — every valid reason value must appear here).
-_REASONS = "assigned|mentioned|comment|status|due|report|capa_stuck|validation_stuck"
+_REASONS = "assigned|mentioned|comment|status|due|report|capa_stuck|validation_stuck|workflow"
 
 _ITEM = ("SELECT n.id, n.reason, n.read_at, n.done_at, n.created_at,"
          " e.actor_id, e.verb, e.object_type, e.object_id, e.task_id,"
