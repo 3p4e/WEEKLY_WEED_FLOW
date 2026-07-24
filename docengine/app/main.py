@@ -42,6 +42,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="GrowFlow DocEngine", version="1.0.0", lifespan=lifespan)
 
+# asyncio.create_task() only holds a WEAK reference to the task it returns —
+# without also keeping a strong reference somewhere, the task can be silently
+# garbage-collected mid-run before it completes (a documented asyncio footgun,
+# not hypothetical: see "Important" note under
+# https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task).
+# A job that vanished mid-generation would sit "running" forever with no
+# error recorded — worse than any exception run_workflow itself might raise.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 
 # ---------- health (unauthenticated: compose healthcheck) ----------
 @app.get("/health")
@@ -88,7 +104,7 @@ async def start_workflow(body: WorkflowIn):
     if not LettaClient().configured:
         raise HTTPException(503, "Letta unavailable")
     jid = await db.job_create("workflow", body.model_dump(), body.requested_by)
-    asyncio.create_task(run_workflow(jid))
+    _fire_and_forget(run_workflow(jid))
     return {"job_id": jid, "status": "queued"}
 
 

@@ -265,201 +265,208 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
 async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
     await wipe_demo_org(org_id)
 
-    u, t = users_admin_pool(), tasks_admin_pool()
     today = date.today()
     mon = {"prev": _monday(today) - timedelta(days=7),
            "cur": _monday(today),
            "next": _monday(today) + timedelta(days=7)}
 
-    # departments
-    dept_ids: dict[str, uuid.UUID] = {}
-    for code, name, name_mk in _DEPARTMENTS:
-        dept_ids[code] = await t.fetchval(
-            "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4) RETURNING id",
-            org_id, code, name, name_mk)
+    # Seed writes span both DBs and dozens of statements — a failure partway
+    # through (a bad row, a lost connection) must not leave a half-seeded demo
+    # org for the next visitor to land on. One transaction per DB, held on a
+    # single acquired connection each, so either the whole seed lands or none
+    # of it does (wipe_demo_org above already does the same for its deletes).
+    upool, tpool = users_admin_pool(), tasks_admin_pool()
+    async with upool.acquire() as u, tpool.acquire() as t:
+        async with u.transaction(), t.transaction():
+            # departments
+            dept_ids: dict[str, uuid.UUID] = {}
+            for code, name, name_mk in _DEPARTMENTS:
+                dept_ids[code] = await t.fetchval(
+                    "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4) RETURNING id",
+                    org_id, code, name, name_mk)
 
-    # calendar weeks (prev / cur / next)
-    week_ids: dict[str, uuid.UUID] = {}
-    for key, m in mon.items():
-        iso = m.isocalendar()
-        week_ids[key] = await t.fetchval(
-            "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
-            " VALUES ($1,$2,$3,$4,$5) RETURNING id",
-            org_id, iso[0], iso[1], m, m + timedelta(days=6))
+            # calendar weeks (prev / cur / next)
+            week_ids: dict[str, uuid.UUID] = {}
+            for key, m in mon.items():
+                iso = m.isocalendar()
+                week_ids[key] = await t.fetchval(
+                    "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
+                    " VALUES ($1,$2,$3,$4,$5) RETURNING id",
+                    org_id, iso[0], iso[1], m, m + timedelta(days=6))
 
-    # people — unusable password (login is token-minted server-side only)
-    unusable = hash_password(secrets.token_urlsafe(32))
-    person_ids: dict[str, uuid.UUID] = {}
-    for key, full_name, role, dept_code, function_role in data["people"]:
-        pid = uuid.uuid4()
-        person_ids[key] = pid
-        await u.execute(
-            "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role,"
-            " department_id, function_role, must_change_password)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)",
-            pid, org_id, f"demo.{_username(full_name)}", unusable, full_name, role,
-            dept_ids.get(dept_code) if dept_code else None, function_role)
-    admin_id = person_ids["admin"]
+            # people — unusable password (login is token-minted server-side only)
+            unusable = hash_password(secrets.token_urlsafe(32))
+            person_ids: dict[str, uuid.UUID] = {}
+            for key, full_name, role, dept_code, function_role in data["people"]:
+                pid = uuid.uuid4()
+                person_ids[key] = pid
+                await u.execute(
+                    "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role,"
+                    " department_id, function_role, must_change_password)"
+                    " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)",
+                    pid, org_id, f"demo.{_username(full_name)}", unusable, full_name, role,
+                    dept_ids.get(dept_code) if dept_code else None, function_role)
+            admin_id = person_ids["admin"]
 
-    # tasks + progress + comments + assignees + sessions
-    for spec in data["tasks"]:
-        wk = spec.get("w", "cur")
-        due = (mon["cur"] + timedelta(days=6)) if spec.get("due") == "cur_end" else None
-        task_id = await t.fetchval(
-            "INSERT INTO tasks(org_id, user_id, title, description, status, priority, task_type,"
-            " reference_code, blocker_reason, department_id, week_id, week_start, days, tags,"
-            " due_date, estimated_hours, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$2,$2) RETURNING id",
-            org_id, person_ids[spec["owner"]], spec["title"], spec.get("desc"),
-            spec.get("status", "pending"), spec.get("priority", "normal"),
-            spec.get("type", "other"), spec.get("ref"), spec.get("blocker"),
-            dept_ids[spec["dept"]], week_ids[wk], mon[wk],
-            spec.get("days", []), spec.get("tags", []), due, spec.get("est"))
-        for helper in spec.get("helpers", []):
+            # tasks + progress + comments + assignees + sessions
+            for spec in data["tasks"]:
+                wk = spec.get("w", "cur")
+                due = (mon["cur"] + timedelta(days=6)) if spec.get("due") == "cur_end" else None
+                task_id = await t.fetchval(
+                    "INSERT INTO tasks(org_id, user_id, title, description, status, priority, task_type,"
+                    " reference_code, blocker_reason, department_id, week_id, week_start, days, tags,"
+                    " due_date, estimated_hours, created_by, updated_by)"
+                    " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$2,$2) RETURNING id",
+                    org_id, person_ids[spec["owner"]], spec["title"], spec.get("desc"),
+                    spec.get("status", "pending"), spec.get("priority", "normal"),
+                    spec.get("type", "other"), spec.get("ref"), spec.get("blocker"),
+                    dept_ids[spec["dept"]], week_ids[wk], mon[wk],
+                    spec.get("days", []), spec.get("tags", []), due, spec.get("est"))
+                for helper in spec.get("helpers", []):
+                    await t.execute(
+                        "INSERT INTO task_assignees(org_id, task_id, user_id, role, assigned_by)"
+                        " VALUES ($1,$2,$3,'assignee',$4)", org_id, task_id, person_ids[helper], admin_id)
+                for who, day, text in spec.get("notes", []):
+                    await t.execute(
+                        "INSERT INTO task_progress(org_id, task_id, user_id, day_label, note)"
+                        " VALUES ($1,$2,$3,$4,$5)", org_id, task_id, person_ids[who], day, text)
+                for who, text in spec.get("comments", []):
+                    await t.execute(
+                        "INSERT INTO task_comments(org_id, task_id, user_id, content)"
+                        " VALUES ($1,$2,$3,$4)", org_id, task_id, person_ids[who], text)
+                for who, wkey, dow, hour, hours, note in spec.get("sessions", []):
+                    start = datetime.combine(mon[wkey] + timedelta(days=dow), time(hour=hour), tzinfo=timezone.utc)
+                    await t.execute(
+                        "INSERT INTO work_sessions(org_id, task_id, user_id, started_at, ended_at, hours, note)"
+                        " VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                        org_id, task_id, person_ids[who], start,
+                        start + timedelta(hours=hours), hours, note)
+
+            # facility: rooms + plant batches
+            s1, s2, s3 = data["strains"]
+            rooms = (("nursery_1", "Nursery 1", "Расадник 1", "nursery"),
+                     ("veg_1", "Veg Room 1", "Вегетативна соба 1", "veg"),
+                     ("veg_2", "Veg Room 2", "Вегетативна соба 2", "veg"),
+                     ("flower_3", "Flower Room 3", "Соба за цветање 3", "flower"),
+                     ("mother_1", "Mother Room", "Соба за мајки", "mother"),
+                     ("dry_2", "Drying Room 2", "Сушара 2", "dry"))
+            room_ids: dict[str, uuid.UUID] = {}
+            for i, (code, name, name_mk, kind) in enumerate(rooms):
+                room_ids[code] = await t.fetchval(
+                    "INSERT INTO rooms(org_id, code, name, name_mk, kind, sort)"
+                    " VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", org_id, code, name, name_mk, kind, i)
+            for room, strain, count, phase, since_days in (
+                    ("nursery_1", s2, 240, "clone", 4), ("veg_1", s2, 180, "veg", 16),
+                    ("veg_2", s3, 120, "veg", 22), ("flower_3", s1, 96, "flower", 48),
+                    ("mother_1", s3, 12, "mother", 120), ("dry_2", s1, 0, "drying", 6)):
+                await t.execute(
+                    "INSERT INTO plant_batches(org_id, room_id, strain, plant_count, phase, phase_since,"
+                    " created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$7)",
+                    org_id, room_ids[room], strain, count, phase,
+                    today - timedelta(days=since_days), admin_id)
+
+            # QC chain: ACTIVE spec (2 params) → sample → DRAFT CoA with a passing and
+            # a FAILING result → sample quarantined → OOS in Phase I. Values are typed
+            # by the seed, complies computed the same way add_result would.
+            batch = data["batch"]
+            mcode, men, mmk = data["material"]
+            qc_mgr, lab_tech, qp = person_ids["qc"], person_ids["op_qc"], person_ids["qp"]
+            # Demo PP-#### document codes come from a dedicated reserved range
+            # (…-9001), generated in Python — NEVER from nextval() — so starting or
+            # resetting the demo does not advance the shared production qc_*_id_seq
+            # counters. Each seed inserts exactly one of each entity and the wipe
+            # first clears the prior demo row, so a fixed number in the reserved
+            # range is collision-free (uniqueness is per (org_id, code)).
+            yr = today.strftime("%Y")
+
+            def dcode(kind: str) -> str:
+                return f"PP-{kind}-{yr}-9001"
+
+            spec_id = await t.fetchval(
+                "INSERT INTO qc_specifications(org_id, spec_id, material_code, material_name_en,"
+                " material_name_mk, version, effective_date, status, thc_grade, thc_acceptance_min,"
+                " thc_acceptance_max, created_by, updated_by)"
+                " VALUES ($1, $7,"
+                "         $2,$3,$4,1,$5,'ACTIVE','GRADE_I',18,30,$6,$6) RETURNING id",
+                org_id, mcode, men, mmk, today, qc_mgr, dcode('SPEC'))
+            p_thc = await t.fetchval(
+                "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk, test_method,"
+                " spec_type, lower_limit, upper_limit, unit, sorting_order, created_by)"
+                " VALUES ($1,$2,'Total THC','Вкупен THC','HPLC','assay',18,30,'%',1,$3) RETURNING id",
+                org_id, spec_id, qc_mgr)
+            p_moist = await t.fetchval(
+                "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk, test_method,"
+                " spec_type, lower_limit, upper_limit, unit, sorting_order, created_by)"
+                " VALUES ($1,$2,'Moisture','Влага','Loss on drying','physical',NULL,12,'%',2,$3) RETURNING id",
+                org_id, spec_id, qc_mgr)
+            sample_id = await t.fetchval(
+                "INSERT INTO qc_samples(org_id, sample_id, batch_id, material_code, sample_type,"
+                " material_name_en, sampling_date, status, location, quantity, quantity_unit,"
+                " created_by, updated_by)"
+                " VALUES ($1, $7,"
+                "         $2,$3,'batch',$4,$5,'QUARANTINE','QC intake fridge 1',25,'g',$6,$6) RETURNING id",
+                org_id, batch, mcode, men, today - timedelta(days=1), qc_mgr, dcode('SMP'))
+            coa_id = await t.fetchval(
+                "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
+                " cert_type, report_date, source_lab, analyst_id, created_by, updated_by)"
+                " VALUES ($1, $8,"
+                "         $2,$3,$4,'ICOA',$5,$6,$7,$7,$7) RETURNING id",
+                org_id, batch, spec_id, sample_id, today, data["lab"], lab_tech, dcode('COA'))
             await t.execute(
-                "INSERT INTO task_assignees(org_id, task_id, user_id, role, assigned_by)"
-                " VALUES ($1,$2,$3,'assignee',$4)", org_id, task_id, person_ids[helper], admin_id)
-        for who, day, text in spec.get("notes", []):
+                "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value, result_numeric,"
+                " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date, created_by)"
+                " VALUES ($1,$2,$3,'Total THC','24.2',24.2,'%',18,30,true,'pass',$4,$5,$4)",
+                org_id, coa_id, p_thc, lab_tech, today)
+            fail_result = await t.fetchval(
+                "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value, result_numeric,"
+                " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date, created_by)"
+                " VALUES ($1,$2,$3,'Moisture','13.4',13.4,'%',NULL,12,false,'fail',$4,$5,$4) RETURNING id",
+                org_id, coa_id, p_moist, lab_tech, today)
+            oos_id = await t.fetchval(
+                "INSERT INTO qc_oos_records(org_id, oos_number, result_id, sample_id, batch_id, material_code,"
+                " test_name, specification_value, obtained_value, oos_type, risk_level, phase, status,"
+                " detection_date, detected_by_id, created_by, updated_by)"
+                " VALUES ($1, $8,"
+                "         $2,$3,$4,$5,'Moisture','<= 12 %','13.4 %','OOS','MEDIUM','I','PHASE_I',$6,$7,$7,$7) RETURNING id",
+                org_id, fail_result, sample_id, batch, mcode, today, qc_mgr, dcode('OOS'))
+            for action, details in (("opened", f"OOS opened for batch {batch} (Moisture 13.4 %)"),
+                                    ("status:OPEN->PHASE_I", "Phase I laboratory investigation started")):
+                await t.execute(
+                    "INSERT INTO qc_oos_register(org_id, oos_id, action, actor_id, details)"
+                    " VALUES ($1,$2,$3,$4,$5)", org_id, oos_id, action, qc_mgr, details)
+
+            # custody chain: sampling request → field record → chain-of-custody entry
+            rqs_id = await t.fetchval(
+                "INSERT INTO qc_sampling_requests(org_id, rqs_number, material_code, material_name_en,"
+                " batch_id, originating_department, status, requested_by_id, registered_by_id, registered_at,"
+                " registration_deadline, registration_window_met, sample_id, created_by, updated_by)"
+                " VALUES ($1, $8,"
+                "         $2,$3,$4,'cultivation','REGISTERED',$5,$6, now() - interval '20 hours',"
+                "         now() + interval '4 hours', true, $7, $5,$5) RETURNING id",
+                org_id, mcode, men, batch, person_ids["cu"], qc_mgr, sample_id, dcode('RQS'))
+            sfr_id = await t.fetchval(
+                "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
+                " barrel_numbers, num_containers, destination_facility, status, sampled_by_id, sample_id,"
+                " created_by, updated_by)"
+                " VALUES ($1, $6,"
+                "         $2,'Flower Room 3',$3,2,'QC laboratory','COMPLETED',$4,$5,$4,$4) RETURNING id",
+                org_id, rqs_id, ["B-101", "B-102"], person_ids["op_qc"], sample_id, dcode('SFR'))
             await t.execute(
-                "INSERT INTO task_progress(org_id, task_id, user_id, day_label, note)"
-                " VALUES ($1,$2,$3,$4,$5)", org_id, task_id, person_ids[who], day, text)
-        for who, text in spec.get("comments", []):
+                "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id, from_location,"
+                " to_location, transfer_reason, transfer_type, sfr_id, created_by)"
+                " VALUES ($1,$2,$3,$4,'Flower Room 3','QC laboratory','Routine batch testing','FIELD_TO_LAB',$5,$3)",
+                org_id, sample_id, lab_tech, qc_mgr, sfr_id)
+
+            # one water test (leaf module coverage)
             await t.execute(
-                "INSERT INTO task_comments(org_id, task_id, user_id, content)"
-                " VALUES ($1,$2,$3,$4)", org_id, task_id, person_ids[who], text)
-        for who, wkey, dow, hour, hours, note in spec.get("sessions", []):
-            start = datetime.combine(mon[wkey] + timedelta(days=dow), time(hour=hour), tzinfo=timezone.utc)
-            await t.execute(
-                "INSERT INTO work_sessions(org_id, task_id, user_id, started_at, ended_at, hours, note)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7)",
-                org_id, task_id, person_ids[who], start,
-                start + timedelta(hours=hours), hours, note)
+                "INSERT INTO qc_water_tests(org_id, water_test_id, result_date, location, grade, parameters,"
+                " passed, created_by, updated_by)"
+                " VALUES ($1, $5,"
+                "         $2,'Irrigation main, Veg Room 1','TW',$3,true,$4,$4)",
+                org_id, today - timedelta(days=2),
+                {"pH": 7.1, "conductivity_uScm": 480, "TOC_mgL": 0.4}, qc_mgr, dcode('WT'))
 
-    # facility: rooms + plant batches
-    s1, s2, s3 = data["strains"]
-    rooms = (("nursery_1", "Nursery 1", "Расадник 1", "nursery"),
-             ("veg_1", "Veg Room 1", "Вегетативна соба 1", "veg"),
-             ("veg_2", "Veg Room 2", "Вегетативна соба 2", "veg"),
-             ("flower_3", "Flower Room 3", "Соба за цветање 3", "flower"),
-             ("mother_1", "Mother Room", "Соба за мајки", "mother"),
-             ("dry_2", "Drying Room 2", "Сушара 2", "dry"))
-    room_ids: dict[str, uuid.UUID] = {}
-    for i, (code, name, name_mk, kind) in enumerate(rooms):
-        room_ids[code] = await t.fetchval(
-            "INSERT INTO rooms(org_id, code, name, name_mk, kind, sort)"
-            " VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", org_id, code, name, name_mk, kind, i)
-    for room, strain, count, phase, since_days in (
-            ("nursery_1", s2, 240, "clone", 4), ("veg_1", s2, 180, "veg", 16),
-            ("veg_2", s3, 120, "veg", 22), ("flower_3", s1, 96, "flower", 48),
-            ("mother_1", s3, 12, "mother", 120), ("dry_2", s1, 0, "drying", 6)):
-        await t.execute(
-            "INSERT INTO plant_batches(org_id, room_id, strain, plant_count, phase, phase_since,"
-            " created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$7)",
-            org_id, room_ids[room], strain, count, phase,
-            today - timedelta(days=since_days), admin_id)
-
-    # QC chain: ACTIVE spec (2 params) → sample → DRAFT CoA with a passing and
-    # a FAILING result → sample quarantined → OOS in Phase I. Values are typed
-    # by the seed, complies computed the same way add_result would.
-    batch = data["batch"]
-    mcode, men, mmk = data["material"]
-    qc_mgr, lab_tech, qp = person_ids["qc"], person_ids["op_qc"], person_ids["qp"]
-    # Demo PP-#### document codes come from a dedicated reserved range
-    # (…-9001), generated in Python — NEVER from nextval() — so starting or
-    # resetting the demo does not advance the shared production qc_*_id_seq
-    # counters. Each seed inserts exactly one of each entity and the wipe
-    # first clears the prior demo row, so a fixed number in the reserved
-    # range is collision-free (uniqueness is per (org_id, code)).
-    yr = today.strftime("%Y")
-
-    def dcode(kind: str) -> str:
-        return f"PP-{kind}-{yr}-9001"
-
-    spec_id = await t.fetchval(
-        "INSERT INTO qc_specifications(org_id, spec_id, material_code, material_name_en,"
-        " material_name_mk, version, effective_date, status, thc_grade, thc_acceptance_min,"
-        " thc_acceptance_max, created_by, updated_by)"
-        " VALUES ($1, $7,"
-        "         $2,$3,$4,1,$5,'ACTIVE','GRADE_I',18,30,$6,$6) RETURNING id",
-        org_id, mcode, men, mmk, today, qc_mgr, dcode('SPEC'))
-    p_thc = await t.fetchval(
-        "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk, test_method,"
-        " spec_type, lower_limit, upper_limit, unit, sorting_order, created_by)"
-        " VALUES ($1,$2,'Total THC','Вкупен THC','HPLC','assay',18,30,'%',1,$3) RETURNING id",
-        org_id, spec_id, qc_mgr)
-    p_moist = await t.fetchval(
-        "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk, test_method,"
-        " spec_type, lower_limit, upper_limit, unit, sorting_order, created_by)"
-        " VALUES ($1,$2,'Moisture','Влага','Loss on drying','physical',NULL,12,'%',2,$3) RETURNING id",
-        org_id, spec_id, qc_mgr)
-    sample_id = await t.fetchval(
-        "INSERT INTO qc_samples(org_id, sample_id, batch_id, material_code, sample_type,"
-        " material_name_en, sampling_date, status, location, quantity, quantity_unit,"
-        " created_by, updated_by)"
-        " VALUES ($1, $7,"
-        "         $2,$3,'batch',$4,$5,'QUARANTINE','QC intake fridge 1',25,'g',$6,$6) RETURNING id",
-        org_id, batch, mcode, men, today - timedelta(days=1), qc_mgr, dcode('SMP'))
-    coa_id = await t.fetchval(
-        "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"
-        " cert_type, report_date, source_lab, analyst_id, created_by, updated_by)"
-        " VALUES ($1, $8,"
-        "         $2,$3,$4,'ICOA',$5,$6,$7,$7,$7) RETURNING id",
-        org_id, batch, spec_id, sample_id, today, data["lab"], lab_tech, dcode('COA'))
-    await t.execute(
-        "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value, result_numeric,"
-        " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date, created_by)"
-        " VALUES ($1,$2,$3,'Total THC','24.2',24.2,'%',18,30,true,'pass',$4,$5,$4)",
-        org_id, coa_id, p_thc, lab_tech, today)
-    fail_result = await t.fetchval(
-        "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value, result_numeric,"
-        " unit, lower_limit, upper_limit, complies, status, analyst_id, result_date, created_by)"
-        " VALUES ($1,$2,$3,'Moisture','13.4',13.4,'%',NULL,12,false,'fail',$4,$5,$4) RETURNING id",
-        org_id, coa_id, p_moist, lab_tech, today)
-    oos_id = await t.fetchval(
-        "INSERT INTO qc_oos_records(org_id, oos_number, result_id, sample_id, batch_id, material_code,"
-        " test_name, specification_value, obtained_value, oos_type, risk_level, phase, status,"
-        " detection_date, detected_by_id, created_by, updated_by)"
-        " VALUES ($1, $8,"
-        "         $2,$3,$4,$5,'Moisture','<= 12 %','13.4 %','OOS','MEDIUM','I','PHASE_I',$6,$7,$7,$7) RETURNING id",
-        org_id, fail_result, sample_id, batch, mcode, today, qc_mgr, dcode('OOS'))
-    for action, details in (("opened", f"OOS opened for batch {batch} (Moisture 13.4 %)"),
-                            ("status:OPEN->PHASE_I", "Phase I laboratory investigation started")):
-        await t.execute(
-            "INSERT INTO qc_oos_register(org_id, oos_id, action, actor_id, details)"
-            " VALUES ($1,$2,$3,$4,$5)", org_id, oos_id, action, qc_mgr, details)
-
-    # custody chain: sampling request → field record → chain-of-custody entry
-    rqs_id = await t.fetchval(
-        "INSERT INTO qc_sampling_requests(org_id, rqs_number, material_code, material_name_en,"
-        " batch_id, originating_department, status, requested_by_id, registered_by_id, registered_at,"
-        " registration_deadline, registration_window_met, sample_id, created_by, updated_by)"
-        " VALUES ($1, $8,"
-        "         $2,$3,$4,'cultivation','REGISTERED',$5,$6, now() - interval '20 hours',"
-        "         now() + interval '4 hours', true, $7, $5,$5) RETURNING id",
-        org_id, mcode, men, batch, person_ids["cu"], qc_mgr, sample_id, dcode('RQS'))
-    sfr_id = await t.fetchval(
-        "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
-        " barrel_numbers, num_containers, destination_facility, status, sampled_by_id, sample_id,"
-        " created_by, updated_by)"
-        " VALUES ($1, $6,"
-        "         $2,'Flower Room 3',$3,2,'QC laboratory','COMPLETED',$4,$5,$4,$4) RETURNING id",
-        org_id, rqs_id, ["B-101", "B-102"], person_ids["op_qc"], sample_id, dcode('SFR'))
-    await t.execute(
-        "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id, from_location,"
-        " to_location, transfer_reason, transfer_type, sfr_id, created_by)"
-        " VALUES ($1,$2,$3,$4,'Flower Room 3','QC laboratory','Routine batch testing','FIELD_TO_LAB',$5,$3)",
-        org_id, sample_id, lab_tech, qc_mgr, sfr_id)
-
-    # one water test (leaf module coverage)
-    await t.execute(
-        "INSERT INTO qc_water_tests(org_id, water_test_id, result_date, location, grade, parameters,"
-        " passed, created_by, updated_by)"
-        " VALUES ($1, $5,"
-        "         $2,'Irrigation main, Veg Room 1','TW',$3,true,$4,$4)",
-        org_id, today - timedelta(days=2),
-        {"pH": 7.1, "conductivity_uScm": 480, "TOC_mgL": 0.4}, qc_mgr, dcode('WT'))
-
-    row = await u.fetchrow(
-        "SELECT id, org_id, role, username, full_name, password_set_at FROM profiles WHERE id=$1",
-        admin_id)
+            row = await u.fetchrow(
+                "SELECT id, org_id, role, username, full_name, password_set_at FROM profiles WHERE id=$1",
+                admin_id)
     return dict(row)

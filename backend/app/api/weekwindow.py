@@ -72,9 +72,18 @@ def task_row(r) -> dict:
 
 def activity_window_sql(start: str = "$1", end: str = "$2", tz: str = "$3") -> str:
     """The 'task had activity in [start, end] facility-local' predicate — a task
-    created, updated, completed, or with a progress note / work session in the
+    created, updated, completed, commented on, (un)assigned, acknowledged, or
+    with a progress note / work session / rejected-or-cancelled handoff in the
     window. `start`/`end` are date params, `tz` a text TZ-name param. One
     definition so the report screen and the locked document agree on membership.
+
+    An assignment, acknowledgment, comment, or work session already bumps
+    t.updated_at in most code paths, but not every one of them does (e.g. a
+    comment never touches the task row itself) — each gets its own EXISTS so a
+    week where that was the ONLY activity still counts. An ACCEPTED handoff
+    already shows up via the task's own department_id UPDATE (t.updated_at);
+    only rejected/cancelled ones leave no other trace on the task, so those are
+    the two statuses counted here.
     """
     return (
         f"("
@@ -85,5 +94,14 @@ def activity_window_sql(start: str = "$1", end: str = "$2", tz: str = "$3") -> s
         f"             AND (tp.created_at AT TIME ZONE {tz}) >= {start}::date AND (tp.created_at AT TIME ZONE {tz}) < ({end}::date + 1))"
         f"  OR EXISTS (SELECT 1 FROM work_sessions ws WHERE ws.task_id=t.id "
         f"             AND (ws.started_at AT TIME ZONE {tz}) >= {start}::date AND (ws.started_at AT TIME ZONE {tz}) < ({end}::date + 1))"
+        f"  OR EXISTS (SELECT 1 FROM task_comments tc WHERE tc.task_id=t.id "
+        f"             AND (tc.created_at AT TIME ZONE {tz}) >= {start}::date AND (tc.created_at AT TIME ZONE {tz}) < ({end}::date + 1))"
+        f"  OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id=t.id AND ("
+        f"             ((ta.assigned_at AT TIME ZONE {tz}) >= {start}::date AND (ta.assigned_at AT TIME ZONE {tz}) < ({end}::date + 1))"
+        f"             OR (ta.accepted_at IS NOT NULL AND (ta.accepted_at AT TIME ZONE {tz}) >= {start}::date"
+        f"                 AND (ta.accepted_at AT TIME ZONE {tz}) < ({end}::date + 1))))"
+        f"  OR EXISTS (SELECT 1 FROM handoffs h WHERE h.task_id=t.id AND h.status IN ('rejected','cancelled')"
+        f"             AND h.resolved_at IS NOT NULL"
+        f"             AND (h.resolved_at AT TIME ZONE {tz}) >= {start}::date AND (h.resolved_at AT TIME ZONE {tz}) < ({end}::date + 1))"
         f")"
     )

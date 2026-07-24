@@ -67,7 +67,8 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
-    for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs", "task_comments",
+    for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
+                  "notifications", "events", "task_comments",
                   "task_workflow_events", "task_assignees", "task_links", "work_sessions",
                   "task_progress",
                   # QC LIMS — children before parents; the cert→spec FK is
@@ -75,9 +76,23 @@ async def purge_org(org_id) -> None:
                   # go before specifications. The CoQ aggregation cites certs
                   # (RESTRICT) and specs (RESTRICT), so it goes before both.
                   "qc_coq_lines", "qc_coq_sources", "qc_coq",
-                  "qc_batch_genealogy", "qc_document_files", "qc_signatures", "qc_results",
-                  "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_sampling_plans",
-                  "qc_specifications",
+                  "qc_batch_genealogy", "qc_document_files", "qc_signatures",
+                  # eCoA/CoA ingestion cluster — everything citing
+                  # qc_coa_documents (CASCADE/SET NULL) goes before it.
+                  "qc_field_placeholders", "qc_ecoa_checklist", "qc_coa_chunks",
+                  "qc_coa_verifications", "qc_coa_extractions", "qc_coa_documents",
+                  # OOS/CAPA cluster — cites qc_results (SET NULL) and
+                  # qc_oos_records (CASCADE), so it goes before both.
+                  "qc_oos_notifications", "qc_oos_register", "qc_oos_records",
+                  "qc_results",
+                  # custody cluster — chain cites samples (CASCADE) and SFRs
+                  # (SET NULL); SFRs cite RQS (SET NULL) and samples (SET NULL).
+                  "qc_chain_of_custody", "qc_sample_field_records", "qc_sampling_requests",
+                  "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
+                  "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
+                  "qc_sampling_plans", "qc_specifications",
+                  # facility — batches cite rooms (RESTRICT), so before it.
+                  "plant_batches", "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
+\restrict rkryD6VtmcyrSEyaIcm6gzkWPb6ZsWIXRGDPk47igaxxvlBsXT8iT5hNmg8mWGq
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -79,7 +79,7 @@ DECLARE
   v_prev  text;
   v_new   jsonb := CASE WHEN TG_OP='DELETE' THEN NULL ELSE to_jsonb(NEW) END;
   v_old   jsonb := CASE WHEN TG_OP='INSERT' THEN NULL ELSE to_jsonb(OLD) END;
-  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END).id::text, '');
+  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN v_old ELSE v_new END)->>'id', '');
   v_payload text;
 BEGIN
   PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
@@ -263,6 +263,13 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: organizations audit_organizations; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_organizations AFTER INSERT OR DELETE OR UPDATE ON public.organizations FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: profiles audit_profiles; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -370,5 +377,5 @@ CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.c
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
+\unrestrict rkryD6VtmcyrSEyaIcm6gzkWPb6ZsWIXRGDPk47igaxxvlBsXT8iT5hNmg8mWGq
 

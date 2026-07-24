@@ -46,6 +46,21 @@ _PREAMBLE = re.compile(
 _STRUCT = re.compile(r"^\s*(#{1,6}\s|\[\[(FORM|TABLE))", re.M)
 
 
+class QaAuditFailed(Exception):
+    """The §6A auditor returned a FIX verdict (or something other than a
+    clear PASS) — the document must not proceed to formatting/registration
+    until the issues are addressed. Consistent with pp_verify's own hard
+    PASS/FAIL gate elsewhere in this pipeline: never fabricate, fail loud."""
+
+    def __init__(self, verdict: str):
+        super().__init__("§6A audit did not PASS")
+        self.verdict = verdict
+
+
+def _qa_audit_passed(verdict: str) -> bool:
+    return (verdict or "").strip().upper().startswith("PASS")
+
+
 def _strip_fences(text: str) -> str:
     return _MD_FENCE.sub("", text or "").strip()
 
@@ -206,6 +221,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             "Run the §6A review on this assembled document Markdown. "
             "Return verdict PASS or FIX with issues.\n\n" + markdown,
         )
+        if not _qa_audit_passed(audit):
+            raise QaAuditFailed(audit)
 
         # ---- format + verify (hard gate) ----
         await db.job_update(job_id, stage="format")
@@ -235,6 +252,10 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         log.error("job %s verify FAILED", job_id)
         await db.job_update(job_id, status="failed", error="verify FAILED",
                             result={"verify": e.report})
+    except QaAuditFailed as e:
+        log.error("job %s §6A audit did not pass", job_id)
+        await db.job_update(job_id, status="failed", error="§6A audit did not pass",
+                            result={"qa_audit": e.verdict})
     except LettaError as e:
         log.error("job %s letta error: %s", job_id, e)
         await db.job_update(job_id, status="failed", error=f"letta: {e}")

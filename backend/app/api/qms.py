@@ -96,6 +96,12 @@ async def families(user: dict = Depends(_require_elevated)):
 async def document(code: str, user: dict = Depends(_require_elevated)):
     if len(code) > 64:
         raise HTTPException(status_code=422, detail="Code too long")
+    # Same traversal guard as download() below: `code` reaches the upstream
+    # unescaped, and a value like ".." (a single path segment, so it passes
+    # FastAPI's route matching) would collapse the forwarded URL onto an
+    # arbitrary internal qms-api endpoint the allowlist exists to block.
+    if code.startswith(("/", "\\")) or "\\" in code or ".." in code.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid code")
     return (await _forward_get(f"/api/documents/{code}")).json()
 
 

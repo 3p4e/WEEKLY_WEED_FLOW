@@ -134,7 +134,12 @@ async def activity(
     clauses, args = ["true"], []
     dept = dept_scope(user) if is_dept_scoped_role(user) else (
         str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    org_wide = user["role"] != "USER" and not is_dept_scoped_role(user)
+    # A dept-scoped manager with no department assigned yet must fall back to
+    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
+    # documents) — checking only the ROLE here, without also checking whether
+    # dept_scope() actually resolved a department, narrowed such a manager to
+    # "my own actions only" instead.
+    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
     if not org_wide:
         args.append(dept)
         args.append(str(user["id"]))
@@ -176,7 +181,12 @@ async def digest(
     clauses, args = ["created_at >= $1"], [since]
     dept = dept_scope(user) if is_dept_scoped_role(user) else (
         str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    org_wide = user["role"] != "USER" and not is_dept_scoped_role(user)
+    # A dept-scoped manager with no department assigned yet must fall back to
+    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
+    # documents) — checking only the ROLE here, without also checking whether
+    # dept_scope() actually resolved a department, narrowed such a manager to
+    # "my own actions only" instead.
+    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
     if not org_wide:
         args.append(dept); args.append(str(user["id"]))
         clauses.append(f"(department_id=${len(args)-1}::uuid OR actor_id=${len(args)}::uuid)")

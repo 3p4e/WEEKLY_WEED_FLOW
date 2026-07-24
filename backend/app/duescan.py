@@ -16,6 +16,7 @@ from datetime import date
 
 from app.db import rls, rls_users, users_admin_pool
 from app.notify import safe_emit
+from app.roles import DEPT_SCOPED_ROLES
 
 
 async def _admin_users() -> list[dict]:
@@ -32,8 +33,8 @@ async def _dept_managers(admin: dict, department_id) -> list[str]:
     async with rls_users(admin) as uc:
         rows = await uc.fetch(
             "SELECT id FROM profiles WHERE org_id=$1 AND department_id=$2"
-            " AND is_deleted=false AND is_active AND role LIKE '%\\_MGR' ESCAPE '\\'",
-            admin["org_id"], department_id)
+            " AND is_deleted=false AND is_active AND role=ANY($3::text[])",
+            admin["org_id"], department_id, DEPT_SCOPED_ROLES)
     return [str(r["id"]) for r in rows]
 
 

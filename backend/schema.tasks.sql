@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict HPfceeJIPCoJrTfFUWPq1mPVFGzzvUXWa8SW7cV4rhdBWMBJEIk98lBXCsRzRfH
+\restrict NcmmVfdFKXYcoILjxvNf4mkUOmWPG7h3Vb8VcQTzhJmtxEneC2dql52hu2UiYJL
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -79,7 +79,7 @@ DECLARE
   v_prev  text;
   v_new   jsonb := CASE WHEN TG_OP='DELETE' THEN NULL ELSE to_jsonb(NEW) END;
   v_old   jsonb := CASE WHEN TG_OP='INSERT' THEN NULL ELSE to_jsonb(OLD) END;
-  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END).id::text, '');
+  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN v_old ELSE v_new END)->>'id', '');
   v_payload text;
 BEGIN
   PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
@@ -2546,6 +2546,27 @@ CREATE INDEX work_sessions_task_idx ON public.work_sessions USING btree (task_id
 
 
 --
+-- Name: ai_agent_bindings audit_ai_agent_bindings; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_ai_agent_bindings AFTER INSERT OR DELETE OR UPDATE ON public.ai_agent_bindings FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: ai_pins audit_ai_pins; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_ai_pins AFTER INSERT OR DELETE OR UPDATE ON public.ai_pins FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: calendar_weeks audit_calendar_weeks; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_calendar_weeks AFTER INSERT OR DELETE OR UPDATE ON public.calendar_weeks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: departments audit_departments; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2763,10 +2784,31 @@ CREATE TRIGGER audit_rooms AFTER INSERT OR DELETE OR UPDATE ON public.rooms FOR 
 
 
 --
+-- Name: task_assignees audit_task_assignees; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_assignees AFTER INSERT OR DELETE OR UPDATE ON public.task_assignees FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: task_comments audit_task_comments; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_comments AFTER INSERT OR DELETE OR UPDATE ON public.task_comments FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: task_dependencies audit_task_dependencies; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER audit_task_dependencies AFTER INSERT OR DELETE OR UPDATE ON public.task_dependencies FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: task_links audit_task_links; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_task_links AFTER INSERT OR DELETE OR UPDATE ON public.task_links FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -3926,5 +3968,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict HPfceeJIPCoJrTfFUWPq1mPVFGzzvUXWa8SW7cV4rhdBWMBJEIk98lBXCsRzRfH
+\unrestrict NcmmVfdFKXYcoILjxvNf4mkUOmWPG7h3Vb8VcQTzhJmtxEneC2dql52hu2UiYJL
 

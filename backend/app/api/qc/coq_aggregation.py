@@ -474,8 +474,12 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         lines = await c.fetch(
             "SELECT * FROM qc_coq_lines WHERE coq_id=$1 ORDER BY sorting_order, created_at",
             coq_id)
+        # Ordered by real dates (not the coa_number string — per-type/per-year
+        # numbering means lexical order doesn't reliably track issuance order),
+        # oldest first so the fallback pick below still means "the newest one".
         sources = await c.fetch(
-            "SELECT * FROM qc_coq_sources WHERE coq_id=$1 ORDER BY coa_number", coq_id)
+            "SELECT * FROM qc_coq_sources WHERE coq_id=$1"
+            " ORDER BY issue_date NULLS FIRST, created_at", coq_id)
         # primary source certificate — richest identity metadata for the meta
         # grid (prefer the in-house iCoA; fall back to the newest source).
         primary = None

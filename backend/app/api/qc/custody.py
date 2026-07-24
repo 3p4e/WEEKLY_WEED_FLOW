@@ -497,6 +497,12 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
             if await c.fetchrow("SELECT id FROM qc_sample_field_records WHERE id=$1", body.sfr_id) is None:
                 raise HTTPException(422, "Unknown field record")
         from_user = body.from_user_id or user["id"]
+        # Serialize custody writes per-sample: the continuity check below reads
+        # the chain's last entry, then the INSERT commits a new one — two
+        # concurrent transfers would each see the same pre-insert last entry
+        # and could both pass the continuity check (same pattern as the
+        # genealogy cycle-check / cert numbering elsewhere in this package).
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"custody:{user['org_id']}:{sample_id}")
         # Append-only continuity: this handoff must start with whoever the
         # chain last recorded as HAVING custody — otherwise a transfer could
         # silently skip a custodian (a break in the field-to-lab chain).

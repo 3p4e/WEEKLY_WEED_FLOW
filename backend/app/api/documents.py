@@ -811,6 +811,16 @@ async def patch_document(doc_id: str, body: PatchReq,
         _scope_guard(user, cur)
         if cur["status"] == "locked":
             raise HTTPException(409, "Locked documents are immutable")
+        # FOR UPDATE: this replaces the WHOLE content jsonb, so the row must
+        # stay locked until commit — same reasoning as patch_section's own row
+        # lock (right below): without it, a concurrent patch_section's own
+        # read-modify-write on this row could land between this handler's
+        # checks and its UPDATE, and this wholesale overwrite would silently
+        # discard that concurrent edit.
+        locked = await c.fetchrow(
+            "SELECT status FROM weekly_documents WHERE id=$1 AND status='draft' FOR UPDATE", doc_id)
+        if locked is None:
+            raise HTTPException(409, "Document is no longer editable")
         row = await c.fetchrow(
             "UPDATE weekly_documents SET content=$2, updated_at=now()"
             " WHERE id=$1 AND status='draft' RETURNING *", doc_id, body.content)
