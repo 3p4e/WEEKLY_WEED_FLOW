@@ -14,6 +14,7 @@
 #   GET  /documents/{id}/pdf              Gotenberg-rendered PDF
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -57,6 +58,14 @@ def _fire_and_forget(coro) -> asyncio.Task:
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return task
+
+
+def _valid_uuid(s: str) -> bool:
+    try:
+        uuid.UUID(s)
+        return True
+    except ValueError:
+        return False
 
 
 # ---------- health (unauthenticated: compose healthcheck) ----------
@@ -110,6 +119,8 @@ async def start_workflow(body: WorkflowIn):
 
 @app.get("/workflows/{jid}", dependencies=[Depends(require_api_key)])
 async def get_workflow(jid: str):
+    if not _valid_uuid(jid):
+        raise HTTPException(404, "no such job")
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     job = await db.job_get(jid)
@@ -163,6 +174,8 @@ async def list_documents():
 
 
 async def _doc_or_404(did: str) -> dict:
+    if not _valid_uuid(did):
+        raise HTTPException(404, "no such document")
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     d = await db.document_get(did)
@@ -175,6 +188,8 @@ async def _doc_or_404(did: str) -> dict:
 
 @app.get("/documents/{did}", dependencies=[Depends(require_api_key)])
 async def get_document(did: str):
+    if not _valid_uuid(did):
+        raise HTTPException(404, "no such document")
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     d = await db.document_get(did)
@@ -198,13 +213,17 @@ async def document_pdf(did: str):
     d = await _doc_or_404(did)
     if not settings.gotenberg_url:
         raise HTTPException(503, "PDF renderer unavailable")
-    async with httpx.AsyncClient(timeout=120) as c:
-        with open(d["path"], "rb") as f:
-            r = await c.post(
-                settings.gotenberg_url + "/forms/libreoffice/convert",
-                files={"files": (Path(d["path"]).name, f,
-                                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-            )
+    try:
+        async with httpx.AsyncClient(timeout=120) as c:
+            with open(d["path"], "rb") as f:
+                r = await c.post(
+                    settings.gotenberg_url + "/forms/libreoffice/convert",
+                    files={"files": (Path(d["path"]).name, f,
+                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+                )
+    except httpx.HTTPError as e:
+        log.warning("Gotenberg PDF conversion failed for document %s: %s", did, e)
+        raise HTTPException(502, "PDF conversion failed") from e
     if r.status_code != 200:
         raise HTTPException(502, "PDF conversion failed")
     return Response(

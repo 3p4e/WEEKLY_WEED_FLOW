@@ -9,7 +9,6 @@
 # Letta tool's contract ({ok, verify, path, bytes}) but enforces PASS.
 import contextlib
 import io
-import json
 import re
 import sys
 import tempfile
@@ -154,14 +153,3 @@ def build(markdown: str, out_dir: Path, out_name: str = "document") -> BuildResu
     return BuildResult(
         path=out, bytes=out.stat().st_size, verify_report=report, doctype=doctype
     )
-
-
-def build_json(markdown: str, out_dir: Path, out_name: str = "document") -> str:
-    """The live Letta tool's JSON contract, PASS-gated (for parity/testing)."""
-    try:
-        r = build(markdown, out_dir, out_name)
-        return json.dumps(
-            {"ok": True, "verify": r.verify_report, "path": str(r.path), "bytes": r.bytes}
-        )
-    except VerifyFailed as e:
-        return json.dumps({"ok": False, "err": "verify FAILED", "verify": e.report})

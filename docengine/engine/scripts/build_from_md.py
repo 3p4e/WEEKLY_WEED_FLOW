@@ -269,7 +269,8 @@ def build_sop(hd, blocks, out):
     pf.save(d, out)
 
 def main(src,out):
-    hd,blocks=parse(open(src,encoding='utf-8').read())
+    with open(src,encoding='utf-8') as f:
+        hd,blocks=parse(f.read())
     dt=hd.get('doctype','SOP').upper()
     (build_sop if dt=='SOP' else build_annex)(hd, blocks, out)
     print("WROTE", out, "("+dt+")")
