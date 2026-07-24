@@ -86,6 +86,15 @@ def _brief(questionnaire_key: str, answers: dict) -> str:
 
 def assemble_markdown(meta: dict, sections: list[dict]) -> str:
     """Assemble the HEADERDATA block + section bodies into engine Markdown."""
+    # A literal "-->" in a meta value would be mistaken for the HEADERDATA
+    # block's own terminator by build_from_md.py's parser, truncating the
+    # header and leaking the remaining fields into the document body. Reject
+    # rather than silently strip/sanitize — fail loud, never ship a
+    # corrupted controlled document.
+    for _k in ("title_mk", "title_en", "code", "version", "doctype", "orient"):
+        _v = meta.get(_k)
+        if _v and "-->" in str(_v):
+            raise ValueError(f"meta.{_k} may not contain '-->' (breaks the HEADERDATA block terminator)")
     hd = (
         "<!--HEADERDATA\n"
         f"mk_title: {meta['title_mk']}\n"

@@ -70,7 +70,8 @@ def test_direct_build_pass(client):
 
 
 def test_direct_build_fail_gated(client, monkeypatch):
-    monkeypatch.setattr(builder, "run_verify", lambda p, min_pt=6.0: (False, "RESULT: FAIL"))
+    monkeypatch.setattr(builder, "run_verify",
+                         lambda p, min_pt=6.0, require_bilingual=True: (False, "RESULT: FAIL"))
     md = (
         "<!--HEADERDATA\nmk_title: Тест\nen_title: Test\ncode: T-2\n"
         "version: 1.0\ndoctype: FORM\norient: portrait\n-->\n"

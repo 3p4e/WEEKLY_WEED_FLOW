@@ -32,12 +32,25 @@ PAGE_W = pr.PAGE_W  # 18.46 cm text width (base-template 1.27 cm margins)
 
 def parse(md):
     hd={}
-    m=re.search(r'<!--HEADERDATA(.*?)-->', md, re.S)
-    if m:
-        for ln in m.group(1).strip().splitlines():
+    # Line-anchored scan, not a single regex across the whole block: the
+    # terminator must be a line that IS "-->" by itself, not any "-->"
+    # substring — a field value containing a literal "-->" (e.g. an
+    # informally-written title) must never be mistaken for the block end,
+    # which would truncate the header and leak the remaining fields into
+    # the document body as garbage paragraphs.
+    all_lines=md.splitlines(); hd_start=hd_end=None
+    for idx,ln in enumerate(all_lines):
+        if ln.strip()=='<!--HEADERDATA':
+            hd_start=idx; break
+    if hd_start is not None:
+        for idx in range(hd_start+1, len(all_lines)):
+            if all_lines[idx].strip()=='-->':
+                hd_end=idx; break
+    if hd_start is not None and hd_end is not None:
+        for ln in all_lines[hd_start+1:hd_end]:
             if ':' in ln:
                 k,v=ln.split(':',1); hd[k.strip()]=v.strip()
-        md=md[m.end():]
+        md="\n".join(all_lines[hd_end+1:])
     blocks=[]; lines=md.splitlines(); i=0
     while i<len(lines):
         s=lines[i].strip()

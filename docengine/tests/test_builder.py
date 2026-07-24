@@ -64,11 +64,82 @@ def test_form_grid_builds_and_passes(tmp_path):
 
 def test_verify_gate_blocks_and_deletes(tmp_path, monkeypatch):
     # Force the verifier to fail: the artifact must NOT survive on disk.
-    monkeypatch.setattr(builder, "run_verify", lambda p, min_pt=6.0: (False, "RESULT: FAIL"))
+    monkeypatch.setattr(builder, "run_verify",
+                         lambda p, min_pt=6.0, require_bilingual=True: (False, "RESULT: FAIL"))
     with pytest.raises(builder.VerifyFailed) as e:
         builder.build(SOP_MD, tmp_path, "gated")
     assert "FAIL" in e.value.report
     assert not (tmp_path / "gated.docx").exists()
+
+
+def _fake_engine_build(text, min_pt=10):
+    """Bypass the real house-style engine and write a minimal, controllable
+    .docx directly — isolates exactly one verify dimension per test instead
+    of depending on the real template's own boilerplate content."""
+    import docx as docxlib
+
+    def _write(src, out):
+        d = docxlib.Document()
+        p = d.add_paragraph(text)
+        p.runs[0].font.size = docxlib.shared.Pt(min_pt)
+        d.save(out)
+    return _write
+
+
+def test_bilingual_missing_now_fails_the_gate(tmp_path, monkeypatch):
+    # B1: the bilingual check used to only print a WARN and never gate the
+    # build. An English-only document must now be refused.
+    monkeypatch.setattr(builder.build_from_md, "main",
+                         _fake_engine_build("Only English content appears anywhere in this "
+                                            "document body, repeated for length. " * 20))
+    with pytest.raises(builder.VerifyFailed) as e:
+        builder.build(SOP_MD, tmp_path, "bilingual_fail")
+    assert "FAIL (missing a language)" in e.value.report
+
+
+def test_bilingual_optout_allows_monolingual_document(tmp_path, monkeypatch):
+    # The forward-compatible `bilingual: no` HEADERDATA escape hatch.
+    monkeypatch.setattr(builder.build_from_md, "main",
+                         _fake_engine_build("Only English content appears anywhere in this "
+                                            "document body, repeated for length. " * 20))
+    md = SOP_MD.replace("orient: portrait\n-->", "orient: portrait\nbilingual: no\n-->")
+    r = builder.build(md, tmp_path, "bilingual_optout")
+    assert "RESULT: PASS" in r.verify_report
+
+
+def test_fidelity_shortfall_fails_the_gate(tmp_path, monkeypatch):
+    # B1: a produced document that is a content SHORTFALL vs. its own source
+    # markdown must be refused — the impoverishment/fabrication-by-omission
+    # class of failure.
+    monkeypatch.setattr(builder.build_from_md, "main", _fake_engine_build("Кратко. Short."))
+    with pytest.raises(builder.VerifyFailed) as e:
+        builder.build(SOP_MD, tmp_path, "fidelity_fail")
+    assert "FIDELITY" in e.value.report and "FAIL" in e.value.report
+
+
+def test_parse_survives_embedded_comment_terminator_in_value():
+    # B2: a HEADERDATA field value containing a literal '-->' must not be
+    # mistaken for the block's own terminator.
+    import build_from_md
+    md = (
+        "<!--HEADERDATA\n"
+        "mk_title: Опис --> на нешто\n"
+        "en_title: Description\n"
+        "code: C-1\n"
+        "version: 1.0\n"
+        "doctype: SOP\n"
+        "orient: portrait\n"
+        "-->\n"
+        "# 1.0 ЦЕЛ|PURPOSE\n"
+        "Текст.|Text.\n"
+    )
+    hd, blocks = build_from_md.parse(md)
+    assert hd["mk_title"] == "Опис --> на нешто"
+    assert hd["en_title"] == "Description"
+    assert hd["code"] == "C-1"
+    assert hd["doctype"] == "SOP"
+    body_text = " ".join(str(b) for b in blocks)
+    assert "en_title" not in body_text and "doctype" not in body_text and "version" not in body_text
 
 
 def test_house_style_in_output(tmp_path):

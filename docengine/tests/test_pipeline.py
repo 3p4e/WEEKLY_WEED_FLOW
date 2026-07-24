@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.pipeline import assemble_markdown, _strip_fences, _clean_section  # noqa: E402
@@ -26,6 +28,16 @@ def test_assemble_markdown_headerdata_and_sections():
     assert md.startswith("<!--HEADERDATA")
     assert "doctype: SOP" in md and "code: C-1" in md
     assert "# 1.0 ЦЕЛ|PURPOSE" in md and "Текст.|Text." in md
+
+
+def test_assemble_markdown_rejects_embedded_comment_terminator():
+    # B2: a meta field value containing '-->' would corrupt the HEADERDATA
+    # block boundary downstream — reject at assembly time, don't ship it.
+    with pytest.raises(ValueError):
+        assemble_markdown(
+            {"title_mk": "Опис --> на процедура", "title_en": "EN", "code": "C-1", "doctype": "SOP"},
+            [{"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Текст.|Text."}],
+        )
 
 
 def test_strip_fences():

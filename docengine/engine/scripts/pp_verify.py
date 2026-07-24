@@ -55,7 +55,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("docx"); ap.add_argument("--source", action="append", default=[])
     ap.add_argument("--min-pt", type=float, default=6.0)
+    ap.add_argument("--require-bilingual", choices=("true", "false"), default="true")
     a = ap.parse_args()
+    require_bl = a.require_bilingual == "true"
     r = analyse(a.docx); ok = True
     print(f"== VERIFY: {r['path']}")
     print(f"   paragraphs {r['paras']} · tables {r['tables']} · equations(oMath) {r['omath']} · figures {r['figures']}")
@@ -64,7 +66,9 @@ def main():
     floor_ok = (mnpt is None) or (mnpt >= a.min_pt)
     print(f"   min font {mnpt} pt  [{'OK' if floor_ok else 'FAIL <%.0f pt'%a.min_pt}]"); ok &= floor_ok
     biling = r['cyr'] and r['lat']
-    print(f"   bilingual MK+EN {'OK' if biling else 'WARN (missing a language)'}")
+    biling_ok = biling or not require_bl
+    print(f"   bilingual MK+EN {'OK' if biling else ('WARN (missing a language, allowed)' if not require_bl else 'FAIL (missing a language)')}")
+    ok &= biling_ok
     if a.source:
         sw = sc = 0
         for s in a.source:
