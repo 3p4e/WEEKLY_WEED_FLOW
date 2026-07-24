@@ -87,7 +87,7 @@ GF.WWF._renderWorklog = () => {
         ? `<button class="mini-btn" style="color:var(--red)" title="${GF.t('delete')}" onclick="GF.WWF.deleteSession('${s.id}')">${GF.icon('trash')}</button>` : '';
       return `<div class="sess-row">
         <span style="font-family:var(--mono);white-space:nowrap">${GF.esc(when)}</span>
-        <span style="font-weight:700;white-space:nowrap">${s.hours}h</span>
+        <span style="font-weight:700;white-space:nowrap">${GF.esc(s.hours)}h</span>
         <span class="sess-class ${GF.esc(s.classification)}">${GF.esc(GF.WWF.sessClassLabel(s.classification))}</span>
         <span style="flex:1;min-width:0;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${GF.esc(s.note || who)}</span>
         ${del}

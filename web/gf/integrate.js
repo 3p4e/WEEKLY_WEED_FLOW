@@ -148,34 +148,9 @@ GF.WWF.buildCalendar = (weeks) => {
 };
 
 /* ── login overlay ─────────────────────────────────────────────────── */
-GF.WWF.showLogin = (msg) => {
-  let el = GF.$('wwf-login');
-  if (!el) {
-    el = document.createElement('div'); el.id = 'wwf-login';
-    el.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;'
-      + 'background:linear-gradient(135deg,#060F0B,#0B1913);font-family:var(--font,Saira,system-ui,sans-serif)';
-    el.innerHTML = `
-      <div style="background:rgba(11,25,19,.92);border:1px solid rgba(43,232,160,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:18px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-          <span class="leaf-stage" data-mode="calm" style="width:42px;height:50px;flex-shrink:0"><span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span></span>
-          <div><div style="font-size:22px;font-weight:800;color:#DDF3E9">Grow<span style="color:#2BE8A0">Flow</span></div>
-          <div style="font-size:9px;font-weight:800;letter-spacing:.16em;color:#8FB6A6">PURELY<i>PLANT</i></div></div>
-        </div>
-        <div style="font-size:13px;color:#8FB6A6;margin:8px 0 18px">Weekly Weed Flow — sign in</div>
-        <input id="wwf-u" placeholder="Username" autocomplete="username"
-          style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(43,232,160,.20);border-radius:10px;margin-bottom:10px;font-size:14px;background:rgba(11,25,19,.6);color:#DDF3E9">
-        <input id="wwf-p" type="password" placeholder="Password" autocomplete="current-password"
-          style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(43,232,160,.20);border-radius:10px;margin-bottom:14px;font-size:14px;background:rgba(11,25,19,.6);color:#DDF3E9"
-          onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
-        <button onclick="GF.WWF.doLogin()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#2BE8A0;color:#03130C;font-weight:700;font-size:14px;cursor:pointer">Sign in</button>
-        <div id="wwf-login-msg" style="color:#FF4D5E;font-size:12px;margin-top:10px;min-height:16px"></div>
-      </div>`;
-    document.body.appendChild(el);
-  }
-  el.style.display = 'flex';
-  const m = GF.$('wwf-login-msg'); if (m) m.textContent = msg || '';
-  setTimeout(() => GF.$('wwf-u') && GF.$('wwf-u').focus(), 60);
-};
+// GF.WWF.showLogin / showChangePw are defined by entry.js (loaded after this
+// file), which presents the interactive splash instead — this file only owns
+// the actual auth calls (doLogin / doChangePw) that presentation reuses.
 GF.WWF.doLogin = async () => {
   const u = (GF.$('wwf-u')||{}).value, p = (GF.$('wwf-p')||{}).value;
   const m = GF.$('wwf-login-msg');
@@ -197,26 +172,6 @@ GF.WWF.doLogin = async () => {
 };
 
 /* ── first-login password change (must_change_password) ────────────── */
-GF.WWF.showChangePw = (currentPw) => {
-  GF.WWF._curPw = currentPw || '';
-  let el = GF.$('wwf-login'); if (!el) { GF.WWF.showLogin(); el = GF.$('wwf-login'); }
-  const IN = 'width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(43,232,160,.20);border-radius:10px;margin-bottom:10px;font-size:14px;background:rgba(11,25,19,.6);color:#DDF3E9';
-  el.innerHTML = `
-    <div style="background:rgba(11,25,19,.92);border:1px solid rgba(43,232,160,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:18px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-        <span class="leaf-stage" data-mode="calm" style="width:42px;height:50px;flex-shrink:0"><span class="leaf-3d"><span class="leaf-float"><span class="pp-leaf-anim"></span></span></span></span>
-        <div><div style="font-size:22px;font-weight:800;color:#DDF3E9">Grow<span style="color:#2BE8A0">Flow</span></div></div>
-      </div>
-      <div style="font-size:15px;font-weight:700;color:#DDF3E9;margin:8px 0 2px">Set a new password</div>
-      <div style="font-size:12px;color:#8FB6A6;margin-bottom:16px">First login — choose a password (min 8 characters).</div>
-      <input id="wwf-np" type="password" placeholder="New password" style="${IN}">
-      <input id="wwf-np2" type="password" placeholder="Confirm password" style="${IN}" onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()">
-      <button onclick="GF.WWF.doChangePw()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#2BE8A0;color:#03130C;font-weight:700;font-size:14px;cursor:pointer">Set password & continue</button>
-      <div id="wwf-login-msg" style="color:#FF4D5E;font-size:12px;margin-top:10px;min-height:16px"></div>
-    </div>`;
-  el.style.display = 'flex';
-  setTimeout(() => GF.$('wwf-np') && GF.$('wwf-np').focus(), 60);
-};
 GF.WWF.doChangePw = async () => {
   const a = (GF.$('wwf-np')||{}).value || '', b = (GF.$('wwf-np2')||{}).value || '';
   const m = GF.$('wwf-login-msg');

@@ -95,7 +95,7 @@
           ${bar(frac)}
           <div class="ana-rx" style="margin-top:4px">${chips || `<span class="ana-note">${AL('no tasks tagged', 'нема означени задачи')}</span>`}</div>
         </div>
-        <div class="ana-rv" title="${p.completed}/${p.total}">${p.total ? pct + '%' : '—'}</div>
+        <div class="ana-rv" title="${GF.esc(p.completed)}/${GF.esc(p.total)}">${p.total ? pct + '%' : '—'}</div>
       </div>`;
     }).join('');
 

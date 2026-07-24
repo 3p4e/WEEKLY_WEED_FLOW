@@ -211,6 +211,10 @@ GF.store = {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem('gf_tasks_v1')); } catch {}
     if (saved && Array.isArray(saved)) GF.state.tasks = saved;
+    // integrate.js's override (the normal path) renders itself once real data
+    // arrives — this fallback is the only case where load() must also paint
+    // the UI, since nothing else will.
+    if (GF.render && GF.render.all) GF.render.all();
   },
   save() { try { localStorage.setItem('gf_tasks_v1', JSON.stringify(GF.state.tasks)); } catch {} },
 };

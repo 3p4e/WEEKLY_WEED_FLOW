@@ -126,15 +126,18 @@ document.addEventListener('keydown', (e) => {
     if (GF.$('voice-modal')?.classList.contains('open')) GF.voice.closeCapture();
     document.querySelectorAll('.overlay.open').forEach(m => m.classList.remove('open'));
   }
-  if (e.key === 'ArrowLeft') GF.selectWeek(GF.state.selWeek - 1);
-  if (e.key === 'ArrowRight') GF.selectWeek(GF.state.selWeek + 1);
+  const modalOpen = document.querySelector('.overlay.open');
+  if (!modalOpen && e.key === 'ArrowLeft') GF.selectWeek(GF.state.selWeek - 1);
+  if (!modalOpen && e.key === 'ArrowRight') GF.selectWeek(GF.state.selWeek + 1);
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); GF.cmdk ? GF.cmdk.toggle() : GF.$('search-input')?.focus(); }
 });
 
 // ── Boot ──
 window.addEventListener('DOMContentLoaded', () => {
+  // GF.store.load() renders itself (see core.js / integrate.js's override) —
+  // a second render.all() here used to fire unconditionally right after,
+  // flashing an empty shell before the real (async) data arrived.
   GF.store.load();
-  GF.render.all();
 
   GF.$('search-input')?.addEventListener('input', (e) => {
     GF.state.search = e.target.value;

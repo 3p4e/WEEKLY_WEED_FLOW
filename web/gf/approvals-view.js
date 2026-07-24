@@ -40,7 +40,7 @@
   const ackRow = (x, mine) => `
     <div class="apv-row">
       <span class="fs-dot" style="background:var(--${{critical:'red',high:'orange'}[x.priority] || 'blue'})"></span>
-      <div class="apv-b" onclick="GF.WWF.xrJump&&GF.WWF.xrJump('${x.task_id}','')">
+      <div class="apv-b" onclick="GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(x.task_id)}','')">
         <div class="apv-t">${GF.esc(x.title)}</div>
         <div class="apv-sub">${mine
           ? `${AL('assigned by', 'доделено од')} ${GF.esc(person(x.assigned_by))}`
@@ -110,7 +110,7 @@
             <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(d.updated_at.slice(0, 16).replace('T', ' ')) : ''}</div></div>
         </div>`).join('') || empty())}
       ${sec(GF.t('stuck'), stuck.length, stuck.map(t => `
-        <div class="apv-row" onclick="GF.WWF.xrJump&&GF.WWF.xrJump('${t.id}','${GF.esc(t.week_start || '')}')">
+        <div class="apv-row" onclick="GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">
           <span class="fs-dot" style="background:var(--red)"></span>
           <div class="apv-b"><div class="apv-t">${GF.esc(t.title)}</div>
             <div class="apv-sub">${GF.esc(t.blocker || '')}</div></div>

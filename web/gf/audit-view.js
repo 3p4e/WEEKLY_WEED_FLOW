@@ -120,9 +120,9 @@ GF.WWF._auditMarkup = () => {
       const v = st.verify[src]; if (!v) return '';
       return v.ok
         ? `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(43,232,160,.12);color:#2BE8A0;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid rgba(43,232,160,.25)">
-             ${GF.icon('shield', 'icon', '#2BE8A0')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('verified', 'потврден')} · ${v.total} ${AL('entries', 'записи')}</span>`
+             ${GF.icon('shield', 'icon', '#2BE8A0')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('verified', 'потврден')} · ${GF.esc(v.total)} ${AL('entries', 'записи')}</span>`
         : `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,77,94,.12);color:#FF4D5E;font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid rgba(255,77,94,.25)">
-             ${GF.icon('flag', 'icon', '#FF4D5E')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('chain broken at', 'прекин кај')} #${v.first_break_id}</span>`;
+             ${GF.icon('flag', 'icon', '#FF4D5E')} ${GF.esc(AL(AUDIT_SOURCES[src].en, AUDIT_SOURCES[src].mk))} ${AL('chain broken at', 'прекин кај')} #${GF.esc(v.first_break_id)}</span>`;
     }).join('');
   }
 
