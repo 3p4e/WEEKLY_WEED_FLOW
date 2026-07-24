@@ -508,6 +508,17 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                     raise HTTPException(403, "The reviewer must be a different person than the analyst")
                 extra_args.append(user["id"]); extra_sql.append(f"reviewer_id=${'PLACEHOLDER'}")
             if target == "APPROVED":
+                # Same second-person principle as REVIEWED: the approver must
+                # not be anyone who produced the data. (Reviewer == approver
+                # is NOT restricted here — this codebase's established model
+                # is a single QP walking a cert through REVIEWED->APPROVED->
+                # RELEASED, exercised throughout the existing test suite; only
+                # analyst self-approval was the confirmed gap.)
+                entered = await c.fetchval(
+                    "SELECT 1 FROM qc_results WHERE coa_id=$1 AND analyst_id=$2 LIMIT 1",
+                    coa_id, user["id"])
+                if entered or (cur["analyst_id"] and str(cur["analyst_id"]) == str(user["id"])):
+                    raise HTTPException(403, "The approver must be a different person than the analyst")
                 extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
         fields, args = [], []
         _NULLABLE = {"source_lab", "laboratory_id", "report_date", "retention_start",

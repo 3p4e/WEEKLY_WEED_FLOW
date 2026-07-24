@@ -68,14 +68,36 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
+def is_development(env: str) -> bool:
+    """Fail-safe, not fail-open: True only for the exact string 'development'.
+    Anything else — 'prod', 'Production ', a typo, an unset/mistyped
+    platform-injected value — is treated as production-like. A guard that
+    instead allow-listed the literal string 'production' would silently
+    fall through to a warning for any other value, leaving a shipped
+    placeholder SECRET_KEY active on a real deployment. Shared by the
+    SECRET_KEY guard below and main.py's /docs gate so the two can never
+    drift apart."""
+    return env.strip().lower() == "development"
+
+
+def docs_kwargs(env: str) -> dict:
+    """FastAPI docs/redoc/openapi kwargs — enabled only in development. A
+    regulated QC LIMS's complete route/schema map must not be browsable
+    unauthenticated on a real deployment."""
+    dev = is_development(env)
+    return {
+        "docs_url": "/docs" if dev else None,
+        "redoc_url": "/redoc" if dev else None,
+        "openapi_url": "/openapi.json" if dev else None,
+    }
+
+
 _secret_is_weak = (
     settings.secret_key in _INSECURE_SECRETS or len(settings.secret_key) < _MIN_SECRET_LENGTH
 )
 if _secret_is_weak:
-    # Case-insensitive: ENVIRONMENT=Production/PRODUCTION must trip the
-    # guard exactly like the lowercase default, not silently fall through
-    # to a log-only warning.
-    if settings.environment.strip().lower() == "production":
+    if not is_development(settings.environment):
         raise RuntimeError(
             f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters. "
             "Set a real SECRET_KEY (e.g. `openssl rand -hex 32`) before running with "

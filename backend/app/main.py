@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import ai, approvals, audit, auth, capture, collab, demo, documents, facility, intake, notifications, qc, qms, reports, tasks
-from app.config import settings
+from app.config import docs_kwargs, settings
 from app.db import close_pools, init_pools
 from app.logging_config import configure_logging
 
@@ -22,7 +22,8 @@ async def lifespan(app: FastAPI):
     await close_pools()
 
 
-app = FastAPI(title="WEEKLY_WEED_FLOW API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="WEEKLY_WEED_FLOW API", version="0.1.0", lifespan=lifespan,
+              **docs_kwargs(settings.environment))
 
 app.add_middleware(
     CORSMiddleware,

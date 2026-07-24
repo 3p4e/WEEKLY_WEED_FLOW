@@ -429,6 +429,27 @@ async def test_coa_approve_release_qp_gated(client, admin_headers):
     assert r.status_code == 200 and r.json()["status"] == "RELEASED" and r.json()["approver_id"] is not None
 
 
+async def test_coa_approve_rejects_analyst(client, admin_headers):
+    """The APPROVED transition must reject an approver who produced the
+    analytical data — mirrors REVIEWED's existing analyst-exclusion check,
+    which previously had no equivalent on APPROVED (self-approval was
+    possible for anyone who was both the analyst and QP-eligible)."""
+    _, qp_analyst = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="APR-ANALYST")
+    coa = await _coa(client, qp_analyst, spec["id"], batch="B-APR-A")  # the QP is the analyst
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qc_h)).status_code == 200
+    # the analyst (also QP-eligible) cannot approve their own certificate
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
+                           headers=qp_analyst)
+    assert r.status_code == 403 and "analyst" in r.json()["detail"]
+    # a different QP may
+    _, qp2 = await _actor(client, admin_headers, "QP")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
+                               headers=qp2)).status_code == 200
+
+
 async def test_results_only_in_draft(client, admin_headers):
     spec = await _spec(client, admin_headers, material="LOCK-MAT")
     coa = await _coa(client, admin_headers, spec["id"])

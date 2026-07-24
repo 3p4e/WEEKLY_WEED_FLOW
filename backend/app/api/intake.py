@@ -4,8 +4,11 @@ CANDIDATES for the user to review, edit, and adopt.
 
 Extraction only — nothing is persisted here. The user picks which candidates to
 keep in the review UI, and the frontend adopts the selected ones through the
-existing POST /capture/import path (owned by the caller, dept kept as-is). This
-endpoint is available to any authenticated user, org-scoped by RLS.
+existing POST /capture/import path (owned by the caller, dept kept as-is).
+/bilingual is personal-tier (any authenticated user); /extract performs the
+same bulk-extraction capability as app.api.ai's "task_extract" function, so
+it carries the same ELEVATED_ROLES gate that function enforces — a base user
+must not get through this door what /ai/task_extract correctly refuses them.
 """
 import json
 import re
@@ -15,7 +18,8 @@ from pydantic import BaseModel
 
 from app.api.ai import _letta_message
 from app.db import rls
-from app.deps import require_password_set
+from app.deps import require_password_set, require_role
+from app.roles import ELEVATED_ROLES
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 
@@ -215,7 +219,7 @@ async def bilingualize(body: BilingualReq, user: dict = Depends(require_password
 
 
 @router.post("/extract")
-async def extract_tasks(body: ExtractReq, user: dict = Depends(require_password_set)):
+async def extract_tasks(body: ExtractReq, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     text = (body.text or "").strip()
     if len(text) < 12:
         raise HTTPException(422, "Provide more text to extract tasks from")

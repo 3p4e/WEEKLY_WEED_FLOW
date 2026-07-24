@@ -6,13 +6,32 @@ repeated identical events, recipient-scoped RLS on the inbox, creation as a
 feed-only event (no recipients), and the read/done lifecycle driving the
 server-computed unread count.
 """
+import logging
+
 from tests.conftest import create_user, login_and_set_password
+from app.db import rls
+from app.notify import safe_emit
 
 
 async def _actor(client, admin_headers, role="USER"):
     u, otp = await create_user(client, admin_headers, role=role)
     token = await login_and_set_password(client, u["username"], otp)
     return u, {"Authorization": f"Bearer {token}"}
+
+
+async def test_safe_emit_logs_a_non_uniqueviolation_failure(org, caplog):
+    """H3: emit()'s per-recipient insert must only swallow a genuine
+    duplicate-notification race (unique violation) — any other failure
+    (here, a malformed recipient id) must surface to safe_emit()'s logging
+    wrapper instead of vanishing silently."""
+    actor = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"}
+    caplog.set_level(logging.WARNING, logger="app.notify")
+    async with rls(actor) as c:
+        ev_id = await safe_emit(c, actor, verb="assigned", object_type="task",
+                                object_id="00000000-0000-0000-0000-000000000000",
+                                recipients=[("not-a-uuid", "assigned")])
+    assert ev_id is None
+    assert any("notification emit failed" in r.message for r in caplog.records)
 
 
 async def test_assign_notifies_assignee_not_actor(client, admin_headers):

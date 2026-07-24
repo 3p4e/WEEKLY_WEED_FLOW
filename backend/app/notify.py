@@ -24,6 +24,8 @@ pinging anyone (e.g. task creation: feed-only by design, per Slack/Linear).
 """
 import logging
 
+import asyncpg
+
 _log = logging.getLogger("app.notify")
 
 
@@ -69,7 +71,7 @@ async def emit(c, user: dict, *, verb: str, object_type: str, object_id,
                     "INSERT INTO notifications(org_id, recipient_id, event_id, reason, coalesce_key)"
                     " VALUES ($1,$2,$3,$4,$5)",
                     user["org_id"], uid, ev_id, reason, f"{verb}:{object_type}:{object_id}")
-        except Exception:  # unique_violation → already an open identical row
+        except asyncpg.UniqueViolationError:  # already an open identical row
             pass
     return ev_id
 
