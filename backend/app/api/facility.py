@@ -172,13 +172,10 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
             " VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, CURRENT_DATE),$7,$8,$8) RETURNING *",
             user["org_id"], body.room_id, body.strain, body.plant_count,
             body.phase, body.phase_since, body.note, user["id"])
-        try:
-            await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
-                       object_id=row["id"], recipients=[],
-                       params={"strain": row["strain"], "plant_count": row["plant_count"],
-                               "phase": row["phase"], "room": room["name"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
+                   object_id=row["id"], recipients=[],
+                   params={"strain": row["strain"], "plant_count": row["plant_count"],
+                           "phase": row["phase"], "room": room["name"]})
     out = dict(row)
     return {"id": str(out["id"]), "room_id": str(out["room_id"]), "strain": out["strain"],
             "plant_count": out["plant_count"], "phase": out["phase"],

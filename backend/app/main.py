@@ -27,7 +27,7 @@ app = FastAPI(title="WEEKLY_WEED_FLOW API", version="0.1.0", lifespan=lifespan,
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.cors_origins == "*" else settings.cors_origins.split(","),
+    allow_origins=["*"] if settings.cors_origins == "*" else [o.strip() for o in settings.cors_origins.split(",")],
     # No cookie-based auth (bearer tokens only), so credentialed cross-origin
     # requests are never needed — keep this off rather than pairing it with a
     # wildcard origin.

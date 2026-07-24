@@ -8,6 +8,7 @@ unreachable, the endpoint returns {available:false} instead of erroring, so the
 UI can fall back.
 """
 import json
+import logging
 import re
 
 import httpx
@@ -22,6 +23,7 @@ from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 from app.roster import roster
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+_log = logging.getLogger("app.api.ai")
 
 _FENCE_RE = re.compile(r"```[a-zA-Z]*\s*\n(.*?)\n?\s*```", re.S)
 _ENVELOPE_RE = re.compile(r'^\{\s*"[\w.-]+"\s*:\s*"(.*?)"?\s*\}?\s*$', re.S)
@@ -163,7 +165,8 @@ async def _letta_message(agent_id: str, text: str, timeout: float = 30) -> str |
             if m.get("message_type") in ("assistant_message", "tool_call_message") and m.get("content"):
                 return m["content"] if isinstance(m["content"], str) else str(m["content"])
         return None
-    except Exception:
+    except Exception as e:
+        _log.warning("Letta message failed (agent=%s): %s", agent_id, e, exc_info=True)
         return None
 
 

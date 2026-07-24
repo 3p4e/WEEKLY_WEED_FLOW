@@ -371,12 +371,9 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
                 await c.execute(
                     "UPDATE qc_samples SET status='QUARANTINE', updated_by=$1, updated_at=now() WHERE id=$2",
                     user["id"], coa["sample_id"])
-                try:
-                    await safe_emit(c, user, verb="sample_quarantined", object_type="qc_sample",
-                               object_id=coa["sample_id"], recipients=[],
-                               params={"test_name": body.test_name})
-                except Exception:
-                    pass
+                await safe_emit(c, user, verb="sample_quarantined", object_type="qc_sample",
+                           object_id=coa["sample_id"], recipients=[],
+                           params={"test_name": body.test_name})
     return _result_out(dict(row))
 
 
@@ -459,14 +456,11 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
         # in a fresh transaction: the 409 must not roll the event back.
         archived = frozen_status in _ARCHIVED_STATUSES
         async with rls(user) as c2:
-            try:
-                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
-                           object_id=coa_id, recipients=[],
-                           params={"reason": "edit_archived_certificate" if archived
-                                             else "edit_issued_certificate",
-                                   "status": frozen_status, "sop": "QCSOP 012 §6.16"})
-            except Exception:
-                pass
+            await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
+                       object_id=coa_id, recipients=[],
+                       params={"reason": "edit_archived_certificate" if archived
+                                         else "edit_issued_certificate",
+                               "status": frozen_status, "sop": "QCSOP 012 §6.16"})
         noun = "archived" if archived else "issued"
         raise HTTPException(409, f"a {frozen_status} certificate is {noun} and immutable —"
                                  " correct it with a revision (/revise); only the retention/"

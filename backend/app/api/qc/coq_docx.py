@@ -393,13 +393,10 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         # reportable deviation (QASOP 010). Recorded in its own transaction so
         # the 409 cannot roll the event back.
         async with rls(user) as c2:
-            try:
-                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
-                           object_id=coa_id, recipients=[],
-                           params={"reason": "coq_on_open_oos", "batch_id": coa["batch_id"],
-                                   "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
-            except Exception:
-                pass
+            await safe_emit(c2, user, verb="qc_deviation", object_type="qc_certificate",
+                       object_id=coa_id, recipients=[],
+                       params={"reason": "coq_on_open_oos", "batch_id": coa["batch_id"],
+                               "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
         raise HTTPException(
             409, f"{open_oos} open OOS investigation(s) on batch {coa['batch_id']}"
                  " — a COQ cannot be issued until the investigation is closed"
@@ -521,12 +518,9 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
             doc_id, user["id"], coa_id)
         if stamped is None:
             raise HTTPException(409, "Certificate is no longer RELEASED — COQ not recorded")
-        try:
-            await safe_emit(c, user, verb="coq_generated", object_type="qc_certificate",
-                       object_id=coa_id, recipients=[],
-                       params={"coa_number": coa["coa_number"], "document_id": doc_id})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coq_generated", object_type="qc_certificate",
+                   object_id=coa_id, recipients=[],
+                   params={"coa_number": coa["coa_number"], "document_id": doc_id})
     return {"coa_number": coa["coa_number"], "document_id": doc_id,
             "verify": build.get("verify"), "bytes": build.get("bytes"),
             "out_of_scope": out_of_scope}

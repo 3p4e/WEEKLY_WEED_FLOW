@@ -28,7 +28,7 @@ def create_access_token(
     sub: str, role: str, org_id: str, *, password_set_at: str | None = None, days: int | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
-    exp = now + (timedelta(days=days) if days else timedelta(minutes=settings.access_token_expire_minutes))
+    exp = now + (timedelta(days=days) if days is not None else timedelta(minutes=settings.access_token_expire_minutes))
     # pwv ("password version") pins the token to the password that was
     # current when it was minted — a later password change invalidates
     # every token minted before it, since decode_token's caller re-checks

@@ -16,12 +16,13 @@ Two ways in:
 """
 import hmac
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.weekwindow import ensure_week
 from app.db import rls, rls_users, users_admin_pool
 from app.deps import require_password_set
 from app.worktime import TZ
@@ -129,19 +130,6 @@ async def _actor(authorization: str | None = Header(None)) -> dict:
     return user
 
 
-async def _ensure_week(c, org_id, day: date):
-    """Same upsert as weekly_snapshot._ensure_week — calendar weeks are
-    auto-provisioned so imported tasks are always week-linked."""
-    iso_year, iso_week, _ = day.isocalendar()
-    monday = day - timedelta(days=day.weekday())
-    return await c.fetchval(
-        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
-        " VALUES ($1,$2,$3,$4,$5)"
-        " ON CONFLICT (org_id, iso_year, iso_week) DO UPDATE SET iso_year=EXCLUDED.iso_year"
-        " RETURNING id",
-        org_id, iso_year, iso_week, monday, monday + timedelta(days=6))
-
-
 def _validate(t: CaptureTask) -> str | None:
     if t.status not in _STATUSES:
         return f"invalid status '{t.status}'"
@@ -191,7 +179,7 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
 
         try:
             async with rls(actor) as c:
-                week_id = await _ensure_week(c, actor["org_id"], t.week_start) if t.week_start else None
+                week_id = await ensure_week(c, actor["org_id"], t.week_start) if t.week_start else None
                 row = await c.fetchrow(
                     "SELECT * FROM tasks WHERE org_id=$1 AND external_ref=$2 AND is_deleted=false",
                     actor["org_id"], t.external_ref)

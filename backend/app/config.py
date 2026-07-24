@@ -61,9 +61,10 @@ class Settings(BaseSettings):
     docengine_url: str = "http://docengine:8000"
     docengine_api_key: str = ""
 
-    # CORS / host
+    # CORS. (APP_HOST also exists as a bare env var — read directly by
+    # docker-compose.yml's Traefik routing rule, not by this app, so it has
+    # no corresponding Settings field here.)
     cors_origins: str = "*"
-    app_host: str = "wwf.srv1231216.hstgr.cloud"
 
 
 settings = Settings()

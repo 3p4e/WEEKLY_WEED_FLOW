@@ -66,9 +66,6 @@ async def sign_certificate(coa_id: str, body: SignIn,
             user["org_id"], coa_id, user["id"],
             prof["full_name"] or user.get("username") or "—", user["role"], body.meaning,
             body.statement)
-        try:
-            await safe_emit(c, user, verb="coa_signed", object_type="qc_certificate",
-                       object_id=coa_id, recipients=[], params={"meaning": body.meaning})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coa_signed", object_type="qc_certificate",
+                   object_id=coa_id, recipients=[], params={"meaning": body.meaning})
     return _sig_out(dict(row))

@@ -233,12 +233,9 @@ async def upload_coa_original(doc_id: str, body: FileUploadIn,
             "           size_bytes, sha256, uploaded_by, uploaded_at",
             user["org_id"], doc_id, body.filename, body.content_type, len(raw), digest,
             raw, user["id"])
-        try:
-            await safe_emit(c, user, verb="coa_original_stored", object_type="qc_coa_document",
-                       object_id=doc_id, recipients=[],
-                       params={"filename": body.filename, "sha256": digest, "size": len(raw)})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coa_original_stored", object_type="qc_coa_document",
+                   object_id=doc_id, recipients=[],
+                   params={"filename": body.filename, "sha256": digest, "size": len(raw)})
     return _file_out(dict(row))
 
 
@@ -770,13 +767,10 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             " WHERE id=$3 AND promoted_coa_id IS NULL", coa["id"], user["id"], doc_id)
         if tag == "UPDATE 0":
             raise HTTPException(409, "Document was already promoted")
-        try:
-            await safe_emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
-                       object_id=doc_id, recipients=[],
-                       params={"doc_number": doc["doc_number"], "coa_number": coa["coa_number"],
-                               "results": len(mapped)})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
+                   object_id=doc_id, recipients=[],
+                   params={"doc_number": doc["doc_number"], "coa_number": coa["coa_number"],
+                           "results": len(mapped)})
     return {"coa_id": str(coa["id"]), "coa_number": coa["coa_number"],
             "results_created": len(mapped), "skipped_unmapped": len(rows) - len(mapped)}
 
@@ -855,10 +849,7 @@ async def verify_certificate(coa_id: str, user: dict = Depends(require_role(*_WR
             " checked, mismatches, details, verified_by)"
             " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
             user["org_id"], coa_id, doc["id"], verdict, len(results), mismatches, details, user["id"])
-        try:
-            await safe_emit(c, user, verb="coa_verified", object_type="qc_certificate",
-                       object_id=coa_id, recipients=[],
-                       params={"verdict": verdict, "checked": len(results), "mismatches": mismatches})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coa_verified", object_type="qc_certificate",
+                   object_id=coa_id, recipients=[],
+                   params={"verdict": verdict, "checked": len(results), "mismatches": mismatches})
     return _verify_out(dict(row))

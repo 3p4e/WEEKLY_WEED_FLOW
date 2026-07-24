@@ -22,6 +22,7 @@ from fastapi.responses import Response
 from app import docengine
 from app.config import settings
 from app.deps import require_password_set
+from app.roles import ADMIN, ELEVATED_ROLES
 
 router = APIRouter(prefix="/qms", tags=["qms"])
 
@@ -43,7 +44,7 @@ _GET_MAP = {
 def _require_elevated(user: dict = Depends(require_password_set)) -> dict:
     # Same read gate as /facility and /reports/analytics: every role above
     # base USER (executives, QP, department managers).
-    if user["role"] == "USER":
+    if user["role"] not in ELEVATED_ROLES:
         raise HTTPException(status_code=403, detail="Managers and executives only")
     return user
 
@@ -158,7 +159,7 @@ async def download(path: str, user: dict = Depends(_require_elevated)):
 _DE_UNAVAILABLE = docengine.DE_UNAVAILABLE
 # Controlled-document AUTHORING is a quality function: QP, QA manager, ADMIN
 # (and OWNER — the site's top authority). Reading stays at elevated.
-_AUTHOR_ROLES = ("ADMIN", "OWNER", "QP", "QA_MGR")
+_AUTHOR_ROLES = (ADMIN, "OWNER", "QP", "QA_MGR")
 
 
 def _require_author(user: dict = Depends(_require_elevated)) -> dict:

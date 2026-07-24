@@ -439,12 +439,9 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
         # Feed-only awareness (NO recipients): creation never notifies —
         # Slack/Linear defaults — but the shared activity stream shows it,
         # which is what makes exec-created work visible to the org.
-        try:
-            await safe_emit(c, user, verb="created", object_type="task", object_id=row["id"],
-                       recipients=[], task_id=row["id"], department_id=row["department_id"],
-                       params={"title": row["title"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="created", object_type="task", object_id=row["id"],
+                   recipients=[], task_id=row["id"], department_id=row["department_id"],
+                   params={"title": row["title"]})
     return dict(row)
 
 

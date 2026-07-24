@@ -182,12 +182,9 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
             body.material_name_en, body.material_name_mk, body.sampling_date, body.location,
             body.quantity, body.quantity_unit, body.retention_sample, body.sample_kind,
             body.retention_expiry, body.parent_id, body.sampling_plan_id, body.notes, user["id"])
-        try:
-            await safe_emit(c, user, verb="sample_collected", object_type="qc_sample",
-                       object_id=row["id"], recipients=[],
-                       params={"sample_id": row["sample_id"], "batch_id": row["batch_id"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="sample_collected", object_type="qc_sample",
+                   object_id=row["id"], recipients=[],
+                   params={"sample_id": row["sample_id"], "batch_id": row["batch_id"]})
     return _sample_out(dict(row))
 
 

@@ -23,7 +23,7 @@ async def _admin_users() -> list[dict]:
     """One system-ADMIN identity per organization (seeded at bootstrap)."""
     rows = await users_admin_pool().fetch(
         "SELECT DISTINCT ON (org_id) id, org_id, role FROM profiles"
-        " WHERE role='ADMIN' AND is_deleted=false ORDER BY org_id, created_at")
+        " WHERE role='ADMIN' AND is_deleted=false AND is_active ORDER BY org_id, created_at")
     return [{"id": r["id"], "org_id": r["org_id"], "role": r["role"]} for r in rows]
 
 

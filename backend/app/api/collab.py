@@ -338,8 +338,14 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
         org_wide = user["role"] in _ELEVATED and dept_scope(user) is None
         if body.status == "accepted":
             allowed = target_side or (org_wide and not is_requester)
-        else:
+        elif body.status == "cancelled":
+            # Cancel = the proposer withdraws their own request — the
+            # requester alone (with no other authority) may do this.
             allowed = target_side or org_wide or is_requester
+        else:
+            # Reject = the receiving side declines — a requester with no
+            # other authority withdraws via "cancelled", not this branch.
+            allowed = target_side or org_wide
         if not allowed:
             raise HTTPException(403, "Not permitted to resolve this handoff")
         # Non-target resolvers still need ordinary visibility of the task.

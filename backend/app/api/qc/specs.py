@@ -166,12 +166,9 @@ async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS)
             if "qc_specifications_material_version_key" in str(e):
                 raise HTTPException(409, "A specification with this material_code + version already exists")
             raise
-        try:
-            await safe_emit(c, user, verb="spec_created", object_type="qc_specification",
-                       object_id=row["id"], recipients=[],
-                       params={"spec_id": row["spec_id"], "material_code": row["material_code"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="spec_created", object_type="qc_specification",
+                   object_id=row["id"], recipients=[],
+                   params={"spec_id": row["spec_id"], "material_code": row["material_code"]})
     return _spec_out(dict(row))
 
 

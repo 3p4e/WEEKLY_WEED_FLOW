@@ -220,12 +220,9 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
             "INSERT INTO qc_oos_register(org_id, oos_id, action, actor_id, details)"
             " VALUES ($1,$2,'opened',$3,$4)",
             user["org_id"], row["id"], user["id"], f"{row['oos_type']} opened for batch {row['batch_id']}")
-        try:
-            await safe_emit(c, user, verb="oos_opened", object_type="qc_oos_record",
-                       object_id=row["id"], recipients=[],
-                       params={"oos_number": row["oos_number"], "batch_id": row["batch_id"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="oos_opened", object_type="qc_oos_record",
+                   object_id=row["id"], recipients=[],
+                   params={"oos_number": row["oos_number"], "batch_id": row["batch_id"]})
     return _oos_out(dict(row))
 
 

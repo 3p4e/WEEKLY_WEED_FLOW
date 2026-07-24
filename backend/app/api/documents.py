@@ -31,7 +31,7 @@ from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls, rls_users
 from app.deps import dept_scope, is_dept_scoped_role, require_role, uuid_or_404
-from app.roles import ELEVATED_ROLES
+from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES, EXECUTIVE_ROLES, MANAGER_ROLES
 from app.roster import roster
 from app.notify import safe_emit
 from app.worktime import TZ, classify, session_hours
@@ -935,11 +935,13 @@ async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED
                 profs = await uc.fetch(
                     "SELECT id, role, department_id FROM profiles"
                     " WHERE org_id=$1 AND is_deleted=false AND is_active=true", user["org_id"])
-            execs = {"OWNER", "CEO", "COO", "QP"}
+            # QP is manager rank but org-wide (see roles.py) — MANAGER_ROLES
+            # minus DEPT_SCOPED_ROLES is exactly {QP}.
+            execs = set(EXECUTIVE_ROLES) | (set(MANAGER_ROLES) - set(DEPT_SCOPED_ROLES))
             rcpts = [(str(pr["id"]), "report") for pr in profs
                      if pr["role"] in execs
                      or (row["department_id"] and pr["department_id"] == row["department_id"]
-                         and pr["role"].endswith("_MGR"))]
+                         and pr["role"] in DEPT_SCOPED_ROLES)]
             await safe_emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
                        recipients=rcpts, department_id=row["department_id"],
                        params={"kind": row["kind"], "week_start": str(row["week_start"])})

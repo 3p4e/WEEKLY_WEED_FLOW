@@ -190,13 +190,10 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         # reportable deviation, recorded in its own transaction so the 409
         # cannot roll the event back.
         async with rls(user) as c2:
-            try:
-                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_specification",
-                           object_id=str(spec["id"]), recipients=[],
-                           params={"reason": "coq_compile_on_open_oos", "batch_id": body.batch_id,
-                                   "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
-            except Exception:
-                pass
+            await safe_emit(c2, user, verb="qc_deviation", object_type="qc_specification",
+                       object_id=str(spec["id"]), recipients=[],
+                       params={"reason": "coq_compile_on_open_oos", "batch_id": body.batch_id,
+                               "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
         raise HTTPException(
             409, f"{open_oos} open OOS investigation(s) on batch {body.batch_id}"
                  " — the CoQ is compiled only on the investigation-confirmed result set"
@@ -347,13 +344,10 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
             ln["test_method"], ln["acceptance_criterion"], ln["result_value"],
             ln["result_numeric"], ln["unit"], ln["complies"], ln["testing_lab"],
             ln["source_coa_id"], ln["source_coa_number"], ln["sorting_order"])
-    try:
-        await safe_emit(c, user, verb="coq_compiled", object_type="qc_coq",
-                   object_id=str(row["id"]), recipients=[],
-                   params={"coq_number": coq_number, "batch_id": body.batch_id,
-                           "overall_conform": overall, "sources": len(cited_cert_ids)})
-    except Exception:
-        pass
+    await safe_emit(c, user, verb="coq_compiled", object_type="qc_coq",
+               object_id=str(row["id"]), recipients=[],
+               params={"coq_number": coq_number, "batch_id": body.batch_id,
+                       "overall_conform": overall, "sources": len(cited_cert_ids)})
     return row
 
 
@@ -394,23 +388,17 @@ async def review_coq(coq_id: str, user: dict = Depends(require_role(*_HOQC))):
             row = await c.fetchrow(
                 "UPDATE qc_coq SET status='APPROVED', reviewed_by=$1, reviewed_at=now(),"
                 " updated_by=$1, updated_at=now() WHERE id=$2 RETURNING *", user["id"], coq_id)
-            try:
-                await safe_emit(c, user, verb="coq_reviewed", object_type="qc_coq",
-                           object_id=coq_id, recipients=[],
-                           params={"coq_number": row["coq_number"]})
-            except Exception:
-                pass
+            await safe_emit(c, user, verb="coq_reviewed", object_type="qc_coq",
+                       object_id=coq_id, recipients=[],
+                       params={"coq_number": row["coq_number"]})
     if open_oos:
         # §6.16 (C8) — recorded in its own transaction so the 409 cannot roll
         # the deviation event back.
         async with rls(user) as c2:
-            try:
-                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
-                           object_id=coq_id, recipients=[],
-                           params={"reason": "coq_approve_on_open_oos", "batch_id": cur["batch_id"],
-                                   "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
-            except Exception:
-                pass
+            await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
+                       object_id=coq_id, recipients=[],
+                       params={"reason": "coq_approve_on_open_oos", "batch_id": cur["batch_id"],
+                               "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
         raise HTTPException(
             409, f"{open_oos} open OOS investigation(s) on batch {cur['batch_id']}"
                  " — the CoQ cannot be approved until the investigation is closed"
@@ -434,12 +422,9 @@ async def void_coq(coq_id: str, body: VoidIn, user: dict = Depends(require_role(
             "UPDATE qc_coq SET status='VOIDED', void_reason=$1, voided_by=$2, voided_at=now(),"
             " updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",
             body.reason.strip(), user["id"], coq_id)
-        try:
-            await safe_emit(c, user, verb="coq_voided", object_type="qc_coq",
-                       object_id=coq_id, recipients=[],
-                       params={"coq_number": row["coq_number"], "reason": body.reason.strip()})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coq_voided", object_type="qc_coq",
+                   object_id=coq_id, recipients=[],
+                   params={"coq_number": row["coq_number"], "reason": body.reason.strip()})
     return _coq_out(dict(row))
 
 
@@ -491,13 +476,10 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
     if open_oos:
         # §6.16 (C8) — recorded in its own transaction, before the 409.
         async with rls(user) as c2:
-            try:
-                await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
-                           object_id=coq_id, recipients=[],
-                           params={"reason": "coq_render_on_open_oos", "batch_id": coq["batch_id"],
-                                   "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
-            except Exception:
-                pass
+            await safe_emit(c2, user, verb="qc_deviation", object_type="qc_coq",
+                       object_id=coq_id, recipients=[],
+                       params={"reason": "coq_render_on_open_oos", "batch_id": coq["batch_id"],
+                               "open_oos": open_oos, "sop": "QCSOP 012 §6.16"})
         raise HTTPException(
             409, f"{open_oos} open OOS investigation(s) on batch {coq['batch_id']}"
                  " — the CoQ document cannot be issued until the investigation is closed"
@@ -565,11 +547,8 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
             doc_id, user["id"], coq_id)
         if stamped is None:
             raise HTTPException(409, "CoQ is no longer APPROVED — document not recorded")
-        try:
-            await safe_emit(c, user, verb="coq_rendered", object_type="qc_coq",
-                       object_id=coq_id, recipients=[],
-                       params={"coq_number": coq["coq_number"], "document_id": doc_id})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="coq_rendered", object_type="qc_coq",
+                   object_id=coq_id, recipients=[],
+                   params={"coq_number": coq["coq_number"], "document_id": doc_id})
     return {"coq_number": coq["coq_number"], "document_id": doc_id,
             "verify": build.get("verify"), "bytes": build.get("bytes")}
