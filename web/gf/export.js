@@ -55,11 +55,11 @@ GF.export = {
     let csv = '\uFEFF';
     csv += `${esc('GrowFlow Export')},${esc('W' + w.weekNum)},${esc(w.label)},${esc(new Date().toLocaleDateString())}\n`;
     csv += `${esc('User')},${esc(u.name)},${esc(u.roleLabel)}\n\n`;
-    csv += 'ID,Title,Department,Status,Priority,Days,Owner,Progress Notes\n';
+    csv += 'ID,Title,Department,Status,Priority,Type,Reference,Due Date,Tags,Archived,Days,Owner,Progress Notes\n';
     tasks.forEach(t => {
       const d = GF.dep(t.dept);
       const notes = (t.notes || []).map(n => `${n.d}: ${n.n}`).join(' | ');
-      csv += `${t.id},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(notes)}\n`;
+      csv += `${esc(t.id)},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc(t.type || '')},${esc(t.ref || '')},${esc(t.due || '')},${esc((t.tags||[]).join(', '))},${t.archived ? 'Y' : 'N'},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(notes)}\n`;
     });
     this._download(csv, base + '.csv', 'text/csv');
   },
@@ -73,6 +73,7 @@ GF.export = {
       telemetry: { total: tasks.length, done, rate: tasks.length ? Math.round(done / tasks.length * 100) : 0 },
       tasks: tasks.map(t => ({
         id: t.id, title: t.title, dept: t.dept, status: t.status, pr: t.pr,
+        type: t.type, ref: t.ref, due: t.due, tags: t.tags, archived: t.archived,
         days: t.days, owner: t.owner, notes: t.notes, deps: t.deps,
       })),
     };

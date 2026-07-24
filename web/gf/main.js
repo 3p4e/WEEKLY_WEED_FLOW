@@ -104,6 +104,7 @@ GF.openAdd = (weekId, parentId) => {
   // "Edit task" / "Save" after it sets GF._editTask.
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('new_task');
   if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('create_task');
+  if (GF.$('add-cancel-btn')) GF.$('add-cancel-btn').textContent = GF.t('cancel');
   GF.openModal('add-modal');
 };
 // GF.submitAdd is defined for real by integrate.js (loaded after this file),

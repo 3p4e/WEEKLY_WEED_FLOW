@@ -32,9 +32,18 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      // A prior wwf-shell-v* cache key means this activate is REPLACING an
+      // older worker (a real deploy) — claim clients so the new shell takes
+      // over instantly (index.html's controllerchange listener then reloads
+      // the one open tab, deliberately, per its own comment). On the very
+      // first-ever install there is no prior key: there is nothing to
+      // "update" from, so skip claim() — otherwise a brand-new visitor's tab
+      // reloads itself once for no reason the instant it finishes loading.
+      const isUpdate = keys.some((k) => k !== VERSION);
+      return Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
+        .then(() => { if (isUpdate) return self.clients.claim(); });
+    })
   );
 });
 

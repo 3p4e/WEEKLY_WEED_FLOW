@@ -108,13 +108,20 @@ GF.WWF.applyTasks = (tasks) => {
 
 GF.WWF.toggleArchived = async () => {
   GF.state.showArchived = !GF.state.showArchived;
+  // A fast double-toggle fires two overlapping /tasks fetches; without this,
+  // whichever call happens to resolve LAST wins and can apply a stale
+  // (archived or not) task list against the toggle's now-opposite state.
+  const my = (GF.WWF._archivedLseq = (GF.WWF._archivedLseq || 0) + 1);
   try {
     const tasks = (await GF.API.tasks(GF.WWF.taskQuery())) || [];
+    if (my !== GF.WWF._archivedLseq) return;
     GF.WWF.applyTasks(tasks);
   } catch (e) {
+    if (my !== GF.WWF._archivedLseq) return;
     GF.state.showArchived = !GF.state.showArchived;   // revert; keep the current list
     GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error');
   }
+  if (my !== GF.WWF._archivedLseq) return;
   GF.render.all();
 };
 
@@ -552,6 +559,8 @@ GF.WWF.install = () => {
   GF.ai = GF.ai || {};
   GF.ai.summary = async (kind) => {
     GF.$('ai-out').innerHTML = `<div class="ai-loading"><span class="spinner"></span>${GF.t('generate')}…</div>`;
+    if (GF.$('ai-modal-title')) GF.$('ai-modal-title').textContent = AL('AI Summary', 'AI резиме');
+    if (GF.$('ai-close-btn')) GF.$('ai-close-btn').textContent = GF.t('close');
     GF.openModal('ai-modal');
     try {
       const wk = GF.calendar.weeks[GF.state.selWeek + (kind==='plan'?1:0)] || GF.calendar.weeks[GF.state.selWeek];
@@ -931,6 +940,8 @@ GF.openUser = (id) => {
   const deptOptions = [{ v: '', label: AL('None — no department', '— Без оддел —') }]
     .concat(GF.DEPTS.map(d => ({ v: String(d.id), label: GF.depName(d.id), color: d.color })));
   GF.$('user-title').textContent = editing ? GF.t('edit_user') : GF.t('add_user');
+  GF.$('user-cancel-btn').textContent = GF.t('cancel');
+  GF.$('user-save-btn').textContent = GF.t('save');
   const usernameRow = editing
     ? `<div class="field"><label>Username</label><div style="font:700 15px ui-monospace,monospace;color:var(--ink-2)">${GF.esc(p.username || '')}</div></div>`
     : `<div class="field"><label>Username</label><input id="u-username" placeholder="e.g. ana" autocapitalize="off" autocomplete="off"></div>`;

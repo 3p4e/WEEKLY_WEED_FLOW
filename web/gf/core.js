@@ -156,6 +156,17 @@ GF.prLabel = (p) => GF.PRIORITY[p] ? GF.PRIORITY[p][GF.state.lang] : p;
 GF.dayLabel = (d) => { const i = GF.DAYS.indexOf(d); return GF.state.lang === 'mk' && i >= 0 ? GF.DAYS_MK[i] : d; };
 GF.taskTypeLabel = (t) => { const l = GF.TASK_TYPE_LABELS && GF.TASK_TYPE_LABELS[t]; return l ? (l[GF.state.lang] || l.en) : t; };
 
+// Shared KPI-tile markup (label above value, optional sub-line) — the .ana-*
+// classes analytics/auditprep/execreport all use for their summary strips.
+// A wrapping container of either `ana-tiles` (grid) or `xr-kpis` (flex) is
+// the caller's choice. report-view.js's own centered, per-status-colored
+// stat card (_sc()) is a genuinely different design (color-coded by status,
+// not a plain label+value) and stays separate rather than being forced into
+// this shape.
+GF.kpiTile = (label, value, sub) => `<div class="ana-tile">
+  <div class="ana-tl">${label}</div><div class="ana-tv">${value}</div>
+  ${sub ? `<div class="ana-ts">${sub}</div>` : ''}</div>`;
+
 // ── Calendar ──
 GF.calendar = { weeks: [], todayId: 0 };
 (function genWeeks() {

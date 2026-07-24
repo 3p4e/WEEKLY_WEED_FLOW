@@ -10,6 +10,15 @@
    <script> tags share one lexical scope in document order.
    ════════════════════════════════════════════════════════════════════ */
 
+/* Work-session classification (backend/app/worktime.py::classify) — the raw
+   value doubles as the CSS class (.sess-class.overtime etc. colour-codes it),
+   so only the rendered label goes through AL(), never the class attribute. */
+GF.WWF._SESS_CLASS = {
+  regular: ['Regular', 'Редовно'], overtime: ['Overtime', 'Прекувремено'],
+  night: ['Night', 'Ноќна'], weekend: ['Weekend', 'Викенд'],
+};
+GF.WWF.sessClassLabel = (c) => { const l = GF.WWF._SESS_CLASS[c]; return l ? AL(l[0], l[1]) : c; };
+
 /* ── Speech-to-text affordance ──────────────────────────────────────────
    Web Speech API is Chromium/WebKit-only; where it's missing (Firefox, iOS
    WebViews) render an explanatory muted button instead of a dead mic. */
@@ -79,7 +88,7 @@ GF.WWF._renderWorklog = () => {
       return `<div class="sess-row">
         <span style="font-family:var(--mono);white-space:nowrap">${GF.esc(when)}</span>
         <span style="font-weight:700;white-space:nowrap">${s.hours}h</span>
-        <span class="sess-class ${GF.esc(s.classification)}">${GF.esc(s.classification)}</span>
+        <span class="sess-class ${GF.esc(s.classification)}">${GF.esc(GF.WWF.sessClassLabel(s.classification))}</span>
         <span style="flex:1;min-width:0;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${GF.esc(s.note || who)}</span>
         ${del}
       </div>`;
@@ -190,7 +199,8 @@ GF.WWF.submitWorklog = async () => {
   } else body.hours = hoursRaw;
   try {
     const s = await GF.API.addSession(st.taskId, body);
-    GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
+    const cls = GF.WWF.sessClassLabel(s.classification);
+    GF.toast(AL(`Logged ${s.hours}h — ${cls}`, `Внесени ${s.hours}ч — ${cls}`), 'success');
     st.sessions = (st.sessions || []).concat([s]);
     const t = GF.task(st.taskId);
     if (t) {

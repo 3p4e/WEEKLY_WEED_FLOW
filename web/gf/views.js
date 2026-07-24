@@ -167,7 +167,7 @@ GF.views = {
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('departments')}</div>${deptRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('responsible')}</div>${loadRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('blocker')} · ${blockers.length}</div>
-          ${blockers.map(t=>`<div class="dash-blk">${GF.icon('flag','icon','var(--red)')}<div><div class="dbk-t">${GF.esc(t.title)}</div><div class="dbk-s">${GF.esc(t.blocker||'')}</div></div></div>`).join('')||'<div class="kempty">None 🎉</div>'}</div>
+          ${blockers.map(t=>`<div class="dash-blk">${GF.icon('flag','icon','var(--red)')}<div><div class="dbk-t">${GF.esc(t.title)}</div><div class="dbk-s">${GF.esc(t.blocker||'')}</div></div></div>`).join('')||`<div class="kempty">${AL('None 🎉', 'Нема 🎉')}</div>`}</div>
       </div>`;
   },
 

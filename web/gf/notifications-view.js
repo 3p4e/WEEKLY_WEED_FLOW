@@ -15,7 +15,12 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
                     user: null,
                     // Team digest (GET /notifications/digest) — lazy: nothing is
                     // fetched until the panel is first opened.
-                    digest: null, digestWindow: 'daily', digestOpen: false, digestLoading: false };
+                    digest: null, digestWindow: 'daily', digestOpen: false, digestLoading: false,
+                    // id -> expiry ms: a notification just marked done/read locally,
+                    // guarding against a 75s-poll GET that was already in flight
+                    // (started before the action's own write landed) resurrecting
+                    // it as undone/unread when it resolves a moment later.
+                    _justDone: {}, _justRead: {} };
   const PAGE = 50;   // backend default limit on /notifications and /activity
 
   const who = (id) => (GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
@@ -201,11 +206,17 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       st.items = []; st.feed = []; st.unread = 0; st.loaded = false;
       st.moreItems = false; st.moreFeed = false;
       st.digest = null; st.digestOpen = false; st.digestLoading = false;
+      st._justDone = {}; st._justRead = {};
     }
     try {
       const [items, feed, uc] = await Promise.all([
         GF.API.notifications({}), GF.API.activity({}), GF.API.notifUnread()]);
-      st.items = Array.isArray(items) ? items : [];
+      const now = Date.now();
+      Object.keys(st._justDone).forEach(id => { if (st._justDone[id] < now) delete st._justDone[id]; });
+      Object.keys(st._justRead).forEach(id => { if (st._justRead[id] < now) delete st._justRead[id]; });
+      const fresh = (Array.isArray(items) ? items : []).filter(n => !st._justDone[n.id]);
+      fresh.forEach(n => { if (st._justRead[n.id]) n.read = true; });
+      st.items = fresh;
       st.feed = Array.isArray(feed) ? feed : [];
       st.unread = (uc && uc.unread) || 0; st.loaded = true;
       st.moreItems = st.items.length === PAGE; st.moreFeed = st.feed.length === PAGE;
@@ -276,6 +287,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     const st = GF.WWF._notif;
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) { n.read = true; st.unread = Math.max(0, st.unread - 1); }
+    st._justRead[id] = Date.now() + 10000;
     if (taskId && GF.WWF.xrJump) {
       const t = GF.task && GF.task(taskId);
       GF.WWF.xrJump(taskId, (t && t.week_start) || '');
@@ -288,13 +300,16 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) st.unread = Math.max(0, st.unread - 1);
     st.items = st.items.filter(x => x.id !== id);
+    st._justDone[id] = Date.now() + 10000;
     GF.render.all();
   };
 
   GF.WWF.notifReadAll = async () => {
     try { await GF.API.notifReadAll(); } catch (e) { return; }
-    GF.WWF._notif.items.forEach(n => n.read = true);
-    GF.WWF._notif.unread = 0;
+    const st = GF.WWF._notif;
+    const until = Date.now() + 10000;
+    st.items.forEach(n => { n.read = true; st._justRead[n.id] = until; });
+    st.unread = 0;
     GF.render.all();
   };
 

@@ -65,9 +65,7 @@
     const readiness = totalAll ? Math.round(100 * doneAll / totalAll) : null;
     const tr = d.traceability || { completed: 0, with_outcome: 0, without_outcome: 0, rate: 0 };
 
-    const tile = (label, value, sub) => `<div class="ana-tile">
-      <div class="ana-tl">${label}</div><div class="ana-tv">${value}</div>
-      ${sub ? `<div class="ana-ts">${sub}</div>` : ''}</div>`;
+    const tile = GF.kpiTile;
 
     const kpis = `<div class="ana-tiles">
       ${tile(AL('Overall readiness', 'Вкупна подготвеност'), readiness === null ? '—' : readiness + '%',

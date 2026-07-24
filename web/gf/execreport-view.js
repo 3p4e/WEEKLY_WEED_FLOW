@@ -134,11 +134,10 @@ const xrKpis = (c) => {
   const done = tasks.filter(t => t.status === 'completed').length;
   const ot = m.on_time || {};
   const rate = (ot.rate != null && Number.isFinite(Number(ot.rate))) ? Math.round(ot.rate * 100) + '%' : '—';
-  const kpi = (v, l) => `<div class="xr-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  return `<div class="xr-kpis">
-    ${kpi(tasks.length, AL('Tasks', 'Задачи'))}
-    ${kpi(done, AL('Completed', 'Завршени'))}
-    ${kpi(rate, AL('On-time', 'Навремено'))}
+  return `<div class="ana-tiles">
+    ${GF.kpiTile(AL('Tasks', 'Задачи'), tasks.length)}
+    ${GF.kpiTile(AL('Completed', 'Завршени'), done)}
+    ${GF.kpiTile(AL('On-time', 'Навремено'), rate)}
   </div>`;
 };
 

@@ -93,7 +93,7 @@
       <button class="icon-btn" id="assistant-btn" title="Assistant" onclick="GF.assistant.open()">
         <svg class="icon" viewBox="0 0 20 20" style="stroke:var(--orange)"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6L10 3z"/></svg>
       </button>
-      <button class="btn btn-sm" onclick="GF.goToday()">Today</button>
+      <button class="btn btn-sm" id="today-btn" onclick="GF.goToday()">Today</button>
       <button class="icon-btn" id="theme-btn" onclick="GF.toggleTheme()" title="Themes"></button>
       <button class="icon-btn" onclick="GF.openSettings()" title="Settings">
         <svg class="icon" viewBox="0 0 20 20"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM10 2.5v2M10 15.5v2M3.5 6l1.7 1M14.8 13l1.7 1M3.5 14l1.7-1M14.8 7l1.7-1"/></svg>
@@ -136,8 +136,8 @@
     <div class="modal-head"><h3 id="user-title">Add person</h3>
       <button class="btn-ghost" onclick="GF.closeModal('user-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="user-body"></div>
-    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('user-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="GF.submitUser()">Save</button></div>
+    <div class="modal-foot"><button class="btn" id="user-cancel-btn" onclick="GF.closeModal('user-modal')">Cancel</button>
+      <button class="btn btn-primary" id="user-save-btn" onclick="GF.submitUser()">Save</button></div>
   </div>
 </div>
 
@@ -153,10 +153,10 @@
 
 <!-- ═══ AI summary ═══ -->
 <div class="overlay" id="ai-modal">
-  <div class="modal"><div class="modal-head"><h3>AI Summary</h3>
+  <div class="modal"><div class="modal-head"><h3 id="ai-modal-title">AI Summary</h3>
     <button class="btn-ghost" onclick="GF.closeModal('ai-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="ai-out" style="min-height:120px"></div>
-    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('ai-modal')">Close</button></div></div>
+    <div class="modal-foot"><button class="btn" id="ai-close-btn" onclick="GF.closeModal('ai-modal')">Close</button></div></div>
 </div>
 
 <!-- ═══ Export ═══ -->
@@ -180,7 +180,7 @@
   <div class="modal"><div class="modal-head"><h3 id="add-modal-title">New task</h3>
     <button class="btn-ghost" onclick="GF.closeModal('add-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="add-body"></div>
-    <div class="modal-foot"><button class="btn" onclick="GF.closeModal('add-modal')">Cancel</button>
+    <div class="modal-foot"><button class="btn" id="add-cancel-btn" onclick="GF.closeModal('add-modal')">Cancel</button>
       <button class="btn btn-primary" id="add-submit-btn" onclick="GF.submitAdd()">Create task</button></div></div>
 </div>
 

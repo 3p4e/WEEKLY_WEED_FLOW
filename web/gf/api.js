@@ -81,6 +81,14 @@ GF.API = {
   logout() {
     this.token = ''; this.user = null;
     sessionStorage.removeItem('wwf_token'); sessionStorage.removeItem('wwf_user');
+    // The manual "Log out" button reloads the page right after this (a full
+    // reload clears all in-memory state anyway), but an in-tab 401 mid-session
+    // does NOT reload — without this, a stale search/department/tag filter
+    // from the PREVIOUS user's session would silently carry over into
+    // whoever re-logs in on the same tab next.
+    if (window.GF && GF.state) {
+      GF.state.search = ''; GF.state.deptFilter = null; GF.state.tagFilter = null;
+    }
   },
   async changePassword(newPassword, currentPassword) {
     const data = await this._req('POST', '/auth/change-password',

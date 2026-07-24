@@ -86,9 +86,10 @@ GF.assistant = {
     try {
       const r = await this.complete('Reply with exactly: OK');
       const ok = /ok/i.test(r || '');
-      GF.toast(ok ? (this.statusInfo().label + ' ✓') : 'Connected, unexpected reply', ok ? 'success' : 'info');
+      GF.toast(ok ? (this.statusInfo().label + ' ✓') : AL('Connected, unexpected reply', 'Поврзано, неочекуван одговор'), ok ? 'success' : 'info');
     } catch (e) {
-      GF.toast(e.message === 'no-ai' ? 'No AI backend available' : 'AI test failed: ' + e.message, 'error');
+      GF.toast(e.message === 'no-ai' ? AL('No AI backend available', 'Нема достапен AI сервер')
+                                      : AL('AI test failed: ', 'AI тестот не успеа: ') + e.message, 'error');
     }
   },
 

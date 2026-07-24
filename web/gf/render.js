@@ -64,6 +64,7 @@ GF.render = {
     GF.$('search-input').placeholder = GF.t('search');
     GF.$('voice-btn-label').textContent = GF.t('voice_task');
     const nl = GF.$('newtask-label'); if (nl) nl.textContent = GF.t('new_task_btn');
+    const tb = GF.$('today-btn'); if (tb) tb.textContent = GF.t('today');
     // Gate the header New-task button on the real create permission. (Was
     // guarded by a never-defined `window.APP`, so it never ran — inert dead code.)
     const nb = GF.$('newtask-btn'); if (nb) nb.style.display = GF.can('create') ? '' : 'none';

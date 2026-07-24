@@ -72,8 +72,8 @@ GF.WWF._renderCandidates = () => {
   // department filter (QC-only vs all, per the requested review flow)
   const filterOptions = [{ v: '', label: AL('All departments', 'Сите оддели') }]
     .concat(st.depts.map((d) => ({ v: d.code, label: d.name })));
-  const priOptions = _INTAKE_PRI.map((x) => ({ v: x, label: x }));
-  const typeOptions = _INTAKE_TYPES.map((x) => ({ v: x, label: x }));
+  const priOptions = _INTAKE_PRI.map((x) => ({ v: x, label: GF.prLabel(x) }));
+  const typeOptions = _INTAKE_TYPES.map((x) => ({ v: x, label: GF.taskTypeLabel(x) }));
 
   const cards = st.candidates.map((c, i) => {
     if (st.filter && c.department !== st.filter) return '';

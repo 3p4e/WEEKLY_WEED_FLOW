@@ -65,6 +65,7 @@ GF.WWF._loadAiInsights = async () => {
   const st = GF.WWF._report;
   if (!st.data) return;
   st.aiLoading = true;
+  const my = (st.lseq = (st.lseq || 0) + 1);
   const el = GF.$('report-ai');
   if (el) el.innerHTML = `<div style="padding:16px;text-align:center;color:var(--ink-3)">${GF.icon('sparkle')} ${AL('Generating AI insights…', 'Генерирање AI увиди…')}</div>`;
   try {
@@ -77,10 +78,13 @@ GF.WWF._loadAiInsights = async () => {
              ', pending: ' + s.pending + '. ' +
              'Provide insights on productivity, risks, and recommendations for next week.',
     });
+    if (my !== st.lseq) return;
     st.aiInsights = result.available ? result.output : null;
   } catch (e) {
+    if (my !== st.lseq) return;
     st.aiInsights = null;
   }
+  if (my !== st.lseq) return;
   st.aiLoading = false;
   const aiEl = GF.$('report-ai');
   if (aiEl) aiEl.innerHTML = GF.WWF._renderAiBox();
@@ -269,11 +273,15 @@ GF.WWF._reportMarkup = () => {
   // ── Overdue (due_date passed, not completed) ──
   let overdueList = '';
   if (isR && d.overdue && d.overdue.length) {
-    const today = new Date();
+    // Local-midnight anchored on both sides (not `new Date()` vs a UTC-parsed
+    // due_date): a positive-offset facility would otherwise see its "now" sit
+    // ahead of the UTC-midnight due date by the timezone offset, adding an
+    // extra day to every count (same idiom as GF.WWF.shiftReportWeek above).
+    const today = new Date(GF.todayISO() + 'T00:00:00');
     overdueList = `<div style="margin:18px 0" id="report-overdue">
       <div style="font-weight:700;font-size:14px;color:#E5484D;margin-bottom:8px">${GF.icon('flag', 'icon', '#E5484D')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {
-        const daysLate = Math.max(1, Math.floor((today - new Date(t.due_date)) / 86400000));
+        const daysLate = Math.max(1, Math.round((today - new Date(t.due_date + 'T00:00:00')) / 86400000));
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
           <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>

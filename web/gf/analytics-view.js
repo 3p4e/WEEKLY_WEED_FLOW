@@ -15,8 +15,16 @@
   GF.WWF.loadAnalytics = async () => {
     const st = GF.WWF._ana;
     st.loading = true; st.error = null;
-    try { st.data = await GF.API.analytics(st.weeks); }
-    catch (e) { st.error = e.message; }
+    const my = (st.lseq = (st.lseq || 0) + 1);
+    try {
+      const data = await GF.API.analytics(st.weeks);
+      if (my !== st.lseq) return;
+      st.data = data;
+    } catch (e) {
+      if (my !== st.lseq) return;
+      st.error = e.message;
+    }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'analytics') GF.render.all();
   };
@@ -136,9 +144,7 @@
     const openNow = d.departments.reduce((s, x) => s + x.open, 0);
     const overdueNow = d.departments.reduce((s, x) => s + x.overdue, 0);
 
-    const tile = (label, value, sub) => `<div class="ana-tile">
-      <div class="ana-tl">${label}</div><div class="ana-tv">${value}</div>
-      ${sub ? `<div class="ana-ts">${sub}</div>` : ''}</div>`;
+    const tile = GF.kpiTile;
 
     const kpis = `<div class="ana-tiles">
       ${tile(AL('Open tasks now', 'Отворени задачи сега'), openNow,
