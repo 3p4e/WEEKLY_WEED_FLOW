@@ -96,6 +96,26 @@ async def test_import_status_never_regresses(client, admin_headers, org):
     assert t["status"] == "completed"
 
 
+async def test_import_reimport_omitting_priority_type_preserves_them(client, admin_headers, org):
+    """H9: priority/task_type used to default to 'medium'/'other' on every
+    import, silently downgrading a classification a re-import simply didn't
+    mention. A re-import that omits them must merge like every sibling
+    field (COALESCE onto the existing row), not stomp it."""
+    r = await client.post("/capture/import",
+                          json=_payload(ref="preserve-1", priority="critical", task_type="capa"),
+                          headers=admin_headers)
+    assert r.json()["created"] == 1
+
+    r = await client.post("/capture/import",
+                          json=_payload(ref="preserve-1", priority=None, task_type=None),
+                          headers=admin_headers)
+    assert r.json()["updated"] == 1
+
+    r = await client.get("/tasks?include_archived=true", headers=admin_headers)
+    t = next(x for x in r.json() if x.get("external_ref") == "preserve-1")
+    assert t["priority"] == "critical" and t["task_type"] == "capa"
+
+
 async def test_import_owner_gating(client, admin_headers, org):
     """A non-admin can import their own work but not someone else's."""
     user, otp = await create_user(client, admin_headers)

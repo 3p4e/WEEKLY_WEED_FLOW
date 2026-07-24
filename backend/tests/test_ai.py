@@ -47,6 +47,16 @@ async def test_missing_input_field_rejected(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_data_func_rejects_malformed_context_week_id(client, admin_headers):
+    """H11: context.week_id is a caller-supplied body field reaching a raw
+    SQL WHERE clause (_task_context) — a garbage value used to 500 from an
+    uncaught asyncpg cast error instead of a clean 422."""
+    r = await client.post("/ai/weekly_summary",
+                          json={"input": "summarise please", "context": {"week_id": "not-a-uuid"}},
+                          headers=admin_headers)
+    assert r.status_code == 422
+
+
 async def test_configured_but_unreachable_agent_degrades_gracefully(client, admin_headers, org, monkeypatch):
     """A binding exists (so the function is "configured"), but the Letta
     endpoint itself doesn't exist in this environment — exercises the

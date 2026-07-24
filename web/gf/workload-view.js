@@ -8,7 +8,6 @@
 window.GF = window.GF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   const W = { critical: 3, high: 2, medium: 1.5, low: 1 };
   const CAP = 12;   // soft weekly capacity in points — display heuristic only
 

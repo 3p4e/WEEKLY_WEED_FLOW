@@ -230,13 +230,26 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
         closed_oos = await c.fetchval(
             "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status='CLOSED'",
             body.batch_id)
-        if not closed_oos and not body.oos_reference:
-            names = ", ".join(sorted({r["test_name"] or "?" for r in masked_fails})[:5])
-            raise HTTPException(
-                409, f"{len(masked_fails)} failing result(s) ({names}) were superseded by a"
-                     " re-test with no OOS investigation on record — the CoQ compiles only"
-                     " the investigation-confirmed result set (QCSOP 012 §6.4.1; close the"
-                     " OOS or cite it via oos_reference)")
+        if not closed_oos:
+            if not body.oos_reference:
+                names = ", ".join(sorted({r["test_name"] or "?" for r in masked_fails})[:5])
+                raise HTTPException(
+                    409, f"{len(masked_fails)} failing result(s) ({names}) were superseded by a"
+                         " re-test with no OOS investigation on record — the CoQ compiles only"
+                         " the investigation-confirmed result set (QCSOP 012 §6.4.1; close the"
+                         " OOS or cite it via oos_reference)")
+            # H5: oos_reference was previously accepted as any non-empty
+            # string with no verification — a fabricated number was enough
+            # to mask a failure. It must actually name a closed investigation.
+            cited = await c.fetchval(
+                "SELECT 1 FROM qc_oos_records WHERE org_id=$1 AND batch_id=$2"
+                " AND oos_number=$3 AND status='CLOSED'",
+                user["org_id"], body.batch_id, body.oos_reference)
+            if not cited:
+                raise HTTPException(
+                    409, f"oos_reference '{body.oos_reference}' does not match a CLOSED OOS"
+                         " record on this batch — cite an existing closed investigation's"
+                         " OOS number, or close the investigation (QCSOP 012 §6.4.1)")
     lines, cited_cert_ids, missing = [], set(), []
     for i, p in enumerate(params):
         pid = str(p["id"])

@@ -31,10 +31,14 @@
   GF.WWF.loadQcLabs = async () => {
     const st = GF.WWF._qclab;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.labs = await GF.API.qcLabs(q);
-    } catch (e) { st.error = e.message; }
+      const labs = await GF.API.qcLabs(q);
+      if (my !== st.lseq) return;
+      st.labs = labs;
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qclab') GF.render.all();
   };
@@ -43,9 +47,12 @@
     const st = GF.WWF._qclab;
     if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; st.detailError = null; GF.render.all();
-    try { st.detail = await GF.API.qcLab(id); }
-    catch (e) { st.detailError = e.message; GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qclab') GF.render.all();
+    // Stale-write guard: if the user picks a different row before this fetch
+    // resolves, st.sel no longer matches `id` — don't let the late response
+    // overwrite the newer selection's detail/error (qcsample-view.js pattern).
+    try { const d = await GF.API.qcLab(id); if (st.sel === id) st.detail = d; }
+    catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
+    if (st.sel === id && GF.state.view === 'qclab') GF.render.all();
   };
   GF.WWF.qcLabFilter = (v) => { GF.WWF._qclab.q = v; GF.render.all(); GF.refocus('qcl-search'); };
   GF.WWF.qcLabStatus = async (v) => { GF.WWF._qclab.status = v; await GF.WWF.loadQcLabs(); GF.refocus('qcl-status'); };

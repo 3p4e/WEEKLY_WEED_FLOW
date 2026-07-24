@@ -30,7 +30,7 @@ from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls, rls_users
-from app.deps import dept_scope, is_dept_scoped_role, require_role
+from app.deps import dept_scope, is_dept_scoped_role, require_role, uuid_or_404
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.notify import safe_emit
@@ -44,15 +44,6 @@ def _today() -> date:
     resolves to the previous day (and thus the previous Fri→Thu week) for the
     hour or two after local midnight."""
     return datetime.now(TZ).date()
-
-
-def _require_uuid(value) -> None:
-    """A malformed (non-uuid) doc_id path param must be a clean 404, not a 500
-    from asyncpg trying to cast it to uuid inside the lookup query."""
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        raise HTTPException(404, "Document not found")
 
 
 def _effective_dept_id(user: dict, requested: str | None) -> str | None:
@@ -812,7 +803,7 @@ class PatchReq(BaseModel):
 @router.patch("/{doc_id}")
 async def patch_document(doc_id: str, body: PatchReq,
                          user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT id, status, department_id FROM weekly_documents WHERE id=$1", doc_id)
         if cur is None:
@@ -847,7 +838,7 @@ async def patch_section(doc_id: str, key: str, body: SectionReq,
     (tasks + ribbon + metrics + every AI body) — and the server mutates the
     CURRENT stored content, so a concurrent edit can't be clobbered by a stale
     full-document upload."""
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         # Plain read first to establish existence + scope + status. A locked row is
         # deliberately NOT FOR-UPDATE-lockable (mig 0008's immutability policy
@@ -914,7 +905,7 @@ async def patch_section(doc_id: str, key: str, body: SectionReq,
 
 @router.post("/{doc_id}/lock")
 async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT id, status, department_id FROM weekly_documents WHERE id=$1", doc_id)
         if cur is None:
@@ -1292,7 +1283,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
 
 @router.get("/{doc_id}/export.pdf")
 async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
     if row is None:
@@ -1497,7 +1488,7 @@ def _html_export(doc: dict, people: dict) -> str:
 @router.get("/{doc_id}/export.html")
 async def export_html(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """The interactive offline snapshot — same guard stack as export.pdf."""
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
     if row is None:

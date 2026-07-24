@@ -5,7 +5,6 @@
 window.GF = window.GF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   let open = false, sel = 0, results = [];
 
   const VIEWS = () => {

@@ -187,6 +187,7 @@
       </div>
       ${nxt && canWrite() ? `<div class="qms-dl"><button class="btn btn-sm btn-primary" onclick="GF.WWF.qcSpecAdvance('${s.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(nxt)}</button>
         ${BACK[s.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','${BACK[s.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
+        ${s.status === 'ACTIVE' ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','SUPERSEDED')">${AL('Supersede', 'Замени')}</button>` : ''}
         ${!['ACTIVE', 'WITHDRAWN', 'SUPERSEDED'].includes(s.status) ? `<button class="btn btn-sm" onclick="GF.WWF.qcSpecAdvance('${s.id}','WITHDRAWN')">${AL('Withdraw', 'Повлечи')}</button>` : ''}</div>` : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test parameters', 'Тест параметри')}</div>
       ${paramRows(d)}

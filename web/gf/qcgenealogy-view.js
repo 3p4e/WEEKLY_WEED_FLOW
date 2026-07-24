@@ -8,8 +8,7 @@
    Full-page view in the QMS Studio zone, anchored 'qms-end'. */
 
 (function () {
-  const AL = (en, mk) => (GF.state && GF.state.lang === 'mk' ? mk : en);
-  const _WRITERS = ['ADMIN', 'CEO', 'COO', 'QC_MGR', 'QP'];
+  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
   const RELATIONS = ['CULTIVATION', 'PROCESSING', 'PACKAGING', 'BLEND', 'GENERIC'];
 
@@ -20,10 +19,16 @@
     const b = (batch != null ? batch : st.batch).trim();
     if (!b) { st.data = null; st.inherited = null; GF.render.all(); return; }
     st.batch = b; st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
-      st.data = await GF.API.qcGenealogy(b);
-      st.inherited = await GF.API.qcGenInherited(b).catch(() => null);
-    } catch (e) { st.error = e.message; }
+      const data = await GF.API.qcGenealogy(b);
+      if (my !== st.lseq) return;
+      st.data = data;
+      const inherited = await GF.API.qcGenInherited(b).catch(() => null);
+      if (my !== st.lseq) return;
+      st.inherited = inherited;
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcgenealogy') GF.render.all();
   };

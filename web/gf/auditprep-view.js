@@ -12,7 +12,6 @@
    base USER). Reuses the ana-* CSS tokens — no new stylesheet. */
 
 (function () {
-  const AL = (en, mk) => (GF.state && GF.state.lang === 'mk' ? mk : en);
   GF.WWF._ap = { data: null, loading: false, error: null };
 
   GF.WWF.loadAuditPrep = async () => {

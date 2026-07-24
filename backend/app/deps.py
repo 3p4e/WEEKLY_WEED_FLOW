@@ -1,4 +1,6 @@
 """Auth dependencies: current user (re-read from DB) + role guards."""
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -67,6 +69,24 @@ def is_dept_scoped_role(user: dict) -> bool:
     NOT hand a department-less manager org-wide authority. They use this to tell
     the two apart and refuse instead."""
     return user["role"] in DEPT_SCOPED_ROLES
+
+
+def uuid_or_404(value, detail: str = "Not found") -> None:
+    """A malformed (non-uuid) path/body id must be a clean 404, not a 500 from
+    asyncpg trying to cast it inside the lookup query."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail)
+
+
+def uuid_or_422(value, detail: str = "must be a uuid") -> None:
+    """Same guard for routes where a malformed id is a bad request rather
+    than a missing resource."""
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
 
 
 def require_role(*roles: str):

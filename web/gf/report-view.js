@@ -15,7 +15,15 @@ GF.WWF._sc = (label, value, color) =>
   </div>`;
 
 GF.views.report = function () {
-  setTimeout(() => GF.WWF.loadReport(), 0);
+  const st = GF.WWF._report;
+  // Already have a fetched report (e.g. the user navigated away and back) —
+  // render it straight away instead of flashing the loading skeleton and
+  // silently re-fetching every time this view is entered.
+  if (st.data) {
+    setTimeout(() => { if (GF.WWF.loadDocument) GF.WWF.loadDocument(); }, 0);
+    return `<div id="report-view" style="padding:4px 2px 40px">${GF.WWF._reportMarkup()}</div>`;
+  }
+  if (!st.loading) setTimeout(() => GF.WWF.loadReport(), 0);
   return `<div id="report-view" style="padding:4px 2px 40px">
     <div style="padding:40px;text-align:center;color:var(--ink-3)">${AL('Loading report…', 'Се вчитува извештај…')}</div>
   </div>`;
@@ -208,9 +216,11 @@ GF.WWF._renderTimeBand = (band) => {
   return html;
 };
 
-GF.WWF.renderReport = () => {
-  const v = GF.$('report-view'); if (!v) return;
-  const d = GF.WWF._report.data; if (!d) return;
+// Pure markup builder — no DOM access — so GF.views.report can render an
+// already-fetched report directly (H12) without going through renderReport's
+// getElementById + innerHTML side effect.
+GF.WWF._reportMarkup = () => {
+  const d = GF.WWF._report.data; if (!d) return '';
   const isR = d.mode === 'report';
   const s = d.summary;
 
@@ -332,7 +342,13 @@ GF.WWF.renderReport = () => {
   const pinsPanel = GF.WWF._renderPinsPanel();
   // Document panel (document-view.js) renders into #report-doc after load.
   const docPanel = '<div id="report-doc"></div>';
-  v.innerHTML = toolbar + period + cards + docPanel + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+  return toolbar + period + cards + docPanel + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+};
+
+GF.WWF.renderReport = () => {
+  const v = GF.$('report-view'); if (!v) return;
+  if (!GF.WWF._report.data) return;
+  v.innerHTML = GF.WWF._reportMarkup();
   if (GF.WWF.loadDocument) GF.WWF.loadDocument();
 };
 

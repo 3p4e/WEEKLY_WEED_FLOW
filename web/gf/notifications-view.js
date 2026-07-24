@@ -8,7 +8,6 @@
 window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false,
                     moreItems: false, moreFeed: false,
                     // Last user this inbox was loaded for — a login as someone

@@ -41,9 +41,12 @@ GF.WWF.openWorklog = (taskId) => {
   GF.$('worklog-modal-title').textContent = GF.t('log_work') + ' — ' + t.title.slice(0, 40);
   GF.WWF._renderWorklog();
   GF.openModal('worklog-modal');
+  // Stale-write guard: if the user swaps to a different task's worklog before
+  // this fetch resolves, _worklog.taskId no longer matches `taskId` — the
+  // late response must not overwrite the newer modal's session list.
   GF.API.sessions(taskId)
-    .then(s => { GF.WWF._worklog.sessions = s || []; GF.WWF._renderWorklog(); })
-    .catch(() => { GF.WWF._worklog.sessions = []; GF.WWF._renderWorklog(); });
+    .then(s => { if (GF.WWF._worklog.taskId === taskId) { GF.WWF._worklog.sessions = s || []; GF.WWF._renderWorklog(); } })
+    .catch(() => { if (GF.WWF._worklog.taskId === taskId) { GF.WWF._worklog.sessions = []; GF.WWF._renderWorklog(); } });
 };
 
 GF.WWF._renderWorklog = () => {

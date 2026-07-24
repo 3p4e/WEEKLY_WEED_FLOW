@@ -5,7 +5,6 @@
 window.GF = window.GF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.state.calOffset = 0;   // months relative to the current month
 
   GF.calNav = (d) => { GF.state.calOffset += d; GF.render.all(); };

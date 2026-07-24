@@ -12,10 +12,11 @@
    Review is second-person (the backend rejects a reviewer who is the analyst).
    Approve / release are Qualified-Person decisions (Annex 16 — QP or ADMIN
    ONLY, mirrored by canQP() here; executives are business leadership, not a
-   GMP quality role). Issuing the COQ is a QC Manager function (mirrored by
-   canCoq() — QP may also issue one). Read = elevated; write = QC_MGR / QP /
-   execs / ADMIN. Same full-page-view + qms-zone pattern; QMS Studio zone,
-   anchored 'qms-end'. */
+   GMP quality role). Issuing the COQ is a QC Manager / ADMIN function only —
+   QP is deliberately excluded (mirrors the backend's _COQ_ROLES exactly: the
+   QP who releases the batch is not the one who issues its certificate).
+   Read = elevated; write = QC_MGR / QP / execs / ADMIN. Same full-page-view +
+   qms-zone pattern; QMS Studio zone, anchored 'qms-end'. */
 
 (function () {
   GF.WWF._qccoa = { coas: null, sel: null, detail: null, detailError: null, specParams: null,
@@ -24,7 +25,7 @@
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const _QP = ['ADMIN', 'QP'];
-  const _COQ = ['ADMIN', 'QC_MGR', 'QP'];
+  const _COQ = ['ADMIN', 'QC_MGR'];
   const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
   const canQP = () => _QP.includes((GF.API.user || {}).role);
   const canCoq = () => _COQ.includes((GF.API.user || {}).role);

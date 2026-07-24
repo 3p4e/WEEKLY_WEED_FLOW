@@ -278,6 +278,34 @@ async def test_unknown_fk_fields_return_422_not_500(client, admin_headers):
     assert r.status_code == 422, r.text
 
 
+async def test_malformed_ids_rejected_with_422_not_500(client, admin_headers):
+    """H11: a garbage (non-uuid) path/body id used to reach asyncpg raw —
+    a cast failure the driver reports as a 500, not a clean validation error.
+    Every task sub-resource route that takes an id must 422 instead."""
+    garbage = "not-a-uuid"
+    r = await client.post("/tasks", json={"title": "id-guard subject"}, headers=admin_headers)
+    task_id = r.json()["id"]
+
+    assert (await client.patch(f"/tasks/{garbage}", json={"title": "x"}, headers=admin_headers)).status_code == 422
+    assert (await client.post(f"/tasks/{garbage}/progress",
+                              json={"day_label": "Mon", "note": "n"}, headers=admin_headers)).status_code == 422
+    assert (await client.post(f"/tasks/{garbage}/sessions",
+                              json={"started_at": "2026-07-06T09:00:00", "hours": 1},
+                              headers=admin_headers)).status_code == 422
+    assert (await client.get(f"/tasks/{garbage}/sessions", headers=admin_headers)).status_code == 422
+    assert (await client.delete(f"/sessions/{garbage}", headers=admin_headers)).status_code == 422
+    assert (await client.post(f"/tasks/{garbage}/links",
+                              json={"url": "https://example.com"}, headers=admin_headers)).status_code == 422
+    assert (await client.delete(f"/tasks/{garbage}/links/{garbage}", headers=admin_headers)).status_code == 422
+    assert (await client.delete(f"/tasks/{task_id}/links/{garbage}", headers=admin_headers)).status_code == 422
+    assert (await client.post(f"/tasks/{garbage}/dependencies",
+                              json={"depends_on_task_id": task_id}, headers=admin_headers)).status_code == 422
+    assert (await client.post(f"/tasks/{task_id}/dependencies",
+                              json={"depends_on_task_id": garbage}, headers=admin_headers)).status_code == 422
+    assert (await client.delete(f"/tasks/{garbage}/dependencies/{garbage}",
+                                headers=admin_headers)).status_code == 422
+
+
 async def test_recurrence_until_bad_date_rejected_at_create(client, admin_headers):
     """A malformed recurrence.until is validated up front (422) — otherwise it
     only blows up later, inside the completion transaction, permanently 500-ing

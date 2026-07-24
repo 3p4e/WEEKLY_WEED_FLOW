@@ -383,12 +383,14 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
 _REGISTER_ONLY = {"retention_start", "retention_expiry", "archive_ref"}
 
 
-_COQ_TEMPLATE_META = {"cultivation_batch", "product_code", "packaging", "packaging_date",
-                      "manufacture_date", "expiry_date", "retest_date",
-                      "botanical_type", "chemotype"}
-
-
-_ISSUED_EDITABLE = _REGISTER_ONLY | _COQ_TEMPLATE_META
+# The CoQ-template metadata fields (cultivation_batch, product_code,
+# packaging[_date], manufacture_date, expiry_date, retest_date,
+# botanical_type, chemotype — see coq_docx.py) are what's literally printed
+# on the issued CoQ, so they get the same set-once treatment as every other
+# analytical field on an issued cert (back-fill from blank is an audited
+# correction; changing an already-set value requires a revision) — NOT
+# unconditional editability (H4).
+_ISSUED_EDITABLE = _REGISTER_ONLY
 
 
 _ARCHIVED_STATUSES = ("VOIDED", "SUPERSEDED")

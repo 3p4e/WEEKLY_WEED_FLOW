@@ -109,6 +109,27 @@ async def test_batch_changes_feed_the_activity_stream(client, admin_headers):
     assert not any(n.get("object_id") == b["id"] for n in inbox)
 
 
+async def test_malformed_ids_rejected_not_500(client, admin_headers):
+    """H11: a garbage (non-uuid) room_id/batch_id used to reach asyncpg raw
+    and 500 instead of the clean error every sibling bad-id path returns."""
+    garbage = "not-a-uuid"
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "grow_badid", "Grow BadId")
+
+    assert (await client.patch(f"/facility/rooms/{garbage}", json={"name": "x"},
+                               headers=admin_headers)).status_code == 404
+    assert (await client.post("/facility/batches", json={
+        "room_id": garbage, "strain": "X", "plant_count": 1, "phase": "veg"},
+        headers=cu_h)).status_code == 422
+    assert (await client.patch(f"/facility/batches/{garbage}", json={"plant_count": 2},
+                               headers=cu_h)).status_code == 404
+    b = await client.post("/facility/batches", json={
+        "room_id": room["id"], "strain": "X", "plant_count": 1, "phase": "veg"}, headers=cu_h)
+    bid = b.json()["id"]
+    assert (await client.patch(f"/facility/batches/{bid}", json={"room_id": garbage},
+                               headers=cu_h)).status_code == 422
+
+
 async def test_batch_phase_since_patch_accepts_real_date(client, admin_headers):
     """PATCH /facility/batches/{id} with an explicit phase_since must bind via a
     ::date cast (backdating a phase), not 500 on asyncpg's str→date rejection."""

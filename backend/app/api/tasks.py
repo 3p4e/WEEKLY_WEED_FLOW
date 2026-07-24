@@ -549,6 +549,7 @@ async def _materialize_recurrence(c, row) -> dict | None:
 
 @router.patch("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     patch = body.model_dump(exclude_unset=True)
     if "recurrence" in patch:
         _check_recurrence(patch["recurrence"])
@@ -677,6 +678,7 @@ class ProgressIn(BaseModel):
 
 @router.post("/tasks/{task_id}/progress", status_code=201)
 async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -722,6 +724,7 @@ def _session_out(r) -> dict:
 
 @router.post("/tasks/{task_id}/sessions", status_code=201)
 async def add_session(task_id: str, body: SessionIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     body.started_at = _facility_tz(body.started_at)
     body.ended_at = _facility_tz(body.ended_at)
     if body.ended_at is None and body.hours is None:
@@ -743,6 +746,7 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
 
 @router.get("/tasks/{task_id}/sessions")
 async def list_sessions(task_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -763,6 +767,7 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
     """Only the person who logged a session (or an elevated role) may remove
     it — sessions are the overtime evidence, so deletion stays narrow (and is
     audit-trailed by the row trigger either way)."""
+    _uuid_or_422(session_id, "session_id")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT user_id, task_id FROM work_sessions WHERE id=$1", session_id)
         if row is None:
@@ -788,6 +793,7 @@ class LinkIn(BaseModel):
 
 @router.post("/tasks/{task_id}/links", status_code=201)
 async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     url = (body.url or "").strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(422, "url must be http(s)")
@@ -805,6 +811,8 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
 async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    _uuid_or_422(link_id, "link_id")
     async with rls(user) as c:
         # Look the task up under RLS first — task_links' only policy is
         # org_isolation, so without this any org member who knows a link id
@@ -832,7 +840,9 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
     that would introduce a CYCLE — if the prospective blocker is already
     (transitively) blocked by this task, adding the edge would deadlock the
     graph, so it's a 422."""
+    _uuid_or_422(task_id, "task_id")
     dep = body.depends_on_task_id
+    _uuid_or_422(dep, "depends_on_task_id")
     if dep == task_id:
         raise HTTPException(422, "A task cannot depend on itself")
     async with rls(user) as c:
@@ -863,6 +873,8 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
 
 @router.delete("/tasks/{task_id}/dependencies/{dep_id}")
 async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    _uuid_or_422(dep_id, "dep_id")
     async with rls(user) as c:
         t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if t is None:
@@ -927,9 +939,16 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
     if action in ("REJECT", "BLOCK") and not remark:
         raise HTTPException(422, "A remark is required to reject or block")
     async with rls(user) as c:
+        # FOR UPDATE (same idiom as update_task's recurrence guard): two
+        # concurrent transitions on the same task (e.g. one APPROVE, one
+        # REJECT, both read while the task was still 'submitted') must
+        # serialize — the second transaction blocks here until the first
+        # commits, then its own read reflects the already-applied
+        # transition, so its `cur != 'submitted'` check correctly 409s
+        # instead of writing a second, conflicting sign-off event.
         t = await c.fetchrow(
             "SELECT id, title, department_id, workflow_state FROM tasks"
-            " WHERE id=$1 AND is_deleted=false", task_id)
+            " WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
         if t is None:
             raise HTTPException(404, "Task not found or not permitted")
         await _assert_scope_visible(c, task_id, user)

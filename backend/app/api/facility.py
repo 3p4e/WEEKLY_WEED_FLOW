@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.db import rls
-from app.deps import require_role
+from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
@@ -133,6 +133,7 @@ async def create_room(body: RoomIn, user: dict = Depends(require_role(ADMIN))):
 @router.patch("/rooms/{room_id}")
 async def update_room(room_id: str, body: RoomPatch,
                       user: dict = Depends(require_role(ADMIN))):
+    uuid_or_404(room_id, "Room not found")
     patch = body.model_dump(exclude_unset=True)
     _check_kind(patch.get("kind"))
     fields, args = [], []
@@ -153,6 +154,7 @@ async def update_room(room_id: str, body: RoomPatch,
 
 
 async def _room_or_422(c, room_id: str):
+    uuid_or_422(room_id, "Unknown or inactive room")
     room = await c.fetchrow("SELECT id, name FROM rooms WHERE id=$1 AND is_active", room_id)
     if room is None:
         raise HTTPException(422, "Unknown or inactive room")
@@ -186,6 +188,7 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
 @router.patch("/batches/{batch_id}")
 async def update_batch(batch_id: str, body: BatchPatch,
                        user: dict = Depends(require_role(*_WRITERS))):
+    uuid_or_404(batch_id, "Batch not found")
     patch = body.model_dump(exclude_unset=True)
     _check_phase(patch.get("phase"))
     async with rls(user) as c:

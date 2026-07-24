@@ -34,14 +34,26 @@
   GF.WWF.qclCreateWater = async () => {
     const location = mk('qcl-loc'), grade = mk('qcl-grade');
     if (!location) return GF.toast(AL('Location required', 'Потребна е локација'), 'error');
-    const body = { location, grade: grade || 'RO', passed: true };
+    const passed = mk('qcl-passed') !== 'fail';
+    const ooe = mk('qcl-ooe');
+    if (!passed && !ooe) return GF.toast(AL('OOE reason required for a failing result', 'Потребна е причина за OOE'), 'error');
+    const body = { location, grade: grade || 'RO', passed };
+    if (!passed) body.ooe = ooe;
     const rd = mk('qcl-wdate'); if (rd) body.result_date = rd;
     const pj = mk('qcl-params'); if (pj) { try { body.parameters = JSON.parse(pj); } catch (e) { return GF.toast(AL('Parameters must be JSON', 'Параметрите мора да се JSON'), 'error'); } }
     try { const r = await GF.API.qcCreateWater(body); GF.toast(r.water_test_id); await GF.WWF.loadQcLeaves(); }
     catch (e) { GF.toast(e.message, 'error'); }
   };
   GF.WWF.qclToggleWater = async (id, passed) => {
-    try { await GF.API.qcPatchWater(id, { passed: !passed }); } catch (e) { GF.toast(e.message, 'error'); }
+    const patch = { passed: !passed };
+    // Flipping PASS -> OOE: a failing water result demands a recorded reason,
+    // same as the create-form gate above — never a bare unexplained fail.
+    if (passed) {
+      const ooe = prompt(AL('OOE reason (required):', 'Причина за OOE (задолжително):'));
+      if (!ooe) return;
+      patch.ooe = ooe;
+    }
+    try { await GF.API.qcPatchWater(id, patch); } catch (e) { GF.toast(e.message, 'error'); }
     await GF.WWF.loadQcLeaves();
   };
   GF.WWF.qclCreateStab = async () => {
@@ -154,6 +166,8 @@
       create = canWrite() ? `<div class="panel ana-panel" style="margin-bottom:12px"><div class="ana-pt" style="margin-bottom:8px">${AL('New water result', 'Нов резултат за вода')}</div><div class="qcs-form">
         ${fld('qcl-loc', AL('Location (SL code)', 'Локација (SL)'))}<select id="qcl-grade">${GRADES.map(g => `<option value="${g}">${g}</option>`).join('')}</select>
         <input id="qcl-wdate" type="date">${fld('qcl-params', AL('Parameters (JSON)', 'Параметри (JSON)'))}
+        <select id="qcl-passed" title="${AL('Result', 'Резултат')}"><option value="pass">PASS</option><option value="fail">OOE</option></select>
+        ${fld('qcl-ooe', AL('OOE reason (if failing)', 'Причина за OOE (ако не поминал)'))}
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qclCreateWater()">${GF.t('create_task') || 'Create'}</button></div></div>` : '';
       list = waterList();
     }

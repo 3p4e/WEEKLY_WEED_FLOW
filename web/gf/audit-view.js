@@ -5,11 +5,11 @@
    `audit_read` policy / app.is_elevated().
 
    Split out of integrate.js (first decomposition cut of its monkey-patch
-   pattern). Loads right after integrate.js — AL/AUDIT_ROLES declared below
-   are bare top-level consts, visible to collab.js/report-view.js only
+   pattern). Loads right after integrate.js — AUDIT_ROLES declared below
+   is a bare top-level const, visible to collab.js/report-view.js only
    because classic <script> tags share one lexical scope in document order.
+   AL() itself now lives in core.js (loads first), same reasoning.
    ════════════════════════════════════════════════════════════════════ */
-const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
 // Reuse integrate.js's ELEVATED_ROLES (same shared <script> scope, loaded
 // first) so the elevated set has one definition on the frontend.
 const AUDIT_ROLES = ELEVATED_ROLES;
@@ -21,7 +21,7 @@ const ACT = {
 const AUDIT_HIDE = ['password_hash'];   // never surface secrets in the trail
 
 GF.WWF.canAudit = () => AUDIT_ROLES.includes((GF.API.user || {}).role);
-GF.WWF._audit = { entries: [], before: null, tables: null, verify: null, hasMore: false, gen: 0 };
+GF.WWF._audit = { entries: [], before: null, tables: null, verify: null, hasMore: false, gen: 0, loaded: false };
 GF.WWF._auditFilter = { table_name: '', action: '', source: '' };
 // The two databases keep independent hash chains; every row carries which
 // one it came from (identity events vs work events).
@@ -58,6 +58,10 @@ GF.WWF._auditDiff = (e) => {
 };
 
 GF.views.audit = function () {
+  const st = GF.WWF._audit;
+  // Already have a fetched page (e.g. the user navigated away and back) —
+  // render it straight away instead of wiping it for a fresh loading skeleton.
+  if (st.loaded) return `<div id="audit-view" class="audit-wrap" style="padding:4px 2px 40px">${GF.WWF._auditMarkup()}</div>`;
   setTimeout(() => GF.WWF.loadAudit({ reset: true }), 0);
   return `<div id="audit-view" class="audit-wrap" style="padding:4px 2px 40px">
     <div class="audit-loading" style="padding:40px;text-align:center;color:var(--ink-3)">${AL('Loading audit trail…', 'Се вчитува ревизија…')}</div>
@@ -87,6 +91,7 @@ GF.WWF.loadAudit = async ({ reset = false } = {}) => {
     if (st.verify === null && (GF.API.user || {}).role === 'ADMIN') {
       try { st.verify = await GF.API.auditVerify(); } catch (e) { st.verify = { error: true }; }
     }
+    st.loaded = true;
     GF.WWF.renderAudit();
   } catch (e) {
     const v = GF.$('audit-view');
@@ -101,8 +106,10 @@ GF.WWF.applyAuditFilter = () => {
   GF.WWF.loadAudit({ reset: true });
 };
 
-GF.WWF.renderAudit = () => {
-  const v = GF.$('audit-view'); if (!v) return;
+// Pure markup builder — no DOM access — so GF.views.audit can render an
+// already-fetched page directly (H12) without going through renderAudit's
+// getElementById + innerHTML side effect.
+GF.WWF._auditMarkup = () => {
   const st = GF.WWF._audit, f = GF.WWF._auditFilter;
 
   // integrity badges (ADMIN only — /verify is ADMIN-guarded). Both databases
@@ -186,7 +193,12 @@ GF.WWF.renderAudit = () => {
     ? `<div class="mw-pager" style="justify-content:center;margin-top:10px"><button onclick="GF.WWF.loadAudit({reset:false})">${AL('Load more', 'Вчитај повеќе')}</button></div>`
     : '';
 
-  v.innerHTML = toolbar + `<div id="audit-list">${rows}</div>` + more;
+  return toolbar + `<div id="audit-list">${rows}</div>` + more;
+};
+
+GF.WWF.renderAudit = () => {
+  const v = GF.$('audit-view'); if (!v) return;
+  v.innerHTML = GF.WWF._auditMarkup();
 };
 
 /* nav item + chrome hiding for the audit view (elevated roles only) */

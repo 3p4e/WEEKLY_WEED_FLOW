@@ -215,6 +215,13 @@ const xrSection = (label, deptId, statusEntry) => {
   let body = '';
   if (open) {
     const doc = st.docs[deptId];
+    // Self-heal on cache-miss: xrSetKind/xrSetRef wipe st.docs on a kind/week
+    // change but leave already-open sections open (xrSetRef especially — the
+    // user is still looking at this department, just a different week), so
+    // without this an open section stuck at `undefined` never re-fetches and
+    // shows "Loading…" forever. Mirrors the org-wide KPI band's own
+    // self-healing fetch above (GF.views.execreport), now for every section.
+    if (doc === undefined) GF.WWF.xrFetchDoc(deptId);
     if (doc === null || doc === undefined) {
       body = `<div class="xr-sec-body sub" style="display:flex;align-items:center;gap:10px">
         <span class="mw-spinner mw-spinner--sm"></span>${AL('Loading…', 'Се вчитува…')}</div>`;

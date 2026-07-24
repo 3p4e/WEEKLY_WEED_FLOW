@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
-from app.deps import dept_scope, require_password_set
+from app.deps import dept_scope, require_password_set, uuid_or_404
 from app.roles import ELEVATED_ROLES
 from app.notify import participants, safe_emit
 from app.roster import display_name, roster
@@ -47,6 +47,7 @@ class AckReq(BaseModel):
 
 
 async def _task_or_404(conn, task_id: str) -> dict:
+    uuid_or_404(task_id, "Task not found")
     t = await conn.fetchrow("SELECT id, user_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
     if t is None:
         raise HTTPException(404, "Task not found")
@@ -190,6 +191,7 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
 
 @router.delete("/tasks/{task_id}/assignees/{assignee_id}")
 async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_password_set)):
+    uuid_or_404(assignee_id, "Assignee not found")
     async with rls(user) as c:
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
@@ -256,6 +258,7 @@ class HandoffResolve(BaseModel):
 
 @router.post("/tasks/{task_id}/handoffs", status_code=201)
 async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(require_password_set)):
+    uuid_or_404(task_id, "Task not found")
     async with rls(user) as c:
         t = await c.fetchrow(
             "SELECT id, title, department_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
@@ -304,6 +307,7 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
     head, or (for cancel) the original requester may resolve."""
     if body.status not in ("accepted", "rejected", "cancelled"):
         raise HTTPException(422, "status must be accepted, rejected, or cancelled")
+    uuid_or_404(handoff_id, "Handoff not found")
     # Phase 1 — caller-scoped READS only. No FOR UPDATE and no writes here: a
     # write on this connection fires the audit trigger, whose hash-chain
     # advisory lock is held until this transaction ends — and the write phase

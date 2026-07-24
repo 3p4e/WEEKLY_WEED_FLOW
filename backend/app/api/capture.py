@@ -63,8 +63,8 @@ class CaptureTask(BaseModel):
     title: str
     description: str | None = None
     status: str = "pending"
-    priority: str = "medium"
-    task_type: str = "other"
+    priority: str | None = None
+    task_type: str | None = None
     reference_code: str | None = None
     department: str | None = None
     owner: str | None = None
@@ -145,9 +145,9 @@ async def _ensure_week(c, org_id, day: date):
 def _validate(t: CaptureTask) -> str | None:
     if t.status not in _STATUSES:
         return f"invalid status '{t.status}'"
-    if t.task_type not in _TYPES:
+    if t.task_type is not None and t.task_type not in _TYPES:
         return f"invalid task_type '{t.task_type}'"
-    if t.priority not in _PRIORITIES:
+    if t.priority is not None and t.priority not in _PRIORITIES:
         return f"invalid priority '{t.priority}'"
     if t.recurrence_hint and t.recurrence_hint not in _RECURRENCE:
         return f"invalid recurrence_hint '{t.recurrence_hint}'"
@@ -212,8 +212,9 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                                 " outcome,tags,estimated_hours,created_by,updated_by)"
                                 " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,"
                                 " $19,$20,$21,$21) RETURNING *",
-                                actor["org_id"], owner_id, t.title, t.description, t.status, t.priority,
-                                t.task_type, t.reference_code, t.external_ref, t.blocker_reason, recurrence,
+                                actor["org_id"], owner_id, t.title, t.description, t.status,
+                                t.priority or "medium", t.task_type or "other", t.reference_code,
+                                t.external_ref, t.blocker_reason, recurrence,
                                 t.department, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
                                 t.outcome, t.tags, t.estimated_hours, actor["id"])
                     except asyncpg.exceptions.UniqueViolationError:
@@ -241,7 +242,8 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                     merged_tags = sorted(set(row["tags"] or []) | set(t.tags))
                     row = await c.fetchrow(
                         "UPDATE tasks SET title=$2, description=COALESCE($3, description), status=$4,"
-                        " priority=$5, task_type=$6, reference_code=COALESCE($7, reference_code),"
+                        " priority=COALESCE($5, priority), task_type=COALESCE($6, task_type),"
+                        " reference_code=COALESCE($7, reference_code),"
                         " blocker_reason=COALESCE($8, blocker_reason), outcome=COALESCE($9, outcome),"
                         " due_date=COALESCE($10, due_date), completed_date=COALESCE($11, completed_date),"
                         " week_id=COALESCE($12, week_id), week_start=COALESCE($13, week_start),"

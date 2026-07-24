@@ -266,3 +266,25 @@ async def test_handoff_to_same_department_rejected(client, admin_headers):
     r = await client.post(f"/tasks/{task['id']}/handoffs", json={"to_dept_id": d["id"]},
                           headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_malformed_ids_return_404_not_500(client, admin_headers):
+    """H11: a garbage (non-uuid) task_id/handoff_id/assignee_id used to reach
+    asyncpg raw and 500 instead of the clean 'not found' every sibling
+    genuinely-missing-row path already returns."""
+    garbage = "not-a-uuid"
+    task = (await client.post("/tasks", json={"title": "id-guard subject"}, headers=admin_headers)).json()
+    tid = task["id"]
+
+    assert (await client.get(f"/tasks/{garbage}/comments", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/comments", json={"content": "hi"},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.get(f"/tasks/{garbage}/assignees", headers=admin_headers)).status_code == 404
+    assert (await client.delete(f"/tasks/{tid}/assignees/{garbage}", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/ack", json={"accepted": True},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/handoffs", json={"to_dept_id": str(uuid.uuid4())},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.get(f"/tasks/{garbage}/handoffs", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/handoffs/{garbage}/resolve", json={"status": "accepted"},
+                              headers=admin_headers)).status_code == 404

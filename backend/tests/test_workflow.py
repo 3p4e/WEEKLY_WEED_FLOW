@@ -2,6 +2,8 @@
 (+ QP quality block). The lifecycle moves only through POST /tasks/{id}/workflow;
 every transition lands in the append-only task_workflow_events record; the
 approver must differ from the submitter; reject/block demand a remark."""
+import asyncio
+
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -40,6 +42,27 @@ async def test_workflow_submit_approve_happy_path(client, admin_headers):
     assert wf["workflow_state"] == "approved"
     assert [e["action"] for e in wf["events"]] == ["SUBMIT", "APPROVE"]
     assert wf["events"][1]["actor_role"] == "QA_MGR" and wf["events"][1]["remark"] == "Looks complete."
+
+
+async def test_workflow_concurrent_approve_reject_race_serializes(client, admin_headers):
+    """H8: two concurrent sign-off decisions on the same 'submitted' task must
+    serialize (a TOCTOU race here would previously let both an APPROVE and a
+    REJECT land in the append-only event record from the same prior state).
+    Exactly one wins; the other must see the already-applied transition and
+    409 rather than write a second, conflicting sign-off."""
+    task = await _task(client, admin_headers, title="Race subject")
+    assert (await _wf(client, admin_headers, task["id"], "submit")).status_code == 201
+    _, mgr1 = await _actor(client, admin_headers, "QA_MGR")
+    _, mgr2 = await _actor(client, admin_headers, "QA_MGR")
+    r1, r2 = await asyncio.gather(
+        _wf(client, mgr1, task["id"], "approve", remark="ok"),
+        _wf(client, mgr2, task["id"], "reject", remark="not ok"),
+    )
+    assert sorted([r1.status_code, r2.status_code]) == [201, 409]
+    wf = (await client.get(f"/tasks/{task['id']}/workflow", headers=admin_headers)).json()
+    actions = [e["action"] for e in wf["events"]]
+    assert actions.count("APPROVE") + actions.count("REJECT") == 1
+    assert not ("APPROVE" in actions and "REJECT" in actions)
 
 
 async def test_workflow_reject_requires_remark_and_resubmit(client, admin_headers):

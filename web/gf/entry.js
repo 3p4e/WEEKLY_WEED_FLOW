@@ -17,7 +17,6 @@ GF.WWF = GF.WWF || {};
   let entrySkin = 'dark'; // the random skin showcased on the current splash
 
   const $ = (id) => (window.GF && GF.$ ? GF.$(id) : document.getElementById(id));
-  const AL = (en, mk) => (GF.state && GF.state.lang === 'mk' ? mk : en);
 
   // The splash/login screen showcases a RANDOM skin each time it's shown — the
   // leaf, glows and accents take that skin's palette. Restricted to the dark

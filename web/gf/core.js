@@ -138,6 +138,14 @@ GF.resetExecDepts = () => {
 // full-week read and deliberately ignores the sidebar day/tag/search filters.
 GF.execTasks = (weekId) => GF.weekTasks(weekId).filter(t => !GF.state.execHidden.has(t.dept));
 GF.t = (k) => (GF.I18N[GF.state.lang] && GF.I18N[GF.state.lang][k]) || GF.I18N.en[k] || k;
+// The ad-hoc bilingual picker every view uses for strings that aren't worth a
+// GF.I18N key. A bare top-level const (not GF.AL) so every classic <script>
+// tag loaded after this one can call it unqualified, same as the rest of this
+// file's globals — canonical home for what used to be 8 separate copies
+// scattered across view files (all subtly different: some skipped the
+// `GF.state &&` guard and would throw before state exists, others returned
+// `undefined` instead of the English fallback).
+const AL = (en, mk) => (GF.state && GF.state.lang === 'mk') ? mk : en;
 GF.dep = (id) => GF.DEPTS.find(d => d.id === id) || GF.DEPTS[0];
 GF.depName = (id) => { const d = GF.dep(id); return GF.state.lang === 'mk' ? d.mk : d.name; };
 // Compact, language-neutral abbreviation (QC, QA, WH…) for cards/chips; falls

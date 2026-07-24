@@ -391,6 +391,8 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
             await _assert_scope_visible(c, task_id, user)
             context = await _family_context(c, await roster(user), task_id)
         elif function_key in _DATA_FUNCS:
+            if week_id:
+                _uuid_or_422(week_id, "week_id")
             context = await _task_context(c, await roster(user), week_id=week_id, dept=dept_scope(user))
         else:
             context = ""
