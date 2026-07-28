@@ -11,6 +11,20 @@ from .common import _WRITERS, _uuid_or_404, router
 
 _SIG_MEANINGS = ("AUTHORED", "REVIEWED", "APPROVED", "RELEASED", "VERIFIED", "COQ_ISSUED")
 
+# H4 — four of the meanings name a point in the certificate's own lifecycle, so
+# they may only be attested once the certificate has actually reached it. A
+# "RELEASED" attestation on a DRAFT is a signed claim about something that has
+# not happened, which is precisely what an Annex 11 signature must never be.
+# Ranked, not equality-matched: signatures are recorded after the fact, so
+# signing REVIEWED on an already-APPROVED certificate is legitimate — the review
+# did happen. SUPERSEDED/VOIDED certificates have been through the whole
+# lifecycle, so they rank at the top and constrain nothing further.
+# VERIFIED and COQ_ISSUED are deliberately absent: they attest the eCoA verify
+# loop and CoQ issuance, not a qc_certificates status, so they stay unranked.
+_MEANING_MIN_RANK = {"AUTHORED": 0, "REVIEWED": 1, "APPROVED": 2, "RELEASED": 3}
+_STATUS_RANK = {"DRAFT": 0, "REVIEWED": 1, "APPROVED": 2, "RELEASED": 3,
+                "SUPERSEDED": 3, "VOIDED": 3}
+
 
 class SignIn(BaseModel):
     password: str = Field(min_length=1, max_length=200)
@@ -56,9 +70,15 @@ async def sign_certificate(coa_id: str, body: SignIn,
     if prof is None or not verify_password(body.password, prof["password_hash"]):
         raise HTTPException(401, "Signature not applied — re-authentication failed")
     async with rls(user) as c:
-        coa = await c.fetchrow("SELECT id FROM qc_certificates WHERE id=$1", coa_id)
+        coa = await c.fetchrow("SELECT id, status FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
             raise HTTPException(404, "Certificate not found")
+        need = _MEANING_MIN_RANK.get(body.meaning)
+        if need is not None and _STATUS_RANK.get(coa["status"], 0) < need:
+            raise HTTPException(
+                409, f"Certificate is {coa['status']} — a '{body.meaning}' signature attests a"
+                     " step it has not reached yet (Annex 11 §14: a signature records an act"
+                     " that happened)")
         row = await c.fetchrow(
             "INSERT INTO qc_signatures(org_id, object_type, object_id, signer_id, signer_name,"
             " signer_role, meaning, statement) VALUES ($1,'qc_certificate',$2,$3,$4,$5,$6,$7)"

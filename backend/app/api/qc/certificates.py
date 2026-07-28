@@ -319,6 +319,19 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
     OOS hook). Results may only be entered while the CoA is DRAFT."""
     _uuid_or_404(coa_id, "Certificate")
     _uuid_or_422(body.parameter_id, "parameter_id")
+    # H3 — an acceptance criterion must come from an APPROVED specification.
+    # Without a cited parameter these limits are whatever the caller typed, yet
+    # _evaluate grades against them and the result renders as a §01 Analytical
+    # Results row on the issued CoQ (coq_docx._coq_markdown iterates EVERY
+    # result and prints r.lower_limit/r.upper_limit in the Acceptance column) —
+    # certified conformance against a criterion no specification backs.
+    # Refused explicitly rather than silently dropped, so the operator is told
+    # to cite the spec parameter instead of losing the limits they entered.
+    if not body.parameter_id and (body.lower_limit is not None or body.upper_limit is not None):
+        raise HTTPException(
+            422, "Acceptance limits require a parameter_id — a certified criterion must come"
+                 " from the approved specification, not from the request. Cite the spec"
+                 " parameter, or record the value without limits as reference data.")
     async with rls(user) as c:
         coa = await c.fetchrow(
             "SELECT id, status, sample_id, specification_id FROM qc_certificates WHERE id=$1", coa_id)

@@ -17,6 +17,19 @@ async def _spec(client, headers, material="CANN-FLOS-D", version=1, **extra):
     return r.json()
 
 
+async def _param(client, headers, spec_id, name="Total THC", lo=18.0, hi=30.0, **extra):
+    """Add one parameter to a spec and return it.
+
+    H3: acceptance limits on a result must come from an approved specification
+    parameter, so tests that exercise grading cite a real one rather than
+    passing bare lower_limit/upper_limit in the request body."""
+    body = {"test_name_en": name, "test_name_mk": name, "test_method": "HPLC",
+            "unit": "%", "lower_limit": lo, "upper_limit": hi, **extra}
+    r = await client.post(f"/qc/specifications/{spec_id}/parameters", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 async def test_create_list_get_specification(client, admin_headers):
     spec = await _spec(client, admin_headers)
     assert spec["spec_id"].startswith("PP-SPEC-") and spec["status"] == "DRAFT"
@@ -48,9 +61,10 @@ async def test_date_fields_accept_real_iso_dates(client, admin_headers):
                            headers=admin_headers)
     assert r.status_code == 200 and r.json()["report_date"] == "2026-08-03"
 
+    pm = await _param(client, admin_headers, spec["id"], name="Moisture", lo=5.0, hi=12.0)
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Moisture", "result_numeric": 8.0,
-                                "lower_limit": 5.0, "upper_limit": 12.0, "result_date": "2026-07-04"},
+                          json={"test_name": "Moisture", "parameter_id": pm["id"],
+                                "result_numeric": 8.0, "result_date": "2026-07-04"},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["result_date"] == "2026-07-04"
 
@@ -326,16 +340,19 @@ async def test_create_and_get_coa(client, admin_headers):
 
 async def test_result_auto_evaluates_complies(client, admin_headers):
     spec = await _spec(client, admin_headers, material="EVAL-MAT")
+    thc = await _param(client, admin_headers, spec["id"], name="Total THC", lo=18.0, hi=30.0)
+    water = await _param(client, admin_headers, spec["id"], name="Water", lo=None, hi=10.0)
     coa = await _coa(client, admin_headers, spec["id"])
     # in-spec numeric → complies True, status pass
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Total THC", "result_numeric": 22.0,
-                                "lower_limit": 18.0, "upper_limit": 30.0, "unit": "%"},
+                          json={"test_name": "Total THC", "parameter_id": thc["id"],
+                                "result_numeric": 22.0, "unit": "%"},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["complies"] is True and r.json()["status"] == "pass"
     # out-of-spec numeric → complies False, status fail
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Water", "result_numeric": 15.0, "upper_limit": 10.0},
+                          json={"test_name": "Water", "parameter_id": water["id"],
+                                "result_numeric": 15.0},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["complies"] is False and r.json()["status"] == "fail"
     # no numeric measurement → complies null, status unknown (never fabricated)
@@ -373,10 +390,12 @@ async def test_failing_result_quarantines_linked_sample(client, admin_headers):
     for tgt in ("RECEIVED", "IN_TEST"):
         assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
                                    headers=admin_headers)).status_code == 200
+    tac = await _param(client, admin_headers, spec["id"], name="Total Aerobic Count",
+                       lo=None, hi=1000.0)
     coa = await _coa(client, admin_headers, spec["id"], batch="B-OOS", sample_id=s["id"])
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Total Aerobic Count", "result_numeric": 5000.0,
-                                "upper_limit": 1000.0}, headers=admin_headers)
+                          json={"test_name": "Total Aerobic Count", "parameter_id": tac["id"],
+                                "result_numeric": 5000.0}, headers=admin_headers)
     assert r.status_code == 201 and r.json()["complies"] is False
     detail = (await client.get(f"/qc/samples/{s['id']}", headers=admin_headers)).json()
     assert detail["sample"]["status"] == "QUARANTINE"
@@ -387,9 +406,11 @@ async def test_passing_result_leaves_sample_untouched(client, admin_headers):
     s = await _sample(client, admin_headers, batch="B-OK")
     assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": "RECEIVED"},
                                headers=admin_headers)).status_code == 200
+    water = await _param(client, admin_headers, spec["id"], name="Water", lo=None, hi=10.0)
     coa = await _coa(client, admin_headers, spec["id"], batch="B-OK", sample_id=s["id"])
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Water", "result_numeric": 5.0, "upper_limit": 10.0},
+                          json={"test_name": "Water", "parameter_id": water["id"],
+                                "result_numeric": 5.0},
                           headers=admin_headers)
     assert r.status_code == 201 and r.json()["complies"] is True
     detail = (await client.get(f"/qc/samples/{s['id']}", headers=admin_headers)).json()
@@ -704,7 +725,8 @@ def _stub_de(monkeypatch, resp):
     monkeypatch.setattr(_qc_agg_mod, "_coq_client", lambda timeout=20.0: _FakeDE(resp))
 
 
-async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None):
+async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None,
+                        result_numeric=22.0):
     """A CoA driven to RELEASED with the given results. Header user is the
     analyst; qp_headers reviews (must differ from analyst) → approves → releases.
     The default result CITES the spec parameter — the COQ completeness gate
@@ -718,7 +740,7 @@ async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results
     # report_date + PASS disposition are WHO/Annex-16 mandatory COQ content
     coa = await _coa(client, headers, spec["id"], batch="B-COQ", report_date="2026-07-01")
     for r in (results or [{"parameter_id": p.json()["id"], "test_name": "Total THC",
-                           "result_numeric": 22.0,
+                           "result_numeric": result_numeric,
                            "lower_limit": 10.0, "upper_limit": 30.0, "unit": "%",
                            "source_document_code": "ECOA-LAB-001"}]):
         assert (await client.post(f"/qc/certificates/{coa['id']}/results",
@@ -996,8 +1018,7 @@ async def test_coq_blocks_on_noncompliant_result(client, admin_headers, monkeypa
     _, qp = await _actor(client, admin_headers, "QP")
     # a failing result → the batch does not conform → COQ refused (never fabricated)
     coa = await _released_coa(client, admin_headers, qp, material="COQ-FAIL",
-                              results=[{"test_name": "Water", "result_numeric": 15.0,
-                                        "upper_limit": 10.0}])
+                              result_numeric=99.0)      # outside the spec's 10–30
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "comply" in r.json()["detail"]
 
@@ -1862,8 +1883,8 @@ async def test_certificate_esignature_records_and_lists(client, admin_headers):
     """A re-authenticated signature is recorded against the certificate carrying
     the signer's name, the meaning, and the time; it is listed on the cert and in
     the detail. The admin's account password is TestPassword123456 (conftest)."""
-    spec = await _spec(client, admin_headers, material="SIG-MAT")
-    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIG")
+    _, qp = await _actor(client, admin_headers, "QP")
+    coa = await _released_coa(client, admin_headers, qp, material="SIG-MAT")
     r = await client.post(f"/qc/certificates/{coa['id']}/sign",
                           json={"password": "TestPassword123456", "meaning": "APPROVED",
                                 "statement": "Reviewed and approved."}, headers=admin_headers)
@@ -1879,6 +1900,70 @@ async def test_certificate_esignature_records_and_lists(client, admin_headers):
     assert [x["meaning"] for x in lst] == ["APPROVED", "RELEASED"]
     detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
     assert len(detail["signatures"]) == 2
+
+
+async def test_signature_meaning_must_match_reached_status(client, admin_headers):
+    """H4 — an Annex 11 signature records an act that HAPPENED. A meaning naming
+    a lifecycle step may not be attested before the certificate reaches it: a
+    'RELEASED' signature on a DRAFT is a signed claim about something that has
+    not occurred. Ranked, not equality-matched — signatures are applied after
+    the fact, so REVIEWED stays signable on an APPROVED certificate."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="SIGST-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIGST")
+    pw = {"password": "TestPassword123456"}
+    for meaning in ("REVIEWED", "APPROVED", "RELEASED"):
+        r = await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={**pw, "meaning": meaning}, headers=admin_headers)
+        assert r.status_code == 409, (meaning, r.text)
+        assert "has not reached yet" in r.json()["detail"]
+    # AUTHORED is the authoring act itself — always available.
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={**pw, "meaning": "AUTHORED"},
+                              headers=admin_headers)).status_code == 201
+    # VERIFIED / COQ_ISSUED attest the verify loop and CoQ issuance, not a
+    # qc_certificates status, so they stay unranked and unconstrained.
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={**pw, "meaning": "VERIFIED"},
+                              headers=admin_headers)).status_code == 201
+    # once REVIEWED, that meaning becomes attestable; RELEASED still does not.
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qp)).status_code == 200
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={**pw, "meaning": "REVIEWED"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={**pw, "meaning": "RELEASED"},
+                              headers=admin_headers)).status_code == 409
+
+
+async def test_result_limits_require_a_spec_parameter(client, admin_headers):
+    """H3 — an acceptance criterion on a certified result must come from the
+    approved specification. Without a cited parameter the limits are whatever
+    the caller typed, yet the result is graded against them AND rendered as a
+    §01 Analytical Results row on the issued CoQ — certified conformance
+    against a criterion no specification backs."""
+    spec = await _spec(client, admin_headers, material="LIMIT-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-LIMIT")
+    for bad in ({"lower_limit": 1.0}, {"upper_limit": 9.0},
+                {"lower_limit": 1.0, "upper_limit": 9.0}):
+        r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"test_name": "Ad-hoc assay", "result_numeric": 5.0, **bad},
+                              headers=admin_headers)
+        assert r.status_code == 422, (bad, r.text)
+        assert "require a parameter_id" in r.json()["detail"]
+    # citing the spec parameter is the supported way to grade …
+    pm = await _param(client, admin_headers, spec["id"], name="Ad-hoc assay", lo=1.0, hi=9.0)
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Ad-hoc assay", "parameter_id": pm["id"],
+                                "result_numeric": 5.0, "lower_limit": 1.0, "upper_limit": 9.0},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is True, r.text
+    # … and an unlimited value is still recordable as ungraded reference data.
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"test_name": "Appearance", "result_value": "Compliant"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["complies"] is None
 
 
 async def test_certificate_esignature_reauth_required(client, admin_headers):
@@ -2607,10 +2692,12 @@ async def test_reviewer_cannot_be_a_result_analyst(client, admin_headers):
     result, not only the CoA's analyst-of-record (each result stamps its own
     analyst_id)."""
     spec = await _spec(client, admin_headers, material="REV2-MAT")
+    water = await _param(client, admin_headers, spec["id"], name="Water", lo=None, hi=10.0)
     coa = await _coa(client, admin_headers, spec["id"], batch="B-REV2")   # analyst-of-record = admin
     _, b_h = await _actor(client, admin_headers, "QC_MGR")
     r = await client.post(f"/qc/certificates/{coa['id']}/results",
-                          json={"test_name": "Water", "result_numeric": 5.0, "upper_limit": 10.0},
+                          json={"test_name": "Water", "parameter_id": water["id"],
+                                "result_numeric": 5.0},
                           headers=b_h)
     assert r.status_code == 201, r.text
     # B produced data on this CoA → B may not review it (even though B != creator)
