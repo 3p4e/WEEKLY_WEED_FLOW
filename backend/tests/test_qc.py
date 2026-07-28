@@ -504,6 +504,25 @@ async def _oos(client, headers, batch="B-OOS-1", **extra):
     return r.json()
 
 
+async def _closed_oos(client, headers, qp_headers, batch, **extra):
+    """Open an OOS and walk it all the way to CLOSED (needs QP for the last two
+    steps — disposition and the close itself are QP decisions)."""
+    oos = await _oos(client, headers, batch=batch, **extra)
+    for tgt in ("PHASE_I", "PHASE_II"):
+        assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": tgt},
+                                   headers=headers)).status_code == 200
+    assert (await client.patch(f"/qc/oos/{oos['id']}",
+                               json={"disposition": "REJECT", "disposition_reason": "confirmed",
+                                     "root_cause_description": "miscalibrated balance"},
+                               headers=qp_headers)).status_code == 200
+    r = await client.patch(f"/qc/oos/{oos['id']}",
+                           json={"status": "CLOSED",
+                                 "impact_assessment": "no other batch affected"},
+                           headers=qp_headers)
+    assert r.status_code == 200 and r.json()["status"] == "CLOSED", r.text
+    return r.json()
+
+
 async def test_create_list_get_oos(client, admin_headers):
     oos = await _oos(client, admin_headers)
     assert oos["oos_number"].startswith("PP-OOS-") and oos["status"] == "OPEN" and oos["phase"] == "I"
@@ -2844,9 +2863,15 @@ async def test_coq_oos_blocks_approval_and_render(client, admin_headers, monkeyp
 
 async def test_coq_masked_fail_requires_oos_trail(client, admin_headers):
     """§6.4.1 — a failing result superseded by a later passing re-test must not
-    silently vanish: compilation refuses unless the batch carries an OOS trail
-    (closed investigation or an explicit oos_reference that actually names one —
-    H5: a fabricated reference number used to be enough)."""
+    silently vanish: compilation refuses unless a CLOSED OOS investigation on
+    the batch actually names THAT test.
+
+    B1: cover used to be batch-scoped, so any closed OOS on the batch — however
+    unrelated — licensed dropping any masked failure. Worse, the H5
+    reference-authenticity check was nested under "no closed OOS exists", a
+    branch the caller's own open-OOS gate makes unreachable (it 409s while any
+    non-CLOSED OOS exists, so by the time the gate runs every OOS on the batch
+    is CLOSED). Any OOS history at all therefore skipped it entirely."""
     _, qp = await _actor(client, admin_headers, "QP")
     spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-MASK")
     # cert A: THC fails (99 vs 10–30); cert B: full passing re-test
@@ -2856,31 +2881,48 @@ async def test_coq_masked_fail_requires_oos_trail(client, admin_headers):
     await _approved_coa(client, admin_headers, qp, spec["id"], "B-MASK", [
         {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.0},
         {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0}])
-    r = await client.post("/qc/coq", json={"batch_id": "B-MASK", "specification_id": spec["id"]},
-                          headers=admin_headers)
+    coq_body = {"batch_id": "B-MASK", "specification_id": spec["id"]}
+    r = await client.post("/qc/coq", json=coq_body, headers=admin_headers)
     assert r.status_code == 409 and "re-test" in r.json()["detail"], r.text
-    # a fabricated reference (no such OOS record exists) no longer bypasses the gate
-    r = await client.post("/qc/coq", json={"batch_id": "B-MASK", "specification_id": spec["id"],
-                                           "oos_reference": "PP-OOS-2026-0099"},
+    assert "Total THC" in r.json()["detail"], r.text
+    # a fabricated reference (no such OOS record exists) does not bypass the gate
+    r = await client.post("/qc/coq", json={**coq_body, "oos_reference": "PP-OOS-2026-0099"},
                           headers=admin_headers)
     assert r.status_code == 409 and "does not match a CLOSED OOS" in r.json()["detail"], r.text
-    # a real, closed OOS investigation on the batch DOES satisfy the trail
-    oos = await _oos(client, admin_headers, batch="B-MASK", test_name="Total THC")
-    for tgt in ("PHASE_I", "PHASE_II"):
-        assert (await client.patch(f"/qc/oos/{oos['id']}", json={"status": tgt},
-                                   headers=admin_headers)).status_code == 200
-    assert (await client.patch(f"/qc/oos/{oos['id']}",
-                               json={"disposition": "REJECT", "disposition_reason": "confirmed",
-                                     "root_cause_description": "miscalibrated balance"},
-                               headers=qp)).status_code == 200
-    assert (await client.patch(f"/qc/oos/{oos['id']}",
-                               json={"status": "CLOSED", "impact_assessment": "no other batch affected"},
-                               headers=qp)).status_code == 200
-    r = await client.post("/qc/coq", json={"batch_id": "B-MASK", "specification_id": spec["id"],
-                                           "oos_reference": oos["oos_number"]},
+    # B1(a) — a CLOSED but UNRELATED investigation does not cover the masked
+    # potency failure. Under batch scope this alone made the compile succeed.
+    await _closed_oos(client, admin_headers, qp, batch="B-MASK", test_name="Microbial count")
+    r = await client.post("/qc/coq", json=coq_body, headers=admin_headers)
+    assert r.status_code == 409 and "Total THC" in r.json()["detail"], r.text
+    # B1(b) — and with that closed OOS now on the batch, a fabricated reference
+    # is STILL rejected. This is the H5 check that had gone dead: the old
+    # nesting skipped it the moment any closed OOS existed.
+    r = await client.post("/qc/coq", json={**coq_body, "oos_reference": "PP-OOS-2026-0099"},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "does not match a CLOSED OOS" in r.json()["detail"], r.text
+    # a real, closed OOS naming the failing test DOES satisfy the trail
+    oos = await _closed_oos(client, admin_headers, qp, batch="B-MASK", test_name="Total THC")
+    r = await client.post("/qc/coq", json={**coq_body, "oos_reference": oos["oos_number"]},
                           headers=admin_headers)
     assert r.status_code == 201, r.text
     assert r.json()["overall_conform"] is True and r.json()["oos_reference"] == oos["oos_number"]
+
+
+async def test_coq_masked_fail_oos_matches_case_insensitively(client, admin_headers):
+    """B1 — both sides of the test-name match are free text typed by different
+    people, so cover folds case and internal whitespace (and nothing else)."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb = await _coq_spec_two_params(client, admin_headers, material="COQA-MASKN")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-MASKN", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 99.0}],
+        decision="FAIL")
+    await _approved_coa(client, admin_headers, qp, spec["id"], "B-MASKN", [
+        {"parameter_id": pa["id"], "test_name": "Total THC", "result_numeric": 22.0},
+        {"parameter_id": pb["id"], "test_name": "Moisture", "result_numeric": 8.0}])
+    await _closed_oos(client, admin_headers, qp, batch="B-MASKN", test_name="total   thc")
+    r = await client.post("/qc/coq", json={"batch_id": "B-MASKN", "specification_id": spec["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
 
 
 async def test_coq_empty_spec_never_certifies(client, admin_headers):

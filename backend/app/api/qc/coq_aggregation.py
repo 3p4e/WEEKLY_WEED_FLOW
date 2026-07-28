@@ -25,6 +25,17 @@ _COQ_SOURCE_STATUSES = ("APPROVED", "RELEASED")
 _COQ_SOURCE_TYPES = ("ICOA", "ECOA")
 
 
+def _norm_test(name: str | None) -> str:
+    """Fold a test name for comparison — same idiom as ecoa._norm_label /
+    laboratories._norm. Both sides of the masked-failure match below are free
+    text typed by different people at different times (qc_results.test_name on
+    the analytical result, qc_oos_records.test_name on the investigation), so an
+    investigation filed as "total  thc" still has to cover a "Total THC"
+    failure. Only case and internal whitespace are folded — nothing else, so
+    "Total THC" and "Total CBD" stay distinct."""
+    return " ".join((name or "").split()).lower()
+
+
 class CoqIn(BaseModel):
     batch_id: str = Field(max_length=120)
     specification_id: str
@@ -218,26 +229,21 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
             latest[str(r["parameter_id"])] = dict(r)
     # §6.4.1 — the CoQ is compiled only on the INVESTIGATION-CONFIRMED result
     # set. A failing result superseded by a later passing re-test must not
-    # silently vanish from the batch record: it needs an OOS trail (a closed
-    # investigation on the batch, or an explicit oos_reference on this CoQ).
+    # silently vanish from the batch record: EACH masked failure needs its own
+    # OOS trail — a CLOSED investigation on this batch raised against that same
+    # result, or against that same test.
     masked_fails = [dict(r) for r in results
                     if r["complies"] is False and r["parameter_id"]
                     and latest.get(str(r["parameter_id"]), {}).get("id") != r["id"]]
     if masked_fails:
-        closed_oos = await c.fetchval(
-            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status='CLOSED'",
-            body.batch_id)
-        if not closed_oos:
-            if not body.oos_reference:
-                names = ", ".join(sorted({r["test_name"] or "?" for r in masked_fails})[:5])
-                raise HTTPException(
-                    409, f"{len(masked_fails)} failing result(s) ({names}) were superseded by a"
-                         " re-test with no OOS investigation on record — the CoQ compiles only"
-                         " the investigation-confirmed result set (QCSOP 012 §6.4.1; close the"
-                         " OOS or cite it via oos_reference)")
-            # H5: oos_reference was previously accepted as any non-empty
-            # string with no verification — a fabricated number was enough
-            # to mask a failure. It must actually name a closed investigation.
+        # An explicitly cited reference is ALWAYS authenticated, whatever else
+        # the batch carries. This check used to sit nested under `if not
+        # closed_oos:`, which the caller's own open-OOS gate (compile_coq, just
+        # above) made unreachable: it already 409s while ANY non-CLOSED OOS
+        # exists, so by the time control arrives here every OOS on the batch is
+        # CLOSED — meaning any OOS history at all skipped the authenticity check
+        # and a fabricated oos_reference sailed straight through.
+        if body.oos_reference:
             cited = await c.fetchval(
                 "SELECT 1 FROM qc_oos_records WHERE org_id=$1 AND batch_id=$2"
                 " AND oos_number=$3 AND status='CLOSED'",
@@ -247,6 +253,27 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
                     409, f"oos_reference '{body.oos_reference}' does not match a CLOSED OOS"
                          " record on this batch — cite an existing closed investigation's"
                          " OOS number, or close the investigation (QCSOP 012 §6.4.1)")
+        # Cover is per-PARAMETER, not per-batch. Batch scope was too loose: a
+        # closed microbial investigation would otherwise silently license
+        # dropping a masked potency failure, because the old counter asked only
+        # "does this batch have ANY closed OOS?". An OOS carries result_id
+        # (exact result it was raised on) and/or test_name; either binds it.
+        oos_rows = await c.fetch(
+            "SELECT result_id, test_name FROM qc_oos_records"
+            " WHERE org_id=$1 AND batch_id=$2 AND status='CLOSED'",
+            user["org_id"], body.batch_id)
+        covered_ids = {str(o["result_id"]) for o in oos_rows if o["result_id"]}
+        covered_tests = {_norm_test(o["test_name"]) for o in oos_rows if o["test_name"]}
+        uncovered = sorted({r["test_name"] for r in masked_fails
+                            if str(r["id"]) not in covered_ids
+                            and _norm_test(r["test_name"]) not in covered_tests})
+        if uncovered:
+            raise HTTPException(
+                409, f"{len(uncovered)} test(s) ({', '.join(uncovered[:5])}) had a failing result"
+                     " superseded by a re-test with no closed OOS investigation naming that same"
+                     " test — the CoQ compiles only the investigation-confirmed result set"
+                     " (QCSOP 012 §6.4.1; close an OOS against that test, or cite one via"
+                     " oos_reference)")
     lines, cited_cert_ids, missing = [], set(), []
     for i, p in enumerate(params):
         pid = str(p["id"])
