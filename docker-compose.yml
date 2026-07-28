@@ -68,6 +68,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
     expose: ["8000"]
+    # H12 — this service has no Traefik labels (only `frontend` does), so the
+    # "Traefik won't route unhealthy containers" rationale never applied here:
+    # nothing detected a wedged-but-alive backend. /health/ready round-trips
+    # BOTH databases, which is the difference between "process is up" and
+    # "can actually serve". Python rather than curl: the slim image has no curl.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks: [internal]
     restart: unless-stopped
 
@@ -80,6 +92,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
     command: ["python", "scripts/scheduler.py"]
+    # H12 — the scheduler has no HTTP surface, and "the process is running"
+    # says nothing about whether its loop still turns; a wedged loop silently
+    # stops firing the weekly snapshot. scheduler.py touches the heartbeat on
+    # every wake and the sleep is capped at 30 min, so >35 min without a
+    # heartbeat means the loop has stopped.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import os,sys,time; p='/tmp/wwf-scheduler-heartbeat'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 2100 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     networks: [internal]
     restart: unless-stopped
 

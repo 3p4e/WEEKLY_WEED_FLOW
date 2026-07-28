@@ -9,10 +9,12 @@
 # Letta tool's contract ({ok, verify, path, bytes}) but enforces PASS.
 import contextlib
 import io
+import os
 import re
 import sys
 import tempfile
 import threading
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,7 +118,19 @@ def build(markdown: str, out_dir: Path, out_name: str = "document") -> BuildResu
     """Bilingual Markdown -> controlled .docx, verified. Raises VerifyFailed
     (doc deleted) on a FAIL — a failed document never exists on disk after."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / (safe_name(out_name) + ".docx")
+    # H13 — the output path used to be safe_name(out_name) + ".docx", derived
+    # from the document CODE alone. Two concurrent builds of the same code
+    # therefore wrote the same file: they interleaved, and the FAIL path below
+    # (out.unlink) could delete the OTHER worker's *passing* document. The
+    # in-process _BUILD_LOCK cannot help — the service runs multiple uvicorn
+    # workers, i.e. separate processes.
+    # Each build now owns a unique path. It is written under a dot-prefixed
+    # `.partial` name and only os.replace()d into place once it has PASSED, so
+    # a reader can never observe a half-written or unverified document, and the
+    # FAIL cleanup can only ever remove this build's own temp file.
+    stamp = uuid.uuid4().hex[:12]
+    final = out_dir / f"{safe_name(out_name)}-{stamp}.docx"
+    out = out_dir / f".{safe_name(out_name)}-{stamp}.partial.docx"
     doctype = "SOP"
     m = re.search(r"^doctype:\s*(\S+)", markdown, re.M)
     if m:
@@ -150,6 +164,9 @@ def build(markdown: str, out_dir: Path, out_name: str = "document") -> BuildResu
     if not passed:
         out.unlink(missing_ok=True)
         raise VerifyFailed(report)
+    # Atomic publish: same filesystem, so os.replace is a rename, and the
+    # document appears at its final path complete and already verified.
+    os.replace(out, final)
     return BuildResult(
-        path=out, bytes=out.stat().st_size, verify_report=report, doctype=doctype
+        path=final, bytes=final.stat().st_size, verify_report=report, doctype=doctype
     )

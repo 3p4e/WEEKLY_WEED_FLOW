@@ -13,9 +13,16 @@ Design notes:
   runs immediately for that date; otherwise it waits for the next fire.
 - Startup also applies the versioned planner prompts and attaches the RAG
   source (both idempotent + failure-tolerant), so a fresh deploy self-heals.
+- Liveness: every wake touches HEARTBEAT_PATH. The container healthcheck
+  reads its mtime, which is what actually distinguishes "alive" from
+  "wedged" — the process staying up proves nothing about the loop, and this
+  loop is the only thing that fires the weekly snapshot. The sleep is capped
+  at 30 min, so a heartbeat older than ~35 min means the loop has stopped
+  turning (H12).
 """
 import asyncio
 import os
+import pathlib
 import sys
 from datetime import date, datetime, time, timedelta
 
@@ -123,6 +130,19 @@ async def _startup_selfheal():
         snap.log(f"source attach skipped: {type(e).__name__}")
 
 
+HEARTBEAT_PATH = pathlib.Path(os.environ.get("SCHEDULER_HEARTBEAT",
+                                             "/tmp/wwf-scheduler-heartbeat"))  # nosec B108
+
+
+def _beat() -> None:
+    """Stamp liveness for the container healthcheck. Never raises: a scheduler
+    that cannot write its heartbeat must still fire the weekly snapshot."""
+    try:
+        HEARTBEAT_PATH.touch()
+    except OSError as e:
+        snap.log(f"heartbeat touch failed: {type(e).__name__}: {e}")
+
+
 async def main():
     tz = _tz()
     from datetime import timezone
@@ -161,6 +181,7 @@ async def main():
                 snap.log(f"due scan failed: {type(e).__name__}: {e}")
 
     await due_tick()
+    _beat()
 
     while True:
         # Pick the fire target ONCE, then sleep toward it in chunks. The
@@ -172,6 +193,7 @@ async def main():
         while (remaining := (fire - datetime.now(timezone.utc)).total_seconds()) > 0:
             await asyncio.sleep(min(1800, remaining))
             await due_tick()
+            _beat()
         snap.log(f"firing weekly snapshot for {fire.astimezone(tz).date().isoformat()}")
         try:
             await snap.run_all(fire.astimezone(tz).date())

@@ -2555,6 +2555,48 @@ async def test_sample_transport_forms(client, admin_headers):
     assert (await client.patch(f"/qc/transports/{tr3['id']}", json={"status": "received"}, headers=admin_headers)).status_code == 409
 
 
+async def test_terminal_leaf_record_is_frozen(client, admin_headers):
+    """H5 — a CLOSED stability study and a `received` transport are closed
+    records: their analytical / custody fields must not be rewritten
+    afterwards. Only a note may still be added. The CLOSING patch itself is
+    unaffected — the guard reads the CURRENT status, so setting report and
+    shelf_life in the same PATCH that closes a study still works."""
+    st = (await client.post("/qc/stability-studies", json={
+        "study_type": "LT", "material_code": "FRZ-1", "batches": ["B-1"],
+        "started": "2026-01-01"}, headers=admin_headers)).json()
+    # editable while IN_PROGRESS …
+    assert (await client.patch(f"/qc/stability-studies/{st['id']}", json={"protocol": "P-1"},
+                               headers=admin_headers)).status_code == 200
+    # … and the closing patch may still carry the study's conclusions
+    r = await client.patch(f"/qc/stability-studies/{st['id']}",
+                           json={"status": "CLOSED", "report": "REP-01", "shelf_life": "24 months"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["shelf_life"] == "24 months"
+    for bad in ({"shelf_life": "36 months"}, {"report": "REP-02"}, {"protocol": "P-2"},
+                {"schedule": "monthly"}, {"batches": ["B-1", "B-2"]}):
+        r = await client.patch(f"/qc/stability-studies/{st['id']}", json=bad, headers=admin_headers)
+        assert r.status_code == 409, (bad, r.text)
+        assert "may no longer be changed" in r.json()["detail"]
+    # a note is still recordable, and a same-value status echo is a no-op
+    assert (await client.patch(f"/qc/stability-studies/{st['id']}",
+                               json={"notes": "annex filed"}, headers=admin_headers)).status_code == 200
+    assert (await client.patch(f"/qc/stability-studies/{st['id']}",
+                               json={"status": "CLOSED"}, headers=admin_headers)).status_code == 200
+
+    tr = (await client.post("/qc/transports", json={"sample_id": "PP-SMP-2026-0009",
+                                                    "external_lab": "EuroLab"},
+                            headers=admin_headers)).json()
+    for tgt in ("in_transit", "received"):
+        assert (await client.patch(f"/qc/transports/{tr['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200, tgt
+    for bad in ({"external_lab": "OtherLab"}, {"tracking": "DHL-999"}, {"form_sar": True},
+                {"tests": ["THC"]}, {"shipped_date": "2026-07-20"}):
+        r = await client.patch(f"/qc/transports/{tr['id']}", json=bad, headers=admin_headers)
+        assert r.status_code == 409, (bad, r.text)
+    assert (await client.patch(f"/qc/transports/{tr['id']}", json={"notes": "received intact"},
+                               headers=admin_headers)).status_code == 200
+
+
 async def test_qc_leaves_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     assert (await client.post("/qc/water-tests", json={"location": "X", "grade": "RO"}, headers=user_headers)).status_code == 403

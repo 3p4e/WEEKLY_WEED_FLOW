@@ -155,3 +155,38 @@ def test_safe_name():
     assert builder.safe_name("../../etc/passwd") == ".._.._etc_passwd"
     assert builder.safe_name("") == "document"
     assert "/" not in builder.safe_name("a/b\\c d")
+
+
+def test_concurrent_builds_of_same_code_produce_two_intact_documents(tmp_path):
+    """H13 — the output path used to be derived from the document CODE alone,
+    so two concurrent builds of the same code wrote the same file: they
+    interleaved, and the FAIL cleanup could delete the OTHER build's passing
+    document. The in-process lock cannot help, because the service runs
+    multiple uvicorn worker PROCESSES.
+
+    Each build now owns a unique path, so both artifacts survive intact."""
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        results = [f.result() for f in
+                   [ex.submit(builder.build, SOP_MD, tmp_path, "same_code") for _ in range(4)]]
+
+    paths = [r.path for r in results]
+    assert len({str(p) for p in paths}) == 4, "builds collided on one path"
+    for r in results:
+        assert r.path.exists() and r.path.stat().st_size == r.bytes > 0
+        assert r.path.name.startswith("same_code-") and r.path.suffix == ".docx"
+    # nothing half-written is left behind under the dot-prefixed staging name
+    assert not list(tmp_path.glob(".*partial*"))
+
+
+def test_failed_build_cannot_delete_another_builds_document(tmp_path, monkeypatch):
+    """H13 — the FAIL path unlinks its own staging file, which is uniquely
+    named, so it can no longer take out a sibling build's passing artifact."""
+    good = builder.build(SOP_MD, tmp_path, "shared_code")
+    assert good.path.exists()
+    monkeypatch.setattr(builder, "run_verify", lambda *a, **k: (False, "RESULT: FAIL"))
+    with pytest.raises(builder.VerifyFailed):
+        builder.build(SOP_MD, tmp_path, "shared_code")     # same code, must FAIL
+    assert good.path.exists(), "a failed build deleted a different build's document"
+    assert good.path.stat().st_size == good.bytes

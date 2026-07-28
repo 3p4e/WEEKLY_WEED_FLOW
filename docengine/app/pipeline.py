@@ -7,6 +7,7 @@
 # Postgres (db.jobs) so any worker can serve the poll.
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -226,7 +227,14 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
 
         # ---- format + verify (hard gate) ----
         await db.job_update(job_id, stage="format")
-        result = builder.build(markdown, settings.out_dir, meta["code"])
+        # H14 — builder.build is fully synchronous (docx render + verify, tens
+        # of seconds). Called bare it blocked the event loop for the whole
+        # build, stalling every other request this worker was serving,
+        # including the /workflows/{jid} polls this very job depends on.
+        # main.py's direct_build already did this correctly.
+        result = await asyncio.to_thread(
+            builder.build, markdown, settings.out_dir, meta["code"]
+        )
         did = await db.document_create(
             job_id,
             {

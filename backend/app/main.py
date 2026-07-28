@@ -3,12 +3,12 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import ai, approvals, audit, auth, capture, collab, demo, documents, facility, intake, notifications, qc, qms, reports, tasks
 from app.config import docs_kwargs, settings
-from app.db import close_pools, init_pools
+from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.logging_config import configure_logging
 
 configure_logging()
@@ -87,7 +87,30 @@ app.include_router(demo.router)
 
 @app.get("/health")
 async def health():
+    # LIVENESS only — deliberately does not touch the database, so a DB blip
+    # cannot take the process out of rotation. Readiness is /health/ready.
     # `demo_enabled` lets the splash decide whether to surface the "Try the
     # demo" button — off in production, on where DEMO_ENABLED=true is set.
     return {"status": "healthy", "system": "WEEKLY_WEED_FLOW API",
             "demo_enabled": settings.demo_enabled}
+
+
+@app.get("/health/ready")
+async def health_ready(response: Response):
+    """READINESS — round-trips BOTH databases (H12).
+
+    The container healthcheck needs a signal that separates "process is up"
+    from "process can actually serve", and this app is useless without both
+    the users DB and the tasks DB. Reports 503 with the failing side named
+    rather than raising, so the body stays readable in `docker inspect`."""
+    checks: dict[str, str] = {}
+    for name, pool in (("users", users_admin_pool), ("tasks", tasks_admin_pool)):
+        try:
+            await pool().fetchval("SELECT 1")
+            checks[name] = "ok"
+        except Exception as e:                      # noqa: BLE001 - reported, not raised
+            checks[name] = f"{type(e).__name__}: {e}"
+    ready = all(v == "ok" for v in checks.values())
+    if not ready:
+        response.status_code = 503
+    return {"ready": ready, "databases": checks}

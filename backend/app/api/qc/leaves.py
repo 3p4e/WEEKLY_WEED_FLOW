@@ -26,6 +26,37 @@ _TRN_STATUSES = ("draft", "in_transit", "received")
 _TRN_TRANSITIONS = {"draft": {"in_transit"}, "in_transit": {"received"}, "received": set()}
 
 
+# H5 — a terminal leaf is a closed record. Once a stability study is CLOSED or
+# a transport is `received`, its analytical / custody fields are the record of
+# what actually happened and must not be silently rewritten afterwards; only a
+# note may still be added. Same shape as certificates._frozen_content_edit,
+# narrowed to these two leaves. The closing patch itself is unaffected: the
+# guard reads the CURRENT status, so setting `report`/`shelf_life` in the same
+# PATCH that closes a study still works.
+#
+# Water tests are DELIBERATELY not frozen. qc_water_tests carries no status or
+# lifecycle column at all, so freezing one would mean first inventing a
+# lifecycle for it — a new feature, not a bug fix, and out of scope for this
+# round. The asymmetry is recorded here so the next reader sees a decision
+# rather than an oversight.
+_LEAF_ANNOTATION_FIELDS = {"notes"}
+
+
+def _assert_leaf_open(patch: dict, current: str, terminal: str, what: str) -> None:
+    """409 if `patch` would change the frozen record of a terminal leaf."""
+    if current != terminal:
+        return
+    changed = sorted(
+        k for k, v in patch.items()
+        if k not in _LEAF_ANNOTATION_FIELDS
+        and not (k == "status" and (v is None or v == current))   # same-value echo
+    )
+    if changed:
+        raise HTTPException(
+            409, f"{what} is {terminal} — {', '.join(changed)} may no longer be changed."
+                 " The closed record stands; record a note instead.")
+
+
 class WaterIn(BaseModel):
     location: str = Field(max_length=120)
     grade: str
@@ -214,6 +245,7 @@ async def update_stability(sid: str, body: StabilityPatch, user: dict = Depends(
         cur = await c.fetchrow("SELECT status FROM qc_stability_studies WHERE id=$1", sid)
         if cur is None:
             raise HTTPException(404, "Stability study not found")
+        _assert_leaf_open(patch, cur["status"], "CLOSED", "Stability study")
         target = patch.get("status")
         if target is not None and target != cur["status"]:
             if target not in _STAB_TRANSITIONS.get(cur["status"], set()):
@@ -264,6 +296,7 @@ async def update_transport(tid: str, body: TransportPatch, user: dict = Depends(
         cur = await c.fetchrow("SELECT status FROM qc_sample_transports WHERE id=$1", tid)
         if cur is None:
             raise HTTPException(404, "Transport not found")
+        _assert_leaf_open(patch, cur["status"], "received", "Transport")
         target = patch.get("status")
         if target is not None and target != cur["status"]:
             if target not in _TRN_TRANSITIONS.get(cur["status"], set()):

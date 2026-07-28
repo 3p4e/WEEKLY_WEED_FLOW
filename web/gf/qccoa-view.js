@@ -360,7 +360,7 @@
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
         ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>` : ''}
         ${BACK[c.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaAdvance('${c.id}','${BACK[c.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
-        ${c.status !== 'DRAFT' && c.status !== 'RELEASED' && c.status !== 'SUPERSEDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
+        ${c.status !== 'DRAFT' && c.status !== 'RELEASED' && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','PASS')">${AL('Mark PASS', 'Означи PASS')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDecide('${c.id}','FAIL')">${AL('Mark FAIL', 'Означи FAIL')}</button>` : ''}
         ${c.status === 'RELEASED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaRevise('${c.id}')">${AL('Revise (supersede)', 'Ревидирај (замени)')}</button>` : ''}
         ${canCoq() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaVoid('${c.id}')" title="${AL('Wrong batch / wrong sample — §6.6', 'Погрешна серија / примерок — §6.6')}">${AL('Void', 'Поништи')}</button>` : ''}
@@ -372,7 +372,7 @@
         ${c.coq_document_id ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','docx')">${AL('COQ .docx', 'COQ .docx')}</button>
           <button class="btn btn-sm" onclick="GF.WWF.qcCoaDlCoq('${GF.esc(c.coq_document_id)}','pdf')">${AL('COQ PDF', 'COQ PDF')}</button>` : ''}
       </div>` : ''}
-      ${canWrite() && c.status !== 'SUPERSEDED' ? coqMetaPanel(c) : ''}
+      ${canWrite() && c.status !== 'SUPERSEDED' && c.status !== 'VOIDED' ? coqMetaPanel(c) : ''}
       <div style="margin-top:12px" class="ana-pt">${AL('Test results', 'Тест резултати')}</div>
       ${resultRows(d)}
       ${signaturesPanel(d)}
