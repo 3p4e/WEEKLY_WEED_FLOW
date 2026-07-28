@@ -6,7 +6,8 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _HOQC, _QP_ROLES, _WRITERS, _evaluate, _lab_verdict_bool, _uuid_or_404, _uuid_or_422, router
+from .common import (_HOQC, _QP_ROLES, _WRITERS, _evaluate, _lab_verdict_bool, _uuid_or_404,
+                     _uuid_or_422, router, splice_stamps)
 from .laboratories import _lab_out, _lab_scope_set, _resolve_lab, _result_in_scope
 from .signatures import _sig_out
 
@@ -557,8 +558,7 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
             fields.append("translation_verified_by=NULL")
             fields.append("translation_verified_at=NULL")
         # splice reviewer_id/approver_id stamps with correct positional params
-        for frag, val in zip(extra_sql, extra_args):
-            args.append(val); fields.append(frag.replace("PLACEHOLDER", str(len(args))))
+        splice_stamps(fields, args, extra_sql, extra_args)
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

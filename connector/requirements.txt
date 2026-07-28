@@ -1,2 +1,10 @@
-mcp>=1.9,<2
-httpx>=0.27
+# Pinned exactly, like backend/ and docengine/ already are. These were open
+# ranges (`mcp>=1.9,<2` / `httpx>=0.27`), so two rebuilds of the same commit
+# could ship different dependency versions — and this is the internet-exposed
+# capture-mcp service, the one component where "whatever resolved that day" is
+# the wrong answer. CI's pip-audit scans this file now, so a pin that develops
+# an advisory turns the build red instead of drifting silently.
+# httpx matches backend/ and docengine/ deliberately: one version across the
+# three services.
+mcp==1.28.1
+httpx==0.28.1

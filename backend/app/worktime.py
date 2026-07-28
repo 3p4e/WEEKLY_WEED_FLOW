@@ -12,11 +12,15 @@ Rules (facility wall-clock, Europe/Skopje):
 Precedence weekend > night > overtime matches how the facility talks about
 these hours; a Saturday 02:00 session is "weekend work", not "night work".
 """
-import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-TZ = ZoneInfo(os.environ.get("SNAPSHOT_TZ", "Europe/Skopje"))
+from app.config import settings
+
+# Through Settings, not a bare os.environ read — scripts/scheduler.py resolved
+# the same SNAPSHOT_TZ independently, so the two could disagree about which
+# wall-clock the week boundary sits on with nothing to flag it.
+TZ = ZoneInfo(settings.snapshot_tz)
 
 BUCKETS = ("regular", "overtime", "night", "weekend")
 

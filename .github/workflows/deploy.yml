@@ -67,11 +67,27 @@ jobs:
           REMOTE_EOF
           )
 
+          # payload.json embeds GH_TOKEN (it is inside the docker build URL in
+          # $REMOTE), so it is deleted the moment curl has read it rather than
+          # left lying in the workspace for the rest of the job. `trap` so an
+          # interrupted or failed curl cleans up too — under `set -e` a plain
+          # `rm` on the next line would be skipped exactly when it matters.
+          #
+          # RESIDUAL, and deliberately not changed here: the token still
+          # reaches KVM4 inside the command string, so it lands in that host's
+          # process list and in the kvm4-runner audit log. Fixing that means
+          # changing the runner's /shell contract to accept env separately,
+          # which cannot be verified from this repo and would risk breaking an
+          # owner-gated deploy path. Mitigating factors are real but partial:
+          # `github.token` is the ephemeral per-job GITHUB_TOKEN, scoped to
+          # this repository and invalid once the job ends.
+          trap 'rm -f payload.json' EXIT
           jq -nc --arg cmd "$REMOTE" '{cmd: $cmd, timeout: 320}' > payload.json
           curl -sS --fail --max-time 340 -X POST "$RUNNER_URL/shell" \
             -H "Authorization: Bearer $RUNNER_TOKEN" \
             -H "Content-Type: application/json" \
             --data @payload.json > resp.json
+          rm -f payload.json
 
           python3 - <<'PY'
           import json, sys

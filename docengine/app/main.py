@@ -37,6 +37,16 @@ log = logging.getLogger("docengine")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
+    # Sweep jobs abandoned by a previously-killed worker. Startup is exactly
+    # when those rows appear (a redeploy kills the worker mid-run), and without
+    # this they sit at 'running' forever with a poller waiting on them.
+    try:
+        reaped = await db.reap_stale_jobs()
+        if reaped:
+            log.warning("reaped %d stale job(s) left mid-flight by a killed worker", reaped)
+    except Exception:
+        # Never block startup on the sweep — the service must come up.
+        log.warning("stale-job sweep failed at startup", exc_info=True)
     yield
     await db.close()
 
@@ -132,7 +142,11 @@ async def get_workflow(jid: str):
 # ---------- direct build (Mode B/C: caller supplies the Markdown) ----------
 class BuildIn(BaseModel):
     markdown: str = Field(min_length=20, max_length=400_000)
-    out_name: str = "document"
+    # Bounded: this becomes part of a filename via builder.safe_name(). That
+    # helper truncates to 120 chars, but only AFTER the value has been accepted
+    # — and every other field on this model already carries a bound, so the
+    # omission was the odd one out rather than a decision.
+    out_name: str = Field(default="document", min_length=1, max_length=80)
     meta: dict = Field(default_factory=dict)
 
 
@@ -213,14 +227,23 @@ async def document_pdf(did: str):
     d = await _doc_or_404(did)
     if not settings.gotenberg_url:
         raise HTTPException(503, "PDF renderer unavailable")
+    # Read off the event loop. Passing the open file handle to httpx made it
+    # do blocking disk reads while streaming the upload, stalling every other
+    # request this worker was serving for the duration of a multi-megabyte
+    # .docx — the same defect H14 fixed for builder.build, on a path that is
+    # hit far more often.
+    try:
+        blob = await asyncio.to_thread(Path(d["path"]).read_bytes)
+    except OSError as e:
+        log.warning("PDF conversion: cannot read document %s: %s", did, e)
+        raise HTTPException(404, "Document file missing") from e
     try:
         async with httpx.AsyncClient(timeout=120) as c:
-            with open(d["path"], "rb") as f:
-                r = await c.post(
-                    settings.gotenberg_url + "/forms/libreoffice/convert",
-                    files={"files": (Path(d["path"]).name, f,
-                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-                )
+            r = await c.post(
+                settings.gotenberg_url + "/forms/libreoffice/convert",
+                files={"files": (Path(d["path"]).name, blob,
+                                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            )
     except httpx.HTTPError as e:
         log.warning("Gotenberg PDF conversion failed for document %s: %s", did, e)
         raise HTTPException(502, "PDF conversion failed") from e

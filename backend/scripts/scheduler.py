@@ -35,6 +35,7 @@ import planner_prompts  # noqa: E402
 import weekly_snapshot as snap  # noqa: E402
 
 from app import duescan  # noqa: E402  (app pools; init_pools() runs in main)
+from app.config import settings  # noqa: E402
 from app.db import init_pools  # noqa: E402
 
 try:
@@ -42,7 +43,10 @@ try:
 except Exception:  # pragma: no cover
     ZoneInfo = None
 
-TZ_NAME = os.environ.get("SNAPSHOT_TZ", "Europe/Skopje")
+# Same source as app/worktime.py's TZ (both read settings.snapshot_tz) so the
+# snapshot cannot fire against a different week boundary than the reports it
+# summarises — they used to resolve SNAPSHOT_TZ independently.
+TZ_NAME = settings.snapshot_tz
 GRACE_HOURS = float(os.environ.get("SNAPSHOT_GRACE_HOURS", "24"))
 FIRE_WEEKDAY = 3   # Thursday (Mon=0)
 FIRE_TIME = time(14, 0)

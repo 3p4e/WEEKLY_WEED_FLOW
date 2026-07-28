@@ -278,12 +278,31 @@ GF.WWF.loadAndRender = async () => {
   GF.WWF.meId = u.id || 'me';
   GF.state.user = GF.WWF.meId;
   // Load each independently so one failure never blanks the UI.
+  //
+  // 401 is the one exception, and it has to be, because it is not a per-call
+  // failure — the session is gone and api.js has ALREADY logged out and put
+  // the login overlay back up. Treating it like any other error meant an
+  // expired token produced three separate "unauthorized" toasts stacked on top
+  // of the login card, and then this function carried on to loadTeam(),
+  // buildCalendar() and applyTasks(), rendering an empty app behind the
+  // overlay. Bail on the first one instead: there is nothing left to load and
+  // nothing left to render.
   let depts = [], weeks = [], tasks = [];
-  try { depts = (await GF.API.departments()) || []; } catch (e) { GF.toast(AL('Departments: ', 'Оддели: ') + e.message, 'error'); }
+  let expired = false;
+  const _authGone = (e) => (e && (e.status === 401 || e.message === 'unauthorized'));
+  try { depts = (await GF.API.departments()) || []; }
+  catch (e) { if (_authGone(e)) expired = true; else GF.toast(AL('Departments: ', 'Оддели: ') + e.message, 'error'); }
   // A /weeks failure is non-fatal — buildCalendar keeps core.js's generated
   // fallback weeks — but tell the user rather than silently swallowing it.
-  try { weeks = (await GF.API.weeks()) || []; } catch (e) { GF.toast(AL('Weeks: ', 'Недели: ') + e.message, 'error'); }
-  try { tasks = (await GF.API.tasks(GF.WWF.taskQuery())) || []; } catch (e) { GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
+  if (!expired) {
+    try { weeks = (await GF.API.weeks()) || []; }
+    catch (e) { if (_authGone(e)) expired = true; else GF.toast(AL('Weeks: ', 'Недели: ') + e.message, 'error'); }
+  }
+  if (!expired) {
+    try { tasks = (await GF.API.tasks(GF.WWF.taskQuery())) || []; }
+    catch (e) { if (_authGone(e)) expired = true; else GF.toast(AL('Tasks: ', 'Задачи: ') + e.message, 'error'); }
+  }
+  if (expired) return;
   if (depts.length) {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
       // `code` rides along so dept-templates.js can resolve the department's
@@ -322,7 +341,7 @@ GF.WWF.loadAndRender = async () => {
     GF.render.all();
   } catch (e) {
     console.error('[WWF] render error', e);
-    GF.toast('Render error: ' + (e && e.message || e), 'error');
+    GF.toast(AL('Render error: ', 'Грешка при прикажување: ') + (e && e.message || e), 'error');
   }
 };
 

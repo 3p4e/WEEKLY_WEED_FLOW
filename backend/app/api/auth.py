@@ -14,7 +14,7 @@ from app.config import settings
 from app.db import rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role
 from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
-from app.security import create_access_token, hash_password, verify_password
+from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -198,11 +198,31 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
     _throttle_action(f"pwch:{user['id']}")
     if len(body.new_password) < settings.password_min_length:
         raise HTTPException(422, f"Password must be at least {settings.password_min_length} characters")
+    # bcrypt hashes at most the first 72 BYTES and silently drops the rest, so
+    # without this the field's own max_length=256 lets a user set a passphrase
+    # of which only the first 72 bytes are ever checked. Rejected here rather
+    # than left to hash_password's exception so the caller gets a 422 they can
+    # act on instead of a 500. Bytes, not characters — Cyrillic costs two each,
+    # so a 40-character Macedonian passphrase already trips it.
+    if len(body.new_password.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        raise HTTPException(
+            422, f"Password must be at most {BCRYPT_MAX_BYTES} bytes"
+                 " (accented and Cyrillic characters count as more than one)")
+    row = await users_admin_pool().fetchrow(
+        "SELECT password_hash FROM profiles WHERE id=$1", user["id"])
     # Voluntary change (flag already cleared) must prove the current password.
     if not user["must_change_password"]:
-        row = await users_admin_pool().fetchrow("SELECT password_hash FROM profiles WHERE id=$1", user["id"])
         if row is None or not body.current_password or not verify_password(body.current_password, row["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password incorrect")
+    # The new password must not be the one being replaced. Only length was
+    # checked before, so on the FORCED (first-login / post-reset) path a user
+    # could "change" their password to the one-time password itself — leaving
+    # the account on a credential that was transmitted out-of-band, printed on
+    # an admin's screen, and is treated everywhere else as single-use.
+    if row is not None and verify_password(body.new_password, row["password_hash"]):
+        raise HTTPException(
+            422, "The new password must differ from the current one"
+                 " (a one-time password cannot be kept as the permanent password)")
     async with rls_users(user, admin=True) as conn:
         new_pwv = await conn.fetchval(
             "UPDATE profiles SET password_hash=$1, must_change_password=false,"
@@ -282,8 +302,11 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
             )
         except asyncpg.UniqueViolationError:
             raise HTTPException(409, f"Username '{body.username}' is already taken")
-        except Exception as e:
-            raise HTTPException(409, f"Could not create account: {type(e).__name__}")
+        # Deliberately NO blanket `except Exception -> 409`: it reported every
+        # unexpected DB error to the caller as a name conflict, so a real bug
+        # looked to the operator (and to the logs) like "pick another
+        # username". Anything not a genuine conflict now surfaces as a 500 and
+        # is logged by the request middleware, which is how it gets found.
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
 
@@ -342,6 +365,9 @@ async def purge_user(user_id: str, actor: dict = Depends(require_role(ADMIN))):
     since audit_log rows are never deleted). Only ever targets a row that
     is ALREADY soft-deleted, so this can't be used to skip the normal
     delete flow (and its _can_manage authorisation) in one step."""
+    # The most consequential of the three: this DELETE is irreversible and
+    # takes the roster name that historical tasks and reports resolve through.
+    _throttle_action(f"userpurge:{actor['id']}")
     _require_uuid(user_id)
     async with rls_users(actor, admin=True) as conn:
         row = await conn.fetchrow(
@@ -369,6 +395,10 @@ async def list_users(actor: dict = Depends(require_role(*ELEVATED_ROLES))):
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    # Same throttle the other account mutations carry. Soft delete is
+    # recoverable, but a scripted sweep still de-activates a whole department
+    # faster than anyone notices, and every call writes an audit row.
+    _throttle_action(f"userdel:{actor['id']}")
     _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
@@ -403,9 +433,16 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
     """Admin/manager resets an existing account's password to a fresh one-time
     password (shown once to the caller). The user must set their own on next
     login — same flow as account creation, so an admin never learns or sets the
-    real password. Same authorisation gate as create/delete: a manager may only
-    reset a USER in their own department; nobody may reset an ADMIN through the
-    app."""
+    real password. Same authorisation gate as create/delete (`_can_manage`): a
+    manager may only reset a USER in their own department.
+
+    An ADMIN, however, CAN reset another ADMIN — `_can_manage` returns True for
+    any target when the actor is ADMIN, deliberately (see its comment: the
+    CREATABLE_ROLES check at each call site is what prevents promotion TO admin,
+    so this only lets a real admin operate on an existing one). This docstring
+    previously claimed the opposite; the code is the intended behaviour and the
+    sentence was wrong, so the sentence is what changed. Admin-to-admin resets
+    are throttled and audited like any other."""
     _throttle_action(f"pwreset:{actor['id']}")
     _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
@@ -435,6 +472,7 @@ async def update_user(user_id: str, body: UpdateUserReq,
     authorisation model as create/delete — a manager may only touch a USER in
     their own department, ADMIN is never assignable, and the caller must be able
     to manage BOTH the account's current state and its requested new state."""
+    _throttle_action(f"userupd:{actor['id']}")
     _require_uuid(user_id)
     fields = body.model_dump(exclude_unset=True)
     if not fields:

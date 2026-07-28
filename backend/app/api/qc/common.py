@@ -65,3 +65,34 @@ _SAMPLE_KINDS = ("PC", "MB", "EXT", "RET", "STAB", "RT", "CC")
 
 
 _QC_REGISTRAR = (ADMIN, "QC_MGR", "QP")
+
+
+def splice_stamps(fields: list[str], args: list, extra_sql: list[str], extra_args: list):
+    """Append actor-stamp fragments to a positional-parameter UPDATE.
+
+    `extra_sql` fragments carry the literal token PLACEHOLDER where a `$n`
+    belongs; `n` is only knowable once the fragment's value has been appended to
+    `args`, which is why this cannot just be built inline with the rest.
+    Fragments WITHOUT the token (e.g. "phase_ii_completed_at=now()") consume no
+    argument and pass through untouched.
+
+    Factored out of certificates.py and oos.py, which had grown two copies.
+    They were not equivalent: certificates.py used
+    `zip(extra_sql, extra_args)`, which is only correct while every fragment
+    happens to carry a placeholder — adding one no-placeholder fragment there
+    would have silently mis-paired every value after it against the wrong
+    column, with no error. oos.py's token-checking form is the correct one and
+    is what this keeps. Mutates `fields`/`args` in place, as both call sites do
+    throughout.
+    """
+    pending = list(extra_args)
+    for frag in extra_sql:
+        if "PLACEHOLDER" in frag:
+            args.append(pending.pop(0))
+            fields.append(frag.replace("PLACEHOLDER", str(len(args))))
+        else:
+            fields.append(frag)
+    if pending:
+        raise ValueError(
+            f"splice_stamps: {len(pending)} stamp value(s) had no PLACEHOLDER fragment"
+        )

@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     remember_device_expire_days: int = 7
     password_min_length: int = 12
 
+    # Business timezone for week windows, work-session classification and the
+    # weekly snapshot's fire time. Read through Settings like everything else
+    # rather than via a bare os.environ at import time in two separate modules
+    # (app/worktime.py and scripts/scheduler.py), which is how they could
+    # silently disagree — and a snapshot that fires on a different week
+    # boundary than the report it summarises is not obviously wrong from
+    # either side.
+    snapshot_tz: str = "Europe/Skopje"
+
     # AI / Letta (always-on layer)
     letta_base_url: str = "http://host.docker.internal:8283"
     letta_mcp_url: str = "http://host.docker.internal:6507"

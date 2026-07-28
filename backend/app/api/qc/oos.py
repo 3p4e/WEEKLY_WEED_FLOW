@@ -6,7 +6,7 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422, router, splice_stamps
 
 
 _OOS_TYPES = ("OOS", "OOT", "OOE", "OOC")
@@ -294,11 +294,7 @@ async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_r
             if val is None and col not in _NULLABLE:
                 continue
             args.append(val); fields.append(f"{col}=${len(args)}")
-        for frag in extra_sql:
-            if "PLACEHOLDER" in frag:
-                args.append(extra_args.pop(0)); fields.append(frag.replace("PLACEHOLDER", str(len(args))))
-            else:
-                fields.append(frag)
+        splice_stamps(fields, args, extra_sql, extra_args)
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

@@ -82,13 +82,15 @@ GF.export = {
 
 };
 
-// ── Rollover ──
-GF.rollover = () => {
-  const weekId = GF.state.selWeek;
-  const nextId = weekId + 1;
-  const incomplete = GF.weekTasks(weekId).filter(t => t.status !== 'done');
-  if (!incomplete.length) { GF.toast(AL('All tasks are done — nothing to roll over', 'Сите задачи се завршени — нема што да се пренесе'), 'info'); return; }
-  incomplete.forEach(t => { t.weekId = nextId; });
-  GF.store.save(); GF.render.all();
-  GF.toast(AL(`${incomplete.length} task(s) rolled to next week`, `${incomplete.length} задача(и) пренесени во следната недела`), 'success');
-};
+// ── Rollover lives in integrate.js ──
+// It used to be defined here too, and that copy was DEAD: index.html loads
+// integrate.js after export.js, so its async, API-backed GF.rollover replaced
+// this one at startup, every time.
+//
+// Deleted rather than left in place because the dead copy was also WRONG — it
+// mutated t.weekId in memory and called GF.store.save(), the abandoned
+// client-side store, so it persisted nothing to the server. It also invented
+// `selWeek + 1` as the next week, which integrate.js deliberately does not do
+// (there is no API to create a calendar_weeks row, so it refuses when the next
+// week does not exist yet). Anyone who reordered these two script tags would
+// have silently restored a rollover that appears to work and saves nothing.

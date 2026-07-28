@@ -75,6 +75,13 @@ def run_verify(docx_path: Path, min_pt: float = 6.0, require_bilingual: bool = T
     finally:
         sys.argv = argv
     report = buf.getvalue().strip()
+    # pp_verify opens its report with `== VERIFY: <absolute path>`, and this
+    # report is handed straight back to API callers (both in the success
+    # response and in VerifyFailed's 422 detail) and stored in the documents
+    # table. That published the service's container filesystem layout to every
+    # client for no diagnostic benefit — the basename identifies the artifact
+    # just as well, and the caller already knows which document it asked for.
+    report = report.replace(str(docx_path), Path(docx_path).name)
     return code == 0 and "RESULT: PASS" in report, report
 
 

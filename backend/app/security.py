@@ -13,11 +13,39 @@ from app.config import settings
 _DUMMY_HASH = bcrypt.hashpw(b"dummy-password-for-timing-safety-only", bcrypt.gensalt())
 
 
+# bcrypt hashes at most the first 72 BYTES of its input and silently ignores
+# the rest — 4.2.1 does not raise, it truncates. The API accepts passwords up
+# to 256 characters (auth.py's `Field(max_length=256)`), so without this a user
+# who sets a long passphrase authenticates on its first 72 bytes alone, while
+# believing the whole thing is checked.
+#
+# Bytes, not characters, and that matters here: this is a bilingual MK/EN
+# application, and Cyrillic costs 2 bytes per character in UTF-8 — a
+# 40-character Macedonian passphrase is already over the limit. Not theoretical.
+BCRYPT_MAX_BYTES = 72
+
+
+class PasswordTooLong(ValueError):
+    """Raised by hash_password for input bcrypt could not hash in full."""
+
+
 def hash_password(p: str) -> str:
-    return bcrypt.hashpw(p.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    pw = p.encode("utf-8")
+    if len(pw) > BCRYPT_MAX_BYTES:
+        raise PasswordTooLong(
+            f"Password must be at most {BCRYPT_MAX_BYTES} bytes "
+            "(non-Latin characters cost more than one byte each)"
+        )
+    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(p: str, h: str | None) -> bool:
+    # Deliberately NOT bounded the way hash_password is. Any password set
+    # before that bound existed was stored as its own 72-byte truncation, and
+    # rejecting the full input here would lock those accounts out of an app
+    # they can still legitimately sign in to. bcrypt truncates on this path
+    # exactly as it did when the hash was written, so they keep working and are
+    # told to shorten it the next time they set one.
     try:
         return bcrypt.checkpw(p.encode("utf-8"), (h or _DUMMY_HASH.decode("utf-8")).encode("utf-8"))
     except ValueError:
