@@ -91,26 +91,36 @@ class BilingualGap(Exception):
 # nothing about language.
 _CYR = re.compile(r"[Ѐ-ӿ]")
 _LAT = re.compile(r"[A-Za-z]")
-# Below this many letters of a language there is nothing to judge — a section
-# that is a bare form marker, a formula or a short code reference is legitimately
-# language-neutral and must not be failed for it. Set well under the length of
-# any real prose sentence so genuine one-language sections are still caught.
-_MIN_LETTERS_TO_JUDGE = 40
+# TWO thresholds, deliberately, because they answer different questions. A
+# single one is wrong in a way that is easy to miss: Macedonian renders longer
+# than its English equivalent, so an ordinary short bilingual section sits at
+# something like 52 Cyrillic / 31 Latin letters. Judged against one shared
+# floor, that section is "missing English" and FAILS a perfectly good job —
+# worse than the gap the check exists to close.
+#
+# _MIN_TOTAL_TO_JUDGE: below this much text there is nothing to be confident
+# about, and a bare [[FORM:grid]], a formula or a code reference is
+# legitimately language-neutral. Skip the section entirely.
+_MIN_TOTAL_TO_JUDGE = 120
+# _MIN_PRESENCE: above the total floor, this much of a language counts as
+# present. Low on purpose — a real heading or clause clears it easily, while a
+# stray acronym or unit symbol ("pH", "HPLC", "mg") does not.
+_MIN_PRESENCE = 15
 
 
 def _bilingual_gaps(sections: list[dict]) -> list[str]:
-    """Return the numbers of sections that have substantial text in exactly one
-    of the two languages. Sections with too little text to judge are skipped —
-    see _MIN_LETTERS_TO_JUDGE."""
+    """Return the numbers of sections that carry substantial text in only one
+    of the two languages. Sections too short to judge are skipped — see
+    _MIN_TOTAL_TO_JUDGE."""
     gaps = []
     for s in sections:
         body = s.get("content") or ""
         cyr, lat = len(_CYR.findall(body)), len(_LAT.findall(body))
-        if cyr + lat < _MIN_LETTERS_TO_JUDGE:
+        if cyr + lat < _MIN_TOTAL_TO_JUDGE:
             continue
-        if cyr < _MIN_LETTERS_TO_JUDGE and lat >= _MIN_LETTERS_TO_JUDGE:
+        if cyr < _MIN_PRESENCE:
             gaps.append(f"{s.get('num', '?')} (no MK)")
-        elif lat < _MIN_LETTERS_TO_JUDGE and cyr >= _MIN_LETTERS_TO_JUDGE:
+        elif lat < _MIN_PRESENCE:
             gaps.append(f"{s.get('num', '?')} (no EN)")
     return gaps
 

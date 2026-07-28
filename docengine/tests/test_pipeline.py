@@ -265,8 +265,10 @@ def test_clean_section_refuses_an_oversized_strip():
 # document passes it. Every realistic failure is per-section, which is where
 # _bilingual_gaps looks.
 
-_MK = "Оваа постапка ја опишува постапката за земање primeroci и чување."
-_EN = "This procedure describes the sampling and retention of samples."
+_MK = ("Оваа постапка ја опишува постапката за земање, обележување и чување на "
+       "примероци од секоја произведена серија до крајот на рокот на употреба.")
+_EN = ("This procedure describes the sampling, labelling and retention of samples "
+       "from every manufactured batch until the end of its shelf life.")
 
 
 def test_bilingual_gaps_flags_a_monolingual_section():
@@ -353,3 +355,19 @@ async def test_bilingual_sections_still_reach_the_build(monkeypatch):
     await run_workflow("job-1", client=BilingualClient())
     assert updates[-1]["status"] == "done"
     assert built
+
+
+def test_bilingual_gaps_does_not_fail_a_short_bilingual_section():
+    """The regression that the code check caught before this shipped.
+
+    Macedonian renders longer than its English equivalent, so an ordinary short
+    bilingual section sits around 52 Cyrillic / 31 Latin letters. Judged against
+    a single shared floor that reads as "missing English" and FAILS a perfectly
+    good job — worse than the gap the check exists to close. Hence the split
+    into _MIN_TOTAL_TO_JUDGE (is there enough text to have an opinion?) and
+    _MIN_PRESENCE (is this language present at all?)."""
+    mk = "Опсегот на оваа постапка ги опфаќа сите серии од производство"
+    en = "Scope covers all production batches"
+    assert _bilingual_gaps([{"num": "2.0", "content": f"{mk}|{en}"}]) == []
+    # ...and a longer section with the same lopsided ratio is still fine
+    assert _bilingual_gaps([{"num": "3.0", "content": f"{mk * 3}|{en * 3}"}]) == []
