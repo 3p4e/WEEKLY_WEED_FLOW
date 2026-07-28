@@ -373,7 +373,11 @@ GF.WWF.install = () => {
     origAddNote(taskId);
     if (v) GF.API.addProgress(taskId, { day_label: GF.todayDay, note: v }).catch(()=>{}); };
 
-  GF.submitAdd = async () => {
+  // GF.once spans the ENTIRE chain below — translate, then createTask, then
+  // the per-helper assign loop. The old inline guard only covered the
+  // translate step and re-enabled the button while the create was still to
+  // come, so a second click duplicated the task (H6).
+  GF.submitAdd = () => GF.once('add-submit-btn', async () => {
     const title = (GF.$('add-title')?.value||'').trim();
     if (!title) { GF.toast(AL('Enter a title','Внесете наслов'),'error'); return; }
     const days = [...GF.$('add-days').querySelectorAll('.on')].map(el => el.dataset.day);
@@ -402,12 +406,15 @@ GF.WWF.install = () => {
     // "Македонски | English" regardless of the language it was typed in. A brief
     // spinner runs on the Save button while the AI translates; it falls back to
     // the typed text if the AI is unavailable, so the save is never blocked.
+    // GF.once owns `disabled` (and restores the label) for the whole chain —
+    // only the transient label changes here, so the button cannot come back
+    // alive between the translate and the create.
     const btn = GF.$('add-submit-btn');
     const btnLabel = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${AL('Translating…','Преведување…')}`; }
+    if (btn) btn.innerHTML = `<span class="spinner"></span> ${AL('Translating…','Преведување…')}`;
     let biTitle = title, biDesc = '';
     try { const bi = await GF.ai.bilingual(title, ''); biTitle = bi.title; biDesc = bi.description || ''; }
-    finally { if (btn) { btn.disabled = false; btn.textContent = btnLabel; } }
+    finally { if (btn) btn.textContent = btnLabel; }
 
     // Edit mode (openEdit in worklog.js sets GF._editTask) → PATCH instead of POST.
     if (GF._editTask) {
@@ -506,7 +513,7 @@ GF.WWF.install = () => {
       }
       if (helperIds.length) { await GF.WWF.loadCollab(created.id); GF.render.panels(); }
     } catch(e) { GF.toast(AL('Create failed: ','Неуспешно креирање: ')+e.message,'error'); }
-  };
+  });
 
   // AI features -> real backend Letta functions (/ai/{function_key}, body: {input}).
   // Every call degrades to "AI agent unavailable" when no binding is configured —
@@ -940,7 +947,10 @@ GF.WWF.resetUserPw = async (id) => {
   } catch (e) { GF.toast(AL('Reset failed: ', 'Неуспешно ресетирање: ') + (e.message || e), 'error'); }
 };
 
-GF.submitUser = async () => {
+// Had no guard at all (H7): a second click on Save created a SECOND account,
+// with its own username collision or its own OTP, and only the last showOtp
+// was ever displayed. Covers the edit branch too.
+GF.submitUser = () => GF.once('user-save-btn', async () => {
   const name = (GF.$('u-name')?.value || '').trim();
   if (!name) { GF.toast(AL('Enter a full name', 'Внесете име и презиме'), 'error'); return; }
   const roleKey = GF.$('u-role').value;
@@ -968,7 +978,7 @@ GF.submitUser = async () => {
     GF.WWF.showOtp(res.user || { username, full_name: name }, res.otp);
     await GF.WWF.loadAndRender();
   } catch (e) { GF.toast(AL('Create failed: ', 'Неуспешно креирање: ') + (e.message || e), 'error'); }
-};
+});
 
 GF.removeUser = async (id) => {
   if (!GF.WWF.canProvision()) return GF.denyToast();

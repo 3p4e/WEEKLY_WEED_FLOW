@@ -5,6 +5,32 @@ GF.$ = (id) => document.getElementById(id);
 GF.esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 GF.uid = () => 'T-' + Math.random().toString(36).slice(2, 7).toUpperCase();
 
+// ── Re-entrancy guard for async submit handlers ──
+// The Save buttons are plain inline onclick handlers, and the handlers behind
+// them await several round trips before they finish (submitAdd: translate,
+// then createTask, then one assign call per helper). Nothing stopped a second
+// click landing inside that window, which creates a duplicate task — or a
+// duplicate user account, complete with its own OTP. Keyed on the button id so
+// the in-flight flag can never leak between modals, and the button stays
+// disabled for the WHOLE chain, not just the first await.
+GF._busy = Object.create(null);
+GF.once = async (btnId, fn) => {
+  if (GF._busy[btnId]) return;                    // already in flight — drop it
+  GF._busy[btnId] = true;
+  const btn = GF.$(btnId);
+  const label = btn ? btn.innerHTML : '';
+  if (btn) btn.disabled = true;
+  try {
+    return await fn(btn, label);
+  } finally {
+    delete GF._busy[btnId];
+    // Re-read: the handler usually closes the modal, and on some paths the
+    // node is replaced by a re-render, so the captured reference can be stale.
+    const b = GF.$(btnId);
+    if (b) { b.disabled = false; b.innerHTML = label; }
+  }
+};
+
 // ── Icons (stroke paths, 20x20 viewBox) ──
 GF.ICONS = {
   search:'M17 17l-3.2-3.2M15.5 9.5a6 6 0 11-12 0 6 6 0 0112 0z',
