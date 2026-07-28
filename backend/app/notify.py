@@ -73,6 +73,18 @@ async def emit(c, user: dict, *, verb: str, object_type: str, object_id,
                     user["org_id"], uid, ev_id, reason, f"{verb}:{object_type}:{object_id}")
         except asyncpg.UniqueViolationError:  # already an open identical row
             pass
+        except Exception:
+            # One bad recipient must never sink the whole fan-out. Only
+            # UniqueViolation was caught before, so ANY other per-recipient
+            # error (a stale user id, a policy rejection) propagated out of
+            # emit() and — via safe_emit's outer savepoint — rolled back the
+            # EVENT itself plus every recipient already inserted. That is the
+            # opposite of what migration 0032's comment documents. The
+            # savepoint has already undone just this recipient's INSERT, so
+            # the transaction is healthy: log with context and carry on.
+            _log.warning(
+                "notification fan-out failed for recipient %s (verb=%s object=%s) — skipped",
+                uid, verb, object_type, exc_info=True)
     return ev_id
 
 

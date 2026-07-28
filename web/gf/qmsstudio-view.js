@@ -94,20 +94,46 @@
     } catch (e) { s.step = 'meta'; s.error = e.message; GF.render.all(); }
   };
 
-  function poll() {
+  // Bounded on three axes, none of which existed before: it kept polling after
+  // the user navigated away, it retried a PERMANENT error (401/403/404) as if
+  // it were transient, and it had no overall ceiling — a job that never reached
+  // a terminal state polled the backend every 2.5s for as long as the tab
+  // stayed open.
+  const _POLL_MS = 2500;
+  const _POLL_MAX_TRANSIENT = 5;    // consecutive transient failures
+  const _POLL_MAX_TICKS = 960;      // ~40 min at 2.5s — far past any real build
+
+  function poll(ticks, softFails) {
     const s = st();
+    ticks = ticks || 0;
+    softFails = softFails || 0;
     if (s._poll) clearTimeout(s._poll);
     s._poll = setTimeout(async () => {
-      if (!s.job) return;
+      // Stop when the view is gone or the job was reset out from under us.
+      if (!s.job || GF.state.view !== 'qmsstudio') { s._poll = null; return; }
+      if (ticks >= _POLL_MAX_TICKS) {
+        s.error = AL('Stopped waiting for this job — reopen it to check again.',
+                     'Прекинато чекањето за оваа задача — отворете ја повторно.');
+        s._poll = null; GF.render.all(); return;
+      }
       try {
         const j = await GF.API.studioWorkflow(s.job.id);
         s.job = { id: j.id, status: j.status, stage: j.stage, result: j.result, error: j.error };
-        if (j.status === 'done') { s.step = 'done'; loadIndex(); }
-        else if (j.status === 'failed') { s.step = 'failed'; }
-        else poll();
-      } catch (e) { poll(); /* transient poll errors: keep trying */ }
+        if (j.status === 'done') { s.step = 'done'; s._poll = null; loadIndex(); }
+        else if (j.status === 'failed') { s.step = 'failed'; s._poll = null; }
+        else poll(ticks + 1, 0);          // progress: reset the failure streak
+      } catch (e) {
+        // A permanent error will not fix itself by asking again.
+        const permanent = e && (e.status === 401 || e.status === 403 || e.status === 404);
+        if (permanent || softFails + 1 >= _POLL_MAX_TRANSIENT) {
+          s.error = (e && e.message) || String(e);
+          s._poll = null;
+        } else {
+          poll(ticks + 1, softFails + 1);
+        }
+      }
       if (GF.state.view === 'qmsstudio') GF.render.all();
-    }, 2500);
+    }, _POLL_MS);
   }
 
   GF.WWF.qstuReset = () => {

@@ -69,8 +69,8 @@ class CaptureTask(BaseModel):
     reference_code: str | None = None
     department: str | None = None
     owner: str | None = None
-    assignees: list[str] = []
-    tags: list[str] = []
+    assignees: list[str] = Field(default_factory=list, max_length=64)
+    tags: list[str] = Field(default_factory=list, max_length=64)
     week_start: date | None = None
     due_date: date | None = None
     estimated_hours: float | None = Field(default=None, ge=0)
@@ -78,15 +78,19 @@ class CaptureTask(BaseModel):
     outcome: str | None = None
     blocker_reason: str | None = None
     recurrence_hint: str | None = None
-    subtasks: list[CaptureSubtask] = []
-    links: list[CaptureLink] = []
-    sessions: list[CaptureSession] = []
-    provenance: list[dict] = []   # Drive sweep carries source files; ignored here beyond links
+    # Explicit caps, matching every other write surface in the app. A capture
+    # is one person's session of work, so these bounds are far above any real
+    # payload while keeping a hostile or runaway one from turning into an
+    # unbounded per-task transaction loop below.
+    subtasks: list[CaptureSubtask] = Field(default_factory=list, max_length=200)
+    links: list[CaptureLink] = Field(default_factory=list, max_length=100)
+    sessions: list[CaptureSession] = Field(default_factory=list, max_length=500)
+    provenance: list[dict] = Field(default_factory=list, max_length=200)
 
 
 class CapturePayload(BaseModel):
     session_meta: dict = {}
-    tasks: list[CaptureTask]
+    tasks: list[CaptureTask] = Field(max_length=1000)
 
 
 def _tz(dt: datetime | None) -> datetime | None:

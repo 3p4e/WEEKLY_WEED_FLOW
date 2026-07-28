@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict NcmmVfdFKXYcoILjxvNf4mkUOmWPG7h3Vb8VcQTzhJmtxEneC2dql52hu2UiYJL
+\restrict g0HJk4cV0Qt7ZcqHHd4dOzraAHE7Xoiq1rYAgvbBKOwzkggLMcDXZMSycK3GyiA
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2658,6 +2658,13 @@ CREATE TRIGGER audit_qc_coq_sources AFTER INSERT OR DELETE OR UPDATE ON public.q
 
 
 --
+-- Name: qc_document_files audit_qc_document_files; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_document_files AFTER INSERT OR DELETE OR UPDATE ON public.qc_document_files FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_ecoa_checklist audit_qc_ecoa_checklist; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3968,5 +3975,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict NcmmVfdFKXYcoILjxvNf4mkUOmWPG7h3Vb8VcQTzhJmtxEneC2dql52hu2UiYJL
+\unrestrict g0HJk4cV0Qt7ZcqHHd4dOzraAHE7Xoiq1rYAgvbBKOwzkggLMcDXZMSycK3GyiA
 

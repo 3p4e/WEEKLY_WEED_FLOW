@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import builder, db, fleet  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
-    assemble_markdown, run_workflow, _strip_fences, _clean_section,
+    assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -228,3 +228,128 @@ async def test_ephemeral_regchecker_cleanup_failure_does_not_abort_the_job(monke
 
     await run_workflow("job-1", client=FlakyDeleteClient())
     assert updates[-1]["status"] == "done"
+
+
+def test_clean_section_keeps_sop_prose_openers():
+    """M — the stripper used to match "note:", "based on", "the following",
+    "this is the" and "below is" at the start of a line. Those open ordinary
+    procedure text at least as often as agent chatter, and the strip is silent:
+    the §5A fidelity check compares the built .docx against this ALREADY-CLEANED
+    text, so anything lost here is invisible to the one safeguard meant to catch
+    content impoverishment."""
+    for raw in (
+        "Note: samples must be stored at 2-8 °C until tested.",
+        "Based on the risk assessment, sampling is performed per QCSOP-011.",
+        "The following equipment is required for this procedure.",
+        "This is the reference method for water conductivity.",
+        "Below is the acceptance criteria table.",
+    ):
+        assert _clean_section(raw, structured=False) == raw, raw
+
+
+def test_clean_section_refuses_an_oversized_strip():
+    """M — a conversational lead-in is short. A large removal is the agent's
+    real output, so the stripper keeps the original rather than being the thing
+    that silently drops procedure text."""
+    big = ("Let me explain. " + "This sentence is real procedure content. " * 40).strip()
+    out = _clean_section(big, structured=False)
+    assert out == big                      # refused, nothing lost
+    # …while a genuinely short lead-in is still peeled
+    small = "Let me explain.\n\nThe purpose of this SOP is to define X."
+    assert _clean_section(small, structured=False) == "The purpose of this SOP is to define X."
+
+
+# --- per-section bilingual gate -------------------------------------------
+# M — pp_verify's --require-bilingual asks whether the WHOLE .docx contains
+# Cyrillic and Latin ANYWHERE, so one Macedonian word in a forty-page English
+# document passes it. Every realistic failure is per-section, which is where
+# _bilingual_gaps looks.
+
+_MK = "Оваа постапка ја опишува постапката за земање primeroci и чување."
+_EN = "This procedure describes the sampling and retention of samples."
+
+
+def test_bilingual_gaps_flags_a_monolingual_section():
+    gaps = _bilingual_gaps([
+        {"num": "1.0", "content": f"{_MK}|{_EN}"},
+        {"num": "2.0", "content": _EN * 2},      # English only
+        {"num": "3.0", "content": _MK * 2},      # Macedonian only
+    ])
+    assert gaps == ["2.0 (no MK)", "3.0 (no EN)"]
+
+
+def test_bilingual_gaps_passes_a_document_that_is_bilingual_throughout():
+    assert _bilingual_gaps([
+        {"num": "1.0", "content": f"{_MK}|{_EN}"},
+        {"num": "2.0", "content": f"{_MK}|{_EN}"},
+    ]) == []
+
+
+def test_bilingual_gaps_ignores_sections_with_too_little_text_to_judge():
+    """A bare form marker, a formula or a short code reference is legitimately
+    language-neutral. Failing those would make the gate unusable."""
+    assert _bilingual_gaps([
+        {"num": "4.0", "content": "[[FORM:grid]]"},
+        {"num": "5.0", "content": "QCSOP-011 v2.0"},
+        {"num": "6.0", "content": "C = (A - B) / V * 100"},
+        {"num": "7.0", "content": ""},
+    ]) == []
+
+
+def test_bilingual_gaps_is_what_the_whole_document_check_would_miss():
+    """The regression this exists for, stated directly: a document whose
+    sections are overwhelmingly English but that carries Macedonian in ONE
+    section satisfies pp_verify's document-wide check, and must not satisfy
+    this one."""
+    sections = [{"num": "1.0", "content": f"{_MK}|{_EN}"}] + [
+        {"num": f"{n}.0", "content": _EN * 3} for n in range(2, 8)
+    ]
+    whole_doc = " ".join(s["content"] for s in sections)
+    import re as _re
+    assert _re.search(r"[Ѐ-ӿ]", whole_doc) and _re.search(r"[A-Za-z]", whole_doc)
+    assert _bilingual_gaps(sections) == [f"{n}.0 (no MK)" for n in range(2, 8)]
+
+
+@pytest.mark.asyncio
+async def test_monolingual_section_fails_the_job_before_the_build(monkeypatch):
+    """The gate wired end-to-end: an English-only section must fail the job,
+    and must do so BEFORE builder.build runs — the whole point is catching it
+    while the sections are still separable, not after pp_verify's
+    document-wide check has waved it through."""
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+
+    class EnglishOnlyClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            if "Check this drafted section" in prompt:
+                return "NO-FINDING"
+            return _EN * 3          # the drafted section body — no Macedonian
+
+    await run_workflow("job-1", client=EnglishOnlyClient())
+    assert updates[-1]["status"] == "failed"
+    assert "not bilingual" in updates[-1]["error"]
+    assert updates[-1]["result"]["bilingual_gaps"] == ["1.0 (no MK)"]
+    assert not built, "the build must not run once a section is known monolingual"
+
+
+@pytest.mark.asyncio
+async def test_bilingual_sections_still_reach_the_build(monkeypatch):
+    """The other direction — the gate must not block a legitimate document."""
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+
+    class BilingualClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            if "Check this drafted section" in prompt:
+                return "NO-FINDING"
+            return f"{_MK}|{_EN}"
+
+    await run_workflow("job-1", client=BilingualClient())
+    assert updates[-1]["status"] == "done"
+    assert built

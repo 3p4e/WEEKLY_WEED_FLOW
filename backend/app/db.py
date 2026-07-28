@@ -1,7 +1,7 @@
 """
 asyncpg connection pools + RLS context — over TWO databases.
 
-Identity data (organizations, profiles, password_reset_codes + their audit
+Identity data (organizations, profiles + their audit
 chain) lives in the users database; all work data (tasks, sessions, pins,
 their audit chain, ...) lives in the tasks database. They run as separate
 Postgres containers; nothing joins across them at the SQL level — app-side

@@ -22,6 +22,10 @@
 
   GF.WWF.loadQcRegister = async () => {
     const st = GF.WWF._qcreg;
+    // lseq: every sibling QC view carries this. The filter setters below call
+    // this on each change, so two loads are routinely in flight and the SLOWER
+    // one used to win — painting rows that don't match the visible filters.
+    const my = (st.lseq = (st.lseq || 0) + 1);
     st.loading = true; st.error = null;
     try {
       const f = st.f;
@@ -33,9 +37,12 @@
       if (f.pending) q.pending = 'true';
       if (f.oos_linked) q.oos_linked = 'true';
       if (f.retention) q.retention = f.retention;
-      st.rows = await GF.API.qcRegister(q);
+      const rows = await GF.API.qcRegister(q);
+      if (my !== st.lseq) return;                 // superseded by a newer load
+      st.rows = rows;
       if (st.labs === null) st.labs = await GF.API.qcLabs({}).catch(() => []);
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcregister') GF.render.all();
   };

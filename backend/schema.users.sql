@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict rkryD6VtmcyrSEyaIcm6gzkWPb6ZsWIXRGDPk47igaxxvlBsXT8iT5hNmg8mWGq
+\restrict TJlcVEQrufntV43yfTWdgLRvu1TUJIyR3afa3LnZGcyWTNu2TvupHNRz46JSEhT
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -163,22 +163,6 @@ ALTER TABLE ONLY public.organizations FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.password_reset_codes (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    code_hash text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    used_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-ALTER TABLE ONLY public.password_reset_codes FORCE ROW LEVEL SECURITY;
-
-
---
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -232,14 +216,6 @@ ALTER TABLE ONLY public.organizations
 
 
 --
--- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_pkey PRIMARY KEY (id);
-
-
---
 -- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -274,14 +250,6 @@ CREATE TRIGGER audit_organizations AFTER INSERT OR DELETE OR UPDATE ON public.or
 --
 
 CREATE TRIGGER audit_profiles AFTER INSERT OR DELETE OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
-
-
---
--- Name: password_reset_codes password_reset_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -334,12 +302,6 @@ CREATE POLICY org_self ON public.organizations USING ((id = app.current_org_id()
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: password_reset_codes; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.password_reset_codes ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -367,15 +329,8 @@ CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.curre
 
 
 --
--- Name: password_reset_codes reset_self; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.current_user_id()) OR app.is_elevated())) WITH CHECK (((user_id = app.current_user_id()) OR app.is_elevated()));
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rkryD6VtmcyrSEyaIcm6gzkWPb6ZsWIXRGDPk47igaxxvlBsXT8iT5hNmg8mWGq
+\unrestrict TJlcVEQrufntV43yfTWdgLRvu1TUJIyR3afa3LnZGcyWTNu2TvupHNRz46JSEhT
 

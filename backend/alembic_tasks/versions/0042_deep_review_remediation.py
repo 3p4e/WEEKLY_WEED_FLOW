@@ -62,6 +62,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # DESTRUCTIVE DOWNGRADE (same risk class migration 0010 flags explicitly).
+    # This re-narrows a CHECK constraint that the upgrade widened. On any
+    # database that has since USED one of the added values, the ALTER ... ADD
+    # CONSTRAINT below fails validation and the downgrade aborts part-way —
+    # after the DROPs above have already run. Before downgrading a real
+    # database, first migrate or delete the rows carrying the newer values.
     op.execute("DROP POLICY org_isolation_insert ON public.qc_chain_of_custody")
     op.execute("DROP POLICY org_isolation_select ON public.qc_chain_of_custody")
     op.execute("CREATE POLICY org_isolation ON public.qc_chain_of_custody"

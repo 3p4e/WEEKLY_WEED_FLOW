@@ -31,14 +31,21 @@ GF.views.report = function () {
 
 GF.WWF.loadReport = async () => {
   const st = GF.WWF._report;
-  if (st.loading) return;
+  // lseq, not `if (st.loading) return`. The early return DROPPED the user's
+  // click — switch mode or week while a load is in flight and nothing
+  // happened, leaving the toolbar showing one selection and the content
+  // another. Superseding instead: the newest request always wins and the
+  // stale response is discarded.
+  const my = (st.lseq = (st.lseq || 0) + 1);
   st.loading = true;
   st.aiInsights = null;
   st.pins = null; st.pinsUser = null;
   try {
     const q = { mode: st.mode };
     if (st.refDate) q.ref_date = st.refDate;
-    st.data = await GF.API.weeklyReport(q);
+    const data = await GF.API.weeklyReport(q);
+    if (my !== st.lseq) return;                   // superseded by a newer load
+    st.data = data;
     // The scheduler archives the AI weekly report / next-week plan to ai_pins
     // (function_key weekly_report / next_week_plan, +_user per person). Best
     // effort — the panel just shows an empty state until the first run lands.
@@ -47,6 +54,7 @@ GF.WWF.loadReport = async () => {
       GF.API.pins({ function_key: orgKey, limit: 1 }).catch(() => []),
       GF.API.pins({ function_key: orgKey + '_user', limit: 10 }).catch(() => []),
     ]);
+    if (my !== st.lseq) return;
     st.pins = (org && org[0]) || null;
     st.pinsUser = per || [];
     GF.WWF.renderReport();
@@ -54,10 +62,11 @@ GF.WWF.loadReport = async () => {
     // Seen: clear the "new AI report" nav badge now that the user is looking at it.
     if (GF.WWF._markReportSeen) GF.WWF._markReportSeen();
   } catch (e) {
+    if (my !== st.lseq) return;                   // a newer load owns the view
     const v = GF.$('report-view');
     if (v) v.innerHTML = `<div style="padding:40px;text-align:center;color:#E5484D">${AL('Failed to load report', 'Не може да се вчита извештај')}: ${GF.esc(e.message)}</div>`;
   } finally {
-    st.loading = false;
+    if (my === st.lseq) st.loading = false;
   }
 };
 

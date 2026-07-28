@@ -28,7 +28,10 @@ GF.WWF._xrRerender = () => { if (GF.state.view === 'execreport') GF.render.all()
 
 GF.WWF.xrLoad = async (force) => {
   const st = GF.WWF._xr;
-  if (st.loading) return;
+  // No `if (st.loading) return` here: this function already supersedes via
+  // st.seq below, so the early return added nothing except DROPPING the user's
+  // click — changing kind or ref_date mid-load did nothing at all, leaving the
+  // toolbar and the content disagreeing.
   st.loading = true; st.error = null;
   if (force) { st.status = null; st.docs = {}; }
   GF.WWF._xrRerender();
@@ -184,7 +187,7 @@ const xrTasks = (c) => {
         ${n.user_id && who(n.user_id) ? `<span class="by">— ${GF.esc(who(n.user_id))}</span>` : ''}</div>`;
     }).join('');
     return `<details class="xr-task"><summary>
-        <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(t.status || '')}</span>
+        <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(GF.statusLabel((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending'))}</span>
         <span class="xr-task-title">${GF.esc(t.title || '')}</span>
         ${t.reference_code ? `<span class="ref-code">${GF.esc(t.reference_code)}</span>` : ''}
       </summary>

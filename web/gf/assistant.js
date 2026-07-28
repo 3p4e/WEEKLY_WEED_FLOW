@@ -13,7 +13,11 @@ GF.assistant = {
 
   open(scope) {
     if (this._lastUser !== GF.state.user) { this._lastUser = GF.state.user; this.msgs = []; }
-    this.scope = scope || (window.APP ? APP.mode : 'prod');
+    // `window.APP` has never existed in this build — the truthiness test was
+    // always false, so every assistant instance silently fell back to 'prod'
+    // and the QC-specific quick actions could never appear for anyone. The
+    // real mode lives on GF.state (core.js), same as every other view reads it.
+    this.scope = scope || (GF.state && GF.state.view === 'qc' ? 'qc' : 'prod');
     GF.$('assistant-drawer')?.classList.add('open');
     GF.$('assistant-overlay')?.classList.add('open');
     if (!this.msgs.length) this._greet();

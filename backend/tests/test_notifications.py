@@ -7,9 +7,10 @@ feed-only event (no recipients), and the read/done lifecycle driving the
 server-computed unread count.
 """
 import logging
+import uuid
 
 from tests.conftest import create_user, login_and_set_password
-from app.db import rls
+from app.db import rls, tasks_admin_pool
 from app.notify import safe_emit
 
 
@@ -19,19 +20,36 @@ async def _actor(client, admin_headers, role="USER"):
     return u, {"Authorization": f"Bearer {token}"}
 
 
-async def test_safe_emit_logs_a_non_uniqueviolation_failure(org, caplog):
-    """H3: emit()'s per-recipient insert must only swallow a genuine
-    duplicate-notification race (unique violation) — any other failure
-    (here, a malformed recipient id) must surface to safe_emit()'s logging
-    wrapper instead of vanishing silently."""
+async def test_one_bad_recipient_is_logged_and_skipped_not_fatal(org, caplog):
+    """A failing recipient must cost exactly that recipient.
+
+    emit() used to catch only UniqueViolation, so any OTHER per-recipient error
+    (here a malformed uuid) propagated out and — through safe_emit's outer
+    savepoint — rolled back the EVENT itself along with every recipient already
+    inserted. Migration 0032's own comment documents the opposite intention.
+    The per-recipient savepoint has already undone just the bad INSERT, so the
+    transaction is healthy and the fan-out continues.
+
+    Pins all three properties: the event survives, the good recipient still
+    gets their notification, and the failure is logged rather than swallowed."""
     actor = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"}
+    good = str(uuid.uuid4())
     caplog.set_level(logging.WARNING, logger="app.notify")
     async with rls(actor) as c:
-        ev_id = await safe_emit(c, actor, verb="assigned", object_type="task",
-                                object_id="00000000-0000-0000-0000-000000000000",
-                                recipients=[("not-a-uuid", "assigned")])
-    assert ev_id is None
-    assert any("notification emit failed" in r.message for r in caplog.records)
+        ev_id = await safe_emit(
+            c, actor, verb="assigned", object_type="task",
+            object_id="00000000-0000-0000-0000-000000000000",
+            # bad one FIRST: if it aborted the fan-out, `good` would never be
+            # reached and the row count below would be 0.
+            recipients=[("not-a-uuid", "assigned"), (good, "assigned")],
+        )
+    assert ev_id is not None, "one bad recipient must not roll back the event"
+    delivered = await tasks_admin_pool().fetchval(
+        "SELECT count(*) FROM notifications WHERE event_id=$1 AND recipient_id=$2",
+        ev_id, good)
+    assert delivered == 1, "the good recipient must still be notified"
+    assert any("fan-out failed for recipient not-a-uuid" in r.message
+               for r in caplog.records), "the skipped recipient must be logged"
 
 
 async def test_assign_notifies_assignee_not_actor(client, admin_headers):

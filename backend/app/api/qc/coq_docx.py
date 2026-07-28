@@ -360,8 +360,15 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
 async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLES))):
     """Render a Certificate of Quality (.docx) from a RELEASED certificate via
     the DocEngine's PASS-gated formatter. Data gate: every result must comply
-    (a FAIL or unmeasured result blocks). Issuing the COQ is a QC Manager
-    function (QP may also issue one)."""
+    (a FAIL or unmeasured result blocks).
+
+    Issuing the COQ is a QC function (QCSOP 012 §6.4) — _COQ_ROLES is
+    (ADMIN, QC_MGR). The Qualified Person RECEIVES the approved COQ as an input
+    to the separate Annex 16 release decision and does NOT issue it; that
+    separation is deliberate and pinned by test_coq_is_qc_mgr_gated, which
+    asserts a QP gets 403 here. This docstring used to add "(QP may also issue
+    one)" — a leftover from before the role fix, contradicting both the code
+    and the test."""
     _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)

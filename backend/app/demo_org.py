@@ -246,7 +246,7 @@ async def wipe_demo_org(org_id: uuid.UUID) -> None:
                 # constant _TASKS_WIPE_ORDER — never user input; the org_id
                 # filter is a bound parameter. Safe by construction.
                 await c.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)  # nosec B608
-    # Users DB: profiles (cascades password_reset_codes). Org row stays.
+    # Users DB: profiles. Org row stays.
     await users_admin_pool().execute("DELETE FROM profiles WHERE org_id=$1", org_id)
 
 

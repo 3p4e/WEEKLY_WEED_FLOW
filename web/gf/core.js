@@ -189,9 +189,13 @@ GF.taskTypeLabel = (t) => { const l = GF.TASK_TYPE_LABELS && GF.TASK_TYPE_LABELS
 // stat card (_sc()) is a genuinely different design (color-coded by status,
 // not a plain label+value) and stays separate rather than being forced into
 // this shape.
+// Escapes like every sibling markup helper in this file. Callers pass only
+// static labels and numbers today, so this changes no current output — it
+// closes the trap for the next caller that passes a task title or a department
+// name, which is exactly how the escaping bugs in the last round happened.
 GF.kpiTile = (label, value, sub) => `<div class="ana-tile">
-  <div class="ana-tl">${label}</div><div class="ana-tv">${value}</div>
-  ${sub ? `<div class="ana-ts">${sub}</div>` : ''}</div>`;
+  <div class="ana-tl">${GF.esc(label)}</div><div class="ana-tv">${GF.esc(value)}</div>
+  ${sub ? `<div class="ana-ts">${GF.esc(sub)}</div>` : ''}</div>`;
 
 // ── Calendar ──
 GF.calendar = { weeks: [], todayId: 0 };

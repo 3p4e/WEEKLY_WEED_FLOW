@@ -483,6 +483,13 @@ async def list_custody(sample_id: str, user: dict = Depends(require_role(*ELEVAT
     return [_custody_out(dict(r)) for r in rows]
 
 
+def _norm_loc(s: str | None) -> str:
+    """Fold a custody location for comparison — same idiom as ecoa._norm_label.
+    Both sides are free text typed by different people in the field and in the
+    lab, so case and internal whitespace must not manufacture a chain break."""
+    return " ".join((s or "").split()).lower()
+
+
 @router.post("/samples/{sample_id}/custody", status_code=201)
 async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(require_role(*_WRITERS))):
     if body.transfer_type is not None and body.transfer_type not in _TRANSFER_TYPES:
@@ -503,15 +510,37 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
         # and could both pass the continuity check (same pattern as the
         # genealogy cycle-check / cert numbering elsewhere in this package).
         await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"custody:{user['org_id']}:{sample_id}")
-        # Append-only continuity: this handoff must start with whoever the
-        # chain last recorded as HAVING custody — otherwise a transfer could
-        # silently skip a custodian (a break in the field-to-lab chain).
+        # Append-only continuity, on BOTH axes — who held it and where it was.
         prev = await c.fetchrow(
-            "SELECT to_user_id FROM qc_chain_of_custody WHERE sample_id=$1"
+            "SELECT to_user_id, to_location FROM qc_chain_of_custody WHERE sample_id=$1"
             " ORDER BY transferred_at DESC LIMIT 1", sample_id)
-        if prev is not None and prev["to_user_id"] is not None and str(prev["to_user_id"]) != str(from_user):
-            raise HTTPException(409, "Custody continuity broken: the last recorded transfer for this"
-                                     " sample ended with a different custodian than this entry's from_user_id")
+        if prev is not None:
+            # WHO — this handoff must start with whoever the chain last
+            # recorded as having custody, or a transfer silently skips a
+            # custodian (a break in the field-to-lab chain).
+            if prev["to_user_id"] is not None:
+                if str(prev["to_user_id"]) != str(from_user):
+                    raise HTTPException(
+                        409, "Custody continuity broken: the last recorded transfer for this"
+                             " sample ended with a different custodian than this entry's"
+                             " from_user_id")
+            # to_user_id is optional (a sample can be left at a place rather
+            # than handed to a person), and that used to mean NO check ran at
+            # all — so a chain could drop personal custody entirely just by
+            # omitting it. An entry that ended at a place must at least be
+            # continued FROM that place.
+            elif prev["to_location"] and not body.from_location:
+                raise HTTPException(
+                    409, f"Custody continuity broken: the sample was last left at"
+                         f" '{prev['to_location']}' with no named custodian — this entry must"
+                         f" state the from_location it is being collected from")
+            # WHERE — independently of who: a stated origin must match where
+            # the sample was actually last left. Never checked before.
+            if (prev["to_location"] and body.from_location
+                    and _norm_loc(body.from_location) != _norm_loc(prev["to_location"])):
+                raise HTTPException(
+                    409, f"Custody continuity broken: the sample was last left at"
+                         f" '{prev['to_location']}', not '{body.from_location}'")
         row = await c.fetchrow(
             "INSERT INTO qc_chain_of_custody(org_id, sample_id, from_user_id, to_user_id,"
             " from_location, to_location, transfer_reason, transfer_type, sfr_id,"

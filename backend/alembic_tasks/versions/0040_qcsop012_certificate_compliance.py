@@ -108,6 +108,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # DESTRUCTIVE DOWNGRADE (same risk class migration 0010 flags explicitly).
+    # This re-narrows a CHECK constraint that the upgrade widened. On any
+    # database that has since USED one of the added values, the ALTER ... ADD
+    # CONSTRAINT below fails validation and the downgrade aborts part-way —
+    # after the DROPs above have already run. Before downgrading a real
+    # database, first migrate or delete the rows carrying the newer values.
     op.execute("DROP TABLE public.qc_ecoa_checklist")
     op.execute("ALTER TABLE public.qc_certificates DROP CONSTRAINT qc_certificates_status_check")
     op.execute(

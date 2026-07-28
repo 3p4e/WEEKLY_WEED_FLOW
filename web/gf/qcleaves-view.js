@@ -17,12 +17,24 @@
   const TRN_NEXT = { draft: 'in_transit', in_transit: 'received' };
 
   GF.WWF.loadQcLeaves = async () => {
-    const st = GF.WWF._qcl; st.loading = true; st.error = null;
+    const st = GF.WWF._qcl;
+    // lseq, like every sibling QC view. qclTab() re-loads on each tab switch,
+    // so a fast click through stab -> trn -> water leaves three loads racing
+    // and the slowest used to paint its tab's data under whichever tab is
+    // actually showing.
+    const my = (st.lseq = (st.lseq || 0) + 1);
+    st.loading = true; st.error = null;
     try {
-      if (st.tab === 'stab') st.stab = await GF.API.qcStability({});
-      else if (st.tab === 'trn') st.trn = await GF.API.qcTransports({});
-      else st.water = await GF.API.qcWater({});
-    } catch (e) { st.error = e.message; }
+      const tab = st.tab;
+      const data = tab === 'stab' ? await GF.API.qcStability({})
+        : tab === 'trn' ? await GF.API.qcTransports({})
+        : await GF.API.qcWater({});
+      if (my !== st.lseq) return;                 // superseded by a newer load
+      if (tab === 'stab') st.stab = data;
+      else if (tab === 'trn') st.trn = data;
+      else st.water = data;
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcleaves') GF.render.all();
   };

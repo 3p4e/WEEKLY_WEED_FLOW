@@ -36,12 +36,25 @@ _MD_FENCE = re.compile(r"^```[a-zA-Z]*\n|\n```$", re.M)
 # body despite being told "body only" (observed live: "Looking at the persona
 # description more carefully... Let me align..."). These must never reach the
 # .docx. Matched case-insensitively at the very start of a line.
+# Narrowed deliberately. These five alternatives were removed because they
+# open legitimate SOP prose at least as often as agent chatter, and the strip
+# is silent: "note:", "based on( the)?", "the following", "this is (my|the)",
+# "below is". "Note: samples are stored at 2-8 C." and "The following
+# equipment is required:" are ordinary procedure text, and losing either is a
+# content-integrity defect in a controlled document. What is left is
+# first-person / meta phrasing that has no place in an SOP body at all.
 _PREAMBLE = re.compile(
-    r"^(looking at|let me|here('s| is)|here are|i'll|i will|i have|i've|based on( the)?|"
-    r"as (requested|instructed|per)|sure[,!]|certainly|okay|alright|below is|the following|"
-    r"this is (my|the)|note:|understood|of course|great[,!]|let's|now,? (let|i))\b",
+    r"^(looking at|let me|here('s| is)|here are|i'll|i will|i have|i've|"
+    r"as (requested|instructed|per)|sure[,!]|certainly|okay|alright|"
+    r"understood|of course|great[,!]|let's|now,? (let|i))\b",
     re.I,
 )
+# A conversational lead-in is SHORT — a sentence or two. Anything bigger is
+# the agent's actual output, so the stripper must not be what decides to drop
+# it. Absolute cap only, deliberately: a proportional cap misfires on short
+# sections, where a single legitimate lead-in line is a large share of the
+# body and would be wrongly kept.
+_MAX_PREAMBLE_CHARS = 400
 # The first structural token of a real document body: a Markdown heading or a
 # form/table marker. Everything an annex author says before this is commentary.
 _STRUCT = re.compile(r"^\s*(#{1,6}\s|\[\[(FORM|TABLE))", re.M)
@@ -56,6 +69,50 @@ class QaAuditFailed(Exception):
     def __init__(self, verdict: str):
         super().__init__("§6A audit did not PASS")
         self.verdict = verdict
+
+
+class BilingualGap(Exception):
+    """One or more sections carry only ONE language.
+
+    pp_verify's `--require-bilingual` asks whether the WHOLE .docx contains
+    Cyrillic and Latin anywhere, which a single Macedonian word in a
+    forty-page English document satisfies. Every real bilingual failure this
+    pipeline can produce is per-SECTION — an agent drafts section 5 in English
+    only while sections 1-4 carry both — and the document-wide check passes it
+    without comment. Checked here, where sections are still separate.
+    """
+
+    def __init__(self, gaps: list[str]):
+        super().__init__("sections are not bilingual: " + ", ".join(gaps))
+        self.gaps = gaps
+
+
+# Letters only. Digits, punctuation and the [[FORM]]/[[TABLE]] markers say
+# nothing about language.
+_CYR = re.compile(r"[Ѐ-ӿ]")
+_LAT = re.compile(r"[A-Za-z]")
+# Below this many letters of a language there is nothing to judge — a section
+# that is a bare form marker, a formula or a short code reference is legitimately
+# language-neutral and must not be failed for it. Set well under the length of
+# any real prose sentence so genuine one-language sections are still caught.
+_MIN_LETTERS_TO_JUDGE = 40
+
+
+def _bilingual_gaps(sections: list[dict]) -> list[str]:
+    """Return the numbers of sections that have substantial text in exactly one
+    of the two languages. Sections with too little text to judge are skipped —
+    see _MIN_LETTERS_TO_JUDGE."""
+    gaps = []
+    for s in sections:
+        body = s.get("content") or ""
+        cyr, lat = len(_CYR.findall(body)), len(_LAT.findall(body))
+        if cyr + lat < _MIN_LETTERS_TO_JUDGE:
+            continue
+        if cyr < _MIN_LETTERS_TO_JUDGE and lat >= _MIN_LETTERS_TO_JUDGE:
+            gaps.append(f"{s.get('num', '?')} (no MK)")
+        elif lat < _MIN_LETTERS_TO_JUDGE and cyr >= _MIN_LETTERS_TO_JUDGE:
+            gaps.append(f"{s.get('num', '?')} (no EN)")
+    return gaps
 
 
 def _qa_audit_passed(verdict: str) -> bool:
@@ -90,7 +147,22 @@ def _clean_section(text: str, structured: bool = False) -> str:
             i += 1
             continue
         break
-    return "\n".join(lines[i:]).strip() or t
+    cleaned = "\n".join(lines[i:]).strip() or t
+    # Bound the strip, and SAY when it fires. The §5A fidelity check compares
+    # the built .docx against this already-cleaned text, so anything removed
+    # here is invisible to the one safeguard meant to catch content
+    # impoverishment. A removal that is large — in absolute size or relative to
+    # the section — is not a lead-in, so the original is kept and the section
+    # goes through with the (harmless) chatter rather than silently losing
+    # procedure text.
+    removed = len(t) - len(cleaned)
+    if removed > 0:
+        too_big = removed > _MAX_PREAMBLE_CHARS
+        log.info("preamble strip removed %d/%d chars%s", removed, len(t),
+                 " — REFUSED (too large to be a lead-in), keeping original" if too_big else "")
+        if too_big:
+            return t
+    return cleaned
 
 
 def _brief(questionnaire_key: str, answers: dict) -> str:
@@ -214,6 +286,17 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     log.warning("failed to delete ephemeral reg-checker %s: %s", tmp_id, e)
             reg_findings.append(f"[{s['num']}] {finding.strip()}")
 
+        # ---- per-section bilingual gate ----
+        # Deliberately BEFORE the §6A audit and the build: both of those see
+        # the assembled document, where pp_verify's document-wide
+        # --require-bilingual is satisfied by any Cyrillic anywhere. Fail here,
+        # while the sections are still separable and the message can name which
+        # one is monolingual.
+        await db.job_update(job_id, stage="bilingual-check")
+        gaps = _bilingual_gaps(sections)
+        if gaps:
+            raise BilingualGap(gaps)
+
         # ---- §6A audit ----
         await db.job_update(job_id, stage="qa-audit")
         markdown = assemble_markdown(meta, sections)
@@ -264,6 +347,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         log.error("job %s §6A audit did not pass", job_id)
         await db.job_update(job_id, status="failed", error="§6A audit did not pass",
                             result={"qa_audit": e.verdict})
+    except BilingualGap as e:
+        log.error("job %s bilingual gap: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed",
+                            error="sections are not bilingual: " + ", ".join(e.gaps),
+                            result={"bilingual_gaps": e.gaps})
     except LettaError as e:
         log.error("job %s letta error: %s", job_id, e)
         await db.job_update(job_id, status="failed", error=f"letta: {e}")
