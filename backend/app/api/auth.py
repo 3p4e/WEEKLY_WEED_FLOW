@@ -472,11 +472,16 @@ async def update_user(user_id: str, body: UpdateUserReq,
     authorisation model as create/delete — a manager may only touch a USER in
     their own department, ADMIN is never assignable, and the caller must be able
     to manage BOTH the account's current state and its requested new state."""
-    _throttle_action(f"userupd:{actor['id']}")
     _require_uuid(user_id)
     fields = body.model_dump(exclude_unset=True)
     if not fields:
         return {"ok": True, "noop": True}
+    # Throttle AFTER the no-op return, not before it. A PATCH with no changed
+    # fields writes nothing — no row, no audit entry — so there is nothing to
+    # rate-limit, and counting it meant an operator who pressed Save on the
+    # edit-person modal without editing anything burned real budget and could
+    # 429 themselves out of an action they had not yet performed.
+    _throttle_action(f"userupd:{actor['id']}")
     if "role" in fields and fields["role"] not in CREATABLE_ROLES:
         raise HTTPException(422, f"Role '{fields['role']}' cannot be assigned")
     # No self-demotion: an ADMIN passes _can_manage for any target now (incl.

@@ -161,10 +161,15 @@ def _clean_section(text: str, structured: bool = False) -> str:
     # Bound the strip, and SAY when it fires. The §5A fidelity check compares
     # the built .docx against this already-cleaned text, so anything removed
     # here is invisible to the one safeguard meant to catch content
-    # impoverishment. A removal that is large — in absolute size or relative to
-    # the section — is not a lead-in, so the original is kept and the section
-    # goes through with the (harmless) chatter rather than silently losing
-    # procedure text.
+    # impoverishment. A removal past the absolute cap is not a lead-in, so the
+    # original is kept and the section goes through with the (harmless) chatter
+    # rather than silently losing procedure text.
+    #
+    # Absolute cap ONLY — a proportional one was tried and dropped, because on
+    # a short section a single legitimate lead-in line is a large share of the
+    # body and would be wrongly kept. Note this path is not reached in
+    # structured mode when a heading/[[FORM]] marker was found: there the
+    # boundary is unambiguous and the strip returns above, uncapped.
     removed = len(t) - len(cleaned)
     if removed > 0:
         too_big = removed > _MAX_PREAMBLE_CHARS
