@@ -152,9 +152,31 @@ jobs:
     name: DocEngine test suite
     runs-on: self-hosted
     timeout-minutes: 15
-    # docengine is a separately-deployed service with its own 33-test suite that
-    # was never executed by CI — a regression in the document-generation
-    # PASS-gate could previously merge green.
+    # docengine is a separately-deployed service with its own suite that was
+    # never executed by CI — a regression in the document-generation PASS-gate
+    # could previously merge green.
+    #
+    # The Postgres service exists because app/db.py had NO executed coverage:
+    # db.init() returns early when DOCENGINE_DATABASE_URL is empty, so the
+    # whole persistence layer was skipped and `reap_stale_jobs` shipped having
+    # never run once. Its only caller wraps it in `except Exception:
+    # log.warning(...)`, so a wrong column name would have surfaced as a
+    # startup warning nobody reads while abandoned jobs piled up forever —
+    # precisely what that function exists to prevent. tests/conftest.py SKIPS
+    # the DB-backed tests when the variable is unset, so a bare local checkout
+    # still runs; setting it here is what makes the coverage real.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -162,8 +184,16 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r docengine/requirements.txt pytest pytest-asyncio
+      - name: Create the docengine database
+        env:
+          PGPASSWORD: postgres
+        # The app creates its own schema at init() (CREATE SCHEMA/TABLE IF NOT
+        # EXISTS), so only the database itself is needed here.
+        run: psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
       - name: Run tests
         working-directory: docengine
+        env:
+          DOCENGINE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/docengine_test
         run: python -m pytest -v
 
   migrations:

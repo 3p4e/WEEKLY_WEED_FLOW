@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import builder  # noqa: E402
+from app import builder, db  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -82,13 +82,23 @@ def test_direct_build_fail_gated(client, monkeypatch):
     assert "FAIL" in r.json()["detail"]["verify"]
 
 
-def test_workflow_degrades_without_db(client):
+def test_workflow_degrades_without_db(client, monkeypatch):
+    """Degraded mode is FORCED here, not inherited from the environment.
+
+    This used to rely on no DOCENGINE_DATABASE_URL being set, which was true
+    only because the suite had no database at all. Now that CI gives docengine
+    a real Postgres (so app/db.py is actually exercised) an ambient-absence
+    assertion would just flip to 200 and the degradation path would go
+    untested — the opposite of what adding a database was for. Patching
+    db.ready() pins the behaviour itself: whatever the environment, an
+    unavailable database must 503 rather than 500."""
+    monkeypatch.setattr(db, "ready", lambda: False)
     r = client.post(
         "/workflows", headers=h(),
         json={"questionnaire": "sop_qc", "answers": {},
               "meta": {"title_mk": "а", "title_en": "a", "code": "X-1"}},
     )
-    assert r.status_code == 503  # no DB configured in tests
+    assert r.status_code == 503
     assert client.get("/documents", headers=h()).status_code == 503
 
 
