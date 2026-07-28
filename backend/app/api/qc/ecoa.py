@@ -401,6 +401,28 @@ def _checklist_out(r: dict) -> dict:
     }
 
 
+async def _invalidate_checklist(c, user: dict, doc_id: str) -> bool:
+    """§6.3.2 — the Head of QC's ACCEPTED signature attests to the transcribed
+    values as they stood when it was signed. Any later change to those values
+    invalidates it, so the checklist drops back to PENDING and the signature is
+    cleared: the review has to be re-signed against the corrected data before
+    promote_coa_document will mint a certificate (it gates on ACCEPTED).
+
+    Same shape as the translation-stamp invalidation in certificates.py's
+    update_coa — a content edit clears the attestation that covered the old
+    content, rather than hard-blocking the correction. Returns whether a
+    signature was actually cleared, so the caller can tell the reviewer.
+
+    Only ACCEPTED is reset. REJECTED must NOT be walked back to PENDING — that
+    would re-open a rejected review. (In practice REJECTED cannot reach here:
+    decide_checklist drives the document to REJECTED, and both extraction
+    endpoints already refuse a REJECTED document.)"""
+    return await c.fetchval(
+        "UPDATE qc_ecoa_checklist SET outcome='PENDING', reviewed_by=NULL, reviewed_at=NULL,"
+        " updated_by=$1, updated_at=now()"
+        " WHERE document_id=$2 AND outcome='ACCEPTED' RETURNING true", user["id"], doc_id) or False
+
+
 @router.get("/coa-documents/{doc_id}/checklist")
 async def get_checklist(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     _uuid_or_404(doc_id, "eCoA document")
@@ -586,14 +608,24 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
             await c.execute(
                 "UPDATE qc_coa_documents SET status='EXTRACTED', updated_by=$1, updated_at=now()"
                 " WHERE id=$2", user["id"], doc_id)
-    return {"extractions": out, "count": len(out), "unmapped": unmapped}
+        # New transcribed values are new content the earlier review never saw.
+        # The doc-status guard above only closes PROMOTED/REJECTED documents —
+        # a signed-ACCEPTED checklist leaves the document EXTRACTED/REVIEWED and
+        # so still open to this endpoint.
+        reset = await _invalidate_checklist(c, user, doc_id) if body.items else False
+    return {"extractions": out, "count": len(out), "unmapped": unmapped,
+            "checklist_reset": reset}
 
 
 @router.patch("/coa-documents/{doc_id}/extractions/{eid}")
 async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
                             user: dict = Depends(require_role(*_WRITERS))):
     """Reviewer fix: map an extraction to a spec parameter (re-grades against
-    that parameter's limits) and/or correct the value/unit."""
+    that parameter's limits) and/or correct the value/unit.
+
+    Every field this endpoint accepts is certificate-bound content, so a fix
+    here invalidates an already-signed §6.3.2 review checklist (see
+    _invalidate_checklist)."""
     _uuid_or_404(doc_id, "eCoA document"); _uuid_or_404(eid, "Extraction")
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
@@ -647,7 +679,8 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
             " WHERE id=$11 AND document_id=$12 RETURNING *",
             pid, test_name, numeric, unit, lo, hi, complies, grade, lab_verdict,
             user["id"], eid, doc_id)
-    return _extract_out(dict(row))
+        reset = await _invalidate_checklist(c, user, doc_id) if patch else False
+    return {**_extract_out(dict(row)), "checklist_reset": reset}
 
 
 @router.get("/coa-placeholders")

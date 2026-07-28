@@ -91,6 +91,17 @@
     if (GF.WWF._qcecoa.sel === id) { GF.WWF._qcecoa.detail = await GF.API.qcCoaDoc(id).catch(() => null); GF.render.all(); }
   };
 
+  // A content edit resets an already-signed §6.3.2 checklist server-side (B2).
+  // The panel caches the checklist per doc and only fetches when it is
+  // undefined, so drop the cache — otherwise it keeps rendering the ACCEPTED
+  // signature the server has just cleared.
+  const _checklistInvalidated = (id, resp) => {
+    if (!resp || !resp.checklist_reset) return;
+    delete GF.WWF._qcecoa.checklist[id];
+    GF.toast(AL('Review checklist reset to pending — the correction must be re-signed',
+                'Листата за преглед е вратена на чекање — корекцијата мора повторно да се потпише'));
+  };
+
   GF.WWF.qcEcoaCreate = async () => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
     const batch_id = mk('qec-batch');
@@ -123,6 +134,7 @@
     try {
       const r = await GF.API.qcSubmitExtractions(id, items);
       GF.toast(AL('Graded', 'Оценето') + ': ' + r.count + ' · ' + AL('unmapped', 'немапирани') + ' ' + r.unmapped);
+      _checklistInvalidated(id, r);
     } catch (e) { GF.toast(e.message, 'error'); }
     await _reload(id);
   };
@@ -169,9 +181,10 @@
     body.unit = unit || null;
     if (pid) body.parameter_id = pid;            // re-map → server re-grades
     try {
-      await GF.API.qcPatchExtraction(docId, eid, body);
+      const r = await GF.API.qcPatchExtraction(docId, eid, body);
       GF.WWF._qcecoa.editEx = null;
       GF.toast(AL('Updated', 'Ажурирано'));
+      _checklistInvalidated(docId, r);
     } catch (e) { GF.toast(e.message, 'error'); }
     await _reload(docId);
   };

@@ -1698,6 +1698,62 @@ async def test_ecoa_lab_verdict_reference_only(client, admin_headers):
     assert e3["lab_verdict"] is None and e3["lab_verdict_mismatch"] is False
 
 
+async def test_ecoa_edit_after_signoff_invalidates_checklist(client, admin_headers):
+    """B2 §6.3.2 — the Head of QC's ACCEPTED signature attests to the transcribed
+    values as they stood at signing. The document-status guard on the extraction
+    endpoints only closes PROMOTED/REJECTED documents, and an accepted checklist
+    leaves the document EXTRACTED — so the values stayed editable underneath a
+    signature that still read ACCEPTED, and promote() would mint a certificate
+    from data nobody had reviewed. A content edit now drops the checklist back to
+    PENDING and clears the signature, so it must be re-signed."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-SIGN")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-ESIGN")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0,
+                                           "unit": "%"}]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["checklist_reset"] is False        # nothing signed yet
+    ext = r.json()["extractions"][0]
+    await _accept_checklist(client, admin_headers, doc["id"])
+    cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist",
+                           headers=admin_headers)).json()
+    assert cl["outcome"] == "ACCEPTED" and cl["reviewed_by"] and cl["reviewed_at"]
+    # the edit the guard used to allow silently
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}/extractions/{ext['id']}",
+                           json={"numeric_value": 28.0}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["checklist_reset"] is True, r.text
+    cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist",
+                           headers=admin_headers)).json()
+    assert cl["outcome"] == "PENDING"
+    assert cl["reviewed_by"] is None and cl["reviewed_at"] is None
+    # …and promotion is refused until the corrected data is re-reviewed
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=admin_headers)
+    assert r.status_code == 409 and "QCT-018" in r.json()["detail"], r.text
+    await _accept_checklist(client, admin_headers, doc["id"])
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/promote",
+                              headers=admin_headers)).status_code == 201
+
+
+async def test_ecoa_new_extractions_after_signoff_invalidate_checklist(client, admin_headers):
+    """B2 — same rule for the bulk path: transcribing further fields adds content
+    the signed review never saw."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-SIGN2")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-ESIGN2")
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0}]},
+                      headers=admin_headers)
+    await _accept_checklist(client, admin_headers, doc["id"])
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Total THC", "numeric_value": 26.0}]},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["checklist_reset"] is True, r.text
+    cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist",
+                           headers=admin_headers)).json()
+    assert cl["outcome"] == "PENDING" and cl["reviewed_by"] is None
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/promote",
+                              headers=admin_headers)).status_code == 409
+
+
 async def test_ecoa_unmeasured_is_unknown_not_fabricated(client, admin_headers):
     spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-UNK")
     doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-UNK")
