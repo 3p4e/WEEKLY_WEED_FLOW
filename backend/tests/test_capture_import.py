@@ -183,3 +183,81 @@ async def test_static_capture_token_acts_as_configured_user(client, admin_header
     # The static token is NOT a general credential.
     r = await client.get("/tasks", headers={"Authorization": "Bearer test-capture-token-123"})
     assert r.status_code == 401
+
+
+async def _two_departments(org):
+    from app.db import tasks_admin_pool
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC'),($1,'pr','Production')"
+        " RETURNING id", org["org_id"])
+    return str(rows[0]["id"]), str(rows[1]["id"])
+
+
+async def test_import_respects_manager_department_scope(client, admin_headers, org):
+    """H2 — a dept-scoped manager may import only into their OWN department.
+
+    The endpoint used to resolve the capture's department code and use it
+    verbatim, with no scope check at all, so a scoped manager could file work
+    into any department just by naming it in the payload — the restriction
+    create_task has enforced all along (tasks.py:379-390). Refusal is per task
+    (the endpoint's established idiom) so one out-of-scope entry never aborts
+    the batch."""
+    _qc, pr = await _two_departments(org)
+    user, otp = await create_user(client, admin_headers, role="CU_MGR",
+                                  full_name="Cultivation Manager", department_id=pr)
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # naming another department is refused …
+    r = await client.post("/capture/import", json=_payload(ref="x-dept", department="qc"),
+                          headers=headers)
+    body = r.json()
+    assert body["created"] == 0, body
+    assert "outside your department scope" in body["skipped"][0]["reason"], body
+
+    # … an unresolvable code cannot be shown to be theirs, so it is refused too
+    r = await client.post("/capture/import", json=_payload(ref="x-unknown", department="nosuchdept"),
+                          headers=headers)
+    assert r.json()["created"] == 0
+    assert "outside your department scope" in r.json()["skipped"][0]["reason"]
+
+    # … their own department is accepted …
+    r = await client.post("/capture/import", json=_payload(ref="own-dept", department="pr"),
+                          headers=headers)
+    assert r.json()["created"] == 1, r.text
+
+    # … and an omitted department defaults to theirs rather than landing
+    # unassigned, where their own scoped list could never surface it again.
+    r = await client.post("/capture/import", json=_payload(ref="no-dept", department=None),
+                          headers=headers)
+    assert r.json()["created"] == 1, r.text
+    tasks = (await client.get("/tasks?include_archived=true", headers=headers)).json()
+    landed = next(t for t in tasks if t.get("external_ref") == "no-dept")
+    assert str(landed["department_id"]) == pr
+    assert landed["department"] == "pr"          # display column agrees with the id
+
+
+async def test_import_batch_continues_past_out_of_scope_task(client, admin_headers, org):
+    """H2 — the scope refusal is per task, like every other skip reason here."""
+    _qc, pr = await _two_departments(org)
+    user, otp = await create_user(client, admin_headers, role="CU_MGR", department_id=pr)
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = _payload(ref="in-scope", department="pr")
+    payload["tasks"].append(_payload(ref="out-of-scope", department="qc")["tasks"][0])
+    body = (await client.post("/capture/import", json=payload, headers=headers)).json()
+    assert body["created"] == 1
+    assert [s["external_ref"] for s in body["skipped"]] == ["out-of-scope"]
+
+
+async def test_import_unscoped_user_unaffected_by_scope_guard(client, admin_headers, org):
+    """H2 hazard check — dept_scope() is None for a plain USER (and for any
+    manager with no department assigned), so the guard must not touch them."""
+    await _two_departments(org)
+    user, otp = await create_user(client, admin_headers)          # plain USER
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    r = await client.post("/capture/import", json=_payload(ref="plain-user", department="qc"),
+                          headers=headers)
+    assert r.json()["created"] == 1, r.text

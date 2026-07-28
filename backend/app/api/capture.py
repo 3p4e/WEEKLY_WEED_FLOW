@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.api.weekwindow import ensure_week
 from app.db import rls, rls_users, users_admin_pool
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set
 from app.worktime import TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])
@@ -159,6 +159,20 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
         dept_rows = await c.fetch("SELECT id, code FROM departments")
     depts = {r["code"]: r["id"] for r in dept_rows}
 
+    # A dept-scoped manager imports into their OWN department only — the same
+    # restriction create_task enforces (tasks.py:379-390) and that this endpoint
+    # never had: it resolved the capture's department code and used it verbatim,
+    # so a scoped manager could file work into any department just by naming it
+    # in the payload. An omitted department defaults to theirs rather than
+    # landing unassigned, where their own scoped list could never surface it
+    # again. Pure function of the actor, so it is resolved once here.
+    # This binds the connector path too (_capture_actor acts as the configured
+    # capture user) — whatever scope that account carries now applies to imports
+    # arriving through the MCP tool.
+    scope = dept_scope(actor)
+    scope_id = actor["department_id"] if scope else None
+    scope_code = next((r["code"] for r in dept_rows if str(r["id"]) == scope), None)
+
     for t in body.tasks:
         reason = _validate(t)
         if reason:
@@ -175,7 +189,20 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
             continue
 
         recurrence = {"freq": t.recurrence_hint, "interval": 1} if t.recurrence_hint else None
+        dept_code = t.department
         dept_id = depts.get(t.department) if t.department else None
+        if scope:
+            if t.department:
+                # An unresolvable code cannot be shown to be the actor's own, so
+                # it is refused rather than silently stored with a null
+                # department_id (which would land the task outside any scope).
+                if dept_id is None or str(dept_id) != scope:
+                    skipped.append({"external_ref": t.external_ref,
+                                    "reason": f"department '{t.department}' is outside"
+                                              " your department scope"})
+                    continue
+            else:
+                dept_code, dept_id = scope_code, scope_id
 
         try:
             async with rls(actor) as c:
@@ -203,7 +230,7 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                                 actor["org_id"], owner_id, t.title, t.description, t.status,
                                 t.priority or "medium", t.task_type or "other", t.reference_code,
                                 t.external_ref, t.blocker_reason, recurrence,
-                                t.department, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
+                                dept_code, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
                                 t.outcome, t.tags, t.estimated_hours, actor["id"])
                     except asyncpg.exceptions.UniqueViolationError:
                         # Lost a concurrent-import race for this external_ref
@@ -286,7 +313,7 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                         " department,department_id,week_id,week_start,created_by,updated_by)"
                         " VALUES ($1,$2,$3,$4,$5,$6,'medium',$7,$8,$9,$10,$11,$12,$12)",
                         actor["org_id"], owner_id, task_id, st.title, st.description, st_status, t.task_type,
-                        t.department, dept_id, week_id, t.week_start, actor["id"])
+                        dept_code, dept_id, week_id, t.week_start, actor["id"])
                     have_titles.add(st.title)
         except Exception as e:
             skipped.append({"external_ref": t.external_ref, "reason": f"db error: {type(e).__name__}"})
