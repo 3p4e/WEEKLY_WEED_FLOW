@@ -89,8 +89,13 @@ async def job_update(jid: str, **fields: Any) -> None:
         vals.append(v)
         sets.append(f"{k} = ${len(vals)}")
     vals.append(jid)
+    # B608 suppressed below: `sets` interpolates only CODE-controlled column
+    # names (the **fields kwargs at this module's own call sites: status/
+    # stage/error/result/payload). Every VALUE is a real asyncpg bind
+    # parameter in *vals, never interpolated. Same parametrized-with-
+    # code-controlled-columns pattern the backend documents in app/demo_org.py.
     await pool().execute(
-        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)}", *vals
+        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)}", *vals  # nosec B608
     )
 
 
