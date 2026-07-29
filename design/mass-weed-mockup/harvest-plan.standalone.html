@@ -1,0 +1,216 @@
+<title>MASS WEED — Cultivation &amp; Harvest Plan</title>
+<style>
+:root{
+  --mw-void:#030610; --mw-abyss:#050b18; --mw-cyan:#5ec8f0; --mw-cyan-bright:#8fe3ff;
+  --mw-cyan-dim:#3a9fd4; --mw-cyan-deep:#1c6ca3; --mw-header:#a8e4fb;
+  --mw-panel:rgba(9,28,52,.72); --mw-panel-2:rgba(6,20,40,.85);
+  --mw-stat-mid:#ecec4a; --mw-text:#cfe6f5; --mw-text-dim:#7fa3bd; --mw-text-faint:#4d6d87;
+  --mw-ink:#eaf6ff; --mw-chamfer:14px;
+  --mw-font:'Titillium Web','Saira Condensed',system-ui,-apple-system,sans-serif;
+}
+.mw-root{ min-height:100vh; font-family:var(--mw-font); color:var(--mw-text);
+  -webkit-font-smoothing:antialiased;
+  background:radial-gradient(120% 90% at 50% -10%,#0c2445 0%,var(--mw-abyss) 45%,var(--mw-void) 100%),var(--mw-void); }
+.mw-nav{ display:flex; align-items:center; gap:18px; padding:10px 0 16px; flex-wrap:wrap;
+  border-bottom:1px solid rgba(94,200,240,.14); margin-bottom:18px; }
+.mw-nav a{ color:var(--mw-text-dim); text-decoration:none; font-size:11px; text-transform:uppercase;
+  letter-spacing:.12em; padding:4px 0; border-bottom:1px solid transparent; }
+.mw-nav a:hover{ color:var(--mw-cyan-bright); }
+.mw-nav a.is-active{ color:var(--mw-cyan-bright); border-bottom-color:var(--mw-cyan-bright); }
+.mw-nav__mark{ width:12px; height:12px; background:linear-gradient(150deg,var(--mw-cyan-bright),var(--mw-cyan-deep));
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+.mw-nav__brand{ font-family:'Saira Condensed',sans-serif; font-size:15px; font-weight:700;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--mw-ink); margin-right:8px; }
+.mw-header-bar{ display:flex; align-items:center; gap:14px; margin:6px 0 18px; }
+.mw-rule{ flex:1; height:1px; background:linear-gradient(90deg,transparent,var(--mw-cyan-dim)); }
+.mw-rule:last-child{ background:linear-gradient(90deg,var(--mw-cyan-dim),transparent); }
+.mw-title{ font-family:'Saira Condensed',sans-serif; font-weight:700; text-transform:uppercase;
+  letter-spacing:.2em; color:var(--mw-ink); margin:0; text-shadow:0 0 12px rgba(94,200,240,.45); }
+.mw-title--xl{ font-size:26px; }
+.mw-panel{ position:relative; background:linear-gradient(160deg,var(--mw-panel) 0%,var(--mw-panel-2) 100%);
+  border:1px solid rgba(94,200,240,.18); padding:18px 20px;
+  clip-path:polygon(var(--mw-chamfer) 0,100% 0,100% calc(100% - var(--mw-chamfer)),calc(100% - var(--mw-chamfer)) 100%,0 100%,0 var(--mw-chamfer));
+  box-shadow:inset 0 0 24px rgba(28,108,163,.16); }
+.mw-label{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-header); }
+
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{ max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .hgrid{ display:grid; grid-template-columns:1.7fr 1fr; gap:16px; }
+  @media (max-width:900px){ .hgrid{ grid-template-columns:1fr; } }
+  .kpis{ display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .kpi{ flex:1; min-width:150px; background:rgba(58,159,212,.07); border:1px solid rgba(94,200,240,.16);
+        padding:12px 16px; clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px); }
+  .kpi__v{ font-family:'Saira Condensed',sans-serif; font-size:30px; font-weight:700; color:var(--mw-ink); line-height:1; }
+  .kpi__l{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-dim); margin-top:5px; }
+  .gantt{ display:flex; flex-direction:column; }
+  .gantt__head{ display:grid; grid-template-columns:186px 1fr;
+    border-bottom:1px solid rgba(94,200,240,.2); padding-bottom:8px; margin-bottom:6px; }
+  .gantt__mos{ position:relative; height:14px; }
+  .gantt__mo{ position:absolute; top:0; font-size:9px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--mw-text-dim); text-align:center; border-left:1px solid rgba(94,200,240,.13); }
+  .row{ display:grid; grid-template-columns:186px 1fr; align-items:center; padding:7px 0;
+    border-bottom:1px solid rgba(94,200,240,.07); }
+  .row--rec{ background:rgba(94,200,240,.03); }
+  .row__nm{ font-size:12px; color:var(--mw-ink); padding-right:10px; }
+  .row__nm small{ display:block; color:var(--mw-text-dim); font-size:9.5px; text-transform:uppercase;
+    letter-spacing:.05em; line-height:1.35; }
+  .row__track{ position:relative; height:22px; }
+  .bar{ position:absolute; top:3px; height:16px; border-radius:2px; display:flex; align-items:center;
+    padding:0 6px; font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--mw-void); white-space:nowrap; overflow:hidden; }
+  .bar--veg{ background:linear-gradient(90deg,#3fe0a0,#2fb888); }
+  .bar--flower{ background:linear-gradient(90deg,#5ec8f0,#3a9fd4); }
+  .bar--clone{ background:linear-gradient(90deg,#a879e0,#8a5cc8); }
+  .bar--turn{ background:linear-gradient(90deg,#f0b95e,#c88a2a); }
+  .bar--clean{ background:linear-gradient(90deg,#f0b95e,#c88a2a); }
+  .bar--destroy{ background:linear-gradient(90deg,#ef4d4d,#c62222); color:#fff; }
+  .bar--gate{ background:rgba(236,236,74,.16); border:1px solid var(--mw-stat-mid);
+    color:var(--mw-stat-mid); }
+  .today{ position:absolute; top:-4px; bottom:0; width:2px; background:var(--mw-cyan-bright);
+    box-shadow:0 0 8px var(--mw-cyan-bright); z-index:5; }
+  .row--rec:first-child .today::before{ content:'NOW'; position:absolute; top:-13px; left:50%;
+    transform:translateX(-50%); font-size:8px; font-weight:700; color:var(--mw-cyan-bright); letter-spacing:.08em; }
+  .lg{ display:flex; gap:16px; margin-top:14px; font-size:9.5px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--mw-text-dim); flex-wrap:wrap; }
+  .lg i{ display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle;
+    margin-right:5px; }
+  .up{ display:flex; flex-direction:column; gap:10px; }
+  .upcard{ background:rgba(58,159,212,.06); border:1px solid rgba(94,200,240,.16);
+    border-left:3px solid var(--mw-cyan-bright); padding:12px 14px;
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+  .upcard__d{ font-family:'Saira Condensed',sans-serif; font-size:26px; font-weight:700;
+    color:var(--mw-cyan-bright); line-height:1; }
+  .upcard__d small{ font-size:12px; color:var(--mw-text-dim); font-weight:400; }
+  .upcard__nm{ font-size:13px; color:var(--mw-ink); margin-top:5px; }
+  .upcard__meta{ font-size:10.5px; color:var(--mw-text-dim); text-transform:uppercase;
+    letter-spacing:.05em; margin-top:3px; }
+  .upcard--soon{ border-left-color:var(--mw-stat-mid); }
+  .upcard--soon .upcard__d{ color:var(--mw-stat-mid); }
+  .tbl{ width:100%; border-collapse:collapse; font-size:12px; margin-top:4px; }
+  .tbl th{ text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--mw-text-dim); padding:6px 10px; border-bottom:1px solid rgba(94,200,240,.2); font-weight:600; }
+  .tbl td{ padding:6px 10px; border-bottom:1px solid rgba(94,200,240,.06); color:var(--mw-text); }
+  .tbl tr:hover td{ background:rgba(94,200,240,.05); }
+  .tbl .n{ color:var(--mw-text-faint); width:34px; }
+  .tbl .dt{ font-family:'Saira Condensed',sans-serif; color:var(--mw-cyan); white-space:nowrap; }
+  .tbl .rm{ color:var(--mw-ink); font-weight:600; width:52px; }
+  .tbl .cv{ color:var(--mw-text-dim); font-size:11px; }
+  .note{ font-size:11px; color:var(--mw-text-dim); line-height:1.55; margin-top:12px; }
+  .note b{ color:var(--mw-ink); font-weight:600; }
+</style>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Cultivation &amp; Harvest Plan">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="environment.html">Climate</a>
+    <a href="genetics.html">Genetics</a>
+    <a href="nutrients.html">Nutrients</a>
+    <a href="harvest.html" class="is-active">Harvest</a>
+    <a href="cure.html">Cure</a>
+    <a href="analytics.html">Analytics</a>
+    <a href="packaging.html">Packaging</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Cultivation &amp; Harvest Plan</h1><span class="mw-rule"></span></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi__v">6</div><div class="kpi__l">Rooms in cycle</div></div>
+    <div class="kpi"><div class="kpi__v">25</div><div class="kpi__l">Harvests · year 1</div></div>
+    <div class="kpi"><div class="kpi__v">13,620</div><div class="kpi__l">Plants placed</div></div>
+    <div class="kpi"><div class="kpi__v">96</div><div class="kpi__l">Days to first harvest</div></div>
+  </div>
+
+  <div class="hgrid">
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:14px;">Cultivation Timeline · Aug 2026 – Aug 2027</div>
+      <div class="gantt">
+        <div class="gantt__head">
+          <div></div>
+          <div class="gantt__mos"><div class="gantt__mo" style="left:0.0%;width:1.276%">JUL</div><div class="gantt__mo" style="left:1.276%;width:7.908%">AUG</div><div class="gantt__mo" style="left:9.184%;width:7.653%">SEP</div><div class="gantt__mo" style="left:16.837%;width:7.908%">OCT</div><div class="gantt__mo" style="left:24.745%;width:7.653%">NOV</div><div class="gantt__mo" style="left:32.398%;width:7.908%">DEC</div><div class="gantt__mo" style="left:40.306%;width:7.908%">JAN</div><div class="gantt__mo" style="left:48.214%;width:7.143%">FEB</div><div class="gantt__mo" style="left:55.357%;width:7.908%">MAR</div><div class="gantt__mo" style="left:63.265%;width:7.653%">APR</div><div class="gantt__mo" style="left:70.918%;width:7.909%">MAY</div><div class="gantt__mo" style="left:78.827%;width:7.653%">JUN</div><div class="gantt__mo" style="left:86.48%;width:7.908%">JUL</div><div class="gantt__mo" style="left:94.388%;width:5.612%">AUG</div></div>
+        </div>
+        <div class="row row--rec"><div class="row__nm">Deep clean<small>План 1 · room by room</small></div><div class="row__track"><div class="bar bar--clean" style="left:0.765%;width:4.082%" title="DEEP CLEAN">DEEP CLEAN</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row row--rec"><div class="row__nm">Destroy<small>old genetics + 253 mothers</small></div><div class="row__track"><div class="bar bar--destroy" style="left:1.786%;width:0.765%" title="DESTROY"></div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row row--rec"><div class="row__nm">Swab validation<small>gate · release to restock</small></div><div class="row__track"><div class="bar bar--gate" style="left:2.551%;width:3.316%" title="SWAB VALIDATION">SWAB VALIDATION</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row row--rec"><div class="row__nm">Clone quarantine<small>gate · pooled qPCR</small></div><div class="row__track"><div class="bar bar--gate" style="left:4.082%;width:3.571%" title="CLONE QUARANTINE">CLONE QUARANTINE</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R6<small>Colorado Nightshifter #11 · Super Buff Cherry #26</small></div><div class="row__track"><div class="bar bar--clone" style="left:4.082%;width:1.785%" title="QTN"></div><div class="bar bar--veg" style="left:5.867%;width:3.572%" title="VEG">VEG</div><div class="bar bar--flower" style="left:9.439%;width:15.561%" title="FLOWER 9W">FLOWER 9W</div><div class="bar bar--turn" style="left:25.0%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:20.153%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:27.296%;width:15.561%" title="FLOWER 9W">FLOWER 9W</div><div class="bar bar--turn" style="left:42.857%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:38.01%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:45.153%;width:15.561%" title="FLOWER 9W">FLOWER 9W</div><div class="bar bar--turn" style="left:60.714%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:55.867%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:63.01%;width:15.561%" title="FLOWER 9W">FLOWER 9W</div><div class="bar bar--turn" style="left:78.571%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:73.724%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:80.867%;width:15.562%" title="FLOWER 9W">FLOWER 9W</div><div class="bar bar--turn" style="left:96.429%;width:1.785%" title="CLEAN"></div><div class="bar bar--veg" style="left:91.582%;width:7.142%" title="VEG">VEG</div><div class="bar bar--flower" style="left:98.724%;width:1.276%" title="FLOWER 9W"></div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R5<small>Permanent Marker · Permanent Chimera #35</small></div><div class="row__track"><div class="bar bar--clone" style="left:4.082%;width:1.785%" title="QTN"></div><div class="bar bar--veg" style="left:5.867%;width:3.572%" title="VEG">VEG</div><div class="bar bar--flower" style="left:9.439%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:26.786%;width:1.785%" title="CLEAN"></div><div class="bar bar--veg" style="left:21.939%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:29.082%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:46.429%;width:1.785%" title="CLEAN"></div><div class="bar bar--veg" style="left:41.582%;width:7.142%" title="VEG">VEG</div><div class="bar bar--flower" style="left:48.724%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:66.071%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:61.224%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:68.367%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:85.714%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:80.867%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:88.01%;width:11.99%" title="FLOWER 10W">FLOWER 10W</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R4<small>MAC1</small></div><div class="row__track"><div class="bar bar--clone" style="left:4.082%;width:1.785%" title="QTN"></div><div class="bar bar--veg" style="left:5.867%;width:5.357%" title="VEG">VEG</div><div class="bar bar--flower" style="left:11.224%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:28.571%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:23.724%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:30.867%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:48.214%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:43.367%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:50.51%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:67.857%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:63.01%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:70.153%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:87.5%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:82.653%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:89.796%;width:10.204%" title="FLOWER 10W">FLOWER 10W</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R3<small>Dante's Inferno #8 · Runtz</small></div><div class="row__track"><div class="bar bar--clone" style="left:4.082%;width:1.785%" title="QTN"></div><div class="bar bar--veg" style="left:5.867%;width:5.357%" title="VEG">VEG</div><div class="bar bar--flower" style="left:11.224%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:28.571%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:23.724%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:30.867%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:48.214%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:43.367%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:50.51%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:67.857%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:63.01%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:70.153%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:87.5%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:82.653%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:89.796%;width:10.204%" title="FLOWER 10W">FLOWER 10W</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R2<small>Cap Junky · Wedding Cake</small></div><div class="row__track"><div class="bar bar--clone" style="left:5.867%;width:1.786%" title="QTN"></div><div class="bar bar--veg" style="left:7.653%;width:5.357%" title="VEG">VEG</div><div class="bar bar--flower" style="left:13.01%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:30.357%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:25.51%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:32.653%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:50.0%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:45.153%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:52.296%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:69.643%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:64.796%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:71.939%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:89.286%;width:1.785%" title="CLEAN"></div><div class="bar bar--veg" style="left:84.439%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:91.582%;width:8.418%" title="FLOWER 10W">FLOWER 10W</div><div class="today" style="left:0.51%"></div></div></div>
+        <div class="row"><div class="row__nm">R1<small>Smackerz · Animal Tsunami</small></div><div class="row__track"><div class="bar bar--clone" style="left:5.867%;width:1.786%" title="QTN"></div><div class="bar bar--veg" style="left:7.653%;width:5.357%" title="VEG">VEG</div><div class="bar bar--flower" style="left:13.01%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:30.357%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:25.51%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:32.653%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:50.0%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:45.153%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:52.296%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:69.643%;width:1.786%" title="CLEAN"></div><div class="bar bar--veg" style="left:64.796%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:71.939%;width:17.347%" title="FLOWER 10W">FLOWER 10W</div><div class="bar bar--turn" style="left:89.286%;width:1.785%" title="CLEAN"></div><div class="bar bar--veg" style="left:84.439%;width:7.143%" title="VEG">VEG</div><div class="bar bar--flower" style="left:91.582%;width:8.418%" title="FLOWER 10W">FLOWER 10W</div><div class="today" style="left:0.51%"></div></div></div>
+      </div>
+      <div class="lg">
+        <span><i style="background:linear-gradient(90deg,#a879e0,#8a5cc8)"></i>Quarantine · qPCR</span>
+        <span><i style="background:linear-gradient(90deg,#3fe0a0,#2fb888)"></i>Veg</span>
+        <span><i style="background:linear-gradient(90deg,#5ec8f0,#3a9fd4)"></i>Flower</span>
+        <span><i style="background:linear-gradient(90deg,#f0b95e,#c88a2a)"></i>Clean · turnaround</span>
+        <span><i style="background:linear-gradient(90deg,#ef4d4d,#c62222)"></i>Destroy</span>
+        <span><i style="background:rgba(236,236,74,.16);border:1px solid #ecec4a"></i>Validation gate</span>
+      </div>
+      <div class="note">
+        <b>Flower runs to catalogue length, not a flat 61 days.</b> Room length is set by the
+        longer-finishing cultivar in the pair. <b>Every harvest is followed by a one-week clean-down</b>
+        before the next flip — the viroid survives up to four weeks in dried debris, so the room
+        cannot be turned with no gap.
+      </div>
+    </div>
+
+    <div class="mw-panel">
+      <div class="mw-label" style="margin-bottom:14px;">Upcoming Harvests</div>
+      <div class="up">
+        <div class="upcard upcard--soon"><div class="upcard__d">96 <small>days</small></div><div class="upcard__nm">R6 · cycle 1</div><div class="upcard__meta">02 Nov 2026 · Colorado Nightshifter #11 · Super Buff Cherry #26</div></div>
+        <div class="upcard"><div class="upcard__d">103 <small>days</small></div><div class="upcard__nm">R5 · cycle 1</div><div class="upcard__meta">09 Nov 2026 · Permanent Marker · Permanent Chimera #35</div></div>
+        <div class="upcard"><div class="upcard__d">110 <small>days</small></div><div class="upcard__nm">R3 · cycle 1</div><div class="upcard__meta">16 Nov 2026 · Dante's Inferno #8 · Runtz</div></div>
+        <div class="upcard"><div class="upcard__d">110 <small>days</small></div><div class="upcard__nm">R4 · cycle 1</div><div class="upcard__meta">16 Nov 2026 · MAC1</div></div>
+        <div class="upcard"><div class="upcard__d">117 <small>days</small></div><div class="upcard__nm">R1 · cycle 1</div><div class="upcard__meta">23 Nov 2026 · Smackerz · Animal Tsunami</div></div>
+        <div class="upcard"><div class="upcard__d">117 <small>days</small></div><div class="upcard__nm">R2 · cycle 1</div><div class="upcard__meta">23 Nov 2026 · Cap Junky · Wedding Cake</div></div>
+      </div>
+      <div class="note">
+        Counted from <b>29 Jul 2026</b>. Cycle 1 is bought-in stock; every cycle after is
+        propagated in-house, with cuttings taken <b>four weeks before the flip</b> while the
+        current crop is still in flower.
+      </div>
+    </div>
+  </div>
+
+  <div class="mw-panel" style="margin-top:16px;">
+    <div class="mw-label" style="margin-bottom:10px;">Year 1 Harvest Schedule · 25 room-harvests · 12 Aug 2026 – 11 Aug 2027</div>
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Harvest week</th><th>Room</th><th>Cycle</th><th>Cultivars</th></tr></thead>
+      <tbody>
+          <tr><td class="n">1</td><td class="dt">02 Nov 2026</td><td class="rm">R6</td><td>1</td><td class="cv">Colorado Nightshifter #11 · Super Buff Cherry #26</td></tr>
+          <tr><td class="n">2</td><td class="dt">09 Nov 2026</td><td class="rm">R5</td><td>1</td><td class="cv">Permanent Marker · Permanent Chimera #35</td></tr>
+          <tr><td class="n">3</td><td class="dt">16 Nov 2026</td><td class="rm">R3</td><td>1</td><td class="cv">Dante's Inferno #8 · Runtz</td></tr>
+          <tr><td class="n">4</td><td class="dt">16 Nov 2026</td><td class="rm">R4</td><td>1</td><td class="cv">MAC1</td></tr>
+          <tr><td class="n">5</td><td class="dt">23 Nov 2026</td><td class="rm">R1</td><td>1</td><td class="cv">Smackerz · Animal Tsunami</td></tr>
+          <tr><td class="n">6</td><td class="dt">23 Nov 2026</td><td class="rm">R2</td><td>1</td><td class="cv">Cap Junky · Wedding Cake</td></tr>
+          <tr><td class="n">7</td><td class="dt">11 Jan 2027</td><td class="rm">R6</td><td>2</td><td class="cv">Colorado Nightshifter #11 · Super Buff Cherry #26</td></tr>
+          <tr><td class="n">8</td><td class="dt">25 Jan 2027</td><td class="rm">R5</td><td>2</td><td class="cv">Permanent Marker · Permanent Chimera #35</td></tr>
+          <tr><td class="n">9</td><td class="dt">01 Feb 2027</td><td class="rm">R3</td><td>2</td><td class="cv">Dante's Inferno #8 · Runtz</td></tr>
+          <tr><td class="n">10</td><td class="dt">01 Feb 2027</td><td class="rm">R4</td><td>2</td><td class="cv">MAC1</td></tr>
+          <tr><td class="n">11</td><td class="dt">08 Feb 2027</td><td class="rm">R1</td><td>2</td><td class="cv">Smackerz · Animal Tsunami</td></tr>
+          <tr><td class="n">12</td><td class="dt">08 Feb 2027</td><td class="rm">R2</td><td>2</td><td class="cv">Cap Junky · Wedding Cake</td></tr>
+          <tr><td class="n">13</td><td class="dt">22 Mar 2027</td><td class="rm">R6</td><td>3</td><td class="cv">Colorado Nightshifter #11 · Super Buff Cherry #26</td></tr>
+          <tr><td class="n">14</td><td class="dt">12 Apr 2027</td><td class="rm">R5</td><td>3</td><td class="cv">Permanent Marker · Permanent Chimera #35</td></tr>
+          <tr><td class="n">15</td><td class="dt">19 Apr 2027</td><td class="rm">R3</td><td>3</td><td class="cv">Dante's Inferno #8 · Runtz</td></tr>
+          <tr><td class="n">16</td><td class="dt">19 Apr 2027</td><td class="rm">R4</td><td>3</td><td class="cv">MAC1</td></tr>
+          <tr><td class="n">17</td><td class="dt">26 Apr 2027</td><td class="rm">R1</td><td>3</td><td class="cv">Smackerz · Animal Tsunami</td></tr>
+          <tr><td class="n">18</td><td class="dt">26 Apr 2027</td><td class="rm">R2</td><td>3</td><td class="cv">Cap Junky · Wedding Cake</td></tr>
+          <tr><td class="n">19</td><td class="dt">31 May 2027</td><td class="rm">R6</td><td>4</td><td class="cv">Colorado Nightshifter #11 · Super Buff Cherry #26</td></tr>
+          <tr><td class="n">20</td><td class="dt">28 Jun 2027</td><td class="rm">R5</td><td>4</td><td class="cv">Permanent Marker · Permanent Chimera #35</td></tr>
+          <tr><td class="n">21</td><td class="dt">05 Jul 2027</td><td class="rm">R3</td><td>4</td><td class="cv">Dante's Inferno #8 · Runtz</td></tr>
+          <tr><td class="n">22</td><td class="dt">05 Jul 2027</td><td class="rm">R4</td><td>4</td><td class="cv">MAC1</td></tr>
+          <tr><td class="n">23</td><td class="dt">12 Jul 2027</td><td class="rm">R1</td><td>4</td><td class="cv">Smackerz · Animal Tsunami</td></tr>
+          <tr><td class="n">24</td><td class="dt">12 Jul 2027</td><td class="rm">R2</td><td>4</td><td class="cv">Cap Junky · Wedding Cake</td></tr>
+          <tr><td class="n">25</td><td class="dt">09 Aug 2027</td><td class="rm">R6</td><td>5</td><td class="cv">Colorado Nightshifter #11 · Super Buff Cherry #26</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      Peak load is <b>two rooms in a week, never three</b> — the staggered flips do that on their own.
+      Dry-room and trim capacity must cover two rooms landing together.
+    </div>
+  </div>
+</div>
+</div>
