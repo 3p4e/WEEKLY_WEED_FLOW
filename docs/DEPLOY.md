@@ -1,13 +1,38 @@
 # Deploying the WWF stack to KVM4
 
-## Deploy order (binding, since 2026-07-13)
+## Deploy order (single environment, owner decision 2026-07-29)
 
-`https://wwf-mass.srv1231216.hstgr.cloud/` is the **test server** — every
-change ships and gets verified there first (see "Parallel test instance —
-wwf_mass" below for what it is and isn't).
 `https://wwf.srv1231216.hstgr.cloud/` is **production** — real Purely Plant
-user accounts and real work data. It is promoted to **only after**
-verification on wwf_mass, never deployed to first.
+user accounts and real work data — and since 2026-07-29 it is the **only**
+environment: the wwf_mass test stack was decommissioned on the owner's
+instruction ("deployment on main server only"). The previous binding rule
+(every change verifies on wwf_mass first, added 2026-07-13) is repealed.
+
+With no staging tier, the compensating controls below are **mandatory, not
+optional**, on every deploy:
+
+1. **CI green on the exact commit being deployed** — the full 8-job pipeline
+   is now the only pre-production gate there is.
+2. **Database snapshot immediately before any migration**
+   (`pg_dump` both DBs; wwf-db-backup's rotation does NOT count — it is on a
+   schedule, not tied to the deploy).
+3. **Post-deploy smoke** — `/health/ready` (round-trips both DBs) plus one
+   authenticated read — before the deploy is called done.
+4. **Rollback path stated in advance** — previous image tags + the snapshot;
+   compose.yaml is backed up timestamped on every change.
+
+### wwf_mass decommission record (2026-07-29)
+
+Removed: containers `wwf-mass-{frontend,backend,docengine,db-users,db-tasks}`,
+volumes `wwf_mass_{tasks,users}_pgdata` + `wwf_mass_docengine_out`, and
+`/opt/stacks/wwf_mass`. Remnants kept on the host under
+`/root/wwf-mass-presnap/`: final pg_dumps of both databases (gzipped) and a
+tarball of the stack config. `https://wwf-mass...` now 404s at Traefik.
+
+> ⚠️ **`wwf_mass_letta_pgdata` is NOT a leftover.** Despite the name, it is
+> the live data volume of the standalone production Letta stack (`wwf-letta-db`
+> kept its original volume when promoted from mass, 2026-07-20). Never remove
+> it. `wwf_mass_qms_{data,output}` are true orphans and may be pruned.
 
 [`docker-compose.yml`](../docker-compose.yml) describes the deployed stack:
 
@@ -176,7 +201,11 @@ nginx serves the UI and reverse-proxies `/auth /departments /weeks /tasks
 /sessions /ai /audit /reports /health` to the backend same-origin (resolved at request time
 via Docker DNS), so the browser only ever talks to one origin.
 
-## Parallel test instance — wwf_mass (added 2026-07-13)
+## Parallel test instance — wwf_mass (added 2026-07-13, **DECOMMISSIONED 2026-07-29**)
+
+> Historical section — the stack below no longer exists. See the decommission
+> record at the top of this file for what was removed and where the final
+> snapshots live. Kept for the record of what the environment was.
 
 An isolated clone of the full app runs alongside production for validation
 and experiments:
