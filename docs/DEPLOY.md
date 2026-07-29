@@ -1805,3 +1805,59 @@ compiler self-review 403 → HoQC approve 200 → **real DocEngine render 201**
 `compose.yaml.bak.v76v106`) + `alembic -n tasks downgrade 0040` on each
 db-tasks (new isolated tables + additive columns; image-only rollback is also
 safe — v76 never touches qc_coq).
+
+## 2026-07-29 — review-round-1+2 remediation — backend v78 / frontend v108 / migrations tasks 0044, users 0008
+
+First deploy under the single-environment rule (wwf_mass decommissioned the
+same day), so the four compensating controls at the top of this file applied.
+Shipped commit `6a768ac` — the two code-review rounds: the bilingual §-gap gate
+in the docengine pipeline, the bcrypt 72-byte bound, `splice_stamps()`
+replacing the unsafe `zip()` in QC certificate stamping, throttling on the
+remaining user-mutation endpoints, docengine DB tests against a real Postgres,
+and per-service memory/CPU caps in the dev compose file.
+
+Cleared **five** migrations of drift, three of which predate this work:
+
+| chain | before | after | contents |
+|-------|--------|-------|----------|
+| tasks | 0041 | **0044** | 0042 deep-review schema, 0043 six missing audit triggers, 0044 `qc_document_files` audit trigger |
+| users | 0006 | **0008** | 0007 `audit_organizations` trigger, 0008 drop dead `password_reset_codes` |
+
+`0044` closes a GxP custody gap: `public.qc_document_files` holds QC PDF
+originals + their SHA-256 (URS item 12) and had been shipping with no
+`app.fn_audit_row()` trigger, so uploads/replacements/deletions of a source
+certificate wrote no audit_log row at all. Found by the new
+`backend/tests/test_audit_coverage.py`, which exists to catch exactly this
+drift class.
+
+Order of operations — **migrations ran BEFORE the image swap**, deliberately
+inverting the usual step order. All five are additive (four triggers + one
+DROP of a table verified empty, `count(*) = 0`, and referenced by v77 only in
+comments, never in SQL), so v77 tolerated the new schema; running them first
+meant a migration failure would have left production wholly on v77 with
+nothing to undo. Then `up -d --no-deps` backend → scheduler → frontend.
+
+Verified post-deploy: `alembic current` = 0044 / 0008; `audit_qc_document_files`
+and `audit_organizations` present and enabled; 44 `audit_*` triggers in tasks;
+`password_reset_codes` gone; `/health/ready` 200 `{"ready":true,...users:ok,
+tasks:ok}` via the container, via nginx on 172.16.31.20, and via the public
+URL; app shell serves at https://wwf.srv1231216.hstgr.cloud/.
+
+Pre-deploy snapshot: `/root/wwf-prod-presnap-wwf-20260729-deploy/`
+(`wwf_tasks.sql.gz` 3.0 MB, `wwf_users.sql.gz` 46 KB, both `gzip -t` clean).
+**Rollback** = restore `compose.yaml.bak-wwf-20260729-deploy` (v77/v107) and
+recreate; the schema may be left forward (additive, v77-compatible), otherwise
+`alembic -n tasks downgrade 0041` + `-n users downgrade 0006`, or restore from
+the snapshot.
+
+> **Build note.** The repo is private, so `docker build` against a bare
+> `github.com` URL fails with `could not read Username ... terminal prompts
+> disabled` — the *daemon* does that clone, not the caller, so the caller
+> having git credentials is irrelevant. Build with the token in the URL, the
+> same shape `deploy.yml` uses:
+> `docker build -t IMG "https://x-access-token:$TOKEN@github.com/OWNER/REPO.git#SHA:subdir"`.
+> Stage the token as a `chmod 600` file rather than an inline argument (it
+> otherwise lands in `ps` output and shell history), pipe build logs through
+> `sed "s|$TOKEN|REDACTED|g"`, and `shred -u` it plus `docker builder prune`
+> afterwards. Confirm with
+> `docker history --no-trunc IMG | grep -c x-access-token` → `0`.
