@@ -34,28 +34,10 @@ async def dbpool():
         pytest.skip("DOCENGINE_DATABASE_URL not set — DB-backed tests skipped")
     await db.init()
     assert db.ready(), "db.init() did not open a pool despite a DSN being set"
-    # documents references jobs, so truncate together.
-    await db.pool().execute(
-        "TRUNCATE docengine.documents, docengine.jobs RESTART IDENTITY CASCADE")
+    # documents references jobs, so truncate together. No RESTART IDENTITY:
+    # both tables key on uuids, so there is no sequence to restart.
+    await db.pool().execute("TRUNCATE docengine.documents, docengine.jobs CASCADE")
     try:
         yield db.pool()
     finally:
         await db.close()
-
-
-async def seed_job(pool, *, status: str, age_minutes: int = 0,
-                   error: str | None = None, kind: str = "workflow") -> str:
-    """Insert a job with a backdated updated_at, which is the only thing
-    reap_stale_jobs keys on. Bypasses job_create deliberately: the point is to
-    control updated_at, which job_create never lets a caller set."""
-    import uuid
-    jid = str(uuid.uuid4())
-    await pool.execute(
-        "INSERT INTO docengine.jobs (id, kind, status, error, updated_at)"
-        " VALUES ($1, $2, $3, $4, now() - make_interval(mins => $5))",
-        jid, kind, status, error, age_minutes)
-    return jid
-
-
-async def status_of(pool, jid: str) -> str:
-    return await pool.fetchval("SELECT status FROM docengine.jobs WHERE id = $1", jid)

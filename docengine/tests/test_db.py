@@ -6,12 +6,30 @@ Exception: log.warning(...)`, so every way it can be wrong is silent. A job
 wrongly reaped destroys a running build's record; a job wrongly SPARED sits at
 'running' forever with a poller waiting on it. Both directions are pinned.
 """
+import uuid
+
 import pytest
 
 from app import db
-from tests.conftest import seed_job, status_of
 
 pytestmark = pytest.mark.asyncio
+
+
+async def seed_job(pool, *, status: str, age_minutes: int = 0,
+                   error: str | None = None, kind: str = "workflow") -> str:
+    """Insert a job with a backdated updated_at — the only thing the reaper
+    keys on. Bypasses job_create deliberately: the point is to control
+    updated_at, which job_create never lets a caller set."""
+    jid = str(uuid.uuid4())
+    await pool.execute(
+        "INSERT INTO docengine.jobs (id, kind, status, error, updated_at)"
+        " VALUES ($1, $2, $3, $4, now() - make_interval(mins => $5))",
+        jid, kind, status, error, age_minutes)
+    return jid
+
+
+async def status_of(pool, jid: str) -> str:
+    return await pool.fetchval("SELECT status FROM docengine.jobs WHERE id = $1", jid)
 
 
 async def test_reaper_fails_jobs_abandoned_by_a_killed_worker(dbpool):
