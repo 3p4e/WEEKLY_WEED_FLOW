@@ -111,6 +111,12 @@
     if (canQA()) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconSwabForm('${cyc.room_id}','${cyc.id}')">
         ${GF.icon('flask', 'icon')}${AL('Add swab', 'Додади брис')}</button>`);
+      // Without this the pending count on the card is a dead number — there
+      // would be no way to enter the result that clears it.
+      if ((sw.pending || 0) + (sw.negative || 0) + (sw.positive || 0) + (sw.inconclusive || 0) > 0) {
+        actions.push(`<button class="btn btn-sm" onclick="GF.WWF.deconSwabList('${cyc.room_id}','${cyc.id}')">
+          ${GF.icon('file', 'icon')}${AL('Swab results', 'Резултати')}</button>`);
+      }
       if (releasable) {
         actions.push(`<button class="btn btn-orange btn-sm" onclick="GF.WWF.deconRelease('${cyc.id}')">
           ${GF.icon('shield', 'icon', '#fff')}${AL('Release room', 'Ослободи соба')}</button>`);
@@ -163,15 +169,17 @@
   // ── actions ───────────────────────────────────────────────────────────────
 
   GF.WWF.deconSignStep = async (cycleId, step) => {
-    // The white-cloth check is the one step with a pass/fail answer — ask, and
-    // send passed=false through so a soiled cloth is RECORDED (which reopens the
-    // wash) rather than silently skipped.
-    let passed;
-    if (step === GATE) {
-      passed = confirm(AL(
-        'White-cloth check PASSED? OK = clean (bleach may proceed). Cancel = soiled (wash again).',
-        'Проверката со бела крпа е ПОМИНАТА? OK = чисто (хлорот може). Откажи = валкано (измијте повторно).'));
-    }
+    // The white-cloth check is the one step with a pass/fail ANSWER, and it gets
+    // its own modal with two explicit buttons rather than a confirm(). With
+    // confirm(), "Cancel" would record a FAILED check — so anyone dismissing the
+    // dialog, or expecting Cancel to mean "abort, I mis-tapped", would write a
+    // failure into a GxP record. There is no safe default here, so the operator
+    // must choose, and dismissing writes nothing.
+    if (step === GATE) { GF.WWF.deconWhiteClothForm(cycleId); return; }
+    await GF.WWF.deconSubmitStep(cycleId, step);
+  };
+
+  GF.WWF.deconSubmitStep = async (cycleId, step, passed) => {
     try {
       const body = { step };
       if (passed !== undefined) body.passed = passed;
@@ -183,54 +191,257 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   };
 
-  GF.WWF.deconRelease = async (cycleId) => {
-    if (!confirm(AL(
-      'Release this room? This is the QA release decision and is recorded against your name.',
-      'Да се ослободи собата? Ова е QA одлука и се запишува на ваше име.'))) return;
-    const note = prompt(AL('Release note (optional)', 'Забелешка (опционално)')) || null;
+  GF.WWF.deconWhiteClothForm = (cycleId) => {
+    if (!canClean()) return;
+    GF.WWF._ensureModal('dc-wc-modal', '440px');
+    GF.$('dc-wc-modal-title').textContent = AL('White-cloth check', 'Проверка со бела крпа');
+    GF.$('dc-wc-modal-body').innerHTML = `
+      <div style="margin-bottom:10px">${AL(
+        'A second person wipes the rinsed surface with a white cloth. This is the gate on the detergent wash — bleach on a surface that is not physically clean is quenched within seconds and the surface is NOT disinfected.',
+        'Второ лице ја брише исплакнатата површина со бела крпа. Ова е контролна точка за миењето — хлор на површина што не е физички чиста се неутралізира за секунди и површината НЕ е дезинфицирана.')}</div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="dc-wc-note" maxlength="500"></div>
+      <div class="row" style="gap:10px">
+        <button class="btn" style="color:var(--red)" id="dc-wc-fail"
+          onclick="GF.WWF.deconWhiteClothSave('${cycleId}', false)">
+          ${AL('Soiled — wash again', 'Валкана — измијте повторно')}</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-wc-pass"
+          onclick="GF.WWF.deconWhiteClothSave('${cycleId}', true)">
+          ${AL('Clean — passed', 'Чиста — поминато')}</button>
+      </div>`;
+    GF.openModal('dc-wc-modal');
+  };
+
+  GF.WWF.deconWhiteClothSave = (cycleId, passed) =>
+    GF.once(passed ? 'dc-wc-pass' : 'dc-wc-fail', async () => {
+      const note = ((GF.$('dc-wc-note') || {}).value || '').trim() || null;
+      try {
+        const body = { step: GATE, passed };
+        if (note) body.note = note;
+        const r = await GF.API.deconStep(cycleId, body);
+        GF.closeModal('dc-wc-modal');
+        GF.toast(passed
+          ? (r.cycle_complete
+              ? AL('Cycle complete — awaiting swab results', 'Циклусот е завршен — чека брисеви')
+              : AL('White-cloth check passed — bleach may proceed', 'Проверката е помината — хлорот може'))
+          : AL('Recorded as soiled — wash again before bleach', 'Запишано како валкано — измијте пред хлор'),
+          passed ? 'success' : 'error');
+        await GF.WWF.loadDecon();
+      } catch (e) { GF.toast(e.message, 'error'); }
+    });
+
+  // The QA release decision, "in writing". Its own modal rather than a
+  // confirm()+prompt() pair: it is the formal record that the room is clean, it
+  // is attributed to the signer, and it must state what it was signed against.
+  GF.WWF.deconRelease = (cycleId) => {
+    if (!canQA()) return;
+    GF.WWF._ensureModal('dc-rel-modal', '460px');
+    GF.$('dc-rel-modal-title').textContent = AL('QA room release', 'QA ослободување на соба');
+    GF.$('dc-rel-modal-body').innerHTML = `
+      <div style="margin-bottom:10px">${AL(
+        'You are releasing this room against its completed batch record: every cycle step signed, and every swab returned negative. This decision is recorded against your name and cannot be undone.',
+        'Ја ослободувате собата врз основа на комплетна евиденција: сите чекори потпишани и сите брисеви негативни. Одлуката се запишува на ваше име и не може да се врати.')}</div>
+      <div class="field"><label>${AL('Release note', 'Забелешка за ослободување')}</label>
+        <input id="dc-rel-note" maxlength="1000"
+          placeholder="${AL('e.g. swabs RR-01-001..005 negative, HVAC confirmed, room sealed', 'пр. брисеви RR-01-001..005 негативни, HVAC потврден, собата затворена')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-orange" id="dc-rel-save"
+          onclick="GF.WWF.deconReleaseSave('${cycleId}')">
+          ${AL('Release room', 'Ослободи соба')}</button>
+      </div>`;
+    GF.openModal('dc-rel-modal');
+    setTimeout(() => { const f = GF.$('dc-rel-note'); if (f) f.focus(); }, 60);
+  };
+
+  GF.WWF.deconReleaseSave = (cycleId) => GF.once('dc-rel-save', async () => {
     try {
-      await GF.API.deconRelease(cycleId, { release_note: note });
+      await GF.API.deconRelease(cycleId, {
+        release_note: ((GF.$('dc-rel-note') || {}).value || '').trim() || null });
+      GF.closeModal('dc-rel-modal');
       GF.toast(AL('Room released', 'Собата е ослободена'), 'success');
       await GF.WWF.loadDecon();
     } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // ── forms ─────────────────────────────────────────────────────────────────
+  // Real modals, not prompt(): this record is filled in many times a shift by a
+  // gloved operator on a tablet, where a native prompt is a single unlabelled
+  // line with no validation, no bilingual label and no way to correct a typo
+  // before submitting. Same _ensureModal/.field/selectField idiom as
+  // facility-view.js, and every submit goes through GF.once so a double tap
+  // cannot write the record twice.
+
+  GF.WWF.deconBleachForm = (roomId, cycleId) => {
+    if (!canClean()) return;
+    GF.WWF._ensureModal('dc-bleach-modal', '420px');
+    GF.$('dc-bleach-modal-title').textContent = AL('Log bleach bucket', 'Внеси кофа со хлор');
+    GF.$('dc-bleach-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Free-chlorine strip reading (ppm)', 'Читање на лентата (ppm)')}</label>
+        <input id="dc-ppm" type="number" min="0" max="200000" step="50" placeholder="${TARGET_PPM}"></div>
+      <div id="dc-ppm-warn" style="display:none;color:var(--red);font-size:12px;margin:-4px 0 8px"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="dc-bleach-note" maxlength="500"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
+        ${AL(`Specification: ${TARGET_PPM} ppm (1 part bleach : 9 parts cold water), minimum 2 minutes wet. Fresh mix every shift and again after 4 hours.`,
+             `Спецификација: ${TARGET_PPM} ppm (1 дел хлор : 9 дела студена вода), минимум 2 минути влажно. Свежа смеса на секоја смена и повторно по 4 часа.`)}
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-bleach-save"
+          onclick="GF.WWF.deconBleachSave('${roomId}','${cycleId}')">${GF.t('save')}</button>
+      </div>`;
+    // Live below-spec warning — the plan's #1 risk is a crew defaulting to
+    // housekeeping strength (~400 ppm), so say so BEFORE the record is written.
+    const inp = GF.$('dc-ppm'), warn = GF.$('dc-ppm-warn');
+    if (inp && warn) {
+      inp.oninput = () => {
+        const v = parseInt(inp.value, 10);
+        if (Number.isFinite(v) && v > 0 && v < TARGET_PPM) {
+          warn.style.display = 'block';
+          warn.textContent = AL(
+            `${v} ppm is BELOW the ${TARGET_PPM} ppm specification — this bucket will not clear the viroid.`,
+            `${v} ppm е ПОД спецификацијата од ${TARGET_PPM} ppm — оваа кофа нема да го уништи вироидот.`);
+        } else { warn.style.display = 'none'; }
+      };
+    }
+    GF.openModal('dc-bleach-modal');
+    setTimeout(() => { const f = GF.$('dc-ppm'); if (f) f.focus(); }, 60);
   };
 
-  GF.WWF.deconBleachForm = async (roomId, cycleId) => {
-    const raw = prompt(AL(
-      `Free-chlorine strip reading in ppm (target ${TARGET_PPM}):`,
-      `Читање на лентата во ppm (цел ${TARGET_PPM}):`));
-    if (raw === null) return;
-    const ppm = parseInt(raw, 10);
+  GF.WWF.deconBleachSave = (roomId, cycleId) => GF.once('dc-bleach-save', async () => {
+    const ppm = parseInt((GF.$('dc-ppm') || {}).value, 10);
     if (!Number.isFinite(ppm) || ppm < 0) {
-      GF.toast(AL('Enter a number in ppm', 'Внесете број во ppm'), 'error'); return;
+      GF.toast(AL('Enter the strip reading in ppm', 'Внесете читање во ppm'), 'error'); return;
     }
     try {
-      await GF.API.deconBleachAdd({ room_id: roomId, cycle_id: cycleId, ppm_strip_reading: ppm });
+      await GF.API.deconBleachAdd({
+        room_id: roomId, cycle_id: cycleId || null, ppm_strip_reading: ppm,
+        note: ((GF.$('dc-bleach-note') || {}).value || '').trim() || null });
+      GF.closeModal('dc-bleach-modal');
       GF.toast(ppm < TARGET_PPM
-        ? AL(`Logged ${ppm} ppm — BELOW the ${TARGET_PPM} ppm specification`,
-             `Внесено ${ppm} ppm — ПОД спецификацијата од ${TARGET_PPM} ppm`)
-        : AL(`Logged ${ppm} ppm`, `Внесено ${ppm} ppm`),
-        ppm < TARGET_PPM ? 'error' : 'success');
+        ? AL(`Logged ${ppm} ppm — BELOW specification`, `Внесено ${ppm} ppm — ПОД спецификација`)
+        : AL(`Logged ${ppm} ppm`, `Внесено ${ppm} ppm`), ppm < TARGET_PPM ? 'error' : 'success');
       await GF.WWF.loadDecon();
     } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  GF.WWF.deconSwabForm = (roomId, cycleId) => {
+    if (!canQA()) return;
+    GF.WWF._ensureModal('dc-swab-modal', '440px');
+    GF.$('dc-swab-modal-title').textContent = AL('Add RT-qPCR swab', 'Додади RT-qPCR брис');
+    GF.$('dc-swab-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Swab code', 'Код на брис')}</label>
+        <input id="dc-swab-code" maxlength="64" placeholder="RR-01-001"></div>
+      <div class="field"><label>${AL('Location swabbed', 'Локација')}</label>
+        <input id="dc-swab-loc" maxlength="300"
+          placeholder="${AL('e.g. tray groove, floor drain rim, emitter', 'пр. жлеб на тацна, слив, капалка')}"></div>
+      <div class="field"><label>${AL('Laboratory (optional)', 'Лабораторија (опционално)')}</label>
+        <input id="dc-swab-lab" maxlength="120"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
+        ${AL('Swab where contamination survives, not the middle of a clean wall: floor-wall coving, drain rims, under bench edges, door handles, light housings, line ends and emitters.',
+             'Земајте брис каде преживува контаминација, не од средина на чист ѕид: споеви под-ѕид, рабови на сливови, долни рабови на маси, рачки, светилки, краеви на линии и капалки.')}
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-swab-save"
+          onclick="GF.WWF.deconSwabSave('${roomId}','${cycleId}')">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('dc-swab-modal');
+    setTimeout(() => { const f = GF.$('dc-swab-code'); if (f) f.focus(); }, 60);
   };
 
-  GF.WWF.deconSwabForm = async (roomId, cycleId) => {
-    const code = prompt(AL('Swab code (e.g. RR-01-001):', 'Код на брис (пр. RR-01-001):'));
-    if (!code) return;
-    const where = prompt(AL('Location (e.g. tray groove, floor drain):',
-                            'Локација (пр. жлеб на тацна, слив):')) || null;
+  GF.WWF.deconSwabSave = (roomId, cycleId) => GF.once('dc-swab-save', async () => {
+    const code = ((GF.$('dc-swab-code') || {}).value || '').trim();
+    if (!code) { GF.toast(AL('Swab code is required', 'Кодот е задолжителен'), 'error'); return; }
     try {
-      await GF.API.deconSwabAdd({ room_id: roomId, cycle_id: cycleId,
-                                  swab_code: code.trim(), location_desc: where });
+      await GF.API.deconSwabAdd({
+        room_id: roomId, cycle_id: cycleId || null, swab_code: code,
+        location_desc: ((GF.$('dc-swab-loc') || {}).value || '').trim() || null,
+        lab_name: ((GF.$('dc-swab-lab') || {}).value || '').trim() || null });
+      GF.closeModal('dc-swab-modal');
       GF.toast(AL('Swab recorded — result pending', 'Брисот е запишан — чека резултат'), 'success');
       await GF.WWF.loadDecon();
     } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // Recording a RESULT is its own form: the Ct value and the action taken on a
+  // positive are part of the record the plan requires, and a positive must
+  // never be a bare status flip with no stated action.
+  GF.WWF.deconSwabList = async (roomId, cycleId) => {
+    if (!canQA()) return;
+    let swabs = [];
+    try { swabs = (await GF.API.deconSwabs({ room_id: roomId })).swabs || []; }
+    catch (e) { GF.toast(e.message, 'error'); return; }
+    const mine = swabs.filter(x => !cycleId || x.cycle_id === cycleId);
+    GF.WWF._ensureModal('dc-swablist-modal', '520px');
+    GF.$('dc-swablist-modal-title').textContent = AL('Swab results', 'Резултати од брисеви');
+    const COL = { negative: '#2BE8A0', positive: '#E5484D', pending: '#E0A73E', inconclusive: '#E0A73E' };
+    const rows = mine.map(x => {
+      const act = x.result === 'pending'
+        ? `<button class="btn btn-sm" onclick="GF.WWF.deconSwabResultForm('${x.id}','${GF.esc(x.swab_code)}')">${AL('Enter result', 'Внеси резултат')}</button>`
+        : `<span style="color:var(--ink-3);font-size:11px">${x.ct_value != null ? 'Ct ' + x.ct_value : ''}</span>`;
+      return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)">
+        <strong style="min-width:110px">${GF.esc(x.swab_code)}</strong>
+        <span style="flex:1;color:var(--ink-3);font-size:11px">${GF.esc(x.location_desc || '—')}</span>
+        <span style="color:${COL[x.result] || 'var(--ink-3)'};font-size:12px;min-width:80px">${GF.esc(x.result)}</span>
+        ${act}
+      </div>`;
+    }).join('');
+    GF.$('dc-swablist-modal-body').innerHTML = rows
+      || `<div class="ntf-empty">${AL('No swabs for this cycle yet', 'Нема брисеви за овој циклус')}</div>`;
+    GF.openModal('dc-swablist-modal');
   };
 
+  GF.WWF.deconSwabResultForm = (swabId, code) => {
+    if (!canQA()) return;
+    GF.WWF._ensureModal('dc-res-modal', '420px');
+    GF.$('dc-res-modal-title').textContent = AL('Swab result', 'Резултат од брис') + ' — ' + code;
+    GF.$('dc-res-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Result', 'Резултат')}</label>
+        ${GF.selectField('dc-res-val', { value: 'negative', title: AL('Result', 'Резултат'), options: [
+          { v: 'negative',     label: AL('Negative', 'Негативен') },
+          { v: 'positive',     label: AL('Positive', 'Позитивен') },
+          { v: 'inconclusive', label: AL('Inconclusive', 'Неодреден') }] })}</div>
+      <div class="field"><label>${AL('Ct value (optional)', 'Ct вредност (опционално)')}</label>
+        <input id="dc-res-ct" type="number" min="0" max="100" step="0.1"></div>
+      <div class="field"><label>${AL('Action taken', 'Преземена мерка')}</label>
+        <input id="dc-res-action" maxlength="500"
+          placeholder="${AL('required on a positive — re-clean and re-test', 'задолжително при позитивен — повторно чистење и тест')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-res-save"
+          onclick="GF.WWF.deconSwabResultSave('${swabId}')">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('dc-res-modal');
+  };
+
+  GF.WWF.deconSwabResultSave = (swabId) => GF.once('dc-res-save', async () => {
+    const result = (GF.$('dc-res-val') || {}).value;
+    const action = ((GF.$('dc-res-action') || {}).value || '').trim();
+    // A positive with no stated action is an incomplete record — the plan's
+    // action-on-positive is "immediate re-clean and re-test", and it must be
+    // written down by the person recording the result.
+    if (result === 'positive' && !action) {
+      GF.toast(AL('A positive result needs the action taken', 'Позитивен резултат бара преземена мерка'), 'error');
+      return;
+    }
+    const ctRaw = (GF.$('dc-res-ct') || {}).value;
+    const ct = ctRaw === '' || ctRaw == null ? null : parseFloat(ctRaw);
+    try {
+      await GF.API.deconSwabResult(swabId, { result, ct_value: ct, action_taken: action || null });
+      GF.closeModal('dc-res-modal');
+      GF.closeModal('dc-swablist-modal');
+      GF.toast(AL('Result recorded', 'Резултатот е запишан'), result === 'positive' ? 'error' : 'success');
+      await GF.WWF.loadDecon();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
   GF.WWF.deconCycleForm = async () => {
+    if (!canClean()) return;
     // Rooms come from the facility registry — this view never invents a room
-    // code (the plan's own room mapping is still an unconfirmed assumption).
+    // code (the plan's own room mapping is an unconfirmed assumption).
     let rooms = [];
     try { rooms = (await GF.API.facility()).rooms || []; }
     catch (e) { GF.toast(e.message, 'error'); return; }
@@ -239,19 +450,42 @@
                   'Нема соби — прво додајте соби на Капацитет'), 'error');
       return;
     }
-    const listing = rooms.map((r, i) => `${i + 1}. ${r.name}`).join('\n');
-    const pick = prompt(AL('Room number:\n', 'Број на соба:\n') + listing);
-    if (!pick) return;
-    const room = rooms[parseInt(pick, 10) - 1];
-    if (!room) { GF.toast(AL('No such room', 'Нема таква соба'), 'error'); return; }
-    const campaign = prompt(AL('Campaign id:', 'Кампања:'), GF.WWF._decon.campaign || 'hlvd-2026-07');
-    if (!campaign) return;
+    GF.WWF._ensureModal('dc-cycle-modal', '420px');
+    GF.$('dc-cycle-modal-title').textContent = AL('Start room cycle', 'Почни циклус за соба');
+    const roomOpts = rooms.map(r => ({ v: r.id, label: r.name }));
+    GF.$('dc-cycle-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Room', 'Соба')}</label>
+        ${GF.selectField('dc-cyc-room', { value: rooms[0].id, title: AL('Room', 'Соба'), options: roomOpts })}</div>
+      <div class="field"><label>${AL('Campaign', 'Кампања')}</label>
+        <input id="dc-cyc-campaign" maxlength="120" value="${GF.esc(GF.WWF._decon.campaign || 'hlvd-2026-07')}"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="dc-cyc-note" maxlength="500"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
+        ${AL('Every room passes the full 5-step cycle. Rough cleaning alone is not a handover — the room is not released until every step is signed and its swabs are negative.',
+             'Секоја соба поминува полн циклус од 5 чекори. Грубото чистење не е предавање — собата не се ослободува додека сите чекори не се потпишани и брисевите негативни.')}
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-cyc-save" onclick="GF.WWF.deconCycleSave()">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('dc-cycle-modal');
+  };
+
+  GF.WWF.deconCycleSave = () => GF.once('dc-cyc-save', async () => {
+    const roomId = (GF.$('dc-cyc-room') || {}).value;
+    const campaign = ((GF.$('dc-cyc-campaign') || {}).value || '').trim();
+    if (!roomId || !campaign) {
+      GF.toast(AL('Room and campaign are required', 'Соба и кампања се задолжителни'), 'error'); return;
+    }
     try {
-      await GF.API.deconCycleCreate({ room_id: room.id, campaign: campaign.trim() });
+      await GF.API.deconCycleCreate({ room_id: roomId, campaign,
+        note: ((GF.$('dc-cyc-note') || {}).value || '').trim() || null });
+      GF.closeModal('dc-cycle-modal');
+      GF.WWF._decon.campaign = '';
       GF.toast(AL('Cycle started', 'Циклусот е започнат'), 'success');
       await GF.WWF.loadDecon();
     } catch (e) { GF.toast(e.message, 'error'); }
-  };
+  });
 
   // Same registration + read gate as the Facility board: every role above base
   // USER may READ the record; the write/release gating is per-action above.

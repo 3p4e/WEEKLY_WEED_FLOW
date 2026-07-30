@@ -202,3 +202,160 @@ test('room names and campaign ids are HTML-escaped', () => {
   assert.match(html, /&lt;img src=x/);
   h.close();
 });
+
+/* ── The modal data-entry layer (replaced prompt()/confirm()) ──────────────
+   The white-cloth check and the QA release each got their own modal. The
+   white-cloth one matters most: with confirm(), "Cancel" recorded a FAILED
+   check, so anyone dismissing the dialog — or expecting Cancel to mean "abort,
+   I mis-tapped" — wrote a failure into a GxP record. There is no safe default,
+   so the operator must pick one of two explicit buttons and dismissing writes
+   nothing.
+   ──────────────────────────────────────────────────────────────────────── */
+
+// The forms call GF.WWF._ensureModal / GF.openModal / GF.$ / GF.t / GF.once /
+// GF.selectField. These are stubbed AFTER the sources load, not via preScript:
+// core.js defines its own openModal/closeModal, so a preScript stub would be
+// overwritten by the real thing and every assertion here would pass vacuously.
+function loadForms(role) {
+  const h = loadGF({
+    files: ['data.js', 'core.js', 'decon-view.js'],
+    preScript: PRE_DECON,
+  });
+  const w = h.window;
+  if (role) w.GF.API.user = { role };
+  w.__modals = []; w.__closed = []; w.__toasts = [];
+  // core.js defines GF.toast too — stub it here, after load, for the same
+  // reason as openModal above.
+  w.GF.toast = (m, k) => { w.__toasts.push([m, k]); };
+  w.GF.WWF._ensureModal = function (id) {
+    if (w.document.getElementById(id)) return;
+    const wrap = w.document.createElement('div');
+    wrap.id = id;
+    wrap.innerHTML = '<div id="' + id + '-title"></div><div id="' + id + '-body"></div>';
+    w.document.body.appendChild(wrap);
+  };
+  w.GF.openModal = (id) => { w.__modals.push(id); };
+  w.GF.closeModal = (id) => { w.__closed.push(id); };
+  w.GF.t = (k) => k;
+  w.GF.selectField = (id, cfg) =>
+    '<input type="hidden" id="' + id + '" value="' + (cfg.value || '') + '">';
+  // GF.once wraps every submit for re-entry safety; here it just runs the body.
+  w.GF.once = async (btnId, fn) => fn();
+  w.GF.API.deconStep       = async (cid, body) => { w.__step = [cid, body]; return {}; };
+  w.GF.API.deconSwabResult = async (id, body)  => { w.__res  = [id, body];  return {}; };
+  w.GF.API.deconRelease    = async (id, body)  => { w.__rel  = [id, body];  return {}; };
+  w.GF.API.deconCycles     = async () => ({ cycles: [] });
+  return h;
+}
+
+test('signing the white-cloth step opens a modal instead of submitting straight away', async () => {
+  const h = loadForms('CU_MGR');
+  await h.window.GF.WWF.deconSignStep('c1', 'rinse1_whitecloth');
+  assert.equal(h.window.__step, undefined,
+    'the gate step must NOT be submitted without an explicit pass/fail choice');
+  assert.ok(h.window.__modals.includes('dc-wc-modal'), 'the white-cloth modal must open');
+  h.close();
+});
+
+test('the white-cloth modal offers BOTH outcomes explicitly', () => {
+  const h = loadForms('CU_MGR');
+  h.window.GF.WWF.deconWhiteClothForm('c1');
+  const body = h.window.document.getElementById('dc-wc-modal-body').innerHTML;
+  assert.match(body, /deconWhiteClothSave\('c1', true\)/,  'a PASS button must exist');
+  assert.match(body, /deconWhiteClothSave\('c1', false\)/, 'a SOILED button must exist');
+  h.close();
+});
+
+test('each white-cloth outcome submits that exact verdict', async () => {
+  for (const verdict of [true, false]) {
+    const h = loadForms('CU_MGR');
+    h.window.GF.WWF.deconWhiteClothForm('c1');
+    await h.window.GF.WWF.deconWhiteClothSave('c1', verdict);
+    const [cid, body] = h.window.__step;
+    assert.equal(cid, 'c1');
+    assert.equal(body.step, 'rinse1_whitecloth');
+    assert.equal(body.passed, verdict, `passed must be ${verdict}, verbatim`);
+    h.close();
+  }
+});
+
+test('a non-gate step still submits directly, with no passed flag', async () => {
+  const h = loadForms('CU_MGR');
+  await h.window.GF.WWF.deconSignStep('c1', 'dry_clean');
+  const [, body] = h.window.__step;
+  assert.equal(body.step, 'dry_clean');
+  assert.equal('passed' in body, false, 'only the white-cloth step carries a verdict');
+  h.close();
+});
+
+test('a POSITIVE swab result is refused without a stated action', async () => {
+  // The plan's action-on-positive is immediate re-clean and re-test; a positive
+  // recorded with no action is an incomplete record.
+  const h = loadForms('QA_MGR');
+  h.window.GF.WWF.deconSwabResultForm('s1', 'RR-01-001');
+  h.window.document.getElementById('dc-res-val').value = 'positive';
+  h.window.document.getElementById('dc-res-action').value = '';
+  await h.window.GF.WWF.deconSwabResultSave('s1');
+  assert.equal(h.window.__res, undefined, 'a positive with no action must not be submitted');
+  assert.ok((h.window.__toasts || []).some(t => /action/i.test(t[0])));
+  h.close();
+});
+
+test('a POSITIVE swab result with an action is submitted, Ct included', async () => {
+  const h = loadForms('QA_MGR');
+  h.window.GF.WWF.deconSwabResultForm('s1', 'RR-01-001');
+  h.window.document.getElementById('dc-res-val').value = 'positive';
+  h.window.document.getElementById('dc-res-ct').value = '28.4';
+  h.window.document.getElementById('dc-res-action').value = 're-clean and re-test';
+  await h.window.GF.WWF.deconSwabResultSave('s1');
+  const [id, body] = h.window.__res;
+  assert.equal(id, 's1');
+  assert.equal(body.result, 'positive');
+  assert.equal(body.ct_value, 28.4);
+  assert.equal(body.action_taken, 're-clean and re-test');
+  h.close();
+});
+
+test('a NEGATIVE result needs no action, and an empty Ct is sent as null', async () => {
+  const h = loadForms('QA_MGR');
+  h.window.GF.WWF.deconSwabResultForm('s2', 'RR-01-002');
+  h.window.document.getElementById('dc-res-val').value = 'negative';
+  await h.window.GF.WWF.deconSwabResultSave('s2');
+  const [, body] = h.window.__res;
+  assert.equal(body.result, 'negative');
+  assert.equal(body.ct_value, null, 'a blank Ct must be null, not NaN');
+  h.close();
+});
+
+test('the release modal requires an explicit button and sends the note', async () => {
+  const h = loadForms('QA_MGR');
+  h.window.GF.WWF.deconRelease('c9');
+  assert.ok(h.window.__modals.includes('dc-rel-modal'));
+  assert.equal(h.window.__rel, undefined, 'opening the modal must not release anything');
+  h.window.document.getElementById('dc-rel-note').value = 'swabs negative, HVAC confirmed';
+  await h.window.GF.WWF.deconReleaseSave('c9');
+  const [id, body] = h.window.__rel;
+  assert.equal(id, 'c9');
+  assert.equal(body.release_note, 'swabs negative, HVAC confirmed');
+  h.close();
+});
+
+test('the cleaning crew cannot open the release or swab-result forms', () => {
+  const h = loadForms('CU_MGR');
+  h.window.GF.WWF.deconRelease('c9');
+  h.window.GF.WWF.deconSwabResultForm('s1', 'RR-01-001');
+  assert.equal(h.window.__modals.length, 0,
+    'role gating must hold on the form entry points, not only on the buttons');
+  h.close();
+});
+
+test('swab results are reachable whenever swabs exist, so pending is not a dead number', () => {
+  const h = loadForms('QA_MGR');
+  const html = renderCycle(h, CYCLE({
+    status: 'awaiting_verification',
+    swabs: { pending: 2, negative: 0, positive: 0, inconclusive: 0 },
+  }));
+  assert.match(html, /deconSwabList\('r1','c1'\)/,
+    'a pending swab must be openable for result entry');
+  h.close();
+});
