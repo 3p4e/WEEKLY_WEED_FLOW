@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Task Detail · Quality Control</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  DESIGN NOTES · Task Detail — Quality Control (department-specific pass)
+  Grounded in the currently-approved QC SOPs (QCSOP 001 lab testing lifecycle,
+  QCSOP 019 OOx investigation, QCSOP 006/007/008/009). WWF stays informational
+  only — this tracks that the RQS/SFR/STR/ARI/Closure work happened and who did
+  it; it is NOT the SFR record, the Main Lab Register, or the CoA/CoQ. Deviation
+  flags, method refs, and SOP refs are code+link only, never controlled content.
+-->
+<style>
+  html,body{ margin:0; background:var(--mw-void); }
+  .wrap{ max-width:1120px; margin:0 auto; padding:18px 24px 60px; }
+  .crumb{ display:flex; align-items:center; gap:8px; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-faint); margin-bottom:16px; }
+  .crumb a{ color:var(--mw-cyan-dim); text-decoration:none; } .crumb a:hover{ color:var(--mw-cyan-bright); }
+
+  .refrow{ display:flex; gap:8px; flex-wrap:wrap; margin:-2px 0 16px; }
+
+  .thead{ display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+  .thead .chk{ width:24px; height:24px; flex:none; margin-top:4px; border:1.5px solid var(--mw-cyan-dim); border-radius:4px; cursor:pointer; position:relative; transition:all .12s ease; }
+  .thead .chk:hover{ border-color:var(--mw-cyan); }
+  .thead .chk.done{ background:var(--mw-cyan); border-color:var(--mw-cyan); }
+  .thead .chk.done::after{ content:""; position:absolute; left:8px; top:2px; width:6px; height:13px; border:solid var(--mw-void); border-width:0 2.5px 2.5px 0; transform:rotate(45deg); }
+  .thead h1{ font-family:var(--mw-font-cond),sans-serif; font-size:24px; font-weight:700; color:var(--mw-ink); margin:0; letter-spacing:.01em; line-height:1.2; }
+  .thead .meta{ display:flex; align-items:center; gap:10px; margin-top:9px; flex-wrap:wrap; }
+  .pill{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; padding:3px 9px; border-radius:2px; }
+  .pill--dept{ color:#c0aef2; box-shadow:inset 0 0 0 1px rgba(155,123,232,.4); }
+  .pill--type{ color:var(--mw-cyan); box-shadow:inset 0 0 0 1px rgba(94,200,240,.3); }
+  .pill--hi{ color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); }
+  .pill--prog{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,236,74,.35); }
+
+  .cols{ display:grid; grid-template-columns:1.6fr 1fr; gap:16px; align-items:start; }
+  .sec{ margin-bottom:22px; }
+  .sec__t{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-faint); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .sec__t .side{ font-weight:400; letter-spacing:.02em; text-transform:none; color:var(--mw-text-faint); }
+  .desc{ font-size:13.5px; line-height:1.65; color:var(--mw-text); }
+
+  .subbar{ margin-top:2px; margin-bottom:12px; }
+
+  .cmt{ display:flex; gap:11px; padding:11px 0; }
+  .cmt .av{ width:30px;height:30px;flex:none;border-radius:50%;background:linear-gradient(135deg,var(--mw-cyan-dim),rgba(16,48,80,.8));
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--mw-void);font-family:var(--mw-font-cond),sans-serif; }
+  .cmt .bd{ flex:1; } .cmt .hd{ display:flex;gap:8px;align-items:baseline; }
+  .cmt .nm{ font-size:13px;font-weight:600;color:var(--mw-ink); } .cmt .ts{ font-size:10px;color:var(--mw-text-faint);letter-spacing:.06em; }
+  .cmt .tx{ font-size:13px;color:var(--mw-text);line-height:1.55;margin-top:3px; }
+  .cbox{ display:flex;gap:10px;margin-top:12px; }
+  .cbox input{ flex:1;background:rgba(6,20,40,.5);border:none;box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);
+    color:var(--mw-ink);padding:10px 12px;font-family:var(--mw-font,'Saira');font-size:13px;outline:none;
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .cbox input:focus{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+
+  .field{ display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid rgba(58,159,212,.1); }
+  .field:last-child{ border:none; }
+  .field .fl{ font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);flex:none;padding-top:2px; }
+  .field .fv{ font-size:13px;color:var(--mw-text);font-weight:500;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;text-align:right; }
+  .av-sm{ width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--mw-cyan-dim),rgba(16,48,80,.8));
+    display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--mw-void);font-family:var(--mw-font-cond),sans-serif;flex:none; }
+  .link{ color:var(--mw-cyan-bright);text-decoration:none; } .link:hover{ text-decoration:underline; }
+
+  .att{ display:flex;align-items:center;gap:10px;padding:9px 11px;margin-bottom:8px;background:rgba(6,20,40,.45);
+    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);cursor:pointer; }
+  .att:hover{ box-shadow:inset 0 0 0 1px rgba(94,200,240,.35); }
+  .att svg{ width:16px;height:16px;color:var(--mw-cyan);flex:none; }
+  .att .an{ font-size:12.5px;color:var(--mw-text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; } .att .as{ margin-left:auto;font-size:10px;color:var(--mw-text-faint);flex:none; }
+
+  .act{ display:flex;gap:11px;padding:8px 0; }
+  .act .dot{ width:8px;height:8px;border-radius:50%;background:var(--mw-cyan-dim);flex:none;margin-top:4px;box-shadow:0 0 6px currentColor; }
+  .act .tx{ font-size:12px;color:var(--mw-text-dim);line-height:1.5; } .act .tx b{ color:var(--mw-text);font-weight:600; }
+  .act .ts{ font-size:10px;color:var(--mw-text-faint);letter-spacing:.06em;margin-top:2px; }
+
+  /* ---- progress logger ---- */
+  .pl-k{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--mw-text-faint); }
+  .pl-v{ font-family:var(--mw-font-cond),monospace; font-size:13px; color:var(--mw-cyan-bright); letter-spacing:.03em; }
+  .pl-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .pl-stat{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:6px 0 8px; }
+  .pl-stat button{ font-family:var(--mw-font-cond),sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    padding:8px 3px; background:rgba(6,20,40,.5); color:var(--mw-text-faint); border:none; box-shadow:inset 0 0 0 1px rgba(94,200,240,.15);
+    cursor:pointer; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); transition:all .12s; }
+  .pl-stat button:hover{ color:var(--mw-text); box-shadow:inset 0 0 0 1px rgba(94,200,240,.4); }
+  .pl-stat button.on{ color:var(--mw-void); font-weight:700; background:var(--st,var(--mw-cyan)); box-shadow:0 0 12px -2px var(--st,var(--mw-cyan)); }
+  .pl-stat2{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin:0 0 16px; }
+
+  .pl-range{ -webkit-appearance:none; appearance:none; width:100%; height:6px; background:var(--mw-stat-track); border-radius:3px; outline:none; margin:2px 0 8px; }
+  .pl-range::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--mw-cyan-bright); box-shadow:0 0 8px var(--mw-cyan); cursor:pointer; }
+  .pl-range::-moz-range-thumb{ width:16px; height:16px; border:none; border-radius:50%; background:var(--mw-cyan-bright); box-shadow:0 0 8px var(--mw-cyan); cursor:pointer; }
+
+  .pl-hrs input{ width:52px; background:rgba(6,20,40,.5); border:none; box-shadow:inset 0 0 0 1px rgba(94,200,240,.2); color:var(--mw-ink);
+    padding:6px 8px; font-family:var(--mw-font-cond),monospace; font-size:13px; text-align:center; outline:none; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .pl-hrs input:focus{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .pl-quick{ display:flex; gap:5px; }
+  .pl-quick button, .pl-log{ font-family:var(--mw-font-cond),sans-serif; font-size:11px; padding:6px 9px; background:rgba(6,20,40,.5);
+    color:var(--mw-cyan-bright); border:none; box-shadow:inset 0 0 0 1px rgba(94,200,240,.25); cursor:pointer; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .pl-quick button:hover, .pl-log:hover{ box-shadow:inset 0 0 0 1px var(--mw-cyan); }
+  .sess{ display:flex; align-items:center; gap:9px; padding:6px 0; border-bottom:1px solid rgba(58,159,212,.08); font-size:12px; }
+  .sess:last-of-type{ border-bottom:none; }
+  .sess .d{ font-family:'Saira Condensed',monospace; color:var(--mw-text-dim); flex:none; width:44px; }
+  .sess .h{ font-family:var(--mw-font-cond),monospace; color:var(--mw-cyan-bright); flex:none; }
+  .sess .n{ color:var(--mw-text-faint); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  @media (max-width:880px){ .cols{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Task Detail — QC">
+  <div class="crumb">
+    <a href="board.html">Cycle Board</a><span>›</span><a href="depthome-qc.html">Quality Control</a><span>›</span><span>QC-1042</span>
+    <span style="flex:1"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="refrow">
+    <span class="mw-attr" style="--mw-acc:#9B7BE8">Sample <b>014/26_SFR-FLW-00183421</b></span>
+    <span class="mw-attr" style="--mw-acc:#9B7BE8">RQS · QCT 002 <b>PP-QC-F-001.A01/2026-014</b></span>
+    <span class="mw-attr" style="--mw-acc:#9B7BE8">Method <b>STP-014 / AM-07</b></span>
+  </div>
+
+  <div class="thead">
+    <div class="chk" id="mainChk"></div>
+    <div>
+      <h1><span class="en">Pre-packing protocol — GR-2 harvest lot</span><span class="mk">Протокол за пред-пакување — жетва GR-2</span></h1>
+      <div class="meta">
+        <span class="pill pill--dept"><span class="en">Quality Control</span><span class="mk">Контрола на квалитет</span></span>
+        <span class="pill pill--type"><span class="en">Routine</span><span class="mk">Рутинска</span></span>
+        <span class="pill pill--hi"><span class="en">Urgent tier · 3d</span><span class="mk">Итно · 3 дена</span></span>
+        <span class="pill pill--prog" id="hdrStPill"><span class="en">In Progress</span><span class="mk">Во тек</span></span>
+        <span style="font-size:11px;color:var(--mw-text-faint);letter-spacing:.06em;"><span class="en">Due Jul 14 · 17:00</span><span class="mk">Рок 14.07 · 17:00</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec__t"><span class="en">Lab Testing Lifecycle</span><span class="mk">Животен циклус на лабораториско тестирање</span><span class="side">· QCSOP 001</span></div>
+    <div class="mw-stepper" id="phaseStepper" style="--mw-acc:#9B7BE8">
+      <div class="mw-step done" data-p="0"><span class="mw-step__n">1</span><span class="mw-step__t"><span class="en">Request (RQS)</span><span class="mk">Барање (RQS)</span></span></div>
+      <div class="mw-step current" data-p="1"><span class="mw-step__n">2</span><span class="mw-step__t"><span class="en">Sampling (SFR)</span><span class="mk">Мострирање (SFR)</span></span></div>
+      <div class="mw-step" data-p="2"><span class="mw-step__n">3</span><span class="mw-step__t"><span class="en">Testing (STR)</span><span class="mk">Тестирање (STR)</span></span></div>
+      <div class="mw-step" data-p="3"><span class="mw-step__n">4</span><span class="mw-step__t"><span class="en">Results (ARI)</span><span class="mk">Резултати (ARI)</span></span></div>
+      <div class="mw-step" data-p="4"><span class="mw-step__n">5</span><span class="mw-step__t"><span class="en">Closure</span><span class="mk">Затворање</span></span></div>
+    </div>
+    <div style="font-size:10px;color:var(--mw-text-faint);margin-top:8px;letter-spacing:.04em;"><span class="en">Select the Closure phase to track the CoA / CoQ certificate (QCSOP 012).</span><span class="mk">Избери ја фазата Затворање за следење на CoA / CoQ (QCSOP 012).</span></div>
+  </div>
+
+  <div class="mw-reveal mw-reveal--info sec" id="certPanel">
+    <div class="sec__t" style="margin-bottom:12px;"><span class="en">Certificate — Closure phase</span><span class="mk">Сертификат — фаза Затворање</span><span class="side">QCSOP 012 · <span class="en">reference only — held in the Register, not here</span><span class="mk">само референца — во Регистарот</span></span></div>
+    <div class="cols" style="grid-template-columns:1fr 1fr;">
+      <div>
+        <div class="pl-k" style="margin-bottom:7px;"><span class="en">Type</span><span class="mk">Тип</span></div>
+        <div class="mw-chips" id="certType">
+          <button class="mw-chip on" type="button" data-val="iCoA" style="--cc:var(--mw-cyan)"><span class="d"></span>iCoA</button>
+          <button class="mw-chip" type="button" data-val="eCoA" style="--cc:var(--mw-cyan)"><span class="d"></span>eCoA</button>
+          <button class="mw-chip" type="button" data-val="CoQ" style="--cc:#9B7BE8"><span class="d"></span>CoQ</button>
+        </div>
+        <div class="mw-field" style="margin:12px 0 0;"><label><span class="en">Certificate ref</span><span class="mk">Референца</span></label><input class="mw-input" id="certRef" value="iCoA-PP-2026-0142" style="padding:8px 12px;"><span id="certHint" style="display:block;font-size:10px;color:var(--mw-text-faint);margin-top:4px;font-family:'Saira Condensed',monospace;">iCoA-PP-YYYY-NNNN</span></div>
+      </div>
+      <div>
+        <div class="pl-k" style="margin-bottom:7px;"><span class="en">Register status</span><span class="mk">Статус во Регистарот</span></div>
+        <div class="mw-chips" id="certStatus">
+          <button class="mw-chip mw-chip--sm on" type="button" data-val="Draft" style="--cc:var(--mw-text-dim)"><span class="en">Draft</span><span class="mk">Нацрт</span></button>
+          <button class="mw-chip mw-chip--sm" type="button" data-val="Issued" style="--cc:var(--mw-cyan)"><span class="en">Issued</span><span class="mk">Издаден</span></button>
+          <button class="mw-chip mw-chip--sm" type="button" data-val="Accepted" style="--cc:#2BE8A0"><span class="en">Accepted</span><span class="mk">Прифатен</span></button>
+          <button class="mw-chip mw-chip--sm" type="button" data-val="Revised" style="--cc:var(--mw-stat-mid)"><span class="en">Revised</span><span class="mk">Ревидиран</span></button>
+          <button class="mw-chip mw-chip--sm" type="button" data-val="Superseded" style="--cc:var(--mw-text-faint)"><span class="en">Superseded</span><span class="mk">Заменет</span></button>
+          <button class="mw-chip mw-chip--sm" type="button" data-val="Voided" style="--cc:var(--mw-stat-lo)"><span class="en">Voided</span><span class="mk">Поништен</span></button>
+        </div>
+        <div id="qpNote" class="mw-reveal mw-reveal--info" style="margin-top:12px;"><div style="font-size:12px;color:var(--mw-text);line-height:1.5;"><span class="en">CoQ + batch dossier → <b>Qualified Person (QP)</b> for batch release.</span><span class="mk">CoQ + досие → <b>Квалификувано лице (QP)</b> за пуштање на серијата.</span></div></div>
+        <div id="certSla" style="font-size:10.5px;color:var(--mw-text-faint);margin-top:8px;"></div>
+        <div style="font-size:10.5px;color:var(--mw-text-faint);margin-top:6px;"><span class="en">Analysed by (Analyst) ▸ Reviewed &amp; approved by (QC Manager)</span><span class="mk">Анализирал (Аналитичар) ▸ Прегледал и одобрил (КК Менаџер)</span></div>
+        <div id="coqPre" class="mw-reveal" style="margin-top:10px;">
+          <div class="pl-k" style="margin-bottom:6px;"><span class="en">CoQ prerequisites</span><span class="mk">Предуслови за CoQ</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--mw-text-dim);">
+            <span>✓ <span class="en">All spec parameters tested</span><span class="mk">Сите параметри тестирани</span></span>
+            <span>✓ <span class="en">All iCoA reviewed &amp; approved</span><span class="mk">Сите iCoA одобрени</span></span>
+            <span>✓ <span class="en">All eCoA reviewed &amp; accepted</span><span class="mk">Сите eCoA прифатени</span></span>
+            <span id="preOOS">✓ <span class="en">No open OOS</span><span class="mk">Нема отворен OOS</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="mw-panel">
+      <div class="sec">
+        <div class="sec__t"><span class="en">Description</span><span class="mk">Опис</span></div>
+        <div class="desc"><span class="en">Execute the 9-step pre-packing sampling protocol (√N×1.5 representative-container rule) on the GR-2 harvest lot ahead of Phase 3 testing. Each retained sample must carry the [NNN/YY_SFR]-[TYPE]-[SEQ8] code and an indelible-ink label for full traceability.</span><span class="mk">Изврши го протоколот за земање мостри пред пакување во 9 чекори (правило √N×1.5) на жетвата од GR-2, пред Фаза 3 тестирање. Секоја задржана мостра носи шифра [NNN/YY_SFR]-[ТИП]-[SEQ8] и етикета со небришливо мастило.</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="sec__t"><span class="en">Deviation flag (OOx)</span><span class="mk">Ознака за отстапување (OOx)</span><span class="side">QCSOP 019 v2</span></div>
+        <div class="mw-chips" id="devFlag">
+          <button class="mw-chip on" type="button" data-val="none" style="--cc:var(--mw-text-dim)"><span class="en">None</span><span class="mk">Нема</span></button>
+          <button class="mw-chip" type="button" data-val="oos" style="--cc:var(--mw-stat-lo)"><span class="d"></span>OOS</button>
+          <button class="mw-chip" type="button" data-val="oot" style="--cc:var(--mw-legendary)"><span class="d"></span>OOT</button>
+          <button class="mw-chip" type="button" data-val="ooe" style="--cc:var(--mw-stat-mid)"><span class="d"></span>OOE</button>
+          <button class="mw-chip" type="button" data-val="ooc" style="--cc:var(--mw-epic)"><span class="d"></span>OOC</button>
+        </div>
+        <div class="mw-reveal mw-reveal--warn" id="devPanel">
+          <div id="devDef" style="font-size:12.5px;color:var(--mw-text);line-height:1.55;margin-bottom:11px;"></div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:7px;"><span class="en">Investigation — report to QC Supervisor ≤ 1 h, secure all preparations</span><span class="mk">Истрага — извести КК Супервизор ≤ 1 ч, зачувај ги препаратите</span></div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-family:var(--mw-font-cond);font-size:11px;font-weight:700;letter-spacing:.03em;">
+            <span style="padding:4px 9px;color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 1px rgba(94,200,240,.35);clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);"><span class="en">Phase IA · Analyst</span><span class="mk">Фаза IA · Аналитичар</span></span>
+            <span style="color:var(--mw-text-faint);">→</span>
+            <span style="padding:4px 9px;color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 1px rgba(94,200,240,.35);clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);"><span class="en">Phase IB · Supervisor · 7-step</span><span class="mk">Фаза IB · Супервизор · 7 чекори</span></span>
+            <span style="color:var(--mw-text-faint);">→</span>
+            <span style="padding:4px 9px;color:var(--mw-legendary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-legendary) 40%,transparent);clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);"><span class="en">Phase II · root cause · cross-functional</span><span class="mk">Фаза II · коренска причина · меѓусекторски</span></span>
+          </div>
+          <div style="font-size:11px;color:var(--mw-text-dim);line-height:1.5;margin-bottom:8px;"><span class="en">Approvals: Head of QC (closes Phase I / initiates Phase II) · Head of QA (oversight) · QP (HIGH-risk + batch disposition).</span><span class="mk">Одобрувања: Раководител КК (затвора Фаза I / иницира Фаза II) · Раководител QA (надзор) · QP (висок ризик + дистрибуција на серија).</span></div>
+          <div style="font-size:11px;color:var(--mw-text-faint);line-height:1.5;"><span class="en">Result invalidated only if the investigation finds a provable lab error that directly explains it.</span><span class="mk">Резултатот се поништува само ако истрагата најде докажлива лабораториска грешка што директно го објаснува.</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec__t"><span class="en">Subtasks</span><span class="mk">Подзадачи</span><span class="side">· <span id="subCount">0/0</span> · <span class="en">unlimited nesting</span><span class="mk">неограничени нивоа</span></span></div>
+        <div id="subs"></div>
+        <div class="mw-stat__track subbar"><div class="mw-stat__fill mw-stat__fill--mid" id="subFill" style="width:0%"></div></div>
+        <div class="mw-subghost">
+          <input class="mw-input" id="subAddInput" placeholder="+ Add subtask…" style="padding:8px 12px;font-size:12.5px;max-width:260px;">
+          <span id="subAddTargetLbl" style="color:var(--mw-text-faint);"></span>
+          <span id="subAddCancel" style="display:none;">✕ <span class="en">cancel nesting</span><span class="mk">откажи подниво</span></span>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec__t"><span class="en">Attachments</span><span class="mk">Прилози</span></div>
+        <div class="att"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="an">SFR_014-26_pre-pack.pdf</span><span class="as">312 KB</span></div>
+        <div class="att"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="an">Container_selection_log.csv</span><span class="as">9 KB</span></div>
+      </div>
+
+      <div class="sec" style="margin-bottom:0;">
+        <div class="sec__t"><span class="en">Comments</span><span class="mk">Коментари</span></div>
+        <div id="comments"></div>
+        <div class="cbox">
+          <input type="text" id="cinput" placeholder="Add a comment…"/>
+          <button class="mw-btn" id="csend"><span class="en">Send</span><span class="mk">Испрати</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="mw-panel mw-panel--alt" style="margin-bottom:16px;">
+        <div class="field"><span class="fl"><span class="en">Analyst</span><span class="mk">Аналитичар</span></span><span class="fv"><span class="av-sm">КА</span>Kaidan A.</span></div>
+        <div class="field"><span class="fl"><span class="en">QC Reviewer</span><span class="mk">КК Проверувач</span></span><span class="fv"><span class="av-sm">ЛВ</span>Liara V.<span class="mw-ack mw-ack--accepted" id="ackChip"><span class="en">Accepted</span><span class="mk">Прифатено</span></span></span></div>
+        <div class="field"><span class="fl"><span class="en">Requested by</span><span class="mk">Побарано од</span></span><span class="fv"><span class="mw-attr" style="--mw-acc:#2FD9D9">PR <span class="en">Production</span><span class="mk">Производство</span></span></span></div>
+        <div class="field"><span class="fl"><span class="en">Batch / lot</span><span class="mk">Серија / лот</span></span><span class="fv"><a class="link" href="batch.html?id=GR2-H07">GR2-H07</a></span></div>
+        <div class="field"><span class="fl"><span class="en">Depends on</span><span class="mk">Зависи од</span></span><span class="fv"><span class="mw-dep met"><span class="dot"></span>RQS-014 <span class="en">intake</span><span class="mk">прием</span></span></span></div>
+        <div class="field"><span class="fl"><span class="en">Blocks</span><span class="mk">Блокира</span></span><span class="fv"><span class="mw-dep unmet"><span class="dot"></span>ARI-014 <span class="en">results report</span><span class="mk">извештај</span></span></span></div>
+        <div class="field"><span class="fl"><span class="en">Recurrence</span><span class="mk">Повторување</span></span><span class="fv"><span class="en">One-time</span><span class="mk">Еднократно</span></span></div>
+        <div class="field"><span class="fl"><span class="en">SOP ref</span><span class="mk">СОП реф.</span></span><span class="fv"><a class="link" href="#" title="QCSOP 011 — Sampling of incoming materials, packaging materials and finished product. Reference only — no controlled content is hosted here.">QCSOP 011</a></span></div>
+        <div class="field"><span class="fl"><span class="en">Est. time</span><span class="mk">Проц. време</span></span><span class="fv">2.5h</span></div>
+      </div>
+
+      <div class="mw-panel" style="margin-bottom:16px;">
+        <div class="sec__t" style="margin-bottom:12px;"><span class="en">Log Progress</span><span class="mk">Внеси напредок</span></div>
+
+        <div class="pl-k"><span class="en">Status</span><span class="mk">Статус</span></div>
+        <div class="pl-stat" id="plStat">
+          <button data-st="Working" class="on" style="--st:var(--mw-stat-mid)"><span class="en">Working</span><span class="mk">Работи</span></button>
+          <button data-st="Review" style="--st:var(--mw-cyan)"><span class="en">Review</span><span class="mk">Преглед</span></button>
+          <button data-st="Done" style="--st:#2BE8A0"><span class="en">Done</span><span class="mk">Готово</span></button>
+        </div>
+        <div class="pl-stat2" id="plStat2">
+          <button data-st="Stuck" style="--st:var(--mw-stat-lo)"><span class="en">Stuck</span><span class="mk">Блокирано</span></button>
+          <button data-st="Postponed" style="--st:var(--mw-stat-mid-2)"><span class="en">Postponed</span><span class="mk">Одложено</span></button>
+        </div>
+        <div class="mw-reveal mw-reveal--warn" id="blockerBlk">
+          <div class="pl-k" style="color:var(--mw-stat-lo);margin-bottom:6px;"><span class="en">Blocker</span><span class="mk">Блокатор</span></div>
+          <input class="mw-input" id="blockerInput" placeholder="What blocks it? / Што го блокира?" style="padding:8px 12px;font-size:13px;">
+        </div>
+        <div class="mw-reveal mw-reveal--info" id="outcomeBlk">
+          <div class="pl-k" style="margin-bottom:8px;"><span class="en">Outcome (Phase 4 recommendation)</span><span class="mk">Исход (препорака Фаза 4)</span></div>
+          <div class="mw-chips" id="plOutcome">
+            <button class="mw-chip mw-chip--sm on" data-val="Approved" style="--cc:#2BE8A0"><span class="en">Approved</span><span class="mk">Одобрено</span></button>
+            <button class="mw-chip mw-chip--sm" data-val="Rejected" style="--cc:var(--mw-stat-lo)"><span class="en">Rejected</span><span class="mk">Одбиено</span></button>
+            <button class="mw-chip mw-chip--sm" data-val="Held" style="--cc:var(--mw-stat-mid)"><span class="en">Held for reprocessing</span><span class="mk">За преработка</span></button>
+            <button class="mw-chip mw-chip--sm" data-val="Retest" style="--cc:var(--mw-cyan)"><span class="en">Retest</span><span class="mk">Ретест</span></button>
+          </div>
+        </div>
+
+        <div class="pl-row" style="justify-content:space-between;margin-top:14px;margin-bottom:2px;">
+          <span class="pl-k"><span class="en">Completion</span><span class="mk">Комплетност</span></span><span class="pl-v" id="plPctV">45%</span>
+        </div>
+        <input type="range" min="0" max="100" step="5" value="45" class="pl-range" id="plRange">
+        <button class="pl-log" id="plPctBtn" style="width:100%;margin-bottom:16px;"><span class="en">Save completion</span><span class="mk">Зачувај комплетност</span></button>
+
+        <div class="pl-row" style="justify-content:space-between;margin-bottom:2px;">
+          <span class="pl-k"><span class="en">Work sessions</span><span class="mk">Работни сесии</span></span><span class="pl-v" id="plHrsTot">2.75 H</span>
+        </div>
+        <div id="sessList" style="margin-bottom:8px;"></div>
+        <input class="mw-input" id="sessNote" placeholder="Note…" style="width:100%;box-sizing:border-box;padding:6px 10px;font-size:12px;margin-bottom:8px;">
+        <div class="pl-row" style="margin-bottom:0;">
+          <div class="pl-hrs"><input type="text" id="plHrs" value="0.5"></div>
+          <div class="pl-quick"><button data-h="0.25" type="button">+¼</button><button data-h="0.5" type="button">+½</button><button data-h="1" type="button">+1</button></div>
+          <button class="pl-log" id="plHrsBtn" type="button" style="margin-left:auto;"><span class="en">Log</span><span class="mk">Запиши</span></button>
+        </div>
+      </div>
+
+      <div class="mw-panel" id="activity">
+        <div class="sec__t" style="margin-bottom:12px;"><span class="en">Activity</span><span class="mk">Активност</span></div>
+        <div class="act"><span class="dot"></span><div><div class="tx"><b>Kaidan A.</b> <span class="en">created this task from</span><span class="mk"> ја создаде задачата од</span> RQS-014</div><div class="ts"><span class="en">Yesterday</span><span class="mk">Вчера</span> · 09:12</div></div></div>
+        <div class="act"><span class="dot"></span><div><div class="tx"><b>Liara V.</b> <span class="en">accepted QC Reviewer assignment</span><span class="mk"> прифати задолжување како КК Проверувач</span></div><div class="ts"><span class="en">Yesterday</span><span class="mk">Вчера</span> · 09:20</div></div></div>
+        <div class="act"><span class="dot"></span><div><div class="tx"><b>Kaidan A.</b> <span class="en">completed step 1–2 of the pre-packing protocol</span><span class="mk"> заврши чекор 1–2 од протоколот</span></div><div class="ts"><span class="en">Today</span><span class="mk">Денес</span> · 08:40</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ===== nested subtask tree (unlimited depth) ===== */
+let subId = 0;
+function node(label_en,label_mk,done,who,children){ return { id: 'n'+(++subId), en:label_en, mk:label_mk, done:!!done, who:who||'', children:children||[] }; }
+let subtasks = [
+  node('FM pre-test','FM пред-тест', true, 'КА'),
+  node('Barrel transfer','Трансфер на барели', true, 'КА'),
+  node('Container selection','Избор на контејнери', false, 'КА', [
+    node('Verify √N×1.5 representative count','Провери репрезентативен број √N×1.5', false, 'ЛВ')
+  ]),
+  node('bRS sample (~150g)','bRS мостра (~150g)', false, 'КА'),
+  node('MB in situ (microbiology)','MB in situ (микробиологија)', false, 'КА'),
+  node('QC crushing / grinding','КК дробење', false),
+  node('rRS sample (~150g)','rRS мостра (~150g)', false),
+  node('mRS sample (≥250g)','mRS мостра (≥250g)', false),
+  node('SFR confirmation','SFR потврда', false)
+];
+let addTarget = null;
+
+function countAll(list){ let n=0,d=0; list.forEach(s=>{ n++; if(s.done)d++; const c=countAll(s.children); n+=c.n; d+=c.d; }); return {n,d}; }
+function findNode(list,id){ for(const s of list){ if(s.id===id) return s; const f=findNode(s.children,id); if(f) return f; } return null; }
+function bilN(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+
+function renderSubList(list){
+  return list.map(s=>{
+    const row = '<div class="mw-subnode'+(s.done?' done':'')+'"><span class="box'+(s.done?' done':'')+'" data-sub="'+s.id+'"></span>'+
+      '<span class="t">'+bilN(s.en,s.mk)+'</span>'+(s.who?'<span class="who">'+s.who+'</span>':'')+
+      '<span class="who" style="cursor:pointer;color:var(--mw-cyan-dim);" data-branch="'+s.id+'" title="Add sub-item">↳</span>'+
+      '<span class="x" data-del="'+s.id+'">✕</span></div>';
+    const kids = s.children.length ? '<div class="mw-subbranch">'+renderSubList(s.children)+'</div>' : '';
+    return row+kids;
+  }).join('');
+}
+function paintSubs(){
+  document.getElementById('subs').innerHTML = renderSubList(subtasks);
+  const {n,d} = countAll(subtasks);
+  document.getElementById('subCount').textContent = d+'/'+n;
+  document.getElementById('subFill').style.width = (n?d/n*100:0)+'%';
+  document.querySelectorAll('#subs .box').forEach(b=>b.addEventListener('click',()=>{
+    const nd = findNode(subtasks, b.dataset.sub); nd.done = !nd.done; paintSubs();
+  }));
+  document.querySelectorAll('#subs [data-del]').forEach(b=>b.addEventListener('click',()=>{
+    function rm(list){ const i=list.findIndex(x=>x.id===b.dataset.del); if(i>-1){ list.splice(i,1); return true; } return list.some(x=>rm(x.children)); }
+    rm(subtasks); paintSubs();
+  }));
+  document.querySelectorAll('#subs [data-branch]').forEach(b=>b.addEventListener('click',()=>{
+    addTarget = b.dataset.branch;
+    const nd = findNode(subtasks, addTarget);
+    document.getElementById('subAddInput').placeholder = 'Add sub-item under: '+nd.en;
+    document.getElementById('subAddTargetLbl').textContent = '';
+    document.getElementById('subAddCancel').style.display = 'inline';
+    document.getElementById('subAddInput').focus();
+  }));
+}
+document.getElementById('subAddCancel').addEventListener('click', ()=>{
+  addTarget = null; document.getElementById('subAddInput').placeholder = '+ Add subtask…';
+  document.getElementById('subAddCancel').style.display = 'none';
+});
+document.getElementById('subAddInput').addEventListener('keydown', e=>{
+  if(e.key !== 'Enter') return;
+  const v = e.target.value.trim(); if(!v) return;
+  const n = node(v, v, false);
+  if(addTarget){ findNode(subtasks, addTarget).children.push(n); } else { subtasks.push(n); }
+  addTarget = null; document.getElementById('subAddInput').value=''; document.getElementById('subAddInput').placeholder = '+ Add subtask…';
+  document.getElementById('subAddCancel').style.display = 'none';
+  paintSubs();
+});
+paintSubs();
+
+/* ===== main checkbox ===== */
+document.getElementById('mainChk').addEventListener('click',function(){ this.classList.toggle('done'); });
+
+/* ===== comments ===== */
+const comments=[
+  ['КА','Kaidan A.','Today 08:41','Steps 1–2 clear, moving to container selection now — GR-2 lot count looks right for √N×1.5.'],
+  ['ЛВ','Liara V.','Today 08:52','Confirmed as QC Reviewer. Will verify the count before you crush/grind on step 6.'],
+];
+function paintComments(){
+  document.getElementById('comments').innerHTML = comments.map(c=>
+    `<div class="cmt"><div class="av">${c[0]}</div><div class="bd"><div class="hd"><span class="nm">${c[1]}</span><span class="ts">${c[2]}</span></div><div class="tx">${c[3]}</div></div></div>`
+  ).join('');
+}
+paintComments();
+function send(){
+  const v=document.getElementById('cinput').value.trim(); if(!v)return;
+  comments.push(['КА','Kaidan A.','Just now',v]); document.getElementById('cinput').value=''; paintComments();
+}
+document.getElementById('csend').addEventListener('click',send);
+document.getElementById('cinput').addEventListener('keydown',e=>{ if(e.key==='Enter')send(); });
+
+/* ===== phase stepper ===== */
+document.getElementById('phaseStepper').addEventListener('click', e=>{
+  const step = e.target.closest('.mw-step'); if(!step) return;
+  const p = +step.dataset.p;
+  document.querySelectorAll('#phaseStepper .mw-step').forEach(s=>{
+    const sp = +s.dataset.p;
+    s.classList.remove('done','current');
+    if(sp < p) s.classList.add('done'); else if(sp === p) s.classList.add('current');
+  });
+  document.getElementById('certPanel').classList.toggle('show', p===4);
+});
+
+/* ===== certificate tracking (Closure, QCSOP 012 — reference only) ===== */
+const CERT_HINT = { iCoA:'iCoA-PP-YYYY-NNNN', eCoA:'eCoA-PP-YYYY-NNNN', CoQ:'CoQ-PP-YYYY-NNNN' };
+function certApply(v){
+  document.getElementById('certHint').textContent = CERT_HINT[v];
+  const ref = document.getElementById('certRef');
+  ref.value = ref.value.replace(/^(iCoA|eCoA|CoQ)-PP/, v+'-PP');
+  document.getElementById('qpNote').classList.toggle('show', v==='CoQ');
+  const SLA={ iCoA:['Prepared same working day as the last result','Изготвен истиот работен ден'], eCoA:['Reviewed within 5 working days of receipt','Преглед во рок од 5 работни дена'], CoQ:['Compiled once all source certs are approved/accepted','Составен по одобрување на изворните сертификати'] };
+  document.getElementById('certSla').innerHTML='<span class="en">SLA: '+SLA[v][0]+'</span><span class="mk">Рок: '+SLA[v][1]+'</span>';
+  document.getElementById('coqPre').classList.toggle('show', v==='CoQ');
+  updateCoqPre();
+}
+function updateCoqPre(){
+  const el=document.getElementById('preOOS'); if(!el) return;
+  const dev=document.querySelector('#devFlag .mw-chip.on'); const oos = dev && dev.dataset.val!=='none';
+  el.innerHTML = oos ? '<span style="color:var(--mw-stat-lo)">✕ <span class="en">Open OOS — CoQ blocked</span><span class="mk">Отворен OOS — CoQ блокиран</span></span>' : '✓ <span class="en">No open OOS</span><span class="mk">Нема отворен OOS</span>';
+}
+document.getElementById('certType').addEventListener('click', e=>{
+  const b=e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#certType .mw-chip').forEach(x=>x.classList.toggle('on',x===b));
+  certApply(b.dataset.val);
+});
+document.getElementById('certStatus').addEventListener('click', e=>{
+  const b=e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#certStatus .mw-chip').forEach(x=>x.classList.toggle('on',x===b));
+});
+document.getElementById('devFlag').addEventListener('click', ()=>updateCoqPre());
+certApply('iCoA');
+
+/* ===== deviation flag (OOx per QCSOP 019 v2) ===== */
+const DEV = {
+  oos:['Out-of-Specification — result outside the registered specification limits.','Надвор од спецификација — резултат надвор од регистрираните граници.'],
+  oot:['Out-of-Trend — within spec but drifting from the historical trend.','Надвор од тренд — во рамки на спец., но отстапува од историскиот тренд.'],
+  ooe:['Out-of-Expectation — within spec but unexpected from process knowledge.','Надвор од очекување — во рамки на спец., но неочекувано според познавањето на процесот.'],
+  ooc:['Out-of-Control — a control/system parameter is outside its control limits.','Надвор од контрола — контролен/системски параметар надвор од своите граници.']
+};
+document.getElementById('devFlag').addEventListener('click', e=>{
+  const b = e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#devFlag .mw-chip').forEach(x=>x.classList.toggle('on', x===b));
+  const v = b.dataset.val, panel = document.getElementById('devPanel');
+  if(v==='none'){ panel.classList.remove('show'); return; }
+  panel.classList.add('show');
+  document.getElementById('devDef').innerHTML = '<span class="en">'+DEV[v][0]+'</span><span class="mk">'+DEV[v][1]+'</span>';
+});
+
+/* ===== log progress: status + blocker + outcome ===== */
+function logAct(html){
+  const el=document.createElement('div'); el.className='act';
+  el.innerHTML=`<span class="dot"></span><div><div class="tx">${html}</div><div class="ts">Just now</div></div>`;
+  document.getElementById('activity').appendChild(el);
+}
+const hdrPill=document.getElementById('hdrStPill');
+const stLabels = { Working:['Working','Работи'], Review:['Review','Преглед'], Done:['Done','Готово'], Stuck:['Stuck','Блокирано'], Postponed:['Postponed','Одложено'] };
+function selectStatus(b){
+  document.querySelectorAll('#plStat button, #plStat2 button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  const st=b.dataset.st, col=b.style.getPropertyValue('--st'), lbl=stLabels[st];
+  hdrPill.innerHTML = '<span class="en">'+lbl[0]+'</span><span class="mk">'+lbl[1]+'</span>';
+  hdrPill.style.color=col; hdrPill.style.boxShadow='inset 0 0 0 1px '+col;
+  document.getElementById('mainChk').classList.toggle('done',st==='Done');
+  document.getElementById('blockerBlk').classList.toggle('show', st==='Stuck');
+  document.getElementById('outcomeBlk').classList.toggle('show', st==='Done');
+  logAct('<b>Kaidan A.</b> set status to '+st);
+}
+document.querySelectorAll('#plStat button, #plStat2 button').forEach(b=>b.addEventListener('click',()=>selectStatus(b)));
+document.getElementById('plOutcome').addEventListener('click', e=>{
+  const b = e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#plOutcome .mw-chip').forEach(x=>x.classList.toggle('on', x===b));
+  logAct('<b>Kaidan A.</b> set outcome to '+b.dataset.val);
+});
+const rng=document.getElementById('plRange'), pctV=document.getElementById('plPctV');
+rng.addEventListener('input',()=>{ pctV.textContent=rng.value+'%'; });
+document.getElementById('plPctBtn').addEventListener('click',()=>{ logAct('<b>Kaidan A.</b> set completion to '+rng.value+'%'); });
+
+/* ===== work sessions (multi-entry log) ===== */
+let sessions = [ ['Jul 13','1.5','GR-2 rows 1–4, steps 1–2 of protocol.'], ['Jul 14','1.25','Container selection in progress.'] ];
+function paintSessions(){
+  document.getElementById('sessList').innerHTML = sessions.map(s=>`<div class="sess"><span class="d">${s[0]}</span><span class="h">${s[1]}h</span><span class="n">${s[2]}</span></div>`).join('');
+  const tot = sessions.reduce((a,s)=>a+parseFloat(s[1]),0);
+  document.getElementById('plHrsTot').textContent = tot+' H';
+}
+paintSessions();
+const hrsIn=document.getElementById('plHrs');
+document.querySelectorAll('.pl-quick button').forEach(b=>b.addEventListener('click',()=>{
+  hrsIn.value=(parseFloat(hrsIn.value||0)+parseFloat(b.dataset.h)).toFixed(2).replace(/\.?0+$/,'');
+}));
+document.getElementById('plHrsBtn').addEventListener('click',()=>{
+  const h=parseFloat(hrsIn.value||0); if(!h)return;
+  const note = document.getElementById('sessNote').value.trim() || '—';
+  sessions.push(['Today', h, note]); paintSessions();
+  logAct('<b>Kaidan A.</b> logged '+h+' h — '+note);
+  hrsIn.value='0'; document.getElementById('sessNote').value='';
+});
+</script>
+<script src="mw-i18n.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>
