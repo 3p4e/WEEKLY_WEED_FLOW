@@ -52,6 +52,14 @@ API paths below same-origin.
   appends a hash-chained row to `audit_log`
   (`entry_hash = sha256(prev_hash || actor || op || table || record_id || ts ||
   new || old)`). Deleting or reordering a row breaks every later link.
+  Two hardenings are worth knowing before touching this function:
+  **H1** (tasks-0012 / users-0006) takes a transaction-scoped advisory lock before
+  the chain-tail read, without which concurrent writers fork the chain;
+  **H2** (tasks-0050 / users-0009) pins the function's own `TimeZone` to `UTC`,
+  because `ts` is `now()::text` and a `timestamptz` renders under the *session's*
+  zone — so before H2 a row's hash depended on the timezone of whoever wrote it and
+  could not be recomputed elsewhere. Both were found the hard way in production;
+  see the audit-chain finding in [`../docs/DEPLOY.md`](../docs/DEPLOY.md).
 
 ## Audit endpoints (`app/api/audit.py`)
 
@@ -59,7 +67,7 @@ API paths below same-origin.
 |--------|------------------|--------|---------|
 | GET    | `/audit`         | elevated¹ | Merged two-chain trail (`source: users/tasks`), filterable by `table_name` / `record_id` / `action` / `source`, keyset-paginated via `before` (created_at) |
 | GET    | `/audit/tables`  | elevated¹ | Distinct table names + counts (drives the filter UI) |
-| GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains and reports each chain's first linkage break, if any |
+| GET    | `/audit/verify`  | `ADMIN`   | Walks BOTH global chains: recomputes every row's hash from its stored content, checks pointer linkage, and anchors the head. `ok` is false only for a genuine failure — `hash_breaks`, `link_orphans` or `head_breaks`. `hash_legacy_tz` (intact, written pre-H2 under a non-UTC session) and `link_forks` (pre-H1 concurrency, with `fork_id_range`) are reported alongside as explained history, not as breaks |
 
 ¹ elevated = every role except `USER` (`ADMIN`, the `OWNER`/`CEO`/`COO` executives,
 the department managers `QA_MGR`/`QC_MGR`/`PR_MGR`/`WH_MGR`/`SE_MGR`/`CU_MGR`/`MU_MGR`,

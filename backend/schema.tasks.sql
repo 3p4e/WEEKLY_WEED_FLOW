@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict jVSelgSnSm7bYJPqLUBm4b0Twnym72C4dV7DUIDH6xX8uHagfvY3O9zuHafpNc9
+\restrict cftaJ9aYc3Ky268xbq6LYdgmywr8RDl0iQS4fWjWsG60P0Mk4jNj0XXr3HfRki7
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -73,6 +73,7 @@ CREATE FUNCTION app.current_user_id() RETURNS uuid
 CREATE FUNCTION app.fn_audit_row() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'app', 'public'
+    SET "TimeZone" TO 'UTC'
     AS $$
 DECLARE
   v_actor text := COALESCE(current_setting('app.user_id', true), 'system');
@@ -85,6 +86,8 @@ BEGIN
   PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
   SELECT entry_hash INTO v_prev FROM audit_log ORDER BY id DESC LIMIT 1;
   -- IMPORTANT: convert_to(text,'UTF8'), never text::bytea (escape-format bug).
+  -- H2: the function pins TimeZone=UTC, so now()::text here is zone-stable and
+  -- /audit/verify can reproduce it from created_at without knowing who wrote it.
   v_payload := COALESCE(v_prev,'') || v_actor || TG_OP || TG_TABLE_NAME || v_rec
                || now()::text || COALESCE(v_new::text,'') || COALESCE(v_old::text,'');
   INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,old_values,new_values,prev_hash,entry_hash)
@@ -4966,5 +4969,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jVSelgSnSm7bYJPqLUBm4b0Twnym72C4dV7DUIDH6xX8uHagfvY3O9zuHafpNc9
+\unrestrict cftaJ9aYc3Ky268xbq6LYdgmywr8RDl0iQS4fWjWsG60P0Mk4jNj0XXr3HfRki7
 

@@ -2122,41 +2122,98 @@ left forward — it is additive and v79-tolerant, as established above. Otherwis
 `alembic -n tasks downgrade 0047` (verified byte-exact on a local PG16), or
 restore from the snapshot.
 
-### ⚠️ Pre-existing audit-chain damage, found during this deploy — NOT caused by it
+### Audit-chain finding — DIAGNOSED AND RESOLVED (2026-07-30)
 
-Running the app's own `_CHAIN_SQL` (`app/api/audit.py`) against the tasks chain
-reports **415 flagged rows of 3703**, first break at id 2032. `GET /audit/verify`
-will say the same.
+Found by the post-deploy check, **not caused by the deploy**, and now fully
+explained. `GET /audit/verify` was reporting **415 breaks of 3703** on the tasks
+chain. Two distinct causes, neither of them tampering, and **no audit row was
+altered to make the chain verify** — the correct response to a chain that does not
+verify is never to rewrite the chain.
 
-**This deploy did not cause it.** The pre-deploy snapshot was restored into a
-throwaway Postgres container and the same verifier run against both: the numbers
-are *identical* — `total 3703, hash_breaks 377, link_breaks 38, head_breaks 0,
-breaks 415, first_break 2032` before and after. The migration added tables, which
-writes no audit rows, and the row count never moved.
+**First, the deploy was ruled out.** The pre-deploy snapshot was restored into a
+throwaway Postgres and the same verifier run against both: identical numbers
+(`hash_breaks 377, link_breaks 38, first_break 2032`). The migration creates
+tables, which writes no audit rows, and the row count never moved.
 
-The damage is bounded and has two distinct signatures on two different days:
+#### Cause 1 — 377 "hash breaks": the verifier could not reproduce a non-UTC rendering
 
-| kind | rows | day | tables |
-|---|---|---|---|
-| link only (`prev_hash` ≠ prior row's `entry_hash`) | 38 | 2026-07-11 | `tasks` |
-| hash only (recomputed hash ≠ stored) | 377 | 2026-07-13 | `tasks`, `work_sessions` |
+`fn_audit_row()` hashes `now()::text`. For a `timestamptz`, `::text` renders under
+the **session's** `TimeZone`, so a row's hash depends on the timezone of whatever
+connection wrote it. `/audit/verify` recomputed from the stored `created_at` under
+the **verifying** session's zone.
 
-Nothing after id 2500 is affected — **1203 subsequent rows are clean** — so
-whatever happened stopped. Two observations that a root-cause investigation should
-start from, offered as leads and **not** as a diagnosis:
+All 377 shared one transaction timestamp, `2026-07-13 00:29:14.082092+00`, while a
+neighbouring 39-row transaction was clean — so it was one session, not a general
+fault. Testing the renderings settled it outright:
 
-- The 38 link breaks sit in a single ~2-second window and their `created_at` runs
-  *backwards* relative to `id`, which is what concurrent transactions interleaving
-  around the advisory lock would look like.
-- The 377 hash breaks are all one day and the verifier recomputes from stored
-  `created_at` while the trigger hashes `now()::text`. `_CHAIN_SQL`'s own comment
-  notes this reproduction depends on the server `TimeZone` being unchanged, so a
-  session that wrote under a different `TimeZone` would fail recomputation without
-  anything having been tampered with.
+```
+TimeZone=UTC            ->   0 of 377 rows verify
+TimeZone=Europe/Skopje  -> 377 of 377 rows verify
+TimeZone=Europe/Berlin  -> 377 of 377 rows verify   (same UTC+2 offset in July)
+TimeZone=Europe/London  ->   0 of 377 rows verify
+```
 
-Zero rows have ever been deleted (ids 1..3703 with no gaps), and the users chain
-is **completely clean** (269 rows, 0 breaks). Needs its own investigation; it is
-not a deploy blocker and was not introduced here.
+**The data was always intact.** It was written by a session at UTC+2 and read back
+under UTC. `_CHAIN_SQL`'s own comment had asserted the opposite — that `created_at`
+"renders under the same server TimeZone the writes used" — and that assumption was
+false.
+
+Two fixes, deliberately separate:
+
+- **Root cause:** `tasks-0050` / `users-0009` add `SET "TimeZone" TO 'UTC'` to
+  `app.fn_audit_row()`. A per-function GUC applies for the call and reverts after,
+  so `now()::text` inside the trigger is zone-stable no matter what the caller is
+  set to. Every future row is canonical. The payload formula is **unchanged** on
+  purpose: rewriting it would invalidate the recomputation of all 3703 existing
+  rows and force a cutover id and two formulas forever. One line, no cutover, no
+  re-hashing, no existing row touched.
+- **Verifier:** it now recomputes under UTC **and** the facility zone
+  (`settings.snapshot_tz`) and reports a row that only matches the latter as
+  `hash_legacy_tz` — explained, not hidden, and not a break. The zone is applied
+  with `set_config('TimeZone', $1, true)` so Postgres does the rendering;
+  reproducing `timestamptz::text` by hand is a trap (it trims trailing zeros in
+  the microseconds). Tolerating the zone costs nothing in tamper detection: a
+  forger controls the content and would hash it correctly anyway, and what catches
+  them is that altering a row invalidates every downstream link. A test pins
+  exactly that — a legacy-zone row whose content is then edited is still a break.
+
+#### Cause 2 — 38 "link breaks": the pre-hardening chain fork
+
+Every one of the 38 had a `prev_hash` pointing at a **real earlier row**, never at
+nothing. The pattern is unmistakable — ids 2041, 2042, 2043, 2044, 2045 all point
+at 2039 — which is several concurrent transactions each reading the same chain tail
+before any of them committed. Each row was its own transaction, and their
+`created_at` values run *backwards* against `id`.
+
+That is precisely the bug **`0012_audit_chain_advisory_lock.py` (Create Date
+2026-07-14)** was written to fix: *"two concurrent writers read the SAME tail and
+both link their new row to it — forking the hash chain."* **The 38 rows are dated
+2026-07-11 — three days before the lock existed**, and nothing after id 2500 is
+affected. Already fixed; cannot recur.
+
+The verifier now classifies link breaks instead of lumping them:
+
+| kind | meaning | counts as a break? |
+|---|---|---|
+| `link_forks` | `prev_hash` matches a real row with a **lower id** — two writers shared a tail | no — reported with `fork_id_range` |
+| `link_orphans` | `prev_hash` matches **no row at all** — a deleted or rewritten predecessor | **yes, this is the alarm** |
+
+#### Result, measured against the real production chains
+
+| chain | total | hash_breaks | hash_legacy_tz | link_forks | link_orphans | head_breaks | `ok` |
+|---|---|---|---|---|---|---|---|
+| tasks | 3703 | **0** | 377 | 38 | **0** | **0** | **true** |
+| users | 269 | **0** | 0 | 0 | **0** | **0** | **true** |
+
+`/audit/verify` now returns `ok: true` with the two historical facts surfaced as
+informational counts, instead of `ok: false` on an intact log. That matters beyond
+tidiness: a tamper alarm that cries wolf is one people learn to ignore, and "your
+own tool says your audit trail is broken" is not a sentence you want in an
+inspection.
+
+**Not yet deployed** — `0050`/`0009` and the verifier change are built and tested
+but production is still on `0049`/`0008` with the old verifier. They need the same
+owner go-ahead as any promotion.
 
 ## PROMOTED 2026-07-30 — see the deploy record above. (Kept for the reasoning; the "not deployed" framing is historical.)
 
