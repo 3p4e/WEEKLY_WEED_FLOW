@@ -18,11 +18,34 @@ import uuid
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("SECRET_KEY", "pytest-test-secret-not-for-production")
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.security import hash_password
+
+
+def pytest_configure(config):
+    """Fail loudly if pytest's logging plugin has been disabled.
+
+    `-p no:logging` is a tempting way to quieten this suite (it is very chatty:
+    every request is logged as JSON). But that plugin is what provides the
+    `caplog` fixture, and test_notifications.py uses `caplog` to prove a failed
+    notification recipient is LOGGED rather than silently swallowed. With the
+    plugin off, that test does not fail — it ERRORS with "fixture 'caplog' not
+    found", which in a 600-test run reads exactly like a real regression and
+    sends you hunting through unrelated code.
+
+    That misdiagnosis has happened twice. Use `-q`, `--tb=short`, or
+    `--log-cli-level=CRITICAL` to reduce noise; never `-p no:logging`."""
+    if not config.pluginmanager.hasplugin("logging"):
+        raise pytest.UsageError(
+            "pytest's logging plugin is disabled (-p no:logging), which removes the "
+            "`caplog` fixture and makes test_notifications.py ERROR in a way that "
+            "looks like a code regression. Drop the flag; use -q or "
+            "--log-cli-level=CRITICAL to reduce output instead."
+        )
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
