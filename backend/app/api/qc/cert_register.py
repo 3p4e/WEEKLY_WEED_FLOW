@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_TODAY_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from fastapi import Depends, HTTPException, Query
@@ -40,11 +41,11 @@ async def certificate_register(
     if oos_linked:
         clauses.append("EXISTS (SELECT 1 FROM qc_oos_records o WHERE o.batch_id = qc_certificates.batch_id)")
     if retention == "expired":
-        clauses.append("retention_expiry IS NOT NULL AND retention_expiry < CURRENT_DATE")
+        clauses.append(f"retention_expiry IS NOT NULL AND retention_expiry < {SITE_TODAY_SQL}")
     elif retention == "expiring":
         args.append(within_days)
-        clauses.append(f"retention_expiry IS NOT NULL AND retention_expiry >= CURRENT_DATE"
-                       f" AND retention_expiry <= CURRENT_DATE + ${len(args)}::int")
+        clauses.append(f"retention_expiry IS NOT NULL AND retention_expiry >= {SITE_TODAY_SQL}"
+                       f" AND retention_expiry <= {SITE_TODAY_SQL} + ${len(args)}::int")
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     async with rls(user) as c:
         rows = await c.fetch(

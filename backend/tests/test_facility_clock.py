@@ -44,6 +44,31 @@ def test_no_naive_date_today_anywhere_in_the_app():
     )
 
 
+def test_no_naive_sql_today_anywhere_in_the_app():
+    """The SQL twin of the check above.
+
+    `CURRENT_DATE` (and `::date` on a timestamptz without AT TIME ZONE) render
+    under the DATABASE's zone — UTC everywhere this app runs — so a query
+    defaulting a stamp to CURRENT_DATE carries the identical nightly
+    off-by-one: batches created in the window got yesterday's phase_since, the
+    eCoA review clock started a day early, and duescan's within-day dedup key
+    missed the morning's rows and re-pinged every due task (all three were CI
+    run 358's failures). Use worktime.SITE_TODAY_SQL / SITE_TZ_SQL."""
+    offenders = []
+    for f in sorted(APP.rglob("*.py")):
+        if f.name == "worktime.py":   # defines the replacement; its comments name the banned form
+            continue
+        text = f.read_text()
+        text = re.sub(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')', "", text)
+        text = re.sub(r"#[^\n]*", "", text)
+        for m in re.finditer(r"CURRENT_DATE|now\(\)::date", text, re.IGNORECASE):
+            offenders.append(f"{f.relative_to(APP.parent)}: {m.group(0)}")
+    assert offenders == [], (
+        "naive SQL 'today' — renders under the database's UTC zone, not the facility's; "
+        "use worktime.SITE_TODAY_SQL: " + "; ".join(offenders)
+    )
+
+
 def test_facility_today_is_the_snapshot_tz_date():
     tz = ZoneInfo(settings.snapshot_tz)
     before = datetime.now(tz).date()

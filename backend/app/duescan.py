@@ -13,6 +13,7 @@ The actor is the org's system ADMIN profile (events.actor_id is NOT NULL;
 self-notify guard is a no-op for it).
 """
 from datetime import date
+from app.worktime import SITE_TZ_SQL
 
 from app.db import rls, rls_users, users_admin_pool
 from app.notify import safe_emit
@@ -43,7 +44,8 @@ async def run_for_org(admin: dict, today: date) -> dict:
     async with rls(admin) as c:
         already = {(r["verb"], r["object_id"]) for r in await c.fetch(
             "SELECT verb, object_id FROM events"
-            " WHERE verb IN ('due_soon','overdue') AND created_at::date=$1", today)}
+            f" WHERE verb IN ('due_soon','overdue')"
+            f" AND (created_at AT TIME ZONE {SITE_TZ_SQL})::date=$1", today)}
         rows = await c.fetch(
             "SELECT t.id, t.title, t.user_id, t.department_id, t.due_date,"
             " COALESCE(array_agg(ta.user_id) FILTER (WHERE ta.user_id IS NOT NULL), '{}') AS assignees"

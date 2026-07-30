@@ -15,6 +15,7 @@ Batch changes emit feed-only events (recipients=[]) so the activity stream
 shows plants moving through the facility without pinging anyone's inbox.
 """
 from datetime import date
+from app.worktime import SITE_TODAY_SQL
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -169,7 +170,7 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
         row = await c.fetchrow(
             "INSERT INTO plant_batches(org_id, room_id, strain, plant_count, phase,"
             " phase_since, note, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, CURRENT_DATE),$7,$8,$8) RETURNING *",
+            f" VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, {SITE_TODAY_SQL}),$7,$8,$8) RETURNING *",
             user["org_id"], body.room_id, body.strain, body.plant_count,
             body.phase, body.phase_since, body.note, user["id"])
         await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
@@ -198,11 +199,11 @@ async def update_batch(batch_id: str, body: BatchPatch,
             await _room_or_422(c, patch["room_id"])
         # A phase move stamps phase_since unless the caller set it explicitly.
         if patch.get("phase") and patch["phase"] != prev["phase"] and "phase_since" not in patch:
-            patch["phase_since"] = None   # placeholder; swapped to CURRENT_DATE below
+            patch["phase_since"] = None   # placeholder; swapped to the site-zone today below
         fields, args = [], []
         for col, val in patch.items():
             if col == "phase_since" and val is None:
-                fields.append("phase_since=CURRENT_DATE")
+                fields.append(f"phase_since={SITE_TODAY_SQL}")
                 continue
             if val is None and col != "note":
                 continue

@@ -25,6 +25,17 @@ TZ = ZoneInfo(settings.snapshot_tz)
 BUCKETS = ("regular", "overtime", "night", "weekend")
 
 
+# The SAME rule for SQL. `CURRENT_DATE` (and `x::date` on a timestamptz)
+# render under the DATABASE's zone — UTC everywhere this app runs — so a query
+# defaulting a column to CURRENT_DATE has the identical nightly off-by-one as
+# naive Python. These fragments carry the facility zone as a SQL literal; the
+# zone is a config constant (settings.snapshot_tz), never user input, and the
+# quote-doubling below keeps even a misconfigured value from breaking out of
+# the literal. tests/test_facility_clock.py bans CURRENT_DATE app-wide.
+SITE_TZ_SQL = "'" + settings.snapshot_tz.replace("'", "''") + "'"
+SITE_TODAY_SQL = f"(now() AT TIME ZONE {SITE_TZ_SQL})::date"
+
+
 def facility_today():
     """Today as the FACILITY sees it — never `date.today()`.
 

@@ -3,7 +3,7 @@ from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
 from datetime import date
-from app.worktime import facility_today
+from app.worktime import SITE_TODAY_SQL, facility_today
 from fastapi import Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from urllib.parse import quote as _urlquote
@@ -304,7 +304,7 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
             # is exactly 7 calendar days (5 business days always cross one
             # weekend); a weekend registration rolls to Monday first (lenient —
             # the clock never starts on a non-working day).
-            "         (CURRENT_DATE + CASE extract(isodow FROM CURRENT_DATE)::int"
+            f"         ({SITE_TODAY_SQL} + CASE extract(isodow FROM {SITE_TODAY_SQL})::int"
             "            WHEN 6 THEN 2 WHEN 7 THEN 1 ELSE 0 END + 7)::date,"
             "         $14,$14,$14) RETURNING *",
             user["org_id"], body.source_institution, body.laboratory_id, body.batch_id,
@@ -362,7 +362,7 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
         # 5-working-day window (met iff reviewed on/before the deadline).
         if review_stamp:
             fields.append("reviewed_at=now()")
-            fields.append("review_window_met=(CURRENT_DATE <= review_deadline)")
+            fields.append(f"review_window_met=({SITE_TODAY_SQL} <= review_deadline)")
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")

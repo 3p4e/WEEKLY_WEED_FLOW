@@ -28,7 +28,7 @@ database for the duration. So:
     from the last seq rather than restarting.
 """
 from datetime import date
-from app.worktime import facility_today
+from app.worktime import SITE_TODAY_SQL, facility_today
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -226,14 +226,14 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
         row = await c.fetchrow(
             "INSERT INTO plant_batches(org_id, room_id, cultivar_id, code, strain,"
             " plant_count, phase, phase_since, note, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,CURRENT_DATE),$9,$10,$10)"
+            f" VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,{SITE_TODAY_SQL}),$9,$10,$10)"
             " RETURNING *",
             user["org_id"], body.room_id, body.cultivar_id, body.code, cv["name"],
             body.plant_count, body.phase, body.phase_since, body.note, user["id"])
         await c.execute(
             "INSERT INTO plant_phase_events(org_id, batch_id, event, to_phase, qty,"
             " to_room_id, occurred_on, created_by)"
-            " VALUES ($1,$2,'create',$3,$4,$5,COALESCE($6::date,CURRENT_DATE),$7)",
+            f" VALUES ($1,$2,'create',$3,$4,$5,COALESCE($6::date,{SITE_TODAY_SQL}),$7)",
             user["org_id"], row["id"], body.phase, body.plant_count, body.room_id,
             body.clone_date or body.phase_since, user["id"])
         await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
@@ -337,7 +337,7 @@ async def move_batch(batch_id: str, body: MoveIn,
             to_room = room["id"]
         row = await c.fetchrow(
             "UPDATE plant_batches SET phase=$1, room_id=$2,"
-            " phase_since=COALESCE($3::date, CURRENT_DATE), updated_by=$4, updated_at=now(),"
+            f" phase_since=COALESCE($3::date, {SITE_TODAY_SQL}), updated_by=$4, updated_at=now(),"
             " is_active = CASE WHEN $1 = ANY($5::text[]) THEN false ELSE is_active END"
             " WHERE id=$6 RETURNING *",
             body.to_phase, to_room, body.occurred_on, user["id"],
@@ -345,7 +345,7 @@ async def move_batch(batch_id: str, body: MoveIn,
         await c.execute(
             "INSERT INTO plant_phase_events(org_id, batch_id, event, from_phase, to_phase,"
             " qty, to_room_id, occurred_on, reason, created_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,CURRENT_DATE),$9,$10)",
+            f" VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,{SITE_TODAY_SQL}),$9,$10)",
             user["org_id"], batch_id,
             ("harvest" if body.to_phase == "harvested"
              else "destroy" if body.to_phase == "destroyed" else "move"),
@@ -356,7 +356,7 @@ async def move_batch(batch_id: str, body: MoveIn,
         # and only ever run once per batch at end of life, not on every move).
         if body.to_phase in _TERMINAL:
             await c.execute(
-                "UPDATE plants SET status=$1, status_since=COALESCE($2::date, CURRENT_DATE),"
+                f"UPDATE plants SET status=$1, status_since=COALESCE($2::date, {SITE_TODAY_SQL}),"
                 " updated_by=$3, updated_at=now()"
                 " WHERE batch_id=$4 AND status='active'",
                 "harvested" if body.to_phase == "harvested" else "destroyed",
