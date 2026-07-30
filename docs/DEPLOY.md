@@ -2046,11 +2046,78 @@ on *both* new images.
 
 ---
 
-## READY, NOT DEPLOYED — harvest / yield + IPM, tasks 0051 (2026-07-30)
+## Production deploy — backend v82 / frontend v112, tasks 0051 (2026-07-30)
 
-Built and tested on `claude/weekly-read-flow-setup-yft7if`. **Promotion is
-owner-gated and has not been requested for this change**, so production remains
-backend `v81` / frontend `v111` / tasks `0050` / users `0009`.
+Owner-authorised ("deploy the latest app on production complete redeployment").
+Promotes the harvest/yield record from `036c183`.
+
+| | before | after |
+|---|---|---|
+| backend | `v81` | **`v82`** |
+| scheduler | `v81` | **`v82`** |
+| frontend | `v111` | **`v112`** |
+| tasks alembic | `0050` | **`0051`** |
+| users alembic | `0009` | `0009` (untouched — 0051 is tasks-only) |
+| service worker | `wwf-shell-v3.77.0` | **`wwf-shell-v3.78.0`** |
+
+**Build method — no PAT was staged on the host this time.** Previous deploys used
+a docker git-context build against the private repo, which required writing a
+GitHub token to disk and then shredding it. Here the build context was produced
+locally with `git archive 036c183 -- backend` / `-- web` and uploaded through the
+runner's `/file/write`, with the SHA-256 of each archive compared on both sides
+before use (`df7fd9b6…` backend, `81409bc1…` web). Two properties fall out of
+that and both are worth keeping: the context is the **committed tree at the exact
+SHA**, so nothing uncommitted in a working directory can ride along, and there is
+no credential on the host to leak or forget to clean up.
+
+**Order: migrate first, then swap.** 0051 adds two tables and alters nothing
+existing, so a v81 backend runs against a 0051 schema unchanged — there is no
+window in which the running code disagrees with the schema. Verified after
+migrating: both tables carry `relrowsecurity`, `relforcerowsecurity`, one
+`fn_audit_row` trigger, one `org_isolation` policy and the `app_user` grants.
+
+**Verified against the live public URL, not just from inside the box:**
+
+- `index.html` loads `gf/harvest-view.js`; `sw.js` reports `wwf-shell-v3.78.0`;
+  `gf/harvest-view.js` served 200, 41,598 bytes (byte-identical to the image).
+- `GET /cultivation/harvests` through Traefik returns **401**, not 200. That is
+  the load-bearing check: 401 proves nginx proxies the prefix to the backend,
+  whereas the SPA fallback would have answered 200 with index.html. It is the
+  exact failure mode that hid the live `/handoffs` 405 bug on 2026-07-30.
+- Authenticated smoke over all new routes: `/cultivation/harvests`, `/ipm`,
+  `/yield`, `/harvest-clearance/{id}` — all 200, and the two malformed-input
+  cases (`?status=soggy`, a non-uuid batch id) correctly 422 rather than 500.
+- `/audit/verify` → `ok: true` on **both** chains: 0 hash breaks, 0 link orphans,
+  0 head breaks, 0 legacy-tz rows, 0 forks, zones `["UTC","Europe/Skopje"]`.
+- `/health/ready` → `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`;
+  scheduler came up clean and ran its missed-run recovery.
+
+**No business data was created in production to test this.** The database was
+wiped to zero by owner order so the facility can start clean, and seeding probe
+rows would have undone that. Functional behaviour is covered by the 27 backend
+tests in `tests/test_harvest.py` against a real PostgreSQL 16.
+
+**Rollback**, all three parts still in place:
+`weekly_weed_flow-backend:v81` and `wwf-growflow:v111` images retained;
+`/opt/stacks/wwf_app/compose.yaml.bak-pre-v82`; and pre-migration dumps at
+`/opt/wwf-backups/20260730-1820-pre0051/` (`wwf_tasks.dump`, `wwf_users.dump`).
+Schema rollback is `alembic -n tasks downgrade 0050`, verified locally to drop
+both tables and leave nothing behind.
+
+**CI at deploy time:** the *Backend test suite* job had completed `success` on
+`036c183`, matching the 619-pass local run. The other 8 jobs were still queued on
+the single shared self-hosted runner. The deploy did not wait on them because the
+independent local evidence was stronger and already complete: full backend suite,
+full 245-test frontend suite, and the alembic-vs-`schema.tasks.sql` diff re-run by
+hand against a real cluster.
+
+---
+
+## Superseded — the pre-deploy record for 0051 (kept for the reasoning)
+
+Built and tested on `claude/weekly-read-flow-setup-yft7if`. At the time of
+writing this section promotion had not been requested; it was authorised and
+carried out shortly afterwards, recorded above.
 
 Phase 2 item 1 of the cultivation build (`docs/CULTIVATION-DESIGN-2026-07.md`
 §5f). It is the change that connects cultivation to the CoA chain: creating a
