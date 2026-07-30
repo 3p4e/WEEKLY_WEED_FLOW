@@ -1937,3 +1937,52 @@ else to reverse.
 > — an allowlist-by-deletion, so anything new under `web/` is served publicly by
 > default. A suite placed there would have been fetchable at `/tests/`. The
 > deploy check above exists to keep proving that.
+
+## 2026-07-30 — cultivation identity + HLVd decontamination record — backend v79 / frontend v110 / migrations tasks 0045→0047
+
+Ships the cultivation department (owner priority, 2026-07-30) and the record the
+CEO's HLVd eradication plan demands. Shipped commit `fd72c9d` with **all 9 CI
+jobs green on that exact SHA** — compensating control 1 satisfied before the
+build, verified by querying the check-runs API rather than assumed.
+
+| chain | before | after | contents |
+|-------|--------|-------|----------|
+| tasks | 0044 | **0047** | 0045 cultivation identity, 0046 decon campaign, 0047 positive controls + tool log |
+| users | 0008 | 0008 | unchanged |
+
+**Migrations ran BEFORE the image swap**, same reasoning as 2026-07-29 and
+verified explicitly this time rather than assumed: every new column on an
+existing table is nullable, the only dropped objects are in the *downgrade* path,
+and 0045's `plant_batches_phase_check` is **widened to a superset** — v78's
+whitelist (`clone/veg/flower/mother/drying`) still validates against it. So the
+old image tolerated the new schema, and a migration failure would have left
+production wholly on v78 with nothing to unwind.
+
+Nine new tables, every one verified live with `rls=true audit=true`:
+`cultivars`, `plants`, `plant_phase_events`, `decon_room_cycles`,
+`decon_step_signoffs`, `decon_bleach_log`, `decon_swabs`,
+`decon_positive_controls`, `decon_tool_log`.
+
+Verified post-deploy: alembic `current` = 0047/0008; `/health/ready` 200 with both
+databases ok; every new route returns **401 through nginx, not 404** — proving the
+proxy allowlist and router wiring are correct and the routes are auth-gated rather
+than missing; `gf/decon-view.js` served; `sw.js` publicly serving
+`wwf-shell-v3.74.0` with `decon-view.js` in its precache list; no test directory
+leaked into the web root.
+
+Pre-deploy snapshot: `/opt/wwf-backups/presnap-v79/` (`wwf_tasks.sql.gz` 3.0 MB,
+`wwf_users.sql.gz` 46 KB, both `gzip -t` verified).
+**Rollback** = restore `compose.yaml.bak-v79` (v78/v109) and
+`docker compose up -d --no-deps backend scheduler frontend`. The schema may be
+left forward — it is additive and v78-tolerant, as established above. Otherwise
+`alembic -n tasks downgrade 0044`, or restore from the snapshot.
+
+Credential hygiene as per the build note above: PAT staged 0600, shredded after,
+build cache pruned, and `docker history --no-trunc | grep -c x-access-token` = **0**
+on *both* new images.
+
+> **Room codes are deliberately not seeded.** The eradication plan's own
+> Appendix B lists the Rooms-1-6 → C180–C185 mapping as "an assumption requiring
+> confirmation", so no migration bakes it in. Rooms stay provisioned through the
+> ADMIN-only `POST /facility/rooms`, and the campaign's room register must be
+> reconciled and signed by Production + QA before the decon board is populated.
