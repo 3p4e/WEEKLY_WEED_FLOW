@@ -2001,23 +2001,43 @@ on *both* new images.
 > (both properties dry-run verified on a local copy before it touched production).
 > All 19 changes are in the audit trail (11 INSERT + 8 UPDATE on `rooms`).
 >
-> ⚠️ **The Rooms-1-6 ↔ C180-C185 mapping is STILL NOT confirmed, and is
-> deliberately absent from the data.** The room *codes* are confirmed (owner,
-> against the detailed facility layout, and they match the signed register). The
-> *operational* mapping is a separate question, and both source documents flag it:
-> the eradication plan's Appendix B calls it "an assumption requiring
-> confirmation", and the CEO's Facility Execution Map of 29.07.2026 repeats
-> verbatim that "the mapping of Rooms 1-6 to C180-C185 requires QA confirmation".
+> **Rooms-1-6 ↔ C180-C185 — resolved by the architectural drawing.** The room
+> *codes* were confirmed by the owner against the detailed facility layout and
+> they match the signed register. The *operational* Room-N mapping was a separate
+> question, and both source documents flagged it: the eradication plan's Appendix
+> B called it "an assumption requiring confirmation", and the CEO's Facility
+> Execution Map of 29.07.2026 repeated verbatim that "the mapping of Rooms 1-6 to
+> C180-C185 requires QA confirmation". So the room names went through three
+> states in one day, and the third is the one in production:
 >
-> The names were briefly seeded as "Flowering 1.1 · Room 1" and then corrected to
-> "Flowering 1.1 · C180"
-> (`oneoff_fix_flowering_room_names_20260730.sql`). "Flowering 1.1..1.6" paired
-> with "C180..C185" in order is register-sourced and safe; equating either with
-> the campaign's "Room 1..6" is not. The harm is concrete rather than theoretical:
-> the harvest schedule is written as "Room 3 on 31.07", so cleaning c182 in the
-> belief that it is Room 3 when it is not is precisely the error the plan's §10
-> reconciliation table exists to prevent.
+> 1. seeded as `Flowering 1.1 · Room 1` — unfounded at the time, since the mapping
+>    was flagged unconfirmed by both documents;
+> 2. stripped to `Flowering 1.1 · C180`
+>    (`oneoff_fix_flowering_room_names_20260730.sql`) — correct given what was
+>    then known;
+> 3. restored as `Flowering 1.1 · C180 · Room 1`
+>    (`oneoff_restore_flowering_room_numbers_20260730.sql`), because the owner
+>    supplied *Purely Plant Layout - Detailed.pdf* and it resolves the mapping.
+>    That is new evidence, not a changed opinion.
 >
-> **Add the Room-N label back in one UPDATE once Production + QA have signed that
-> one-page reconciliation table.** Until then the board identifies rooms only by
-> the designations that are actually confirmed.
+> The drawing carries `FLOWERING PREMISE 1.1`..`1.6` and `C180`..`C185` as
+> separate text labels. Extracted with `pdftotext -layout`, which preserves
+> horizontal position, the two sets align one-to-one and monotonically at
+> dx = 3, 11, 2, 7, 8, 5 columns. **Every dx is 2-11 columns while adjacent rooms
+> are 60-100 columns apart, so no other pairing is geometrically possible.** The
+> same method confirms C150 = «КАРАНТИН ЗА БОЛНИ РАСТЕНИЈА» (dx 34, same line).
+> Combined with the plan's §08 zone map, which pairs C180="Room 1" .. C185="Room
+> 6", two independent documents now agree — the corroboration that was missing.
+> Room N = Flowering 1.N = C(179+N).
+>
+> This matters operationally rather than cosmetically: the harvest schedule is
+> written as "Room 3 on 31.07", so a board that cannot say which code Room 3 is
+> cannot dispatch that work — and cleaning the wrong room is exactly the error the
+> plan's §10 reconciliation table exists to prevent. Carrying all three
+> designations in the room name puts the reconciliation in the data instead of in
+> someone's head.
+>
+> ⚠️ **Still outstanding: QA's signature** on that one-page §10 reconciliation
+> table. Verifying a drawing is evidence; it is not a signed controlled document.
+> The data is now correct and usable; the process step remains open, and nothing
+> in the software claims otherwise.

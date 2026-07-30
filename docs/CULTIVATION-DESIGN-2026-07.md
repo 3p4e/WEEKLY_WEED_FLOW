@@ -255,10 +255,14 @@ explicit that either failing is how the campaign fails:
 - **Release requires every step signed AND every swab for the room negative** —
   a `pending` or `positive` swab blocks it outright, and release is gated to
   QA_MGR/executives/ADMIN only ("nobody else can release a room ... no room is
-  released verbally"). Room codes are deliberately NOT seeded by the migration —
-  the plan's own Appendix B flags the Rooms-1-6-to-C180-C185 mapping as an
-  unconfirmed assumption, so rooms stay provisioned through the existing
-  ADMIN-only `POST /facility/rooms`.
+  released verbally"). Room codes are deliberately NOT seeded by the migration:
+  the register is per-org operational data, so rooms stay provisioned through the
+  existing ADMIN-only `POST /facility/rooms`, and Purely Plant's 19 real rooms
+  were loaded by a reviewable one-off script instead (see §5c). At the time the
+  migration was written the Rooms-1-6-to-C180-C185 mapping was also still an
+  unconfirmed assumption per the plan's Appendix B; that has since been resolved
+  by the layout drawing, which is a second reason the mapping does not belong in
+  schema history.
 
 Both gates and the campaign-scoped duplicate-cycle guard are tested
 (`tests/test_decon.py`, 8 tests) against a real Postgres, including the full
@@ -283,6 +287,7 @@ honest on purpose — the gaps matter more than the coverage.
 | Frozen positive controls, taken before the cull (§11.7, §27) | **built** — `decon_positive_controls` |
 | Tool sterilisation at 10,000 ppm (§28 control 2) | **built** — `decon_tool_log`, separate target from surfaces |
 | Room register / codes | **seeded 2026-07-30** — owner confirmed the codes against the detailed facility layout, resolving Appendix B's open item. 19 rooms incl. C171/C176-C179/C180-C185/C88/C150/C158 + 5 corridors; see `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` |
+| Rooms-1-6 ↔ C180-C185 reconciliation (§10) | **resolved in the data, signature outstanding** — the layout drawing positions `FLOWERING PREMISE 1.N` within 2-11 columns of `C(179+N)` while adjacent rooms sit 60-100 apart, so the pairing is geometrically forced and agrees with the plan's §08 zone map. Room names now carry all three designations (`Flowering 1.1 · C180 · Room 1`); see `oneoff_restore_flowering_room_numbers_20260730.sql`. QA's signature on the one-page table is **still open** — evidence is not a controlled document |
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **NOT built** |
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |

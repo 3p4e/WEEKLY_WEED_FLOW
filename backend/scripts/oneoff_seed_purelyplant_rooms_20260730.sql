@@ -30,6 +30,16 @@
 -- Codes are lowercased because rooms.code is constrained to ^[a-z0-9_]{1,64}$
 -- (see RoomIn.code in app/api/facility.py). C180 is therefore stored as c180.
 --
+-- SUPERSEDED NAMES — read this before running on a fresh environment. The
+-- flowering room NAMES below are the originals and were revised twice the same
+-- day; run all three scripts in order to end up where production actually is:
+--   1. this script
+--   2. oneoff_fix_flowering_room_names_20260730.sql       (dropped "Room N")
+--   3. oneoff_restore_flowering_room_numbers_20260730.sql (restored it, on
+--      positional evidence from the detailed layout drawing)
+-- The names below are left as-run rather than back-edited, so the audit trail
+-- and these files tell the same story. Everything else here is current.
+--
 -- IDEMPOTENT: re-running changes nothing. The renames are guarded on the
 -- placeholder code still being present; the inserts are ON CONFLICT DO NOTHING.
 -- Run against the tasks DB as a superuser:
