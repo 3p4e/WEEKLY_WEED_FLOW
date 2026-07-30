@@ -2046,6 +2046,71 @@ on *both* new images.
 
 ---
 
+## Production deploy — backend v81, tasks 0050 / users 0009 (2026-07-30)
+
+Owner-authorised, "deployed in full". Promotes the audit-chain fix (H2). All 9 CI
+checks were green on `433085d` before promotion.
+
+| | before | after |
+|---|---|---|
+| backend | `v80` | **`v81`** |
+| scheduler | `v80` | **`v81`** |
+| frontend | `v111` | **`v111` — deliberately unchanged** |
+| tasks alembic | `0049` | **`0050`** |
+| users alembic | `0008` | **`0009`** |
+
+**Why the frontend was not rebuilt.** `git diff 961e3a9..HEAD -- web/` is empty:
+the running `v111` image is already byte-for-byte HEAD. Cutting a `v112` with
+identical content would change nothing except forcing every client to re-download
+the shell, since `sw.js` is unchanged at `wwf-shell-v3.77.0`. "In full" means the
+running system matches HEAD, and it does — a new tag would have been churn, not
+completeness.
+
+**Both databases migrated this time** (0049→0050 and 0008→0009): the H2 TimeZone
+pin lands on `app.fn_audit_row()` in each, and the two copies of that trigger must
+not diverge. Confirmed live:
+
+```
+wwf_tasks:  search_path=app, public, TimeZone=UTC
+wwf_users:  search_path=app, public, TimeZone=UTC
+```
+
+### Verification
+
+- `/health/ready` ok on both databases; no traceback in backend or scheduler; the
+  scheduler completed a weekly-snapshot cycle on the empty org.
+- **`/audit/verify` returns the new shape** and reports clean:
+  `zones_tried: ["UTC","Europe/Skopje"]`, `hash_legacy_tz: 0`, `link_forks: 0`,
+  `link_orphans: 0`. The zero `hash_legacy_tz` is the point — every row now written
+  is canonical under UTC, so the tolerance path is dormant and only ever applies to
+  history.
+- **End-to-end WRITE test through the public API**, not just reads: logged in as
+  `admin`, created a department, created a task (a calendar week was auto-created
+  on demand, confirming the app bootstraps from an empty database), read it back,
+  then removed the smoke data. 17 endpoint surfaces probed — all 200.
+  `/approvals` returns 404 because there is no bare route; the real path is
+  `/approvals/pending`, which returns 200.
+- The chain still verifies after **14 audited writes and deletes** under the new
+  pinned trigger.
+
+**The audit trail deliberately retains the smoke test and its removal.** Those 14
+rows are an honest record of a real post-deploy verification. Deleting them to get
+a cosmetically empty log would be precisely the rewrite-the-chain antipattern the
+H2 investigation was written to reject. Business data is back to zero: 0 tasks,
+0 departments, 0 rooms, 1 profile, 1 organization.
+
+**Rollback** = restore `compose.yaml.bak-v81` (v80) and
+`docker compose up -d --no-deps backend scheduler`. The schema may be left
+forward — 0050/0009 only add a per-function GUC and are v80-tolerant. Otherwise
+`alembic -n tasks downgrade 0049` / `-n users downgrade 0008`, both verified
+byte-exact. Snapshot at `/opt/wwf-backups/presnap-v81/`.
+
+Credential hygiene as usual: PAT staged 0600 and shredded, ops scripts removed
+(one of them read the database password), build cache pruned,
+`docker history --no-trunc | grep -c x-access-token` = **0**.
+
+---
+
 ## FULL APPLICATION DATA WIPE — owner-ordered, 2026-07-30
 
 Both application databases were emptied of **all** application data and the
@@ -2303,9 +2368,10 @@ tidiness: a tamper alarm that cries wolf is one people learn to ignore, and "you
 own tool says your audit trail is broken" is not a sentence you want in an
 inspection.
 
-**Not yet deployed** — `0050`/`0009` and the verifier change are built and tested
-but production is still on `0049`/`0008` with the old verifier. They need the same
-owner go-ahead as any promotion.
+**DEPLOYED 2026-07-30** as backend `v81` / tasks `0050` / users `0009` — see the
+v81 deploy record above. `/audit/verify` in production now returns the new shape
+and reports clean, with `hash_legacy_tz: 0` because the wiped database has no
+pre-H2 rows left.
 
 ## PROMOTED 2026-07-30 — see the deploy record above. (Kept for the reasoning; the "not deployed" framing is historical.)
 
