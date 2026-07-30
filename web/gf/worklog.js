@@ -58,9 +58,38 @@ GF.WWF.openWorklog = (taskId) => {
     .catch(() => { if (GF.WWF._worklog.taskId === taskId) { GF.WWF._worklog.sessions = []; GF.WWF._renderWorklog(); } });
 };
 
-GF.WWF._renderWorklog = () => {
+/* The form inputs, in the order they appear. Named once because
+   _renderWorklog has to both snapshot and restore them. */
+GF.WWF._WL_FIELDS = ['wl-date', 'wl-start', 'wl-end', 'wl-hours', 'wl-note'];
+
+/* Re-render the modal body.
+ *
+ * `resetForm: true` clears the entry fields back to their defaults — correct
+ * ONLY after a session has actually been logged. Every other caller must leave
+ * them alone, because this function rebuilds the whole body via innerHTML and
+ * would otherwise throw away whatever the user has typed:
+ *
+ *   • the sessions GET in openWorklog resolves and re-renders. On a fast
+ *     machine that lands before a human can type; under load the window is
+ *     wide open, and the entry silently reverts to today/09:00/no-hours. That
+ *     is how the e2e run on 2026-07-30 failed three times in a row — it filled
+ *     a Saturday date, the list arrived mid-form, and the submit posted
+ *     nothing.
+ *   • setProgress / progressMarkDone re-render after a quick-set click. Not a
+ *     race at all: fill in a date and hours, click 75%, and both are gone.
+ *   • deleteSession re-renders after removing a row.
+ *
+ * Preserving here rather than at each call site is deliberate — a new caller
+ * gets the safe behaviour by default, and only the one place that genuinely
+ * means "clear the form" has to say so. */
+GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   const body = GF.$('worklog-modal-body'); if (!body) return;
   const st = GF.WWF._worklog;
+  // Snapshot BEFORE innerHTML replaces the elements. On the first render the
+  // fields do not exist yet, so this is empty and the template defaults stand.
+  const keep = resetForm ? null : GF.WWF._WL_FIELDS
+    .map((id) => [id, (GF.$(id) || {}).value])
+    .filter(([, v]) => v !== undefined);
   const today = GF.todayISO();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
@@ -115,6 +144,8 @@ GF.WWF._renderWorklog = () => {
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="GF.WWF.submitWorklog()">${GF.t('log_work')}</button>
     <div class="sec-label" style="margin-top:16px">${GF.icon('clock','icon')}${AL('Logged sessions', 'Внесени сесии')}</div>
     <div id="wl-list">${list}</div>`;
+
+  if (keep) for (const [id, v] of keep) { const el = GF.$(id); if (el) el.value = v; }
 };
 
 /* ── Completion % (tasks.progress) — the mockup's log-progress control:
@@ -211,7 +242,9 @@ GF.WWF.submitWorklog = async () => {
       if (t.status === 'pending' && GF.setStatus) GF.setStatus(st.taskId, 'working');
       GF.render.panels();
     }
-    GF.WWF._renderWorklog();
+    // The one caller that MEANS to clear the form: the session is saved, so
+    // leaving the old date/hours in place would invite logging them twice.
+    GF.WWF._renderWorklog({ resetForm: true });
   } catch (e) { GF.toast(AL('Log failed: ', 'Неуспешен внес: ') + e.message, 'error'); }
 };
 
