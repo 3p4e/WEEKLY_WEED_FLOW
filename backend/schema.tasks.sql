@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict g0HJk4cV0Qt7ZcqHHd4dOzraAHE7Xoiq1rYAgvbBKOwzkggLMcDXZMSycK3GyiA
+\restrict SToTgltFFRWhaoQzgvuw7kAEmUJVGZQKuEgnpY7dQQoPncItqkwfZMRi30FJLqy
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -204,6 +204,27 @@ ALTER TABLE ONLY public.calendar_weeks FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: cultivars; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cultivars (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    name_mk text,
+    note text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.cultivars FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: departments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -303,11 +324,67 @@ CREATE TABLE public.plant_batches (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT plant_batches_phase_check CHECK ((phase = ANY (ARRAY['clone'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'drying'::text]))),
+    code text,
+    cultivar_id uuid,
+    CONSTRAINT plant_batches_phase_check CHECK ((phase = ANY (ARRAY['nursery'::text, 'clone'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'drying'::text, 'harvested'::text, 'destroyed'::text]))),
     CONSTRAINT plant_batches_plant_count_check CHECK ((plant_count >= 0))
 );
 
 ALTER TABLE ONLY public.plant_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: plant_phase_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plant_phase_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    plant_id uuid,
+    event text NOT NULL,
+    from_phase text,
+    to_phase text,
+    qty integer,
+    to_room_id uuid,
+    occurred_on date DEFAULT CURRENT_DATE NOT NULL,
+    reason text,
+    note text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT plant_phase_events_event_check CHECK ((event = ANY (ARRAY['create'::text, 'move'::text, 'cull'::text, 'destroy'::text, 'harvest'::text, 'note'::text]))),
+    CONSTRAINT plant_phase_events_qty_check CHECK (((qty IS NULL) OR (qty >= 0)))
+);
+
+ALTER TABLE ONLY public.plant_phase_events FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: plants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plants (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    room_id uuid,
+    cultivar_id uuid,
+    plant_code text NOT NULL,
+    clone_date date,
+    seq integer NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    status_since date DEFAULT CURRENT_DATE NOT NULL,
+    reason text,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT plants_seq_check CHECK ((seq >= 1)),
+    CONSTRAINT plants_status_check CHECK ((status = ANY (ARRAY['active'::text, 'culled'::text, 'destroyed'::text, 'harvested'::text, 'moved'::text])))
+);
+
+ALTER TABLE ONLY public.plants FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1593,6 +1670,22 @@ ALTER TABLE ONLY public.calendar_weeks
 
 
 --
+-- Name: cultivars cultivars_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cultivars
+    ADD CONSTRAINT cultivars_org_id_code_key UNIQUE (org_id, code);
+
+
+--
+-- Name: cultivars cultivars_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cultivars
+    ADD CONSTRAINT cultivars_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: departments departments_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1638,6 +1731,38 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.plant_batches
     ADD CONSTRAINT plant_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plant_phase_events plant_phase_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_phase_events
+    ADD CONSTRAINT plant_phase_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plants plants_batch_id_seq_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_batch_id_seq_key UNIQUE (batch_id, seq);
+
+
+--
+-- Name: plants plants_org_id_plant_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_org_id_plant_code_key UNIQUE (org_id, plant_code);
+
+
+--
+-- Name: plants plants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_pkey PRIMARY KEY (id);
 
 
 --
@@ -2154,10 +2279,38 @@ CREATE INDEX notifications_unread_idx ON public.notifications USING btree (recip
 
 
 --
+-- Name: plant_batches_org_code_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX plant_batches_org_code_key ON public.plant_batches USING btree (org_id, code) WHERE (code IS NOT NULL);
+
+
+--
 -- Name: plant_batches_org_room_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org_id, room_id) WHERE is_active;
+
+
+--
+-- Name: plant_phase_events_org_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plant_phase_events_org_batch_idx ON public.plant_phase_events USING btree (org_id, batch_id, occurred_on);
+
+
+--
+-- Name: plants_active_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plants_active_batch_idx ON public.plants USING btree (batch_id) WHERE (status = 'active'::text);
+
+
+--
+-- Name: plants_org_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plants_org_batch_idx ON public.plants USING btree (org_id, batch_id);
 
 
 --
@@ -2567,6 +2720,13 @@ CREATE TRIGGER audit_calendar_weeks AFTER INSERT OR DELETE OR UPDATE ON public.c
 
 
 --
+-- Name: cultivars audit_cultivars; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_cultivars AFTER INSERT OR DELETE OR UPDATE ON public.cultivars FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: departments audit_departments; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2585,6 +2745,20 @@ CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoff
 --
 
 CREATE TRIGGER audit_plant_batches AFTER INSERT OR DELETE OR UPDATE ON public.plant_batches FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: plant_phase_events audit_plant_phase_events; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_plant_phase_events AFTER INSERT OR DELETE OR UPDATE ON public.plant_phase_events FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: plants audit_plants; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_plants AFTER INSERT OR DELETE OR UPDATE ON public.plants FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -2910,11 +3084,67 @@ ALTER TABLE ONLY public.notifications
 
 
 --
+-- Name: plant_batches plant_batches_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: plant_batches plant_batches_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.plant_batches
     ADD CONSTRAINT plant_batches_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plant_phase_events plant_phase_events_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_phase_events
+    ADD CONSTRAINT plant_phase_events_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plant_phase_events plant_phase_events_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_phase_events
+    ADD CONSTRAINT plant_phase_events_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plants(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plant_phase_events plant_phase_events_to_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_phase_events
+    ADD CONSTRAINT plant_phase_events_to_room_id_fkey FOREIGN KEY (to_room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plants plants_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plants plants_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plants plants_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -3332,6 +3562,12 @@ CREATE POLICY audit_read ON public.audit_log FOR SELECT USING ((app.is_elevated(
 ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cultivars; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cultivars ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: departments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3412,6 +3648,13 @@ CREATE POLICY org_isolation ON public.calendar_weeks USING ((org_id = app.curren
 
 
 --
+-- Name: cultivars org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.cultivars USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: departments org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3430,6 +3673,20 @@ CREATE POLICY org_isolation ON public.handoffs USING ((org_id = app.current_org_
 --
 
 CREATE POLICY org_isolation ON public.plant_batches USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: plant_phase_events org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.plant_phase_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: plants org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.plants USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -3689,6 +3946,18 @@ CREATE POLICY org_isolation_select ON public.qc_chain_of_custody FOR SELECT USIN
 --
 
 ALTER TABLE public.plant_batches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: plant_phase_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.plant_phase_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: plants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.plants ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: task_progress progress_rw; Type: POLICY; Schema: public; Owner: -
@@ -3975,5 +4244,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict g0HJk4cV0Qt7ZcqHHd4dOzraAHE7Xoiq1rYAgvbBKOwzkggLMcDXZMSycK3GyiA
+\unrestrict SToTgltFFRWhaoQzgvuw7kAEmUJVGZQKuEgnpY7dQQoPncItqkwfZMRi30FJLqy
 

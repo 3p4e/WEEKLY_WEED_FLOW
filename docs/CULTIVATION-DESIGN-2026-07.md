@@ -169,6 +169,61 @@ because `backend/tests/test_audit_coverage.py` is default-deny and will fail the
 build otherwise. Any deliberate exemption goes in that test's `_EXEMPT` set with
 a stated reason.
 
+## 5a. Owner-confirmed identity scheme (2026-07-30) — now built as migration 0045
+
+The plan (`Final COMPLETE_Plan_interactive`, the HLVd eradication campaign) turned
+out to be a **decontamination** plan, not the plant-tracking spec — so it settles
+the room register and the biosecurity/quarantine gate, but the identity scheme
+came directly from the owner:
+
+- **Batch = one cultivar in one flowering room.** Usually a whole flowering room
+  is a single cultivar and therefore a single batch; occasionally a room holds
+  several cultivars, and then **each cultivar in that room is its own batch.**
+- **~2000 plants per flowering room.**
+- **Batch code** like `GP072501` — site prefix + period + sequence.
+- **Plant ID** `<clone-date>_<cultivar>_<seq>`, `seq` incrementing from 1 within
+  the batch.
+
+Migration `0045_cultivation_identity_lifecycle` implements the shape:
+
+- `cultivars` — the master that retires free-text `plant_batches.strain`.
+- `plant_batches` gains `code` (unique per org where present) and `cultivar_id`;
+  its `phase` vocabulary is widened to add `nursery` (split from `clone`) and the
+  terminal states `harvested`/`destroyed`.
+- `plants` — one row per plant, `plant_code` unique per org, `(batch_id, seq)`
+  unique. **It deliberately has NO `phase` column.**
+- `plant_phase_events` — dated, batch-level transition history; `plant_id` is set
+  only for a per-plant exception.
+
+**Why `plants` has no phase — this is the resolution of the §3 audit-lock
+constraint, now concrete.** With ~2000 plants per room, a phase column on the
+plant would make a room move veg→flower into 2000 UPDATEs, i.e. 2000 audited
+writes serialized under `fn_audit_row()`'s single global chain lock, freezing
+every other audited write in the database for that transaction. Instead the
+phase is the **batch's**: a whole-room move is one `plant_batches` update plus one
+`plant_phase_events` row. Per-plant rows change only on bounded exceptions
+(this plant culled/destroyed/harvested). Batch CREATION is still ~2000 inserts,
+so the **API must chunk** it into bounded transactions (25–50 plants) — the
+migration defines the shape, the API owns the chunking, and a chunked create is
+not atomic, so a partially-filled batch must be a defined, resumable state.
+
+Verified before commit: upgrade + downgrade clean on a real PG16, the
+alembic-head dump matches the regenerated `schema.tasks.sql` under CI
+normalization, and `test_audit_coverage` + `test_rls_coverage` pass — all three
+new tables carry the audit trigger and org-isolation RLS.
+
+## 5b. The decontamination campaign is a SEPARATE, earlier record (not built here)
+
+The plan is a live campaign: destruction 30.07, cleaning through 09.08, genetics
+13.08/19.08. It demands structured records this app should hold, and even names
+the QMS documents — **QASOP 032** (master plan) and **QASOP 032 A01** (per-room
+decontamination batch record), plus **QCSOP 024** (HLVd sampling/RT-qPCR). Those
+records — the 5-step signed room cycle with the white-cloth gate and clean-lock,
+the strip-verified bleach-bucket log, the swab/RT-qPCR verification that gates
+QA room release — are a distinct module from plant tracking and are **not** in
+0045. They are the natural next increment because they are fully specified and
+time-critical, but they precede the new genetics rather than tracking them.
+
 ## 6. Not yet decided
 
 - Whether per-plant identity applies to all phases or only from flower entry
