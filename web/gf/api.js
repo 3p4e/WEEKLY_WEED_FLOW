@@ -116,6 +116,42 @@ GF.API = {
   notifReadAll()       { return this._req('POST', '/notifications/read-all'); },
   notifDone(id)        { return this._req('POST', '/notifications/' + id + '/done'); },
   facility()               { return this._req('GET', '/facility'); },
+
+  // ── Cultivation (migration 0045) — cultivar master, coded batches, plants ──
+  // A batch is one cultivar in one flowering room (code like GP072501); plant
+  // ids are <clone-date>_<cultivar>_<seq>. cultivationGenPlants is CHUNKED and
+  // RESUMABLE server-side: call it again to finish an interrupted fill rather
+  // than restarting, and never expect it to be instant for a ~2000-plant room.
+  cultivars()                    { return this._req('GET',  '/cultivation/cultivars'); },
+  cultivarCreate(body)           { return this._req('POST', '/cultivation/cultivars', body); },
+  cultivarPatch(id, body)        { return this._req('PATCH','/cultivation/cultivars/' + id, body); },
+  cultivationBatches(active = true) {
+    return this._req('GET', '/cultivation/batches?active=' + (active ? 'true' : 'false'));
+  },
+  cultivationBatchCreate(body)   { return this._req('POST', '/cultivation/batches', body); },
+  cultivationGenPlants(batchId)  { return this._req('POST', '/cultivation/batches/' + batchId + '/plants'); },
+  cultivationPlants(batchId, q = {}) {
+    const u = new URLSearchParams(q).toString();
+    return this._req('GET', '/cultivation/batches/' + batchId + '/plants' + (u ? '?' + u : ''));
+  },
+  cultivationMove(batchId, body) { return this._req('POST', '/cultivation/batches/' + batchId + '/move', body); },
+
+  // ── Decontamination campaign (migration 0046) ──
+  // The 5 steps are ordered and rinse1_whitecloth must PASS before bleach is
+  // accepted (a soiled cloth reopens the wash), and release is QA-only against
+  // an all-negative swab set — the server rejects violations with 409, so the
+  // UI should surface `detail` rather than pre-guessing the rule.
+  deconCycles(campaign)          { return this._req('GET',  '/decon/cycles' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
+  deconCycle(id)                 { return this._req('GET',  '/decon/cycles/' + id); },
+  deconCycleCreate(body)         { return this._req('POST', '/decon/cycles', body); },
+  deconStep(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/steps', body); },
+  deconRelease(cycleId, body)    { return this._req('POST', '/decon/cycles/' + cycleId + '/release', body || {}); },
+  deconBleachLog(q = {})         { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/bleach-log' + (u ? '?' + u : '')); },
+  deconBleachAdd(body)           { return this._req('POST', '/decon/bleach-log', body); },
+  deconSwabs(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/swabs' + (u ? '?' + u : '')); },
+  deconSwabAdd(body)             { return this._req('POST', '/decon/swabs', body); },
+  deconSwabResult(id, body)      { return this._req('PATCH','/decon/swabs/' + id + '/result', body); },
+
   analytics(weeks = 8)     { return this._req('GET', '/reports/analytics?weeks=' + weeks); },
   auditPrep(programs)      { return this._req('GET', '/reports/audit-prep' + (programs ? '?programs=' + encodeURIComponent(programs) : '')); },
   // qms-api retired platform-wide — its legacy wrappers (qmsStats/qmsDocuments/qmsDocument/qmsHierarchy/qmsFamilies/qmsRagQuery/qmsDownloadUrl) were removed; QMS Studio (DocEngine) below is the successor.
