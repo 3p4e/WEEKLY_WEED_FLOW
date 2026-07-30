@@ -577,6 +577,30 @@ test('the form warns that the time is server-stamped', () => {
   });
 });
 
+test('a corridor-endpoint failure degrades to no panel, it does not fail the board', async () => {
+  // The cadence endpoint is newer than the cycles endpoint, so a frontend
+  // deployed ahead of its backend gets a 404 here. With a bare Promise.all that
+  // rejected the whole load and replaced the WORKING room-cycle board with an
+  // error page — a new panel taking out an existing board.
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.deconCycles = async () => ({ cycles: [{
+    id: 'c1', room_id: 'r1', room_name: 'Flowering 1.1', campaign: 'hlvd-2026-07',
+    status: 'in_progress', started_on: '2026-07-30', released_at: null,
+    steps: { dry_clean: null, detergent_wash: null, rinse1_whitecloth: null,
+             bleach: null, rinse2: null },
+    swabs: { pending: 0, negative: 0, positive: 0, inconclusive: 0 } }] });
+  w.GF.API.deconCorridors = async () => { throw new Error('404 Not Found'); };
+  await w.GF.WWF.loadDecon();
+  assert.equal(w.GF.WWF._decon.error, null, 'the board must not go to an error state');
+  assert.equal(w.GF.WWF._decon.cycles.length, 1, 'the cycles still load');
+  w.GF.state.view = 'decon';
+  const html = w.GF.views.decon();
+  assert.match(html, /Flowering 1\.1/, 'the room cycle still renders');
+  assert.doesNotMatch(html, /Corridor cleaning cadence/, 'and the panel is simply absent');
+  h.close();
+});
+
 test('a reader calling the corridor form directly is refused', async () => {
   const h = loadForms('QC_MGR');
   await h.window.GF.WWF.deconCorridorForm('r1');

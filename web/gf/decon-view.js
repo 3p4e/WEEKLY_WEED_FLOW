@@ -49,9 +49,15 @@
       // Both in one round trip: the corridor cadence is part of the same
       // campaign picture, and a second render pass would make the panel flash in
       // after the cycles.
+      //
+      // The corridor call CANNOT be allowed to fail the board. It is the newer
+      // endpoint of the two, so a frontend deployed ahead of its backend gets a
+      // 404 here — and with a bare Promise.all that 404 rejected the whole load
+      // and replaced the working room-cycle board with an error page. The cycles
+      // are the load-bearing half; the cadence panel degrades to absent.
       const [r, cor] = await Promise.all([
         GF.API.deconCycles(st.campaign || undefined),
-        GF.API.deconCorridors(st.campaign || undefined),
+        GF.API.deconCorridors(st.campaign || undefined).catch(() => null),
       ]);
       st.cycles = r.cycles || [];
       st.corridors = cor;
