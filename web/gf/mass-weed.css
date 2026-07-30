@@ -70,6 +70,65 @@
   --scanlines:repeating-linear-gradient(0deg, rgba(94,200,240,.05) 0 1px, transparent 1px 3px);
   --clip-panel:polygon(var(--chamfer) 0,100% 0,100% calc(100% - var(--chamfer)),calc(100% - var(--chamfer)) 100%,0 100%,0 var(--chamfer));
   --clip-notch:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
+
+  /* ── THE --mw-* DESIGN-SYSTEM TOKEN LAYER (dark) ──────────────────────
+     Verbatim from design/mass-weed-mockup/mass-weed.css's :root block —
+     the authored Mass Weed design system. Until now this app defined NONE
+     of these: it mapped Mass Effect colours onto the app's generic token
+     names (--bg/--ink/--primary) instead. The consequence was that any
+     screen authored against the design system (the mockups in
+     design/mass-weed-mockup/, and the QC screens the owner produced on
+     2026-07-30) rendered UNSTYLED here, because every var(--mw-…) resolved
+     to nothing.
+
+     These are values, not aliases, so they stay identical to the design
+     source and can be diffed against it. The generic tokens above remain
+     for the ~970 var() references already in app.css/views.css; components
+     migrate onto --mw-* incrementally rather than in one sweep. */
+
+  /* Base backdrop */
+  --mw-void:#030610; --mw-abyss:#050b18; --mw-deep:#071324;
+  --mw-hull:#0a1c33; --mw-hull-2:#0d2545;
+
+  /* Cyan / electric-blue system */
+  --mw-cyan:#5ec8f0; --mw-cyan-bright:#8fe3ff; --mw-cyan-dim:#3a9fd4;
+  --mw-cyan-deep:#1c6ca3; --mw-edge:#4db8e8; --mw-header:#a8e4fb;
+
+  /* Panel fills (translucent) */
+  --mw-panel:rgba(9,28,52,.72); --mw-panel-2:rgba(6,20,40,.85);
+  --mw-panel-in:rgba(4,14,28,.66); --mw-glass:rgba(30,90,150,.10);
+
+  /* Rarity / faction */
+  --mw-common:#cbab7e; --mw-common-bg1:#4b3f28; --mw-common-bg2:#2a2216;
+  --mw-uncommon:#7fe0a0; --mw-rare:#5ec8f0; --mw-rare-bg1:#123a5c; --mw-rare-bg2:#0a2038;
+  --mw-epic:#c89bf0; --mw-legendary:#f0b95e; --mw-selected:#e88a34;
+
+  /* Stat bar spectrum */
+  --mw-stat-hi:#6cf05a; --mw-stat-hi-2:#34c62c;
+  --mw-stat-mid:#ecec4a; --mw-stat-mid-2:#c9c522;
+  --mw-stat-lo:#ef4d4d; --mw-stat-lo-2:#c62222;
+  --mw-stat-track:rgba(3,12,24,.8);
+
+  /* Resource digits */
+  --mw-digit:#6ef06e; --mw-digit-glow:rgba(110,240,110,.55);
+
+  /* Text */
+  --mw-text:#cfe6f5; --mw-text-dim:#7fa3bd; --mw-text-faint:#4d6d87; --mw-ink:#eaf6ff;
+
+  /* Typography — the design's own stacks. The @import at the top of this
+     file already loads Titillium Web + Saira Condensed. */
+  --mw-font:'Titillium Web', system-ui, sans-serif;
+  --mw-font-cond:'Saira Condensed', 'Titillium Web', sans-serif;
+  --mw-track:.14em; --mw-track-wide:.28em;
+
+  /* Effects */
+  --mw-glow-cyan:0 0 12px rgba(94,200,240,.55), 0 0 2px rgba(143,227,255,.9);
+  --mw-glow-soft:0 0 20px rgba(58,159,212,.35);
+  --mw-inner-glow:inset 0 0 24px rgba(28,108,163,.25);
+  --mw-scan:repeating-linear-gradient(to bottom, rgba(94,200,240,.035) 0px, rgba(94,200,240,.035) 1px, transparent 1px, transparent 3px);
+
+  /* Chamfer sizes */
+  --mw-chamfer:14px; --mw-chamfer-sm:8px;
 }
 
 /* ═══════════════ 2 · LIGHT — "Cool Mist Glass" (mass-weed-light) ═══════════════ */
@@ -107,6 +166,41 @@
   --scanlines:repeating-linear-gradient(0deg, rgba(60,120,165,.028) 0 1px, transparent 1px 3px);
   --clip-panel:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
   --clip-notch:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
+
+  /* ── --mw-* DESIGN-SYSTEM TOKEN LAYER (light) ────────────────────────
+     Verbatim from design/mass-weed-mockup/mass-weed.css's
+     [data-theme="light"] block. ONLY the tokens the design actually
+     overrides for daylight are repeated here — everything else (rarity,
+     stat spectrum, typography, chamfers) inherits from the dark block
+     above, exactly as it does in the design source. Overriding more here
+     than the design does would silently fork the two. */
+
+  /* backdrop — cool mist */
+  --mw-void:#e7eef6; --mw-abyss:#eff5fb; --mw-deep:#dce8f3;
+  --mw-hull:#ccdcee; --mw-hull-2:#bad0e6;
+
+  /* cyan — darkened so it reads as ink/edge on white */
+  --mw-cyan:#1a7fb4; --mw-cyan-bright:#0d5c8a; --mw-cyan-dim:#4d97c2;
+  --mw-cyan-deep:#093f66; --mw-edge:#7bb8de; --mw-header:#0b5480;
+
+  /* translucent light glass */
+  --mw-panel:rgba(255,255,255,.76); --mw-panel-2:rgba(237,245,252,.88);
+  --mw-panel-in:rgba(255,255,255,.64); --mw-glass:rgba(120,170,215,.10);
+
+  /* ink */
+  --mw-text:#274a64; --mw-text-dim:#587892; --mw-text-faint:#93aabf; --mw-ink:#102c44;
+
+  /* digits — deeper green for contrast */
+  --mw-digit:#1c9a4d; --mw-digit-glow:rgba(28,154,77,.30);
+
+  /* stat track */
+  --mw-stat-track:rgba(176,202,224,.6);
+
+  /* softened effects */
+  --mw-glow-cyan:0 0 8px rgba(26,127,180,.25), 0 0 2px rgba(13,92,138,.4);
+  --mw-glow-soft:0 0 16px rgba(123,184,222,.22);
+  --mw-inner-glow:inset 0 0 24px rgba(150,192,228,.28);
+  --mw-scan:repeating-linear-gradient(to bottom, rgba(60,120,165,.028) 0px, rgba(60,120,165,.028) 1px, transparent 1px, transparent 3px);
 }
 
 /* ═══════════════ 3 · HUD CHROME (both mass-weed variants) ═══════════════ */
