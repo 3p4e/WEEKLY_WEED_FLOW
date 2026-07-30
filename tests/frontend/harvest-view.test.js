@@ -468,6 +468,45 @@ test('a clearance lookup that fails does NOT read as clear', () => {
   });
 });
 
+test('a stale clearance response cannot overwrite a newer pick', async () => {
+  /* Reproduces the race directly rather than through harvestForm()'s own
+     picker/DOM setup: two harvestClearance() calls are put in flight for two
+     different batches, and the OLDER one is made to resolve SECOND — the
+     out-of-order arrival the sequence guard exists for. Without the guard,
+     whichever response lands last always wins, even if it is stale. */
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.document.body.insertAdjacentHTML('beforeend',
+    '<input id="hv-c-batch" value="b1"><div id="hv-c-clearance"></div><div id="hv-c-override"></div>');
+
+  const pending = {};
+  w.GF.API.harvestClearance = (id) => new Promise((resolve) => { pending[id] = resolve; });
+
+  const firstCheck = w.GF.WWF.harvestClearanceCheck();
+  await Promise.resolve();
+  assert.ok(pending.b1, 'the first (b1) check must be in flight');
+
+  w.document.getElementById('hv-c-batch').value = 'b2';
+  const secondCheck = w.GF.WWF.harvestClearanceCheck();
+  await Promise.resolve();
+  assert.ok(pending.b2, 'the second (b2) check must be in flight');
+
+  pending.b2({ batch_id: 'b2', clear: true, blocking: [], rei_active: [] });
+  await secondCheck;
+  pending.b1({
+    batch_id: 'b1', clear: false, rei_active: [],
+    blocking: [{ ipm_id: 'i1', product: 'STALE PRODUCT', phi_days: 9,
+                 phi_clear_on: '2026-08-01', days_remaining: 2 }],
+  });
+  await firstCheck;
+
+  const box = w.document.getElementById('hv-c-clearance').innerHTML;
+  assert.match(box, /Clear to harvest/, 'the box must reflect b2, the current pick');
+  assert.doesNotMatch(box, /STALE PRODUCT/,
+    'the stale b1 response must not overwrite the newer pick');
+  h.close();
+});
+
 test('an active re-entry restriction is surfaced on the cut form even when the cut is clear', () => {
   const h = loadForms('CU_MGR');
   const w = h.window;

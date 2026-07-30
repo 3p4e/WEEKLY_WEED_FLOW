@@ -39,6 +39,10 @@
     loading: false, error: null,
     statusFilter: '',
     clearance: null,             // the clearance answer currently on the cut form
+    // Bumped by harvestClearanceCheck on every call, initialized to 0 (not
+    // left undefined) — `++undefined` is NaN, and NaN !== NaN is always true,
+    // which would make the staleness guard reject even the first-ever call.
+    _clearanceSeq: 0,
   };
 
   // Must stay in step with the CHECK constraints in migration 0051 and the
@@ -387,11 +391,21 @@
     const ovr = GF.$('hv-c-override');
     const batchId = ((GF.$('hv-c-batch') || {}).value || '');
     if (!box || !batchId) return;
+    // A sequence token, not an abort controller: onPick fires on every batch
+    // switch with no debounce, and two in-flight clearance lookups can resolve
+    // out of order (the request for batch A can outlive a later request for
+    // batch B). Without this, a stale response for a no-longer-selected batch
+    // can overwrite the box a newer pick already populated. Bumped BEFORE the
+    // await so this call's own token is fixed the instant it starts; checked
+    // after every await so a call that is no longer the latest just stops
+    // instead of rendering.
+    const mySeq = ++GF.WWF._harv._clearanceSeq;
     box.innerHTML = `<div style="color:var(--ink-3);font-size:11px">${AL(
       'Checking pre-harvest intervals…', 'Проверка на интервали пред жетва…')}</div>`;
     let c;
     try { c = await GF.API.harvestClearance(batchId); }
     catch (e) {
+      if (mySeq !== GF.WWF._harv._clearanceSeq) return; // a newer pick has since fired
       // A clearance lookup that fails must not silently look like "clear" —
       // that is the one wrong answer. Say it is unknown and let the server
       // refuse if it must.
@@ -401,6 +415,7 @@
       if (ovr) ovr.innerHTML = '';
       return;
     }
+    if (mySeq !== GF.WWF._harv._clearanceSeq) return; // a newer pick has since fired
     GF.WWF._harv.clearance = c;
     const rei = (c.rei_active || []).length
       ? `<div style="color:#E0A73E;font-size:11px;margin-top:6px">${GF.icon('shield', 'icon', '#E0A73E')}${AL(

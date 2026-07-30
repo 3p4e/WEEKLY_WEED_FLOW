@@ -37,6 +37,15 @@ than to unpick later. Deliberately NOT a trigger or CHECK: it spans two tables,
 and the alternative (a counter column on plant_batches) would be a second source
 of truth for a number already derivable. See migration 0048's docstring.
 
+The arithmetic alone is not enough under concurrency: `add_line` takes a
+batch-scoped `pg_advisory_xact_lock('headcount:{batch_id}')` before reading its
+sums, and `harvest.create_harvest`'s Gate 2 takes the identical lock before
+reading its own. Without it, a concurrent harvest and a waste line for the SAME
+batch — or two waste lines on two different manifests — can each read
+pre-commit sums under READ COMMITTED and both pass a check that is, together,
+false. The lock key must match harvest.py's exactly or the two never actually
+contend.
+
 GET /waste/reconciliation is the report that closes the loop: per batch, planned
 headcount vs plants declared destroyed vs plants still unaccounted for, and it
 flags the case that matters most — a batch CLOSED as destroyed with nothing ever
@@ -268,6 +277,15 @@ async def add_line(manifest_id: str, body: LineIn,
             if room_id is None and b["room_id"] is not None:
                 room_id = str(b["room_id"])
             if body.plant_qty:
+                # Batch-scoped lock — mirrors harvest.py's create_harvest Gate 2
+                # exactly (same key, same reasoning). Without it, a concurrent
+                # create_harvest or another add_line for THIS batch can each
+                # read pre-commit sums and jointly over-declare it; the lock
+                # key must match harvest.py's byte-for-byte or the two
+                # transactions serialize against different locks and never
+                # actually block each other.
+                await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
+                                f"headcount:{b['id']}")
                 # THE RECONCILIATION INVARIANT. Counts every line for this batch
                 # on every OTHER manifest — including drafts, because a draft that
                 # over-declares must be caught before it is sealed, not after.

@@ -14,6 +14,7 @@ Org isolation is not re-tested here: test_rls_coverage enumerates every public
 table and fails on any without RLS, so both new tables are covered the moment the
 migration lands, and test_rls pins the cross-org API behaviour once for the app.
 """
+import asyncio
 from datetime import date, timedelta
 
 from app.db import tasks_admin_pool
@@ -431,6 +432,49 @@ async def test_harvest_and_destruction_are_counted_against_the_same_batch(client
                                    json={"batch_id": b["id"], "plant_qty": 1}, headers=cu_h)
     assert more_waste.status_code == 409
     assert "harvested" in more_waste.json()["detail"]
+
+
+async def test_concurrent_harvest_and_destruction_do_not_jointly_over_declare(
+        client, admin_headers):
+    """THE race the headcount lock exists for. Sequential calls (the tests
+    above) only prove the ARITHMETIC is right; they cannot catch a locking gap
+    because they never actually contend. This fires a real create_harvest and a
+    real waste.add_line CONCURRENTLY (asyncio.gather over the same in-process
+    ASGI app, each on its own pool connection) against a batch that only has
+    room for one of the two to succeed.
+
+    Before the fix, add_line took no lock at all: it could read the pre-commit
+    sums while create_harvest's transaction was still open, see the check pass,
+    and commit — and create_harvest could do the same from its side — so BOTH
+    could succeed and the batch would end up over-declared. The org-scoped
+    genealogy lock create_harvest takes does not help here: it only serializes
+    concurrent HARVESTS against each other, and add_line never touches it."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "c228_h", "Flowering H27")
+    cv = await _cultivar(client, cu_h, "RACE", "Race")
+    b = await _batch(client, cu_h, room["id"], cv["id"], "GP-RACE", 10,
+                     phase_since=_days(30))
+    m = await client.post("/waste/manifests", json={
+        "manifest_code": "WM-RACE", "waste_type": "plant_material",
+        "reason": "routine_cull"}, headers=cu_h)
+    assert m.status_code == 201
+
+    harvest_res, waste_res = await asyncio.gather(
+        _harvest(client, cu_h, b["id"], "LOT-RACE", 6, 3000),
+        client.post(f"/waste/manifests/{m.json()['id']}/lines",
+                    json={"batch_id": b["id"], "plant_qty": 6}, headers=cu_h))
+
+    statuses = sorted([harvest_res.status_code, waste_res.status_code])
+    assert statuses == [201, 409], (
+        "a concurrent harvest and destruction line that jointly exceed the"
+        f" batch (6+6 > 10) must resolve to exactly one success, got {statuses}"
+        f" (harvest={harvest_res.status_code} body={harvest_res.text[:200]},"
+        f" waste={waste_res.status_code} body={waste_res.text[:200]})")
+
+    row = next(r for r in (await client.get("/cultivation/yield", headers=cu_h))
+               .json()["batches"] if r["code"] == "GP-RACE")
+    assert row["plants_harvested"] + row["plants_destroyed"] == 6, \
+        "exactly the winning request's 6 plants may be recorded, never both sixes"
 
 
 async def test_a_partial_canopy_pull_retires_no_plants(client, admin_headers):

@@ -12,6 +12,8 @@ every public table and fails on any without RLS enabled, so the two new tables
 are covered the moment the migration lands, and test_rls pins the cross-org API
 behaviour once for the whole app. A third copy of that scaffolding would drift.
 """
+import asyncio
+
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -280,6 +282,39 @@ async def test_over_declaring_a_batch_is_refused_across_manifests(client, admin_
     exact = await client.post(f"/waste/manifests/{m2['id']}/lines",
                               json={"batch_id": b["id"], "plant_qty": 40}, headers=cu_h)
     assert exact.status_code == 201, "declaring exactly the remainder must be allowed"
+
+
+async def test_concurrent_lines_on_different_manifests_do_not_jointly_over_declare(
+        client, admin_headers):
+    """The reconciliation invariant is checked per add_line call, so two lines
+    for the SAME batch on two DIFFERENT manifests never see each other's write
+    unless something serializes them — add_line took no lock at all before this
+    fix. Sequential calls (the test above) only prove the arithmetic; this
+    fires two real concurrent requests (asyncio.gather) against a batch that
+    only has room for one of the two lines to be accepted."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "c183_w", "Flowering 1.4")
+    cv = await _cultivar(client, cu_h, "RaceLines", "Race Lines")
+    b = await _batch(client, cu_h, room["id"], cv["id"], "GP072503", 10)
+    m1 = await _manifest(client, cu_h, "WM-RACEL1")
+    m2 = await _manifest(client, cu_h, "WM-RACEL2")
+
+    r1, r2 = await asyncio.gather(
+        client.post(f"/waste/manifests/{m1['id']}/lines",
+                    json={"batch_id": b["id"], "plant_qty": 6}, headers=cu_h),
+        client.post(f"/waste/manifests/{m2['id']}/lines",
+                    json={"batch_id": b["id"], "plant_qty": 6}, headers=cu_h))
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [201, 409], (
+        "two concurrent lines that jointly exceed the batch (6+6 > 10) on"
+        f" DIFFERENT manifests must resolve to exactly one success, got {statuses}")
+
+    total = 0
+    for man in (m1, m2):
+        detail = (await client.get(f"/waste/manifests/{man['id']}", headers=cu_h)).json()
+        total += sum(l["plant_qty"] or 0 for l in detail["lines"])
+    assert total == 6, "exactly the winning request's 6 plants may be recorded"
 
 
 async def test_a_batch_line_inherits_the_batch_room(client, admin_headers):

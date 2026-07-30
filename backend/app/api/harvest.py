@@ -45,7 +45,15 @@ THE FIVE GATES
      the batch's plant count, summed across EVERY harvest and EVERY waste
      manifest. Checking either register alone lets both be individually valid and
      jointly impossible — 2000 plants harvested and the same 2000 destroyed.
-     `waste.add_line` carries the mirror of this check for the same reason.
+     `waste.add_line` carries the mirror of this check for the same reason —
+     AND the mirror of the batch-scoped `pg_advisory_xact_lock` this gate takes
+     before reading its sums. The arithmetic alone is not enough: under READ
+     COMMITTED, two concurrent requests touching the same batch (a harvest and
+     a waste line, or two waste lines on different manifests) can each read
+     pre-commit sums and jointly over-declare it unless something actually
+     serializes them. The lock is keyed `headcount:{batch_id}` in both places —
+     it must be the identical key or the two transactions block on different
+     locks and never contend at all.
 
   3. YIELD ARITHMETIC. Dry output cannot exceed wet input; nothing gains mass in
      a dry room. Pre-checked here for a clean 409 with the numbers in it, and
@@ -549,6 +557,15 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
         # Gate 2 — the headcount invariant, across BOTH registers. Either one
         # alone can be satisfied while the two together are impossible.
         if body.plants_harvested:
+            # Batch-scoped lock, held for the rest of this transaction. The
+            # org-scoped genealogy lock taken above serializes concurrent
+            # create_harvest calls within an org, but says nothing about a
+            # concurrent waste.add_line for THIS batch — without this, the two
+            # can each read pre-commit sums under READ COMMITTED and jointly
+            # over-declare the batch. waste.add_line takes the identical lock,
+            # keyed off the same batch id, before its own sums.
+            await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
+                            f"headcount:{b['id']}")
             already_cut = await c.fetchval(
                 "SELECT COALESCE(sum(plants_harvested), 0) FROM harvests WHERE batch_id=$1",
                 b["id"]) or 0
