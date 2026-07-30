@@ -207,7 +207,13 @@ GF.calendar = { weeks: [], todayId: 0 };
   const start = new Date(monday); start.setDate(monday.getDate() - 4 * 7);  // 4 weeks back
   for (let i = 0; i < 14; i++) {
     const s = new Date(start); s.setDate(start.getDate() + i * 7);
-    const e = new Date(s); e.setDate(s.getDate() + 6);
+    // End of the SEVENTH day, not its midnight. `s` inherits 00:00:00.000 from
+    // the anchor Monday, so a plain +6 days put `e` at Sunday 00:00:00.000 and
+    // the `now <= e` test below went false for all but the first millisecond of
+    // Sunday — no week matched, todayId kept its initial 0, and the app opened
+    // four weeks in the past every Sunday. `end` is also what the date->week
+    // lookups elsewhere compare with `d <= w.end`, so they shared the bug.
+    const e = new Date(s); e.setDate(s.getDate() + 6); e.setHours(23,59,59,999);
     const num = Math.ceil(((s - new Date(s.getFullYear(),0,1)) / 86400000 + 1) / 7);
     GF.calendar.weeks.push({
       id: i, start: s, end: e, weekNum: num, monthIndex: s.getMonth(), year: s.getFullYear(),

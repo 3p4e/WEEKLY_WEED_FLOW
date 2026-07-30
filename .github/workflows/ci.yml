@@ -5,11 +5,40 @@ on:
   push:
     branches: [main]
 
-# All jobs run on the dedicated self-hosted runner (kvm4-wwf) on host
-# networking, so tests/migrations/e2e's Postgres service containers and e2e's
-# local nginx bind fixed host ports (5432, 8091) with no per-job VM isolation
-# to fall back on. A second in-flight run for the same ref would fight over
-# those ports, so cancel any superseded run for this ref before its jobs start.
+# ── The single self-hosted runner, and how it has already failed ──────────
+# There is exactly ONE registered runner: kvm4-wwf, a container (gh-runner-wwf)
+# on the KVM4 host. Every job below says `runs-on: self-hosted`, and that is not
+# a preference — GitHub-HOSTED minutes are unavailable on this account, so a job
+# targeting `ubuntu-latest` is never assigned a runner and therefore never runs
+# at all — it queues forever and reads as "in progress", not as an error. Any new
+# workflow in this repo must say self-hosted; treat a job that never starts as
+# the first thing to check for.
+#
+# KNOWN HAZARD, NOT FIXED HERE — runner self-update can delete its own bin/.
+# The runner agent updates itself in place. An update interrupted part-way (host
+# reboot, OOM kill, container restart) has already once left the runner's `bin/`
+# directory mass-deleted; the service then crash-looped with
+# `Runner.Listener: No such file or directory`. The reason that went unnoticed
+# for FIVE DAYS is the interaction with `cancel-in-progress` below: with no
+# runner available, jobs sat *queued* rather than failing, and each pending run
+# was then cancelled the moment the next push superseded it. The run list showed
+# a tidy column of cancellations — never a red X — so CI was silently dead while
+# looking merely busy.
+#
+# The real remediation lives on the HOST and cannot be expressed in this file:
+# re-register the runner with auto-update off (`./config.sh remove`, then
+# `./config.sh --url … --token … --disableupdate`) and upgrade it deliberately
+# instead, keep a restart policy on the gh-runner-wwf container, and alarm on
+# "no runner assigned" separately — because as shown above a queued-then-
+# cancelled run is indistinguishable from a legitimately superseded one.
+# NOTHING IN THIS FILE PINS THE RUNNER VERSION. This comment is the record of
+# the hazard and of where the fix has to be applied; it is not the fix.
+#
+# The runner uses HOST networking with the docker socket mounted, so
+# tests/docengine/migrations/e2e's Postgres service containers and e2e's local
+# nginx bind fixed host ports (5432, 8091) with no per-job VM isolation to fall
+# back on. A second in-flight run for the same ref would fight over those ports,
+# so cancel any superseded run for this ref before its jobs start.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -268,6 +297,54 @@ jobs:
             fi
             echo "$which: downgrade removed every table it created"
           done
+
+  web-unit:
+    name: Frontend unit suite (jsdom)
+    runs-on: self-hosted
+    timeout-minutes: 10
+    # DELIBERATELY NO `services:` BLOCK — this job needs no Postgres and so must
+    # not bind host port 5432. To be precise about the risk, because the sibling
+    # jobs show the naive version of this warning is wrong: there is ONE runner
+    # registration, so jobs execute SERIALLY and two jobs of the same run can
+    # never hold 5432 at once — which is exactly why tests, docengine, migrations
+    # and e2e can all declare `5432:5432` today and pass. The real collision is
+    # ACROSS concurrent runs on the same host, which the `ci-<ref>` concurrency
+    # group above only prevents per-ref: two different branches still overlap.
+    # Every needless binding widens that window, so this job takes none. This job
+    # also lives in ci.yml rather than its own workflow for the same reason — a
+    # separate workflow would sit outside that concurrency group entirely. If it
+    # ever does need a database, give it host port 5433.
+    #
+    # web/index.html is a no-build app: ~54 classic <script src> tags sharing a
+    # window.GF global, with no imports/exports and nothing to require(). The
+    # suite therefore loads the REAL web/gf/*.js sources as <script> elements in
+    # a jsdom window, each test naming the files it needs in dependency order —
+    # no logic is copied into the tests, so deleting a line from a source file
+    # turns a test red. jsdom is the only dependency; the runner is node --test.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same major as the e2e job: `node --test` and the assertions the suite
+          # relies on are the node 22 built-ins, so there is no framework to pin.
+          node-version: '22'
+      - name: Install jsdom
+        working-directory: tests/frontend
+        # `npm ci`, not `npm install`: it installs exactly the committed
+        # package-lock.json and hard-fails if the lockfile and package.json have
+        # drifted apart, so CI can never quietly test against a different jsdom
+        # than a developer does.
+        run: npm ci
+      - name: Run unit suite
+        working-directory: tests/frontend
+        # The suite pins TZ=Europe/Skopje itself (the facility timezone the
+        # backend hard-codes as settings.snapshot_tz) and asserts the zone
+        # actually resolved, because several helpers under test are only correct
+        # BECAUSE they read local date components rather than UTC ones — under
+        # TZ=UTC that distinction disappears and the tests would pass vacuously.
+        # If this step ever fails on the tzdata assertion, the runner image is
+        # missing zone data; that is an environment fix, not a test to relax.
+        run: npm test
 
   e2e:
     name: End-to-end (Playwright)

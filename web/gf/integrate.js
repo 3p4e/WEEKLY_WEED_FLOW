@@ -134,8 +134,18 @@ GF.WWF.buildCalendar = (weeks) => {
   // real weeks. Assigning the (empty) result before the length check would
   // wipe core.js's generated fallback and blank week navigation when /weeks
   // is empty or failed.
+  // calendar_weeks.starts_on/ends_on are DATE columns, so the API sends a bare
+  // 'YYYY-MM-DD'. `new Date('2026-08-02')` is parsed as UTC midnight, which in a
+  // UTC+2 facility is 02:00 LOCAL — so `now <= e` went false from 02:00 onward
+  // every Sunday, no week matched, and todayId fell back to 0. Because /weeks is
+  // re-sorted ascending above, 0 is the OLDEST week in the table, so the app
+  // opened on ancient data every Sunday afternoon. Parse both as explicit LOCAL
+  // times and make the end inclusive of its whole day; `end` is also what the
+  // `d <= w.end` date->week lookups compare against, so they are fixed with it.
+  const dayOnly = (v) => String(v).slice(0, 10);
   const mapped = ws.map((w,i) => {
-    const s = new Date(w.starts_on), e = new Date(w.ends_on);
+    const s = new Date(dayOnly(w.starts_on) + 'T00:00:00');
+    const e = new Date(dayOnly(w.ends_on) + 'T23:59:59.999');
     if (now >= s && now <= e) todayId = i;
     return { id:i, realId:w.id, start:s, end:e, weekNum:w.iso_week, monthIndex:s.getMonth(), year:s.getFullYear(),
       label:`${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}`, short:`W${w.iso_week}` };
