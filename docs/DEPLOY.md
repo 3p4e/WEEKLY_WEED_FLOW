@@ -1899,3 +1899,41 @@ the snapshot.
 > `sed "s|$TOKEN|REDACTED|g"`, and `shred -u` it plus `docker builder prune`
 > afterwards. Confirm with
 > `docker history --no-trunc IMG | grep -c x-access-token` → `0`.
+
+## 2026-07-30 — Sunday week-selection fix — frontend v109 (no migration)
+
+Frontend-only, no schema change, no snapshot required. Shipped commit
+`9afda0f` with all **9** CI jobs green on that exact SHA (the new
+`Frontend unit suite (jsdom)` job included) — compensating control 1 satisfied
+before the build.
+
+Fixes a bug that was live and recurred **every Sunday**: a week's `end` was its
+seventh day at *midnight*, so `now >= s && now <= e` was false for all of Sunday
+and no week matched. `integrate.js` is the path that actually runs, and there the
+bare `YYYY-MM-DD` from the `ends_on` DATE column parses as UTC midnight = 02:00
+local at UTC+2, so from 02:00 each Sunday `todayId` fell back to 0 — the OLDEST
+week in the table, because the rows are re-sorted ascending. The app opened on
+ancient data and an export taken then exported that week. `core.js`'s fallback
+generator had the same flaw independently.
+
+Found by writing the frontend unit suite, not by a report from the floor.
+
+`sw.js` VERSION bumped 3.72.0 → **3.73.0** so clients replace the cached shell
+instead of serving the buggy one back.
+
+Deployed: frontend `v108` → **`v109`** (`docker compose up -d --no-deps
+frontend`; backend and scheduler untouched on `v78`). Verified: `/` 200,
+`/health/ready` 200 with both databases ok, `sw.js` serving `wwf-shell-v3.73.0`
+publicly, `gf/integrate.js` containing the fix, and `/tests/package.json`
+falling through to the SPA rather than serving the new unit suite.
+
+**Rollback** = restore `compose.yaml.bak-v109-sundayfix` (v108) and
+`docker compose up -d --no-deps frontend`. No migration ran, so there is nothing
+else to reverse.
+
+> The frontend unit suite deliberately lives at repo-root `tests/frontend/`, NOT
+> under `web/`. `web/Dockerfile` ships the web root with
+> `COPY . /usr/share/nginx/html` and then deletes only the strays it knows about
+> — an allowlist-by-deletion, so anything new under `web/` is served publicly by
+> default. A suite placed there would have been fetchable at `/tests/`. The
+> deploy check above exists to keep proving that.
