@@ -97,6 +97,9 @@ concurrency:
 # else needs it.
 permissions:
   contents: read
+  # actions:read is what lets the CI-green gate below query the check runs for
+  # the dispatched SHA. `contents: read` alone returns 403 on that endpoint.
+  actions: read
 
 jobs:
   deploy:
@@ -139,6 +142,72 @@ jobs:
       HEALTH_URL:     https://wwf.srv1231216.hstgr.cloud/health/ready
 
     steps:
+      - name: Gate — CI must be green on the exact commit being deployed
+        # docs/DEPLOY.md declares four compensating controls "mandatory, not
+        # optional, on every deploy", the first being "CI green on the exact
+        # commit being deployed — the full pipeline is now the only
+        # pre-production gate there is". wwf_mass is gone, so there is no staging
+        # tier behind which a red commit could be caught; this step is that
+        # control, and without it the workflow would happily build, migrate and
+        # swap a commit whose CI failed or never ran at all — including the known
+        # case where the runner is dead and no job was ever assigned, which
+        # cancel-in-progress makes look like a tidy list of superseded runs
+        # rather than a failure. See ci.yml's header for that outage.
+        #
+        # Deliberately NOT skippable by an input. A gate with a bypass flag is a
+        # suggestion, and this one exists because the only other gate was
+        # decommissioned. To deploy a commit whose CI is not green, fix CI.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          IN_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          SHA="${IN_SHA:-$GITHUB_SHA}"
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          sha = os.environ.get("IN_SHA") or os.environ["GITHUB_SHA"]
+          repo = os.environ["REPO"]
+          url = f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs?per_page=100"
+          req = urllib.request.Request(url)
+          req.add_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
+          req.add_header("Accept", "application/vnd.github+json")
+          try:
+              runs = json.load(urllib.request.urlopen(req, timeout=30))["check_runs"]
+          except urllib.error.HTTPError as e:
+              # Fail CLOSED. An unreadable gate is not an open one — that is how a
+              # control quietly stops being a control.
+              print(f"::error::cannot read check runs for {sha}: HTTP {e.code} "
+                    f"{e.read().decode()[:300]}")
+              sys.exit(1)
+
+          # A commit with NO checks is the dangerous case, not the safe one: it is
+          # exactly what a dead runner produces. Treat absence as failure.
+          if not runs:
+              print(f"::error::{sha} has NO check runs at all — CI never ran for this "
+                    "commit (a dead runner produces exactly this). Refusing to deploy.")
+              sys.exit(1)
+
+          bad = [r for r in runs
+                 if r["status"] != "completed"
+                 or r["conclusion"] not in ("success", "skipped", "neutral")]
+          rows = ["| check | status | conclusion |", "| --- | --- | --- |"]
+          for r in sorted(runs, key=lambda x: x["name"]):
+              rows.append(f"| {r['name']} | {r['status']} | {r['conclusion'] or '-'} |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"## CI gate for `{sha}`\n\n" + "\n".join(rows) + "\n\n")
+
+          if bad:
+              for r in bad:
+                  print(f"::error::{r['name']}: status={r['status']} "
+                        f"conclusion={r['conclusion']}")
+              print(f"::error::{len(bad)} of {len(runs)} checks are not green on {sha} "
+                    "— refusing to deploy. Fix CI rather than bypassing this gate.")
+              sys.exit(1)
+          print(f"CI gate passed: {len(runs)} checks green on {sha}")
+          PY
+
       - name: Runner toolchain preflight
         # The whole CI side of this deploy is python3 + stdlib. `sudo apt-get`
         # is used here because ci.yml's e2e job already installs nginx-light the

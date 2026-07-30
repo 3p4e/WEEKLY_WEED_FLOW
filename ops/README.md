@@ -82,10 +82,13 @@ install -m 0600 /dev/null /etc/wwf-watchdog.env
 #   WWF_WATCHDOG_GH_TOKEN_FILE=/etc/wwf-watchdog.token
 ```
 
-**systemd timer (preferred).** Prefer it over cron for one specific reason: a
-cron job that silently stops running is invisible, whereas
-`systemctl list-timers` shows the last and next elapse, so the watchdog's *own*
-death is observable — which matters more here than anywhere else.
+**systemd timer.** Its advantage is that `systemctl list-timers` shows the last
+and next elapse, so the watchdog's *own* death is observable — which matters more
+here than anywhere else, since a cron job that silently stops running is
+invisible. Its disadvantage is that it has **no built-in alert channel at all**
+(see the comment in the unit below); cron gets one free via `MAILTO`. Neither is
+"preferred" unconditionally: choose systemd for observability plus an explicit
+alert path, or cron for a working alert path out of the box.
 
 `/etc/systemd/system/wwf-watchdog.service`:
 
@@ -100,7 +103,28 @@ After=docker.service
 Type=oneshot
 EnvironmentFile=-/etc/wwf-watchdog.env
 ExecStart=/usr/local/sbin/wwf-watchdog.sh
+# WITHOUT one of these, THIS INSTALL ALERTS NOBODY. Type=oneshot exiting 1 only
+# marks the unit failed; systemd has no MAILTO equivalent, so a FAIL lands in the
+# journal and stops there. That is strictly worse than the cron alternative
+# below, which mails on a non-zero exit for free — so if you pick systemd you
+# must add the alert path yourself. Two ways, pick one:
+#
+#   1. Set WWF_WATCHDOG_WEBHOOK in /etc/wwf-watchdog.env. The script POSTs a JSON
+#      summary on FAIL and now distinguishes sent / rejected / unreachable, so a
+#      rotated webhook URL is visible instead of silently swallowed.
+#   2. Add an OnFailure unit, e.g. OnFailure=wwf-watchdog-alert@%n.service, where
+#      that template mails or pages. Uncomment the line below once it exists —
+#      naming a unit that does not exist makes the failure path itself fail.
+#
+# OnFailure=wwf-watchdog-alert@%n.service
 ```
+
+> ⚠️ **Verify the alert path before trusting the install.** Run
+> `WWF_WATCHDOG_WEBHOOK=... /usr/local/sbin/wwf-watchdog.sh --only runner
+> --webhook-always` and confirm the output says `webhook=sent http=2xx`. If it
+> says `rejected` or `failed`, the watchdog is running and reaching nobody, which
+> is the failure mode this whole file exists to prevent. A monitor whose alert
+> channel has never been exercised is not a monitor.
 
 `/etc/systemd/system/wwf-watchdog.timer`:
 
