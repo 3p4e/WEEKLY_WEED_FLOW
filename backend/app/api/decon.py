@@ -26,6 +26,8 @@ THE TWO GATES THE PLAN INSISTS ON, ENFORCED HERE, NOT LEFT TO DISCIPLINE:
      A pending or positive swab blocks it outright — "no room is released on
      a pending result."
 """
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -49,6 +51,11 @@ _CONTROL_MATERIALS = ("leaf", "root", "surface_scraping", "other")
 # one number would silently under-dose the blades, which carry HLVd's
 # primary transmission route.
 _TOOL_TARGET_PPM = 10000
+# The SURFACE specification, half the tool figure. Named rather than left as the
+# bare `5000` it used to be inline: 0047's whole point is that surfaces and tools
+# are separate targets, and a loose literal is how the two get conflated — the
+# failure mode being an under-dosed blade, which carries HLVd's primary route.
+_SURFACE_TARGET_PPM = 5000
 
 
 class CycleIn(BaseModel):
@@ -296,7 +303,7 @@ async def record_bleach(body: BleachIn, user: dict = Depends(require_role(*_CLEA
             user["id"], body.note)
         # Below-spec is not an error (below-target buckets are the #1 risk the
         # plan calls out) — it is logged and surfaced via the feed, not blocked.
-        if body.ppm_strip_reading < 5000:
+        if body.ppm_strip_reading < _SURFACE_TARGET_PPM:
             await safe_emit(c, user, verb="decon_bleach_below_spec", object_type="room",
                             object_id=body.room_id, recipients=[],
                             params={"room": room["name"], "ppm": body.ppm_strip_reading})
@@ -508,3 +515,171 @@ async def record_tool_check(body: ToolLogIn,
             "ppm_strip_reading": row["ppm_strip_reading"],
             "target_ppm": _TOOL_TARGET_PPM,
             "checked_at": row["checked_at"].isoformat()}
+
+
+# ── corridor cleaning cadence (§25, migration 0049) ──────────────────────────
+#
+# A LOG ANSWERS "WAS IT CLEANED"; THE PLAN ASKS "OFTEN ENOUGH, AND AFTER THE
+# EVENTS THAT DEMAND IT". §25 requires the cultivation corridors cleaned after
+# every waste movement, every 4 hours, and at shift changeover. So the write
+# endpoint records which of those three rules a cleaning discharges, and the read
+# endpoint derives whether the cadence is currently being met — a bare list of
+# timestamps would leave that arithmetic to whoever is reading the board at 3am.
+#
+# The interval is DERIVED at read time rather than stored as a due-date, because a
+# stored due-date is a second source of truth that goes stale the moment someone
+# cleans early, and because a due-date row implies something will act on it.
+# Nothing here enforces the cadence: software cannot make anyone mop a corridor,
+# and a board that implied otherwise would show a false green.
+
+_CORRIDOR_TRIGGERS = ("waste_movement", "four_hourly", "shift_change", "other")
+_CORRIDOR_INTERVAL_MIN = 240   # the plan's 4 hours, in ONE place
+
+
+class CorridorCleaningIn(BaseModel):
+    room_id: str
+    trigger: str
+    manifest_id: str | None = None
+    campaign: str | None = Field(default=None, max_length=120)
+    ppm_strip_reading: int | None = Field(default=None, ge=0, le=200000)
+    note: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/corridors")
+async def corridor_cadence(user: dict = Depends(require_role(*ELEVATED_ROLES)),
+                           campaign: str | None = Query(None)):
+    """Per corridor: when it was last cleaned, how long ago, and whether that is
+    inside the 4-hour interval. Plus the join neither table can do alone — a
+    DISPOSED waste manifest with no corridor cleaning recorded after it.
+
+    Corridors are identified by the room register, not by a hardcoded list: the
+    facility's corridors are C146/C152/C155/C169/C170, but inventing that list
+    here would silently ignore a corridor added later. A room counts as a corridor
+    if its name says so, which is how the register itself distinguishes them —
+    `rooms` has no corridor `kind` (they are `other`), and adding one would be a
+    schema change to carry a label this query can already read."""
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT r.id, r.code, r.name, r.name_mk,"
+            " (SELECT max(cc.cleaned_at) FROM corridor_cleanings cc"
+            "  WHERE cc.room_id = r.id"
+            "    AND ($1::text IS NULL OR cc.campaign = $1)) AS last_cleaned,"
+            " (SELECT count(*) FROM corridor_cleanings cc"
+            "  WHERE cc.room_id = r.id"
+            "    AND ($1::text IS NULL OR cc.campaign = $1)) AS cleanings"
+            " FROM rooms r"
+            " WHERE r.is_active AND (r.name ILIKE 'corridor%' OR r.name_mk ILIKE 'коридор%')"
+            " ORDER BY r.sort, r.code", campaign)
+        # A disposed manifest with no cleaning that CITES IT and happened after it.
+        #
+        # STRICT ON PURPOSE. An earlier draft also accepted any cleaning with
+        # trigger='waste_movement', on the theory that one sweep covers whatever
+        # moved. That is a hole: a cleaning attesting to movement A, timed after
+        # movement B, would silently discharge B, and nobody ever attested to B.
+        # It also made the mandatory manifest citation pointless — if any
+        # movement-triggered sweep clears every movement, there is no reason to ask
+        # which one it followed. "After EVERY waste movement" means per movement,
+        # so one sweep following two movements is two records. That is the record
+        # the plan asks for, and it is one extra form submission.
+        #
+        # A mutation removing the loose clause survived the test suite, which is
+        # how the hole was found: nothing failed, because nothing had a reason to
+        # depend on the weaker reading.
+        open_movements = await c.fetch(
+            "SELECT m.id, m.manifest_code, m.disposed_at"
+            " FROM waste_manifests m"
+            " WHERE m.status = 'disposed' AND m.disposed_at IS NOT NULL"
+            "   AND ($1::text IS NULL OR m.campaign = $1)"
+            "   AND NOT EXISTS ("
+            "     SELECT 1 FROM corridor_cleanings cc"
+            "     WHERE cc.manifest_id = m.id AND cc.cleaned_at >= m.disposed_at)"
+            " ORDER BY m.disposed_at", campaign)
+    now = datetime.now(timezone.utc)
+    corridors = []
+    for r in rows:
+        last = r["last_cleaned"]
+        mins = None if last is None else int((now - last).total_seconds() // 60)
+        corridors.append({
+            "room_id": str(r["id"]), "code": r["code"],
+            "name": r["name"], "name_mk": r["name_mk"],
+            "last_cleaned": last.isoformat() if last else None,
+            "minutes_since": mins,
+            "cleanings": r["cleanings"],
+            # Never cleaned is overdue, not "unknown": during the campaign a
+            # corridor with no record is the case the requirement is aimed at.
+            #
+            # `>=`, not `>`: "cleaned every 4 hours" makes it DUE at the four-hour
+            # mark, not a minute after. The boundary was undefined behaviour until
+            # a mutation flipping the operator survived the suite, so it is now
+            # decided in one direction and pinned at 239/240/241.
+            "overdue": mins is None or mins >= _CORRIDOR_INTERVAL_MIN,
+        })
+    return {
+        "interval_minutes": _CORRIDOR_INTERVAL_MIN,
+        "corridors": corridors,
+        "movements_without_cleaning": [
+            {"manifest_id": str(m["id"]), "manifest_code": m["manifest_code"],
+             "disposed_at": m["disposed_at"].isoformat()}
+            for m in open_movements],
+    }
+
+
+@router.get("/corridors/{room_id}/cleanings")
+async def list_corridor_cleanings(room_id: str,
+                                  user: dict = Depends(require_role(*ELEVATED_ROLES)),
+                                  limit: int = Query(200, ge=1, le=2000)):
+    uuid_or_404(room_id, "Room not found")
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT cc.id, cc.trigger, cc.manifest_id, cc.campaign,"
+            " cc.ppm_strip_reading, cc.cleaned_at, cc.note, m.manifest_code"
+            " FROM corridor_cleanings cc"
+            " LEFT JOIN waste_manifests m ON m.id = cc.manifest_id"
+            " WHERE cc.room_id=$1 ORDER BY cc.cleaned_at DESC LIMIT $2", room_id, limit)
+    return {"room_id": room_id, "cleanings": [
+        {"id": str(r["id"]), "trigger": r["trigger"],
+         "manifest_id": str(r["manifest_id"]) if r["manifest_id"] else None,
+         "manifest_code": r["manifest_code"], "campaign": r["campaign"],
+         "ppm_strip_reading": r["ppm_strip_reading"],
+         "cleaned_at": r["cleaned_at"].isoformat(), "note": r["note"]}
+        for r in rows]}
+
+
+@router.post("/corridors/cleanings", status_code=201)
+async def record_corridor_cleaning(body: CorridorCleaningIn,
+                                   user: dict = Depends(require_role(*_CLEAN_WRITERS))):
+    """Record one corridor clean and which of §25's rules it discharges.
+
+    A `waste_movement` clean MUST cite the manifest it followed — otherwise it
+    cannot discharge "after every waste movement", because there is nothing
+    tying it to a movement. The schema enforces the same thing; this is here so
+    the refusal carries a sentence instead of a constraint name."""
+    if body.trigger not in _CORRIDOR_TRIGGERS:
+        raise HTTPException(422, f"trigger must be one of: {', '.join(_CORRIDOR_TRIGGERS)}")
+    if body.trigger == "waste_movement" and body.manifest_id is None:
+        raise HTTPException(
+            422, "a cleaning triggered by a waste movement must cite the manifest it followed")
+    async with rls(user) as c:
+        room = await _room_or_422(c, body.room_id)
+        if body.manifest_id is not None:
+            uuid_or_422(body.manifest_id, "Unknown manifest")
+            m = await c.fetchrow(
+                "SELECT id FROM waste_manifests WHERE id=$1", body.manifest_id)
+            if m is None:
+                raise HTTPException(422, "Unknown manifest")
+        row = await c.fetchrow(
+            "INSERT INTO corridor_cleanings(org_id, room_id, campaign, trigger,"
+            " manifest_id, ppm_strip_reading, cleaned_by, note)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], body.room_id, body.campaign, body.trigger,
+            body.manifest_id, body.ppm_strip_reading, user["id"], body.note)
+        # Below the surface specification is a finding, not a refusal — same
+        # reasoning as the bleach and tool logs above.
+        if body.ppm_strip_reading is not None and body.ppm_strip_reading < _SURFACE_TARGET_PPM:
+            await safe_emit(c, user, verb="decon_corridor_below_spec", object_type="room",
+                            object_id=body.room_id, recipients=[],
+                            params={"room": room["name"], "ppm": body.ppm_strip_reading,
+                                    "target": _SURFACE_TARGET_PPM})
+    return {"id": str(row["id"]), "room_id": body.room_id, "trigger": row["trigger"],
+            "cleaned_at": row["cleaned_at"].isoformat(),
+            "interval_minutes": _CORRIDOR_INTERVAL_MIN}

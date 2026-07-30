@@ -15,7 +15,8 @@
    Same monkey-patch/view pattern as the other *-view.js files. */
 
 (function () {
-  GF.WWF._decon = { cycles: null, loading: false, error: null, campaign: '' };
+  GF.WWF._decon = { cycles: null, loading: false, error: null, campaign: '',
+                    corridors: null };
 
   // The plan's §12 sequence, in order. Labels are bilingual per house style.
   const STEPS = [
@@ -45,8 +46,15 @@
     const st = GF.WWF._decon;
     st.loading = true; st.error = null;
     try {
-      const r = await GF.API.deconCycles(st.campaign || undefined);
+      // Both in one round trip: the corridor cadence is part of the same
+      // campaign picture, and a second render pass would make the panel flash in
+      // after the cycles.
+      const [r, cor] = await Promise.all([
+        GF.API.deconCycles(st.campaign || undefined),
+        GF.API.deconCorridors(st.campaign || undefined),
+      ]);
       st.cycles = r.cycles || [];
+      st.corridors = cor;
     } catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'decon') GF.render.all();
@@ -143,6 +151,167 @@
     </div>`;
   };
 
+  // ── corridor cleaning cadence (§25, migration 0049) ─────────────────────
+  //
+  // The server derives `overdue` and the interval; this panel renders them and
+  // does NOT recompute the 4 hours, because two copies of an interval is how the
+  // board and the record come to disagree about what "overdue" means.
+  //
+  // It sits at the TOP of the board during a campaign, above the room cycles.
+  // The cadence is the thing that lapses silently — a room cycle is a visible
+  // piece of work someone is doing, an unswept corridor is the absence of one.
+
+  const TRIGGERS = [
+    { v: 'four_hourly',    en: 'Four-hourly round', mk: 'Четиричасовен циклус' },
+    { v: 'shift_change',   en: 'Shift changeover',  mk: 'Промена на смена' },
+    { v: 'waste_movement', en: 'After a waste movement', mk: 'По движење на отпад' },
+    { v: 'other',          en: 'Other',             mk: 'Друго' },
+  ];
+  const trigLbl = (v) => { const o = TRIGGERS.find(t => t.v === v); return o ? AL(o.en, o.mk) : v; };
+  const roomName = (r) => (GF.state.lang === 'mk' && r.name_mk) ? r.name_mk : r.name;
+
+  // "241 minutes" is not how anyone thinks about a 4-hourly round.
+  const sinceLbl = (mins) => {
+    if (mins == null) return AL('never', 'никогаш');
+    if (mins < 60) return `${mins} ${AL('min ago', 'мин.')}`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return `${h}h${m ? ' ' + m + 'm' : ''} ${AL('ago', 'претходно')}`;
+  };
+
+  const corridorPanel = () => {
+    const cor = GF.WWF._decon.corridors;
+    if (!cor || !(cor.corridors || []).length) return '';
+    const rows = cor.corridors.map(c => {
+      const col = c.overdue ? '#E5484D' : '#2BE8A0';
+      const btn = canClean()
+        ? `<button class="btn btn-sm" onclick="GF.WWF.deconCorridorForm('${c.room_id}')">
+            ${AL('Record clean', 'Запиши чистење')}</button>`
+        : '';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0${c.overdue ? ';background:rgba(229,72,77,.06)' : ''}">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex:none"></span>
+        <strong style="flex:1;font-size:12px">${GF.esc(roomName(c))}</strong>
+        <span style="color:${col};font-size:11px;min-width:110px;text-align:right">${
+          GF.esc(sinceLbl(c.minutes_since))}</span>
+        <span style="color:var(--ink-3);font-size:11px;min-width:60px;text-align:right">${
+          c.cleanings} ${AL('logged', 'запис.')}</span>
+        ${btn}
+      </div>`;
+    }).join('');
+    const late = cor.corridors.filter(c => c.overdue).length;
+    // ONE derivation of the interval, used by both the subtitle and the summary.
+    // A hardcoded "4-hourly" caption above a computed "past the 2-hour interval"
+    // line is the same two-copies-of-a-rule problem in miniature, and the caption
+    // is the half a reader would believe.
+    const hrs = Math.round((cor.interval_minutes || 240) / 60);
+    const head = late
+      ? `<div style="color:#E5484D;font-size:12px;margin-bottom:6px">${AL(
+          `${late} of ${cor.corridors.length} corridors are past the ${hrs}-hour interval.`,
+          `${late} од ${cor.corridors.length} коридори го надминаа интервалот од ${hrs} часа.`)}</div>`
+      : `<div style="color:#2BE8A0;font-size:12px;margin-bottom:6px">${AL(
+          `All ${cor.corridors.length} corridors are inside the ${hrs}-hour interval.`,
+          `Сите ${cor.corridors.length} коридори се во интервалот од ${hrs} часа.`)}</div>`;
+    // The cross-module breach: something left the site and no corridor has been
+    // cleaned since. Listed by manifest, because "after every waste movement"
+    // names the movement, and a count alone would not say which.
+    const moves = (cor.movements_without_cleaning || []);
+    const movesBlock = moves.length
+      ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+          <div style="color:#E5484D;font-size:12px;margin-bottom:4px">${AL(
+            `${moves.length} waste movement(s) left the site with no corridor cleaning recorded after them:`,
+            `${moves.length} движење(а) на отпад без запишано чистење на коридор потоа:`)}</div>
+          ${moves.map(m => `<div style="font-size:11px;color:var(--ink-3)">
+            ${GF.esc(m.manifest_code)} · ${GF.esc(String(m.disposed_at).slice(0, 16).replace('T', ' '))}
+          </div>`).join('')}
+        </div>`
+      : '';
+    return `<div class="card" style="padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <strong style="flex:1">${AL('Corridor cleaning cadence', 'Циклус на чистење на коридори')}</strong>
+        <span style="color:var(--ink-3);font-size:11px">${AL(
+          `after every waste movement · ${hrs}-hourly · shift changeover`,
+          `по секое движење на отпад · на ${hrs} часа · промена на смена`)}</span>
+      </div>
+      ${head}${rows}${movesBlock}
+    </div>`;
+  };
+
+  GF.WWF.deconCorridorForm = async (roomId) => {
+    if (!canClean()) return;
+    // Manifests are offered so an "after a waste movement" clean can cite the
+    // movement it followed — the server refuses that trigger without one, and
+    // making the operator go and find a code by hand is how the rule gets
+    // recorded as 'other' instead.
+    let manifests = [];
+    try { manifests = (await GF.API.wasteManifests({ status: 'disposed' })).manifests || []; }
+    catch (e) { manifests = []; }   // the register is optional context, not a blocker
+    GF.WWF._ensureModal('dc-cor-modal', '440px');
+    GF.$('dc-cor-modal-title').textContent = AL('Record corridor cleaning', 'Запиши чистење на коридор');
+    const manOpts = [{ v: '', label: AL('— none —', '— ништо —') }]
+      .concat(manifests.map(m => ({ v: m.id, label: m.manifest_code,
+                                    sub: String(m.disposed_at || '').slice(0, 16).replace('T', ' ') })));
+    GF.$('dc-cor-modal-body').innerHTML = `
+      <div class="field"><label>${AL('What prompted this clean', 'Што го предизвика чистењето')}</label>
+        ${GF.selectField('dc-cor-trigger', { value: 'four_hourly',
+          title: AL('Trigger', 'Причина'),
+          options: TRIGGERS.map(t => ({ v: t.v, label: AL(t.en, t.mk) })),
+          onPick: (v) => GF.WWF._deconCorridorSync(v) })}</div>
+      <div class="field" id="dc-cor-man-field"><label>${AL('Waste movement', 'Движење на отпад')}</label>
+        ${GF.selectField('dc-cor-manifest', { value: '', title: AL('Waste movement', 'Движење на отпад'),
+          options: manOpts, searchable: true })}
+        <div id="dc-cor-man-hint" style="color:var(--ink-3);font-size:11px;margin-top:3px"></div></div>
+      <div class="field"><label>${AL('Free-chlorine strip reading (ppm, optional)', 'Читање на лентата (ppm, опционално)')}</label>
+        <input id="dc-cor-ppm" type="number" min="0" max="200000" step="50" placeholder="${TARGET_PPM}"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="dc-cor-note" maxlength="500"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'The time is stamped by the server, not entered here — a cleaning that can be backdated satisfies the cadence on paper only.',
+        'Времето го внесува серверот, не се внесува тука — запис што може да се смени наназад ја задоволува обврската само на хартија.')}
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-cor-save"
+          onclick="GF.WWF.deconCorridorSave('${roomId}')">${GF.t('save')}</button>
+      </div>`;
+    GF.WWF._deconCorridorSync('four_hourly');
+    GF.openModal('dc-cor-modal');
+  };
+
+  // GF.selectField renders a HIDDEN input and GF.pickSel assigns .value directly,
+  // firing no change event, so onPick is the only hook that runs.
+  GF.WWF._deconCorridorSync = (trigger) => {
+    const hint = GF.$('dc-cor-man-hint');
+    if (!hint) return;
+    hint.textContent = trigger === 'waste_movement'
+      ? AL('Required: "after every waste movement" needs the movement it followed.',
+           'Задолжително: „по секое движење на отпад" бара кое движење.')
+      : AL('Optional for this trigger.', 'Опционално за оваа причина.');
+    hint.style.color = trigger === 'waste_movement' ? 'var(--red)' : 'var(--ink-3)';
+  };
+
+  GF.WWF.deconCorridorSave = (roomId) => GF.once('dc-cor-save', async () => {
+    const trigger = (GF.$('dc-cor-trigger') || {}).value;
+    const manifestId = ((GF.$('dc-cor-manifest') || {}).value || '') || null;
+    // Checked here as well as server-side so the operator is told what is
+    // missing while the form is still open and the answer is still to hand.
+    if (trigger === 'waste_movement' && !manifestId) {
+      GF.toast(AL('Pick the waste movement this clean followed',
+                  'Изберете кое движење на отпад е чистено потоа'), 'error');
+      return;
+    }
+    const ppmRaw = ((GF.$('dc-cor-ppm') || {}).value || '').trim();
+    try {
+      await GF.API.deconCorridorClean({
+        room_id: roomId, trigger, manifest_id: manifestId,
+        campaign: GF.WWF._decon.campaign || 'hlvd-2026-07',
+        ppm_strip_reading: ppmRaw === '' ? null : parseInt(ppmRaw, 10),
+        note: ((GF.$('dc-cor-note') || {}).value || '').trim() || null });
+      GF.closeModal('dc-cor-modal');
+      GF.toast(AL('Corridor cleaning recorded — ' + trigLbl(trigger),
+                  'Запишано чистење — ' + trigLbl(trigger)), 'success');
+      await GF.WWF.loadDecon();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
   GF.views.decon = () => {
     const st = GF.WWF._decon;
     if (!st.cycles && !st.loading && !st.error) GF.WWF.loadDecon();
@@ -155,15 +324,19 @@
     if (st.loading && !st.cycles) return head + `<div class="ntf-empty">${AL('Loading…', 'Вчитување…')}</div>`;
     if (st.error) return head + `<div class="ntf-empty">${GF.esc(st.error)}</div>`;
     const cycles = st.cycles || [];
+    // The corridor panel renders even with no room cycles: the cadence runs
+    // throughout the campaign, including before the first room cycle is started
+    // and after the last one is released.
+    const corridors = corridorPanel();
     if (!cycles.length) {
-      return head + `<div class="ntf-empty">${AL(
+      return head + corridors + `<div class="ntf-empty">${AL(
         'No room cycles yet. Start one per room — every room passes the full 5-step cycle.',
         'Нема циклуси. Почнете по еден за секоја соба — секоја поминува полн циклус од 5 чекори.')}</div>`;
     }
     const released = cycles.filter(c => c.status === 'released').length;
     const summary = `<div style="margin-bottom:10px;color:var(--ink-3);font-size:12px">
       ${released}/${cycles.length} ${AL('rooms released', 'соби ослободени')}</div>`;
-    return head + summary + cycles.map(cycleCard).join('');
+    return head + corridors + summary + cycles.map(cycleCard).join('');
   };
 
   // ── actions ───────────────────────────────────────────────────────────────

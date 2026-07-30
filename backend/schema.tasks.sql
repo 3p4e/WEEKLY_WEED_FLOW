@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict GmjA7KmPz36mmM9b11Q2TOH86pHoZQRA8vOuAtbyhIPaeyKyVrVkbHF0rK2uGzZ
+\restrict jVSelgSnSm7bYJPqLUBm4b0Twnym72C4dV7DUIDH6xX8uHagfvY3O9zuHafpNc9
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -201,6 +201,30 @@ CREATE TABLE public.calendar_weeks (
 );
 
 ALTER TABLE ONLY public.calendar_weeks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: corridor_cleanings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.corridor_cleanings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    campaign text,
+    trigger text NOT NULL,
+    manifest_id uuid,
+    ppm_strip_reading integer,
+    cleaned_at timestamp with time zone DEFAULT now() NOT NULL,
+    cleaned_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT corridor_cleanings_movement_cites_manifest_check CHECK (((trigger <> 'waste_movement'::text) OR (manifest_id IS NOT NULL))),
+    CONSTRAINT corridor_cleanings_ppm_check CHECK (((ppm_strip_reading IS NULL) OR (ppm_strip_reading >= 0))),
+    CONSTRAINT corridor_cleanings_trigger_check CHECK ((trigger = ANY (ARRAY['waste_movement'::text, 'four_hourly'::text, 'shift_change'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.corridor_cleanings FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1874,6 +1898,14 @@ ALTER TABLE ONLY public.calendar_weeks
 
 
 --
+-- Name: corridor_cleanings corridor_cleanings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.corridor_cleanings
+    ADD CONSTRAINT corridor_cleanings_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cultivars cultivars_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2536,6 +2568,20 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: corridor_cleanings_manifest_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX corridor_cleanings_manifest_idx ON public.corridor_cleanings USING btree (manifest_id) WHERE (manifest_id IS NOT NULL);
+
+
+--
+-- Name: corridor_cleanings_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX corridor_cleanings_org_room_idx ON public.corridor_cleanings USING btree (org_id, room_id, cleaned_at DESC);
+
+
+--
 -- Name: decon_bleach_log_org_room_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3096,6 +3142,13 @@ CREATE TRIGGER audit_calendar_weeks AFTER INSERT OR DELETE OR UPDATE ON public.c
 
 
 --
+-- Name: corridor_cleanings audit_corridor_cleanings; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_corridor_cleanings AFTER INSERT OR DELETE OR UPDATE ON public.corridor_cleanings FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: cultivars audit_cultivars; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3473,6 +3526,22 @@ ALTER TABLE ONLY public.ai_pins
 
 ALTER TABLE ONLY public.ai_pins
     ADD CONSTRAINT ai_pins_week_id_fkey FOREIGN KEY (week_id) REFERENCES public.calendar_weeks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: corridor_cleanings corridor_cleanings_manifest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.corridor_cleanings
+    ADD CONSTRAINT corridor_cleanings_manifest_id_fkey FOREIGN KEY (manifest_id) REFERENCES public.waste_manifests(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: corridor_cleanings corridor_cleanings_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.corridor_cleanings
+    ADD CONSTRAINT corridor_cleanings_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -4098,6 +4167,12 @@ CREATE POLICY audit_read ON public.audit_log FOR SELECT USING ((app.is_elevated(
 ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: corridor_cleanings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.corridor_cleanings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cultivars; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4217,6 +4292,13 @@ CREATE POLICY org_isolation ON public.ai_pins USING (((org_id = app.current_org_
 --
 
 CREATE POLICY org_isolation ON public.calendar_weeks USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: corridor_cleanings org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.corridor_cleanings USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -4884,5 +4966,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GmjA7KmPz36mmM9b11Q2TOH86pHoZQRA8vOuAtbyhIPaeyKyVrVkbHF0rK2uGzZ
+\unrestrict jVSelgSnSm7bYJPqLUBm4b0Twnym72C4dV7DUIDH6xX8uHagfvY3O9zuHafpNc9
 

@@ -101,6 +101,9 @@ async def purge_org(org_id) -> None:
                   # come before either. The lines->manifest edge is CASCADE, but
                   # both are listed: this is a per-org DELETE, not a DROP, and
                   # relying on the cascade would leave the intent implicit.
+                  # corridor_cleanings cites rooms AND waste_manifests (both
+                  # RESTRICT), so it precedes the manifests as well as the rooms.
+                  "corridor_cleanings",
                   "waste_manifest_lines", "waste_manifests",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",

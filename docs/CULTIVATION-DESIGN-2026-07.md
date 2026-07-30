@@ -1,8 +1,8 @@
 # Cultivation department — design record (2026-07-30)
 
 **Status: migrations 0045–0047 are LIVE in production** (backend v79 / frontend
-v110, 2026-07-30 — see `docs/DEPLOY.md`). **0048 and the two new boards are built
-and tested but NOT deployed.** This began as a pre-design record written before
+v110, 2026-07-30 — see `docs/DEPLOY.md`). **0048, 0049 and the two new boards are
+built and tested but NOT deployed.** This began as a pre-design record written before
 the CEO's plan arrived, and the analysis in §1–§4 is kept as written because it is
 what the design was reasoned from — but §1's "no schema" framing is historical
 now. What actually exists:
@@ -13,6 +13,7 @@ now. What actually exists:
 | **0046** | decontamination campaign — signed room cycle, bleach log, swab release gate (§5b) |
 | **0047** | frozen positive controls + tool-sterilisation log |
 | **0048** | destruction / waste manifest — witnessed disposal + batch reconciliation (§5d) |
+| **0049** | corridor cleaning **cadence** — trigger-classified, joined to waste movements (§5e) |
 | API | `app/api/cultivation.py`, `app/api/decon.py`, `app/api/waste.py` |
 | UI | `web/gf/cultivation-view.js` (identity board), `web/gf/decon-view.js` (decon board), `web/gf/waste-view.js` (destruction register) |
 | Adherence | see the requirement-by-requirement table in §5c, including what is **not** built |
@@ -338,6 +339,81 @@ test intended to catch it; two early mutation attempts were silent no-ops (a
 quoting mismatch), which is why the mutation harness now refuses to run a
 mutation whose pattern is absent.
 
+## 5e. Corridor cleaning cadence (migration 0049)
+
+§25 requires the cultivation corridors (C146/C152/C155/C169/C170) cleaned **after
+every waste movement, every 4 hours, and at shift changeover** during the
+campaign. That is a *cadence* requirement, and a cadence requirement is not
+satisfied by a log: a log answers "was it cleaned", the requirement asks "was it
+cleaned OFTEN ENOUGH, and after the specific events that demand it". The whole
+design follows from that distinction.
+
+**The trigger is a column, not free text.** Without it the four-hourly rule and
+the after-a-movement rule are indistinguishable in the data, so a shift that moved
+waste four times and swept four times looks identical to one that swept on the
+clock and never after a movement — and only the second is a breach.
+
+**A `waste_movement` clean must cite the manifest it followed** — enforced in both
+the row (CHECK) and the API. Without the link it cannot discharge "after every
+waste movement", because nothing ties it to a movement. This only became possible
+once 0048 made the movements records, which is why the two migrations belong
+together.
+
+**The cadence is DERIVED at read time**, not stored as a due-date and not driven
+by a scheduler row. A stored due-date is a second source of truth that goes stale
+the moment someone cleans early, and a due-date row implies something will act on
+it. The 4-hour interval lives in exactly one place (`_CORRIDOR_INTERVAL_MIN`) and
+is *reported*, never enforced: software cannot make anyone mop a corridor, and a
+board that implied otherwise would show a false green.
+
+**Corridors come from the room register, not a hardcoded list.** A literal
+C146/C152/... list in the query would silently ignore a corridor added later —
+the failure mode of every embedded facility list. `rooms` has no corridor `kind`
+(they are `other`), so the query reads the name in either language.
+
+`GET /decon/corridors` returns, per corridor, when it was last cleaned, how long
+ago, and whether that is inside the interval — plus
+`movements_without_cleaning`: **disposed waste manifests with no corridor cleaning
+recorded after them.** Two properties of that join are load-bearing and each has
+its own test:
+
+- *Never cleaned is overdue, not unknown.* During a campaign a corridor with no
+  record is precisely the case the requirement is aimed at; reporting it as blank
+  would let it sit unnoticed beside a green row.
+- *An earlier movement's sweep does not discharge a later movement.* Movement A is
+  disposed, the corridor is swept citing A, then B is disposed and nothing is
+  swept — B is still a breach. This is what makes the `cleaned_at >= disposed_at`
+  comparison load-bearing, and the first version of the test file did **not**
+  cover it: the earlier clean it used was a four-hourly one whose trigger fails
+  the condition anyway, so deleting the time comparison changed nothing and the
+  mutation survived. The test that catches it was written from that finding.
+
+`cleaned_at` is server-stamped and deliberately not client-settable — a crew that
+can backdate its own cleaning satisfies the cadence on paper only. A below-spec
+strip reading is recorded rather than refused, the same reasoning as the bleach
+and tool logs: a refused entry is one the crew simply does not make, and an
+unlogged weak bucket is invisible.
+
+**Two more findings came out of mutation testing, and both changed the code rather
+than the tests:**
+
+- The join originally also accepted *any* cleaning with
+  `trigger='waste_movement'`, on the theory that one sweep covers whatever moved.
+  That is a hole — a sweep attesting to movement A, timed after movement B, would
+  silently discharge B — and it made the mandatory manifest citation pointless.
+  Removing the loose clause made a mutation fail nothing, which is how the hole
+  surfaced: no test depended on the weaker reading because the weaker reading was
+  not what anyone wanted. "After EVERY waste movement" now means per movement, so
+  one physical sweep after two movements is two attestations.
+- The overdue boundary at exactly 240 minutes was undefined — a mutation flipping
+  `>` to `>=` survived. It is now `>=` (cleaned every 4 hours makes it *due* at the
+  four-hour mark, not a minute after) and pinned at 239/240/241.
+
+Tested with 16 backend tests (`tests/test_corridors.py`) and 13 frontend tests
+(appended to `tests/frontend/decon-view.test.js`). 17 mutations applied one at a
+time; the three that survived each pointed at a real defect rather than a missing
+assertion, and all three were fixed in the code.
+
 ## 5c. Plan-adherence status (2026-07-30)
 
 What the campaign plan asks for, and whether the software now holds it. Kept
@@ -358,7 +434,7 @@ honest on purpose — the gaps matter more than the coverage.
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
 | Cultivation board a grower can actually use | **built 2026-07-30** — `web/gf/cultivation-view.js`: cultivar registry, coded batches, chunked/resumable plant-id generation, whole-batch phase moves, paginated plant roster. 29 unit tests (`tests/frontend/cultivation-view.test.js`), ten mutations verified to fail the intended test |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **built 2026-07-30** — migration 0048 + `app/api/waste.py` + `web/gf/waste-view.js`: header/lines, the draft→sealed→witnessed→disposed ladder, the two-person witness rule, and per-batch reconciliation incl. the closed-as-destroyed-but-never-manifested flag (§5d) |
-| Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |
+| Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **built 2026-07-30** — migration 0049 + `/decon/corridors` + a panel on the decon board. A *cadence* record, not a log: trigger-classified, derived overdue against a single interval constant, and joined to 0048's movements so a disposal with nothing swept after it is surfaced (§5e) |
 | AHU filter pull/refit record (§18) | **NOT built** |
 | Disinfection-mat refill + strip verification (§20) | **NOT built** |
 | Contact plates (drying/curing) and sentinel bioassay (§27) | **NOT built** |

@@ -151,6 +151,14 @@ GF.API = {
   deconSwabs(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/swabs' + (u ? '?' + u : '')); },
   deconSwabAdd(body)             { return this._req('POST', '/decon/swabs', body); },
   deconSwabResult(id, body)      { return this._req('PATCH','/decon/swabs/' + id + '/result', body); },
+  // Corridor cleaning CADENCE (migration 0049), not a plain log: the response
+  // carries `interval_minutes`, a derived `overdue` per corridor, and
+  // `movements_without_cleaning` — disposed waste manifests with no corridor
+  // cleaning recorded after them. Read the flags; do not recompute the interval
+  // client-side, or the two copies will disagree about what "overdue" means.
+  deconCorridors(campaign)       { return this._req('GET',  '/decon/corridors' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
+  deconCorridorCleanings(roomId) { return this._req('GET',  '/decon/corridors/' + roomId + '/cleanings'); },
+  deconCorridorClean(body)       { return this._req('POST', '/decon/corridors/cleanings', body); },
 
   // ── Destruction / waste manifests (migration 0048) ──
   // A manifest climbs draft -> sealed -> witnessed -> disposed and each rung is a

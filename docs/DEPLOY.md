@@ -2044,7 +2044,7 @@ on *both* new images.
 
 ---
 
-## Pending, NOT deployed — cultivation board, destruction register, migration 0048
+## Pending, NOT deployed — cultivation board, destruction register, corridor cadence (0048 + 0049)
 
 Built and tested on `claude/weekly-read-flow-setup-yft7if`, deliberately **not
 promoted**: production promotion is owner-gated, and this needs an explicit
@@ -2055,10 +2055,13 @@ go-ahead. Production is still backend `v79` / frontend `v110`, tasks head `0047`
 | | |
 |---|---|
 | `backend/alembic_tasks/versions/0048_destruction_waste_manifest.py` | `waste_manifests` + `waste_manifest_lines`, purely additive |
+| `backend/alembic_tasks/versions/0049_corridor_cleaning_cadence.py` | `corridor_cleanings`, purely additive |
 | `backend/app/api/waste.py` | the four gates + the reconciliation report |
+| `backend/app/api/decon.py` | `+GET /decon/corridors` (cadence), `+POST /decon/corridors/cleanings` |
 | `web/gf/cultivation-view.js` | the cultivation identity board — the module was API-only |
 | `web/gf/waste-view.js` | the destruction register |
-| `web/sw.js` | `wwf-shell-v3.76.0`, both new files precached, **and an API_RE fix** |
+| `web/gf/decon-view.js` | `+` the corridor cadence panel at the top of the board |
+| `web/sw.js` | `wwf-shell-v3.77.0`, both new files precached, **and an API_RE fix** |
 | `web/nginx.conf` | `waste` added — **and `handoffs`, which fixes a live bug** |
 
 ### Two live-production bugs fixed here, neither of them new features
@@ -2126,19 +2129,45 @@ Verified locally against a real PG16:
 
 **Test evidence**
 
-- 14 backend tests (`backend/tests/test_waste.py`) against a real Postgres.
-- 26 + 29 frontend tests for the two new boards, plus 3 for the drift detector;
-  **184 frontend tests green** in total.
-- Twelve backend and nineteen frontend mutations applied one at a time; each
-  failed the test intended to catch it, and each source was restored
-  byte-identical afterwards. Two early mutation attempts were silent no-ops from
-  a quote mismatch — the harness now refuses to run a mutation whose pattern is
-  absent, so a no-op can no longer masquerade as a surviving mutant.
+- 15 backend tests for the waste register (`backend/tests/test_waste.py`) and 16
+  for the corridor cadence (`backend/tests/test_corridors.py`), against a real
+  Postgres. The full backend suite passes; CI confirmed it green on the pushed
+  head before the corridor work was added.
+- **208 frontend tests green** in total — 31 for the destruction register, 29 for
+  the cultivation board, 13 for the corridor panel, 5 for the route drift
+  detector.
+- 41 mutations applied one at a time. Most failed the test intended to catch
+  them. **Four survived, and each one was a real defect rather than a missing
+  assertion**, so the code changed rather than the test: a live batch reported as
+  a reconciliation discrepancy, a per-plant control the roster's blocklist did not
+  name, a corridor-cleaning join loose enough that a sweep citing one movement
+  discharged another, and an undefined overdue boundary at exactly 240 minutes.
+- Two early mutation attempts were silent no-ops from a quote mismatch. The
+  harness now refuses to run a mutation whose pattern is absent, so a no-op can
+  no longer masquerade as a surviving mutant — which matters, because the
+  survivors are the findings.
 - Every inline handler across both boards and their nine modals verified to
   resolve to a real function (offline, in jsdom).
 
+### Corridor cleaning cadence (0049) — same window, same reasoning
+
+§25 wants the corridors cleaned after every waste movement, 4-hourly, and at
+shift changeover, which is operative *during* the 30.07-01.08 destruction window.
+It is a **cadence** record rather than a log: `GET /decon/corridors` derives
+last-cleaned, minutes-since and `overdue` per corridor from one interval constant,
+and joins 0048's disposed manifests to report **movements with no corridor
+cleaning recorded after them**. The interval is reported, never enforced —
+software cannot make anyone mop a corridor, and a board that implied otherwise
+would show a false green. `cleaned_at` is server-stamped and not client-settable,
+because a crew that can backdate its own record satisfies the cadence on paper.
+
+Same additive/exact-rollback verification as 0048: `upgrade head` reaches `0049`,
+`downgrade 0048` leaves a schema byte-identical to a freshly built 0048, and the
+regenerated `schema.tasks.sql` matches `alembic upgrade head` with no real removed
+lines (only pg_dump's random `\restrict` nonce differs).
+
 **When promoted, the order is:** snapshot both databases → `alembic -n tasks
-upgrade head` (0047 → 0048) → build + swap backend and scheduler → build + swap
+upgrade head` (0047 → 0049) → build + swap backend and scheduler → build + swap
 frontend → verify each new route returns **401 through nginx, not 404** (a 200-only
 smoke test cannot tell "wired and auth-gated" from "missing") → confirm `sw.js`
-publicly serves `wwf-shell-v3.76.0`.
+publicly serves `wwf-shell-v3.77.0`.

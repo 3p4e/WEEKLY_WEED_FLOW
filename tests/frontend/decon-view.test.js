@@ -237,8 +237,15 @@ function loadForms(role) {
   w.GF.openModal = (id) => { w.__modals.push(id); };
   w.GF.closeModal = (id) => { w.__closed.push(id); };
   w.GF.t = (k) => k;
-  w.GF.selectField = (id, cfg) =>
-    '<input type="hidden" id="' + id + '" value="' + (cfg.value || '') + '">';
+  // The real GF.selectField renders a HIDDEN input and GF.pickSel assigns .value
+  // directly — it fires NO change event, so onPick is the only hook that runs.
+  // The cfg is recorded so a test can drive that callback, which is the only way
+  // to catch a regression back to addEventListener('change').
+  w.__selCfg = {};
+  w.GF.selectField = (id, cfg) => {
+    w.__selCfg[id] = cfg;
+    return '<input type="hidden" id="' + id + '" value="' + (cfg.value || '') + '">';
+  };
   // GF.once wraps every submit for re-entry safety; here it just runs the body.
   w.GF.once = async (btnId, fn) => fn();
   w.GF.API.deconStep       = async (cid, body) => { w.__step = [cid, body]; return {}; };
@@ -357,5 +364,223 @@ test('swab results are reachable whenever swabs exist, so pending is not a dead 
   }));
   assert.match(html, /deconSwabList\('r1','c1'\)/,
     'a pending swab must be openable for result entry');
+  h.close();
+});
+
+/* ── Corridor cleaning cadence (§25, migration 0049) ───────────────────────
+   A log answers "was it cleaned"; the plan asks "often enough, and after the
+   events that demanded it". So what is pinned here is the panel's negative
+   cases: a corridor never cleaned reads as OVERDUE rather than blank, the
+   interval comes from the SERVER rather than being recomputed here, and a waste
+   movement with nothing cleaned after it is named by manifest — a count alone
+   would not say which movement went unswept.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const COR = (over = {}) => ({
+  room_id: 'r1', code: 'c146', name: 'Corridor · C146', name_mk: 'Коридор · C146',
+  last_cleaned: '2026-07-30T09:00:00Z', minutes_since: 15, cleanings: 4,
+  overdue: false, ...over,
+});
+
+function renderCorridors(h, payload) {
+  h.window.GF.WWF._decon.cycles = [];
+  h.window.GF.WWF._decon.corridors = payload;
+  h.window.GF.state.view = 'decon';
+  return h.window.GF.views.decon();
+}
+
+test('a corridor never cleaned reads as OVERDUE, not as a blank row', () => {
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR({ last_cleaned: null, minutes_since: null, cleanings: 0, overdue: true })],
+    movements_without_cleaning: [],
+  });
+  assert.match(html, /never/, 'the absence of a record must be stated, not left empty');
+  assert.match(html, /1 of 1 corridors are past the 4-hour interval/);
+  h.close();
+});
+
+test('the interval comes from the server, not a second copy in the view', () => {
+  // If the view hardcoded 4 hours, a server that changed the rule would be
+  // silently overruled by the board.
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 120,
+    corridors: [COR({ overdue: true, minutes_since: 200 })],
+    movements_without_cleaning: [],
+  });
+  assert.match(html, /past the 2-hour interval/);
+  assert.doesNotMatch(html, /4-hour/);
+  h.close();
+});
+
+test('overdue is taken from the server flag, not recomputed from the minutes', () => {
+  // Deliberately inconsistent input: 500 minutes but overdue false. The view must
+  // follow the server, because the server owns the rule — and it must do so in
+  // EVERY place it renders the state, not just the summary line. A first version
+  // of this test only checked the banner, so a mutation that recomputed the row
+  // colour client-side survived.
+  const h = load('CU_MGR');
+  let html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR({ minutes_since: 500, overdue: false })],
+    movements_without_cleaning: [],
+  });
+  assert.match(html, /All 1 corridors are inside/, 'the summary follows the flag');
+  assert.match(html, /background:#2BE8A0/, 'and so does the row dot');
+  assert.doesNotMatch(html, /background:#E5484D/);
+  assert.doesNotMatch(html, /rgba\(229,72,77,\.06\)/, 'and the row highlight');
+
+  // The inverse: 5 minutes but overdue true. Nothing may quietly overrule it.
+  html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR({ minutes_since: 5, overdue: true })],
+    movements_without_cleaning: [],
+  });
+  assert.match(html, /1 of 1 corridors are past/);
+  assert.match(html, /background:#E5484D/);
+  assert.match(html, /rgba\(229,72,77,\.06\)/);
+  h.close();
+});
+
+test('minutes are rendered as hours and minutes, not a raw count', () => {
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR({ minutes_since: 265, overdue: true })],
+    movements_without_cleaning: [],
+  });
+  assert.match(html, /4h 25m/, '"265 minutes" is not how a 4-hourly round is thought about');
+  h.close();
+});
+
+test('a waste movement with no cleaning after it is named by manifest', () => {
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR()],
+    movements_without_cleaning: [
+      { manifest_id: 'm1', manifest_code: 'WM-2026-0731-01', disposed_at: '2026-07-31T14:20:00Z' },
+      { manifest_id: 'm2', manifest_code: 'WM-2026-0731-02', disposed_at: '2026-07-31T16:05:00Z' },
+    ],
+  });
+  assert.match(html, /2 waste movement\(s\) left the site with no corridor cleaning/);
+  assert.match(html, /WM-2026-0731-01/);
+  assert.match(html, /WM-2026-0731-02/, 'each movement is listed — a count would not say which');
+  h.close();
+});
+
+test('the corridor panel renders even with no room cycles', () => {
+  // The cadence runs throughout the campaign, including before the first room
+  // cycle is started and after the last is released.
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240, corridors: [COR({ overdue: true })], movements_without_cleaning: [],
+  });
+  assert.match(html, /Corridor cleaning cadence/);
+  assert.match(html, /No room cycles yet/, 'and the empty-cycles message still shows');
+  h.close();
+});
+
+test('a reader sees the cadence and is offered no clean button', () => {
+  const h = load('QC_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240, corridors: [COR()], movements_without_cleaning: [],
+  });
+  assert.match(html, /Corridor cleaning cadence/, 'the cadence is readable by any elevated role');
+  assert.doesNotMatch(html, /deconCorridorForm/, 'recording a clean is a cleaning-crew action');
+  h.close();
+});
+
+test('corridor names are HTML-escaped', () => {
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240,
+    corridors: [COR({ name: '<img src=x onerror=alert(1)>' })],
+    movements_without_cleaning: [
+      { manifest_id: 'm1', manifest_code: '"><script>bad()</script>', disposed_at: 'x' }],
+  });
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.doesNotMatch(html, /<script>bad\(\)/);
+  assert.match(html, /&lt;img src=x/);
+  h.close();
+});
+
+test('no corridors in the register means no panel, rather than an empty card', () => {
+  const h = load('CU_MGR');
+  const html = renderCorridors(h, {
+    interval_minutes: 240, corridors: [], movements_without_cleaning: [] });
+  assert.doesNotMatch(html, /Corridor cleaning cadence/);
+  h.close();
+});
+
+test('a waste-movement clean is refused without its manifest, before the request', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.wasteManifests = async () => ({ manifests: [] });
+  w.GF.API.deconCorridorClean = async (b) => { w.__cor = b; return {}; };
+  return w.GF.WWF.deconCorridorForm('r1').then(async () => {
+    w.document.getElementById('dc-cor-trigger').value = 'waste_movement';
+    w.document.getElementById('dc-cor-manifest').value = '';
+    await w.GF.WWF.deconCorridorSave('r1');
+    assert.equal(w.__cor, undefined,
+      '"after every waste movement" cannot be discharged by a clean citing no movement');
+    assert.ok(w.__toasts.some(t => /waste movement/i.test(t[0])));
+    h.close();
+  });
+});
+
+test('the manifest hint flips to required through onPick, the only hook that fires', () => {
+  // GF.selectField renders a HIDDEN input and GF.pickSel assigns .value directly,
+  // firing no change event. A change listener here would never run.
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.wasteManifests = async () => ({ manifests: [] });
+  return w.GF.WWF.deconCorridorForm('r1').then(() => {
+    const hint = w.document.getElementById('dc-cor-man-hint');
+    assert.match(hint.textContent, /Optional/);
+    w.__selCfg['dc-cor-trigger'].onPick('waste_movement');
+    assert.match(hint.textContent, /Required/);
+    h.close();
+  });
+});
+
+test('a clean sends the trigger and a null strip reading when blank', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.wasteManifests = async () => ({ manifests: [] });
+  w.GF.API.deconCorridorClean = async (b) => { w.__cor = b; return {}; };
+  return w.GF.WWF.deconCorridorForm('r1').then(async () => {
+    w.document.getElementById('dc-cor-trigger').value = 'shift_change';
+    w.document.getElementById('dc-cor-ppm').value = '';
+    await w.GF.WWF.deconCorridorSave('r1');
+    assert.equal(w.__cor.room_id, 'r1');
+    assert.equal(w.__cor.trigger, 'shift_change');
+    assert.equal(w.__cor.manifest_id, null);
+    assert.equal(w.__cor.ppm_strip_reading, null, 'a blank reading is null, not NaN');
+    // cleaned_at is never sent — the server stamps it, so a backdated clean
+    // cannot satisfy the cadence on paper.
+    assert.equal('cleaned_at' in w.__cor, false);
+    h.close();
+  });
+});
+
+test('the form warns that the time is server-stamped', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.wasteManifests = async () => ({ manifests: [] });
+  return w.GF.WWF.deconCorridorForm('r1').then(() => {
+    const body = w.document.getElementById('dc-cor-modal-body').innerHTML;
+    assert.match(body, /stamped by the server/);
+    h.close();
+  });
+});
+
+test('a reader calling the corridor form directly is refused', async () => {
+  const h = loadForms('QC_MGR');
+  await h.window.GF.WWF.deconCorridorForm('r1');
+  assert.ok(!h.window.__modals.includes('dc-cor-modal'),
+    'hiding the button is not the gate — the handler checks too');
   h.close();
 });
