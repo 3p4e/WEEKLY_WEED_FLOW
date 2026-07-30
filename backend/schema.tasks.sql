@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict zlPEJqQtofMHM1xXjE1uHi8w7xQ6918xRyen0df7rSazm16fWxMxXrub8inW3UU
+\restrict GmjA7KmPz36mmM9b11Q2TOH86pHoZQRA8vOuAtbyhIPaeyKyVrVkbHF0rK2uGzZ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1714,6 +1714,70 @@ ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: waste_manifest_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.waste_manifest_lines (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    manifest_id uuid NOT NULL,
+    batch_id uuid,
+    room_id uuid,
+    plant_qty integer,
+    weight_kg numeric,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    CONSTRAINT waste_manifest_lines_plant_qty_check CHECK (((plant_qty IS NULL) OR (plant_qty >= 0))),
+    CONSTRAINT waste_manifest_lines_quantified_check CHECK (((plant_qty IS NOT NULL) OR (weight_kg IS NOT NULL))),
+    CONSTRAINT waste_manifest_lines_weight_check CHECK (((weight_kg IS NULL) OR (weight_kg >= (0)::numeric)))
+);
+
+ALTER TABLE ONLY public.waste_manifest_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: waste_manifests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.waste_manifests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    manifest_code text NOT NULL,
+    waste_type text NOT NULL,
+    reason text NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    campaign text,
+    origin_room_id uuid,
+    destination text,
+    carrier_name text,
+    carrier_ref text,
+    gross_weight_kg numeric,
+    weighed_at timestamp with time zone,
+    weighed_by uuid,
+    sealed_at timestamp with time zone,
+    witnessed_at timestamp with time zone,
+    witnessed_by uuid,
+    disposed_at timestamp with time zone,
+    disposed_by uuid,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT waste_manifests_disposal_evidence_check CHECK (((status <> 'disposed'::text) OR ((disposed_at IS NOT NULL) AND (disposed_by IS NOT NULL)))),
+    CONSTRAINT waste_manifests_gross_weight_check CHECK (((gross_weight_kg IS NULL) OR (gross_weight_kg >= (0)::numeric))),
+    CONSTRAINT waste_manifests_reason_check CHECK ((reason = ANY (ARRAY['hlvd_eradication'::text, 'routine_cull'::text, 'failed_qc'::text, 'expired'::text, 'spillage'::text, 'other'::text]))),
+    CONSTRAINT waste_manifests_seal_evidence_check CHECK (((status = 'draft'::text) OR ((sealed_at IS NOT NULL) AND (weighed_by IS NOT NULL)))),
+    CONSTRAINT waste_manifests_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'sealed'::text, 'witnessed'::text, 'disposed'::text]))),
+    CONSTRAINT waste_manifests_waste_type_check CHECK ((waste_type = ANY (ARRAY['plant_material'::text, 'root_substrate'::text, 'growing_medium'::text, 'trim'::text, 'packaging'::text, 'other'::text]))),
+    CONSTRAINT waste_manifests_witness_evidence_check CHECK (((status = ANY (ARRAY['draft'::text, 'sealed'::text])) OR ((witnessed_at IS NOT NULL) AND (witnessed_by IS NOT NULL))))
+);
+
+ALTER TABLE ONLY public.waste_manifests FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: weekly_documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2418,6 +2482,30 @@ ALTER TABLE ONLY public.tasks
 
 
 --
+-- Name: waste_manifest_lines waste_manifest_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifest_lines
+    ADD CONSTRAINT waste_manifest_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: waste_manifests waste_manifests_org_id_manifest_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifests
+    ADD CONSTRAINT waste_manifests_org_id_manifest_code_key UNIQUE (org_id, manifest_code);
+
+
+--
+-- Name: waste_manifests waste_manifests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifests
+    ADD CONSTRAINT waste_manifests_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: weekly_documents weekly_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2924,6 +3012,34 @@ CREATE INDEX tasks_week_idx ON public.tasks USING btree (week_id);
 
 
 --
+-- Name: waste_manifest_lines_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX waste_manifest_lines_batch_idx ON public.waste_manifest_lines USING btree (batch_id) WHERE (batch_id IS NOT NULL);
+
+
+--
+-- Name: waste_manifest_lines_manifest_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX waste_manifest_lines_manifest_idx ON public.waste_manifest_lines USING btree (manifest_id);
+
+
+--
+-- Name: waste_manifests_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX waste_manifests_org_idx ON public.waste_manifests USING btree (org_id, created_at DESC);
+
+
+--
+-- Name: waste_manifests_org_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX waste_manifests_org_status_idx ON public.waste_manifests USING btree (org_id, status);
+
+
+--
 -- Name: weekly_documents_org_kind_week_dept_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3313,6 +3429,20 @@ CREATE TRIGGER audit_task_workflow_events AFTER INSERT OR DELETE OR UPDATE ON pu
 --
 
 CREATE TRIGGER audit_tasks AFTER INSERT OR DELETE OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: waste_manifest_lines audit_waste_manifest_lines; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_waste_manifest_lines AFTER INSERT OR DELETE OR UPDATE ON public.waste_manifest_lines FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: waste_manifests audit_waste_manifests; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_waste_manifests AFTER INSERT OR DELETE OR UPDATE ON public.waste_manifests FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -3890,6 +4020,38 @@ ALTER TABLE ONLY public.tasks
 
 
 --
+-- Name: waste_manifest_lines waste_manifest_lines_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifest_lines
+    ADD CONSTRAINT waste_manifest_lines_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: waste_manifest_lines waste_manifest_lines_manifest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifest_lines
+    ADD CONSTRAINT waste_manifest_lines_manifest_id_fkey FOREIGN KEY (manifest_id) REFERENCES public.waste_manifests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: waste_manifest_lines waste_manifest_lines_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifest_lines
+    ADD CONSTRAINT waste_manifest_lines_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: waste_manifests waste_manifests_origin_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.waste_manifests
+    ADD CONSTRAINT waste_manifests_origin_room_id_fkey FOREIGN KEY (origin_room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: work_sessions work_sessions_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4373,6 +4535,20 @@ CREATE POLICY org_isolation ON public.task_workflow_events USING ((org_id = app.
 
 
 --
+-- Name: waste_manifest_lines org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.waste_manifest_lines USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: waste_manifests org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.waste_manifests USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: work_sessions org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4653,6 +4829,18 @@ CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()
 
 
 --
+-- Name: waste_manifest_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.waste_manifest_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: waste_manifests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.waste_manifests ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: weekly_documents wd_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4696,5 +4884,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict zlPEJqQtofMHM1xXjE1uHi8w7xQ6918xRyen0df7rSazm16fWxMxXrub8inW3UU
+\unrestrict GmjA7KmPz36mmM9b11Q2TOH86pHoZQRA8vOuAtbyhIPaeyKyVrVkbHF0rK2uGzZ
 

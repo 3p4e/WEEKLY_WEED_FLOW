@@ -152,6 +152,24 @@ GF.API = {
   deconSwabAdd(body)             { return this._req('POST', '/decon/swabs', body); },
   deconSwabResult(id, body)      { return this._req('PATCH','/decon/swabs/' + id + '/result', body); },
 
+  // ── Destruction / waste manifests (migration 0048) ──
+  // A manifest climbs draft -> sealed -> witnessed -> disposed and each rung is a
+  // different person's assertion. Four server gates answer 409 and the UI should
+  // surface `detail` rather than restating the rule: an empty manifest cannot be
+  // sealed, a sealed one accepts no line changes, the witness must differ from
+  // whoever weighed it, and disposal follows witnessing. The per-batch
+  // over-declare refusal is a 409 too — declared destruction may never exceed a
+  // batch's plant count.
+  wasteManifests(q = {})         { const u = new URLSearchParams(q).toString(); return this._req('GET', '/waste/manifests' + (u ? '?' + u : '')); },
+  wasteManifest(id)              { return this._req('GET',  '/waste/manifests/' + id); },
+  wasteManifestCreate(body)      { return this._req('POST', '/waste/manifests', body); },
+  wasteLineAdd(id, body)         { return this._req('POST', '/waste/manifests/' + id + '/lines', body); },
+  wasteLineDelete(id, lineId)    { return this._req('DELETE','/waste/manifests/' + id + '/lines/' + lineId); },
+  wasteSeal(id, body)            { return this._req('POST', '/waste/manifests/' + id + '/seal', body); },
+  wasteWitness(id, body)         { return this._req('POST', '/waste/manifests/' + id + '/witness', body || {}); },
+  wasteDispose(id, body)         { return this._req('POST', '/waste/manifests/' + id + '/dispose', body); },
+  wasteReconciliation()          { return this._req('GET',  '/waste/reconciliation'); },
+
   analytics(weeks = 8)     { return this._req('GET', '/reports/analytics?weeks=' + weeks); },
   auditPrep(programs)      { return this._req('GET', '/reports/audit-prep' + (programs ? '?programs=' + encodeURIComponent(programs) : '')); },
   // qms-api retired platform-wide — its legacy wrappers (qmsStats/qmsDocuments/qmsDocument/qmsHierarchy/qmsFamilies/qmsRagQuery/qmsDownloadUrl) were removed; QMS Studio (DocEngine) below is the successor.

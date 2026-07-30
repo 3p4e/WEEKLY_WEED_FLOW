@@ -97,6 +97,11 @@ async def purge_org(org_id) -> None:
                   "decon_tool_log", "decon_positive_controls",
                   "decon_swabs", "decon_bleach_log", "decon_step_signoffs",
                   "decon_room_cycles",
+                  # waste lines cite batches AND rooms (both RESTRICT), so they
+                  # come before either. The lines->manifest edge is CASCADE, but
+                  # both are listed: this is a per-org DELETE, not a DROP, and
+                  # relying on the cascade would leave the intent implicit.
+                  "waste_manifest_lines", "waste_manifests",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):

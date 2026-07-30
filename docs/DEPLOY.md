@@ -2041,3 +2041,104 @@ on *both* new images.
 > table. Verifying a drawing is evidence; it is not a signed controlled document.
 > The data is now correct and usable; the process step remains open, and nothing
 > in the software claims otherwise.
+
+---
+
+## Pending, NOT deployed — cultivation board, destruction register, migration 0048
+
+Built and tested on `claude/weekly-read-flow-setup-yft7if`, deliberately **not
+promoted**: production promotion is owner-gated, and this needs an explicit
+go-ahead. Production is still backend `v79` / frontend `v110`, tasks head `0047`.
+
+**What is waiting**
+
+| | |
+|---|---|
+| `backend/alembic_tasks/versions/0048_destruction_waste_manifest.py` | `waste_manifests` + `waste_manifest_lines`, purely additive |
+| `backend/app/api/waste.py` | the four gates + the reconciliation report |
+| `web/gf/cultivation-view.js` | the cultivation identity board — the module was API-only |
+| `web/gf/waste-view.js` | the destruction register |
+| `web/sw.js` | `wwf-shell-v3.76.0`, both new files precached, **and an API_RE fix** |
+| `web/nginx.conf` | `waste` added — **and `handoffs`, which fixes a live bug** |
+
+### Two live-production bugs fixed here, neither of them new features
+
+Both were found by writing `tests/frontend/sw-api-routes.test.js`, which compares
+the three hand-maintained route lists (nginx's proxy prefixes, `sw.js`'s
+`API_RE`, and the prefixes `api.js` actually calls) against each other.
+
+**1. `POST /handoffs/{id}/resolve` never reached the backend.** `handoffs` was
+absent from the nginx allowlist while `GF.API.resolveHandoff` has been posting to
+that path. Unproxied paths fall through to the SPA `location /`, where the static
+handler answers a POST with **405**. Verified against the running frontend on
+2026-07-30:
+
+```
+POST /handoffs/<uuid>/resolve   → HTTP/1.1 405 Not Allowed   (SPA fallback)
+POST /tasks/<uuid>/handoffs     → HTTP/1.1 401 Unauthorized  (proxied, auth-gated)
+```
+
+So proposing a cross-department handoff worked and resolving one silently could
+not. Nothing failed loudly enough to notice, because a 405 on a background POST
+surfaces as a toast rather than a crash.
+
+**2. `sw.js` was caching API responses.** It routes API paths network-first and
+everything else **cache-first**; `cultivation`, `decon`, `waste`, `demo` and
+`handoffs` were all missing from `API_RE`, so those responses were stored in the
+versioned cache and replayed stale until the next `VERSION` bump. `decon` has
+been live since v110, which means the decontamination board has been capable of
+showing a cached swab result — worse than failing.
+
+The test asserts its own parsers found something (`>= 15` prefixes, `>= 50` SHELL
+entries) before comparing, because a silently-broken parser would make the whole
+detector permanently green. Every direction was confirmed by re-introducing each
+bug and watching the intended test go red, and the api.js parser's vacuity guard
+was confirmed by breaking all 190 call sites at once.
+
+It also checks the precache list in the direction nobody had: **every path in
+`SHELL` must exist**. `SHELL` is passed to `cache.addAll()`, which *rejects* if a
+single request fails, so one stale path fails the whole install inside
+`e.waitUntil()` — the app silently loses offline support and nothing on screen
+says so.
+
+The edited `nginx.conf` was validated with `nginx -t` in a throwaway
+`nginx:1.27-alpine` container on the host (production untouched): *"configuration
+file test is successful"*. The `proxy_pass $wwf_backend` variable form means
+nginx does not resolve the upstream at config-parse time, so this test is
+meaningful without the backend being reachable.
+
+**The `handoffs` fix is independent of everything else here** — one line in
+`nginx.conf`, no schema and no backend change — so it can be promoted on its own
+with a frontend rebuild if you would rather not take the cultivation and
+destruction work at the same time.
+
+**Migrate-before-swap is safe here, and for a stated reason rather than by habit.**
+0048 creates two new tables and alters nothing existing, so a v79 backend runs
+against the 0048 schema unchanged; there is no column a running container reads.
+Verified locally against a real PG16:
+
+- `alembic upgrade head` reaches `0048`;
+- `downgrade 0047` leaves a schema **byte-identical** to a freshly built 0047 (the
+  two `pg_dump`s diff clean), so the rollback is exact rather than approximate;
+- CI's schema-diff invariant passes — `backend/schema.tasks.sql` was regenerated
+  and matches `alembic upgrade head` exactly, with **zero removed lines** in the
+  diff against the previous file.
+
+**Test evidence**
+
+- 14 backend tests (`backend/tests/test_waste.py`) against a real Postgres.
+- 26 + 29 frontend tests for the two new boards, plus 3 for the drift detector;
+  **184 frontend tests green** in total.
+- Twelve backend and nineteen frontend mutations applied one at a time; each
+  failed the test intended to catch it, and each source was restored
+  byte-identical afterwards. Two early mutation attempts were silent no-ops from
+  a quote mismatch — the harness now refuses to run a mutation whose pattern is
+  absent, so a no-op can no longer masquerade as a surviving mutant.
+- Every inline handler across both boards and their nine modals verified to
+  resolve to a real function (offline, in jsdom).
+
+**When promoted, the order is:** snapshot both databases → `alembic -n tasks
+upgrade head` (0047 → 0048) → build + swap backend and scheduler → build + swap
+frontend → verify each new route returns **401 through nginx, not 404** (a 200-only
+smoke test cannot tell "wired and auth-gated" from "missing") → confirm `sw.js`
+publicly serves `wwf-shell-v3.76.0`.

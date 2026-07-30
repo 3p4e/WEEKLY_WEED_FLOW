@@ -1,17 +1,20 @@
 # Cultivation department — design record (2026-07-30)
 
-**Status: BUILT (migrations 0045–0047), not deployed.** This began as a
-pre-design record written before the CEO's plan arrived, and the analysis in §1–§4
-is kept as written because it is what the design was reasoned from — but §1's
-"no schema" framing is historical now. What actually exists:
+**Status: migrations 0045–0047 are LIVE in production** (backend v79 / frontend
+v110, 2026-07-30 — see `docs/DEPLOY.md`). **0048 and the two new boards are built
+and tested but NOT deployed.** This began as a pre-design record written before
+the CEO's plan arrived, and the analysis in §1–§4 is kept as written because it is
+what the design was reasoned from — but §1's "no schema" framing is historical
+now. What actually exists:
 
 | | |
 |---|---|
 | **0045** | cultivation identity — cultivar master, batch codes, per-plant rows, phase events (§5a) |
 | **0046** | decontamination campaign — signed room cycle, bleach log, swab release gate (§5b) |
 | **0047** | frozen positive controls + tool-sterilisation log |
-| API | `app/api/cultivation.py`, `app/api/decon.py` |
-| UI | `web/gf/cultivation-view.js` (identity board), `web/gf/decon-view.js` (decon board) |
+| **0048** | destruction / waste manifest — witnessed disposal + batch reconciliation (§5d) |
+| API | `app/api/cultivation.py`, `app/api/decon.py`, `app/api/waste.py` |
+| UI | `web/gf/cultivation-view.js` (identity board), `web/gf/decon-view.js` (decon board), `web/gf/waste-view.js` (destruction register) |
 | Adherence | see the requirement-by-requirement table in §5c, including what is **not** built |
 
 The ⟨PLAN⟩ items in §4 were answered by a combination of the plan itself (room
@@ -271,6 +274,70 @@ refusals (no swabs at all, pending, positive). 25 affected-area tests green
 (decon + cultivation + facility + audit/RLS coverage); upgrade/downgrade clean;
 schema-diff invariant holds.
 
+## 5d. Destruction / waste manifest (migration 0048)
+
+The campaign's destruction window is 30.07-01.08 and it moves several tonnes off
+site. Migration 0045 can mark a batch `destroyed`, which says the batch is gone
+but not what left the building, how much it weighed, who watched it go, or who
+took it. Destruction is the one phase transition where the material stops being
+auditable afterwards — a missing harvest record can be reconstructed from the
+lot, a missing destruction record cannot be reconstructed from anything — so
+this is the regulatory invariant the §5c table names.
+
+**Header + lines, not one table.** One consignment routinely empties several
+batches, and the reconciliation question is per BATCH while the weighbridge
+ticket and carrier docket are per CONSIGNMENT. One table would force either a
+duplicated carrier reference across rows (two rows able to disagree about one
+physical load) or per-batch quantities in free text (nothing reconciles).
+
+**The status ladder is in the schema**: `draft -> sealed -> witnessed ->
+disposed`. Each rung is a different person's assertion, so "who has signed off"
+is a query rather than an interpretation of timestamps. Row-level CHECKs refuse a
+status without the timestamp that evidences it, so a manifest cannot read
+`disposed` with every signature column null.
+
+Four gates, enforced in `app/api/waste.py` rather than left to discipline:
+
+- **An empty manifest cannot be sealed.** A sealed manifest asserts "this is what
+  left the building"; with no lines it asserts nothing while looking complete.
+- **A sealed manifest accepts no line changes.** That is what sealing means, and
+  without it the witness signed something that can still change underneath them.
+- **The witness must differ from the weigher.** The two-person rule is the entire
+  point of a destruction witness; one person doing both is not a witnessed
+  destruction whatever their role. Checked in the API, not as a CHECK, because
+  `weighed_by` is null until the seal and a row-level `<>` would silently permit
+  the equal-and-null case.
+- **Disposal follows witnessing.** The carrier reference closes a chain that has
+  to exist first.
+
+**The reconciliation invariant** — plants declared destroyed per batch, summed
+across every manifest including drafts, may not exceed the batch's plant count —
+also lives in the API. It spans two tables, and the alternative (a counter column
+on `plant_batches`) would be a second source of truth for a derivable number.
+
+`GET /waste/reconciliation` is the report that closes the loop, and it flags the
+one discrepancy neither module can see alone: a batch **closed as destroyed in
+cultivation with nothing ever manifested**. Cultivation says the plants are gone;
+the waste register says nothing left the building. Only the join notices.
+
+The report's `unaccounted` field is plain arithmetic (`plant_count` minus declared
+destroyed) and is a discrepancy **only for a batch in the `destroyed` phase** —
+for a live batch it equals the whole batch, because the plants are in the room.
+The first version of the board rendered it unconditionally, which labelled every
+healthy batch "2000 unaccounted" and would have buried the handful of rows the
+report exists for. It now interprets the number by phase in a single predicate
+shared by the row rendering and the summary count, so the banner and the
+highlighted rows cannot disagree, and it treats a *partly* manifested destroyed
+batch as a problem too — "has a manifest, therefore fine" is exactly the reading
+that lets 70 of 100 plants leave unrecorded.
+
+Tested with 14 backend tests against a real Postgres (`tests/test_waste.py`) and
+26 frontend tests (`tests/frontend/waste-view.test.js`). Twelve backend mutations
+and sixteen frontend mutations were each applied one at a time and each failed the
+test intended to catch it; two early mutation attempts were silent no-ops (a
+quoting mismatch), which is why the mutation harness now refuses to run a
+mutation whose pattern is absent.
+
 ## 5c. Plan-adherence status (2026-07-30)
 
 What the campaign plan asks for, and whether the software now holds it. Kept
@@ -290,7 +357,7 @@ honest on purpose — the gaps matter more than the coverage.
 | Rooms-1-6 ↔ C180-C185 reconciliation (§10) | **resolved in the data, signature outstanding** — the layout drawing positions `FLOWERING PREMISE 1.N` within 2-11 columns of `C(179+N)` while adjacent rooms sit 60-100 apart, so the pairing is geometrically forced and agrees with the plan's §08 zone map. Room names now carry all three designations (`Flowering 1.1 · C180 · Room 1`); see `oneoff_restore_flowering_room_numbers_20260730.sql`. QA's signature on the one-page table is **still open** — evidence is not a controlled document |
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
 | Cultivation board a grower can actually use | **built 2026-07-30** — `web/gf/cultivation-view.js`: cultivar registry, coded batches, chunked/resumable plant-id generation, whole-batch phase moves, paginated plant roster. 29 unit tests (`tests/frontend/cultivation-view.test.js`), ten mutations verified to fail the intended test |
-| Destruction / waste manifest (several tonnes, 30.07-01.08) | **NOT built** |
+| Destruction / waste manifest (several tonnes, 30.07-01.08) | **built 2026-07-30** — migration 0048 + `app/api/waste.py` + `web/gf/waste-view.js`: header/lines, the draft→sealed→witnessed→disposed ladder, the two-person witness rule, and per-batch reconciliation incl. the closed-as-destroyed-but-never-manifested flag (§5d) |
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |
 | AHU filter pull/refit record (§18) | **NOT built** |
 | Disinfection-mat refill + strip verification (§20) | **NOT built** |
