@@ -2046,6 +2046,92 @@ on *both* new images.
 
 ---
 
+## Production deploy — backend v83 / frontend v113, no migration (2026-07-30)
+
+Owner-authorised. Ships two things from `6b159ab`: the **headcount-invariant
+advisory lock** (a live data-integrity defect in the code v82 put into
+production) and **stages 1+2 of the Mass Weed port** (the app now actually
+defines the design system's `--mw-*` tokens and component atoms).
+
+| | before | after |
+|---|---|---|
+| backend | `v82` | **`v83`** |
+| scheduler | `v82` | **`v83`** |
+| frontend | `v112` | **`v113`** |
+| tasks alembic | `0051` | `0051` (unchanged) |
+| users alembic | `0009` | `0009` (unchanged) |
+| service worker | `wwf-shell-v3.78.0` | **`wwf-shell-v3.79.0`** |
+
+**No migration ran.** Both schema heads were already where this build expects
+them, so this was a straight image swap — no dump/restore window, no period in
+which running code and schema could disagree. The pre-swap dumps below were still
+taken, because "no migration" is a claim to be *checked against the live cluster*
+before the swap, not assumed from the diff.
+
+**What the backend change actually fixes.** `create_harvest` and `waste.add_line`
+both enforce "harvested + destroyed ≤ `plant_count`" by reading two `SUM()`s and
+comparing before their own `INSERT`. The arithmetic was mirrored across the two
+endpoints; the *locking* never was. `create_harvest` held only
+`genealogy:{org_id}` — org-scoped, and taken for an unrelated genealogy-edge
+concern — and `add_line` held nothing at all. Under READ COMMITTED, a harvest and
+a destruction against the same batch could each read pre-commit sums, each see
+the invariant satisfied, and both commit, jointly over-declaring the batch. Both
+paths now take `pg_advisory_xact_lock(hashtext('headcount:{batch_id}'))` as the
+first statement before reading either sum. No deadlock is introduced: the only
+path that takes both locks (`create_harvest`) always takes the org lock first and
+the batch lock second, and `add_line` never takes the org lock at all, so no cycle
+is possible. Verified in the running image: `headcount:` appears twice in each of
+`app/api/harvest.py` and `app/api/waste.py`.
+
+**The regression test proves the lock, not the arithmetic.** The pre-existing
+headcount tests only exercise *sequential* calls, which this class of bug walks
+straight past. The two new tests fire genuinely concurrent requests with
+`asyncio.gather` and assert exactly one wins. Both were confirmed to **fail 5/5
+against the unpatched code** before being confirmed to pass against the patched
+code — a concurrency test that has never been seen to fail is not evidence.
+
+**Build method:** same no-PAT path as v82 — `git archive 6b159ab -- backend` /
+`-- web`, uploaded through the runner's `/file/write`, SHA-256 compared on both
+sides before use (`9d71ac09…` backend, `928abcf5…` web). The context is the
+committed tree at that exact SHA, and no credential touches the host.
+
+**Verified against the live public URL, not just from inside the box:**
+
+- `sw.js` reports `wwf-shell-v3.79.0`.
+- `gf/mass-weed.css` serves 200 / 65,068 bytes and now carries **74 `--mw-*`
+  definitions** — it carried **zero** before this deploy. That is the whole point
+  of stages 1+2: every `var(--mw-…)` in an authored design previously resolved to
+  nothing in the real app, silently, with nothing logged and nothing failing.
+- All five status pills present (`.mw-st--done/working/review/stuck/postponed`),
+  `.mw-panel` ×16, `.mw-tcard*` ×18.
+- `GET /cultivation/harvests` through Traefik returns **401**, not 200 — the
+  load-bearing check that nginx still proxies the prefix to the backend rather
+  than answering 200 with the SPA fallback.
+- `/health` → 200; `/health/ready` →
+  `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`.
+- Live schema heads re-read from the cluster after the swap: tasks `0051`, users
+  `0009` — i.e. the revision numbers, **not** row counts. (Reporting these as
+  bare `name=number` once read as "9 users exist" and alarmed the owner. They are
+  Alembic revisions; the business tables remain at zero rows since the wipe.)
+
+**No business data was created in production to test this.** The database was
+wiped to zero by owner order; seeding probe rows would undo that. Functional
+coverage is the backend suite against a real PostgreSQL 16 plus the frontend
+suite, both green locally before the push.
+
+**Rollback**, all three parts in place:
+`weekly_weed_flow-backend:v82` and `wwf-growflow:v112` images retained;
+`/opt/stacks/wwf_app/compose.yaml.bak-pre-v83`; and pre-swap dumps at
+`/opt/wwf-backups/20260730-2150-pre-v83/` (`wwf_tasks.dump` 293,901 B,
+`wwf_users.dump` 22,410 B). There is no schema rollback step — nothing migrated.
+
+**Cleanup:** `/opt/wwf-deploy-v83` (7.0 MB of build context) removed after the
+build; no `/opt/wwf-deploy-*` staging remains. `/opt` sits at 96% used (8.7 GB
+free) — image retention is the pressure, and pruning is a separate owner-gated
+decision, not something to fold into a deploy.
+
+---
+
 ## Production deploy — backend v82 / frontend v112, tasks 0051 (2026-07-30)
 
 Owner-authorised ("deploy the latest app on production complete redeployment").
