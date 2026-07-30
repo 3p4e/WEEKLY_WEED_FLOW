@@ -23,7 +23,7 @@ from app.db import rls
 from app.deps import dept_scope, require_password_set
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
-from app.worktime import TZ, classify, session_hours
+from app.worktime import facility_today, TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -55,7 +55,7 @@ async def weekly_report(
         except ValueError:
             raise HTTPException(status_code=422, detail="ref_date must be ISO format YYYY-MM-DD")
     else:
-        ref = date.today()
+        ref = facility_today()
     fri, thu = _fri_thu(ref)
 
     if mode == "plan":
@@ -167,7 +167,7 @@ async def weekly_report(
             # progress (thu+1 is in the future), matching the per-op overdue
             # semantics used elsewhere in this file (due_date < today).
             # Viewing a past week's report is unaffected (thu+1 <= today there).
-            over_args: list = [min(date.today(), thu + timedelta(days=1))]
+            over_args: list = [min(facility_today(), thu + timedelta(days=1))]
             if scope:
                 over_clause = _scope_clause(user, over_args)
             elif department_id:
@@ -304,7 +304,7 @@ async def analytics(
     if user["role"] == "USER":
         raise HTTPException(status_code=403, detail="Managers and executives only")
     tz = str(TZ)
-    today = date.today()
+    today = facility_today()
     fri0, _ = _fri_thu(today)
     start = fri0 - timedelta(days=7 * (weeks - 1))
     # _scope_clause no-ops (returns "", appends nothing) for an org-wide caller
@@ -444,7 +444,7 @@ async def audit_prep(
     if not progs:
         progs = list(_AUDIT_PROGRAMS)
 
-    today = date.today()
+    today = facility_today()
     # Dept-scoped managers are forced to their department; execs/QP/ADMIN keep
     # free choice — same rule as /reports/weekly and /reports/analytics.
     scope = dept_scope(user)

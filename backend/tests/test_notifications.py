@@ -7,6 +7,7 @@ feed-only event (no recipients), and the read/done lifecycle driving the
 server-computed unread count.
 """
 import logging
+from app.worktime import facility_today
 import uuid
 
 from tests.conftest import create_user, login_and_set_password
@@ -190,7 +191,7 @@ async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
     mgr, mh = await _actor(client, admin_headers, role="QC_MGR")
     await client.patch(f"/auth/users/{mgr['id']}", json={"department_id": dept["id"]},
                        headers=admin_headers)
-    today = date.today()
+    today = facility_today()
     r1 = await client.post("/tasks", json={"title": "Due today", "department_id": dept["id"],
                                            "due_date": today.isoformat()}, headers=admin_headers)
     r2 = await client.post("/tasks", json={"title": "Late", "department_id": dept["id"],

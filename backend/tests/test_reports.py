@@ -1,6 +1,7 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
 from datetime import date, timedelta
+from app.worktime import facility_today
 
 from app.api.weekwindow import fri_thu
 from app.db import tasks_admin_pool
@@ -37,7 +38,7 @@ async def test_report_overdue_excludes_tasks_due_later_this_same_week(client, ad
     assertion doesn't depend on which day of the week the suite happens to
     run on; the overdue query itself isn't week-bounded, so a genuinely
     past-due task is unaffected by which ref_date is passed."""
-    today = date.today()
+    today = facility_today()
     future_ref = today + timedelta(days=10)
     _fri, thu = fri_thu(future_ref)
     assert thu > today  # sanity: the window's end must actually be in the future

@@ -25,6 +25,23 @@ TZ = ZoneInfo(settings.snapshot_tz)
 BUCKETS = ("regular", "overtime", "night", "weekend")
 
 
+def facility_today():
+    """Today as the FACILITY sees it — never `date.today()`.
+
+    `date.today()` renders under the process's zone (UTC in every container
+    and in CI), while the SQL side of this codebase converts timestamps at
+    settings.snapshot_tz (see harvest._site_today and the audit views). The
+    two disagree every night between facility-midnight and UTC-midnight —
+    for Europe/Skopje that is a standing 1–2 h window in which "today" is
+    Friday to the database and still Thursday to naive Python, weekly
+    windows point at the wrong week, and the CI suite fails if it happens
+    to run then (it did, 2026-07-30 22:30 UTC). Every "what day is it"
+    question in this codebase must go through here or through SQL at
+    snapshot_tz; tests/test_facility_clock.py enforces the app side."""
+    from datetime import datetime
+    return datetime.now(TZ).date()
+
+
 def classify(started_at: datetime) -> str:
     local = started_at.astimezone(TZ)
     if local.weekday() >= 5:

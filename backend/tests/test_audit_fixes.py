@@ -12,6 +12,7 @@ Each test pins a specific bug the audit surfaced so it cannot silently return:
     metrics bucket missing keys.
 """
 from datetime import date, timedelta
+from app.worktime import facility_today
 
 import pytest
 
@@ -77,7 +78,7 @@ async def test_subtask_under_foreign_parent_never_lands_in_that_department(clien
 
 @pytest.mark.asyncio
 async def test_plan_excludes_future_week_tasks_but_keeps_open_carryover(client, admin_headers, org):
-    today = date.today()
+    today = facility_today()
     future = (today + timedelta(days=60)).isoformat()
     past = (today - timedelta(days=60)).isoformat()
     await client.post("/tasks", json={"title": "future task", "week_start": future,
@@ -96,7 +97,7 @@ async def test_pdf_export_survives_hostile_color_and_missing_metric_keys(client,
     r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
     doc = r.json()
     c = doc["content"]
-    c["ribbon"] = [{"date": date.today().isoformat(), "start_h": 9, "end_h": 11,
+    c["ribbon"] = [{"date": facility_today().isoformat(), "start_h": 9, "end_h": 11,
                     "color": '"/><script>x</script>', "title": "x", "sop": "PP-01", "hours": 2}]
     # a v1-shape metrics bucket: hostile color + missing hours/prev4/tasks/... keys
     c.setdefault("metrics", {})["per_sop"] = [{"sop": "PP-01", "color": "javascript:alert(1)"}]

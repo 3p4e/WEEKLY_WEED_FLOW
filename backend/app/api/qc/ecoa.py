@@ -3,6 +3,7 @@ from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
 from datetime import date
+from app.worktime import facility_today
 from fastapi import Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from urllib.parse import quote as _urlquote
@@ -116,7 +117,7 @@ def _ecoa_out(r: dict) -> dict:
         "review_overdue": bool(
             r.get("review_deadline") and r.get("review_window_met") is None
             and r["status"] in ("UPLOADED", "EXTRACTED")
-            and r["review_deadline"] < date.today()),
+            and r["review_deadline"] < facility_today()),
         "notes": r["notes"],
         "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
     }

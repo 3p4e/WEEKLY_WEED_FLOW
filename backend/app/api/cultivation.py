@@ -28,6 +28,7 @@ database for the duration. So:
     from the last seq rather than restarting.
 """
 from datetime import date
+from app.worktime import facility_today
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -263,7 +264,7 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_WRI
             "SELECT occurred_on FROM plant_phase_events WHERE batch_id=$1 AND event='create'"
             " ORDER BY created_at LIMIT 1", batch_id)
         cultivar_code = b["cultivar_code"] or "NA"
-        prefix = (clone_ev or b["phase_since"] or date.today()).strftime("%Y%m%d")
+        prefix = (clone_ev or b["phase_since"] or facility_today()).strftime("%Y%m%d")
 
     if have >= target:
         return {"batch_id": batch_id, "target": target, "created": 0,

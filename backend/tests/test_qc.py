@@ -1602,7 +1602,8 @@ async def test_ecoa_review_clock_met(client, admin_headers):
     assert doc["review_overdue"] is False
     # 5 working days is at least 7 calendar days ahead of today
     import datetime as _dt
-    assert _dt.date.fromisoformat(doc["review_deadline"]) >= _dt.date.today() + _dt.timedelta(days=7)
+    from app.worktime import facility_today
+    assert _dt.date.fromisoformat(doc["review_deadline"]) >= facility_today() + _dt.timedelta(days=7)
     # walk to REVIEWED (on time) → window met, reviewed_at stamped
     assert (await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "EXTRACTED"},
                                headers=admin_headers)).status_code == 200

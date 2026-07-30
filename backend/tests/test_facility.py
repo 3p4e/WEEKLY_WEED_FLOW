@@ -5,6 +5,7 @@ executives + ADMIN; rooms: ADMIN-only, idempotent) and the batch lifecycle
 (phase-move stamps phase_since, closing removes from the board, totals math).
 """
 from datetime import date
+from app.worktime import facility_today
 
 from tests.conftest import create_user, login_and_set_password
 
@@ -47,7 +48,7 @@ async def test_batch_lifecycle_and_totals(client, admin_headers):
         "phase": "clone"}, headers=cu_h)
     assert b.status_code == 201, b.text
     bid = b.json()["id"]
-    assert b.json()["phase_since"] == date.today().isoformat()
+    assert b.json()["phase_since"] == facility_today().isoformat()
 
     board = (await client.get("/facility", headers=cu_h)).json()
     nroom = next(r for r in board["rooms"] if r["id"] == nursery["id"])
@@ -60,7 +61,7 @@ async def test_batch_lifecycle_and_totals(client, admin_headers):
         headers=cu_h)
     assert mv.status_code == 200, mv.text
     assert mv.json()["phase"] == "flower"
-    assert mv.json()["phase_since"] == date.today().isoformat()
+    assert mv.json()["phase_since"] == facility_today().isoformat()
     board = (await client.get("/facility", headers=cu_h)).json()
     groom = next(r for r in board["rooms"] if r["id"] == grow["id"])
     assert groom["plant_total"] == 44

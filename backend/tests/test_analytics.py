@@ -6,6 +6,7 @@ land in the current Fri→Thu bucket), the current department snapshot
 managers being pinned to their own department like /reports/weekly.
 """
 from datetime import date, timedelta
+from app.worktime import facility_today
 
 from tests.conftest import create_user, login_and_set_password
 
@@ -29,7 +30,7 @@ async def test_weeks_param_bounds(client, admin_headers):
 async def test_weekly_buckets_and_snapshot(client, admin_headers):
     dept = (await client.post("/departments", json={"code": "ana_d1", "name": "Ana D1"},
                               headers=admin_headers)).json()
-    today = date.today()
+    today = facility_today()
     # one completed on time (due today, completed today), one open + overdue
     r1 = await client.post("/tasks", json={"title": "Ana done", "department_id": dept["id"],
                                            "task_type": "lab", "due_date": today.isoformat()},

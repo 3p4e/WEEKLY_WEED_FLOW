@@ -16,6 +16,7 @@ migration lands, and test_rls pins the cross-org API behaviour once for the app.
 """
 import asyncio
 from datetime import date, timedelta
+from app.worktime import facility_today
 
 from app.db import tasks_admin_pool
 from tests.conftest import create_user, login_and_set_password
@@ -28,11 +29,11 @@ def _at(days_ago: int) -> str:
     PHI arithmetic counts from, and 10:00 UTC lands on the same calendar date in
     any plausible site timezone. A test that used `now()` would flip its own
     expected dates for a few hours every evening."""
-    return (date.today() - timedelta(days=days_ago)).isoformat() + "T10:00:00+00:00"
+    return (facility_today() - timedelta(days=days_ago)).isoformat() + "T10:00:00+00:00"
 
 
 def _days(n: int) -> str:
-    return (date.today() - timedelta(days=n)).isoformat()
+    return (facility_today() - timedelta(days=n)).isoformat()
 
 
 async def _actor(client, admin_headers, role):
@@ -189,7 +190,7 @@ async def test_a_batch_inside_a_pre_harvest_interval_cannot_be_cut(client, admin
     assert block["product"] == "Sulphur dust"
     assert block["scope"] == "room"
     assert block["days_remaining"] == 11
-    assert block["phi_clear_on"] == (date.today() + timedelta(days=11)).isoformat()
+    assert block["phi_clear_on"] == (facility_today() + timedelta(days=11)).isoformat()
 
     cut = await _harvest(client, cu_h, b["id"], "LOT-PHI-1", 100, 50000)
     assert cut.status_code == 409
@@ -255,7 +256,7 @@ async def test_the_interval_boundary_is_the_clear_date_itself(client, admin_head
     # And the `on` parameter moves the question, not just the answer's label.
     ahead = (await client.get(
         f"/cultivation/harvest-clearance/{b['id']}"
-        f"?on={(date.today() + timedelta(days=1)).isoformat()}", headers=cu_h)).json()
+        f"?on={(facility_today() + timedelta(days=1)).isoformat()}", headers=cu_h)).json()
     assert ahead["clear"] is True, "asking about tomorrow must answer about tomorrow"
 
 

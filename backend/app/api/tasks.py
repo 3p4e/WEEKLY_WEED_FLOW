@@ -20,7 +20,7 @@ from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
 from app.notify import participants, safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
-from app.worktime import classify, session_hours
+from app.worktime import facility_today, classify, session_hours
 
 router = APIRouter(tags=["tasks"])
 
@@ -513,7 +513,7 @@ async def _materialize_recurrence(c, row) -> dict | None:
     definition, dates advanced by the recurrence rule, fresh lifecycle.
     Stops silently once `until` is passed."""
     rec = dict(row["recurrence"])
-    base = row["due_date"] or row["week_start"] or date.today()
+    base = row["due_date"] or row["week_start"] or facility_today()
     # Pin the monthly day anchor on first materialization (before any clamp
     # rewrites it) so the cadence never drifts off the original day-of-month.
     if rec.get("freq") == "monthly" and not rec.get("anchor_day"):
@@ -570,7 +570,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
     # reopening it (status moves away from completed) clears the stale stamp
     # unless the caller is explicitly setting completed_date themselves.
     if patch.get("status") == "completed" and "completed_date" not in patch:
-        args.append(date.today()); fields.append(f"completed_date=${len(args)}")
+        args.append(facility_today()); fields.append(f"completed_date=${len(args)}")
     elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
     # Completing forward-fills the completion bar unless the caller set one.

@@ -26,6 +26,7 @@ import secrets
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
+from app.worktime import facility_today
 
 from app.db import tasks_admin_pool, users_admin_pool
 from app.security import hash_password
@@ -272,7 +273,7 @@ async def reset_demo_org(cast: str = DEFAULT_CAST) -> dict:
 async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
     await wipe_demo_org(org_id)
 
-    today = date.today()
+    today = facility_today()
     mon = {"prev": _monday(today) - timedelta(days=7),
            "cur": _monday(today),
            "next": _monday(today) + timedelta(days=7)}

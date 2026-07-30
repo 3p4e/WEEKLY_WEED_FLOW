@@ -11,6 +11,7 @@ Every test uses UNIQUE tag names so counts are exact regardless of other tests'
 data sharing the DB.
 """
 from datetime import date, timedelta
+from app.worktime import facility_today
 
 from tests.conftest import create_user, login_and_set_password
 
@@ -51,7 +52,7 @@ async def test_programs_param_bounds(client, admin_headers):
 
 
 async def test_per_program_rollup_and_zero_task_program(client, admin_headers):
-    past = (date.today() - timedelta(days=3)).isoformat()
+    past = (facility_today() - timedelta(days=3)).isoformat()
     await _task(client, admin_headers, "mk done", ["AUD_MK"], status="completed")
     await _task(client, admin_headers, "mk ongoing", ["AUD_MK"], status="ongoing")
     # in both MK + EU, stuck and overdue
@@ -82,8 +83,8 @@ async def test_default_programs_when_unspecified(client, admin_headers):
 
 
 async def test_timeline_orders_by_due_and_flags_overdue(client, admin_headers):
-    past = (date.today() - timedelta(days=2)).isoformat()
-    future = (date.today() + timedelta(days=5)).isoformat()
+    past = (facility_today() - timedelta(days=2)).isoformat()
+    future = (facility_today() + timedelta(days=5)).isoformat()
     await _task(client, admin_headers, "tl late", ["AUD_TL"], status="ongoing", due_date=past)
     await _task(client, admin_headers, "tl upcoming", ["AUD_TL"], status="pending", due_date=future)
     # a task with no due_date must NOT appear on the timeline
