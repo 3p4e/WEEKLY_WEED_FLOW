@@ -1,5 +1,6 @@
 """Weekly Plan & Report documents — compile → review → lock → PDF export."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from app.worktime import TZ, facility_today
 
 from tests.conftest import create_user, login_and_set_password
 
@@ -17,8 +18,15 @@ async def _seed_task_with_session(client, admin_headers, org, title="Ribbon task
                           json={"day_label": "Mon", "note": "Column equilibrated."},
                           headers=admin_headers)
     assert r.status_code in (200, 201), r.text
-    # a real work session today 09:00-11:30 facility time -> ribbon segment
-    start = datetime.now(timezone.utc).replace(hour=7, minute=0, second=0, microsecond=0)
+    # a real work session today 09:00-11:30 facility time -> ribbon segment.
+    # "Today" MUST be the facility's date, built at the facility zone — the
+    # previous version pinned it via datetime.now(timezone.utc).replace(hour=7),
+    # which is the same wall-clock only while UTC and the facility agree on
+    # the DATE. Between facility-midnight and UTC-midnight they do not: the
+    # session landed on the facility's YESTERDAY (the closed Fri->Thu week),
+    # the compile window had moved on, and the ribbon assert failed — CI run
+    # 356, nightly window, exactly like the date.today() sites.
+    start = datetime.combine(facility_today(), time(9, 0), tzinfo=TZ)
     r = await client.post(f"/tasks/{task['id']}/sessions", json={
         "started_at": start.isoformat(),
         "ended_at": (start + timedelta(hours=2, minutes=30)).isoformat(),
@@ -209,7 +217,7 @@ async def test_preview_custom_range_not_persisted(client, admin_headers, org):
     the stored/lockable record stays the scheduled Fri→Thu week only. The
     period carries the day-span the ribbon renderers use."""
     task = await _seed_task_with_session(client, admin_headers, org)
-    today = datetime.now(timezone.utc).date()
+    today = facility_today()
     start = (today - timedelta(days=1)).isoformat()
     end = (today + timedelta(days=1)).isoformat()
     r = await client.post("/reports/documents/preview",
@@ -241,7 +249,7 @@ async def test_preview_validation_errors(client, admin_headers, org):
 async def test_export_range_pdf(client, admin_headers, org):
     """The non-persisted preview exports to PDF by posting its content back."""
     await _seed_task_with_session(client, admin_headers, org)
-    today = datetime.now(timezone.utc).date()
+    today = facility_today()
     r = await client.post("/reports/documents/preview", json={
         "kind": "report", "start": (today - timedelta(days=1)).isoformat(),
         "end": (today + timedelta(days=1)).isoformat()}, headers=admin_headers)
