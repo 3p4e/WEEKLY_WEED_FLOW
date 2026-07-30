@@ -1,99 +1,1312 @@
-name: Deploy WWF frontend to KVM4
+name: Deploy WWF stack to KVM4
 
-# Manual, dispatch-only deploy of the GrowFlow frontend to the live stack on
-# KVM4 (/opt/stacks/wwf_app). It runs entirely through the kvm4-runner HTTP API,
-# which is the only channel that reaches the box from CI — GitHub-hosted runners
-# cannot open an SSH connection to KVM4 (port 22 is firewalled; only 443 is
-# reachable), so the previous rsync-over-SSH deploy could never authenticate.
+# Manual, dispatch-only deploy of the live stack on KVM4 (/opt/stacks/wwf_app).
+# It runs entirely through the kvm4-runner HTTP API, which is the only channel
+# that reaches the box's filesystem and docker from CI — port 22 is firewalled,
+# only 443 is reachable, so the rsync-over-SSH deploy this file used to describe
+# could never authenticate.
 #
-# What it does:
-#   1. Builds a fresh, uniquely-tagged frontend image straight from this repo's
-#      web/ directory via a Docker git build-context. The daemon clones the repo
-#      itself using the ephemeral GITHUB_TOKEN, so no long-lived PAT is stored.
-#   2. Backs up the live compose.yaml (timestamped) and bumps the frontend image
-#      tag to the freshly-built one.
-#   3. Recreates ONLY the frontend container (`--no-deps`), so the two Postgres
-#      databases, the backend and the scheduler are never stopped or touched.
+# WHY self-hosted (this was the first of two bugs that made this workflow dead
+# code): GitHub-HOSTED runner minutes are unavailable on this account, so
+# `runs-on: ubuntu-latest` produced a workflow that queued forever and could
+# never run. It looked like a working deploy path and was not one. Every job
+# here runs on the single self-hosted runner (kvm4-wwf).
 #
-# This never converges the whole stack and never recreates the databases — the
-# frontend has no persistent state, so a redeploy is always safe and idempotent.
+# The runner happens to live ON KVM4, which does NOT mean the API detour can be
+# skipped: the runner is a container with the docker socket mounted and no view
+# of the host's /opt/stacks, and the API is the audited, owner-gated channel.
+# What being on-box does buy us is that the /shell round trips are local, and
+# that `docker build` output never crosses the public internet.
+#
+# WHY no host ports and what that means for concurrency: this workflow claims NO
+# host port at all — it has no `services:` block and starts no local server, so
+# it cannot collide with ci.yml's 5432/8000/8091 even though host networking
+# gives the runner no per-job isolation. Nothing here needs Postgres locally;
+# the two production databases are reached inside their own containers, over the
+# stack's internal network. So the port question does not arise and the
+# concurrency group is not about ports. There is also exactly ONE runner and it
+# takes one job at a time, which already serialises this against CI. The group
+# below is the explicit second guarantee that two DEPLOY runs never interleave
+# on compose.yaml — the thing a future second runner would otherwise allow — and
+# it deliberately does not cancel in progress: killing a half-finished deploy is
+# worse than letting it finish.
+#
+# What it does, in the order production proved on 2026-07-29 (that deploy was
+# done entirely by hand because none of this existed):
+#   1. Build the backend and/or frontend image from a git build-context pinned
+#      to the dispatched commit.
+#   2. Assert the built backend image really is that commit (both alembic
+#      chains resolve to exactly the heads the repo has at that SHA).
+#   3. Snapshot BOTH databases, gzipped, and verify the archives — an unverified
+#      snapshot is not a rollback.
+#   4. Back up compose.yaml, publish the migration plan and the rollback
+#      recipe to the job summary.
+#   5. Run migrations on both chains BEFORE swapping any image (see the comment
+#      on the migrate step for why that order is deliberate).
+#   6. Bump the image tags and recreate ONLY the services in scope, one at a
+#      time, with --no-deps. The whole stack is never converged and the two
+#      database containers are never recreated.
+#   7. Smoke-test /health/ready and require BOTH databases to report ok.
+#
+# No phase removes a docker volume, prunes images, or runs `docker compose
+# down`. Volumes on this host are production data even when their names suggest
+# otherwise, and the previous image tag IS the rollback path — pruning it would
+# throw away the thing step 4 promises.
 #
 # Required repository secrets:
-#   KVM4_RUNNER_URL    -> base URL of the kvm4-runner API (e.g. https://runner.srv1231216.hstgr.cloud)
-#   KVM4_RUNNER_TOKEN  -> bearer token for the kvm4-runner /shell endpoint
+#   KVM4_RUNNER_URL    -> base URL of the kvm4-runner API
+#   KVM4_RUNNER_TOKEN  -> bearer token for its /shell and /file/write endpoints
 #
-# Rollback: on the box, set the frontend `image:` back to the previous tag in
-# /opt/stacks/wwf_app/compose.yaml (a compose.yaml.bak.<timestamp> is written on
-# every run) and `docker compose up -d --no-deps frontend`.
+# Tooling assumed on the runner: python3 only (stdlib urllib does the HTTP, so
+# neither curl nor jq is required any more — jq in particular is not on most
+# runner images). The first step checks for it and apt-installs it if missing.
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'What to deploy'
+        type: choice
+        required: true
+        default: full
+        options:
+          - frontend
+          - backend+scheduler
+          - full
+      sha:
+        description: 'Full 40-hex commit SHA to deploy (blank = the commit this workflow was dispatched on)'
+        type: string
+        required: false
+        default: ''
+      run_migrations:
+        description: 'Run alembic upgrade head on BOTH chains before swapping images'
+        type: boolean
+        required: true
+        default: true
+      confirm_destructive_migrations:
+        description: 'I have read the migration plan and accept that it is NOT purely additive'
+        type: boolean
+        required: true
+        default: false
 
 concurrency:
-  group: deploy-kvm4-frontend
+  group: deploy-kvm4
   cancel-in-progress: false
+
+# The docker DAEMON on KVM4 clones the private repo with this token; nothing
+# else needs it.
+permissions:
+  contents: read
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    name: Deploy (${{ inputs.scope }})
+    runs-on: self-hosted
+    # One shared runner: a hung deploy on GitHub's 6-hour default would block
+    # every branch's CI too. Every remote call carries its own shorter timeout,
+    # so this is only the outer backstop.
+    timeout-minutes: 60
+    env:
+      # Inputs reach the shell ONLY through env vars. A ${{ inputs.sha }}
+      # spliced straight into a `run:` line is a shell-injection hole even on a
+      # dispatch-only workflow, and the SHA is additionally charset-checked
+      # below before it is ever handed to docker or git.
+      RUNNER_URL:   ${{ secrets.KVM4_RUNNER_URL }}
+      RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+      GH_TOKEN:     ${{ github.token }}
+      REPO:         ${{ github.repository }}
+      IN_SCOPE:     ${{ inputs.scope }}
+      IN_SHA:       ${{ inputs.sha }}
+      IN_MIGRATE:   ${{ inputs.run_migrations }}
+      IN_CONFIRM:   ${{ inputs.confirm_destructive_migrations }}
+      DEFAULT_SHA:  ${{ github.sha }}
+      RUN_NUMBER:   ${{ github.run_number }}
+      RUN_ATTEMPT:  ${{ github.run_attempt }}
+      # Facts about the live stack. If a service is ever renamed, this block and
+      # the container names below are the only places to change.
+      STACK_DIR:      /opt/stacks/wwf_app
+      NETWORK:        weekly_weed_flow_internal
+      BACKEND_IMAGE:  weekly_weed_flow-backend
+      FRONTEND_IMAGE: wwf-growflow
+      BACKEND_CT:     weekly_weed_flow-backend-1
+      SCHEDULER_CT:   wwf-scheduler
+      FRONTEND_CT:    wwf-gf-frontend
+      USERS_DB_CT:    wwf-db-users
+      TASKS_DB_CT:    wwf-db-tasks
+      SNAP_ROOT:      /opt/wwf-deploy/snapshots
+      # Probed from the host itself, so it exercises the real public path:
+      # TLS -> Traefik -> frontend nginx -> backend -> both databases.
+      HEALTH_URL:     https://wwf.srv1231216.hstgr.cloud/health/ready
+
     steps:
-      - name: Build & deploy frontend via kvm4-runner
-        env:
-          RUNNER_URL:   ${{ secrets.KVM4_RUNNER_URL }}
-          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
-          GH_TOKEN:     ${{ github.token }}
-          REPO:         ${{ github.repository }}
-          REF:          ${{ github.ref_name }}
-          TAG:          gh-${{ github.run_number }}
+      - name: Runner toolchain preflight
+        # The whole CI side of this deploy is python3 + stdlib. `sudo apt-get`
+        # is used here because ci.yml's e2e job already installs nginx-light the
+        # same way on this runner, so passwordless sudo + apt are known to work.
+        # (actions/setup-python@v5 would also do, and is likewise proven here,
+        # but pinning a Python toolchain to run a 40-line stdlib script is a
+        # heavier dependency than the thing it protects.)
         run: |
           set -euo pipefail
           if [ -z "${RUNNER_URL:-}" ] || [ -z "${RUNNER_TOKEN:-}" ]; then
             echo "::error::KVM4_RUNNER_URL / KVM4_RUNNER_TOKEN secrets are not set."
             exit 1
           fi
+          if ! command -v python3 >/dev/null 2>&1; then
+            echo "::warning::python3 missing on this runner — installing it"
+            sudo apt-get update -q && sudo apt-get install -y -q python3
+          fi
+          command -v python3 >/dev/null 2>&1 || {
+            echo "::error::python3 is unavailable and could not be installed. Install it on the kvm4-wwf runner (or add actions/setup-python to this job) — every remaining step needs it."
+            exit 1
+          }
+          python3 -c 'import base64, json, sys, urllib.request; print("python3", sys.version.split()[0], "with the stdlib bits this workflow needs")'
+          # jq and curl are deliberately NOT required. Say so out loud, because
+          # the previous version of this file used both.
+          for optional in jq curl; do
+            command -v "$optional" >/dev/null 2>&1 \
+              && echo "note: $optional present but unused" \
+              || echo "note: $optional absent — not needed"
+          done
 
-          # Remote script: build tagged image from this ref, bump the live
-          # compose tag, recreate ONLY the frontend. $() runs on the runner.
-          REMOTE=$(cat <<REMOTE_EOF
-          set -e
-          docker build -t wwf-growflow:${TAG} "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git#${REF}:web"
-          NEW=\$(docker run --rm wwf-growflow:${TAG} grep -o "wwf-shell-v[0-9.]*" /usr/share/nginx/html/sw.js | head -1)
-          echo "built wwf-growflow:${TAG} serving \$NEW"
-          cd /opt/stacks/wwf_app
-          cp compose.yaml compose.yaml.bak.\$(date +%Y%m%d%H%M%S)
-          sed -i -E "s#image: wwf-growflow:[^[:space:]]+#image: wwf-growflow:${TAG}#" compose.yaml
-          docker compose up -d --no-deps frontend
-          docker ps --filter name=wwf-gf-frontend --format "{{.Image}} {{.Status}}"
-          REMOTE_EOF
+          # Resolve and validate the commit. Anything but 40 hex characters is
+          # rejected rather than passed to docker/git: the value ends up inside
+          # a URL the docker daemon clones.
+          SHA="${IN_SHA:-}"
+          [ -n "$SHA" ] || SHA="$DEFAULT_SHA"
+          case "$SHA" in
+            *[!0-9a-fA-F]*) echo "::error::sha input must be a full 40-character hex commit SHA (got: $SHA)"; exit 1 ;;
+          esac
+          [ "${#SHA}" -eq 40 ] || { echo "::error::sha input must be exactly 40 hex characters (got ${#SHA})"; exit 1; }
+          SHA=$(printf '%s' "$SHA" | tr 'A-F' 'a-f')
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          echo "TAG=gh-${RUN_NUMBER}-$(printf '%s' "$SHA" | cut -c1-7)" >> "$GITHUB_ENV"
+          echo "REMOTE_DIR=/opt/wwf-deploy/run-${RUN_NUMBER}-${RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          case "$IN_SCOPE" in
+            frontend)          echo "DO_BACKEND=false" >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV" ;;
+            backend+scheduler) echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=false" >> "$GITHUB_ENV" ;;
+            full)              echo "DO_BACKEND=true"  >> "$GITHUB_ENV"; echo "DO_FRONTEND=true"  >> "$GITHUB_ENV" ;;
+            *) echo "::error::unknown scope '$IN_SCOPE'"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          # The exact commit being deployed, so the expected migration heads
+          # below describe THAT code and not whatever main happens to be.
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      - name: Compute the migration heads the deployed commit expects
+        # Parsed out of the revision files with the stdlib rather than with
+        # alembic, which is not installed on the runner. The image is checked
+        # against these two numbers in the verify step; that is what makes
+        # "this image is the intended code" an assertion instead of a hope.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import pathlib, re, sys
+
+          REV  = re.compile(r'^revision(?:\s*:[^=]*)?=\s*["\']([^"\']+)["\']', re.M)
+          DOWN = re.compile(r'^down_revision(?:\s*:[^=]*)?=\s*(?:["\']([^"\']+)["\']|None)', re.M)
+
+          for chain in ("users", "tasks"):
+              d = pathlib.Path("backend") / f"alembic_{chain}" / "versions"
+              revs, downs = set(), set()
+              for p in sorted(d.glob("[0-9]*.py")):
+                  src = p.read_text(encoding="utf-8")
+                  m = REV.search(src)
+                  if not m:
+                      sys.exit(f"::error::{p} has no parsable `revision = ...`")
+                  revs.add(m.group(1))
+                  dm = DOWN.search(src)
+                  if dm and dm.group(1):
+                      downs.add(dm.group(1))
+              heads = sorted(revs - downs)
+              if len(heads) != 1:
+                  sys.exit(f"::error::{chain} chain does not have exactly one head: {heads}")
+              print(f"EXPECT_{chain.upper()}_HEAD={heads[0]}")
+              print(f"EXPECT_{chain.upper()}_COUNT={len(revs)}")
+          PY
+          # Not echoed here: GITHUB_ENV assignments are only visible to LATER
+          # steps, and under `set -u` referencing them now would abort the step.
+          # The next step prints config.env, which contains them.
+
+      - name: Stage the remote deploy scripts
+        run: |
+          set -euo pipefail
+
+          # ---------------------------------------------------------------
+          # kvm4.py — the only thing that talks to the runner API. urllib from
+          # the stdlib, so no curl/jq assumption. The response of /file/write is
+          # never printed: its request body can be the GITHUB_TOKEN.
+          # ---------------------------------------------------------------
+          cat > "$RUNNER_TEMP/kvm4.py" <<'KVM4_PY'
+          import base64
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          BASE = os.environ["RUNNER_URL"].rstrip("/")
+          TOKEN = os.environ["RUNNER_TOKEN"]
+
+
+          def post(path, payload, timeout):
+              req = urllib.request.Request(
+                  BASE + path,
+                  data=json.dumps(payload).encode(),
+                  headers={"Authorization": "Bearer " + TOKEN,
+                           "Content-Type": "application/json"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=timeout) as resp:
+                  return json.loads(resp.read().decode())
+
+
+          def write(remote, local, mode):
+              body = base64.b64encode(open(local, "rb").read()).decode()
+              payload = {"path": remote, "content_b64": body, "mode": mode, "mkdir": True}
+              try:
+                  post("/file/write", payload, 120)
+              except urllib.error.HTTPError as exc:
+                  # "0700" is not a valid JSON number, so the mode almost
+                  # certainly travels as a string — but this repo has never
+                  # called /file/write before, so the contract is unproven. If
+                  # the service rejects the request, try the integer form once
+                  # rather than failing the whole deploy on a type guess.
+                  if exc.code not in (400, 415, 422):
+                      raise
+                  print("::warning::/file/write rejected mode as a string "
+                        "(HTTP %d); retrying with the octal integer" % exc.code)
+                  payload["mode"] = int(mode, 8)
+                  post("/file/write", payload, 120)
+              print("wrote %s (mode %s, %d bytes)"
+                    % (remote, mode, os.path.getsize(local)))
+
+
+          def main(argv):
+              if not argv:
+                  print("usage: kvm4.py write <remote> <local> <mode> "
+                        "| shell <cmd> <timeout>")
+                  return 2
+              if argv[0] == "write":
+                  write(argv[1], argv[2], argv[3])
+                  return 0
+              if argv[0] == "shell":
+                  cmd, timeout = argv[1], int(argv[2])
+                  # The HTTP read timeout has to outlast the remote timeout, or
+                  # a build that is still running looks like a network failure.
+                  r = post("/shell", {"cmd": cmd, "timeout": timeout}, timeout + 60)
+                  print(r.get("output", ""))
+                  if r.get("truncated"):
+                      print("::warning::kvm4-runner truncated this output; the full "
+                            "log is on the host under the run directory")
+                  rc = r.get("exit_code", 1)
+                  print("::notice::remote exit_code=%s" % rc)
+                  return 0 if rc == 0 else 1
+              print("usage: kvm4.py write <remote> <local> <mode> | shell <cmd> <timeout>")
+              return 2
+
+
+          if __name__ == "__main__":
+              sys.exit(main(sys.argv[1:]))
+          KVM4_PY
+
+          # ---------------------------------------------------------------
+          # config.env — every non-secret parameter of this run, in one file the
+          # remote script sources. Written from env vars, never interpolated.
+          # ---------------------------------------------------------------
+          {
+            printf 'SCOPE=%s\n'           "$IN_SCOPE"
+            printf 'DO_BACKEND=%s\n'      "$DO_BACKEND"
+            printf 'DO_FRONTEND=%s\n'     "$DO_FRONTEND"
+            printf 'RUN_MIGRATIONS=%s\n'  "$IN_MIGRATE"
+            printf 'CONFIRM_DESTRUCTIVE=%s\n' "$IN_CONFIRM"
+            printf 'SHA=%s\n'             "$SHA"
+            printf 'REPO=%s\n'            "$REPO"
+            printf 'TAG=%s\n'             "$TAG"
+            printf 'RUN_NUMBER=%s\n'      "$RUN_NUMBER"
+            printf 'RUN_ATTEMPT=%s\n'     "$RUN_ATTEMPT"
+            printf 'STACK_DIR=%s\n'       "$STACK_DIR"
+            printf 'NETWORK=%s\n'         "$NETWORK"
+            printf 'BACKEND_IMAGE=%s\n'   "$BACKEND_IMAGE"
+            printf 'FRONTEND_IMAGE=%s\n'  "$FRONTEND_IMAGE"
+            printf 'BACKEND_CT=%s\n'      "$BACKEND_CT"
+            printf 'SCHEDULER_CT=%s\n'    "$SCHEDULER_CT"
+            printf 'FRONTEND_CT=%s\n'     "$FRONTEND_CT"
+            printf 'USERS_DB_CT=%s\n'     "$USERS_DB_CT"
+            printf 'TASKS_DB_CT=%s\n'     "$TASKS_DB_CT"
+            printf 'SNAP_ROOT=%s\n'       "$SNAP_ROOT"
+            printf 'HEALTH_URL=%s\n'      "$HEALTH_URL"
+            printf 'EXPECT_USERS_HEAD=%s\n'  "$EXPECT_USERS_HEAD"
+            printf 'EXPECT_USERS_COUNT=%s\n' "$EXPECT_USERS_COUNT"
+            printf 'EXPECT_TASKS_HEAD=%s\n'  "$EXPECT_TASKS_HEAD"
+            printf 'EXPECT_TASKS_COUNT=%s\n' "$EXPECT_TASKS_COUNT"
+          } > "$RUNNER_TEMP/config.env"
+
+          # ---------------------------------------------------------------
+          # migrate_entry.sh — the entrypoint of the throwaway migration
+          # container. It exists as a mounted FILE rather than as a `sh -c '...'`
+          # string because the DSN has to be assembled from a URL-encoded
+          # password, and nesting those quotes through docker run, bash, JSON
+          # and YAML is how a deploy script grows a bug nobody can see.
+          # ---------------------------------------------------------------
+          cat > "$RUNNER_TEMP/migrate_entry.sh" <<'ENTRY_SH'
+          #!/bin/sh
+          # Runs INSIDE the freshly built backend image, with WWF_* supplied by
+          # docker --env-file. Everything after $0 is passed to alembic.
+          set -eu
+          : "${WWF_CHAIN:?}" "${WWF_DB_HOST:?}" "${WWF_DB_NAME:?}" "${WWF_DSN_VAR:?}" "${WWF_DB_PW:?}"
+          # The password is read from the environment, never from argv: the host
+          # can see every container process's command line in /proc, so
+          # `python3 -c ... "$PW"` would publish it to the host's process list.
+          # Two escapings are needed, and missing the second one breaks EVERY
+          # migration this workflow runs. First percent-encode for the URL, then
+          # DOUBLE each '%' for alembic: env.py hands the DSN to
+          # config.set_main_option(), which is a ConfigParser with
+          # BasicInterpolation, and its before_set() rejects a lone '%' outright
+          # ("invalid interpolation syntax", verified). '%%40' is accepted and
+          # read back as '%40', so the DSN sqlalchemy finally sees is correct.
+          # Latent today only because the current password needs no encoding —
+          # add one '@', ':' or '/' to it and the un-doubled version dies before
+          # it opens a single connection.
+          ENC=$(python3 -c 'import os, urllib.parse, sys; sys.stdout.write(urllib.parse.quote(os.environ["WWF_DB_PW"], safe="").replace("%", "%%"))')
+          export "$WWF_DSN_VAR=postgresql+asyncpg://postgres:$ENC@$WWF_DB_HOST:5432/$WWF_DB_NAME"
+          unset WWF_DB_PW
+          exec alembic -c /app/alembic.ini -n "$WWF_CHAIN" "$@"
+          ENTRY_SH
+
+          # ---------------------------------------------------------------
+          # alembic_probe.py — see its own docstring. Mounted into the image so
+          # it inspects the chains that are actually IN the artifact.
+          # ---------------------------------------------------------------
+          cat > "$RUNNER_TEMP/alembic_probe.py" <<'PROBE_PY'
+          """Offline inspection of the two alembic chains INSIDE the built image.
+
+          Touches no database: the caller passes the revision production is
+          currently on (read separately with `alembic current`), and this walks
+          the image's own script directory.
+
+            verify <users_head> <users_count> <tasks_head> <tasks_count>
+                Exit 0 only if BOTH chains in the image resolve to exactly the
+                single head and revision count the repo had at the deployed
+                commit.
+
+            plan <chain> <current_revision>
+                Print the revisions an upgrade would apply, in apply order, and
+                classify each one's upgrade() body.
+                0 = nothing pending, 3 = pending and all look additive,
+                4 = at least one is NOT safely additive, 5 = no plan possible.
+                ONLY upgrade() is inspected: every additive revision's
+                downgrade() drops what its upgrade created, so scanning whole
+                files flags all 52 of them and the guard becomes noise the
+                operator learns to click through.
+
+          WWF_ALEMBIC_INI overrides the config path (the image has it at
+          /app/alembic.ini) so this can be exercised against a plain checkout.
+          """
+
+          import ast
+          import os
+          import re
+          import sys
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          INI = os.environ.get("WWF_ALEMBIC_INI", "/app/alembic.ini")
+
+          # Deliberately biased towards asking. A false "not additive" costs one
+          # operator decision; a false "additive" is how a DROP reaches
+          # production behind a guard that said it was safe. op.alter_column is
+          # flagged unconditionally even though a server_default-only change is
+          # harmless, because kwargs are not parsed here.
+          #
+          # What is NOT matched, on purpose: any rule spanning a quote or a
+          # newline. These revisions build SQL from adjacent string literals
+          # ("ALTER TABLE x" " DROP CONSTRAINT y"), so a greedy
+          # `ALTER TABLE .* DROP` rule ran past the end of one op.execute() into
+          # the next and flagged two purely-additive CREATE POLICY revisions on
+          # the word USING. The object-level DROP rule catches those same real
+          # cases (0003/0010 both hit DROP CONSTRAINT) without the noise.
+          NON_ADDITIVE = re.compile(
+              r"""(?xi)
+                \b op\.(?: drop_table | drop_column | drop_constraint | drop_index
+                         | drop_table_comment | rename_table | alter_column ) \b
+              | \b DROP \s+ (?: IF \s+ EXISTS \s+ )?
+                    (?: TABLE | COLUMN | CONSTRAINT | INDEX | SCHEMA | TRIGGER | VIEW
+                      | TYPE | POLICY | FUNCTION | SEQUENCE | DEFAULT | DATABASE
+                      | ROLE ) \b
+              | \b TRUNCATE \b
+              | \b DELETE \s+ FROM \b
+              | \b ALTER \s+ COLUMN \s+ [\w."]+ \s+ (?: SET \s+ DATA \s+ )? TYPE \b
+              | \b RENAME \s+ (?: TO | COLUMN ) \b
+              | \b SET \s+ NOT \s+ NULL \b
+              """
           )
 
-          # payload.json embeds GH_TOKEN (it is inside the docker build URL in
-          # $REMOTE), so it is deleted the moment curl has read it rather than
-          # left lying in the workspace for the rest of the job. `trap` so an
-          # interrupted or failed curl cleans up too — under `set -e` a plain
-          # `rm` on the next line would be skipped exactly when it matters.
-          #
-          # RESIDUAL, and deliberately not changed here: the token still
-          # reaches KVM4 inside the command string, so it lands in that host's
-          # process list and in the kvm4-runner audit log. Fixing that means
-          # changing the runner's /shell contract to accept env separately,
-          # which cannot be verified from this repo and would risk breaking an
-          # owner-gated deploy path. Mitigating factors are real but partial:
-          # `github.token` is the ephemeral per-job GITHUB_TOKEN, scoped to
-          # this repository and invalid once the job ends.
-          trap 'rm -f payload.json' EXIT
-          jq -nc --arg cmd "$REMOTE" '{cmd: $cmd, timeout: 320}' > payload.json
-          curl -sS --fail --max-time 340 -X POST "$RUNNER_URL/shell" \
-            -H "Authorization: Bearer $RUNNER_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data @payload.json > resp.json
-          rm -f payload.json
 
-          python3 - <<'PY'
-          import json, sys
-          r = json.load(open("resp.json"))
-          print(r.get("output", ""))
-          rc = r.get("exit_code", 1)
-          print(f"::notice::kvm4-runner exit_code={rc}")
-          sys.exit(0 if rc == 0 else 1)
-          PY
+          def chain(name):
+              return ScriptDirectory.from_config(Config(INI, ini_section=name))
+
+
+          def upgrade_source(path):
+              """Source of just the upgrade() function, or None if absent."""
+              src = open(path, encoding="utf-8").read()
+              try:
+                  tree = ast.parse(src)
+              except SyntaxError:
+                  return None
+              for node in tree.body:
+                  if isinstance(node, ast.FunctionDef) and node.name == "upgrade":
+                      return ast.get_source_segment(src, node)
+              return None
+
+
+          def do_verify(argv):
+              if len(argv) != 4:
+                  print("usage: probe verify <users_head> <users_count> "
+                        "<tasks_head> <tasks_count>")
+                  return 5
+              want = {"users": (argv[0], int(argv[1])),
+                      "tasks": (argv[2], int(argv[3]))}
+              bad = []
+              for name, (head, count) in want.items():
+                  sd = chain(name)
+                  heads = list(sd.get_heads())
+                  revs = list(sd.walk_revisions("base", "heads"))
+                  print("%s: image head=%s count=%d | expected head=%s count=%d"
+                        % (name, ",".join(heads) or "<none>", len(revs), head, count))
+                  if heads != [head]:
+                      bad.append("%s: image head %s != expected %s"
+                                 % (name, heads, head))
+                  if len(revs) != count:
+                      bad.append("%s: image has %d revisions, expected %d"
+                                 % (name, len(revs), count))
+                  try:
+                      script = sd.get_revision(head)
+                  except Exception as exc:
+                      bad.append("%s: expected head revision %s is not in the "
+                                 "image (%s)" % (name, head, exc))
+                      continue
+                  print("%s: head script present at %s" % (name, script.path))
+              if bad:
+                  print("IMAGE VERIFICATION FAILED:")
+                  for line in bad:
+                      print("  - " + line)
+                  return 5
+              print("image contains exactly the migration chains of the deployed commit")
+              return 0
+
+
+          def do_plan(argv):
+              if len(argv) != 2:
+                  print("usage: probe plan <users|tasks> <current_revision|''>")
+                  return 5
+              name, current = argv[0], argv[1].strip()
+              sd = chain(name)
+              lower = current if current else "base"
+              try:
+                  revs = list(sd.iterate_revisions("heads", lower, implicit_base=True))
+              except Exception as exc:
+                  print("%s: cannot compute an upgrade plan from %r: %s"
+                        % (name, lower, exc))
+                  print("%s: production is on a revision this image does not "
+                        "contain, or the chain branched. Resolve by hand; "
+                        "refusing to guess." % name)
+                  return 5
+              revs.reverse()  # alembic yields newest-first; operators read apply order
+              if not revs:
+                  print("%s: at %s, nothing pending" % (name, lower))
+                  return 0
+              print("%s: %d revision(s) pending from %s:" % (name, len(revs), lower))
+              worst = 3
+              for rev in revs:
+                  body = upgrade_source(rev.path)
+                  if body is None:
+                      hits = ["upgrade() not found in %s - cannot classify"
+                              % os.path.basename(rev.path)]
+                  else:
+                      hits = sorted({" ".join(m.group(0).split())[:120]
+                                     for m in NON_ADDITIVE.finditer(body)})
+                  if hits:
+                      worst = 4
+                  doc = (rev.doc or "").splitlines()
+                  print("  %s  %-12s %s"
+                        % (rev.revision, "NOT-ADDITIVE" if hits else "additive",
+                           doc[0] if doc else os.path.basename(rev.path)))
+                  for hit in hits:
+                      print("        ! %s" % hit)
+              return worst
+
+
+          def main():
+              if len(sys.argv) < 2:
+                  print("usage: probe verify|plan ...")
+                  return 5
+              if sys.argv[1] == "verify":
+                  return do_verify(sys.argv[2:])
+              if sys.argv[1] == "plan":
+                  return do_plan(sys.argv[2:])
+              print("unknown subcommand %r" % sys.argv[1])
+              return 5
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          PROBE_PY
+
+          # ---------------------------------------------------------------
+          # deploy.sh — the whole remote side, one function per phase.
+          # ---------------------------------------------------------------
+          cat > "$RUNNER_TEMP/deploy.sh" <<'DEPLOY_SH'
+          #!/usr/bin/env bash
+          # Runs ON KVM4, one phase per kvm4-runner /shell call:
+          #     bash deploy.sh <phase>
+          #
+          # /shell executes under /bin/sh (dash), which is why the workflow
+          # always invokes this as `bash deploy.sh ...`: `local`, ${VAR//a/b} and
+          # `set -o pipefail` below are bash features that dash either rejects or
+          # silently mis-handles.
+          #
+          # Phases are separately re-runnable and ordered so that a phase which
+          # dies leaves production exactly as the previous phase left it. That is
+          # the entire reason the order is build -> verify -> snapshot ->
+          # backup-compose -> plan -> migrate -> swap -> smoke.
+          set -euo pipefail
+
+          RUNDIR="$(cd "$(dirname "$0")" && pwd)"
+          . "$RUNDIR/config.env"
+          STATE="$RUNDIR/state.env"
+          # `[ -f x ] && . x` would abort the script under errexit when the file
+          # does not exist yet, because the failing list is the whole command.
+          if [ -f "$STATE" ]; then . "$STATE"; fi
+
+          TOKEN_FILE="$RUNDIR/.gh_token"
+          REDACT_SED="$RUNDIR/.redact.sed"
+          DBENV="$RUNDIR/.dbenv"
+          PROBE="$RUNDIR/alembic_probe.py"
+          ENTRY="$RUNDIR/migrate_entry.sh"
+          BACKEND_REF="$BACKEND_IMAGE:$TAG"
+          FRONTEND_REF="$FRONTEND_IMAGE:$TAG"
+
+          log() { printf '%s\n' "$*"; }
+          die() { printf 'DEPLOY-ABORT: %s\n' "$*" >&2; exit 1; }
+
+          # Every /shell call is a fresh shell, so whatever a later phase needs
+          # (previous tags, snapshot path, pre-deploy revisions) is written down.
+          state_put() {
+            printf '%s=%q\n' "$1" "$2" >> "$STATE"
+            export "$1=$2"
+          }
+
+          # The git build-context URL must carry the token (the DAEMON does the
+          # clone), so every byte of build output is filtered. The substitution
+          # lives in a 0600 file because `sed -e "s|$TOKEN|...|"` would put the
+          # token in sed's own argv, i.e. in this host's process list — the exact
+          # exposure this is meant to reduce.
+          init_redaction() {
+            [ -s "$TOKEN_FILE" ] || die "$TOKEN_FILE is missing or empty"
+            if [ ! -s "$REDACT_SED" ]; then
+              ( umask 077; printf 's|%s|REDACTED|g\n' "$(cat "$TOKEN_FILE")" > "$REDACT_SED" )
+            fi
+          }
+          redact() {
+            sed -f "$REDACT_SED" -e 's|x-access-token:[^@]*@|x-access-token:REDACTED@|g'
+          }
+          build_context_url() {
+            printf 'https://x-access-token:%s@github.com/%s.git#%s:%s' \
+              "$(cat "$TOKEN_FILE")" "$REPO" "$SHA" "$1"
+          }
+
+          # ---------------------------------------------------------------
+          phase_preflight() {
+            command -v docker >/dev/null 2>&1 || die "docker is not on PATH on the host"
+            docker compose version >/dev/null 2>&1 || die "docker compose v2 is unavailable on the host"
+            [ -f "$STACK_DIR/compose.yaml" ] || die "$STACK_DIR/compose.yaml does not exist"
+            mkdir -p "$SNAP_ROOT"
+            [ -w "$SNAP_ROOT" ] || die "$SNAP_ROOT is not writable"
+            docker network inspect "$NETWORK" >/dev/null 2>&1 \
+              || die "docker network $NETWORK not found — migrations run in a throwaway container on it"
+
+            log "== containers =="
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
+              docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" \
+                || die "container $ct not found — refusing to deploy into a stack that is not the documented one"
+            done
+
+            # Both database containers must be reachable by name on $NETWORK or
+            # the migration container cannot connect to them.
+            local attached
+            # Newlines folded to spaces so the membership test below is a plain
+            # substring match regardless of how docker formats the list.
+            attached=" $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$NETWORK" | tr '\n' ' ') "
+            log "== $NETWORK members:$attached"
+            for ct in "$USERS_DB_CT" "$TASKS_DB_CT"; do
+              case "$attached" in
+                *" $ct "*) ;;
+                *) die "$ct is not attached to $NETWORK — the migration container could not resolve it" ;;
+              esac
+            done
+
+            # Derive the compose SERVICE names from the running containers'
+            # compose labels instead of guessing them. The same labels catch a
+            # container that belongs to a different compose project than
+            # $STACK_DIR, where `docker compose up` would create a SECOND copy
+            # beside the live one instead of replacing it.
+            cd "$STACK_DIR"
+            local services
+            # Space-delimited for substring membership tests below. Piping into
+            # `grep -q` instead would let grep exit before the producer finished
+            # writing, and under pipefail that EPIPE reads as "not a member".
+            services=" $(docker compose config --services | tr '\n' ' ') " \
+              || die "docker compose config failed in $STACK_DIR"
+            log "== compose services:$services"
+            local ct svc wdir key
+            for pair in "BACKEND_SVC $BACKEND_CT" "SCHEDULER_SVC $SCHEDULER_CT" \
+                        "FRONTEND_SVC $FRONTEND_CT" "USERS_DB_SVC $USERS_DB_CT" \
+                        "TASKS_DB_SVC $TASKS_DB_CT"; do
+              key=${pair%% *}
+              ct=${pair#* }
+              svc=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$ct")
+              # A missing label renders as the literal <no value>, not as empty.
+              case "$svc" in
+                ""|"<no value>")
+                  die "$ct carries no com.docker.compose.service label — it was not created by compose, so compose up would create a second container beside it instead of replacing it" ;;
+              esac
+              case "$services" in
+                *" $svc "*) ;;
+                *) die "$ct maps to compose service '$svc', which is not in $STACK_DIR/compose.yaml" ;;
+              esac
+              wdir=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$ct")
+              case "$wdir" in
+                ""|"<no value>")
+                  # Older compose did not write this label. Degrade to a warning
+                  # rather than blocking a deploy on a label's existence.
+                  log "note: $ct has no project.working_dir label — project identity unverified" ;;
+                "$STACK_DIR") ;;
+                *) die "$ct belongs to the compose project in $wdir, not $STACK_DIR" ;;
+              esac
+              state_put "$key" "$svc"
+              log "$ct -> service $svc"
+            done
+
+            # Record the tags currently deployed BEFORE anything changes; the
+            # rollback note is worthless without them.
+            local prev
+            # `| head -1` is avoided on purpose throughout this file: head exits
+            # after the first line, SIGPIPEs the producer, and pipefail then
+            # fails the whole command substitution. awk reads to EOF.
+            # Anchor on `image:` exactly as bump_image() does. An UNANCHORED
+            # match also hits prose: a header comment reading "the backend ran
+            # weekly_weed_flow-backend:v77 until ..." wins NR==1 and the job then
+            # publishes a rollback recipe naming a tag that is NOT what is
+            # deployed — an operator following it rolls back to the wrong image.
+            # The two must read the same lines or the recipe is fiction.
+            #
+            # `|| true` on each substitution is load-bearing: without it a
+            # non-matching grep trips pipefail, the assignment's non-zero status
+            # trips `set -e`, and the function exits BEFORE the `die` below can
+            # print — the diagnostic became dead code and the operator saw a bare
+            # exit=1. Verified against a compose.yaml using `image: ${BACKEND_TAG}`.
+            prev_tag_of() {  # prev_tag_of <image-name>
+              grep -oE "image: *$1:[A-Za-z0-9._-]+" compose.yaml \
+                | awk -F: 'NR==1 {print $NF}' || true
+            }
+            if [ "$DO_BACKEND" = true ]; then
+              prev=$(prev_tag_of "$BACKEND_IMAGE") || true
+              [ -n "$prev" ] || die "no 'image: $BACKEND_IMAGE:<tag>' line in compose.yaml"
+              state_put PREV_BACKEND_TAG "$prev"
+            fi
+            if [ "$DO_FRONTEND" = true ]; then
+              prev=$(prev_tag_of "$FRONTEND_IMAGE") || true
+              [ -n "$prev" ] || die "no 'image: $FRONTEND_IMAGE:<tag>' line in compose.yaml"
+              state_put PREV_FRONTEND_TAG "$prev"
+            fi
+            log "== compose image lines =="
+            # `|| die` for the same reason: a quoted or variable image line made
+            # this grep exit 1 and abort the phase with no message at all.
+            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE):" compose.yaml \
+              || die "no anchored 'image: <name>:<tag>' lines found in compose.yaml" 
+            log "preflight ok (scope=$SCOPE sha=$SHA new tag=$TAG)"
+          }
+
+          # ---------------------------------------------------------------
+          phase_build() {
+            init_redaction
+            if [ "$DO_BACKEND" = true ]; then
+              log "building $BACKEND_REF from $REPO@$SHA (backend/)"
+              # The DOCKER DAEMON performs this clone, not this shell, so the
+              # caller's git credentials are irrelevant: a bare github.com URL
+              # fails on this private repo with "could not read Username ...
+              # terminal prompts disabled". Hence the token in the URL.
+              # --network host: proven necessary for this build on this box.
+              # Full output goes to a file (redacted) and only the tail is
+              # printed, because /shell truncates long responses and the
+              # truncation would eat the failure reason.
+              if ! docker build --network host -t "$BACKEND_REF" "$(build_context_url backend)" 2>&1 \
+                   | redact > "$RUNDIR/build-backend.log"; then
+                tail -n 120 "$RUNDIR/build-backend.log" || true
+                die "backend image build failed (full redacted log: $RUNDIR/build-backend.log)"
+              fi
+              tail -n 25 "$RUNDIR/build-backend.log"
+              docker image inspect -f 'built {{index .RepoTags 0}} id={{.Id}} created={{.Created}}' "$BACKEND_REF"
+            fi
+            if [ "$DO_FRONTEND" = true ]; then
+              log "building $FRONTEND_REF from $REPO@$SHA (web/)"
+              # No --network host here: the frontend build has never needed it,
+              # and this is the command that is already proven in production.
+              if ! docker build -t "$FRONTEND_REF" "$(build_context_url web)" 2>&1 \
+                   | redact > "$RUNDIR/build-frontend.log"; then
+                tail -n 120 "$RUNDIR/build-frontend.log" || true
+                die "frontend image build failed (full redacted log: $RUNDIR/build-frontend.log)"
+              fi
+              tail -n 25 "$RUNDIR/build-frontend.log"
+              # The service-worker shell version is the frontend's own build
+              # fingerprint. The previous version of this workflow printed it and
+              # carried on when it was empty, which turned a broken build into a
+              # successful-looking deploy.
+              local shell_v
+              shell_v=$(docker run --rm "$FRONTEND_REF" \
+                grep -o 'wwf-shell-v[0-9.]*' /usr/share/nginx/html/sw.js \
+                | awk 'NR==1 {print}') || true
+              [ -n "$shell_v" ] || die "$FRONTEND_REF has no wwf-shell-v* marker in sw.js — the web build did not produce a usable bundle"
+              state_put FRONTEND_SHELL "$shell_v"
+              log "built $FRONTEND_REF serving $shell_v"
+            fi
+          }
+
+          # ---------------------------------------------------------------
+          phase_verify() {
+            if [ "$DO_BACKEND" != true ]; then
+              log "scope=$SCOPE: no backend image to verify"
+              return 0
+            fi
+            # Verify the artifact BEFORE it is allowed near production: both
+            # chains inside the image must resolve to exactly the heads the repo
+            # has at $SHA. A stale build context, a partial clone or the wrong
+            # SHA all show up here instead of halfway through a migration.
+            docker run --rm \
+              -v "$PROBE:/probe.py:ro" \
+              -e WWF_ALEMBIC_INI=/app/alembic.ini \
+              "$BACKEND_REF" python3 /probe.py verify \
+              "$EXPECT_USERS_HEAD" "$EXPECT_USERS_COUNT" \
+              "$EXPECT_TASKS_HEAD" "$EXPECT_TASKS_COUNT" \
+              || die "the built image does not contain the migration chains of $SHA"
+          }
+
+          # ---------------------------------------------------------------
+          # Runs alembic inside the NEW image against a production database.
+          #   alembic_cli <users|tasks> <alembic args...>
+          # The DSN is assembled inside the container from a password that never
+          # appears in any command line: --env-file instead of -e, because the
+          # host's process list is readable and `-e URL=...:pw@...` would put the
+          # superuser password in it.
+          alembic_cli() {
+            local which="$1"; shift
+            local svc db var pw rc=0
+            case "$which" in
+              users) svc="$USERS_DB_CT"; db=wwf_users; var=USERS_MIGRATION_DATABASE_URL ;;
+              tasks) svc="$TASKS_DB_CT"; db=wwf_tasks; var=TASKS_MIGRATION_DATABASE_URL ;;
+              *) die "alembic_cli: unknown chain '$which'" ;;
+            esac
+            # Read the superuser password from inside the database container, as
+            # documented. The app's own DSNs are DML-only and cannot run DDL.
+            pw=$(docker exec "$svc" printenv POSTGRES_PASSWORD) \
+              || die "cannot read POSTGRES_PASSWORD from $svc"
+            [ -n "$pw" ] || die "POSTGRES_PASSWORD is empty in $svc"
+            ( umask 077
+              {
+                printf 'WWF_CHAIN=%s\n'   "$which"
+                printf 'WWF_DB_HOST=%s\n' "$svc"
+                printf 'WWF_DB_NAME=%s\n' "$db"
+                printf 'WWF_DSN_VAR=%s\n' "$var"
+                printf 'WWF_DB_PW=%s\n'   "$pw"
+              } > "$DBENV" )
+            docker run --rm --network "$NETWORK" --env-file "$DBENV" \
+              -v "$ENTRY:/migrate_entry.sh:ro" \
+              "$BACKEND_REF" sh /migrate_entry.sh "$@" || rc=$?
+            shred -u "$DBENV" 2>/dev/null || rm -f "$DBENV"
+            return $rc
+          }
+
+          current_revision() {  # prints the revision production is on, or ""
+            local which="$1" raw cur
+            raw=$(alembic_cli "$which" current) || die "alembic -n $which current failed against the live database"
+            # alembic prints "<rev> (head)" on stdout and sends its logging to
+            # stderr (see alembic.ini), so the revision is the LAST non-empty
+            # line. `awk '... exit'` is avoided: it would SIGPIPE tr and, under
+            # pipefail, fail this on perfectly good output.
+            cur=$(printf '%s\n' "$raw" | tr -d '\r' | awk 'NF {last=$1} END {if (last != "") print last}')
+            # Empty is legitimate (a database with no alembic_version row yet).
+            # Anything that is not revision-shaped means we are parsing the wrong
+            # stream, and guessing from it would drive the plan and the recorded
+            # rollback revision off the same bad value.
+            case "$cur" in
+              "") ;;
+              *[!A-Za-z0-9_.-]*) die "cannot parse a revision out of 'alembic -n $which current'; raw output was: $raw" ;;
+            esac
+            printf '%s' "$cur"
+          }
+
+          # ---------------------------------------------------------------
+          phase_snapshot() {
+            if [ "$DO_BACKEND" != true ]; then
+              log "scope=$SCOPE: no snapshot taken — a frontend-only deploy cannot touch either database"
+              return 0
+            fi
+            local dir
+            dir="$SNAP_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-gh$RUN_NUMBER"
+            mkdir -p "$dir"
+            chmod 700 "$dir"
+            state_put SNAPSHOT_DIR "$dir"
+            snapshot_one "$USERS_DB_CT" wwf_users "$dir"
+            snapshot_one "$TASKS_DB_CT" wwf_tasks "$dir"
+            log "== snapshot $dir =="
+            ls -l "$dir"
+            du -sh "$dir"
+          }
+
+          snapshot_one() {
+            local ct="$1" db="$2" dir="$3" out size hits
+            out="$dir/$db.sql.gz"
+            # --clean --if-exists so the archive is actually restorable OVER the
+            # live database. A plain dump collides on every existing object,
+            # which would only be discovered during the rollback it exists for.
+            # PGPASSWORD is expanded INSIDE the container, so the password stays
+            # out of this host's process list.
+            if ! docker exec -e WWF_DB="$db" "$ct" \
+                 sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h 127.0.0.1 -U postgres --clean --if-exists -d "$WWF_DB"' \
+                 | gzip -9 > "$out"; then
+              die "pg_dump of $db failed — nothing has been changed yet"
+            fi
+            gzip -t "$out" || die "$out is not a valid gzip archive — a snapshot you have not verified is not a rollback"
+            # `grep -q` would exit on the first match, SIGPIPE the decompressor
+            # and, under pipefail, fail this check on a perfectly good archive.
+            # grep -c reads the whole stream, which also re-proves it inflates.
+            hits=$(gzip -cd "$out" | grep -c 'PostgreSQL database dump' || true)
+            [ "${hits:-0}" -ge 1 ] || die "$out does not look like a pg_dump archive"
+            size=$(wc -c < "$out")
+            [ "$size" -gt 1024 ] || die "$out is only $size bytes — refusing to treat that as a snapshot"
+            log "snapshot ok: $out ($size bytes, gzip -t passed, $hits dump markers)"
+          }
+
+          # ---------------------------------------------------------------
+          phase_backup_compose() {
+            cd "$STACK_DIR"
+            local bak
+            # Same .bak.<timestamp> family already on the box, in UTC.
+            bak="$STACK_DIR/compose.yaml.bak.$(date -u +%Y%m%d%H%M%S)"
+            cp -p compose.yaml "$bak"
+            cmp -s compose.yaml "$bak" || die "compose.yaml backup $bak does not match the original"
+            state_put COMPOSE_BACKUP "$bak"
+            log "compose.yaml backed up to $bak (verified byte-identical)"
+          }
+
+          # ---------------------------------------------------------------
+          phase_plan() {
+            if [ "$DO_BACKEND" != true ]; then
+              log "scope=$SCOPE: no migrations are possible, nothing to plan"
+              return 0
+            fi
+            local pending=0 destructive=0 which cur rc
+            for which in users tasks; do
+              cur=$(current_revision "$which")
+              log "$which: production is at revision '${cur:-<none>}'"
+              state_put "PRE_$(printf '%s' "$which" | tr 'a-z' 'A-Z')_REV" "${cur:-base}"
+              rc=0
+              docker run --rm \
+                -v "$PROBE:/probe.py:ro" \
+                -e WWF_ALEMBIC_INI=/app/alembic.ini \
+                "$BACKEND_REF" python3 /probe.py plan "$which" "$cur" || rc=$?
+              case "$rc" in
+                0) ;;
+                3) pending=1 ;;
+                4) pending=1; destructive=1 ;;
+                *) die "migration plan probe failed for $which (exit $rc)" ;;
+              esac
+            done
+            state_put PENDING_MIGRATIONS "$pending"
+            state_put PENDING_DESTRUCTIVE "$destructive"
+
+            if [ "$pending" = 0 ]; then
+              log "both chains are already at the head this image carries — the migrate phase will be a no-op"
+              return 0
+            fi
+            if [ "$RUN_MIGRATIONS" != true ]; then
+              die "run_migrations=false, but the image at $SHA carries revisions production has not applied (listed above). Either re-dispatch with run_migrations=true, or apply them out of band first — this check passes on its own once nothing is pending."
+            fi
+            if [ "$destructive" = 1 ] && [ "$CONFIRM_DESTRUCTIVE" != true ]; then
+              die "the pending set is NOT purely additive (every match is listed above). Migrating before the image swap only protects you while the OLD image tolerates the new schema; a DROP, a RENAME or a type change breaks that assumption and there is no unwind. Read the plan, then re-dispatch with confirm_destructive_migrations=true if it is genuinely safe."
+            fi
+            log "migration plan accepted (pending=$pending destructive=$destructive confirm=$CONFIRM_DESTRUCTIVE)"
+          }
+
+          # ---------------------------------------------------------------
+          phase_migrate() {
+            if [ "$DO_BACKEND" != true ] || [ "$RUN_MIGRATIONS" != true ]; then
+              log "scope=$SCOPE run_migrations=$RUN_MIGRATIONS: migrate phase skipped"
+              return 0
+            fi
+            # ORDER, DELIBERATE, DO NOT REORDER: migrations run BEFORE the image
+            # swap. The revisions this project ships are additive and the OLD
+            # image tolerates them, so migrating first means a migration failure
+            # leaves production wholly on the old image with nothing to unwind —
+            # the databases are ahead, the code is untouched, and the site keeps
+            # serving. Swapping first and migrating second would leave a window
+            # where new code runs against the old schema, and a failure there has
+            # to be fixed forward under load. The plan phase is what keeps the
+            # "additive" premise honest; it refuses to reach this point when the
+            # pending set is not.
+            #
+            # The migrations are applied by the NEW image (it is the only thing
+            # that has the new revision files), which is why build+verify run
+            # before this.
+            local which
+            for which in users tasks; do
+              # The two chains are independent (no cross-database foreign keys),
+              # so the order between them is arbitrary — but fixed, so two logs
+              # are comparable.
+              log "== alembic -n $which upgrade head =="
+              alembic_cli "$which" upgrade head \
+                || die "alembic -n $which upgrade head FAILED. Production is still entirely on the old image; nothing has been swapped. Snapshot: ${SNAPSHOT_DIR:-<none>}"
+              alembic_cli "$which" current
+            done
+          }
+
+          # ---------------------------------------------------------------
+          bump_image() {
+            local repo="$1" tag="$2" before after
+            before=$(grep -cE "image: *${repo}:[A-Za-z0-9._-]+" compose.yaml || true)
+            [ "${before:-0}" -gt 0 ] \
+              || die "compose.yaml has no 'image: ${repo}:<tag>' line to rewrite — refusing to run a deploy that would silently change nothing"
+            sed -i -E "s#image: *${repo}:[A-Za-z0-9._-]+#image: ${repo}:${tag}#g" compose.yaml
+            after=$(grep -cF -- "${repo}:${tag}" compose.yaml || true)
+            # A sed that matches nothing exits 0. Unchecked, that is how a deploy
+            # reports success while production keeps running the old code.
+            [ "${after:-0}" -ge "${before:-0}" ] \
+              || die "rewrote only ${after} of ${before} '${repo}' image line(s) in compose.yaml"
+            log "compose.yaml: ${before} '${repo}' image line(s) now pinned to ${tag}"
+          }
+
+          phase_swap() {
+            cd "$STACK_DIR"
+            [ -n "${COMPOSE_BACKUP:-}" ] || die "no compose backup recorded — run the backup-compose phase first"
+            cmp -s compose.yaml "$COMPOSE_BACKUP" \
+              || die "compose.yaml has changed since $COMPOSE_BACKUP was taken — someone else is editing the live stack. Refusing to overwrite their change."
+
+            local svcs="" s
+            if [ "$DO_BACKEND" = true ]; then svcs="${BACKEND_SVC:?} ${SCHEDULER_SVC:?}"; fi
+            if [ "$DO_FRONTEND" = true ]; then svcs="$svcs ${FRONTEND_SVC:?}"; fi
+            # Belt and braces: whatever the labels said, never recreate a
+            # database container. Losing one is not a rollback, it is an
+            # incident, and --no-deps is the only thing standing between
+            # `up -d backend` and a restarted Postgres.
+            for s in $svcs; do
+              case "$s" in
+                "${USERS_DB_SVC:-__none__}"|"${TASKS_DB_SVC:-__none__}"|db-*|*db-backup*)
+                  die "refusing to recreate database service '$s'" ;;
+              esac
+            done
+
+            if [ "$DO_BACKEND" = true ]; then bump_image "$BACKEND_IMAGE" "$TAG"; fi
+            if [ "$DO_FRONTEND" = true ]; then bump_image "$FRONTEND_IMAGE" "$TAG"; fi
+            log "== compose image lines after rewrite =="
+            grep -nE "image: *($BACKEND_IMAGE|$FRONTEND_IMAGE):" compose.yaml
+
+            # One service at a time, --no-deps every time: the whole stack is
+            # never converged, so the databases and db-backup are never in the
+            # blast radius.
+            for s in $svcs; do
+              log "== docker compose up -d --no-deps $s =="
+              docker compose up -d --no-deps "$s" || die "docker compose up -d --no-deps $s failed"
+            done
+
+            log "== containers after swap =="
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT"; do
+              docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" || true
+            done
+          }
+
+          # ---------------------------------------------------------------
+          http_get() {
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsS --max-time 10 "$1"
+            elif command -v wget >/dev/null 2>&1; then
+              wget -qO- --timeout=10 "$1"
+            else
+              die "neither curl nor wget is on the host — cannot probe $1"
+            fi
+          }
+
+          json_has() {  # json_has <literal substring> <document>
+            case "$2" in *"$1"*) return 0 ;; *) return 1 ;; esac
+          }
+
+          phase_smoke() {
+            local attempt=1 body norm ok=0 want ct expect
+            # /health/ready round-trips BOTH databases, which is the only reason
+            # this probe is worth anything: it is the difference between "the
+            # container is up" and "the deploy works".
+            while [ "$attempt" -le 24 ]; do
+              body=$(http_get "$HEALTH_URL" 2>/dev/null || true)
+              norm=$(printf '%s' "$body" | tr -d ' \011\015\012')
+              if json_has '"ready":true' "$norm" \
+                 && json_has '"users":"ok"' "$norm" \
+                 && json_has '"tasks":"ok"' "$norm"; then
+                ok=1
+                break
+              fi
+              log "attempt $attempt: not ready yet (${norm:-<empty response>})"
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            if [ "$ok" != 1 ]; then
+              log "== last /health/ready response =="
+              printf '%s\n' "${body:-<empty>}"
+              log "== backend log tail =="
+              docker logs --tail 50 "$BACKEND_CT" 2>&1 | tail -n 50 || true
+              die "$HEALTH_URL did not report ready with BOTH databases ok after $((attempt - 1)) attempts. Images are already swapped: use the rollback recipe in the job summary."
+            fi
+            log "smoke ok: $body"
+            state_put HEALTH_BODY "$body"
+
+            # A green probe is not enough on its own: assert the containers are
+            # actually running the tag this run built.
+            for want in "$DO_BACKEND $BACKEND_CT $BACKEND_REF" \
+                        "$DO_BACKEND $SCHEDULER_CT $BACKEND_REF" \
+                        "$DO_FRONTEND $FRONTEND_CT $FRONTEND_REF"; do
+              set -- $want
+              [ "$1" = true ] || continue
+              ct="$2"; expect="$3"
+              local running img
+              running=$(docker inspect -f '{{.State.Status}}' "$ct")
+              img=$(docker inspect -f '{{.Config.Image}}' "$ct")
+              [ "$running" = running ] || die "$ct is '$running', not running"
+              [ "$img" = "$expect" ] || die "$ct is running image '$img', expected '$expect'"
+              log "$ct: running $img"
+            done
+          }
+
+          # ---------------------------------------------------------------
+          # Markdown for the job summary. Deliberately fenced with ~~~ and free
+          # of backticks: this heredoc is unquoted so the variables expand, and a
+          # backtick in it would be command substitution on the production host.
+          phase_rollback_note() {
+            cat <<NOTE
+          ## Rollback recipe (recorded $(date -u +%FT%TZ), BEFORE anything was changed)
+
+          | | |
+          |---|---|
+          | scope | $SCOPE |
+          | commit | $SHA |
+          | new tag | $TAG |
+          | previous backend tag | ${PREV_BACKEND_TAG:-n/a} |
+          | previous frontend tag | ${PREV_FRONTEND_TAG:-n/a} |
+          | compose backup | ${COMPOSE_BACKUP:-n/a} |
+          | database snapshot | ${SNAPSHOT_DIR:-none (frontend-only deploy)} |
+          | pre-deploy revisions | users=${PRE_USERS_REV:-n/a} tasks=${PRE_TASKS_REV:-n/a} |
+          | pending / destructive | ${PENDING_MIGRATIONS:-0} / ${PENDING_DESTRUCTIVE:-0} |
+
+          **1. Images back.** Always safe, changes no data:
+
+          ~~~sh
+          cd $STACK_DIR
+          cp ${COMPOSE_BACKUP:-compose.yaml.bak.SEE-ABOVE} compose.yaml
+          docker compose up -d --no-deps ${BACKEND_SVC:-backend} ${SCHEDULER_SVC:-scheduler} ${FRONTEND_SVC:-frontend}
+          ~~~
+
+          **2. Schema back — only if a migration has to be undone.** Prefer the
+          surgical downgrade; CI proves every revision downgrades cleanly:
+
+          ~~~sh
+          # from the PREVIOUS image ($BACKEND_IMAGE:${PREV_BACKEND_TAG:-n/a}), with the same
+          # *_MIGRATION_DATABASE_URL plumbing this workflow uses
+          alembic -c /app/alembic.ini -n users downgrade ${PRE_USERS_REV:-n/a}
+          alembic -c /app/alembic.ini -n tasks downgrade ${PRE_TASKS_REV:-n/a}
+          ~~~
+
+          **3. Last resort — restore the verified snapshot.** This destroys every
+          write since $(basename "${SNAPSHOT_DIR:-none}"); the dumps were taken with
+          --clean --if-exists so they restore over the live database:
+
+          ~~~sh
+          gzip -cd ${SNAPSHOT_DIR:-<snapshot>}/wwf_users.sql.gz \\
+            | docker exec -i $USERS_DB_CT sh -c 'PGPASSWORD=\$POSTGRES_PASSWORD psql -h 127.0.0.1 -U postgres -d wwf_users'
+          gzip -cd ${SNAPSHOT_DIR:-<snapshot>}/wwf_tasks.sql.gz \\
+            | docker exec -i $TASKS_DB_CT sh -c 'PGPASSWORD=\$POSTGRES_PASSWORD psql -h 127.0.0.1 -U postgres -d wwf_tasks'
+          ~~~
+
+          Then re-verify: $HEALTH_URL must report ready with both databases ok.
+          NOTE
+          }
+
+          # ---------------------------------------------------------------
+          phase_status() {
+            log "scope=$SCOPE sha=$SHA tag=$TAG"
+            log "previous tags: backend=${PREV_BACKEND_TAG:-n/a} frontend=${PREV_FRONTEND_TAG:-n/a}"
+            log "compose backup: ${COMPOSE_BACKUP:-none taken}"
+            log "database snapshot: ${SNAPSHOT_DIR:-none taken}"
+            log "pre-deploy revisions: users=${PRE_USERS_REV:-n/a} tasks=${PRE_TASKS_REV:-n/a}"
+            log "run dir kept for postmortem: $RUNDIR"
+            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
+              docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" 2>/dev/null || true
+            done
+            printf 'health: %s\n' "$(http_get "$HEALTH_URL" 2>/dev/null || echo '<unreachable>')"
+          }
+
+          # ---------------------------------------------------------------
+          phase_cleanup() {
+            local f
+            for f in "$TOKEN_FILE" "$REDACT_SED" "$DBENV"; do
+              if [ -f "$f" ]; then
+                shred -u "$f" 2>/dev/null || rm -f "$f"
+                log "removed $f"
+              fi
+            done
+            # Never prune images here: the PREVIOUS tag is the rollback path, and
+            # deleting it would throw away the recipe this run just published.
+            # Old tags and snapshots are removed by hand, deliberately.
+            log "kept (no secrets): $RUNDIR/{deploy.sh,config.env,state.env,alembic_probe.py,migrate_entry.sh,build-*.log}"
+          }
+
+          case "${1:-}" in
+            preflight)      phase_preflight ;;
+            build)          phase_build ;;
+            verify)         phase_verify ;;
+            snapshot)       phase_snapshot ;;
+            backup-compose) phase_backup_compose ;;
+            plan)           phase_plan ;;
+            migrate)        phase_migrate ;;
+            swap)           phase_swap ;;
+            smoke)          phase_smoke ;;
+            rollback-note)  phase_rollback_note ;;
+            status)         phase_status ;;
+            cleanup)        phase_cleanup ;;
+            *) die "usage: deploy.sh preflight|build|verify|snapshot|backup-compose|plan|migrate|swap|smoke|rollback-note|status|cleanup" ;;
+          esac
+          DEPLOY_SH
+
+          # The GITHUB_TOKEN goes to its own 0600 file so that it is never an
+          # argument to anything. See the RESIDUAL note on the ship step.
+          ( umask 077; printf '%s' "$GH_TOKEN" > "$RUNNER_TEMP/gh_token" )
+
+          # Syntax-check before any of this reaches production. A quoting slip in
+          # a heredoc is otherwise discovered halfway through a deploy.
+          bash -n "$RUNNER_TEMP/deploy.sh"
+          sh -n "$RUNNER_TEMP/migrate_entry.sh"
+          python3 -m py_compile "$RUNNER_TEMP/kvm4.py" "$RUNNER_TEMP/alembic_probe.py"
+          echo "staged and syntax-checked: deploy.sh migrate_entry.sh alembic_probe.py kvm4.py config.env"
+          cat "$RUNNER_TEMP/config.env"
+
+      - name: Ship the deploy scripts to KVM4
+        # RESIDUAL, honest, and NOT fixed by the 0600 file below — do not read
+        # this as "the token is safe now":
+        #   * The token is in the /file/write request BODY, so it reaches the
+        #     kvm4-runner and whatever that service logs about requests.
+        #   * `docker build <url-with-token>` puts the token in the docker CLI's
+        #     own argv on KVM4, so it IS in that host's process list for the
+        #     duration of the build, and in the daemon's clone environment.
+        # What the file DOES buy: the token is no longer inside the /shell
+        # command string (it used to be, on every call), so it is not in the
+        # /shell audit trail, not in this workflow's own process list, and it is
+        # shredded from the host in the cleanup step instead of living in a
+        # workspace file for the rest of the job.
+        # What would actually fix the argv exposure is BuildKit's
+        # `--secret id=GIT_AUTH_TOKEN` for git contexts, which needs a daemon-side
+        # entitlement for `--network host` and changes the one build recipe that
+        # is proven on this box; that is not something CI can validate blind.
+        # Mitigations that are real but partial: github.token is the ephemeral
+        # per-job GITHUB_TOKEN, scoped to this repository and invalid the moment
+        # the job ends, and Actions masks it in these logs as a backstop.
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/deploy.sh"          "$RUNNER_TEMP/deploy.sh"          0700
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/config.env"         "$RUNNER_TEMP/config.env"         0600
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/alembic_probe.py"   "$RUNNER_TEMP/alembic_probe.py"   0644
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/migrate_entry.sh"   "$RUNNER_TEMP/migrate_entry.sh"   0644
+          python3 "$RUNNER_TEMP/kvm4.py" write "$REMOTE_DIR/.gh_token"          "$RUNNER_TEMP/gh_token"           0600
+
+      - name: Preflight on KVM4 (stack identity, service names, previous tags)
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh preflight" 180
+
+      - name: Build images from the git build-context at the dispatched SHA
+        # Long timeout: the backend image installs Pango/HarfBuzz and the pip
+        # set from scratch. If the HTTP call dies mid-build the build continues
+        # on the box and a re-run is cheap and idempotent (layer cache), so the
+        # safe response to a timeout here is to dispatch the same SHA again.
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh build" 1800
+
+      - name: Verify the built image is the deployed commit
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh verify" 180
+
+      - name: Snapshot BOTH databases and verify the archives
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh snapshot" 900
+
+      - name: Back up the live compose.yaml
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh backup-compose" 120
+
+      - name: Migration plan and additivity guard
+        # Read-only. Publishes the pending revision list to the summary whether
+        # it passes or fails, because the list is exactly what the operator needs
+        # in order to decide about confirm_destructive_migrations.
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh plan" 600 \
+            | tee "$RUNNER_TEMP/plan.txt" || rc=$?
+          {
+            printf '## Migration plan (scope=%s, run_migrations=%s, confirm_destructive=%s)\n\n' \
+              "$IN_SCOPE" "$IN_MIGRATE" "$IN_CONFIRM"
+            printf '~~~text\n'
+            cat "$RUNNER_TEMP/plan.txt"
+            printf '~~~\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: Publish the rollback recipe before anything is changed
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh rollback-note" 120 \
+            | tee "$RUNNER_TEMP/rollback.md" || rc=$?
+          # Strip the helper's own ::notice:: line: it belongs in the log, not in
+          # the rendered summary. sed always exits 0; `grep -v` would not.
+          sed '/^::/d' "$RUNNER_TEMP/rollback.md" >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: Run migrations on BOTH chains (before any image swap)
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh migrate" 1800
+
+      - name: Bump image tags and recreate only the services in scope
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh swap" 600
+
+      - name: Smoke test /health/ready (both databases must report ok)
+        # 480s because the probe's own worst case is 24 attempts x (10s curl
+        # timeout + 5s sleep) = 360s, and a remote timeout shorter than the
+        # phase it is waiting on turns a slow start into a false failure.
+        run: python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh smoke" 480
+
+      - name: Deploy status
+        if: always()
+        run: |
+          set -euo pipefail
+          rc=0
+          python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh status" 180 \
+            | tee "$RUNNER_TEMP/status.txt" || rc=$?
+          {
+            printf '## Final state (job result: %s)\n\n~~~text\n' "${{ job.status }}"
+            cat "$RUNNER_TEMP/status.txt"
+            printf '~~~\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: Shred the staged token (KVM4 and runner)
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/kvm4.py" shell "bash $REMOTE_DIR/deploy.sh cleanup" 120 || true
+          if [ -f "$RUNNER_TEMP/gh_token" ]; then
+            shred -u "$RUNNER_TEMP/gh_token" 2>/dev/null || rm -f "$RUNNER_TEMP/gh_token"
+          fi

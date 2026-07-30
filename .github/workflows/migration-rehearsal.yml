@@ -1,0 +1,800 @@
+name: Nightly migration rehearsal
+
+# Two gaps this closes, both of which bit on 2026-07-29.
+#
+# 1. DRIFT WENT UNNOTICED. That deploy applied FIVE migrations that had
+#    accumulated undetected (tasks 0041->0044, users 0006->0008); three of them
+#    predated the work being deployed. Nothing anywhere compared production's
+#    alembic head against the repo's, so "production is five migrations behind"
+#    was invisible until someone happened to run `alembic current` by hand.
+#
+# 2. MIGRATIONS WERE NEVER REHEARSED ON REAL DATA. ci.yml's `migrations` job
+#    proves `alembic upgrade head` reproduces the generated schema files on an
+#    EMPTY database. That says nothing about real rows: a NOT NULL added where
+#    production has nulls, a UNIQUE index added where production has
+#    duplicates, a type narrowing that overflows, or a DROP of a table that is
+#    empty in CI and not in production all pass CI and fail on the box.
+#
+# So this workflow reads production's real head, diffs it against this repo's
+# chain, and then restores the most recent ROUTINE backup pair into throwaway
+# databases and runs both chains against that restored copy.
+#
+# WHERE THE WORK HAPPENS, AND WHY: entirely on KVM4, through the kvm4-runner
+# HTTP API (the only channel that reaches the box — port 22 is firewalled,
+# only 443 is reachable; same channel deploy.yml uses). Production dumps are
+# never downloaded into the GitHub workspace: the dump is decompressed and
+# piped straight into a database in the SAME Postgres container it came from,
+# so production data never leaves the host and never lands in a workspace that
+# a later `upload-artifact` could publish. Only summary text (revision ids,
+# table/row counts, alembic's own log) crosses back over HTTPS.
+#
+# NO POSTGRES SERVICE CONTAINER, DELIBERATELY: ci.yml already binds host port
+# 5432 on this host-networked runner, and a second server would need a free
+# host port (5433), the `wwf_{users,tasks}_globals_*.sql.gz` role dumps, and a
+# repeat of the app_user/app_admin bootstrap before a production dump would
+# even restore. Restoring into the existing production Postgres containers
+# needs none of that — the roles, the pgcrypto extension and the
+# ALTER DEFAULT PRIVILEGES that migrations rely on (docs/DEPLOY.md) are
+# already there — and it binds ZERO host ports, so this workflow cannot
+# collide with ci.yml on any port no matter when it runs. The cost is that a
+# throwaway database briefly lives inside the live cluster, which is why the
+# guards below are written to make "it pointed at wwf_tasks/wwf_users"
+# impossible rather than unlikely. Blast radius of the restore itself is a
+# few MB of extra disk in the existing pgdata volume plus a short WAL burst.
+#
+# Required repository secrets (already present, used by deploy.yml):
+#   KVM4_RUNNER_URL    -> base URL of the kvm4-runner API
+#   KVM4_RUNNER_TOKEN  -> bearer token for /shell and /file/write
+#
+# If this job reports drift: apply the listed revisions to production with the
+# recipe in docs/DEPLOY.md ("Schema changes"), then re-run to confirm.
+
+on:
+  schedule:
+    # 03:17 UTC (05:17 Europe/Skopje). Off the hour on purpose — scheduled
+    # workflows queue behind GitHub's top-of-hour stampede, and this one wants
+    # the box quiet rather than punctual.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dump_timestamp:
+        description: 'Pin a routine-backup pair, e.g. 20260729T031501Z (default: newest complete pair)'
+        required: false
+        default: ''
+      dump_host_dir:
+        description: 'Read wwf_tasks.sql.gz + wwf_users.sql.gz from this KVM4 directory instead of the routine backups, e.g. /opt/wwf-backups/presnap-wwf-20260729-deploy'
+        required: false
+        default: ''
+
+# Its own group, and NOT shared with ci-${{ github.ref }}: this workflow binds
+# no host ports, so it has nothing to fight ci.yml over and does not need to
+# serialise against it. cancel-in-progress is false because a cancellation
+# between CREATE DATABASE and DROP DATABASE would strand a throwaway inside the
+# live cluster. A ref-less group additionally guarantees only ONE rehearsal
+# exists at a time host-wide, which is what makes the leftover-sweep below safe
+# to run unconditionally.
+concurrency:
+  group: migration-rehearsal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    name: Drift check + restore-and-upgrade on real data
+    runs-on: self-hosted
+    # This is ONE shared self-hosted runner; a job hung on GitHub's 6-hour
+    # default blocks every other branch. The remote /shell calls carry their
+    # own shorter timeouts, so this is the outer backstop only.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install kvm4-runner client
+        # python3 + stdlib rather than curl|jq, which deploy.yml uses. Two
+        # reasons, both specific to this runner:
+        #   * curl and jq are not verifiably present in the gh-runner-wwf
+        #     container (nothing in ci.yml exercises either), while python3 is
+        #     guaranteed by setup-python above.
+        #   * `curl -H "Authorization: Bearer $TOKEN"` publishes the token in
+        #     an argv that any other job on this SHARED runner can read from
+        #     /proc. deploy.yml was written for an ephemeral single-tenant
+        #     GitHub-hosted VM where that did not matter. Reading the token
+        #     from the environment inside the request avoids both an argv and a
+        #     token file on disk.
+        # The token therefore never reaches a file; the request/response temp
+        # files (which DO quote production table and revision names) are still
+        # removed via `trap` in the same spirit as deploy.yml's payload.json.
+        run: |
+          set -euo pipefail
+          cat <<'PY' > "$RUNNER_TEMP/kvm4.py"
+          import base64, json, os, sys, tempfile, urllib.error, urllib.request
+
+          BASE = (os.environ.get("RUNNER_URL") or "").rstrip("/")
+          TOKEN = os.environ.get("RUNNER_TOKEN") or ""
+          if not BASE or not TOKEN:
+              sys.exit("::error::KVM4_RUNNER_URL / KVM4_RUNNER_TOKEN secrets are not set")
+
+
+          def post(path, payload, timeout):
+              # tempfile so a large body is never held in a shell variable or
+              # argv; removed in the finally: below whether or not the POST
+              # succeeds (deploy.yml's `trap 'rm -f payload.json'` precaution,
+              # kept because these bodies quote production identifiers).
+              fd, tmp = tempfile.mkstemp(prefix="kvm4-", suffix=".json")
+              try:
+                  with os.fdopen(fd, "wb") as fh:
+                      fh.write(json.dumps(payload).encode())
+                  with open(tmp, "rb") as fh:
+                      body = fh.read()
+                  req = urllib.request.Request(
+                      BASE + path, data=body, method="POST",
+                      headers={"Content-Type": "application/json",
+                               "Authorization": "Bearer " + TOKEN})
+                  try:
+                      with urllib.request.urlopen(req, timeout=timeout) as r:
+                          return json.loads(r.read().decode())
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode("utf-8", "replace")[:2000]
+                      sys.exit(f"::error::kvm4-runner {path} -> HTTP {e.code}: {detail}")
+                  except urllib.error.URLError as e:
+                      sys.exit(f"::error::kvm4-runner {path} unreachable: {e.reason}")
+              finally:
+                  try:
+                      os.unlink(tmp)
+                  except OSError:
+                      pass
+
+
+          def main(argv):
+              if argv[1] == "shell":
+                  # argv: shell <remote_timeout_s> <local script file>
+                  remote = int(argv[2])
+                  with open(argv[3]) as fh:
+                      cmd = fh.read()
+                  r = post("/shell", {"cmd": cmd, "timeout": remote}, remote + 30)
+                  sys.stdout.write(r.get("output", ""))
+                  sys.stdout.flush()
+                  if r.get("truncated"):
+                      print("::warning::kvm4-runner truncated this command's output — "
+                            "some rehearsal detail is missing from the log below")
+                  rc = r.get("exit_code", 1)
+                  print(f"::notice::kvm4-runner exit_code={rc}")
+                  return 0 if rc == 0 else 1
+              if argv[1] == "write":
+                  # argv: write <remote path> <local file> [mode]
+                  with open(argv[3], "rb") as fh:
+                      blob = base64.b64encode(fh.read()).decode()
+                  # `mode` as an octal STRING. The endpoint's accepted type is
+                  # not documented anywhere in this repo; if /file/write starts
+                  # rejecting the body, drop this key (the default is fine —
+                  # nothing here needs an exec bit, the script is run as
+                  # `sh <file>`).
+                  post("/file/write", {"path": argv[2], "content_b64": blob,
+                                       "mode": argv[4] if len(argv) > 4 else "0600",
+                                       "mkdir": True}, 120)
+                  print(f"::notice::wrote {len(blob)} b64 chars to KVM4:{argv[2]}")
+                  return 0
+              sys.exit(f"::error::unknown kvm4.py subcommand {argv[1]!r}")
+
+
+          sys.exit(main(sys.argv))
+          PY
+          python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$RUNNER_TEMP/kvm4.py"
+
+      - name: Resolve this repo's alembic head for both chains
+        id: repo
+        # Read straight out of the version files with stdlib only: no
+        # `pip install -r backend/requirements.txt` (minutes on this runner)
+        # just to learn two revision ids, and the drift check still works when
+        # the box is too loaded to build an environment. The parse is not
+        # trusted blindly — the rehearsal asserts that alembic's own
+        # `upgrade head` lands the restored copy on exactly the revision
+        # computed here, so a mis-parse fails the job instead of passing.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re, sys
+
+          REV = re.compile(r'^revision(?:\s*:[^=]*)?=\s*["\']([^"\']+)["\']', re.M)
+          DOWN = re.compile(r'^down_revision(?:\s*:[^=]*)?=\s*(?:["\']([^"\']+)["\']|None)', re.M)
+
+          chains = {}
+          for which in ("tasks", "users"):
+              d = pathlib.Path("backend") / f"alembic_{which}" / "versions"
+              parent = {}
+              for p in sorted(d.glob("*.py")):
+                  text = p.read_text()
+                  rev, down = REV.search(text), DOWN.search(text)
+                  if not rev or not down:
+                      sys.exit(f"::error::{p}: cannot read revision / down_revision")
+                  parent[rev.group(1)] = down.group(1)  # None -> base
+              if not parent:
+                  sys.exit(f"::error::{d}: no revision files found")
+              # A head is a revision nothing else declares as its parent. More
+              # than one means a BRANCHED chain, which `upgrade head` would
+              # refuse anyway — surface it here rather than let the rehearsal
+              # fail with a confusing alembic error.
+              heads = sorted(set(parent) - {v for v in parent.values() if v})
+              if len(heads) != 1:
+                  sys.exit(f"::error::{which}: chain has {len(heads)} heads ({', '.join(heads)}) — "
+                           "expected exactly one linear head")
+              # Walk base -> head so the drift check can say WHICH revisions
+              # production is missing, in application order.
+              order, cur = [], heads[0]
+              seen = set()
+              while cur:
+                  if cur in seen:
+                      sys.exit(f"::error::{which}: cycle in chain at {cur}")
+                  seen.add(cur)
+                  order.append(cur)
+                  cur = parent.get(cur)
+              order.reverse()
+              if len(order) != len(parent):
+                  orphans = ", ".join(sorted(set(parent) - set(order)))
+                  sys.exit(f"::error::{which}: revision(s) not reachable from the head: {orphans}")
+              chains[which] = order
+              print(f"{which}: {len(order)} revisions, head {order[-1]}")
+
+          pathlib.Path(os.environ["RUNNER_TEMP"], "chains.json").write_text(json.dumps(chains))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              for which, order in chains.items():
+                  out.write(f"{which}_head={order[-1]}\n")
+          PY
+
+      - name: Read production's current alembic head (both chains)
+        id: prod
+        env:
+          RUNNER_URL: ${{ secrets.KVM4_RUNNER_URL }}
+          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+        run: |
+          set -euo pipefail
+          # /shell runs under /bin/sh (dash) on KVM4 — POSIX only, no bashisms.
+          cat <<'SH' > "$RUNNER_TEMP/prodheads.sh"
+          set -eu
+          for triple in tasks:wwf-db-tasks:wwf_tasks users:wwf-db-users:wwf_users; do
+            which=${triple%%:*}; rest=${triple#*:}; c=${rest%%:*}; db=${rest#*:}
+            # string_agg rather than a bare SELECT: a branched or duplicated
+            # alembic_version has MORE than one row, and taking whichever row
+            # came back first would report a false "in sync".
+            h=$(docker exec "$c" psql -U postgres -d "$db" -tAqc \
+                  "SELECT coalesce(string_agg(version_num, ',' ORDER BY version_num), '') FROM alembic_version")
+            echo "PRODHEAD ${which}=${h}"
+          done
+          SH
+          python3 "$RUNNER_TEMP/kvm4.py" shell 60 "$RUNNER_TEMP/prodheads.sh" \
+            | tee "$RUNNER_TEMP/prodheads.txt"
+          for which in tasks users; do
+            v=$(sed -n "s/^PRODHEAD ${which}=//p" "$RUNNER_TEMP/prodheads.txt" | head -1)
+            echo "${which}_head=${v}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Drift check (production head vs this repo)
+        id: drift
+        # Records the verdict and annotates, but does NOT exit non-zero here:
+        # the rehearsal below is exactly the thing you want to see the result of
+        # when production is behind, so the job runs it and fails at the final
+        # gate step instead. One run, both answers.
+        env:
+          CHAINS: ${{ runner.temp }}/chains.json
+          REPO_TASKS: ${{ steps.repo.outputs.tasks_head }}
+          REPO_USERS: ${{ steps.repo.outputs.users_head }}
+          PROD_TASKS: ${{ steps.prod.outputs.tasks_head }}
+          PROD_USERS: ${{ steps.prod.outputs.users_head }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+
+          chains = json.load(open(os.environ["CHAINS"]))
+          drift = False
+          rows = ["| chain | production | this repo | unapplied |",
+                  "| --- | --- | --- | --- |"]
+          for which in ("tasks", "users"):
+              order = chains[which]
+              repo_head = order[-1]
+              assert repo_head == os.environ[f"REPO_{which.upper()}"], "head outputs disagree"
+              prod = os.environ[f"PROD_{which.upper()}"].strip()
+              if not prod:
+                  drift, pending = True, "unknown"
+                  print(f"::error::{which}: production has NO alembic_version row — "
+                        "that chain was never stamped, so no migration can be applied to it")
+              elif "," in prod:
+                  drift, pending = True, "unknown"
+                  print(f"::error::{which}: production alembic_version holds MULTIPLE rows ({prod}) — "
+                        "branched or duplicated history, resolve by hand before migrating")
+              elif prod == repo_head:
+                  pending = "none"
+                  print(f"{which}: production is at {prod}, in sync with this repo")
+              elif prod in order:
+                  missing = order[order.index(prod) + 1:]
+                  drift, pending = True, f"{len(missing)}: " + ", ".join(missing)
+                  print(f"::error::{which}: production is at {prod}, this repo's head is {repo_head} — "
+                        f"{len(missing)} unapplied migration(s): {', '.join(missing)}")
+              else:
+                  drift, pending = True, "unknown"
+                  print(f"::error::{which}: production is at {prod}, which does not exist in this "
+                        f"repo's {which} chain — production is ahead, or history was rewritten")
+              rows.append(f"| {which} | `{prod or 'none'}` | `{repo_head}` | {pending} |")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write("## Alembic drift\n\n" + "\n".join(rows) + "\n\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as o:
+              o.write(f"detected={'true' if drift else 'false'}\n")
+          PY
+
+      - name: Ship this repo's alembic chains to KVM4
+        env:
+          RUNNER_URL: ${{ secrets.KVM4_RUNNER_URL }}
+          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+          WORK: /opt/wwf-rehearsal/run-${{ github.run_id }}_${{ github.run_attempt }}
+        # WORK MUST LIVE UNDER /opt, NOT /tmp. The kvm4-runner's /shell and
+        # /file/write execute inside the gh-runner-wwf CONTAINER, whose / is a
+        # containerd overlay — but `docker run -v <path>:...` is serviced by the
+        # HOST's daemon and resolves <path> against the HOST. Under /tmp those are
+        # two different filesystems: the tarball unpacked into the container while
+        # the bind mount pointed at a host path dockerd then auto-created EMPTY,
+        # so alembic found no alembic.ini and every night failed red with
+        # "alembic upgrade head FAILED on real production data" — a false alarm
+        # about production, which is worse than no rehearsal. /opt is a real host
+        # mount shared by both, so the two views coincide. Same reason the cleanup
+        # paths below are /opt: pointed at /tmp they could not see what dockerd
+        # created and leaked one root-owned tree per run. See the /root-vs-/opt
+        # warning in docs/DEPLOY.md.
+        #
+        # The rehearsal must run THIS repo's revisions, which the deployed
+        # backend image does not contain (that is the whole point — its chain is
+        # whatever was deployed). Two rejected alternatives:
+        #   * `docker build` the image from a git URL the way deploy.yml does:
+        #     needs GITHUB_TOKEN embedded in a payload, and rebuilds a
+        #     WeasyPrint/apt/pip image nightly for two directories of .py files.
+        #   * bind-mount the runner's checkout: `docker run -v` paths are
+        #     resolved by the daemon on the HOST, and this checkout lives inside
+        #     the gh-runner-wwf container, so the path may not exist there.
+        # ~50 KB of alembic.ini + both versions/ trees, shipped as one tarball,
+        # is the cheap and deterministic option. No credential in this payload.
+        run: |
+          set -euo pipefail
+          tar czf "$RUNNER_TEMP/alembic.tgz" \
+            backend/alembic.ini backend/alembic_users backend/alembic_tasks
+          ls -l "$RUNNER_TEMP/alembic.tgz"
+          python3 "$RUNNER_TEMP/kvm4.py" write "$WORK/alembic.tgz" "$RUNNER_TEMP/alembic.tgz" 0600
+
+      - name: Rehearse both chains against a restored production copy
+        id: rehearsal
+        env:
+          RUNNER_URL: ${{ secrets.KVM4_RUNNER_URL }}
+          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+          # RUN_TAG is the only thing that varies in the throwaway database
+          # names, and it comes from GitHub, never from an input.
+          RUN_TAG: ${{ github.run_id }}_${{ github.run_attempt }}
+          EXP_TASKS: ${{ steps.repo.outputs.tasks_head }}
+          EXP_USERS: ${{ steps.repo.outputs.users_head }}
+          DUMP_TS: ${{ inputs.dump_timestamp }}
+          DUMP_DIR: ${{ inputs.dump_host_dir }}
+        run: |
+          set -euo pipefail
+
+          # Dispatch inputs end up in a shell script that runs as root on the
+          # production host, so they are validated here BEFORE it is composed
+          # (and again inside the script). They arrive through `env:` above and
+          # are read as "$DUMP_TS" / "$DUMP_DIR"; an inputs expression written
+          # directly into a run: block is substituted before the shell ever
+          # sees it, which is a script-injection hole.
+          if [ -n "$DUMP_TS" ]; then
+            case "$DUMP_TS" in
+              *[!0-9TZ]*) echo "::error::dump_timestamp must look like 20260729T031501Z"; exit 1;;
+            esac
+          fi
+          if [ -n "$DUMP_DIR" ]; then
+            case "$DUMP_DIR" in
+              /*) case "$DUMP_DIR" in
+                    *[!A-Za-z0-9._/-]*) echo "::error::dump_host_dir may only contain A-Za-z0-9._/-"; exit 1;;
+                  esac;;
+              *) echo "::error::dump_host_dir must be an absolute path"; exit 1;;
+            esac
+          fi
+          case "$RUN_TAG" in *[!0-9_]*) echo "::error::unexpected RUN_TAG '$RUN_TAG'"; exit 1;; esac
+          for rev in "$EXP_TASKS" "$EXP_USERS"; do
+            case "$rev" in
+              ''|*[!0-9A-Za-z_]*) echo "::error::unexpected revision id '$rev'"; exit 1;;
+            esac
+          done
+
+          SCRIPT="$RUNNER_TEMP/rehearse.sh"
+          # Parameters first (single-quoted, values validated above), then the
+          # body from a QUOTED heredoc so the runner's bash expands nothing in
+          # it — every $ in the body belongs to dash on KVM4.
+          {
+            printf "RUN_TAG='%s'\n"   "$RUN_TAG"
+            printf "DUMP_TS='%s'\n"   "$DUMP_TS"
+            printf "DUMP_DIR='%s'\n"  "$DUMP_DIR"
+            printf "EXP_TASKS='%s'\n" "$EXP_TASKS"
+            printf "EXP_USERS='%s'\n" "$EXP_USERS"
+          } > "$SCRIPT"
+          cat <<'SH' >> "$SCRIPT"
+          set -eu
+
+          # ── re-validation on the host ────────────────────────────────────
+          # Cheap, and it means a future caller that skips the runner-side
+          # checks still cannot smuggle an identifier into a name or an SQL
+          # string below.
+          case "$RUN_TAG"   in ''|*[!0-9_]*)        echo "::error::bad RUN_TAG";   exit 2;; esac
+          case "$EXP_TASKS" in ''|*[!0-9A-Za-z_]*)  echo "::error::bad EXP_TASKS"; exit 2;; esac
+          case "$EXP_USERS" in ''|*[!0-9A-Za-z_]*)  echo "::error::bad EXP_USERS"; exit 2;; esac
+          case "$DUMP_TS"   in *[!0-9TZ]*)          echo "::error::bad DUMP_TS";   exit 2;; esac
+          case "$DUMP_DIR"  in ''|/*) ;; *)         echo "::error::bad DUMP_DIR";  exit 2;; esac
+
+          WORK="/opt/wwf-rehearsal/run-${RUN_TAG}"
+          NET=weekly_weed_flow_internal          # docker-compose.yml networks.internal.name
+          BACKUP_C=wwf-db-backup
+          DB_TASKS="wwf_rehearsal_tasks_${RUN_TAG}"
+          DB_USERS="wwf_rehearsal_users_${RUN_TAG}"
+          FAIL=0
+
+          # ── the guard ───────────────────────────────────────────────────
+          # Everything that creates, restores into, migrates or drops a
+          # database passes its name through here first. Combined with the fact
+          # that the names are CONSTRUCTED from a digits-only RUN_TAG and can
+          # never be supplied by an input, pointing this workflow at
+          # wwf_tasks/wwf_users is not "unlikely", it is unreachable.
+          assert_throwaway() {
+            case "$1" in
+              wwf_rehearsal_tasks_*|wwf_rehearsal_users_*) ;;
+              *) echo "::error::REFUSING: '$1' is not a wwf_rehearsal_* throwaway database"; exit 3;;
+            esac
+            # Redundant today (the prefix above already excludes both names).
+            # Kept so that widening the pattern above can never quietly
+            # re-admit the live databases.
+            case "$1" in
+              wwf_tasks|wwf_users) echo "::error::REFUSING: '$1' is a LIVE production database"; exit 3;;
+            esac
+          }
+
+          drop_throwaway() {   # $1 container  $2 database
+            assert_throwaway "$2"
+            # WITH (FORCE) (PG13+; production is PG17): a rehearsal that failed
+            # part-way can leave the alembic container's connection open, and
+            # without FORCE the DROP would block and the throwaway would
+            # survive the run inside the live cluster.
+            if ! docker exec "$1" psql -U postgres -d postgres -qtAc \
+                   "DROP DATABASE IF EXISTS \"$2\" WITH (FORCE)" >/dev/null 2>&1; then
+              echo "::warning::could not drop $2 in $1 — remove it by hand"
+            fi
+          }
+
+          cleanup() {
+            trap - EXIT INT TERM HUP
+            # The env files hold the production superuser password, so they go
+            # first, and from a trap: under `set -eu` a plain rm on the next
+            # line is skipped exactly when a step failed, which is when it
+            # matters most. (deploy.yml's payload.json precaution, applied to
+            # the one file here that actually embeds a credential.)
+            rm -f "$WORK/tasks.env" "$WORK/users.env"
+            drop_throwaway wwf-db-tasks "$DB_TASKS"
+            drop_throwaway wwf-db-users "$DB_USERS"
+            rm -rf "$WORK"
+          }
+          trap 'rc=$?; cleanup; exit $rc' EXIT
+          trap 'exit 130' INT HUP
+          trap 'exit 143' TERM
+
+          # ── sweep leftovers ─────────────────────────────────────────────
+          # A run cancelled between CREATE and DROP strands a throwaway. The
+          # workflow's concurrency group is ref-less with cancel-in-progress
+          # false, so only one rehearsal exists at a time host-wide and
+          # anything matching here belongs to a run that is already over.
+          # Backslash-escaped LIKE because '_' is a single-char wildcard;
+          # assert_throwaway re-checks with a glob that treats it literally.
+          for c in wwf-db-tasks wwf-db-users; do
+            for stale in $(docker exec "$c" psql -U postgres -d postgres -tAqc \
+                "SELECT datname FROM pg_database WHERE datname LIKE 'wwf\_rehearsal\_%'"); do
+              echo "[rehearsal] sweeping stranded $stale in $c"
+              drop_throwaway "$c" "$stale"
+            done
+          done
+
+          # ── unpack this repo's chains ───────────────────────────────────
+          [ -f "$WORK/alembic.tgz" ] || { echo "::error::$WORK/alembic.tgz is missing"; exit 4; }
+          rm -rf "$WORK/alembic"
+          mkdir -p "$WORK/alembic"
+          # Members are backend/alembic.ini + backend/alembic_{users,tasks}/...
+          # --strip-components=1 puts alembic.ini at the mount root so its
+          # `script_location = %(here)s/alembic_<chain>` resolves beside it.
+          tar xzf "$WORK/alembic.tgz" -C "$WORK/alembic" --strip-components=1
+          [ -f "$WORK/alembic/alembic.ini" ] || { echo "::error::tarball has no alembic.ini"; exit 4; }
+
+          # ── choose the dump pair ────────────────────────────────────────
+          # Routine backups are preferred over any one-off snapshot: they are
+          # what actually exists every day, so rehearsing them also proves the
+          # backups themselves still restore. Location comes from
+          # docker-compose.yml (db-backup mounts the weekly_weed_flow_backups
+          # volume at /backups) + docs/BACKUP.md
+          # (wwf_<which>_<UTC ts>.sql.gz). Reached through `docker exec
+          # wwf-db-backup` rather than a host path so the volume's driver path
+          # and compose's project-name prefix never have to be guessed.
+          if [ -n "$DUMP_DIR" ]; then
+            echo "[rehearsal] dump source: HOST DIR $DUMP_DIR (wwf_tasks.sql.gz + wwf_users.sql.gz)"
+            for w in tasks users; do
+              f="$DUMP_DIR/wwf_${w}.sql.gz"
+              [ -f "$f" ] || { echo "::error::$f not found"; exit 5; }
+              gzip -t "$f" || { echo "::error::$f fails gzip -t"; exit 5; }
+            done
+          else
+            if [ -z "$DUMP_TS" ]; then
+              # Newest timestamp that has BOTH per-database dumps: db_backup.sh
+              # writes them back-to-back and skips rotation on a failed cycle,
+              # so a half-written pair is possible and must not be picked.
+              # The globals dumps (wwf_<which>_globals_<ts>.sql.gz) fall out of
+              # this sed on their own — 'globals' is not [0-9TZ] — and are not
+              # needed anyway: restoring into the same instance means
+              # app_user/app_admin already exist.
+              DUMP_TS=$(docker exec "$BACKUP_C" ls -1 /backups \
+                | sed -n 's/^wwf_tasks_\([0-9TZ]*\)\.sql\.gz$/\1/p' | sort -r \
+                | while read -r ts; do
+                    if docker exec "$BACKUP_C" test -f "/backups/wwf_users_${ts}.sql.gz"; then
+                      echo "$ts"; break
+                    fi
+                  done)
+            fi
+            [ -n "$DUMP_TS" ] || {
+              echo "::error::no wwf_tasks_/wwf_users_ dump PAIR in ${BACKUP_C}:/backups — is db-backup still cycling?"
+              exit 5; }
+            echo "[rehearsal] dump source: ${BACKUP_C}:/backups pair @ ${DUMP_TS}"
+            for w in tasks users; do
+              docker exec "$BACKUP_C" gzip -t "/backups/wwf_${w}_${DUMP_TS}.sql.gz" \
+                || { echo "::error::/backups/wwf_${w}_${DUMP_TS}.sql.gz fails gzip -t"; exit 5; }
+            done
+            # A wedged db-backup loop is precisely the sort of thing nobody
+            # notices, and rehearsing a week-old shape is not rehearsing
+            # today's. Warn, don't fail — a stale dump is still a better
+            # rehearsal than none.
+            iso=$(echo "$DUMP_TS" | sed -E 's/^([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z$/\1-\2-\3T\4:\5:\6Z/')
+            # Epoch first, THEN arithmetic: an empty command substitution inside
+            # $(( )) is a fatal syntax error in dash that `|| fallback` cannot
+            # catch, so an unparseable timestamp must skip the check, not kill
+            # the rehearsal.
+            dump_epoch=$(date -u -d "$iso" +%s 2>/dev/null || echo '')
+            if [ -n "$dump_epoch" ]; then
+              age_h=$(( ( $(date -u +%s) - dump_epoch ) / 3600 ))
+              if [ "$age_h" -gt 48 ]; then
+                echo "::warning::newest routine backup pair is ${age_h}h old (${DUMP_TS}) — check wwf-db-backup"
+              fi
+            fi
+          fi
+
+          # Exact row counts for EVERY ordinary table in one round trip, so the
+          # before/after comparison covers tables nobody thought to list.
+          # query_to_xml is the standard trick for counting dynamically named
+          # relations without plpgsql; reltuples/pg_stat would be estimates,
+          # and estimates are useless on a freshly restored copy.
+          COUNT_SQL="SELECT c.relname, (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM public.%I', c.relname), false, true, '')))[1]::text::bigint FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname"
+
+          write_env() {   # $1 chain  $2 container  $3 database
+            assert_throwaway "$3"
+            wv=$(echo "$1" | tr 'a-z' 'A-Z')_MIGRATION_DATABASE_URL
+            wdsn="postgresql+asyncpg://postgres@$2:5432/$3"
+            # Last line of defence, after all string building is done: whatever
+            # went wrong upstream, the DSN handed to alembic must not name a
+            # live database.
+            case "$wdsn" in
+              */wwf_tasks|*/wwf_users) echo "::error::REFUSING DSN $wdsn"; exit 3;;
+            esac
+            # Password via PGPASSWORD, NOT inside the DSN: asyncpg honours
+            # libpq's PGPASSWORD, and a superuser password containing '@', ':',
+            # '/' or '#' would silently corrupt a URL-form DSN (there is no
+            # percent-encoding step available in dash). Read out of the
+            # container so the value never appears in this repo, in the
+            # workflow log, or in the request body sent to this host.
+            wpw=$(docker exec "$2" printenv POSTGRES_PASSWORD) || {
+              echo "::error::cannot read POSTGRES_PASSWORD from $2"; return 1; }
+            # An --env-file line is KEY=<rest of line>, so an embedded newline
+            # is the one password shape that would silently truncate into a
+            # wrong credential (and a wrong-password failure here would read
+            # like a broken migration). Refuse it instead of guessing. The
+            # value is never echoed, only measured.
+            if [ -z "$wpw" ] || [ "$(printf '%s' "$wpw" | wc -l)" != "0" ]; then
+              echo "::error::POSTGRES_PASSWORD in $2 is empty or multi-line — cannot be passed safely"
+              return 1
+            fi
+            umask 077
+            { printf '%s=%s\n' "$wv" "$wdsn"
+              printf 'PGPASSWORD=%s\n' "$wpw"
+            } > "$WORK/$1.env"
+          }
+
+          # alembic runs from the DEPLOYED backend image with this repo's
+          # chains bind-mounted read-only: the image already carries the pinned
+          # alembic/sqlalchemy/asyncpg and reaches the DB containers over the
+          # internal network, and resolving its tag from the running container
+          # means this never has to be bumped by hand. A fresh `docker run` off
+          # that image inherits NO env_file, so the only DSN in scope is the
+          # one --env-file supplies; alembic.ini's fallback
+          # `driver://user:pass@localhost/dbname` fails loudly rather than
+          # reaching anything real. Caveat: this rehearses the repo's REVISIONS
+          # against the DEPLOYED alembic version — a change to the alembic pin
+          # in backend/requirements.txt is not what runs here.
+          IMG=$(docker inspect --format '{{.Config.Image}}' weekly_weed_flow-backend-1)
+          [ -n "$IMG" ] || { echo "::error::cannot resolve the deployed backend image"; exit 7; }
+          echo "[rehearsal] alembic image: $IMG"
+
+          # `set -e` is SUSPENDED inside a function invoked on the left of `||`
+          # (which is how this is called, so both chains get reported instead
+          # of aborting at the first). Every step below is therefore checked
+          # explicitly — the same errexit trap ci.yml's migrations job
+          # documents, in its other form.
+          rehearse_chain() {   # $1 chain  $2 container  $3 database  $4 expected head
+            ch="$1"; cn="$2"; dbn="$3"; exp="$4"
+            assert_throwaway "$dbn"
+
+            # CREATE without IF NOT EXISTS on purpose: if the name somehow
+            # already exists this must abort, never adopt (or destroy) a
+            # database it did not create.
+            docker exec "$cn" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -qc \
+              "CREATE DATABASE \"$dbn\"" || { echo "::error::$ch: CREATE DATABASE $dbn failed"; return 1; }
+
+            # dash has no `pipefail`, so gunzip's exit status on the left of
+            # this pipe is invisible. That is why every dump was gzip -t'd
+            # above and why the restored copy is asserted to carry a real
+            # schema AND an alembic_version row below, instead of trusting the
+            # pipe to have failed loudly.
+            if [ -n "$DUMP_DIR" ]; then
+              gunzip -c "$DUMP_DIR/wwf_${ch}.sql.gz"
+            else
+              docker exec "$BACKUP_C" gunzip -c "/backups/wwf_${ch}_${DUMP_TS}.sql.gz"
+            fi | docker exec -i "$cn" psql -U postgres -d "$dbn" -v ON_ERROR_STOP=1 -q >/dev/null \
+              || { echo "::error::$ch: restoring the dump into $dbn failed"; return 1; }
+
+            ntab=$(docker exec "$cn" psql -U postgres -d "$dbn" -tAqc \
+                    "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") \
+              || { echo "::error::$ch: cannot inspect $dbn"; return 1; }
+            got=$(docker exec "$cn" psql -U postgres -d "$dbn" -tAqc \
+                    "SELECT coalesce(string_agg(version_num, ',' ORDER BY version_num), '') FROM alembic_version") \
+              || { echo "::error::$ch: $dbn has no alembic_version table"; return 1; }
+            echo "[rehearsal] $ch: restored into $dbn — $ntab public relations, alembic_version=${got:-<empty>}"
+            # Floor is deliberately low: wwf_users legitimately has only three
+            # public tables. It only has to catch "the dump produced nothing";
+            # the alembic_version assertion below is the real proof that a
+            # populated production dump landed.
+            if [ "$ntab" -lt 3 ]; then
+              echo "::error::$ch: restore produced only $ntab relations — the dump did not apply"; return 1
+            fi
+            if [ -z "$got" ]; then
+              echo "::error::$ch: restored copy has no alembic_version row"; return 1
+            fi
+
+            docker exec "$cn" psql -U postgres -d "$dbn" -tAq -F'|' -c "$COUNT_SQL" \
+              > "$WORK/$ch.before" || { echo "::error::$ch: pre-upgrade row counts failed"; return 1; }
+
+            write_env "$ch" "$cn" "$dbn" || return 1
+            # PYTHONDONTWRITEBYTECODE is set in the image, and the mount is :ro
+            # so a stray .pyc write would fail anyway.
+            docker run --rm --network "$NET" --env-file "$WORK/$ch.env" \
+              -v "$WORK/alembic:/rehearsal:ro" "$IMG" \
+              alembic -c /rehearsal/alembic.ini -n "$ch" upgrade head \
+              || { echo "::error::$ch: alembic upgrade head FAILED on real production data"; return 1; }
+
+            got=$(docker exec "$cn" psql -U postgres -d "$dbn" -tAqc \
+                    "SELECT coalesce(string_agg(version_num, ',' ORDER BY version_num), '') FROM alembic_version") \
+              || { echo "::error::$ch: cannot read alembic_version after upgrade"; return 1; }
+            if [ "$got" != "$exp" ]; then
+              echo "::error::$ch: after upgrade head the restored copy is at '$got', expected '$exp'"
+              return 1
+            fi
+
+            docker exec "$cn" psql -U postgres -d "$dbn" -tAq -F'|' -c "$COUNT_SQL" \
+              > "$WORK/$ch.after" || { echo "::error::$ch: post-upgrade row counts failed"; return 1; }
+            # awk rather than `join`: join requires both inputs sorted in the
+            # SHELL's collation, and psql's ORDER BY uses the DATABASE's, which
+            # need not agree on '_' — a mismatch makes join silently skip
+            # pairs, i.e. silently stop detecting row loss. Tables a migration
+            # ADDS or DROPS are simply absent from one side and reported by
+            # neither. Row loss is the failure mode an empty-database CI run
+            # structurally cannot see.
+            if ! awk -F'|' -v ch="$ch" '
+                   NR == FNR { before[$1] = $2; next }
+                   ($1 in before) && before[$1] > $2 {
+                     printf "::error::%s: public.%s lost rows across the upgrade: %s -> %s\n", ch, $1, before[$1], $2
+                     bad = 1
+                   }
+                   END { exit bad ? 1 : 0 }' "$WORK/$ch.before" "$WORK/$ch.after"; then
+              return 1
+            fi
+            echo "[rehearsal] $ch: upgrade head reached $exp on restored production data, no row loss"
+            return 0
+          }
+
+          rehearse_chain tasks wwf-db-tasks "$DB_TASKS" "$EXP_TASKS" || FAIL=1
+          rehearse_chain users wwf-db-users "$DB_USERS" "$EXP_USERS" || FAIL=1
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo "::error::migration rehearsal FAILED — these migrations would not survive production data as it is now"
+            exit 8
+          fi
+          echo "[rehearsal] PASS: both chains upgrade to head on a restored copy of production"
+          SH
+
+          # `bash -n` is not the right check for this file (it is executed by
+          # dash), but a syntax error would only surface as a remote exit code,
+          # so parse it locally first with whichever POSIX shell exists here.
+          if command -v dash >/dev/null 2>&1; then dash -n "$SCRIPT"; else sh -n "$SCRIPT"; fi
+
+          set +e
+          python3 "$RUNNER_TEMP/kvm4.py" shell 900 "$SCRIPT" | tee "$RUNNER_TEMP/rehearsal.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "## Rehearsal"
+            echo
+            echo '```'
+            grep -E '^\[rehearsal\]' "$RUNNER_TEMP/rehearsal.log" || echo "(no rehearsal output — see the step log)"
+            echo '```'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Drop any throwaway database this run may have stranded
+        if: always()
+        env:
+          RUNNER_URL: ${{ secrets.KVM4_RUNNER_URL }}
+          RUNNER_TOKEN: ${{ secrets.KVM4_RUNNER_TOKEN }}
+          RUN_TAG: ${{ github.run_id }}_${{ github.run_attempt }}
+        # Belt and braces. The remote script cleans up in its own trap, but a
+        # /shell request that times out client-side, or a job cancelled between
+        # the CREATE and the trap firing, would leave a throwaway inside the
+        # live cluster. Same prefix guard, so this step cannot touch anything
+        # else either.
+        run: |
+          set -euo pipefail
+          case "$RUN_TAG" in *[!0-9_]*) echo "::error::unexpected RUN_TAG"; exit 1;; esac
+          printf "RUN_TAG='%s'\n" "$RUN_TAG" > "$RUNNER_TEMP/sweep.sh"
+          cat <<'SH' >> "$RUNNER_TEMP/sweep.sh"
+          set -eu
+          case "$RUN_TAG" in ''|*[!0-9_]*) echo "::error::bad RUN_TAG"; exit 2;; esac
+          for pair in wwf-db-tasks:tasks wwf-db-users:users; do
+            c=${pair%%:*}; w=${pair#*:}
+            db="wwf_rehearsal_${w}_${RUN_TAG}"
+            case "$db" in
+              wwf_rehearsal_tasks_*|wwf_rehearsal_users_*) ;;
+              *) echo "::error::REFUSING: '$db' is not a throwaway database"; exit 3;;
+            esac
+            if [ "$(docker exec "$c" psql -U postgres -d postgres -tAqc \
+                      "SELECT count(*) FROM pg_database WHERE datname = '$db'")" != "0" ]; then
+              echo "[cleanup] dropping stranded $db in $c"
+              docker exec "$c" psql -U postgres -d postgres -qtAc \
+                "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >/dev/null \
+                || echo "::warning::could not drop $db in $c — remove it by hand"
+            fi
+          done
+          rm -rf "/opt/wwf-rehearsal/run-${RUN_TAG}"
+          echo "[cleanup] done"
+          SH
+          if command -v dash >/dev/null 2>&1; then dash -n "$RUNNER_TEMP/sweep.sh"; else sh -n "$RUNNER_TEMP/sweep.sh"; fi
+          python3 "$RUNNER_TEMP/kvm4.py" shell 120 "$RUNNER_TEMP/sweep.sh"
+
+      - name: Fail the job if production is behind this repo
+        # Last, and if: always(), so the rehearsal result is already in the log
+        # and the summary before the drift verdict decides the job's colour.
+        # This is the check that would have caught the five-migration gap.
+        if: always()
+        env:
+          DETECTED: ${{ steps.drift.outputs.detected }}
+        run: |
+          set -euo pipefail
+          # An EMPTY verdict means the drift step never ran (something upstream
+          # failed), which is NOT the same as "no drift" and must never be
+          # reported as green. CI on this repo was already silently dead for
+          # five days once because an absent signal read as a passing one.
+          if [ -z "$DETECTED" ]; then
+            echo "::error::the drift check did not run — production's alembic head was NOT verified this run"
+            exit 1
+          fi
+          if [ "$DETECTED" = "true" ]; then
+            echo "::error::production's alembic head does not match this repo — see the Drift check step; apply the listed revisions per docs/DEPLOY.md"
+            exit 1
+          fi
+          echo "no alembic drift between production and this repo"
