@@ -2001,8 +2001,23 @@ on *both* new images.
 > (both properties dry-run verified on a local copy before it touched production).
 > All 19 changes are in the audit trail (11 INSERT + 8 UPDATE on `rooms`).
 >
-> The flowering room NAMES deliberately carry both designations
-> (`c180` / "Flowering 1.1 · Room 1") because the plan schedules by "Room 1..6"
-> while the register identifies by C180..C185, and §10 requires the two be
-> reconciled precisely so a room is not lost between them. That reconciliation now
-> lives in the data rather than in someone's head.
+> ⚠️ **The Rooms-1-6 ↔ C180-C185 mapping is STILL NOT confirmed, and is
+> deliberately absent from the data.** The room *codes* are confirmed (owner,
+> against the detailed facility layout, and they match the signed register). The
+> *operational* mapping is a separate question, and both source documents flag it:
+> the eradication plan's Appendix B calls it "an assumption requiring
+> confirmation", and the CEO's Facility Execution Map of 29.07.2026 repeats
+> verbatim that "the mapping of Rooms 1-6 to C180-C185 requires QA confirmation".
+>
+> The names were briefly seeded as "Flowering 1.1 · Room 1" and then corrected to
+> "Flowering 1.1 · C180"
+> (`oneoff_fix_flowering_room_names_20260730.sql`). "Flowering 1.1..1.6" paired
+> with "C180..C185" in order is register-sourced and safe; equating either with
+> the campaign's "Room 1..6" is not. The harm is concrete rather than theoretical:
+> the harvest schedule is written as "Room 3 on 31.07", so cleaning c182 in the
+> belief that it is Room 3 when it is not is precisely the error the plan's §10
+> reconciliation table exists to prevent.
+>
+> **Add the Room-N label back in one UPDATE once Production + QA have signed that
+> one-page reconciliation table.** Until then the board identifies rooms only by
+> the designations that are actually confirmed.
