@@ -270,3 +270,64 @@ test('GF.task resolves subtask rows out of GF.state.children as well as the flat
   assert.equal(h.GF.task('T-CHILD'), undefined);
   h.close();
 });
+
+/* ── The matrix's VALUES, not just its self-consistency ────────────────
+   The table-driven test above compares GF.can(x) against GF.PERMS[role].flag.
+   That proves GF.can faithfully reports the table — but it is a tautology with
+   respect to the table's CONTENT: flip `_FULL.deleteAny` to false and both sides
+   move together, so it stays green. Measured against the real core.js, one flag
+   at a time: deleteAny, create and team could each be silently flipped with all
+   tests still passing.
+
+   This pins the policy itself, in both directions. The downgrade direction turns
+   a manager into a read-only user; the ESCALATION direction is the one that
+   matters more — an operator quietly gaining editAny or deleteAny would let
+   anyone re-status or delete another department's GxP task.
+   ──────────────────────────────────────────────────────────────────── */
+
+const FULL_ROLES = ['admin', 'owner', 'ceo', 'coo', 'qa_mgr', 'qc_mgr', 'pr_mgr',
+                    'wh_mgr', 'se_mgr', 'cu_mgr', 'mu_mgr', 'qp'];
+
+test('every privileged role really holds the full write row', () => {
+  const h = loadGF();
+  for (const role of FULL_ROLES) {
+    const p = h.GF.PERMS[role];
+    assert.ok(p, `${role} must be present in GF.PERMS`);
+    assert.equal(p.create, true, `${role}.create must be true`);
+    assert.equal(p.editAny, true, `${role}.editAny must be true`);
+    assert.equal(p.deleteAny, true, `${role}.deleteAny must be true`);
+    assert.equal(p.team, true, `${role}.team must be true`);
+    assert.equal(p.status, 'any', `${role}.status must be 'any'`);
+  }
+  h.close();
+});
+
+test('operator stays restricted — the privilege-escalation direction', () => {
+  const h = loadGF();
+  const op = h.GF.PERMS.operator;
+  assert.equal(op.create, true, 'an operator may still create its own work');
+  assert.equal(op.editAny, false, 'operator must NOT be able to edit others\' tasks');
+  assert.equal(op.deleteAny, false, 'operator must NOT be able to delete');
+  assert.equal(op.team, false, 'operator must NOT reach team management');
+  assert.equal(op.status, 'own', "operator status scope must be 'own'");
+  h.close();
+});
+
+test('no role exists in GF.PERMS that this policy list has not reviewed', () => {
+  // GF.PERMS is hand-maintained. A role added with an ad-hoc row would satisfy
+  // the self-consistency test silently; here it fails until someone states
+  // deliberately which shape it gets.
+  const h = loadGF();
+  const known = new Set([...FULL_ROLES, 'operator']);
+  for (const role of Object.keys(h.GF.PERMS)) {
+    assert.ok(known.has(role),
+      `${role} is in GF.PERMS but not in this test's reviewed policy list — ` +
+      'add it here on purpose rather than inheriting a row by accident');
+  }
+  // And the converse: a role removed from GF.PERMS silently falls back to
+  // operator via GF.perms(), which is a downgrade nobody would notice.
+  for (const role of FULL_ROLES) {
+    assert.ok(role in h.GF.PERMS, `${role} disappeared from GF.PERMS`);
+  }
+  h.close();
+});

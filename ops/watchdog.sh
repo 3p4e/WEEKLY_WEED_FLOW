@@ -75,6 +75,11 @@ GH_CI_WORKFLOW="${WWF_WATCHDOG_CI_WORKFLOW:-ci.yml}"
 # labels changed, runner too far behind to be assigned work).
 CI_QUEUED_MAX_MIN="${WWF_WATCHDOG_CI_QUEUED_MAX_MIN:-30}"
 CI_RUNNING_MAX_MIN="${WWF_WATCHDOG_CI_RUNNING_MAX_MIN:-120}"
+# How long CI may go without ANY run reaching a conclusion while unfinished runs
+# exist. A full pipeline is ~25 min, so 90 leaves room for one queued behind one
+# running without false-alarming. This is the threshold that actually catches the
+# five-day outage, because it is immune to the push cadence.
+CI_NO_COMPLETION_MAX_MIN="${WWF_WATCHDOG_CI_NO_COMPLETION_MAX_MIN:-90}"
 # Generous, and only ever a WARN: no runs can simply mean no pushes.
 CI_MAX_AGE_DAYS="${WWF_WATCHDOG_CI_MAX_AGE_DAYS:-14}"
 WEBHOOK="${WWF_WATCHDOG_WEBHOOK:-}"
@@ -512,7 +517,13 @@ check_ci_freshness() {
     return 0
   fi
 
-  api="https://api.github.com/repos/${GH_REPO}/actions/workflows/${GH_CI_WORKFLOW}/runs?per_page=1"
+  # per_page=20, NOT 1. Looking only at the newest run is defeated by the very
+  # push cadence that masked the original outage: with the runner dead,
+  # cancel-in-progress cancels the old queued run and each push creates a fresh
+  # one, so "the newest run" is perpetually young and this check stays green
+  # forever. The drain signal below needs the surrounding runs to see that runs
+  # are being created and NONE is completing.
+  api="https://api.github.com/repos/${GH_REPO}/actions/workflows/${GH_CI_WORKFLOW}/runs?per_page=20"
   # curl reads its config (and therefore the Authorization header and URL) from
   # STDIN, so the token never appears in this host's process list — `-H "Bearer
   # ..."` on the command line would be world-readable via ps for the life of
@@ -532,28 +543,60 @@ check_ci_freshness() {
     *) emit WARN ci_freshness "GitHub API returned http=${code} — CI freshness unknown"; return 0 ;;
   esac
 
-  py_out="$(WWF_BODY="$body" python3 - <<'PY' 2>/dev/null
+  # The body goes through a temp FILE, not the environment. A single env var is
+  # capped at MAX_ARG_STRLEN (128 KiB) and the per_page=20 response measured
+  # 296 KB against the real API, so `WWF_BODY="$body" python3` failed with E2BIG
+  # and produced NOTHING — which this function then reported as "could not parse
+  # GitHub API response". The fixtures could not catch it: they were small. It
+  # also keeps a 300 KB API body out of the process environment.
+  local bodyfile
+  bodyfile="$(mktemp 2>/dev/null || printf '/tmp/wwf-watchdog-%s.json' "$$")"
+  printf '%s' "$body" > "$bodyfile"
+  py_out="$(WWF_BODY_FILE="$bodyfile" python3 - <<'PY' 2>/dev/null
 import json, os, sys
 from datetime import datetime, timezone
 try:
-    d = json.loads(os.environ["WWF_BODY"])
+    d = json.load(open(os.environ["WWF_BODY_FILE"]))
     runs = d.get("workflow_runs") or []
     print(f"total={d.get('total_count', 0)}")
+    now = datetime.now(timezone.utc)
+
+    def age_of(run):
+        ts = (run.get("created_at") or "").replace("Z", "+00:00")
+        return int((now - datetime.fromisoformat(ts)).total_seconds())
+
     if runs:
         r = runs[0]
-        ts = (r.get("created_at") or "").replace("Z", "+00:00")
-        age = int((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
         print(f"status={r.get('status')}")
         print(f"conclusion={r.get('conclusion') or 'none'}")
         print(f"number={r.get('run_number')}")
-        print(f"age_seconds={age}")
+        print(f"age_seconds={age_of(r)}")
+
+        # The drain signal. A run that REACHED a conclusion proves the runner
+        # actually executed something; "created" only proves GitHub accepted a
+        # push. Report the age of the newest concluded run, and how many
+        # unfinished runs sit newer than it. Runs accumulating with nothing
+        # concluding is the outage signature, and unlike the newest run's age it
+        # does not reset when someone pushes again.
+        concluded = [x for x in runs if x.get("conclusion")]
+        unfinished = [x for x in runs if not x.get("conclusion")]
+        print(f"unfinished={len(unfinished)}")
+        if concluded:
+            newest_done = min(concluded, key=age_of)
+            print(f"last_conclusion_age_seconds={age_of(newest_done)}")
+            print(f"last_conclusion_number={newest_done.get('run_number')}")
+        else:
+            print("last_conclusion_age_seconds=-1")
+            print("last_conclusion_number=none")
 except Exception as exc:                     # noqa: BLE001 - reported, not raised
     print(f"error={type(exc).__name__}: {exc}")
     sys.exit(0)
 PY
 )"
+  rm -f "$bodyfile"
 
   local total=0 status="" concl="" number="" age=0 perr="" k v
+  local unfinished=0 done_age=-1 done_num="none"
   while IFS='=' read -r k v; do
     case "$k" in
       total) total="$v" ;;
@@ -561,6 +604,9 @@ PY
       conclusion) concl="$v" ;;
       number) number="$v" ;;
       age_seconds) age="$v" ;;
+      unfinished) unfinished="$v" ;;
+      last_conclusion_age_seconds) done_age="$v" ;;
+      last_conclusion_number) done_num="$v" ;;
       error) perr="$v" ;;
     esac
   done <<EOF
@@ -577,6 +623,24 @@ EOF
   fi
 
   local age_min=$((age / 60))
+
+  # THE PUSH-PROOF DEAD-MAN'S SWITCH, checked before the per-status verdicts
+  # below because those key off the NEWEST run and are therefore reset by every
+  # push. If runs exist that never concluded and nothing has concluded within
+  # the drain window, the queue is not draining — report that and stop, rather
+  # than letting a perpetually-young queued run report PASS.
+  if [ "$unfinished" -gt 0 ]; then
+    if [ "$done_age" -lt 0 ]; then
+      emit FAIL ci_freshness "${unfinished} unfinished ${GH_CI_WORKFLOW} run(s) and NONE of the ${total} most recent reached a conclusion — no runner is executing work"
+      return 0
+    fi
+    local done_min=$((done_age / 60))
+    if [ "$done_min" -ge "$CI_NO_COMPLETION_MAX_MIN" ]; then
+      emit FAIL ci_freshness "${unfinished} unfinished ${GH_CI_WORKFLOW} run(s); last run to CONCLUDE was #${done_num}, ${done_min}min ago (limit ${CI_NO_COMPLETION_MAX_MIN}) — runs are being created but the queue is not draining"
+      return 0
+    fi
+  fi
+
   case "$status" in
     queued|waiting|pending|requested)
       # THE DEAD-MAN'S SWITCH. GitHub accepted the run and nothing took it —
