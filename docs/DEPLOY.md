@@ -2044,7 +2044,121 @@ on *both* new images.
 
 ---
 
-## Pending, NOT deployed — cultivation board, destruction register, corridor cadence (0048 + 0049)
+---
+
+## Production deploy — backend v80 / frontend v111, tasks 0049 (2026-07-30)
+
+Owner-authorised. Promoted the cultivation board, the destruction register, the
+corridor cadence panel, and the two live-bug fixes, from
+`961e3a9346856af2eaa6e99a17e4fc4d90f089e3`.
+
+| | before | after |
+|---|---|---|
+| backend | `v79` | **`v80`** |
+| scheduler | `v79` | **`v80`** |
+| frontend | `v110` | **`v111`** |
+| tasks alembic | `0047` | **`0049`** |
+| users alembic | `0008` | `0008` (untouched) |
+| service worker | `wwf-shell-v3.74.0` | **`wwf-shell-v3.77.0`** |
+
+**Why this was not a frontend-only deploy, even though that is what was asked
+for.** The frontend at that SHA calls `/waste/*` and `/decon/corridors`, which
+only exist on v80. Shipping the frontend alone would have left the destruction
+register 404-ing — and, worse, would have taken out the *working* decon board,
+because the corridor panel's loader shared a `Promise.all` with the room-cycle
+fetch. That fragility was found while planning this deploy and fixed first
+(`961e3a9`): the corridor call now catches to null, so the cadence panel degrades
+to absent instead of failing the board. The ordering hazard is real and the fix is
+tested, but the coupling still meant backend + migration + frontend had to move
+together.
+
+**Order executed:** snapshot → migrate → build → swap → verify.
+
+1. **Snapshot** `/opt/wwf-backups/presnap-v80/` — `wwf_tasks.sql.gz` 3.1 MB,
+   `wwf_users.sql.gz` 48 KB, both `gzip -t` clean, on `/dev/sda1` (a real host
+   mount, not a container overlay — see the warning further up this file).
+2. **Migrate before swap**, `0047 → 0048 → 0049`, run from the v80 image against
+   the live DB while v79 was still serving. Safe because both migrations are
+   purely additive: three new tables, nothing existing altered, no column a
+   running v79 container reads. Verified afterwards: all three tables have RLS
+   enabled, one `org_isolation` policy, an `fn_audit_row` trigger, and
+   `SELECT/INSERT/UPDATE/DELETE` for `app_user`; zero unprotected public tables;
+   `tasks` 577, `rooms` 25, `plant_batches` 6, `audit_log` 3703 — all unchanged.
+3. **Build** v80 + v111 via Docker git-context. PAT staged `0600`, logs piped
+   through `sed`, credential shredded, build cache pruned,
+   `docker history --no-trunc | grep -c x-access-token` = **0** on both images.
+4. **Swap** `compose.yaml.bak-v80` taken first; `docker compose up -d --no-deps
+   backend scheduler frontend`. All three up, nothing in the WWF stack unhealthy
+   or restarting, no traceback in either log, scheduler reattached its Letta
+   source and completed a due scan.
+
+**Verification**
+
+- `/health/ready` → `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`.
+- **Every new route returns 401 through nginx, not 404** — `/cultivation/*`,
+  `/decon/corridors`, `/waste/manifests`, `/waste/reconciliation`, and the POST
+  paths. A bogus control path returns 200 (the SPA fallback), which is what proves
+  those 401s come from the backend rather than from some blanket nginx behaviour.
+- **`POST /handoffs/{id}/resolve` now returns 401. Before this deploy it returned
+  405.** The unproxied-path bug is fixed in production.
+- All **71** precached shell paths fetch 200 over https, so `cache.addAll()` will
+  not reject and the service worker installs.
+- **14 design-system and view assets hash-identical** (sha256) between the repo at
+  that SHA and what the public URL serves — `mass-weed.css`, `app.css`,
+  `skins.css`, `views.css`, `brand.css`, `mobile.css`, the four view files,
+  `api.js`, `data.js`, `sw.js`, `index.html`.
+- The two non-trivial queries (`/waste/reconciliation`, the corridor cadence and
+  its movements-without-cleaning join) were **executed as `app_user` with the
+  API's own identity GUCs**, because a 401 proves wiring but not that the SQL is
+  valid. All returned rows: 19 rooms, 556 tasks, the 5 corridors correctly matched
+  by name. *The first attempt at this looked like a clean run over empty tables —
+  `set_config(..., is_local=true)` is transaction-scoped and psql auto-commits per
+  statement, so the GUC was discarded and RLS filtered everything to zero. Wrap it
+  in `BEGIN … ROLLBACK`.*
+
+**Rollback** = restore `compose.yaml.bak-v80` (v79 / v110) and
+`docker compose up -d --no-deps backend scheduler frontend`. The schema may be
+left forward — it is additive and v79-tolerant, as established above. Otherwise
+`alembic -n tasks downgrade 0047` (verified byte-exact on a local PG16), or
+restore from the snapshot.
+
+### ⚠️ Pre-existing audit-chain damage, found during this deploy — NOT caused by it
+
+Running the app's own `_CHAIN_SQL` (`app/api/audit.py`) against the tasks chain
+reports **415 flagged rows of 3703**, first break at id 2032. `GET /audit/verify`
+will say the same.
+
+**This deploy did not cause it.** The pre-deploy snapshot was restored into a
+throwaway Postgres container and the same verifier run against both: the numbers
+are *identical* — `total 3703, hash_breaks 377, link_breaks 38, head_breaks 0,
+breaks 415, first_break 2032` before and after. The migration added tables, which
+writes no audit rows, and the row count never moved.
+
+The damage is bounded and has two distinct signatures on two different days:
+
+| kind | rows | day | tables |
+|---|---|---|---|
+| link only (`prev_hash` ≠ prior row's `entry_hash`) | 38 | 2026-07-11 | `tasks` |
+| hash only (recomputed hash ≠ stored) | 377 | 2026-07-13 | `tasks`, `work_sessions` |
+
+Nothing after id 2500 is affected — **1203 subsequent rows are clean** — so
+whatever happened stopped. Two observations that a root-cause investigation should
+start from, offered as leads and **not** as a diagnosis:
+
+- The 38 link breaks sit in a single ~2-second window and their `created_at` runs
+  *backwards* relative to `id`, which is what concurrent transactions interleaving
+  around the advisory lock would look like.
+- The 377 hash breaks are all one day and the verifier recomputes from stored
+  `created_at` while the trigger hashes `now()::text`. `_CHAIN_SQL`'s own comment
+  notes this reproduction depends on the server `TimeZone` being unchanged, so a
+  session that wrote under a different `TimeZone` would fail recomputation without
+  anything having been tampered with.
+
+Zero rows have ever been deleted (ids 1..3703 with no gaps), and the users chain
+is **completely clean** (269 rows, 0 breaks). Needs its own investigation; it is
+not a deploy blocker and was not introduced here.
+
+## PROMOTED 2026-07-30 — see the deploy record above. (Kept for the reasoning; the "not deployed" framing is historical.)
 
 Built and tested on `claude/weekly-read-flow-setup-yft7if`, deliberately **not
 promoted**: production promotion is owner-gated, and this needs an explicit

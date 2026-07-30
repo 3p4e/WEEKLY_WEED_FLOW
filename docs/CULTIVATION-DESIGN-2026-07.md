@@ -1,8 +1,9 @@
 # Cultivation department — design record (2026-07-30)
 
-**Status: migrations 0045–0047 are LIVE in production** (backend v79 / frontend
-v110, 2026-07-30 — see `docs/DEPLOY.md`). **0048, 0049 and the two new boards are
-built and tested but NOT deployed.** This began as a pre-design record written before
+**Status: ALL of it is LIVE in production** — migrations 0045–0049, the
+cultivation identity board, the destruction register and the corridor cadence
+panel (backend v80 / frontend v111, 2026-07-30; see `docs/DEPLOY.md` for the
+deploy record and its verification). This began as a pre-design record written before
 the CEO's plan arrived, and the analysis in §1–§4 is kept as written because it is
 what the design was reasoned from — but §1's "no schema" framing is historical
 now. What actually exists:
