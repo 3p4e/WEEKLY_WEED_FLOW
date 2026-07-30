@@ -3,7 +3,11 @@
 **Status: ALL of it is LIVE in production** — migrations 0045–0049, the
 cultivation identity board, the destruction register and the corridor cadence
 panel (backend v80 / frontend v111, 2026-07-30; see `docs/DEPLOY.md` for the
-deploy record and its verification). This began as a pre-design record written before
+deploy record and its verification). The **schema and code are deployed; the
+DATA is empty** — an owner-ordered full wipe on 2026-07-30 cleared every
+application record, including the room register, so the module is live and
+waiting to be populated rather than in use. Everything deleted is archived at
+`/opt/wwf-backups/prewipe-20260730/`. This began as a pre-design record written before
 the CEO's plan arrived, and the analysis in §1–§4 is kept as written because it is
 what the design was reasoned from — but §1's "no schema" framing is historical
 now. What actually exists:
@@ -430,8 +434,8 @@ honest on purpose — the gaps matter more than the coverage.
 | RT-qPCR swabs + results + action on positive (§27, QCSOP 024) | **built** — `decon_swabs`, positive needs a stated action |
 | Frozen positive controls, taken before the cull (§11.7, §27) | **built** — `decon_positive_controls` |
 | Tool sterilisation at 10,000 ppm (§28 control 2) | **built** — `decon_tool_log`, separate target from surfaces |
-| Room register / codes | **seeded 2026-07-30** — owner confirmed the codes against the detailed facility layout, resolving Appendix B's open item. 19 rooms incl. C171/C176-C179/C180-C185/C88/C150/C158 + 5 corridors; see `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` |
-| Rooms-1-6 ↔ C180-C185 reconciliation (§10) | **resolved in the data, signature outstanding** — the layout drawing positions `FLOWERING PREMISE 1.N` within 2-11 columns of `C(179+N)` while adjacent rooms sit 60-100 apart, so the pairing is geometrically forced and agrees with the plan's §08 zone map. Room names now carry all three designations (`Flowering 1.1 · C180 · Room 1`); see `oneoff_restore_flowering_room_numbers_20260730.sql`. QA's signature on the one-page table is **still open** — evidence is not a controlled document |
+| Room register / codes | **script ready, currently NOT loaded.** Owner confirmed the codes against the detailed facility layout, resolving Appendix B's open item, and the 19 rooms (C171/C176-C179/C180-C185/C88/C150/C158 + 5 corridors) were seeded on 2026-07-30 — then removed by the owner-ordered full data wipe later the same day (see `docs/DEPLOY.md`). Re-seeding is one idempotent command: `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` plus the two follow-ups named in its header |
+| Rooms-1-6 ↔ C180-C185 reconciliation (§10) | **resolved, re-applied by the seed script** — the layout drawing positions `FLOWERING PREMISE 1.N` within 2-11 columns of `C(179+N)` while adjacent rooms sit 60-100 apart, so the pairing is geometrically forced and agrees with the plan's §08 zone map. Room names now carry all three designations (`Flowering 1.1 · C180 · Room 1`); see `oneoff_restore_flowering_room_numbers_20260730.sql`. QA's signature on the one-page table is **still open** — evidence is not a controlled document |
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
 | Cultivation board a grower can actually use | **built 2026-07-30** — `web/gf/cultivation-view.js`: cultivar registry, coded batches, chunked/resumable plant-id generation, whole-batch phase moves, paginated plant roster. 29 unit tests (`tests/frontend/cultivation-view.test.js`), ten mutations verified to fail the intended test |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **built 2026-07-30** — migration 0048 + `app/api/waste.py` + `web/gf/waste-view.js`: header/lines, the draft→sealed→witnessed→disposed ladder, the two-person witness rule, and per-batch reconciliation incl. the closed-as-destroyed-but-never-manifested flag (§5d) |

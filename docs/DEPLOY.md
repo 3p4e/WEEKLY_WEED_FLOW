@@ -2046,6 +2046,98 @@ on *both* new images.
 
 ---
 
+## FULL APPLICATION DATA WIPE — owner-ordered, 2026-07-30
+
+Both application databases were emptied of **all** application data and the
+system restarted clean. Ordered by the owner: the content had accumulated across
+many failed and partial task-capture attempts, and the effort to reconcile it was
+worth less than a clean start. Real work will be re-ingested deliberately, later,
+through the app's own rules.
+
+**Archived first**, and this archive is the only copy of everything that was
+deleted:
+
+```
+/opt/wwf-backups/prewipe-20260730/wwf_tasks.sql.gz   3.1 MB   gzip -t OK
+/opt/wwf-backups/prewipe-20260730/wwf_users.sql.gz    48 KB   gzip -t OK
+```
+It holds all 58 profiles and 60 populated tables, on `/dev/sda1` (a real host
+mount, not a container overlay). **Do not prune it** — nothing else has this data.
+
+### What was deleted
+
+| | before | after |
+|---|---|---|
+| `wwf_tasks` — tasks | 577 | **0** |
+| `wwf_tasks` — audit_log | 3703 | **0** |
+| `wwf_tasks` — task_links / events / work_sessions | 360 / 359 / 276 | **0** |
+| `wwf_tasks` — rooms / plant_batches | 25 / 6 | **0** |
+| `wwf_tasks` — departments / calendar_weeks | 14 / 27 | **0** |
+| `wwf_tasks` — all QC records | 14 across 9 tables | **0** |
+| `wwf_users` — profiles | 58 | **1** (admin) |
+| `wwf_users` — organizations | 2 (incl. demo) | **1** (purely-plant) |
+| `wwf_users` — audit_log | 269 | **0**, then 2 (the org + admin re-creation) |
+
+Every test, executive, owner and demo account is gone, including the previous
+`admin` row itself.
+
+### Method, and what was deliberately preserved
+
+`TRUNCATE ... RESTART IDENTITY CASCADE` over every table in `public` **except
+`alembic_version`**, in both databases. Three reasons for that shape:
+
+- **TRUNCATE, not DELETE** — it does not fire the `FOR EACH ROW` audit trigger, so
+  the wipe did not write thousands of audit rows describing its own destruction.
+- **CASCADE** resolves the foreign-key order without hand-sequencing 60 tables.
+- **RESTART IDENTITY** resets the sequences, so the first task of the real era is
+  #1 rather than #578.
+- **`alembic_version` preserved** — it is bookkeeping, not application data.
+  Wiping it would make the app believe no migration had ever run.
+
+Schema, RLS policies, grants, triggers and functions were untouched: this was a
+data wipe, not a teardown. Verified after: **60 tables, 68 RLS policies, 56 audit
+triggers**, tasks head `0049`, users head `0008`.
+
+Out of scope and confirmed untouched: `wwf-letta`, `wwf-letta-db`,
+`wwf-docengine`, `qms-api`, and the three `wwf_mass_*` volumes — one of which
+(`wwf_mass_letta_pgdata`) is the live production Letta store despite its name.
+
+### The admin account
+
+Recreated with the **original bcrypt hash carried across verbatim** from the
+archive, so the username and password are literally unchanged and the password
+was never re-hashed or handled in plaintext. Same org, same role, same
+`must_change_password = false`.
+
+Verified end to end against the public URL, not just in the database:
+
+```
+POST /auth/login (admin, original password)  -> 200, access_token, role ADMIN
+POST /auth/login (wrong password)            -> 401
+GET  /tasks /departments /facility           -> 200 (reachable, empty)
+GET  /cultivation/* /waste/* /decon/*        -> 200
+GET  /audit/verify                           -> ok: true, tasks 0 rows, users 2
+```
+
+The audit chain now starts from zero and verifies clean — the 377 legacy-timezone
+rows and 38 pre-hardening forks documented above went with the wipe. They are
+still in the archive if they are ever needed.
+
+### Re-populating when you are ready
+
+Nothing is auto-seeded; the app bootstraps from empty on its own:
+
+- **Departments** — `POST /departments` (ADMIN) creates them; they are not
+  seed-only.
+- **Calendar weeks** — created on demand by `ensure_week()`, so no backfill is
+  needed before the first task.
+- **The room register** — one command, already committed and idempotent:
+  `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql`, then the two
+  follow-ups in order (see that file's header). It restores all 19 real facility
+  rooms including the C180–C185 mapping.
+
+---
+
 ## Production deploy — backend v80 / frontend v111, tasks 0049 (2026-07-30)
 
 Owner-authorised. Promoted the cultivation board, the destruction register, the
