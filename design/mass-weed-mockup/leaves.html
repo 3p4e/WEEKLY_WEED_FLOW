@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Water · Stability · Transport</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone C · QC LIMS — standalone leaves (qcleaves): water tests (PP-WT),
+  stability studies (PP-STB), sample transports (PP-TRN). JSONB-backed, no
+  cross-table deps. Blank-not-zero on unmeasured params; guarded transitions.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:18px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:#7fdfe0;background:rgba(47,217,217,.12);box-shadow:inset 0 0 0 1px rgba(47,217,217,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero h1{font-family:var(--mw-font-cond);font-size:27px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.3);}
+  .hero .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:560px;}
+  .hero__sp{flex:1;}
+  .subtabs{display:flex;gap:5px;margin-bottom:18px;flex-wrap:wrap;}
+  .subtab{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;cursor:pointer;padding:9px 18px;color:var(--mw-text-dim);background:rgba(4,14,28,.6);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);transition:all .12s ease;}
+  .subtab:hover{color:var(--mw-cyan-bright);} .subtab.on{color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));}
+  .subtab .c{font-family:var(--mw-mono);opacity:.7;margin-left:6px;font-size:11px;}
+  .pane{display:none;} .pane.on{display:block;}
+  table.t{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.t thead th{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;font-weight:700;color:var(--mw-text-dim);text-align:left;padding:9px 11px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.2);white-space:nowrap;}
+  table.t td{padding:10px 11px;color:var(--mw-text);box-shadow:inset 0 -1px 0 rgba(94,200,240,.07);vertical-align:middle;}
+  .code{font-family:var(--mw-mono);font-weight:700;font-size:12px;color:var(--mw-cyan-bright);white-space:nowrap;}
+  .mono{font-family:var(--mw-mono);font-size:11px;color:var(--mw-text-dim);} .blank{color:var(--mw-stat-mid);}
+  .stc{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;white-space:nowrap;color:var(--sc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc) 55%,transparent);background:color-mix(in srgb,var(--sc) 12%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .gd{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;color:#7fdfe0;box-shadow:inset 0 0 0 1px rgba(47,217,217,.4);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .passflag{font-family:var(--mw-font-cond);font-weight:700;font-size:11px;} .passflag.ok{color:var(--mw-stat-hi);} .passflag.oo{color:var(--mw-stat-lo);}
+  .note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;margin-top:14px;font-size:11px;line-height:1.5;color:var(--mw-text-dim);background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .note .ic{color:var(--mw-cyan-bright);flex:none;margin-top:1px;} .note b{color:var(--mw-ink);}
+  .formsflags{display:flex;gap:5px;flex-wrap:wrap;}
+  .ff{font-family:var(--mw-mono);font-size:9px;font-weight:700;padding:2px 6px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .ff.on{color:var(--mw-void);background:var(--mw-digit);} .ff.off{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);}
+  tr.rowlink{cursor:pointer;} tr.rowlink:hover td{background:rgba(58,159,212,.09);}
+  .scrim{position:fixed;inset:0;background:rgba(4,10,20,.68);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:60;} .scrim.on{opacity:1;pointer-events:auto;}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(480px,94vw);z-index:61;transform:translateX(100%);transition:transform .22s cubic-bezier(.2,.7,.3,1);background:linear-gradient(160deg,var(--mw-panel),var(--mw-panel-2));box-shadow:-8px 0 40px rgba(0,0,0,.6),inset 1px 0 0 rgba(94,200,240,.3);overflow-y:auto;} .drawer.on{transform:translateX(0);}
+  .dr__hd{padding:18px 20px 14px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.16);position:sticky;top:0;background:linear-gradient(160deg,var(--mw-panel),var(--mw-panel-2));z-index:2;}
+  .dr__cls{position:absolute;top:16px;right:16px;cursor:pointer;color:var(--mw-text-dim);background:none;border:none;} .dr__cls:hover{color:var(--mw-cyan-bright);}
+  .dr__c{font-family:var(--mw-mono);font-weight:700;font-size:14px;color:var(--mw-cyan-bright);} .dr__t{font-family:var(--mw-font-cond);font-size:17px;font-weight:600;color:var(--mw-ink);margin-top:5px;}
+  .dr__bd{padding:16px 20px 30px;}
+  .tp{display:flex;align-items:center;gap:12px;padding:11px 0;position:relative;} .tp:not(:last-child)::before{content:"";position:absolute;left:8px;top:24px;bottom:-4px;width:1px;background:rgba(94,200,240,.2);}
+  .tp__dot{width:17px;height:17px;flex:none;border-radius:50%;background:var(--mw-void);box-shadow:inset 0 0 0 2px var(--mw-text-faint);position:relative;z-index:2;} .tp.done .tp__dot{box-shadow:inset 0 0 0 2px var(--mw-stat-hi);background:var(--mw-stat-hi);} .tp.due .tp__dot{box-shadow:inset 0 0 0 2px var(--mw-stat-mid),0 0 8px var(--mw-stat-mid);background:var(--mw-stat-mid);}
+  .tp__m{font-family:var(--mw-font-cond);font-weight:700;font-size:13px;color:var(--mw-ink);width:52px;flex:none;} .tp__r{flex:1;font-family:var(--mw-mono);font-size:11px;color:var(--mw-text-dim);} .tp__r.blank{color:var(--mw-stat-mid);}
+  .tp__s{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);} .tp__s.done{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);} .tp__s.due{color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1px rgba(236,236,74,.45);} .tp__s.pend{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(127,141,164,.4);}
+  .dr__sec{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:700;color:var(--mw-header);margin:0 0 10px;}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="QC leaves">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="qc-lab.html">QC LIMS</a><span>›</span><a href="#">Water · Stability · Transport</a>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M12 2s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/></svg></div>
+    <div>
+      <h1><span class="en">Water · Stability · Transport</span><span class="mk">Вода · Стабилност · Транспорт</span></h1>
+      <div class="sub"><span class="en">Three standalone QC record types with no cross-table dependencies. Unmeasured parameters stay blank; transitions are guarded.</span><span class="mk">Три самостојни типови КК записи без зависности. Неизмерените параметри остануваат празни; преодите се заштитени.</span></div>
+    </div>
+    <div class="hero__sp"></div>
+  </div>
+
+  <div class="subtabs">
+    <div class="subtab on" data-p="water" onclick="tab('water')"><span class="en">Water tests</span><span class="mk">Вода</span><span class="c">4</span></div>
+    <div class="subtab" data-p="stab" onclick="tab('stab')"><span class="en">Stability studies</span><span class="mk">Стабилност</span><span class="c">3</span></div>
+    <div class="subtab" data-p="trans" onclick="tab('trans')"><span class="en">Sample transports</span><span class="mk">Транспорт</span><span class="c">3</span></div>
+  </div>
+
+  <div class="pane on" id="pane-water">
+    <div class="mw-panel" style="padding:6px 8px 4px;"><div class="mw-well" style="padding:2px 8px;overflow-x:auto;">
+      <table class="t"><thead><tr>
+        <th>PP-WT №</th><th><span class="en">Grade</span><span class="mk">Класа</span></th><th><span class="en">Parameters</span><span class="mk">Параметри</span></th><th><span class="en">Result</span><span class="mk">Резултат</span></th><th><span class="en">Date</span><span class="mk">Датум</span></th>
+      </tr></thead><tbody>
+        <tr><td class="code">PP-WT-2026-0011</td><td><span class="gd">RO</span></td><td class="mono">pH 6.8 · cond 1.2 µS · TOC 0.3</td><td><span class="passflag ok">✓ PASS</span></td><td class="mono">22.07.2026</td></tr>
+        <tr><td class="code">PP-WT-2026-0010</td><td><span class="gd">TW</span></td><td class="mono">pH 7.4 · cond 410 µS · <span class="blank">TOC —</span></td><td><span class="stc" style="--sc:#ecec4a"><span class="en">in progress</span><span class="mk">во тек</span></span></td><td class="mono">22.07.2026</td></tr>
+        <tr><td class="code">PP-WT-2026-0009</td><td><span class="gd">RO</span></td><td class="mono">pH 6.9 · cond 0.9 µS · TOC 0.2</td><td><span class="passflag ok">✓ PASS</span></td><td class="mono">12.07.2026</td></tr>
+        <tr><td class="code">PP-WT-2026-0008</td><td><span class="gd">BW</span></td><td class="mono">pH 7.1 · cond 380 µS · endotoxin 0.4</td><td><span class="passflag oo">✕ out of expectation</span></td><td class="mono">05.07.2026</td></tr>
+      </tbody></table>
+    </div></div>
+    <div class="note"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div><span class="en">Grades: <b>TW</b> tap · <b>BW</b> bore · <b>TR</b> treated · <b>RO</b> reverse-osmosis. On WT-0010 the TOC is <b>blank, not 0</b> — the measurement is genuinely pending.</span><span class="mk">Класи: <b>TW</b> · <b>BW</b> · <b>TR</b> · <b>RO</b>. На WT-0010, TOC е <b>празно, не 0</b> — мерењето е во тек.</span></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-stab">
+    <div class="mw-panel" style="padding:6px 8px 4px;"><div class="mw-well" style="padding:2px 8px;overflow-x:auto;">
+      <table class="t"><thead><tr>
+        <th><span class="en">Study №</span><span class="mk">Студија №</span></th><th><span class="en">Type</span><span class="mk">Тип</span></th><th><span class="en">Batches</span><span class="mk">Серии</span></th><th><span class="en">Status</span><span class="mk">Статус</span></th><th><span class="en">Shelf-life</span><span class="mk">Рок</span></th>
+      </tr></thead><tbody>
+        <tr class="rowlink" onclick="openStab(0)"><td class="code">PP-STB-2026-0004</td><td><span class="gd">ACC</span></td><td class="mono">PP-B-2026-0288, 0291</td><td><span class="stc" style="--sc:#5ec8f0">IN_PROGRESS</span></td><td class="mono blank">—</td></tr>
+        <tr class="rowlink" onclick="openStab(1)"><td class="code">PP-STB-2026-0003</td><td><span class="gd">LT</span></td><td class="mono">PP-B-2026-0250</td><td><span class="stc" style="--sc:#6cf05a">CLOSED</span></td><td class="mono">24 mo</td></tr>
+        <tr class="rowlink" onclick="openStab(2)"><td class="code">PP-STB-2026-0002</td><td><span class="gd">INT</span></td><td class="mono">PP-B-2026-0221</td><td><span class="stc" style="--sc:#6cf05a">CLOSED</span></td><td class="mono">18 mo</td></tr>
+      </tbody></table>
+    </div></div>
+    <div class="note"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div><span class="en">Types: <b>LT</b> long-term · <b>ACC</b> accelerated · <b>INT</b> intermediate. Shelf-life is set only on close — an open study's shelf-life is <b>blank</b>, not assumed.</span><span class="mk">Типови: <b>LT</b> · <b>ACC</b> · <b>INT</b>. Рокот се внесува само при затворање — на отворена студија е <b>празно</b>.</span></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-trans">
+    <div class="mw-panel" style="padding:6px 8px 4px;"><div class="mw-well" style="padding:2px 8px;overflow-x:auto;">
+      <table class="t"><thead><tr>
+        <th>PP-TRN №</th><th><span class="en">Reference</span><span class="mk">Референца</span></th><th><span class="en">Tests</span><span class="mk">Тестови</span></th><th><span class="en">Status</span><span class="mk">Статус</span></th><th><span class="en">Annex forms</span><span class="mk">Анекс форми</span></th>
+      </tr></thead><tbody>
+        <tr><td class="code">PP-TRN-2026-0007</td><td class="mono">Eurofins MK · heavy metals</td><td class="mono">Pb, Cd, Hg, As</td><td><span class="stc" style="--sc:#5ec8f0">in_transit</span></td><td><div class="formsflags"><span class="ff on">SAR</span><span class="ff on">MOIA</span><span class="ff off">TMCOC</span><span class="ff off">COO</span><span class="ff off">FIN</span></div></td></tr>
+        <tr><td class="code">PP-TRN-2026-0006</td><td class="mono">Eurofins MK · mycotoxins</td><td class="mono">Afla B1, ΣAfla, OTA</td><td><span class="stc" style="--sc:#6cf05a">received</span></td><td><div class="formsflags"><span class="ff on">SAR</span><span class="ff on">MOIA</span><span class="ff on">TMCOC</span><span class="ff on">COO</span><span class="ff on">FIN</span></div></td></tr>
+        <tr><td class="code">PP-TRN-2026-0005</td><td class="mono">Internal · retention move</td><td class="mono">—</td><td><span class="stc" style="--sc:#7fa3bd">draft</span></td><td><div class="formsflags"><span class="ff off">SAR</span><span class="ff off">MOIA</span><span class="ff off">TMCOC</span><span class="ff off">COO</span><span class="ff off">FIN</span></div></td></tr>
+      </tbody></table>
+    </div></div>
+    <div class="note"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div><span class="en">Flow <b>draft → in_transit → received</b>. Annex forms (SAR / MOIA / TMCOC / COO / FIN) are per-transport flags — filled green, unfilled muted; a bad enum transition is rejected.</span><span class="mk">Тек <b>draft → in_transit → received</b>. Анекс форми се знамиња по транспорт; погрешен преод се одбива.</span></div>
+    </div>
+  </div>
+</div>
+<div class="scrim" id="scrim" onclick="closeStab()"></div>
+<aside class="drawer" id="drawer"></aside>
+</div>
+
+<script>
+function tab(p){ document.querySelectorAll('.subtab').forEach(function(x){x.classList.toggle('on',x.dataset.p===p);});
+  document.querySelectorAll('.pane').forEach(function(x){x.classList.toggle('on',x.id==='pane-'+p);}); }
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var STB=[
+  {code:'PP-STB-2026-0004',type:['ACC','accelerated 40\u00b0C/75%RH','акцелерирана'],batch:'PP-B-2026-0288, 0291',pulls:[
+    {m:'0',date:'01.06.2026',st:'done',r:'THC 21.4% · water 8.2% · TYMC <10'},
+    {m:'3 mo',date:'01.09.2026',st:'done',r:'THC 21.0% · water 8.5% · TYMC <10'},
+    {m:'6 mo',date:'01.12.2026',st:'due',r:null},
+    {m:' end',date:'—',st:'pend',r:null}]},
+  {code:'PP-STB-2026-0003',type:['LT','long-term 25\u00b0C/60%RH','долгорочна'],batch:'PP-B-2026-0250',pulls:[
+    {m:'0',date:'10.01.2025',st:'done',r:'THC 22.1% · water 7.9%'},
+    {m:'6 mo',date:'10.07.2025',st:'done',r:'THC 21.8% · water 8.1%'},
+    {m:'12 mo',date:'10.01.2026',st:'done',r:'THC 21.2% · water 8.4%'},
+    {m:'24 mo',date:'10.01.2027',st:'done',r:'THC 20.6% · water 8.8% — within spec'}]}
+];
+function openStab(i){ var s=STB[i]; if(!s){return;}
+  var pulls=s.pulls.map(function(p){ var rr=p.r?'<span class="tp__r">'+p.r+'</span>':'<span class="tp__r blank">'+(document.documentElement.getAttribute('data-lang')==='mk'?'не измерено':'not yet pulled')+'</span>';
+    var stl={done:['done','pulled','извршено'],due:['due','due now','рок'],pend:['pend','scheduled','закажано']}[p.st];
+    return '<div class="tp '+p.st+'"><span class="tp__dot"></span><span class="tp__m">'+p.m+'</span>'+rr+'<span class="tp__s '+stl[0]+'">'+bil(stl[1],stl[2])+'</span></div>'; }).join('');
+  document.getElementById('drawer').innerHTML='<div class="dr__hd"><button class="dr__cls" onclick="closeStab()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>'+
+    '<div class="dr__c">'+s.code+'</div><div class="dr__t"><span class="gd">'+s.type[0]+'</span> '+bil(s.type[1],s.type[2])+'</div></div>'+
+    '<div class="dr__bd"><div class="dr__sec">'+bil('Batches','Серии')+'</div><div class="mono" style="margin-bottom:18px">'+s.batch+'</div>'+
+    '<div class="dr__sec">'+bil('Timepoint pull schedule','Распоред на точки')+'</div>'+pulls+'</div>';
+  document.getElementById('drawer').classList.add('on'); document.getElementById('scrim').classList.add('on'); if(window.mwSync)window.mwSync(); }
+function closeStab(){ document.getElementById('drawer').classList.remove('on'); document.getElementById('scrim').classList.remove('on'); }
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeStab();});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

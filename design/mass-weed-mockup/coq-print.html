@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="omelette-owns-print" content="true">
+<title>MASS WEED — Certificate of Quality</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone C · QC LIMS — Certificate of Quality print layout (CoQ).
+  The controlled document generated on RELEASE from coa-detail.html. Fixed
+  A4 page, print-owning. WHO TRS 1010 mandatory-field manifest, EU-GMP
+  Annex 16 QP certification block, bilingual MK|EN, provenance + SHA-256.
+  Screen shows a paper preview on a desk; print emits the page alone.
+-->
+<style>
+  :root{ --paper:#f4f8fc; --pink:#0d2036; --pnavy:#0a4a6e; }
+  html,body{margin:0;background:var(--mw-void);}
+  .desk{ padding:34px 20px 70px; display:flex; flex-direction:column; align-items:center; gap:18px; }
+  .toolbar{ display:flex; align-items:center; gap:12px; width:210mm; max-width:100%; }
+  .toolbar h1{ font-family:var(--mw-font-cond); font-size:20px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--mw-header); margin:0; }
+  .toolbar .sp{ flex:1; }
+  .printbtn{ font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:.07em; font-size:12.5px; font-weight:700; cursor:pointer; padding:10px 18px; border:none; color:var(--mw-void); background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan)); clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+  .printbtn:hover{ filter:brightness(1.15); }
+
+  /* the sheet */
+  .sheet{ width:210mm; min-height:297mm; background:var(--paper); color:var(--pink); box-shadow:0 20px 60px rgba(0,0,0,.5); padding:16mm 16mm 14mm; box-sizing:border-box; position:relative; }
+  .sheet, .sheet *{ font-family:'Titillium Web',system-ui,sans-serif; }
+  .wm{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; opacity:.05; }
+  .wm span{ font-family:'Saira Condensed',sans-serif; font-weight:800; font-size:150px; letter-spacing:6px; color:var(--pnavy); transform:rotate(-24deg); }
+  .cert-hd{ display:flex; align-items:flex-start; gap:14px; border-bottom:3px solid var(--pnavy); padding-bottom:12px; }
+  .cert-hd__mk{ width:46px; height:46px; flex:none; display:grid; place-items:center; background:var(--pnavy); color:#fff; font-family:'Saira Condensed',sans-serif; font-weight:800; font-size:20px; clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px); }
+  .cert-hd__t{ flex:1; }
+  .cert-hd__org{ font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:15px; letter-spacing:.04em; text-transform:uppercase; color:var(--pnavy); }
+  .cert-hd__ttl{ font-family:'Saira Condensed',sans-serif; font-weight:800; font-size:23px; letter-spacing:.02em; text-transform:uppercase; color:var(--pink); line-height:1.05; margin-top:2px; }
+  .cert-hd__no{ text-align:right; } .cert-hd__no .l{ font-size:8px; text-transform:uppercase; letter-spacing:.12em; color:#5a7690; } .cert-hd__no .v{ font-family:'Geist Mono',monospace; font-weight:700; font-size:15px; color:var(--pnavy); }
+  .verdict{ display:inline-flex; align-items:center; gap:8px; font-family:'Saira Condensed',sans-serif; font-weight:800; font-size:17px; letter-spacing:.08em; text-transform:uppercase; padding:5px 15px; margin-top:6px; }
+  .verdict.pass{ color:#0a5c34; background:#c9f0d6; box-shadow:inset 0 0 0 1.5px #2e9a56; }
+  .kvgrid{ display:grid; grid-template-columns:1fr 1fr; gap:0 26px; margin:14px 0; }
+  .kv{ display:flex; gap:10px; padding:5px 0; border-bottom:1px solid #dbe6f0; font-size:11.5px; }
+  .kv dt{ width:44%; color:#5a7690; text-transform:uppercase; letter-spacing:.04em; font-size:9.5px; padding-top:2px; }
+  .kv dd{ margin:0; flex:1; font-family:'Geist Mono',monospace; font-size:11px; color:var(--pink); font-weight:600; }
+  .sec-lbl{ font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--pnavy); margin:16px 0 7px; padding-bottom:3px; border-bottom:1.5px solid var(--pnavy); }
+  table.res{ width:100%; border-collapse:collapse; font-size:10.5px; }
+  table.res th{ text-align:left; background:var(--pnavy); color:#fff; font-family:'Saira Condensed',sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.04em; font-size:8.5px; padding:5px 8px; }
+  table.res th.num,table.res td.num{ text-align:right; }
+  table.res td{ padding:5px 8px; border-bottom:1px solid #dbe6f0; font-family:'Geist Mono',monospace; }
+  table.res td.p{ font-family:'Titillium Web',sans-serif; color:var(--pink); }
+  .cmp{ font-weight:700; } .cmp.y{ color:#0a5c34; } .cmp.n{ color:#b0121f; }
+  .prov{ font-size:8px; color:#5a7690; }
+  .manifest{ display:flex; flex-wrap:wrap; gap:5px 8px; margin-top:6px; }
+  .mf{ font-size:8.5px; color:#0a5c34; } .mf::before{ content:"\2713 "; font-weight:700; }
+  .sigrow{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:14px; }
+  .sig{ font-size:10px; } .sig__l{ font-size:8px; text-transform:uppercase; letter-spacing:.08em; color:#5a7690; } .sig__nm{ font-family:'Geist Mono',monospace; font-weight:700; color:var(--pink); border-top:1px solid var(--pink); margin-top:22px; padding-top:4px; font-size:10.5px; } .sig__meta{ font-size:8.5px; color:#5a7690; margin-top:2px; }
+  .qp{ margin-top:14px; padding:11px 14px; background:#eaf2f9; border-left:4px solid var(--pnavy); font-size:10px; line-height:1.5; color:var(--pink); }
+  .qp b{ color:var(--pnavy); }
+  .foot{ position:absolute; left:16mm; right:16mm; bottom:9mm; display:flex; justify-content:space-between; font-size:8px; color:#5a7690; border-top:1px solid #dbe6f0; padding-top:5px; }
+  .foot .mono{ font-family:'Geist Mono',monospace; }
+  @media print{
+    @page{ size:A4; margin:0; }
+    html,body{ background:#fff; }
+    .desk{ padding:0; gap:0; } .toolbar{ display:none; }
+    .sheet{ box-shadow:none; width:210mm; min-height:297mm; }
+    .mw-root{ background:none; }
+  }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="desk">
+  <div class="toolbar">
+    <h1><span class="en">Certificate of Quality — Print</span><span class="mk">Сертификат за квалитет — Печат</span></h1>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+    </div>
+    <button class="printbtn" onclick="window.print()"><span class="en">Print / Save PDF</span><span class="mk">Печати / PDF</span></button>
+  </div>
+
+  <div class="sheet" data-screen-label="CoQ">
+    <div class="wm"><span>PURELY PLANT</span></div>
+
+    <div class="cert-hd">
+      <span class="cert-hd__mk">PP</span>
+      <div class="cert-hd__t">
+        <div class="cert-hd__org">Purely Plant GmbH · North Macedonia</div>
+        <div class="cert-hd__ttl"><span class="en">Certificate of Quality</span><span class="mk">Сертификат за квалитет</span></div>
+        <span class="verdict pass">✓ <span class="en">CONFORMS · RELEASED</span><span class="mk">СООДВЕТНО · ИЗДАДЕНО</span></span>
+      </div>
+      <div class="cert-hd__no">
+        <div class="l"><span class="en">Certificate №</span><span class="mk">Сертификат №</span></div>
+        <div class="v">CoQ-PP-2026-0038</div>
+        <div class="l" style="margin-top:8px;"><span class="en">Issued</span><span class="mk">Издаден</span></div>
+        <div class="v" style="font-size:12px;">23.07.2026</div>
+      </div>
+    </div>
+
+    <div class="kvgrid">
+      <dl style="margin:0"><div class="kv"><dt><span class="en">Product</span><span class="mk">Производ</span></dt><dd>Dried Cannabis Flower (medical)</dd></div>
+        <div class="kv"><dt><span class="en">Batch №</span><span class="mk">Серија №</span></dt><dd>PP-B-2026-0311</dd></div>
+        <div class="kv"><dt><span class="en">Strain / variety</span><span class="mk">Сорта</span></dt><dd>Nebula OG</dd></div>
+        <div class="kv"><dt><span class="en">Manufacture date</span><span class="mk">Датум на производство</span></dt><dd>07.07.2026</dd></div></dl>
+      <dl style="margin:0"><div class="kv"><dt><span class="en">Specification</span><span class="mk">Спецификација</span></dt><dd>QCSP 001 v2</dd></div>
+        <div class="kv"><dt><span class="en">Batch size</span><span class="mk">Големина</span></dt><dd>12.4 kg · 312 units</dd></div>
+        <div class="kv"><dt><span class="en">Retest / expiry</span><span class="mk">Рок</span></dt><dd>07.07.2028</dd></div>
+        <div class="kv"><dt><span class="en">Storage</span><span class="mk">Чување</span></dt><dd>15–25°C · ≤60% RH · dark</dd></div></dl>
+    </div>
+
+    <div class="sec-lbl"><span class="en">Analytical results</span><span class="mk">Аналитички резултати</span></div>
+    <table class="res"><thead><tr>
+      <th><span class="en">Parameter</span><span class="mk">Параметар</span></th>
+      <th><span class="en">Method</span><span class="mk">Метод</span></th>
+      <th class="num"><span class="en">Limit</span><span class="mk">Граница</span></th>
+      <th class="num"><span class="en">Result</span><span class="mk">Резултат</span></th>
+      <th><span class="en">Complies</span><span class="mk">Усог.</span></th>
+    </tr></thead><tbody>
+      <tr><td class="p">Total THC</td><td>HPLC · QCSOP 016</td><td class="num">18.0–24.0 %</td><td class="num">21.4 %</td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p">Total CBD</td><td>HPLC · QCSOP 016</td><td class="num">≤ 1.0 %</td><td class="num">0.8 %</td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p"><span class="en">Water content</span><span class="mk">Содржина на вода</span></td><td>KF · QCSOP 016</td><td class="num">≤ 10.0 %</td><td class="num">8.2 %</td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p">TAMC</td><td>QCSOP 024</td><td class="num">≤ 1×10⁴ CFU/g</td><td class="num">1.2×10³</td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p">Bile-tolerant G−</td><td>QCSOP 024</td><td class="num">≤ 1×10² CFU/g</td><td class="num">&lt; 10</td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p">Lead (Pb)</td><td>ICP-MS</td><td class="num">≤ 0.50 mg/kg</td><td class="num">0.12 <span class="prov">·src eCoA-0031</span></td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p">Aflatoxin B1</td><td>LC-MS/MS</td><td class="num">≤ 2.0 µg/kg</td><td class="num">0.4 <span class="prov">·src eCoA-0031</span></td><td><span class="cmp y">✓</span></td></tr>
+      <tr><td class="p"><span class="en">Pesticide screen</span><span class="mk">Пестициди</span></td><td>LC-MS/MS · QCSOP 017</td><td class="num">≤ MRL</td><td class="num"><span class="en">not detected</span><span class="mk">не откриено</span></td><td><span class="cmp y">✓</span></td></tr>
+    </tbody></table>
+    <div class="manifest">
+      <span class="mf"><span class="en">All specified tests reported</span><span class="mk">сите тестови пријавени</span></span>
+      <span class="mf"><span class="en">Reference to specification</span><span class="mk">референца на спецификација</span></span>
+      <span class="mf"><span class="en">External results carry provenance</span><span class="mk">потекло на надворешни</span></span>
+      <span class="mf">WHO TRS 1010 §</span>
+    </div>
+
+    <div class="sec-lbl"><span class="en">Certification &amp; signatures</span><span class="mk">Заверка и потписи</span></div>
+    <div class="sigrow">
+      <div class="sig"><div class="sig__l"><span class="en">Analysed by</span><span class="mk">Анализирал</span></div><div class="sig__nm">K. Alenko</div><div class="sig__meta">Analyst · 23.07.2026 09:14</div></div>
+      <div class="sig"><div class="sig__l"><span class="en">Reviewed by (2nd person)</span><span class="mk">Прегледал (второ лице)</span></div><div class="sig__nm">L. T'Soni</div><div class="sig__meta">QC Manager · 23.07.2026 14:32</div></div>
+      <div class="sig"><div class="sig__l"><span class="en">Certified &amp; released by</span><span class="mk">Заверил и издал</span></div><div class="sig__nm">D. Anderson</div><div class="sig__meta">Qualified Person · 23.07.2026 15:06</div></div>
+    </div>
+
+    <div class="qp"><b><span class="en">QP declaration (EU-GMP Annex 16).</span><span class="mk">Изјава на QP (Анекс 16).</span></b>
+      <span class="en"> I certify that this batch has been manufactured and controlled in compliance with its marketing authorisation, the principles of GMP, and specification QCSP 001 v2, and I release it for its intended medical use. Electronic signatures applied under EU-GMP Annex 11.</span>
+      <span class="mk"> Потврдувам дека серијата е произведена и контролирана согласно одобрението, принципите на GMP и спецификацијата QCSP 001 v2, и ја издавам за медицинска употреба. Електронски потписи по Анекс 11.</span></div>
+
+    <div class="foot">
+      <span class="mono">SHA-256 a91f4e…d7c02 · <span class="en">controlled document — do not alter</span><span class="mk">контролиран документ — не менувај</span></span>
+      <span class="mono"><span class="en">Page 1 of 1 · CoQ-PP-2026-0038</span><span class="mk">Страница 1 од 1</span></span>
+    </div>
+  </div>
+</div>
+</div>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

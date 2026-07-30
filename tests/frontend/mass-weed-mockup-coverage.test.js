@@ -52,33 +52,30 @@ function classesUsedIn(html) {
  *  those, so a genuinely undefined atom never hides behind this filter. */
 const isRuntimeFragment = (cls) => /(--|__)$/.test(cls);
 
-/** Atoms used in markup that nothing styles, as of 2026-07-30.
+/** Atoms used in markup that nothing styles, as of 2026-07-30 (evening).
  *
  *  This is a record of a real gap, not a licence. Each entry means some part
  *  of that mockup renders unstyled today. They are listed so the gap is
  *  visible in the repo and cannot GROW silently — a new undefined atom fails
  *  this test immediately.
  *
- *  • mw-chip / mw-chip--sm / mw-chips — the newest QC pages were written
- *    against `.mw-chip`; the design system defines `.mw-chip2`. One of the two
- *    names is wrong and only the design's author can say which.
- *  • mw-ack(+--accepted/--pending), mw-dep, mw-reveal(+--info/--warn),
- *    mw-subnode, mw-subbranch, mw-subghost, mw-step__t, mw-hero-ic — atoms the
- *    2026-07-30 task-detail / task-create designs depend on that are not in
- *    the mass-weed.css revision committed here. Most likely the design CSS is
- *    a revision behind what those pages were authored against.
- *  • mw-catalog-row / mw-cat-name — pre-existing, same shape, older files.
+ *  This list held 17 entries earlier today. The owner then shared the newer
+ *  mass-weed.css revision the task-detail/task-create pages were authored
+ *  against, which styles 14 of them (including the .mw-chip family the design
+ *  had only as .mw-chip2 — the newer revision defines BOTH, so the pages were
+ *  right and the committed CSS was stale, exactly as suspected). Three remain:
+ *
+ *  • mw-catalog-row / mw-cat-name — used by orders.html / packaging.html,
+ *    which the newer design drop does not include, styled in no revision yet.
+ *  • mw-hero-ic — task-create-qc.html's header icon well; not in the newer
+ *    CSS either.
  *
  *  Deleting an entry once its atom is styled is REQUIRED: the "no stale
  *  entries" test below fails on any that has been fixed, so this list cannot
  *  quietly outlive the problem it documents. */
 const KNOWN_UNSTYLED = new Set([
-  'mw-ack', 'mw-ack--accepted', 'mw-ack--pending',
   'mw-cat-name', 'mw-catalog-row',
-  'mw-chip', 'mw-chip--sm', 'mw-chips',
-  'mw-dep', 'mw-hero-ic',
-  'mw-reveal', 'mw-reveal--info', 'mw-reveal--warn',
-  'mw-step__t', 'mw-subbranch', 'mw-subghost', 'mw-subnode',
+  'mw-hero-ic',
 ]);
 
 const DESIGN_CSS = selectorsIn(fs.readFileSync(path.join(DIR, 'mass-weed.css'), 'utf8'));

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MASS WEED — Department Home</title>
+<title>MASS WEED — Security · Department Home</title>
 <link rel="stylesheet" href="mass-weed.css">
 <!--
   ════════════════════════════════════════════════════════════════════
@@ -145,6 +145,9 @@
       <button class="mw-btn mw-btn--accent" id="emptyToggle" type="button" style="padding:9px 16px;font-size:12px;">
         <span class="en">Demo: empty week</span><span class="mk">Демо: празна недела</span>
       </button>
+      <a class="mw-btn mw-btn--primary" href="task-create-security.html" style="padding:9px 16px;font-size:12px;text-decoration:none;">
+        <span class="en">+ New task</span><span class="mk">+ Нова задача</span>
+      </a>
     </div>
   </div>
 
@@ -321,7 +324,7 @@ function rail(r, acc, dab){
   return '<div class="mw-panel dh-rail" style="--mw-acc:'+acc+'"><div class="dh-rail__hd"><svg viewBox="0 0 24 24">'+(IC[r.ic]||'')+'</svg>'+bilingual(r.en,r.mk)+'</div>'+cards+'</div>';
 }
 
-let current = 'cultivation';
+let current = 'security';
 let empty = false;
 
 function renderPicker(){
@@ -390,9 +393,11 @@ function render(){
   renderPicker(); renderHero(d, empty?0:countTasks(d)); renderPresets(d); renderBody(d);
 }
 
+/* dedicated per-department page — picker navigates to sibling depthome-*.html */
 document.getElementById('picker').addEventListener('click', e=>{
   const el = e.target.closest('[data-dept]'); if(!el) return;
-  current = el.getAttribute('data-dept'); empty = false; render();
+  if(el.getAttribute('data-dept')===current){ empty=false; render(); return; }
+  location.href = 'depthome-'+el.getAttribute('data-dept')+'.html';
 });
 document.getElementById('emptyToggle').addEventListener('click', ()=>{ empty = !empty; render(); });
 

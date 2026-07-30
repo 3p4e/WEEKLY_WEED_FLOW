@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Document Studio</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone B · QMS Studio — Document creation wizard (qmsstudio).
+  Questionnaire → per-section AI drafting with regulatory checks → assemble →
+  house-style format → pp_verify hard PASS/FAIL gate → DOCX/PDF. Never ships on
+  FAIL; never fabricates regulatory content (cited). House style navy #2B547E.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:18px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:var(--mw-cyan-bright);background:rgba(94,200,240,.12);box-shadow:inset 0 0 0 1px rgba(94,200,240,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero h1{font-family:var(--mw-font-cond);font-size:27px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.3);}
+  .hero .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:600px;}
+  .hero__sp{flex:1;}
+  /* wizard rail */
+  .wiz{display:flex;align-items:center;gap:0;margin:18px 0 24px;flex-wrap:wrap;}
+  .wiz .st{display:flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mw-text-faint);padding:6px 12px;cursor:pointer;}
+  .wiz .st .n{width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:10px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;}
+  .wiz .st.done{color:var(--mw-stat-hi);} .wiz .st.done .n{background:var(--mw-stat-hi);color:var(--mw-void);box-shadow:none;}
+  .wiz .st.cur{color:var(--mw-cyan-bright);} .wiz .st.cur .n{box-shadow:inset 0 0 0 2px var(--mw-cyan-bright),0 0 10px var(--mw-cyan);background:rgba(94,200,240,.12);}
+  .wiz .arw{color:var(--mw-text-faint);font-size:11px;}
+  .step{display:none;} .step.on{display:block;}
+  .card{padding:20px 22px;}
+  .card__t{font-family:var(--mw-font-cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mw-ink);margin:0 0 4px;}
+  .card__d{font-size:12px;color:var(--mw-text-dim);margin-bottom:18px;line-height:1.5;}
+  .field{margin-bottom:16px;} .field__l{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-dim);margin-bottom:8px;display:block;}
+  .mw-chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .txt{width:100%;background:rgba(4,14,28,.7);border:none;outline:none;color:var(--mw-ink);font-family:var(--mw-font);font-size:13px;padding:10px 13px;box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .wiz-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.08em;font-size:13px;font-weight:700;cursor:pointer;padding:11px 20px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);transition:filter .12s ease;}
+  .btn:hover{filter:brightness(1.18);} .btn.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);} .btn[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+  /* section progress list */
+  .seclist{display:flex;flex-direction:column;gap:8px;}
+  .secrow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .secrow__n{width:22px;height:22px;flex:none;display:grid;place-items:center;font-family:var(--mw-mono);font-size:10px;border-radius:50%;color:var(--mw-text-faint);box-shadow:inset 0 0 0 1.5px currentColor;}
+  .secrow.done .secrow__n{background:var(--mw-stat-hi);color:var(--mw-void);box-shadow:none;} .secrow.run .secrow__n{color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 2px var(--mw-cyan-bright);}
+  .secrow__t{flex:1;font-size:12.5px;color:var(--mw-ink);} .secrow__t .st{font-size:10px;color:var(--mw-text-faint);margin-top:2px;}
+  .secrow__s{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 9px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .secrow__s.queued{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(127,109,156,.4);}
+  .secrow__s.drafting{color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 1px rgba(94,200,240,.5);}
+  .secrow__s.checking{color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1px rgba(236,236,74,.45);}
+  .secrow__s.done{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);}
+  .spindot{width:8px;height:8px;border-radius:50%;background:var(--mw-cyan-bright);animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.3;}50%{opacity:1;}}
+  /* reg check citations */
+  .cite{padding:12px 15px;margin-bottom:10px;background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);}
+  .cite__h{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
+  .cite__sec{font-family:var(--mw-font-cond);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mw-ink);}
+  .cite__src{margin-left:auto;font-family:var(--mw-mono);font-size:10px;color:var(--mw-cyan-bright);background:rgba(94,200,240,.1);padding:2px 8px;border-radius:2px;}
+  .cite__b{font-size:11.5px;line-height:1.5;color:var(--mw-text-dim);}
+  .cite.nomatch{box-shadow:inset 0 0 0 1px rgba(236,236,74,.3);} .cite.nomatch .cite__src{color:var(--mw-stat-mid);background:rgba(236,236,74,.1);}
+  /* verify gate */
+  .verifybox{padding:22px;text-align:center;} 
+  .verdictbig{font-family:var(--mw-font-cond);font-weight:700;font-size:44px;letter-spacing:.08em;text-transform:uppercase;margin:8px 0;}
+  .verdictbig.pass{color:var(--mw-stat-hi);text-shadow:0 0 26px rgba(108,240,90,.5);} .verdictbig.fail{color:var(--mw-stat-lo);text-shadow:0 0 26px rgba(239,77,77,.5);}
+  .verifylist{display:inline-flex;flex-direction:column;gap:7px;text-align:left;margin:14px 0;}
+  .vrow{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mw-text-dim);} .vrow .ok{color:var(--mw-stat-hi);} .vrow .bad{color:var(--mw-stat-lo);}
+  .housestyle{display:inline-flex;align-items:center;gap:8px;font-size:10.5px;color:var(--mw-text-faint);margin-top:6px;}
+  .swatch{width:14px;height:14px;border-radius:3px;background:#2B547E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);}
+  /* download */
+  .dlrow{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px;}
+  .dlcard{padding:16px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.24);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:all .12s ease;}
+  .dlcard:hover{box-shadow:inset 0 0 0 1px rgba(94,200,240,.5);} .dlcard svg{color:var(--mw-cyan-bright);} .dlcard .l{font-family:var(--mw-font-cond);font-weight:700;font-size:15px;color:var(--mw-ink);} .dlcard .d{font-size:10px;color:var(--mw-text-faint);}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Document Studio">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="#">QMS Studio</a><span>›</span><span>Document Studio</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M12 3l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z"/></svg></div>
+    <div>
+      <h1><span class="en">Document Studio</span><span class="mk">Студио за документи</span></h1>
+      <div class="sub"><span class="en">AI-assisted authoring of controlled quality documents: questionnaire → section drafting with regulatory checks → house-style format → a hard verify gate. A document never ships on FAIL.</span><span class="mk">AI-потпомогната изработка на контролирани документи: прашалник → секции со регулаторни проверки → форматирање → строга порта. Документ не се издава на FAIL.</span></div>
+    </div>
+    <div class="hero__sp"></div>
+  </div>
+
+  <div class="wiz" id="wiz"></div>
+
+  <!-- 1 questionnaire -->
+  <div class="step on" id="step-0">
+    <div class="mw-panel card">
+      <h3 class="card__t"><span class="en">Questionnaire</span><span class="mk">Прашалник</span></h3>
+      <p class="card__d"><span class="en">Structured intake. These inputs drive the section plan, the regulatory checks, and the house-style template.</span><span class="mk">Структуриран внес. Овие ги водат секциите, проверките и шаблонот.</span></p>
+      <div class="field"><label class="field__l"><span class="en">Document type</span><span class="mk">Тип документ</span></label>
+        <div class="mw-chips"><button class="mw-chip on" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span>SOP</button><button class="mw-chip" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span><span class="en">Work Instruction</span><span class="mk">Упатство</span></button><button class="mw-chip" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span><span class="en">Specification</span><span class="mk">Спецификација</span></button><button class="mw-chip" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span><span class="en">Validation plan</span><span class="mk">План</span></button></div>
+      </div>
+      <div class="field"><label class="field__l"><span class="en">Title</span><span class="mk">Наслов</span></label>
+        <input class="txt" value="Cleaning &amp; Sanitisation of Production Rooms" placeholder="Document title…"></div>
+      <div class="field"><label class="field__l"><span class="en">Owning department</span><span class="mk">Оддел</span></label>
+        <div class="mw-chips"><button class="mw-chip" type="button" style="--cc:#2BE8A0"><span class="d"></span><span class="en">Cultivation</span><span class="mk">Одгледување</span></button><button class="mw-chip on" type="button" style="--cc:#2FD9D9"><span class="d"></span><span class="en">Production</span><span class="mk">Производство</span></button><button class="mw-chip" type="button" style="--cc:#7A5BE0"><span class="d"></span>QC</button><button class="mw-chip" type="button" style="--cc:#C2410C"><span class="d"></span>QA</button></div>
+      </div>
+      <div class="field"><label class="field__l"><span class="en">Regulatory basis</span><span class="mk">Регулаторна основа</span></label>
+        <div class="mw-chips"><button class="mw-chip on" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span>EU-GMP Annex 1</button><button class="mw-chip on" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span>MK-GMP</button><button class="mw-chip" type="button" style="--cc:var(--mw-cyan)"><span class="d"></span>PIC/S</button></div>
+      </div>
+      <div class="wiz-actions"><button class="btn" onclick="go(1)"><span class="en">Generate sections →</span><span class="mk">Генерирај секции →</span></button></div>
+    </div>
+  </div>
+
+  <!-- 2 progress -->
+  <div class="step" id="step-1">
+    <div class="mw-panel card">
+      <h3 class="card__t"><span class="en">Section drafting</span><span class="mk">Изработка на секции</span></h3>
+      <p class="card__d"><span class="en">Each section is drafted by an AI author, then passed through a per-section regulatory check before assembly.</span><span class="mk">Секоја секција ја пишува AI автор, потоа поминува регулаторна проверка.</span></p>
+      <div class="seclist" id="seclist"></div>
+      <div class="wiz-actions"><button class="btn ghost" onclick="go(0)"><span class="en">← Back</span><span class="mk">← Назад</span></button><button class="btn" id="progNext" disabled onclick="go(2)"><span class="en">Regulatory report →</span><span class="mk">Регулаторен извештај →</span></button></div>
+    </div>
+  </div>
+
+  <!-- 3 reg check -->
+  <div class="step" id="step-2">
+    <div class="mw-panel card">
+      <h3 class="card__t"><span class="en">Regulatory-check report</span><span class="mk">Регулаторен извештај</span></h3>
+      <p class="card__d"><span class="en">Grounded findings per section — cited from real regulatory sources. Where nothing is found, the tool says so honestly rather than inventing a citation.</span><span class="mk">Заземјени наоди по секција — цитирани од вистински извори. Каде нема наод, тоа се кажува искрено.</span></p>
+      <div class="cite"><div class="cite__h"><span class="cite__sec">§5 Cleaning procedure</span><span class="cite__src">EU-GMP Annex 1 §4.33</span></div><div class="cite__b"><span class="en">Cleaning of cleanroom surfaces must follow validated procedures; disinfectant rotation is expected to prevent resistant strains.</span><span class="mk">Чистењето на чисти простории мора да следи валидирани процедури; ротација на дезинфициенси.</span></div></div>
+      <div class="cite"><div class="cite__h"><span class="cite__sec">§6 Frequency &amp; records</span><span class="cite__src">MK-GMP Ch.3 §3.36</span></div><div class="cite__b"><span class="en">Cleaning records must be retained and reviewed; frequency defined by risk assessment and product-contact classification.</span><span class="mk">Записите за чистење мора да се чуваат и прегледуваат; фреквенција по проценка на ризик.</span></div></div>
+      <div class="cite nomatch"><div class="cite__h"><span class="cite__sec">§8 Environmental limits</span><span class="cite__src"><span class="en">no citation found</span><span class="mk">нема наод</span></span></div><div class="cite__b"><span class="en">No grounding passage matched this facility's room-grade table. Flagged for a human author to complete — no limit was invented.</span><span class="mk">Нема заземјен пасус за табелата. Обележано за човек — граница не е измислена.</span></div></div>
+      <div class="wiz-actions"><button class="btn ghost" onclick="go(1)"><span class="en">← Back</span><span class="mk">← Назад</span></button><button class="btn" onclick="go(3)"><span class="en">Assemble &amp; verify →</span><span class="mk">Состави и провери →</span></button></div>
+    </div>
+  </div>
+
+  <!-- 4 verify gate -->
+  <div class="step" id="step-3">
+    <div class="mw-panel card">
+      <div class="verifybox">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-text-faint)"><span class="en">pp_verify — house-style gate</span><span class="mk">pp_verify — порта на стил</span></div>
+        <div class="verdictbig pass" id="verdict">PASS</div>
+        <div class="verifylist" id="vlist">
+          <div class="vrow"><span class="ok">✓</span><span class="en">Bilingual MK | EN throughout</span><span class="mk">Двојазично MK | EN</span></div>
+          <div class="vrow"><span class="ok">✓</span><span class="en">Navy house header · Calibri · 6 pt floor</span><span class="mk">Навy заглавие · Calibri · 6 pt</span></div>
+          <div class="vrow"><span class="ok">✓</span><span class="en">Parameterized approval-role block (no hardcoded names)</span><span class="mk">Параметризиран блок за одобрување</span></div>
+          <div class="vrow"><span class="ok">✓</span><span class="en">All sections present &amp; regulatory-checked</span><span class="mk">Сите секции присутни и проверени</span></div>
+        </div>
+        <div class="housestyle"><span class="swatch"></span><span class="en">house style locked · navy #2B547E</span><span class="mk">стил заклучен · навy #2B547E</span></div>
+        <div class="wiz-actions" style="justify-content:center;margin-top:20px;">
+          <button class="btn ghost" onclick="go(2)"><span class="en">← Back</span><span class="mk">← Назад</span></button>
+          <button class="btn ghost" onclick="flipFail()"><span class="en">Demo: force a FAIL</span><span class="mk">Демо: FAIL</span></button>
+          <button class="btn" id="verifyNext" onclick="go(4)"><span class="en">Download →</span><span class="mk">Преземи →</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 download -->
+  <div class="step" id="step-4">
+    <div class="mw-panel card">
+      <div class="verifybox">
+        <h3 class="card__t"><span class="en">Verified — ready to issue</span><span class="mk">Проверено — спремно</span></h3>
+        <p class="card__d" style="max-width:440px;margin:6px auto 18px;"><span class="en">The document passed the hard gate and is rendered in house style. Issuing it registers it into Document Control with a controlled number &amp; version.</span><span class="mk">Документот ја помина портата. Издавањето го регистрира во Контрола на документи.</span></p>
+        <div class="dlrow">
+          <div class="dlcard"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg><span class="l">DOCX</span><span class="d">house style · bilingual</span></div>
+          <div class="dlcard"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 15h6M9 18h4"/></svg><span class="l">PDF</span><span class="d">Gotenberg render</span></div>
+        </div>
+        <div class="wiz-actions" style="justify-content:center;margin-top:22px;">
+          <button class="btn ghost" onclick="reset()"><span class="en">New document</span><span class="mk">Нов документ</span></button>
+          <button class="btn" onclick="location.href='doc-control.html'"><span class="en">Register in Document Control →</span><span class="mk">Регистрирај →</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var STEPS=[['Questionnaire','Прашалник'],['Drafting','Изработка'],['Reg check','Проверка'],['Verify','Проверка'],['Download','Преземи']];
+var cur=0;
+function paintWiz(){ document.getElementById('wiz').innerHTML=STEPS.map(function(s,i){ var cls=i<cur?'done':i===cur?'cur':'';
+  return (i?'<span class="arw">→</span>':'')+'<span class="st '+cls+'" onclick="if('+i+'<'+cur+')go('+i+')"><span class="n">'+(i<cur?'✓':(i+1))+'</span>'+bil(s[0],s[1])+'</span>';}).join(''); }
+function go(n){ cur=n; document.querySelectorAll('.step').forEach(function(s,i){s.classList.toggle('on',i===n);}); paintWiz();
+  if(n===1) runSections(); window.scrollTo(0,0); if(window.mwSync)window.mwSync(); }
+
+var SECTIONS=[['1 Purpose &amp; scope','Цел и опсег'],['2 Responsibilities','Одговорности'],['3 Definitions','Дефиниции'],['4 Materials &amp; equipment','Материјали'],['5 Cleaning procedure','Процедура'],['6 Frequency &amp; records','Фреквенција'],['7 References','Референци'],['8 Annexes','Анекси']];
+var secState=[];
+function paintSec(){ document.getElementById('seclist').innerHTML=SECTIONS.map(function(s,i){ var st=secState[i]||'queued';
+  var cls=st==='done'?'done':(st==='drafting'||st==='checking')?'run':'';
+  var chip=st==='done'?'<span class="secrow__s done">'+bil('Done','Готово')+'</span>':st==='drafting'?'<span class="secrow__s drafting"><span class="spindot" style="display:inline-block"></span> '+bil('Drafting','Пишува')+'</span>':st==='checking'?'<span class="secrow__s checking">'+bil('Checking','Проверува')+'</span>':'<span class="secrow__s queued">'+bil('Queued','Во ред')+'</span>';
+  var stTx=st==='done'?bil('drafted · regulatory-checked','напишана · проверена'):st==='checking'?bil('regulatory check…','регулаторна проверка…'):st==='drafting'?bil('AI author…','AI автор…'):bil('waiting','чека');
+  return '<div class="secrow '+cls+'"><span class="secrow__n">'+(st==='done'?'✓':(i+1))+'</span><div class="secrow__t"><span class="en">'+s[0]+'</span><span class="mk">'+s[1]+'</span><div class="st">'+stTx+'</div></div>'+chip+'</div>';
+}).join(''); }
+function runSections(){ secState=SECTIONS.map(function(){return 'queued';}); paintSec();
+  document.getElementById('progNext').disabled=true;
+  var i=0; function tick(){ if(i>=SECTIONS.length){ document.getElementById('progNext').disabled=false; if(window.mwSync)window.mwSync(); return; }
+    secState[i]='drafting'; paintSec();
+    setTimeout(function(){ secState[i]='checking'; paintSec();
+      setTimeout(function(){ secState[i]='done'; paintSec(); i++; tick(); },240);
+    },300);
+  } tick();
+}
+function flipFail(){ var v=document.getElementById('verdict'), nb=document.getElementById('verifyNext');
+  if(v.textContent==='PASS'){ v.className='verdictbig fail'; v.textContent='FAIL';
+    document.getElementById('vlist').innerHTML='<div class="vrow"><span class="ok">✓</span>'+bil('Bilingual MK | EN throughout','Двојазично')+'</div>'+
+      '<div class="vrow"><span class="bad">✕</span>'+bil('§8 environmental limits missing — blank not resolved','§8 граници недостасуваат')+'</div>'+
+      '<div class="vrow"><span class="bad">✕</span>'+bil('Section 8 failed regulatory check','Секција 8 падна на проверка')+'</div>';
+    nb.disabled=true; nb.style.opacity='.4'; nb.style.cursor='not-allowed';
+    if(!document.getElementById('failnote')){ var d=document.createElement('div'); d.id='failnote'; d.style.cssText='font-size:11.5px;color:#ff9a9a;margin-top:14px;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5';
+      d.innerHTML='<span class="en"><b>A FAIL never produces a document.</b> Resolve the missing section and re-verify — the gate is hard by design.</span><span class="mk"><b>FAIL никогаш не издава документ.</b> Реши ја секцијата и провери повторно.</span>';
+      document.getElementById('vlist').after(d); }
+  } else { v.className='verdictbig pass'; v.textContent='PASS';
+    document.getElementById('vlist').innerHTML='<div class="vrow"><span class="ok">✓</span>'+bil('Bilingual MK | EN throughout','Двојазично MK | EN')+'</div><div class="vrow"><span class="ok">✓</span>'+bil('Navy house header · Calibri · 6 pt floor','Навy заглавие · Calibri')+'</div><div class="vrow"><span class="ok">✓</span>'+bil('Parameterized approval-role block','Параметризиран блок')+'</div><div class="vrow"><span class="ok">✓</span>'+bil('All sections present &amp; regulatory-checked','Сите секции проверени')+'</div>';
+    nb.disabled=false; nb.style.opacity=''; nb.style.cursor=''; var fn=document.getElementById('failnote'); if(fn)fn.remove(); }
+  if(window.mwSync)window.mwSync();
+}
+function reset(){ go(0); }
+paintWiz();
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

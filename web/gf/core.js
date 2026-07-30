@@ -459,18 +459,63 @@ GF.openThemePicker = () => {
       ${t.id === cur ? GF.icon('check', 'icon theme-ck') : ''}
     </button>`;
   const grid = (group) => `<div class="theme-grid">${GF.THEMES.filter(t => t.group === group).map(chip).join('')}</div>`;
+  // Hue dots — shown only while a mass-weed theme is active, because the hue
+  // axis re-tints nothing else and a control that visibly does nothing teaches
+  // the user the whole panel might be decorative.
+  const curSkin = GF.curMWSkin();
+  const hueRow = String(cur).startsWith('mass-weed') ? `
+        <div class="theme-group-lbl" style="margin-top:14px">${GF.state.lang === 'mk' ? 'Нијанса (Mass Weed)' : 'Hue (Mass Weed)'}</div>
+        <div class="mw-skins" role="radiogroup" style="padding:6px 2px">${GF.MW_SKINS.map(k => `
+          <button class="mw-skins__dot ${k.id === curSkin ? 'is-active' : ''}" role="radio" aria-checked="${k.id === curSkin}"
+            style="--sw:${k.hex}" title="${GF.esc(GF.state.lang === 'mk' ? k.mk : k.en)}"
+            onclick="GF.pickMWSkin('${k.id}')"></button>`).join('')}</div>` : '';
   el.innerHTML = `
     <div class="modal" style="max-width:560px">
       <div class="modal-head"><h3>${GF.state.lang === 'mk' ? 'Тема / изглед' : 'Theme / skin'}</h3>
         <button class="btn-ghost" onclick="GF.closeModal('gf-theme-modal')"><svg class="icon" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
       <div class="modal-body">
         <div class="theme-group-lbl">${GF.state.lang === 'mk' ? 'Темни' : 'Dark'}</div>${grid('dark')}
-        <div class="theme-group-lbl" style="margin-top:14px">${GF.state.lang === 'mk' ? 'Светли' : 'Light'}</div>${grid('light')}
+        <div class="theme-group-lbl" style="margin-top:14px">${GF.state.lang === 'mk' ? 'Светли' : 'Light'}</div>${grid('light')}${hueRow}
       </div>
     </div>`;
   GF.openModal('gf-theme-modal');
 };
 GF.pickTheme = (id) => { GF.setTheme(id); GF.openThemePicker(); };   // re-render to move the check
+
+// ── Mass Weed hue schemes (design mw-i18n.js: "ONE identity, MANY hues") ──
+// A SECOND, orthogonal axis to the theme: data-skin on <html> re-hues the two
+// mass-weed themes (accent family, backdrop, glow — never the semantic
+// green/amber/red) and does nothing to the other 33 skins, so it survives
+// theme switches instead of being reset by them. 'alliance' is the original
+// cyan and means NO attribute — the default must not depend on a CSS block
+// matching, or a typo in the attribute would unstyle the whole shell.
+// Ids, hexes and both names come from the design file verbatim;
+// tests/frontend/mass-weed-skins.test.js pins them against it.
+GF.MW_SKINS = [
+  { id: 'alliance', hex: '#5ec8f0', en: 'Alliance', mk: 'Алијанса' },
+  { id: 'spectre',  hex: '#3fe0a0', en: 'Spectre',  mk: 'Спектар' },
+  { id: 'flux',     hex: '#2fd9d9', en: 'Flux',     mk: 'Флукс' },
+  { id: 'paragon',  hex: '#5e7cf0', en: 'Paragon',  mk: 'Парагон' },
+  { id: 'omega',    hex: '#c85ef0', en: 'Omega',    mk: 'Омега' },
+  { id: 'renegade', hex: '#f0555e', en: 'Renegade', mk: 'Ренегат' },
+  { id: 'citadel',  hex: '#f0c05e', en: 'Citadel',  mk: 'Цитадела' },
+];
+GF.curMWSkin = () => {
+  const s = document.documentElement.dataset.skin;
+  return GF.MW_SKINS.some(k => k.id === s) ? s : 'alliance';
+};
+GF.setMWSkin = (id) => {
+  const skin = GF.MW_SKINS.find(k => k.id === id) || GF.MW_SKINS[0];
+  const root = document.documentElement;
+  if (skin.id === 'alliance') delete root.dataset.skin;
+  else root.dataset.skin = skin.id;
+  try { localStorage.setItem('gf_mw_skin', skin.id); } catch (e) {}
+  GF.syncThemeBtn();   // meta theme-color follows --bg, which the hue re-tints
+  // The 3D leaf reads the ACTIVE computed tokens, so re-tinting with the
+  // current theme id picks up the new hue.
+  if (GF.leafFX && GF.leafFX.retintAll) GF.leafFX.retintAll(GF.curTheme());
+};
+GF.pickMWSkin = (id) => { GF.setMWSkin(id); GF.openThemePicker(); };  // re-render to move the ring
 // Back-compat: the header button previously "toggled"; now it opens the picker.
 GF.toggleTheme = () => GF.openThemePicker();
 GF.setView = (v) => {

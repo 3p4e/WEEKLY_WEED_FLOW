@@ -14,6 +14,15 @@
     var t=localStorage.getItem('gf_theme');
     if(t&&CORE.indexOf(t)<0&&CARBON.indexOf(t)<0){t='mass-weed';try{localStorage.setItem('gf_theme','mass-weed');}catch(e){}}
     if(t){var r=document.documentElement;r.dataset.theme=t;if(CORE.indexOf(t)<0)r.setAttribute('data-skin-carbon','');else r.removeAttribute('data-skin-carbon');}
+    /* Mass Weed hue scheme (design mw-i18n.js: ONE identity, MANY hues).
+       Orthogonal to gf_theme: it only re-hues the two mass-weed themes, so it
+       is preserved across theme switches rather than reset by them. Same
+       healing rule as above — an unknown saved id resets to the default
+       (alliance = the original cyan = NO attribute) before first paint. */
+    var HUES=['alliance','spectre','flux','paragon','omega','renegade','citadel'];
+    var s=localStorage.getItem('gf_mw_skin');
+    if(s&&HUES.indexOf(s)<0){s='alliance';try{localStorage.setItem('gf_mw_skin','alliance');}catch(e){}}
+    if(s&&s!=='alliance'){document.documentElement.dataset.skin=s;}
   }catch(e){}</script>
   <meta charset="utf-8">
   <!-- no maximum-scale: pinch-zoom must stay available (a11y) -->

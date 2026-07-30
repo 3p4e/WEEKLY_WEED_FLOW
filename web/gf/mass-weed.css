@@ -119,6 +119,7 @@
      file already loads Titillium Web + Saira Condensed. */
   --mw-font:'Titillium Web', system-ui, sans-serif;
   --mw-font-cond:'Saira Condensed', 'Titillium Web', sans-serif;
+  --mw-mono:'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   --mw-track:.14em; --mw-track-wide:.28em;
 
   /* Effects */
@@ -207,7 +208,7 @@
 
 /* Deep-space canvas + faint starfield behind the whole shell */
 :root[data-theme="mass-weed"] body{
-  background:radial-gradient(120% 90% at 50% -10%, #234064 0%, #1a3050 45%, var(--bg) 100%), var(--bg);
+  background:radial-gradient(120% 90% at 50% -10%, var(--mw-bg-g1,#234064) 0%, var(--mw-bg-g2,#1a3050) 45%, var(--bg) 100%), var(--bg);
 }
 :root[data-theme="mass-weed-light"] body{
   background:radial-gradient(120% 90% at 50% -10%, #f4f9ff 0%, #e7eff7 45%, #dbe6f2 100%), var(--bg);
@@ -1126,3 +1127,315 @@
 .mw-st--review{ color:var(--mw-cyan-bright); background:rgba(58,159,212,.16); box-shadow:inset 0 0 0 1px rgba(94,200,240,.4); }
 .mw-st--stuck{ color:var(--mw-stat-lo); background:rgba(239,77,77,.14); box-shadow:inset 0 0 0 1px rgba(239,77,77,.45); }
 .mw-st--postponed{ color:var(--mw-stat-mid); background:rgba(236,236,74,.12); box-shadow:inset 0 0 0 1px rgba(236,236,74,.4); }
+
+
+/* ═══ Component fill, pass 4 — the 2026-07-30 design revision's atoms:
+   chip groups, reveal wells, subtask tree, dependency + acknowledgment
+   pills (verbatim from design/mass-weed-mockup/mass-weed.css; consumed by
+   task-detail / task-create / depthome surfaces) ═══ */
+.mw-chips{ display:flex; flex-wrap:wrap; gap:8px; }
+.mw-chip{ --cc: var(--mw-cyan); display:inline-flex; align-items:center; gap:7px; padding:8px 13px;
+  background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  font-family:var(--mw-font); font-size:12.5px; font-weight:600; letter-spacing:.03em; color:var(--mw-text-dim);
+  border:none; cursor:pointer; user-select:none; transition:all .13s ease; }
+.mw-chip:hover{ color:var(--mw-text); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cc) 45%, transparent); }
+.mw-chip.on{ color:var(--cc); background:color-mix(in srgb, var(--cc) 16%, var(--mw-panel-in));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cc) 55%, transparent), 0 0 14px -4px var(--cc); }
+.mw-chip .d{ width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 6px currentColor; opacity:.5; flex:none; }
+.mw-chip.on .d{ opacity:1; }
+.mw-chip--sm{ padding:6px 10px; font-size:11.5px; }
+
+/* reveal panel (blocker / deviation detail — hidden until triggered) */
+.mw-reveal{ display:none; margin-top:10px; padding:11px 13px;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+.mw-reveal.show{ display:block; }
+.mw-reveal--warn{ background:color-mix(in srgb, var(--mw-stat-lo) 10%, var(--mw-panel-in)); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--mw-stat-lo) 40%, transparent); }
+.mw-reveal--info{ background:color-mix(in srgb, var(--mw-cyan) 8%, var(--mw-panel-in)); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--mw-cyan) 35%, transparent); }
+
+/* nested subtask tree (unlimited depth) */
+.mw-subnode{ display:flex; align-items:center; gap:9px; padding:8px 11px; background:var(--mw-panel-in);
+  box-shadow:inset 0 0 0 1px rgba(94,200,240,.12); margin-bottom:6px;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+.mw-subnode .box{ width:15px;height:15px;flex:none;border:1.5px solid var(--mw-cyan-dim);border-radius:3px;cursor:pointer;position:relative; }
+.mw-subnode .box.done{ background:var(--mw-cyan);border-color:var(--mw-cyan); }
+.mw-subnode .box.done::after{ content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid var(--mw-void);border-width:0 2px 2px 0;transform:rotate(45deg); }
+.mw-subnode .t{ flex:1; min-width:0; font-size:13px; color:var(--mw-text); }
+.mw-subnode.done .t{ text-decoration:line-through; color:var(--mw-text-faint); }
+.mw-subnode .who{ font-size:10.5px; color:var(--mw-text-faint); white-space:nowrap; }
+.mw-subnode .x{ color:var(--mw-text-faint); cursor:pointer; font-size:12px; }
+.mw-subnode .x:hover{ color:var(--mw-stat-lo); }
+.mw-subbranch{ margin-left:22px; padding-left:12px; border-left:2px solid color-mix(in srgb, var(--mw-acc,var(--mw-cyan)) 40%, transparent); }
+.mw-subghost{ display:flex; gap:16px; padding:6px 2px; font-size:12px; color:var(--mw-text-dim); }
+.mw-subghost span{ cursor:pointer; } .mw-subghost span:hover{ color:var(--mw-cyan-bright); }
+
+/* dependency pill (blocks / blocked-by, met/unmet) */
+.mw-dep{ display:inline-flex; align-items:center; gap:7px; padding:6px 11px; font-size:11.5px; color:var(--mw-text);
+  background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);
+  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px); }
+.mw-dep .dot{ width:7px;height:7px;border-radius:50%; flex:none; }
+.mw-dep.met .dot{ background:var(--mw-stat-hi); box-shadow:0 0 6px var(--mw-stat-hi); }
+.mw-dep.unmet .dot{ background:var(--mw-stat-lo); box-shadow:0 0 6px var(--mw-stat-lo); }
+
+/* assignment acknowledgment pill */
+.mw-ack{ display:inline-flex; align-items:center; gap:5px; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.07em;
+  padding:2px 8px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+.mw-ack--pending{ color:var(--mw-stat-mid); background:rgba(236,236,74,.13); }
+.mw-ack--accepted{ color:var(--mw-stat-hi); background:rgba(108,240,90,.13); }
+.mw-ack--declined{ color:var(--mw-stat-lo); background:rgba(239,77,77,.13); }
+
+/* The newer design's stepper labels — ADDITIVE only: the app's own numbered
+   .mw-stepper base lives in app.css and must not be re-based here. */
+.mw-step__t{ font-size:11px; font-weight:700; color:var(--mw-text-dim); letter-spacing:.01em; line-height:1.25; }
+.mw-step.done .mw-step__t{ color:var(--mw-stat-hi); }
+
+
+/* ═══════════════ 6 · COLOR SCHEMES ([data-skin]) — ONE identity, MANY hues ═══
+   Ported from design/mass-weed-mockup/mass-weed.css (the 2026-07-30 revision)
+   and design/mass-weed-mockup/mw-i18n.js. Every scheme keeps the Mass Weed HUD
+   chrome and re-hues ONLY the accent family, backdrop and glow; semantic stat
+   colors (green/amber/red) are deliberately NOT re-hued, same as the design.
+   Default (no attribute / data-skin="alliance") is the original cyan.
+
+   The design re-hues --mw-* tokens only, because the mockups consume nothing
+   else. The APP additionally derives its generic tokens (--bg, --surface*,
+   --primary…) from hard-coded hexes in section 1, so each scheme here ALSO
+   re-derives that accent-facing subset — otherwise the atoms would re-hue and
+   the chrome would stay cyan, which is exactly the halfway state the port
+   exists to prevent. Accent-family app tokens reference the --mw-* vars;
+   surfaces keep section 1's "lightened navy" decision by construction: each
+   hex below is the skin's --mw-hull-2 with the SAME lightness/saturation
+   factors that map the design default hull-2 to section 1's surfaces
+   (HSL math, generated — do not hand-edit; the derivation script lives in the
+   commit message of this section). */
+
+/* ---- RENEGADE ---- */
+:root[data-theme^="mass-weed"][data-skin="renegade"]{
+  --mw-cyan:#f0555e; --mw-cyan-bright:#ff8a90; --mw-cyan-dim:#d43a52; --mw-cyan-deep:#a31c3a;
+  --mw-edge:#e84d6a; --mw-header:#fba8b8; --mw-rare:#f0555e;
+  --mw-glow-cyan:0 0 12px rgba(240,85,94,0.55), 0 0 2px rgba(255,138,144,0.9);
+  --mw-glow-soft:0 0 20px rgba(212,58,82,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(163,28,58,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(240,85,94,0.035) 0px,rgba(240,85,94,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="renegade"]{
+  --mw-void:#100306; --mw-abyss:#180509; --mw-deep:#240711; --mw-hull:#330a1c; --mw-hull-2:#45102a; --mw-haze:#3a0f1e;
+  --mw-panel:rgba(52,12,24,0.72); --mw-panel-2:rgba(40,8,18,0.85); --mw-panel-in:rgba(28,6,14,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#3f172b; --surface:#511f38; --surface-2:#652745; --surface-3:#7a3155;
+  --mw-bg-g1:#652745; --mw-bg-g2:#501d36;
+  --accent-rgb:240,85,94;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="renegade"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:163,28,58;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* ---- PARAGON ---- */
+:root[data-theme^="mass-weed"][data-skin="paragon"]{
+  --mw-cyan:#5e7cf0; --mw-cyan-bright:#8fa3ff; --mw-cyan-dim:#3a5ad4; --mw-cyan-deep:#1c3aa3;
+  --mw-edge:#4d6ae8; --mw-header:#a8bafb; --mw-rare:#5e7cf0;
+  --mw-glow-cyan:0 0 12px rgba(94,124,240,0.55), 0 0 2px rgba(143,163,255,0.9);
+  --mw-glow-soft:0 0 20px rgba(58,90,212,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(28,58,163,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(94,124,240,0.035) 0px,rgba(94,124,240,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="paragon"]{
+  --mw-void:#05061a; --mw-abyss:#080b28; --mw-deep:#0a1140; --mw-hull:#131c58; --mw-hull-2:#1a2470; --mw-haze:#16205a;
+  --mw-panel:rgba(19,28,88,0.72); --mw-panel-2:rgba(10,17,64,0.85); --mw-panel-in:rgba(6,10,40,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#252d67; --surface:#333c83; --surface-2:#404ba4; --surface-3:#5965bc;
+  --mw-bg-g1:#404ba4; --mw-bg-g2:#303983;
+  --accent-rgb:94,124,240;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="paragon"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:28,58,163;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* ---- OMEGA ---- */
+:root[data-theme^="mass-weed"][data-skin="omega"]{
+  --mw-cyan:#c85ef0; --mw-cyan-bright:#e38fff; --mw-cyan-dim:#a63ad4; --mw-cyan-deep:#7a1ca3;
+  --mw-edge:#c04de8; --mw-header:#d9a8fb; --mw-rare:#c85ef0;
+  --mw-glow-cyan:0 0 12px rgba(200,94,240,0.55), 0 0 2px rgba(227,143,255,0.9);
+  --mw-glow-soft:0 0 20px rgba(166,58,212,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(122,28,163,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(200,94,240,0.035) 0px,rgba(200,94,240,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="omega"]{
+  --mw-void:#0d0416; --mw-abyss:#140620; --mw-deep:#1c0730; --mw-hull:#2a0a45; --mw-hull-2:#380e5c; --mw-haze:#300d4a;
+  --mw-panel:rgba(42,10,69,0.72); --mw-panel-2:rgba(28,7,48,0.85); --mw-panel-in:rgba(20,6,32,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#381854; --surface:#49226a; --surface-2:#5b2a85; --surface-3:#6f35a0;
+  --mw-bg-g1:#5b2a85; --mw-bg-g2:#471f6a;
+  --accent-rgb:200,94,240;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="omega"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:122,28,163;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* ---- CITADEL ---- */
+:root[data-theme^="mass-weed"][data-skin="citadel"]{
+  --mw-cyan:#f0c05e; --mw-cyan-bright:#ffe08f; --mw-cyan-dim:#d4a03a; --mw-cyan-deep:#a37a1c;
+  --mw-edge:#e8c04d; --mw-header:#fbe4a8; --mw-rare:#f0c05e;
+  --mw-glow-cyan:0 0 12px rgba(240,192,94,0.55), 0 0 2px rgba(255,224,143,0.9);
+  --mw-glow-soft:0 0 20px rgba(212,160,58,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(163,122,28,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(240,192,94,0.035) 0px,rgba(240,192,94,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="citadel"]{
+  --mw-void:#100c03; --mw-abyss:#181305; --mw-deep:#241c07; --mw-hull:#33290a; --mw-hull-2:#45360e; --mw-haze:#3a2f0c;
+  --mw-panel:rgba(51,41,10,0.72); --mw-panel-2:rgba(36,28,7,0.85); --mw-panel-in:rgba(24,19,5,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#3f3415; --surface:#50421d; --surface-2:#645324; --surface-3:#79652e;
+  --mw-bg-g1:#645324; --mw-bg-g2:#50421b;
+  --accent-rgb:240,192,94;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="citadel"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:163,122,28;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* ---- SPECTRE ---- */
+:root[data-theme^="mass-weed"][data-skin="spectre"]{
+  --mw-cyan:#3fe0a0; --mw-cyan-bright:#7ff0c0; --mw-cyan-dim:#2ab585; --mw-cyan-deep:#1c8a63;
+  --mw-edge:#34d99a; --mw-header:#a8fbd9; --mw-rare:#3fe0a0;
+  --mw-glow-cyan:0 0 12px rgba(63,224,160,0.55), 0 0 2px rgba(127,240,192,0.9);
+  --mw-glow-soft:0 0 20px rgba(42,181,133,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(28,138,99,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(63,224,160,0.035) 0px,rgba(63,224,160,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="spectre"]{
+  --mw-void:#03100b; --mw-abyss:#051810; --mw-deep:#072418; --mw-hull:#0a3325; --mw-hull-2:#0e4533; --mw-haze:#0c3a2a;
+  --mw-panel:rgba(10,51,37,0.72); --mw-panel-2:rgba(7,36,24,0.85); --mw-panel-in:rgba(5,24,16,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#153f31; --surface:#1d503f; --surface-2:#24644f; --surface-3:#2e7961;
+  --mw-bg-g1:#24644f; --mw-bg-g2:#1b503f;
+  --accent-rgb:63,224,160;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="spectre"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:28,138,99;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* ---- FLUX ---- */
+:root[data-theme^="mass-weed"][data-skin="flux"]{
+  --mw-cyan:#2fd9d9; --mw-cyan-bright:#7ff0f0; --mw-cyan-dim:#1fb5b5; --mw-cyan-deep:#0e8a8a;
+  --mw-edge:#34d9c0; --mw-header:#a8fbf0; --mw-rare:#2fd9d9;
+  --mw-glow-cyan:0 0 12px rgba(47,217,217,0.55), 0 0 2px rgba(127,240,240,0.9);
+  --mw-glow-soft:0 0 20px rgba(31,181,181,0.35);
+  --mw-inner-glow:inset 0 0 24px rgba(14,138,138,0.25);
+  --mw-scan:repeating-linear-gradient(to bottom,rgba(47,217,217,0.035) 0px,rgba(47,217,217,0.035) 1px,transparent 1px,transparent 3px);
+}
+:root[data-theme="mass-weed"][data-skin="flux"]{
+  --mw-void:#03100f; --mw-abyss:#05100f; --mw-deep:#07211f; --mw-hull:#0a302e; --mw-hull-2:#0e4340; --mw-haze:#0c3835;
+  --mw-panel:rgba(10,48,46,0.72); --mw-panel-2:rgba(7,33,31,0.85); --mw-panel-in:rgba(5,22,20,0.66);
+  /* app-token derivation (see section header) */
+  --bg:#153d3b; --surface:#1d4e4b; --surface-2:#24615e; --surface-3:#2d7672;
+  --mw-bg-g1:#24615e; --mw-bg-g2:#1b4e4b;
+  --accent-rgb:47,217,217;
+  --primary:var(--mw-cyan); --primary-hover:var(--mw-cyan-bright);
+  --primary-soft:rgba(var(--accent-rgb),.14); --primary-fg:var(--mw-header);
+  --focus-ring:rgba(var(--accent-rgb),.5);
+  --blue:var(--mw-cyan); --blue-700:var(--mw-cyan-deep);
+  --blue-soft:rgba(var(--accent-rgb),.16); --blue-soft-2:rgba(var(--accent-rgb),.08);
+  --line:rgba(var(--accent-rgb),.16); --line-2:rgba(var(--accent-rgb),.09);
+  --border-strong:rgba(var(--accent-rgb),.34);
+}
+:root[data-theme="mass-weed-light"][data-skin="flux"]{
+  /* Cool Mist keeps its frosted canvas; only the accent re-hues (design rule).
+     Light needs the DARK end of the accent family for contrast on white. */
+  --accent-rgb:14,138,138;
+  --primary:var(--mw-cyan-deep); --primary-hover:var(--mw-cyan-dim);
+  --primary-soft:rgba(var(--accent-rgb),.12); --primary-fg:var(--mw-cyan-deep);
+  --focus-ring:rgba(var(--accent-rgb),.45);
+  --blue:var(--mw-cyan-deep); --blue-700:var(--mw-cyan-dim);
+  --blue-soft:rgba(var(--accent-rgb),.14); --blue-soft-2:rgba(var(--accent-rgb),.07);
+  --line:rgba(var(--accent-rgb),.22); --line-2:rgba(var(--accent-rgb),.12);
+  --border-strong:rgba(var(--accent-rgb),.4);
+}
+
+/* scheme picker dots (design .mw-skins, rescoped to app theme ids) */
+.mw-skins{ display:inline-flex; align-items:center; gap:5px; padding:3px 7px; }
+.mw-skins__dot{ width:15px; height:15px; border-radius:50%; cursor:pointer; padding:0; border:none; position:relative;
+  background:var(--sw); box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.25); transition:transform .12s ease, box-shadow .12s ease; }
+.mw-skins__dot:hover{ transform:scale(1.18); }
+.mw-skins__dot.is-active{ box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.9), 0 0 9px 1px var(--sw); transform:scale(1.12); }
+:root[data-theme="mass-weed-light"] .mw-skins__dot{ box-shadow:inset 0 0 0 1.5px rgba(20,50,80,0.3); }
+:root[data-theme="mass-weed-light"] .mw-skins__dot.is-active{ box-shadow:inset 0 0 0 1.5px rgba(20,50,80,0.85), 0 0 9px 1px var(--sw); }

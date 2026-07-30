@@ -40,6 +40,7 @@
     signout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
     collapse:'<path d="M15 6l-6 6 6 6"/>',
     home:   '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+    qms:    '<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
     tree:   '<path d="M5 4v16"/><path d="M5 8h7M5 14h10M5 20h13"/><circle cx="5" cy="4" r="1.4"/>',
     exec:   '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 13l2 2 4-4"/>',
     role:   '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -73,6 +74,14 @@
       { h:'reports.html',    t:'Reports',    i:'reports' },
       { h:'execreport.html', t:'Exec Report',i:'exec' },
       { h:'analytics.html',  t:'Analytics',  i:'analytics' }
+    ]},
+    { g:'QMS', k:'qms', items:[
+      { h:'qms-home.html',      t:'Command Deck', i:'qms' },
+      { h:'modules.html',       t:'Modules',      i:'tree' },
+      { h:'qc-lab.html',        t:'QC Lab',       i:'facility' },
+      { h:'qc-registers.html',  t:'Registers',    i:'tree' },
+      { h:'doc-control.html',   t:'Documents',    i:'reports' },
+      { h:'supplier-qual.html', t:'Suppliers',    i:'crew' }
     ]},
     { g:'System', k:'sys', items:[
       { h:'team.html',          t:'Crew',        i:'crew' },

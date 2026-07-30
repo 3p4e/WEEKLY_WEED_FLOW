@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — AI Intake</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone A — AI Intake (intake). Paste free-text → AI extracts task candidates
+  → review (per-candidate edit: dept, priority, due) → adopt/discard → bulk
+  adopt. Honest "no candidates" + "AI unavailable" degrade states.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1120px;margin:0 auto;padding:16px 24px 70px;}
+  .top{display:flex;align-items:flex-end;gap:16px;margin:2px 0 6px;flex-wrap:wrap;}
+  .top h1{font-family:var(--mw-font-cond);font-size:28px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 18px rgba(94,200,240,.28);}
+  .top .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:560px;}
+  .top .sp{flex:1;}
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;}
+  @media(max-width:840px){.layout{grid-template-columns:1fr;}}
+  .col__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--mw-header);margin:0 0 10px;display:flex;align-items:center;gap:10px;}
+  .col__t .c{margin-left:auto;font-family:var(--mw-mono);font-size:11px;color:var(--mw-text-faint);}
+  textarea.paste{width:100%;min-height:300px;resize:vertical;background:rgba(4,14,28,.7);border:none;outline:none;color:var(--mw-ink);font-family:var(--mw-font);font-size:13px;line-height:1.6;padding:14px 16px;box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  [data-theme="light"] textarea.paste{background:rgba(255,255,255,.7);}
+  .cap{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:10.5px;color:var(--mw-text-faint);}
+  .cap.over{color:var(--mw-stat-lo);}
+  .actbar{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.07em;font-size:13px;font-weight:700;cursor:pointer;padding:11px 20px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);transition:filter .12s ease;}
+  .btn:hover{filter:brightness(1.16);} .btn.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);} .btn[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+  .aihint{font-size:10.5px;color:var(--mw-text-faint);}
+  .aihint.off{color:var(--mw-stat-mid);}
+  /* candidate cards */
+  .cand{padding:13px 15px;margin-bottom:11px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);--dc:#5ec8f0;position:relative;}
+  .cand::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--dc);}
+  .cand.dropped{opacity:.4;}
+  .cand__hd{display:flex;align-items:flex-start;gap:10px;}
+  .cand__cb{width:20px;height:20px;flex:none;margin-top:1px;cursor:pointer;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--mw-text-faint);display:grid;place-items:center;color:transparent;transition:all .12s ease;}
+  .cand__cb.on{box-shadow:inset 0 0 0 1.5px var(--dc);background:var(--dc);color:var(--mw-void);}
+  .cand__ttl{flex:1;font-size:13px;color:var(--mw-ink);line-height:1.35;background:none;border:none;outline:none;font-family:var(--mw-font);width:100%;padding:2px 0;}
+  .cand__ttl:focus{box-shadow:inset 0 -1px 0 var(--dc);}
+  .cand__conf{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;white-space:nowrap;color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .cand__meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;margin-left:30px;}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.02em;padding:4px 9px;cursor:pointer;color:var(--mw-text-dim);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);transition:all .12s ease;}
+  .chip:hover{color:var(--mw-cyan-bright);} .chip .d{width:7px;height:7px;border-radius:50%;background:var(--cc,var(--mw-cyan));}
+  .chip.drop{margin-left:auto;color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(239,77,77,.25);} .chip.drop:hover{color:#ff9a9a;}
+  .src{font-size:9.5px;color:var(--mw-text-faint);margin-top:8px;margin-left:30px;font-style:italic;}
+  /* states */
+  .state{padding:40px 24px;text-align:center;} .state__ic{margin-bottom:12px;} .state__t{font-family:var(--mw-font-cond);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mw-ink);} .state__d{font-size:12px;color:var(--mw-text-dim);margin-top:8px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.5;}
+  .state__ic.wait{color:var(--mw-cyan-bright);} .state__ic.empty{color:var(--mw-stat-mid);} .state__ic.off{color:var(--mw-stat-lo);}
+  .loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:36px;color:var(--mw-text-dim);font-size:12.5px;}
+  .spindot{width:9px;height:9px;border-radius:50%;background:var(--mw-cyan-bright);animation:pulse 1s ease-in-out infinite;} @keyframes pulse{0%,100%{opacity:.3;}50%{opacity:1;}}
+  .popover{position:fixed;z-index:60;background:linear-gradient(160deg,var(--mw-panel),var(--mw-panel-2));box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 0 0 1px rgba(94,200,240,.3);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);padding:6px;display:none;min-width:150px;}
+  .popover.on{display:block;} .popover button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:var(--mw-font);font-size:12px;color:var(--mw-text);background:none;border:none;cursor:pointer;padding:7px 10px;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);} .popover button:hover{background:rgba(58,159,212,.14);color:var(--mw-ink);}
+  .popover button .d{width:8px;height:8px;border-radius:50%;background:var(--cc,var(--mw-cyan));flex:none;}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="AI Intake">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="board.html">Cycle Board</a>
+    <a href="intake.html" class="is-active">AI Intake</a>
+    <a href="review.html">Review</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="top">
+    <div>
+      <h1><span class="en">AI Intake</span><span class="mk">AI внес</span></h1>
+      <div class="sub"><span class="en">Paste meeting notes or messages — the AI proposes task candidates. Review, edit, and adopt the ones you want; nothing is created until you adopt.</span><span class="mk">Залепи белешки или пораки — AI предлага задачи. Прегледај, уреди и усвои; ништо не се создава без усвојување.</span></div>
+    </div>
+    <div class="sp"></div>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <p class="col__t"><span class="en">Source text</span><span class="mk">Изворен текст</span></p>
+      <textarea class="paste" id="paste" oninput="cap()" placeholder="Paste meeting notes, a message thread, or a voice transcript…">Flower room F-3 needs week-6 flush started Monday — Kaidan to own it. Liara: please review the three CoQ requests before Thursday, they're piling up. Someone must fix the blend-line changeover on production, it stalled twice this week (high priority). Also warehouse should count the retention samples before month end, low urgency. QA to lock the W28 report by Friday.</textarea>
+      <div class="cap" id="capLbl"><span><span class="en">tip: one action per line works best</span><span class="mk">совет: една акција по ред</span></span><span id="capN">0 / 4000</span></div>
+      <div class="actbar">
+        <button class="btn" id="extractBtn" onclick="extract()"><span class="en">Extract tasks</span><span class="mk">Извлечи задачи</span></button>
+        <label class="aihint" id="aiHint"><input type="checkbox" id="aiOff" onchange="renderRight()" style="vertical-align:middle"> <span class="en">simulate AI unavailable</span><span class="mk">симулирај недостапен AI</span></label>
+      </div>
+    </div>
+
+    <div>
+      <p class="col__t"><span class="en">Task candidates</span><span class="mk">Предлог задачи</span><span class="c" id="candCount"></span></p>
+      <div id="right"></div>
+      <div class="actbar" id="adoptBar" style="display:none">
+        <button class="btn" onclick="adopt()"><span class="en">Adopt selected</span><span class="mk">Усвои избрани</span> (<span id="selN">0</span>)</button>
+        <button class="btn ghost" onclick="selAll(true)"><span class="en">Select all</span><span class="mk">Избери сè</span></button>
+        <button class="btn ghost" onclick="selAll(false)"><span class="en">Clear</span><span class="mk">Исчисти</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="popover" id="pop"></div>
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var DEPTS=[['cultivation','CU','Cultivation','Одгледување','#2BE8A0'],['production','PR','Production','Производство','#2FD9D9'],['qc','QC','Quality Control','Контрола','#9B7BE8'],['quality_assurance','QA','QA','QA','#E0743A'],['logistics','WH','Warehouse','Магацин','#22B8D8']];
+var PRIOS=[['low','Low','Низок','#7fa3bd'],['normal','Normal','Среден','#5ec8f0'],['high','High','Висок','#f0b95e'],['critical','Critical','Критичен','#ef4d4d']];
+var CAND=[
+  {t:'Start week-6 flush — Flower room F-3',dept:'cultivation',prio:'normal',due:'Mon',by:'Kaidan',src:'“…F-3 needs week-6 flush started Monday — Kaidan to own it.”',keep:true,sel:true},
+  {t:'Review 3 CoQ requests',dept:'qc',prio:'high',due:'Thu',by:'Liara',src:'“…review the three CoQ requests before Thursday, they\u2019re piling up.”',keep:true,sel:true},
+  {t:'Fix blend-line changeover (stalled twice)',dept:'production',prio:'critical',due:'',by:'',src:'“…fix the blend-line changeover on production, it stalled twice this week (high priority).”',keep:true,sel:true},
+  {t:'Count retention samples before month end',dept:'logistics',prio:'low',due:'Jul 31',by:'',src:'“…warehouse should count the retention samples before month end, low urgency.”',keep:true,sel:true},
+  {t:'Lock the W28 weekly report',dept:'quality_assurance',prio:'normal',due:'Fri',by:'',src:'“QA to lock the W28 report by Friday.”',keep:true,sel:true}
+];
+var stage='idle'; /* idle | loading | results | empty | off */
+
+function cap(){ var v=document.getElementById('paste').value, n=v.length;
+  document.getElementById('capN').textContent=n+' / 4000';
+  document.getElementById('capLbl').classList.toggle('over',n>4000);
+  document.getElementById('extractBtn').disabled=(n===0||n>4000);
+}
+function extract(){ if(document.getElementById('aiOff').checked){ stage='off'; renderRight(); return; }
+  if(!document.getElementById('paste').value.trim()){ stage='empty'; renderRight(); return; }
+  stage='loading'; renderRight();
+  setTimeout(function(){ stage='results'; CAND.forEach(function(c){c.keep=true;c.sel=true;}); renderRight(); },700);
+}
+function renderRight(){
+  var r=document.getElementById('right'), bar=document.getElementById('adoptBar'), cc=document.getElementById('candCount');
+  bar.style.display='none'; cc.textContent='';
+  if(document.getElementById('aiOff') && document.getElementById('aiOff').checked && stage!=='results'){ stage='off'; }
+  if(stage==='idle'){ r.innerHTML='<div class="mw-panel state"><div class="state__ic wait"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z"/></svg></div><div class="state__t">'+bil('Ready to extract','Спремно')+'</div><div class="state__d">'+bil('Paste your text and hit Extract — the AI will propose task candidates here for your review.','Залепи текст и притисни Извлечи.')+'</div></div>'; return; }
+  if(stage==='loading'){ r.innerHTML='<div class="mw-panel"><div class="loading"><span class="spindot"></span>'+bil('extracting task candidates…','извлекување…')+'</div></div>'; return; }
+  if(stage==='off'){ r.innerHTML='<div class="mw-panel state"><div class="state__ic off"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z"/><path d="M4 4l16 16"/></svg></div><div class="state__t">'+bil('AI unavailable','AI недостапен')+'</div><div class="state__d">'+bil('No AI binding is configured for this org. You can still add tasks manually on the board — extraction resumes when AI is connected.','Нема AI врска. Додај задачи рачно на таблата.')+'</div></div>'; return; }
+  if(stage==='empty'){ r.innerHTML='<div class="mw-panel state"><div class="state__ic empty"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></div><div class="state__t">'+bil('No candidates found','Нема предлози')+'</div><div class="state__d">'+bil('The AI could not identify clear action items in this text. Try adding explicit actions, owners, or due dates.','AI не најде јасни задачи. Додај акции, носители или рокови.')+'</div></div>'; return; }
+  var kept=CAND.filter(function(c){return c.keep;});
+  cc.textContent=kept.length+' '+(document.documentElement.getAttribute('data-lang')==='mk'?'предлози':'candidates');
+  r.innerHTML=CAND.map(function(c,i){ if(!c.keep)return '';
+    var d=DEPTS.find(function(x){return x[0]===c.dept;}), p=PRIOS.find(function(x){return x[0]===c.prio;});
+    return '<div class="cand" style="--dc:'+d[4]+'">'+
+      '<div class="cand__hd"><span class="cand__cb '+(c.sel?'on':'')+'" onclick="tog('+i+')">'+(c.sel?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>':'')+'</span>'+
+        '<input class="cand__ttl" value="'+c.t.replace(/"/g,'&quot;')+'" onchange="CAND['+i+'].t=this.value">'+
+        '<span class="cand__conf">'+bil('AI','AI')+'</span></div>'+
+      '<div class="cand__meta">'+
+        '<span class="chip" style="--cc:'+d[4]+'" onclick="openPop(event,'+i+',\'dept\')"><span class="d"></span>'+d[1]+' · <span class="en">'+d[2]+'</span><span class="mk">'+d[3]+'</span></span>'+
+        '<span class="chip" style="--cc:'+p[3]+'" onclick="openPop(event,'+i+',\'prio\')"><span class="d"></span><span class="en">'+p[1]+'</span><span class="mk">'+p[2]+'</span></span>'+
+        '<span class="chip" onclick="editDue('+i+')">'+(c.due?'⏱ '+c.due:bil('+ due','+ рок'))+'</span>'+
+        (c.by?'<span class="chip" style="cursor:default">@'+c.by+'</span>':'')+
+        '<span class="chip drop" onclick="drop('+i+')">✕ '+bil('discard','отфрли')+'</span>'+
+      '</div>'+
+      '<div class="src">'+c.src+'</div></div>';
+  }).join('');
+  if(kept.length){ bar.style.display='flex'; }
+  updateSel();
+}
+function tog(i){ CAND[i].sel=!CAND[i].sel; renderRight(); }
+function drop(i){ CAND[i].keep=false; if(!CAND.some(function(c){return c.keep;}))stage='empty'; renderRight(); }
+function selAll(v){ CAND.forEach(function(c){if(c.keep)c.sel=v;}); renderRight(); }
+function updateSel(){ var n=CAND.filter(function(c){return c.keep&&c.sel;}).length; var el=document.getElementById('selN'); if(el)el.textContent=n; }
+function editDue(i){ var v=prompt('Due (e.g. Mon, Jul 31):',CAND[i].due||''); if(v!==null){CAND[i].due=v.trim();renderRight();} }
+function openPop(e,i,kind){ e.stopPropagation(); var pop=document.getElementById('pop'); var list=kind==='dept'?DEPTS:PRIOS;
+  pop.innerHTML=list.map(function(x){var col=kind==='dept'?x[4]:x[3];return '<button style="--cc:'+col+'" onclick="setField('+i+',\''+kind+'\',\''+x[0]+'\')"><span class="d"></span><span class="en">'+(kind==='dept'?x[2]:x[1])+'</span><span class="mk">'+(kind==='dept'?x[3]:x[2])+'</span></button>';}).join('');
+  pop.classList.add('on'); var rect=e.target.closest('.chip').getBoundingClientRect();
+  pop.style.left=Math.min(rect.left,window.innerWidth-170)+'px'; pop.style.top=(rect.bottom+6)+'px';
+}
+function setField(i,kind,val){ CAND[i][kind==='dept'?'dept':'prio']=val; document.getElementById('pop').classList.remove('on'); renderRight(); }
+document.addEventListener('click',function(e){ if(!e.target.closest('.chip')&&!e.target.closest('#pop'))document.getElementById('pop').classList.remove('on'); });
+function adopt(){ var n=CAND.filter(function(c){return c.keep&&c.sel;}).length; if(!n){toast('err','Select at least one candidate','Избери барем еден');return;}
+  CAND.forEach(function(c){if(c.keep&&c.sel)c.keep=false;}); if(!CAND.some(function(c){return c.keep;}))stage='empty';
+  renderRight(); toast('ok',n+' task'+(n>1?'s':'')+' adopted to the board','Усвоени задачи'); }
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+cap(); renderRight();
+new MutationObserver(function(){ if(stage==='results')renderRight(); }).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>
