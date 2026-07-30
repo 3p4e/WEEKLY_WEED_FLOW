@@ -32,7 +32,28 @@ tarball of the stack config. `https://wwf-mass...` now 404s at Traefik.
 > ⚠️ **`wwf_mass_letta_pgdata` is NOT a leftover.** Despite the name, it is
 > the live data volume of the standalone production Letta stack (`wwf-letta-db`
 > kept its original volume when promoted from mass, 2026-07-20). Never remove
-> it. `wwf_mass_qms_{data,output}` are true orphans and may be pruned.
+> it. Verified 2026-07-30: `docker ps -a --filter volume=wwf_mass_letta_pgdata`
+> returns the running `wwf-letta-db`.
+>
+> ⚠️ **`wwf_mass_qms_{data,output}` are unreferenced but NOT empty** — an
+> earlier revision of this file called them "true orphans [that] may be pruned",
+> which was wrong in the way that matters. No container mounts them (the live
+> `qms-api` has zero mounts and does not use them), but between them they hold a
+> QMS document registry (`document_status.json`, keyed on QA_00.xx codes incl.
+> the Quality Manual) and **238 generated documents** — 233 under `customized/`,
+> 5 under `memo_analysis/`, plus `validation_report.html` and
+> `cross_reference_report.html`. 4.8 MB, last written 2026-07-15.
+>
+> Unreferenced is not the same as valueless. `docker volume prune` will take
+> both without asking, and nothing here establishes that these outputs exist
+> anywhere else. **Archive before removing**, and treat the archive as the
+> decision point, not the removal.
+>
+> Archived 2026-07-30 to `/opt/wwf-backups/qms-volume-archive-20260730/`
+> (`wwf_mass_qms_data.tar.gz`, `wwf_mass_qms_output.tar.gz`). The volumes
+> themselves are deliberately left in place — with the contents preserved, their
+> removal is now a reversible cleanup rather than a one-way loss, so it can wait
+> for an owner decision instead of being bundled into someone's prune.
 
 [`docker-compose.yml`](../docker-compose.yml) describes the deployed stack:
 
@@ -1843,8 +1864,25 @@ and `audit_organizations` present and enabled; 44 `audit_*` triggers in tasks;
 tasks:ok}` via the container, via nginx on 172.16.31.20, and via the public
 URL; app shell serves at https://wwf.srv1231216.hstgr.cloud/.
 
-Pre-deploy snapshot: `/root/wwf-prod-presnap-wwf-20260729-deploy/`
-(`wwf_tasks.sql.gz` 3.0 MB, `wwf_users.sql.gz` 46 KB, both `gzip -t` clean).
+Pre-deploy snapshot: **`/opt/wwf-backups/presnap-wwf-20260729-deploy/`**
+(`wwf_tasks.sql.gz` 3.0 MB, `wwf_users.sql.gz` 46 KB, both `gzip -t` clean,
+SHA-256 verified against the originals).
+
+> ⚠️ **`/root` on the kvm4-runner is NOT the host's `/root`.** The runner's
+> `/shell` endpoint executes inside the `gh-runner-wwf` **container**, whose `/`
+> is a containerd overlay — anything a shell redirect writes under `/root` lives
+> in that container's writable layer and dies with it. Only **`/opt` is a real
+> host mount** (`/dev/sda1`, ext4), which is why editing
+> `/opt/stacks/wwf_app/compose.yaml` through the runner affects the live stack.
+>
+> This bit this very deploy: the snapshots were first written to the container's
+> `/root` and recorded here as if they were on the host — a rollback path stored
+> on disposable storage. They were copied to `/opt/wwf-backups/` and re-verified.
+> **Put anything you intend to survive under `/opt`.** Note the confusing
+> asymmetry: `docker run -v /host/path:/out` resolves against the HOST (the
+> daemon does the mounting), so a bind mount and a shell redirect in the same
+> script write to two different filesystems.
+
 **Rollback** = restore `compose.yaml.bak-wwf-20260729-deploy` (v77/v107) and
 recreate; the schema may be left forward (additive, v77-compatible), otherwise
 `alembic -n tasks downgrade 0041` + `-n users downgrade 0006`, or restore from
