@@ -91,8 +91,11 @@ async def purge_org(org_id) -> None:
                   "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
                   "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
                   "qc_sampling_plans", "qc_specifications",
-                  # facility — batches cite rooms (RESTRICT), so before it.
-                  "plant_batches", "rooms",
+                  # cultivation — plants + phase events cite batches (RESTRICT),
+                  # batches cite cultivars (RESTRICT) and rooms (RESTRICT), so the
+                  # order is: leaves -> batches -> cultivars/rooms.
+                  "plant_phase_events", "plants", "plant_batches", "cultivars",
+                  "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)

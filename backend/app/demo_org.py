@@ -37,9 +37,10 @@ DEMO_ORG_NAME = "GrowFlow Demo"
 _RESET_LOCK_KEY = 771_2026
 
 # Every org-scoped table in the tasks DB except audit_log, children before
-# parents. Two FK edges are RESTRICT and force ordering: qc_certificates →
-# qc_specifications, and plant_batches → rooms. Everything else either
-# cascades or is SET NULL, but explicit order keeps the wipe self-evident.
+# parents. Several FK edges are RESTRICT and force ordering: qc_certificates →
+# qc_specifications; the cultivation chain plant_phase_events/plants → batches →
+# cultivars/rooms; and plant_batches → rooms. Everything else either cascades or
+# is SET NULL, but explicit order keeps the wipe self-evident.
 _TASKS_WIPE_ORDER = (
     "ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
     "task_comments", "task_assignees", "task_links", "work_sessions",
@@ -51,7 +52,7 @@ _TASKS_WIPE_ORDER = (
     "qc_samples", "qc_sampling_plans", "qc_spec_parameters",
     "qc_specifications", "qc_field_placeholders", "qc_water_tests",
     "qc_stability_studies", "qc_sample_transports",
-    "plant_batches", "rooms",
+    "plant_phase_events", "plants", "plant_batches", "cultivars", "rooms",
     "tasks", "calendar_weeks", "departments",
 )
 
