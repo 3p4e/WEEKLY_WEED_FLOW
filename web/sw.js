@@ -5,7 +5,7 @@
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
    Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.74.0';
+const VERSION = 'wwf-shell-v3.75.0';
 
 const SHELL = [
   '/',
@@ -16,7 +16,7 @@ const SHELL = [
   '/gf/export.js', '/gf/views.js', '/gf/cmdk.js', '/gf/calendar-view.js', '/gf/workload-view.js', '/gf/leaf-fx.js', '/gf/assistant.js', '/gf/main.js',
   '/gf/api.js', '/gf/demo.js', '/gf/integrate.js', '/gf/audit-view.js', '/gf/collab.js', '/gf/task-extras.js', '/gf/worklog.js',
   '/gf/report-view.js', '/gf/document-view.js', '/gf/execreport-view.js', '/gf/import-view.js', '/gf/intake-view.js',
-  '/gf/dept-templates.js', '/gf/depthome-view.js', '/gf/notifications-view.js', '/gf/facility-view.js', '/gf/decon-view.js', '/gf/approvals-view.js', '/gf/myday-view.js', '/gf/analytics-view.js', '/gf/auditprep-view.js', '/gf/qmsregistry-view.js', '/gf/qmsknow-view.js', '/gf/qmsstudio-view.js', '/gf/qcspec-view.js', '/gf/qclab-view.js', '/gf/qcregister-view.js', '/gf/qcgenealogy-view.js', '/gf/qcsample-view.js', '/gf/qccoa-view.js', '/gf/qcoos-view.js', '/gf/qcecoa-view.js', '/gf/qccustody-view.js', '/gf/qcleaves-view.js', '/gf/chooser.js', '/gf/tweaks-vanilla.js',
+  '/gf/dept-templates.js', '/gf/depthome-view.js', '/gf/notifications-view.js', '/gf/facility-view.js', '/gf/cultivation-view.js', '/gf/decon-view.js', '/gf/approvals-view.js', '/gf/myday-view.js', '/gf/analytics-view.js', '/gf/auditprep-view.js', '/gf/qmsregistry-view.js', '/gf/qmsknow-view.js', '/gf/qmsstudio-view.js', '/gf/qcspec-view.js', '/gf/qclab-view.js', '/gf/qcregister-view.js', '/gf/qcgenealogy-view.js', '/gf/qcsample-view.js', '/gf/qccoa-view.js', '/gf/qcoos-view.js', '/gf/qcecoa-view.js', '/gf/qccustody-view.js', '/gf/qcleaves-view.js', '/gf/chooser.js', '/gf/tweaks-vanilla.js',
   // 3D-leaf splash/login entry (self-hosted three.js + mesh)
   '/gf/vendor/three.min.js', '/gf/leaf3d.js', '/gf/entry.js', '/assets/pp-leaf-3d.obj',
   '/assets/pp-leaf.png', '/assets/pp-logo.png', '/assets/pp-logo-white.png', '/assets/pp-wordmark.png',

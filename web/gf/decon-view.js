@@ -441,7 +441,9 @@
   GF.WWF.deconCycleForm = async () => {
     if (!canClean()) return;
     // Rooms come from the facility registry — this view never invents a room
-    // code (the plan's own room mapping is an unconfirmed assumption).
+    // code. The registry is the one place the code/Room-N reconciliation lives
+    // (see the room-register note in docs/DEPLOY.md); a code typed here would
+    // bypass it.
     let rooms = [];
     try { rooms = (await GF.API.facility()).rooms || []; }
     catch (e) { GF.toast(e.message, 'error'); return; }

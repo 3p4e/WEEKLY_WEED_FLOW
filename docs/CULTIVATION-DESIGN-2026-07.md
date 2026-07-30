@@ -11,7 +11,7 @@ is kept as written because it is what the design was reasoned from — but §1's
 | **0046** | decontamination campaign — signed room cycle, bleach log, swab release gate (§5b) |
 | **0047** | frozen positive controls + tool-sterilisation log |
 | API | `app/api/cultivation.py`, `app/api/decon.py` |
-| UI | `web/gf/decon-view.js` (decon board); cultivation is API-only so far |
+| UI | `web/gf/cultivation-view.js` (identity board), `web/gf/decon-view.js` (decon board) |
 | Adherence | see the requirement-by-requirement table in §5c, including what is **not** built |
 
 The ⟨PLAN⟩ items in §4 were answered by a combination of the plan itself (room
@@ -289,6 +289,7 @@ honest on purpose — the gaps matter more than the coverage.
 | Room register / codes | **seeded 2026-07-30** — owner confirmed the codes against the detailed facility layout, resolving Appendix B's open item. 19 rooms incl. C171/C176-C179/C180-C185/C88/C150/C158 + 5 corridors; see `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` |
 | Rooms-1-6 ↔ C180-C185 reconciliation (§10) | **resolved in the data, signature outstanding** — the layout drawing positions `FLOWERING PREMISE 1.N` within 2-11 columns of `C(179+N)` while adjacent rooms sit 60-100 apart, so the pairing is geometrically forced and agrees with the plan's §08 zone map. Room names now carry all three designations (`Flowering 1.1 · C180 · Room 1`); see `oneoff_restore_flowering_room_numbers_20260730.sql`. QA's signature on the one-page table is **still open** — evidence is not a controlled document |
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
+| Cultivation board a grower can actually use | **built 2026-07-30** — `web/gf/cultivation-view.js`: cultivar registry, coded batches, chunked/resumable plant-id generation, whole-batch phase moves, paginated plant roster. 29 unit tests (`tests/frontend/cultivation-view.test.js`), ten mutations verified to fail the intended test |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **NOT built** |
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |
 | AHU filter pull/refit record (§18) | **NOT built** |
