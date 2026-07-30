@@ -282,7 +282,7 @@ honest on purpose — the gaps matter more than the coverage.
 | RT-qPCR swabs + results + action on positive (§27, QCSOP 024) | **built** — `decon_swabs`, positive needs a stated action |
 | Frozen positive controls, taken before the cull (§11.7, §27) | **built** — `decon_positive_controls` |
 | Tool sterilisation at 10,000 ppm (§28 control 2) | **built** — `decon_tool_log`, separate target from surfaces |
-| Room register / codes | **deliberately not seeded** — Appendix B flags the Rooms-1-6→C180-C185 mapping as unconfirmed; rooms are provisioned via `POST /facility/rooms` |
+| Room register / codes | **seeded 2026-07-30** — owner confirmed the codes against the detailed facility layout, resolving Appendix B's open item. 19 rooms incl. C171/C176-C179/C180-C185/C88/C150/C158 + 5 corridors; see `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` |
 | Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **NOT built** |
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |

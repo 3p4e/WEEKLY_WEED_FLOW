@@ -1981,8 +1981,28 @@ Credential hygiene as per the build note above: PAT staged 0600, shredded after,
 build cache pruned, and `docker history --no-trunc | grep -c x-access-token` = **0**
 on *both* new images.
 
-> **Room codes are deliberately not seeded.** The eradication plan's own
-> Appendix B lists the Rooms-1-6 → C180–C185 mapping as "an assumption requiring
-> confirmation", so no migration bakes it in. Rooms stay provisioned through the
-> ADMIN-only `POST /facility/rooms`, and the campaign's room register must be
-> reconciled and signed by Production + QA before the decon board is populated.
+> **Room register — RESOLVED 2026-07-30, seeded.** The eradication plan's
+> Appendix B listed the Rooms-1-6 → C180–C185 mapping as "an assumption requiring
+> confirmation", so nothing baked it in at deploy time. The owner then confirmed
+> the codes against the detailed facility layout, and
+> `backend/scripts/oneoff_seed_purelyplant_rooms_20260730.sql` applied the real
+> register to org `purely-plant`: **19 rooms** — C171 mothers, C176/C177 clones,
+> C178/C179 vegetation, C180–C185 flowering, C88 seed, C150 quarantine, C158
+> nutrient/irrigation, and the five cultivation corridors C146/C152/C155/C169/C170
+> the plan cleans near-daily. T161 (water plant) is excluded, as the plan excludes
+> it and keeps it running.
+>
+> Eight rooms carried placeholder codes (`grow_1`..`grow_6`, `nursery`,
+> `veg_room`) that exist nowhere in the facility; they were RENAMED rather than
+> replaced, which was only safe because all eight were verified to have zero
+> `plant_batches` and zero `decon_room_cycles` first — with no history, the
+> grow_N → C18X mapping is an assignment rather than an assumption. The script
+> carries a guard that ABORTS if that ever stops being true, and it is idempotent
+> (both properties dry-run verified on a local copy before it touched production).
+> All 19 changes are in the audit trail (11 INSERT + 8 UPDATE on `rooms`).
+>
+> The flowering room NAMES deliberately carry both designations
+> (`c180` / "Flowering 1.1 · Room 1") because the plan schedules by "Room 1..6"
+> while the register identifies by C180..C185, and §10 requires the two be
+> reconciled precisely so a room is not lost between them. That reconciliation now
+> lives in the data rather than in someone's head.
