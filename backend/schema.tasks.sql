@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict SToTgltFFRWhaoQzgvuw7kAEmUJVGZQKuEgnpY7dQQoPncItqkwfZMRi30FJLqy
+\restrict xrpYd85Ta6S3FClNEDiBQKVCn63yITEQer8q8AOAwdO0fd10XnMmb7AQQSDw68u
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -222,6 +222,99 @@ CREATE TABLE public.cultivars (
 );
 
 ALTER TABLE ONLY public.cultivars FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: decon_bleach_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_bleach_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    cycle_id uuid,
+    mixed_at timestamp with time zone DEFAULT now() NOT NULL,
+    ppm_strip_reading integer NOT NULL,
+    mixed_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_bleach_log_ppm_check CHECK ((ppm_strip_reading >= 0))
+);
+
+ALTER TABLE ONLY public.decon_bleach_log FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: decon_room_cycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_room_cycles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    campaign text NOT NULL,
+    status text DEFAULT 'in_progress'::text NOT NULL,
+    started_on date DEFAULT CURRENT_DATE NOT NULL,
+    sealed_at timestamp with time zone,
+    released_by uuid,
+    released_at timestamp with time zone,
+    release_note text,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_room_cycles_status_check CHECK ((status = ANY (ARRAY['in_progress'::text, 'awaiting_verification'::text, 'released'::text, 'failed'::text])))
+);
+
+ALTER TABLE ONLY public.decon_room_cycles FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: decon_step_signoffs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_step_signoffs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    cycle_id uuid NOT NULL,
+    step text NOT NULL,
+    passed boolean,
+    signed_by uuid NOT NULL,
+    signed_at timestamp with time zone DEFAULT now() NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_step_signoffs_step_check CHECK ((step = ANY (ARRAY['dry_clean'::text, 'detergent_wash'::text, 'rinse1_whitecloth'::text, 'bleach'::text, 'rinse2'::text])))
+);
+
+ALTER TABLE ONLY public.decon_step_signoffs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: decon_swabs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_swabs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    cycle_id uuid,
+    swab_code text NOT NULL,
+    location_desc text,
+    taken_at timestamp with time zone DEFAULT now() NOT NULL,
+    taken_by uuid NOT NULL,
+    lab_name text,
+    sent_at timestamp with time zone,
+    result text DEFAULT 'pending'::text NOT NULL,
+    ct_value numeric,
+    result_at timestamp with time zone,
+    action_taken text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_swabs_result_check CHECK ((result = ANY (ARRAY['pending'::text, 'negative'::text, 'positive'::text, 'inconclusive'::text])))
+);
+
+ALTER TABLE ONLY public.decon_swabs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1686,6 +1779,46 @@ ALTER TABLE ONLY public.cultivars
 
 
 --
+-- Name: decon_bleach_log decon_bleach_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_bleach_log
+    ADD CONSTRAINT decon_bleach_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: decon_room_cycles decon_room_cycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_room_cycles
+    ADD CONSTRAINT decon_room_cycles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: decon_step_signoffs decon_step_signoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_step_signoffs
+    ADD CONSTRAINT decon_step_signoffs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: decon_swabs decon_swabs_org_id_swab_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_swabs
+    ADD CONSTRAINT decon_swabs_org_id_swab_code_key UNIQUE (org_id, swab_code);
+
+
+--
+-- Name: decon_swabs decon_swabs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_swabs
+    ADD CONSTRAINT decon_swabs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: departments departments_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2244,6 +2377,48 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: decon_bleach_log_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_bleach_log_org_room_idx ON public.decon_bleach_log USING btree (org_id, room_id, mixed_at);
+
+
+--
+-- Name: decon_room_cycles_open_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX decon_room_cycles_open_idx ON public.decon_room_cycles USING btree (org_id, room_id, campaign) WHERE (status = ANY (ARRAY['in_progress'::text, 'awaiting_verification'::text]));
+
+
+--
+-- Name: decon_room_cycles_org_campaign_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_room_cycles_org_campaign_idx ON public.decon_room_cycles USING btree (org_id, campaign);
+
+
+--
+-- Name: decon_step_signoffs_cycle_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_step_signoffs_cycle_idx ON public.decon_step_signoffs USING btree (cycle_id, signed_at);
+
+
+--
+-- Name: decon_swabs_cycle_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_swabs_cycle_idx ON public.decon_swabs USING btree (cycle_id);
+
+
+--
+-- Name: decon_swabs_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_swabs_org_room_idx ON public.decon_swabs USING btree (org_id, room_id);
+
+
+--
 -- Name: events_org_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2727,6 +2902,34 @@ CREATE TRIGGER audit_cultivars AFTER INSERT OR DELETE OR UPDATE ON public.cultiv
 
 
 --
+-- Name: decon_bleach_log audit_decon_bleach_log; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_bleach_log AFTER INSERT OR DELETE OR UPDATE ON public.decon_bleach_log FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: decon_room_cycles audit_decon_room_cycles; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_room_cycles AFTER INSERT OR DELETE OR UPDATE ON public.decon_room_cycles FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: decon_step_signoffs audit_decon_step_signoffs; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_step_signoffs AFTER INSERT OR DELETE OR UPDATE ON public.decon_step_signoffs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: decon_swabs audit_decon_swabs; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_swabs AFTER INSERT OR DELETE OR UPDATE ON public.decon_swabs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: departments audit_departments; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3041,6 +3244,54 @@ ALTER TABLE ONLY public.ai_pins
 
 ALTER TABLE ONLY public.ai_pins
     ADD CONSTRAINT ai_pins_week_id_fkey FOREIGN KEY (week_id) REFERENCES public.calendar_weeks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: decon_bleach_log decon_bleach_log_cycle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_bleach_log
+    ADD CONSTRAINT decon_bleach_log_cycle_id_fkey FOREIGN KEY (cycle_id) REFERENCES public.decon_room_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_bleach_log decon_bleach_log_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_bleach_log
+    ADD CONSTRAINT decon_bleach_log_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_room_cycles decon_room_cycles_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_room_cycles
+    ADD CONSTRAINT decon_room_cycles_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_step_signoffs decon_step_signoffs_cycle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_step_signoffs
+    ADD CONSTRAINT decon_step_signoffs_cycle_id_fkey FOREIGN KEY (cycle_id) REFERENCES public.decon_room_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_swabs decon_swabs_cycle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_swabs
+    ADD CONSTRAINT decon_swabs_cycle_id_fkey FOREIGN KEY (cycle_id) REFERENCES public.decon_room_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_swabs decon_swabs_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_swabs
+    ADD CONSTRAINT decon_swabs_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -3568,6 +3819,30 @@ ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cultivars ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: decon_bleach_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_bleach_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: decon_room_cycles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_room_cycles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: decon_step_signoffs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_step_signoffs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: decon_swabs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_swabs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: departments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3652,6 +3927,34 @@ CREATE POLICY org_isolation ON public.calendar_weeks USING ((org_id = app.curren
 --
 
 CREATE POLICY org_isolation ON public.cultivars USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: decon_bleach_log org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_bleach_log USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: decon_room_cycles org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_room_cycles USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: decon_step_signoffs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_step_signoffs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: decon_swabs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_swabs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -4244,5 +4547,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict SToTgltFFRWhaoQzgvuw7kAEmUJVGZQKuEgnpY7dQQoPncItqkwfZMRi30FJLqy
+\unrestrict xrpYd85Ta6S3FClNEDiBQKVCn63yITEQer8q8AOAwdO0fd10XnMmb7AQQSDw68u
 

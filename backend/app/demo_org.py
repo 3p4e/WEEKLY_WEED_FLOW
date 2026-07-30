@@ -52,6 +52,7 @@ _TASKS_WIPE_ORDER = (
     "qc_samples", "qc_sampling_plans", "qc_spec_parameters",
     "qc_specifications", "qc_field_placeholders", "qc_water_tests",
     "qc_stability_studies", "qc_sample_transports",
+    "decon_swabs", "decon_bleach_log", "decon_step_signoffs", "decon_room_cycles",
     "plant_phase_events", "plants", "plant_batches", "cultivars", "rooms",
     "tasks", "calendar_weeks", "departments",
 )

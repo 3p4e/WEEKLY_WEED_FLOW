@@ -94,6 +94,8 @@ async def purge_org(org_id) -> None:
                   # cultivation — plants + phase events cite batches (RESTRICT),
                   # batches cite cultivars (RESTRICT) and rooms (RESTRICT), so the
                   # order is: leaves -> batches -> cultivars/rooms.
+                  "decon_swabs", "decon_bleach_log", "decon_step_signoffs",
+                  "decon_room_cycles",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):

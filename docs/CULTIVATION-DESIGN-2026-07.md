@@ -212,7 +212,7 @@ alembic-head dump matches the regenerated `schema.tasks.sql` under CI
 normalization, and `test_audit_coverage` + `test_rls_coverage` pass — all three
 new tables carry the audit trigger and org-isolation RLS.
 
-## 5b. The decontamination campaign is a SEPARATE, earlier record (not built here)
+## 5b. The decontamination campaign is a SEPARATE, earlier record — now built (migration 0046)
 
 The plan is a live campaign: destruction 30.07, cleaning through 09.08, genetics
 13.08/19.08. It demands structured records this app should hold, and even names
@@ -220,9 +220,39 @@ the QMS documents — **QASOP 032** (master plan) and **QASOP 032 A01** (per-roo
 decontamination batch record), plus **QCSOP 024** (HLVd sampling/RT-qPCR). Those
 records — the 5-step signed room cycle with the white-cloth gate and clean-lock,
 the strip-verified bleach-bucket log, the swab/RT-qPCR verification that gates
-QA room release — are a distinct module from plant tracking and are **not** in
-0045. They are the natural next increment because they are fully specified and
-time-critical, but they precede the new genetics rather than tracking them.
+QA room release — are a distinct module from plant tracking. It does not touch
+`plant_batches`/`plants`/`cultivars` at all; it precedes the new genetics rather
+than tracking them.
+
+Migration `0046_decontamination_campaign` + `app/api/decon.py` implement it:
+`decon_room_cycles` (one per room per campaign — a partial unique index allows a
+room to re-enter a LATER campaign once its current cycle is terminal),
+`decon_step_signoffs` (append-only per attempt, since the plan's own rule is
+"soiled cloth → wash again", so a step can be re-attempted), `decon_bleach_log`
+(every bucket, strip-verified — the plan calls this "the cheapest, most valuable
+record"), and `decon_swabs` (RT-qPCR result gating release).
+
+Two gates are enforced in code, not left to discipline, because the plan is
+explicit that either failing is how the campaign fails:
+
+- **Steps are signed in order**, and `bleach` is rejected unless the latest
+  `rinse1_whitecloth` attempt PASSED. A failed white-cloth check does not dead-end
+  the cycle — it reopens `detergent_wash`, matching "wash again; the bleach does
+  not go on" precisely.
+- **Release requires every step signed AND every swab for the room negative** —
+  a `pending` or `positive` swab blocks it outright, and release is gated to
+  QA_MGR/executives/ADMIN only ("nobody else can release a room ... no room is
+  released verbally"). Room codes are deliberately NOT seeded by the migration —
+  the plan's own Appendix B flags the Rooms-1-6-to-C180-C185 mapping as an
+  unconfirmed assumption, so rooms stay provisioned through the existing
+  ADMIN-only `POST /facility/rooms`.
+
+Both gates and the campaign-scoped duplicate-cycle guard are tested
+(`tests/test_decon.py`, 8 tests) against a real Postgres, including the full
+soiled→re-wash→pass→bleach→release happy path and every one of the release
+refusals (no swabs at all, pending, positive). 25 affected-area tests green
+(decon + cultivation + facility + audit/RLS coverage); upgrade/downgrade clean;
+schema-diff invariant holds.
 
 ## 6. Not yet decided
 
