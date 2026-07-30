@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xrpYd85Ta6S3FClNEDiBQKVCn63yITEQer8q8AOAwdO0fd10XnMmb7AQQSDw68u
+\restrict zlPEJqQtofMHM1xXjE1uHi8w7xQ6918xRyen0df7rSazm16fWxMxXrub8inW3UU
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -245,6 +245,30 @@ ALTER TABLE ONLY public.decon_bleach_log FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: decon_positive_controls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_positive_controls (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    control_code text NOT NULL,
+    room_id uuid,
+    material text NOT NULL,
+    source_desc text,
+    taken_at timestamp with time zone DEFAULT now() NOT NULL,
+    taken_by uuid NOT NULL,
+    storage_location text,
+    frozen boolean DEFAULT true NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_positive_controls_material_check CHECK ((material = ANY (ARRAY['leaf'::text, 'root'::text, 'surface_scraping'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.decon_positive_controls FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: decon_room_cycles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -315,6 +339,29 @@ CREATE TABLE public.decon_swabs (
 );
 
 ALTER TABLE ONLY public.decon_swabs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: decon_tool_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.decon_tool_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    cycle_id uuid,
+    tool_set text NOT NULL,
+    ppm_strip_reading integer NOT NULL,
+    soak_minutes numeric,
+    checked_at timestamp with time zone DEFAULT now() NOT NULL,
+    checked_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT decon_tool_log_ppm_check CHECK ((ppm_strip_reading >= 0)),
+    CONSTRAINT decon_tool_log_soak_check CHECK (((soak_minutes IS NULL) OR (soak_minutes >= (0)::numeric)))
+);
+
+ALTER TABLE ONLY public.decon_tool_log FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1787,6 +1834,22 @@ ALTER TABLE ONLY public.decon_bleach_log
 
 
 --
+-- Name: decon_positive_controls decon_positive_controls_org_id_control_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_positive_controls
+    ADD CONSTRAINT decon_positive_controls_org_id_control_code_key UNIQUE (org_id, control_code);
+
+
+--
+-- Name: decon_positive_controls decon_positive_controls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_positive_controls
+    ADD CONSTRAINT decon_positive_controls_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: decon_room_cycles decon_room_cycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1816,6 +1879,14 @@ ALTER TABLE ONLY public.decon_swabs
 
 ALTER TABLE ONLY public.decon_swabs
     ADD CONSTRAINT decon_swabs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: decon_tool_log decon_tool_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_tool_log
+    ADD CONSTRAINT decon_tool_log_pkey PRIMARY KEY (id);
 
 
 --
@@ -2384,6 +2455,13 @@ CREATE INDEX decon_bleach_log_org_room_idx ON public.decon_bleach_log USING btre
 
 
 --
+-- Name: decon_positive_controls_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_positive_controls_org_idx ON public.decon_positive_controls USING btree (org_id, taken_at);
+
+
+--
 -- Name: decon_room_cycles_open_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2416,6 +2494,13 @@ CREATE INDEX decon_swabs_cycle_idx ON public.decon_swabs USING btree (cycle_id);
 --
 
 CREATE INDEX decon_swabs_org_room_idx ON public.decon_swabs USING btree (org_id, room_id);
+
+
+--
+-- Name: decon_tool_log_org_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX decon_tool_log_org_room_idx ON public.decon_tool_log USING btree (org_id, room_id, checked_at);
 
 
 --
@@ -2909,6 +2994,13 @@ CREATE TRIGGER audit_decon_bleach_log AFTER INSERT OR DELETE OR UPDATE ON public
 
 
 --
+-- Name: decon_positive_controls audit_decon_positive_controls; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_positive_controls AFTER INSERT OR DELETE OR UPDATE ON public.decon_positive_controls FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: decon_room_cycles audit_decon_room_cycles; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2927,6 +3019,13 @@ CREATE TRIGGER audit_decon_step_signoffs AFTER INSERT OR DELETE OR UPDATE ON pub
 --
 
 CREATE TRIGGER audit_decon_swabs AFTER INSERT OR DELETE OR UPDATE ON public.decon_swabs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: decon_tool_log audit_decon_tool_log; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_decon_tool_log AFTER INSERT OR DELETE OR UPDATE ON public.decon_tool_log FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -3263,6 +3362,14 @@ ALTER TABLE ONLY public.decon_bleach_log
 
 
 --
+-- Name: decon_positive_controls decon_positive_controls_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_positive_controls
+    ADD CONSTRAINT decon_positive_controls_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: decon_room_cycles decon_room_cycles_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3292,6 +3399,22 @@ ALTER TABLE ONLY public.decon_swabs
 
 ALTER TABLE ONLY public.decon_swabs
     ADD CONSTRAINT decon_swabs_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_tool_log decon_tool_log_cycle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_tool_log
+    ADD CONSTRAINT decon_tool_log_cycle_id_fkey FOREIGN KEY (cycle_id) REFERENCES public.decon_room_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: decon_tool_log decon_tool_log_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.decon_tool_log
+    ADD CONSTRAINT decon_tool_log_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -3825,6 +3948,12 @@ ALTER TABLE public.cultivars ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.decon_bleach_log ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: decon_positive_controls; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_positive_controls ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: decon_room_cycles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3841,6 +3970,12 @@ ALTER TABLE public.decon_step_signoffs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.decon_swabs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: decon_tool_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.decon_tool_log ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: departments; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3937,6 +4072,13 @@ CREATE POLICY org_isolation ON public.decon_bleach_log USING ((org_id = app.curr
 
 
 --
+-- Name: decon_positive_controls org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_positive_controls USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: decon_room_cycles org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3955,6 +4097,13 @@ CREATE POLICY org_isolation ON public.decon_step_signoffs USING ((org_id = app.c
 --
 
 CREATE POLICY org_isolation ON public.decon_swabs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: decon_tool_log org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.decon_tool_log USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -4547,5 +4696,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xrpYd85Ta6S3FClNEDiBQKVCn63yITEQer8q8AOAwdO0fd10XnMmb7AQQSDw68u
+\unrestrict zlPEJqQtofMHM1xXjE1uHi8w7xQ6918xRyen0df7rSazm16fWxMxXrub8inW3UU
 

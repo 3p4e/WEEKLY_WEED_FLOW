@@ -220,3 +220,72 @@ async def test_cannot_start_a_second_open_cycle_on_the_same_room_and_campaign(cl
                               json={"room_id": room["id"], "campaign": "hlvd-2026-08-restart"},
                               headers=cu_h)
     assert other.status_code == 201
+
+
+# ── frozen positive controls + tool log (migration 0047) ─────────────────────
+
+async def test_positive_controls_are_qa_owned_and_uniquely_coded(client, admin_headers):
+    """"Makes every later negative falsifiable. Free, irreplaceable once plants
+    are gone." QA owns them because they are the reference the swab results are
+    interpreted against."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c171_t", "Mother plants", "mother")
+
+    payload = {"control_code": "PC-001", "material": "surface_scraping",
+               "room_id": room["id"], "source_desc": "C171 table groove",
+               "storage_location": "freezer A, -20C"}
+    # the cleaning crew does not author the reference material
+    assert (await client.post("/decon/positive-controls", json=payload,
+                              headers=cu_h)).status_code == 403
+    ok = await client.post("/decon/positive-controls", json=payload, headers=qa_h)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["material"] == "surface_scraping"
+
+    # codes are unique per org — two controls cannot share an identity
+    assert (await client.post("/decon/positive-controls", json=payload,
+                              headers=qa_h)).status_code == 409
+
+    # all three material types the plan names are accepted
+    for i, mat in enumerate(("leaf", "root", "other")):
+        r = await client.post("/decon/positive-controls", json={
+            "control_code": f"PC-01{i}", "material": mat}, headers=qa_h)
+        assert r.status_code == 201, r.text
+    bad = await client.post("/decon/positive-controls", json={
+        "control_code": "PC-099", "material": "stem_dust"}, headers=qa_h)
+    assert bad.status_code == 422
+
+    listing = (await client.get("/decon/positive-controls", headers=cu_h)).json()
+    assert len(listing["controls"]) == 4    # readable by any elevated role
+
+
+async def test_tool_log_targets_10000_ppm_not_the_surface_5000(client, admin_headers):
+    """Tools and drains are 10,000 ppm — DOUBLE the surface specification. The
+    two logs are separate on purpose; one shared number would under-dose the
+    blades, which carry HLVd's primary transmission route."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c176_t", "Clone 1", "nursery")
+
+    r = await client.post("/decon/tool-log", json={
+        "room_id": room["id"], "tool_set": "black set A",
+        "ppm_strip_reading": 10000, "soak_minutes": 2}, headers=cu_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["target_ppm"] == 10000, "the tool target must be 10,000 ppm"
+
+    # a reading that would PASS the 5,000 ppm surface spec is still below the
+    # tool target — recorded, not rejected, same reasoning as the bleach log
+    weak = await client.post("/decon/tool-log", json={
+        "room_id": room["id"], "tool_set": "black set B",
+        "ppm_strip_reading": 5000, "soak_minutes": 2}, headers=cu_h)
+    assert weak.status_code == 201
+
+    # swab-only role may not record a cleaning action
+    assert (await client.post("/decon/tool-log", json={
+        "room_id": room["id"], "tool_set": "x", "ppm_strip_reading": 10000},
+        headers=qa_h)).status_code == 403
+
+    log = (await client.get("/decon/tool-log", params={"room_id": room["id"]},
+                            headers=qa_h)).json()
+    assert log["target_ppm"] == 10000
+    assert {e["ppm_strip_reading"] for e in log["entries"]} == {10000, 5000}

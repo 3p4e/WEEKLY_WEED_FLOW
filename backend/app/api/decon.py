@@ -43,6 +43,12 @@ _QA_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
 _STEPS = ("dry_clean", "detergent_wash", "rinse1_whitecloth", "bleach", "rinse2")
 _GATE_STEP = "rinse1_whitecloth"   # must pass before the next step is accepted
 _RESULTS = ("pending", "negative", "positive", "inconclusive")
+_CONTROL_MATERIALS = ("leaf", "root", "surface_scraping", "other")
+# Tools and drains are 10,000 ppm — DOUBLE the 5,000 ppm surface spec.
+# Deliberately a separate constant from the bleach log's target: sharing
+# one number would silently under-dose the blades, which carry HLVd's
+# primary transmission route.
+_TOOL_TARGET_PPM = 10000
 
 
 class CycleIn(BaseModel):
@@ -80,6 +86,24 @@ class SwabResultIn(BaseModel):
 
 class ReleaseIn(BaseModel):
     release_note: str | None = Field(default=None, max_length=1000)
+
+
+class PositiveControlIn(BaseModel):
+    control_code: str = Field(max_length=64)
+    material: str
+    room_id: str | None = None
+    source_desc: str | None = Field(default=None, max_length=300)
+    storage_location: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ToolLogIn(BaseModel):
+    room_id: str
+    cycle_id: str | None = None
+    tool_set: str = Field(max_length=120)
+    ppm_strip_reading: int = Field(ge=0, le=200000)
+    soak_minutes: float | None = Field(default=None, ge=0, le=600)
+    note: str | None = Field(default=None, max_length=500)
 
 
 async def _room_or_422(c, room_id: str):
@@ -387,3 +411,100 @@ async def release_room(cycle_id: str, body: ReleaseIn,
                         object_id=cycle_id, recipients=[],
                         params={"room": cyc["room_name"], "campaign": cyc["campaign"]})
     return {"id": cycle_id, "status": row["status"], "released_at": row["released_at"].isoformat()}
+
+
+# ── frozen positive controls ─────────────────────────────────────────────────
+# "Makes every later negative falsifiable. Free, irreplaceable once plants are
+# gone." Taken BEFORE the cull; QA owns them because they are the reference the
+# swab results are interpreted against.
+
+@router.get("/positive-controls")
+async def list_positive_controls(user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT pc.id, pc.control_code, pc.room_id, pc.material, pc.source_desc,"
+            " pc.taken_at, pc.storage_location, pc.frozen, pc.note, r.name AS room_name"
+            " FROM decon_positive_controls pc"
+            " LEFT JOIN rooms r ON r.id = pc.room_id"
+            " ORDER BY pc.taken_at DESC")
+    return {"controls": [
+        {"id": str(r["id"]), "control_code": r["control_code"],
+         "room_id": str(r["room_id"]) if r["room_id"] else None,
+         "room_name": r["room_name"], "material": r["material"],
+         "source_desc": r["source_desc"], "taken_at": r["taken_at"].isoformat(),
+         "storage_location": r["storage_location"], "frozen": r["frozen"],
+         "note": r["note"]}
+        for r in rows]}
+
+
+@router.post("/positive-controls", status_code=201)
+async def create_positive_control(body: PositiveControlIn,
+                                  user: dict = Depends(require_role(*_QA_WRITERS))):
+    if body.material not in _CONTROL_MATERIALS:
+        raise HTTPException(422, f"material must be one of: {', '.join(_CONTROL_MATERIALS)}")
+    async with rls(user) as c:
+        if body.room_id is not None:
+            await _room_or_422(c, body.room_id)
+        dup = await c.fetchrow(
+            "SELECT id FROM decon_positive_controls WHERE org_id=$1 AND control_code=$2",
+            user["org_id"], body.control_code)
+        if dup is not None:
+            raise HTTPException(409, f"control code {body.control_code} already exists")
+        row = await c.fetchrow(
+            "INSERT INTO decon_positive_controls(org_id, control_code, room_id, material,"
+            " source_desc, taken_by, storage_location, note)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], body.control_code, body.room_id, body.material,
+            body.source_desc, user["id"], body.storage_location, body.note)
+    return {"id": str(row["id"]), "control_code": row["control_code"],
+            "material": row["material"], "taken_at": row["taken_at"].isoformat()}
+
+
+# ── tool sterilisation log ───────────────────────────────────────────────────
+
+@router.get("/tool-log")
+async def list_tool_log(user: dict = Depends(require_role(*ELEVATED_ROLES)),
+                        room_id: str | None = Query(None),
+                        limit: int = Query(200, ge=1, le=2000)):
+    if room_id is not None:
+        uuid_or_422(room_id, "room_id must be a uuid")
+    async with rls(user) as c:
+        rows = await c.fetch(
+            "SELECT id, room_id, cycle_id, tool_set, ppm_strip_reading, soak_minutes,"
+            " checked_at, note FROM decon_tool_log"
+            " WHERE ($1::uuid IS NULL OR room_id=$1)"
+            " ORDER BY checked_at DESC LIMIT $2", room_id, limit)
+    return {"target_ppm": _TOOL_TARGET_PPM, "entries": [
+        {"id": str(r["id"]), "room_id": str(r["room_id"]),
+         "cycle_id": str(r["cycle_id"]) if r["cycle_id"] else None,
+         "tool_set": r["tool_set"], "ppm_strip_reading": r["ppm_strip_reading"],
+         "soak_minutes": float(r["soak_minutes"]) if r["soak_minutes"] is not None else None,
+         "checked_at": r["checked_at"].isoformat(), "note": r["note"]}
+        for r in rows]}
+
+
+@router.post("/tool-log", status_code=201)
+async def record_tool_check(body: ToolLogIn,
+                            user: dict = Depends(require_role(*_CLEAN_WRITERS))):
+    """Below-target is RECORDED, not rejected — same reasoning as the bleach log.
+    A refused entry means the crew simply does not log it, and an unlogged weak
+    bucket is invisible; a logged one is a finding someone can act on."""
+    async with rls(user) as c:
+        room = await _room_or_422(c, body.room_id)
+        if body.cycle_id is not None:
+            await _cycle_or_404(c, body.cycle_id)
+        row = await c.fetchrow(
+            "INSERT INTO decon_tool_log(org_id, room_id, cycle_id, tool_set,"
+            " ppm_strip_reading, soak_minutes, checked_by, note)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], body.room_id, body.cycle_id, body.tool_set,
+            body.ppm_strip_reading, body.soak_minutes, user["id"], body.note)
+        if body.ppm_strip_reading < _TOOL_TARGET_PPM:
+            await safe_emit(c, user, verb="decon_tool_below_spec", object_type="room",
+                            object_id=body.room_id, recipients=[],
+                            params={"room": room["name"], "ppm": body.ppm_strip_reading,
+                                    "target": _TOOL_TARGET_PPM})
+    return {"id": str(row["id"]), "room_id": body.room_id, "tool_set": row["tool_set"],
+            "ppm_strip_reading": row["ppm_strip_reading"],
+            "target_ppm": _TOOL_TARGET_PPM,
+            "checked_at": row["checked_at"].isoformat()}
