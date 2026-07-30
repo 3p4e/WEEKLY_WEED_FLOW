@@ -332,9 +332,69 @@ body_is_ready() {
   return 0
 }
 
+# ---------------------------------------------------------------- http client
+# curl is NOT guaranteed. Verified absent on this stack's own runner container
+# (only python3 and openssl are installed), and the FIRST end-to-end run of this
+# script against production degraded both HTTP checks to WARN with "unreachable
+# (curl rc=127)" — rc 127 is "command not found", not a network condition, so the
+# watchdog was mislabelling its own missing dependency as a fact about
+# production. The container fallback further down already used python for exactly
+# this reason ("the backend image ships no curl") without the same lesson being
+# applied to the host.
+#
+# Prefer curl, fall back to python3, and refuse to run with neither rather than
+# reporting "unknown" forever while looking configured.
+if command -v curl >/dev/null 2>&1; then HTTP_TOOL=curl
+elif command -v python3 >/dev/null 2>&1; then HTTP_TOOL=python3
+else HTTP_TOOL=none
+fi
+
+# http_get <url> [bearer-token]
+# Emits the body, then a final line "http_code=NNN" — the same contract curl's
+# -w gave, so the parsers downstream are unchanged. Returns curl/python's exit
+# status. The token goes through the ENVIRONMENT in both branches: curl reads its
+# config from stdin and python reads os.environ, so it never reaches this host's
+# process list where ps would expose it for the life of the call.
+http_get() {
+  _url="$1"; _tok="${2:-}"
+  case "$HTTP_TOOL" in
+    curl)
+      if [ -n "$_tok" ]; then
+        printf 'silent\nshow-error\nmax-time = 20\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github+json"\nheader = "X-GitHub-Api-Version: 2022-11-28"\nurl = "%s"\n' \
+          "$_tok" "$_url" | bounded 30 curl --config - -w '\nhttp_code=%{http_code}' 2>/dev/null
+      else
+        bounded 30 curl -sS --max-time 20 -w '\nhttp_code=%{http_code}' "$_url" 2>/dev/null
+      fi
+      ;;
+    python3)
+      WD_URL="$_url" WD_TOK="$_tok" bounded 30 python3 -c '
+import os, sys, urllib.request, urllib.error
+req = urllib.request.Request(os.environ["WD_URL"])
+tok = os.environ.get("WD_TOK") or ""
+if tok:
+    req.add_header("Authorization", "Bearer " + tok)
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+try:
+    r = urllib.request.urlopen(req, timeout=20)
+    body, code = r.read().decode("utf-8", "replace"), r.status
+except urllib.error.HTTPError as e:
+    # An HTTP error is a REACHED endpoint: report its status rather than exiting
+    # non-zero, or a 401/404 from the API is indistinguishable from a dead network.
+    body, code = e.read().decode("utf-8", "replace"), e.code
+except Exception as e:
+    sys.stderr.write(str(e) + "\n")
+    sys.exit(7)
+sys.stdout.write(body + "\nhttp_code=%d" % code)
+' 2>/dev/null
+      ;;
+    *) return 127 ;;
+  esac
+}
+
 check_app_ready() {
   local out rc code body
-  out="$(bounded 30 curl -sS --max-time 20 -w '\nhttp_code=%{http_code}' "$PUBLIC_URL" 2>/dev/null)"
+  out="$(http_get "$PUBLIC_URL")"
   rc=$?
   if [ "$rc" -eq 0 ]; then
     code="${out##*http_code=}"
@@ -360,7 +420,7 @@ check_app_ready() {
   # hairpin, a via=container-fallback line means curl broke, not the app.
   local inner ircode ibody
   if ! docker_ready; then
-    emit FAIL app_ready "public probe of ${PUBLIC_URL} failed (curl rc=${rc}) and docker is unusable (see docker_access), so the container fallback is unavailable — production liveness is UNKNOWN, treated as down"
+    emit FAIL app_ready "public probe of ${PUBLIC_URL} failed (${HTTP_TOOL} rc=${rc}) and docker is unusable (see docker_access), so the container fallback is unavailable — production liveness is UNKNOWN, treated as down"
     return 1
   fi
   inner="$(bounded 30 docker exec "$BACKEND_CONTAINER" python -c '
@@ -374,16 +434,16 @@ except e.HTTPError as x:
     print(x.code); print(x.read().decode())
 ' 2>/dev/null)"
   if [ -z "$inner" ]; then
-    emit FAIL app_ready "public probe failed (curl rc=${rc}) AND container fallback produced no answer from ${BACKEND_CONTAINER}"
+    emit FAIL app_ready "public probe failed (${HTTP_TOOL} rc=${rc}) AND container fallback produced no answer from ${BACKEND_CONTAINER}"
     return 1
   fi
   ircode="$(printf '%s\n' "$inner" | head -n 1)"
   ibody="$(printf '%s\n' "$inner" | tail -n +2)"
   if [ "$ircode" = 200 ] && body_is_ready "$ibody"; then
-    emit WARN app_ready "via=container-fallback http=200 body=$(printf '%s' "$ibody" | tr -d '\n') — backend healthy but ${PUBLIC_URL} was unreachable from this host (curl rc=${rc}); expected if the host does not hairpin its own public IP, otherwise the public edge is down"
+    emit WARN app_ready "via=container-fallback http=200 body=$(printf '%s' "$ibody" | tr -d '\n') — backend healthy but ${PUBLIC_URL} was unreachable from this host (${HTTP_TOOL} rc=${rc}); expected if the host does not hairpin its own public IP, otherwise the public edge is down"
     return 0
   fi
-  emit FAIL app_ready "via=container-fallback http=${ircode} body=$(printf '%s' "$ibody" | tr -d '\n') (public probe also failed, curl rc=${rc})"
+  emit FAIL app_ready "via=container-fallback http=${ircode} body=$(printf '%s' "$ibody" | tr -d '\n') (public probe also failed, ${HTTP_TOOL} rc=${rc})"
   return 1
 }
 
@@ -457,11 +517,10 @@ check_ci_freshness() {
   # STDIN, so the token never appears in this host's process list — `-H "Bearer
   # ..."` on the command line would be world-readable via ps for the life of
   # the call.
-  resp="$(printf 'silent\nshow-error\nmax-time = 20\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github+json"\nheader = "X-GitHub-Api-Version: 2022-11-28"\nurl = "%s"\n' \
-            "$token" "$api" | bounded 30 curl --config - -w '\nhttp_code=%{http_code}' 2>/dev/null)"
+  resp="$(http_get "$api" "$token")"
   rc=$?
   if [ "$rc" -ne 0 ]; then
-    emit WARN ci_freshness "GitHub API unreachable (curl rc=${rc}) — CI freshness unknown"
+    emit WARN ci_freshness "GitHub API not reached via ${HTTP_TOOL} (rc=${rc}) — CI freshness unknown"
     return 0
   fi
   code="${resp##*http_code=}"
