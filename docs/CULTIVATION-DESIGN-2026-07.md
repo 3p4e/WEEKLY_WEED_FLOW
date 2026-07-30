@@ -1,10 +1,23 @@
 # Cultivation department — design record (2026-07-30)
 
-**Status: pre-design.** No schema has been written. The CEO's cultivation plan is
-pending and will settle the decisions marked ⟨PLAN⟩ below; this document exists so
-that plan can be mapped onto known ground rather than read cold, and so the
-constraints discovered in the existing code are on the table before anything is
-built.
+**Status: BUILT (migrations 0045–0047), not deployed.** This began as a
+pre-design record written before the CEO's plan arrived, and the analysis in §1–§4
+is kept as written because it is what the design was reasoned from — but §1's
+"no schema" framing is historical now. What actually exists:
+
+| | |
+|---|---|
+| **0045** | cultivation identity — cultivar master, batch codes, per-plant rows, phase events (§5a) |
+| **0046** | decontamination campaign — signed room cycle, bleach log, swab release gate (§5b) |
+| **0047** | frozen positive controls + tool-sterilisation log |
+| API | `app/api/cultivation.py`, `app/api/decon.py` |
+| UI | `web/gf/decon-view.js` (decon board); cultivation is API-only so far |
+| Adherence | see the requirement-by-requirement table in §5c, including what is **not** built |
+
+The ⟨PLAN⟩ items in §4 were answered by a combination of the plan itself (room
+register, biosecurity gates) and the owner directly (the identity scheme) — §5a
+records which came from where, because the plan turned out to be a
+*decontamination* plan rather than the plant-tracking spec §4 anticipated.
 
 Owner decisions already taken (2026-07-30):
 
@@ -253,6 +266,37 @@ soiled→re-wash→pass→bleach→release happy path and every one of the relea
 refusals (no swabs at all, pending, positive). 25 affected-area tests green
 (decon + cultivation + facility + audit/RLS coverage); upgrade/downgrade clean;
 schema-diff invariant holds.
+
+## 5c. Plan-adherence status (2026-07-30)
+
+What the campaign plan asks for, and whether the software now holds it. Kept
+honest on purpose — the gaps matter more than the coverage.
+
+| Plan requirement | Status |
+|---|---|
+| Per-room 5-step cycle, signed step by step (§10, §12; QASOP 032 A01) | **built** — `decon_step_signoffs`, order enforced |
+| White-cloth gate before bleach (§12 step 3) | **built** — enforced server-side, bleach refused until it passes |
+| Bleach bucket strip-verified and logged (§5, §13, §27) | **built** — `decon_bleach_log`, below-spec flagged |
+| Clean-lock / seal on completion (§10) | **built** — `sealed_at`, set when the cycle completes |
+| QA-only written room release against a complete record (§27) | **built** — all-negative swabs required, QA_MGR only |
+| RT-qPCR swabs + results + action on positive (§27, QCSOP 024) | **built** — `decon_swabs`, positive needs a stated action |
+| Frozen positive controls, taken before the cull (§11.7, §27) | **built** — `decon_positive_controls` |
+| Tool sterilisation at 10,000 ppm (§28 control 2) | **built** — `decon_tool_log`, separate target from surfaces |
+| Room register / codes | **deliberately not seeded** — Appendix B flags the Rooms-1-6→C180-C185 mapping as unconfirmed; rooms are provisioned via `POST /facility/rooms` |
+| Cultivation batch identity + per-plant IDs (owner scheme) | **built** — migration 0045 |
+| Destruction / waste manifest (several tonnes, 30.07-01.08) | **NOT built** |
+| Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **NOT built** |
+| AHU filter pull/refit record (§18) | **NOT built** |
+| Disinfection-mat refill + strip verification (§20) | **NOT built** |
+| Contact plates (drying/curing) and sentinel bioassay (§27) | **NOT built** |
+| Gowning / zone-crossing control (§23, §28 control 5) | **NOT built** |
+| The QMS documents themselves (§31) | **out of scope for software** — they are controlled documents to be authored |
+
+The unbuilt rows are all *additional record types* of the same shape as those
+already built, not changes to the model. None of them blocks the built ones. The
+ordering above follows the plan's own priority ranking (§11), which is why the
+bleach specification, the cycle, the swab gate, the positive controls and the tool
+log came first.
 
 ## 6. Not yet decided
 
