@@ -40,7 +40,8 @@ _RESET_LOCK_KEY = 771_2026
 # parents. Several FK edges are RESTRICT and force ordering: qc_certificates →
 # qc_specifications; the cultivation chain plant_phase_events/plants → batches →
 # cultivars/rooms; corridor_cleanings → manifests/rooms;
-# waste_manifest_lines → batches/rooms; and plant_batches →
+# waste_manifest_lines → batches/rooms; harvests and ipm_applications →
+# batches/rooms; and plant_batches →
 # rooms. Everything else either cascades or is SET NULL, but explicit order
 # keeps the wipe self-evident.
 _TASKS_WIPE_ORDER = (
@@ -56,6 +57,7 @@ _TASKS_WIPE_ORDER = (
     "qc_stability_studies", "qc_sample_transports",
     "decon_tool_log", "decon_positive_controls", "decon_swabs", "decon_bleach_log", "decon_step_signoffs", "decon_room_cycles",
     "corridor_cleanings", "waste_manifest_lines", "waste_manifests",
+    "harvests", "ipm_applications",
     "plant_phase_events", "plants", "plant_batches", "cultivars", "rooms",
     "tasks", "calendar_weeks", "departments",
 )

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict cftaJ9aYc3Ky268xbq6LYdgmywr8RDl0iQS4fWjWsG60P0Mk4jNj0XXr3HfRki7
+\restrict a9TAY61okYYK3llmQDwfuhrI32jeg8J6xer01kletsVg2lFbugrhfOgmC81eGc9
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -451,6 +451,84 @@ CREATE TABLE public.handoffs (
 );
 
 ALTER TABLE ONLY public.handoffs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: harvests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.harvests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    room_id uuid,
+    lot_code text NOT NULL,
+    status text DEFAULT 'wet'::text NOT NULL,
+    harvested_on date DEFAULT CURRENT_DATE NOT NULL,
+    plants_harvested integer NOT NULL,
+    wet_weight_g numeric NOT NULL,
+    dried_on date,
+    dry_flower_g numeric,
+    dry_trim_g numeric,
+    dry_waste_g numeric,
+    phi_override_at timestamp with time zone,
+    phi_override_by uuid,
+    phi_override_reason text,
+    harvested_by uuid NOT NULL,
+    closed_at timestamp with time zone,
+    closed_by uuid,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT harvests_close_evidence_check CHECK (((status <> 'closed'::text) OR ((closed_at IS NOT NULL) AND (closed_by IS NOT NULL)))),
+    CONSTRAINT harvests_dry_evidence_check CHECK (((status = 'wet'::text) OR ((dried_on IS NOT NULL) AND (dry_flower_g IS NOT NULL)))),
+    CONSTRAINT harvests_dry_flower_check CHECK (((dry_flower_g IS NULL) OR (dry_flower_g >= (0)::numeric))),
+    CONSTRAINT harvests_dry_trim_check CHECK (((dry_trim_g IS NULL) OR (dry_trim_g >= (0)::numeric))),
+    CONSTRAINT harvests_dry_waste_check CHECK (((dry_waste_g IS NULL) OR (dry_waste_g >= (0)::numeric))),
+    CONSTRAINT harvests_phi_override_check CHECK ((((phi_override_at IS NULL) AND (phi_override_by IS NULL) AND (phi_override_reason IS NULL)) OR ((phi_override_at IS NOT NULL) AND (phi_override_by IS NOT NULL) AND (phi_override_reason IS NOT NULL) AND (length(btrim(phi_override_reason)) > 0)))),
+    CONSTRAINT harvests_plants_check CHECK ((plants_harvested >= 0)),
+    CONSTRAINT harvests_status_check CHECK ((status = ANY (ARRAY['wet'::text, 'dried'::text, 'closed'::text]))),
+    CONSTRAINT harvests_wet_weight_check CHECK ((wet_weight_g >= (0)::numeric)),
+    CONSTRAINT harvests_yield_check CHECK ((((COALESCE(dry_flower_g, (0)::numeric) + COALESCE(dry_trim_g, (0)::numeric)) + COALESCE(dry_waste_g, (0)::numeric)) <= wet_weight_g))
+);
+
+ALTER TABLE ONLY public.harvests FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: ipm_applications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ipm_applications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid,
+    batch_id uuid,
+    product text NOT NULL,
+    active_ingredient text,
+    category text NOT NULL,
+    method text,
+    dose text,
+    target text,
+    applied_at timestamp with time zone DEFAULT now() NOT NULL,
+    rei_hours integer,
+    phi_days integer,
+    applied_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT ipm_applications_category_check CHECK ((category = ANY (ARRAY['biological'::text, 'botanical'::text, 'chemical'::text, 'mechanical'::text, 'other'::text]))),
+    CONSTRAINT ipm_applications_method_check CHECK (((method IS NULL) OR (method = ANY (ARRAY['spray'::text, 'drench'::text, 'fog'::text, 'dust'::text, 'release'::text, 'other'::text])))),
+    CONSTRAINT ipm_applications_phi_check CHECK (((phi_days IS NULL) OR (phi_days >= 0))),
+    CONSTRAINT ipm_applications_rei_check CHECK (((rei_hours IS NULL) OR (rei_hours >= 0))),
+    CONSTRAINT ipm_applications_target_scope_check CHECK (((room_id IS NOT NULL) OR (batch_id IS NOT NULL)))
+);
+
+ALTER TABLE ONLY public.ipm_applications FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2021,6 +2099,30 @@ ALTER TABLE ONLY public.handoffs
 
 
 --
+-- Name: harvests harvests_org_id_lot_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.harvests
+    ADD CONSTRAINT harvests_org_id_lot_code_key UNIQUE (org_id, lot_code);
+
+
+--
+-- Name: harvests harvests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.harvests
+    ADD CONSTRAINT harvests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ipm_applications ipm_applications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ipm_applications
+    ADD CONSTRAINT ipm_applications_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2655,6 +2757,48 @@ CREATE INDEX events_org_dept_created_idx ON public.events USING btree (org_id, d
 
 
 --
+-- Name: harvests_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX harvests_batch_idx ON public.harvests USING btree (batch_id);
+
+
+--
+-- Name: harvests_org_harvested_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX harvests_org_harvested_idx ON public.harvests USING btree (org_id, harvested_on DESC);
+
+
+--
+-- Name: harvests_org_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX harvests_org_status_idx ON public.harvests USING btree (org_id, status);
+
+
+--
+-- Name: ipm_applications_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ipm_applications_batch_idx ON public.ipm_applications USING btree (batch_id, applied_at DESC) WHERE (batch_id IS NOT NULL);
+
+
+--
+-- Name: ipm_applications_org_applied_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ipm_applications_org_applied_idx ON public.ipm_applications USING btree (org_id, applied_at DESC);
+
+
+--
+-- Name: ipm_applications_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ipm_applications_room_idx ON public.ipm_applications USING btree (room_id, applied_at DESC) WHERE (room_id IS NOT NULL);
+
+
+--
 -- Name: notifications_coalesce_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3215,6 +3359,20 @@ CREATE TRIGGER audit_handoffs AFTER INSERT OR DELETE OR UPDATE ON public.handoff
 
 
 --
+-- Name: harvests audit_harvests; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_harvests AFTER INSERT OR DELETE OR UPDATE ON public.harvests FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: ipm_applications audit_ipm_applications; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_ipm_applications AFTER INSERT OR DELETE OR UPDATE ON public.ipm_applications FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: plant_batches audit_plant_batches; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3649,6 +3807,38 @@ ALTER TABLE ONLY public.handoffs
 
 ALTER TABLE ONLY public.handoffs
     ADD CONSTRAINT handoffs_to_dept_id_fkey FOREIGN KEY (to_dept_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: harvests harvests_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.harvests
+    ADD CONSTRAINT harvests_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: harvests harvests_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.harvests
+    ADD CONSTRAINT harvests_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: ipm_applications ipm_applications_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ipm_applications
+    ADD CONSTRAINT ipm_applications_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: ipm_applications ipm_applications_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ipm_applications
+    ADD CONSTRAINT ipm_applications_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -4250,6 +4440,18 @@ CREATE POLICY events_read ON public.events FOR SELECT USING ((org_id = app.curre
 ALTER TABLE public.handoffs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: harvests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.harvests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ipm_applications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ipm_applications ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: notifications notif_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4365,6 +4567,20 @@ CREATE POLICY org_isolation ON public.departments USING ((org_id = app.current_o
 --
 
 CREATE POLICY org_isolation ON public.handoffs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: harvests org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.harvests USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: ipm_applications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.ipm_applications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -4969,5 +5185,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict cftaJ9aYc3Ky268xbq6LYdgmywr8RDl0iQS4fWjWsG60P0Mk4jNj0XXr3HfRki7
+\unrestrict a9TAY61okYYK3llmQDwfuhrI32jeg8J6xer01kletsVg2lFbugrhfOgmC81eGc9
 

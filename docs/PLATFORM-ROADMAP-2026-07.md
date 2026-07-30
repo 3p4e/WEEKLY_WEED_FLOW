@@ -323,9 +323,15 @@ overtaken by events, and are corrected here rather than left to mislead.
 2. **The cultivation department** is the current development priority (owner
    direction, 2026-07-30) and has its own design record in
    `docs/CULTIVATION-DESIGN-2026-07.md` — identity/lifecycle, the HLVd
-   decontamination campaign, and the destruction/waste register, with a
-   requirement-by-requirement adherence table in §5c that lists what is **not**
-   built as prominently as what is.
+   decontamination campaign, the destruction/waste register, and now the
+   harvest/yield record with the plant-protection intervals that gate a cut
+   (§5f), with a requirement-by-requirement adherence table in §5c that lists
+   what is **not** built as prominently as what is. Harvest is the piece that
+   joined cultivation to the certificate chain: `qc_batch_genealogy` had carried
+   a `relation='CULTIVATION'` slot since 2026-07-21 with nothing upstream
+   producing the identifier for it. **The remaining Phase 2 record is
+   irrigation/feeding**; Phase 3 (phase transitions generating per-phase task
+   sets) has not been started.
 3. **Phase 4 hardening** — nav-zone unify, retire the `qms-api` shell once the
    registry read-path fully moves to the DocEngine, a security/correctness pass
    over the QC + certificate surface, doc consolidation, the Letta ops backlog.

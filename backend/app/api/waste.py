@@ -274,12 +274,21 @@ async def add_line(manifest_id: str, body: LineIn,
                 already = await c.fetchval(
                     "SELECT COALESCE(sum(plant_qty), 0) FROM waste_manifest_lines"
                     " WHERE batch_id=$1", body.batch_id) or 0
-                if already + body.plant_qty > (b["plant_count"] or 0):
+                # ...AND every plant already harvested off the batch (migration
+                # 0051). Checking destruction alone let the two registers each be
+                # individually valid and jointly impossible: 2000 plants cut into
+                # harvest lots and the same 2000 declared destroyed. harvest.py
+                # carries the mirror of this check, and the two must agree.
+                harvested = await c.fetchval(
+                    "SELECT COALESCE(sum(plants_harvested), 0) FROM harvests"
+                    " WHERE batch_id=$1", body.batch_id) or 0
+                if already + harvested + body.plant_qty > (b["plant_count"] or 0):
                     raise HTTPException(
                         409,
-                        f"batch {b['code']} has {b['plant_count']} plants and"
-                        f" {already} are already declared destroyed;"
-                        f" {body.plant_qty} more would over-declare it")
+                        f"batch {b['code']} has {b['plant_count']} plants;"
+                        f" {already} are already declared destroyed and"
+                        f" {harvested} harvested, so {body.plant_qty} more"
+                        " would over-declare it")
         if room_id is not None:
             await _room_or_422(c, room_id)
         row = await c.fetchrow(

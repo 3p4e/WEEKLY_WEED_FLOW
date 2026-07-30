@@ -2046,6 +2046,73 @@ on *both* new images.
 
 ---
 
+## READY, NOT DEPLOYED — harvest / yield + IPM, tasks 0051 (2026-07-30)
+
+Built and tested on `claude/weekly-read-flow-setup-yft7if`. **Promotion is
+owner-gated and has not been requested for this change**, so production remains
+backend `v81` / frontend `v111` / tasks `0050` / users `0009`.
+
+Phase 2 item 1 of the cultivation build (`docs/CULTIVATION-DESIGN-2026-07.md`
+§5f). It is the change that connects cultivation to the CoA chain: creating a
+harvest writes the `qc_batch_genealogy` edge `batch code → lot code` with
+`relation='CULTIVATION'`, the slot migration 0036 has carried since 2026-07-21
+with nothing upstream producing an identifier for it.
+
+**What is waiting**
+
+| | |
+|---|---|
+| `backend/alembic_tasks/versions/0051_harvest_yield_and_ipm.py` | `harvests` + `ipm_applications`, purely additive |
+| `backend/app/api/harvest.py` | the five gates, the PHI clearance report, the genealogy edge, the yield report |
+| `backend/app/api/waste.py` | `add_line` now counts HARVESTED plants too — the invariant was only half-enforced |
+| `backend/app/main.py` | second router on the `/cultivation` prefix |
+| `web/gf/harvest-view.js` | the harvest board (lots / yield / plant protection) |
+| `web/gf/api.js`, `web/gf/data.js`, `web/index.html` | bindings, labels, script tag |
+| `web/sw.js` | `wwf-shell-v3.78.0`, the new file precached |
+| `backend/schema.tasks.sql` | regenerated; the CI alembic-vs-schema diff was re-verified clean locally |
+
+**No nginx or `API_RE` change is needed, and that is deliberate.** The new routes
+hang off the existing `/cultivation` prefix rather than a new one, so both
+allowlists already cover them. A new prefix missing from either is exactly the
+class of live bug `tests/frontend/sw-api-routes.test.js` was written for on
+2026-07-30, and the cheapest way to not have it is to not add a prefix.
+
+**Migration risk: low, and v81-tolerant.** 0051 is two new tables and nothing
+else — no column added to, dropped from, or retyped on an existing table. A v81
+backend runs against a 0051 schema unchanged, so the migration can precede the
+image swap with no window in which the running code disagrees with the schema.
+`alembic -n tasks downgrade 0050` was verified locally to remove both tables and
+leave nothing behind.
+
+**Verified locally before pushing** (a real PostgreSQL 16 cluster, not mocks):
+
+- `alembic -n tasks upgrade head` from the 0050 baseline, then `downgrade 0050`,
+  then `upgrade head` again — clean each way.
+- The CI schema-diff invariant re-run by hand: `pg_dump` of the alembic-built
+  database vs a database loaded from the regenerated `schema.tasks.sql`, filtered
+  the way `.github/workflows/ci.yml` filters it. Identical. The diff against the
+  *previous* schema file was checked first and was purely additive, so the
+  regeneration carried no unrelated drift.
+- 26 backend tests (`tests/test_harvest.py`) and the full 245-test frontend suite.
+- 12 mutations against `web/gf/harvest-view.js`, applied one at a time, all
+  killed. The harness refuses to run a mutation whose search string is absent,
+  because a mutation that fails to apply is indistinguishable from a surviving
+  one — which is how two silent no-ops passed as "survivors" in the 0049 round.
+
+**Two real defects were found by writing the tests and fixed in the code, not the
+tests:** `harvestForm()` resolved before its own PHI clearance box had rendered
+(a promise claiming the form was ready while its most important field was still a
+spinner), and one test asserted on a spy stubbed only in the tests that expected a
+call, making its "must not call" assertion vacuous.
+
+**One access change, and it is exactly one action.** `QA_MGR` can now create a
+harvest. The PHI release is written on the harvest row — that is what makes it
+evidence rather than a note — so whoever releases the block has to be the one who
+signs the record carrying it. Recording the yield, closing a lot and logging an
+IPM application all remain cultivation-crew actions.
+
+---
+
 ## Production deploy — backend v81, tasks 0050 / users 0009 (2026-07-30)
 
 Owner-authorised, "deployed in full". Promotes the audit-chain fix (H2). All 9 CI

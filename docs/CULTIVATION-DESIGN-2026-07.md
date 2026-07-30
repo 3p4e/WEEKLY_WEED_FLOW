@@ -181,6 +181,12 @@ and IPM, both room-level and dated. IPM carries re-entry and pre-harvest
 intervals, which the harvest step must then be able to *block* on — that
 interaction should be designed with harvest, not bolted on after.
 
+> **Status 2026-07-30.** Reconciliation/destruction landed first (migrations 0048
+> and 0049) because the campaign's destruction window forced it. Harvest/yield and
+> IPM landed together as migration 0051 — see §5f, which explains why the PHI
+> interaction made shipping them separately the wrong call rather than merely the
+> slower one. **Irrigation/feeding is the remaining Phase 2 record.**
+
 **Phase 3 — tasks on top.**
 Phase transitions generate the per-phase task sets, and tasks reference the batch
 they act on, so the batch record accumulates from work actually performed. This
@@ -419,6 +425,96 @@ Tested with 16 backend tests (`tests/test_corridors.py`) and 13 frontend tests
 time; the three that survived each pointed at a real defect rather than a missing
 assertion, and all three were fixed in the code.
 
+## 5f. Harvest / yield, and the IPM applications it blocks on (migration 0051)
+
+Phase 2 item 1, and the first piece of this build that is not a cultivation
+record in isolation. **Creating a harvest writes a `qc_batch_genealogy` edge
+`batch code → lot code` with `relation='CULTIVATION'`.** That relation has been
+defined since migration 0036 (2026-07-21) with nothing upstream producing the
+identifier for it, so until now a finished-product CoQ could not trace past the
+processing lot. It can now: cultivar → batch → harvest lot → processing →
+packaging, with no gap.
+
+**Why IPM ships in the same migration.** §5's own build order says the PHI
+interaction "should be designed with harvest, not bolted on after". A pre-harvest
+interval is not an IPM feature that harvest consults — it is a *harvest gate*
+whose evidence happens to live on the IPM row. Shipping harvest first with a
+`phi_acknowledged` boolean would have produced a gate with nothing to read, an
+override with nothing to override, and an IPM table later shaped around a
+placeholder. Both tables land together and the gate reads real rows from day one.
+
+`ipm_applications.applied_at` is a **timestamptz, not a date**, because REI is
+measured in hours: a room sprayed at 08:00 with a 12-hour re-entry is enterable at
+20:00 the same day. A date column rounds that to "not today", which is wrong on
+the permissive side — the side that puts people in a treated room.
+
+**The five gates**, all refusals rather than warnings:
+
+1. **Pre-harvest interval.** A batch inside a PHI cannot be cut. Overridable only
+   by QA authority and only with a written reason, both stamped on the harvest row
+   (`harvests_phi_override_check` makes the three columns arrive together or not
+   at all — there is no anonymous override and none with a blank reason). A
+   recorder sending a reason gets 403: if they could clear their own block the
+   gate would be decoration.
+2. **Headcount, across BOTH registers.** Harvested plants plus plants declared
+   destroyed may not exceed the batch. Checking either alone lets both be
+   individually valid and jointly impossible — 2000 cut into lots and the same
+   2000 destroyed. `waste.add_line` gained the mirror of this check in the same
+   change; it previously counted destruction only.
+3. **Yield arithmetic.** Dry output cannot exceed wet input. This one is a schema
+   CHECK, not just an application guard: four columns of one row, so nothing can
+   put a lot that gained mass in a dry room into the table by any route, including
+   a direct SQL fix.
+4. **Closing needs a yield.** A closed record with no dry weight looks finished,
+   which is worse than an open one.
+5. **Terminal batches.** The manager closes the batch after the final pull, not
+   before.
+
+**Room scope is resolved as of the application date, not as of now.** A room-scoped
+spray restricts whatever was standing in that room *when it was sprayed*. A batch
+that moved in afterwards was never treated; one that moved out still carries the
+interval. `plant_phase_events` already dates every move, so the batch's room on
+the application date is a lookup rather than a guess — and resolving against the
+current room gets both cases backwards.
+
+**Deliberately NOT gated: closing a lot needs no second person.** The destruction
+witness exists because destroyed material stops being auditable the moment it
+leaves; a harvest lot is still physically present and still re-weighable, so the
+same friction buys far less and would be routed around. If a second signature is
+wanted it belongs on the CoA, where it already exists.
+
+**What is reported and not refused:** moisture loss outside 60–92%. Fresh material
+is roughly three-quarters water and dries to ~10–12% moisture, so 70–80% loss is
+ordinary; the band is wider than that on purpose, because a report that cries wolf
+on ordinary variation gets ignored on the day it is right.
+
+`GET /cultivation/yield` closes the loop the same way the destruction register
+does: per batch, planted vs harvested vs destroyed, and
+`harvested_without_record` — a batch closed as harvested in cultivation with no
+lot recorded. Cultivation says the crop came off; the yield register says nothing
+did, and there is no lot for a certificate to be issued against. Neither module
+sees that alone.
+
+**Access is widened by exactly one action.** QA_MGR can create a harvest — because
+the PHI release is written on the harvest row, so whoever releases the block must
+be the one who signs the record carrying it. Recording the yield, closing the lot
+and logging IPM applications all stay with the cultivation crew.
+
+Routes hang off the existing `/cultivation` prefix (a second FastAPI router on the
+same prefix), so nginx's allowlist and `sw.js`'s `API_RE` needed no change — a
+new prefix missing from either is the exact class of live bug the route drift
+detector was written for on 2026-07-30.
+
+Tested with 26 backend tests (`tests/test_harvest.py`) and 36 frontend tests
+(`tests/frontend/harvest-view.test.js`). 12 mutations applied one at a time, all
+killed; the first attempt at the ladder mutation was **unreachable** (the `wet`
+branch returns before the `dried` branch is evaluated) and so proved nothing — it
+was replaced with one that actually renders two rungs. Building the frontend
+suite also surfaced two real defects, both fixed in the code rather than the
+tests: `harvestForm()` resolved before its own clearance box had rendered, and one
+test asserted on a spy that only existed in the tests expecting a call, so its
+"must not call" assertion was vacuous.
+
 ## 5c. Plan-adherence status (2026-07-30)
 
 What the campaign plan asks for, and whether the software now holds it. Kept
@@ -440,6 +536,8 @@ honest on purpose — the gaps matter more than the coverage.
 | Cultivation board a grower can actually use | **built 2026-07-30** — `web/gf/cultivation-view.js`: cultivar registry, coded batches, chunked/resumable plant-id generation, whole-batch phase moves, paginated plant roster. 29 unit tests (`tests/frontend/cultivation-view.test.js`), ten mutations verified to fail the intended test |
 | Destruction / waste manifest (several tonnes, 30.07-01.08) | **built 2026-07-30** — migration 0048 + `app/api/waste.py` + `web/gf/waste-view.js`: header/lines, the draft→sealed→witnessed→disposed ladder, the two-person witness rule, and per-batch reconciliation incl. the closed-as-destroyed-but-never-manifested flag (§5d) |
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **built 2026-07-30** — migration 0049 + `/decon/corridors` + a panel on the decon board. A *cadence* record, not a log: trigger-classified, derived overdue against a single interval constant, and joined to 0048's movements so a disposal with nothing swept after it is surfaced (§5e) |
+| Harvest / yield record, and the cultivation→QC join | **built 2026-07-30** — migration 0051 + `app/api/harvest.py` + `web/gf/harvest-view.js`: harvest lots with wet/dry weights on a wet→dried→closed ladder, and the `qc_batch_genealogy` edge that finally fills the `relation='CULTIVATION'` slot migration 0036 has carried since before cultivation had an identifier (§5f) |
+| Plant protection (IPM) applications, with re-entry and pre-harvest intervals | **built 2026-07-30** — same migration, deliberately: the PHI is a *harvest gate*, and shipping it later would have meant an untestable placeholder (§5f) |
 | AHU filter pull/refit record (§18) | **NOT built** |
 | Disinfection-mat refill + strip verification (§20) | **NOT built** |
 | Contact plates (drying/curing) and sentinel bioassay (§27) | **NOT built** |

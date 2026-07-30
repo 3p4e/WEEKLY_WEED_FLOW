@@ -136,6 +136,31 @@ GF.API = {
   },
   cultivationMove(batchId, body) { return this._req('POST', '/cultivation/batches/' + batchId + '/move', body); },
 
+  // ── Harvest / yield + IPM applications (migration 0051) ──
+  // Same /cultivation prefix, separate server module: a harvest and a spray
+  // record carry one interlocking control between them, the PRE-HARVEST
+  // INTERVAL. Always call harvestClearance() before offering the cut — it
+  // reports what is blocking and the date it clears, so the operator sees the
+  // control instead of discovering it as a 409. The server still enforces it;
+  // this is the explanation, never the gate.
+  //
+  // Creating a harvest also writes the qc_batch_genealogy edge
+  // `batch code -> lot code` with relation CULTIVATION. That edge is what
+  // connects cultivation to the CoA chain, so a lot code must be a brand-new
+  // identifier — reusing a batch or processing code is a 409.
+  //
+  // Overriding a PHI block needs QA authority AND a written reason; a recorder
+  // sending phi_override_reason gets a 403, and a blank reason a 422.
+  ipmApplications(q = {})        { const u = new URLSearchParams(q).toString(); return this._req('GET', '/cultivation/ipm' + (u ? '?' + u : '')); },
+  ipmApply(body)                 { return this._req('POST', '/cultivation/ipm', body); },
+  harvestClearance(batchId, on)  { return this._req('GET', '/cultivation/harvest-clearance/' + batchId + (on ? '?on=' + encodeURIComponent(on) : '')); },
+  harvests(q = {})               { const u = new URLSearchParams(q).toString(); return this._req('GET', '/cultivation/harvests' + (u ? '?' + u : '')); },
+  harvest(id)                    { return this._req('GET',  '/cultivation/harvests/' + id); },
+  harvestCreate(body)            { return this._req('POST', '/cultivation/harvests', body); },
+  harvestDry(id, body)           { return this._req('POST', '/cultivation/harvests/' + id + '/dry', body); },
+  harvestClose(id, body)         { return this._req('POST', '/cultivation/harvests/' + id + '/close', body || {}); },
+  harvestYield()                 { return this._req('GET',  '/cultivation/yield'); },
+
   // ── Decontamination campaign (migration 0046) ──
   // The 5 steps are ordered and rinse1_whitecloth must PASS before bleach is
   // accepted (a soiled cloth reopens the wash), and release is QA-only against

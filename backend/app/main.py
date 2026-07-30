@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, approvals, audit, auth, capture, collab, cultivation, decon, demo, documents, facility, intake, notifications, qc, qms, reports, tasks, waste
+from app.api import ai, approvals, audit, auth, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, notifications, qc, qms, reports, tasks, waste
 from app.config import docs_kwargs, settings
 from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.logging_config import configure_logging
@@ -80,6 +80,10 @@ app.include_router(intake.router)
 app.include_router(notifications.router)
 app.include_router(facility.router)
 app.include_router(cultivation.router)
+# Second router on the /cultivation prefix: harvest and IPM are cultivation
+# records, kept in their own module because together they carry one interlocking
+# control (the pre-harvest interval) that is easier to break when split up.
+app.include_router(harvest.router)
 app.include_router(decon.router)
 app.include_router(waste.router)
 app.include_router(approvals.router)
