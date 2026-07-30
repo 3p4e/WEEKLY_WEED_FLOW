@@ -38,9 +38,9 @@ GF.WWF.renderCollabInner = (t) => {
 
   // Assignee chips (+ accept/decline for me, remove for managers)
   const chips = c.assignees.map(a => {
-    const state = a.accepted === true ? `<span style="color:var(--green)">✓ ${AL('accepted', 'прифатено')}</span>`
-      : a.accepted === false ? `<span style="color:#E5484D">✋ ${AL('declined', 'одбиено')}</span>`
-      : `<span style="color:var(--ink-3)">${AL('pending', 'во тек')}</span>`;
+    const state = a.accepted === true ? `<span class="mw-ack mw-ack--accepted">✓ ${AL('accepted', 'прифатено')}</span>`
+      : a.accepted === false ? `<span class="mw-ack mw-ack--declined">✋ ${AL('declined', 'одбиено')}</span>`
+      : `<span class="mw-ack mw-ack--pending">${AL('pending', 'во тек')}</span>`;
     const mineActions = (a.user_id === me && a.accepted == null) ? `
       <button class="mini-btn" style="color:var(--green)" title="${AL('Accept', 'Прифати')}" onclick="GF.WWF.doAck('${t.id}',true)">✓</button>
       <button class="mini-btn" style="color:#E5484D" title="${AL('Decline', 'Одбиј')}" onclick="GF.WWF.doAck('${t.id}',false)">✕</button>` : '';

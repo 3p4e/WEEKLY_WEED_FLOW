@@ -103,8 +103,11 @@ GF.WWF.removeLink = async (taskId, linkId) => {
 
 /* ── Dependencies (task_dependencies: task_id is blocked_by depends_on) ── */
 GF.WWF.renderDeps = (t, x) => {
+  // Design .mw-dep: the dot is green once the OTHER task is done (the blocker
+  // no longer blocks) and red while it still does — state the old chip never
+  // showed. The dot only ever reflects other.status; it is display, not gate.
   const chip = (other, onRemove) => `
-    <span class="dep-chip">${GF.esc(other.title)}
+    <span class="mw-dep ${other.status === 'done' ? 'met' : 'unmet'}"><span class="dot"></span>${GF.esc(other.title)}
       <button class="mini-btn" style="color:var(--ink-3)" title="${AL('Remove', 'Отстрани')}" onclick="${onRemove}">×</button>
     </span>`;
   const blockedBy = x.blockedBy.length

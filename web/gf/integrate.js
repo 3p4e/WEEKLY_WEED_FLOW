@@ -9,12 +9,17 @@ const S_IN  = { ongoing:'working', completed:'done', pending:'pending', stuck:'s
 const S_OUT = { working:'ongoing', done:'completed', pending:'pending', stuck:'stuck', review:'review', postponed:'postponed' };
 const P_IN  = { normal:'medium', medium:'medium', high:'high', critical:'critical', low:'low' };
 const P_OUT = { medium:'normal', high:'high', critical:'critical', low:'low' };
+// Colours are the DESIGN SYSTEM's brief hexes, verbatim from the DEPTS config
+// in design/mass-weed-mockup/depthome-*.html — five of seven had drifted to
+// app-local values, so a department rendered one colour in the mockups and
+// another in the product. tests/frontend/mass-weed-dept-colors.test.js pins
+// this table (and the --dept-* CSS tokens) to the design source.
 const DEPT_STYLE = {
   cultivation:{icon:'leaf',color:'#2BE8A0'}, vegetation:{icon:'leaf',color:'#3FA34D'},
-  production:{icon:'box',color:'#2FD9D9'}, qc:{icon:'flask',color:'#7A5BE0'},
-  quality_control:{icon:'flask',color:'#7A5BE0'}, quality_assurance:{icon:'shield',color:'#C2410C'},
-  logistics:{icon:'box',color:'#0891B2'}, tooling:{icon:'wrench',color:'#5A6B82'},
-  security:{icon:'shield',color:'#566884'},
+  production:{icon:'box',color:'#2FD9D9'}, qc:{icon:'flask',color:'#9B7BE8'},
+  quality_control:{icon:'flask',color:'#9B7BE8'}, quality_assurance:{icon:'shield',color:'#E0743A'},
+  logistics:{icon:'box',color:'#22B8D8'}, tooling:{icon:'wrench',color:'#8496B2'},
+  security:{icon:'shield',color:'#7C90AE'},
 };
 // Short, language-neutral department abbreviations (QC, QA, WH…), shown on the
 // compact task cards / chips; the full bilingual name shows in lists + dropdowns.

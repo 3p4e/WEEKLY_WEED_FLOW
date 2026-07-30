@@ -41,8 +41,8 @@
   --green:#6cf05a; --green-500:#6cf05a; --green-fg:#9df58c; --green-soft:rgba(108,240,90,.15);
 
   /* Department identity colours */
-  --dept-cultivation:#2be8a0; --dept-production:#2fd9d9; --dept-qc:#a07bf0;
-  --dept-quality_assurance:#f0803e; --dept-logistics:#35b6e0; --dept-security:#8296b4; --dept-tooling:#9fb0c8;
+  --dept-cultivation:#2be8a0; --dept-production:#2fd9d9; --dept-qc:#9b7be8;
+  --dept-quality_assurance:#e0743a; --dept-logistics:#22b8d8; --dept-security:#7c90ae; --dept-tooling:#8496b2;
 
   /* Glass / HUD fills */
   --glass-bg:rgba(9,28,52,.72); --glass-border:rgba(var(--accent-rgb),.14); --glass-blur:blur(14px);
@@ -149,8 +149,10 @@
   --violet:#7a4fc2; --violet-700:#5d3a99; --violet-soft:rgba(122,79,194,.14);
   --teal:#1c9a4d; --teal-soft:rgba(28,154,77,.13);
   --green:#1c9a4d; --green-500:#1c9a4d; --green-fg:#178043; --green-soft:rgba(28,154,77,.14);
-  --dept-cultivation:#12a06a; --dept-production:#0e9aa0; --dept-qc:#6a3fc0;
-  --dept-quality_assurance:#c2410c; --dept-logistics:#0e7fa8; --dept-security:#4a5e7c; --dept-tooling:#54677f;
+  /* Same brief hexes as dark — the design's light pages keep the one
+     accent per department rather than a darkened variant. */
+  --dept-cultivation:#2be8a0; --dept-production:#2fd9d9; --dept-qc:#9b7be8;
+  --dept-quality_assurance:#e0743a; --dept-logistics:#22b8d8; --dept-security:#7c90ae; --dept-tooling:#8496b2;
   --glass-bg:rgba(255,255,255,.82); --glass-border:rgba(26,127,180,.2); --glass-blur:blur(14px);
   --font:'Titillium Web','Saira',-apple-system,system-ui,sans-serif;
   --font-display:'Saira Condensed','Saira',system-ui,sans-serif;

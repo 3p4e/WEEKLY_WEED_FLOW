@@ -389,6 +389,6 @@ GF.render = {
         <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
       </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
     }).join('');
-    return `<div class="tree-rows tree-d${depth}">${rows}</div>`;
+    return `<div class="tree-rows tree-d${depth}${depth > 0 ? ' mw-subbranch' : ''}">${rows}</div>`;
   },
 };
