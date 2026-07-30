@@ -35,6 +35,12 @@ const DESIGN = fs.readFileSync(
   path.join(ROOT, 'design', 'mass-weed-mockup', 'mass-weed.css'), 'utf8');
 const SHIPPED = fs.readFileSync(path.join(ROOT, 'web', 'gf', 'mass-weed.css'), 'utf8');
 
+/** The file's own comments NAME the atoms they document (".mw-htag (#hash
+ *  outline chip)"), so a presence check against the raw text passes on the
+ *  prose even after the real rule is gone. Every structural assertion below
+ *  runs against comment-stripped CSS instead. */
+const SHIPPED_CODE = SHIPPED.replace(/\/\*[\s\S]*?\*\//g, '');
+
 /** Pull the `--mw-*: value;` pairs out of one CSS block. */
 function tokensIn(css, blockRe, label) {
   const m = css.match(blockRe);
@@ -87,6 +93,42 @@ test('the light theme carries every design-system --mw-* override, unchanged', (
   // than the design does would fork the two without this catching it.
   compare(/\[data-theme="light"\]\{([\s\S]*?)\n\}/,
           /:root\[data-theme="mass-weed-light"\] \{([\s\S]*?)\n\}/, 'light');
+});
+
+test('the component atoms the newest designs depend on are all present', () => {
+  // Stage 2 of the port. The design notes on depthome-qc.html name these as
+  // "added to mass-weed.css as shared atoms" — they are what the QC screens
+  // are built out of. A missing atom does not error; the element just renders
+  // as an unstyled div, which is the same invisible failure the tokens had.
+  const REQUIRED = [
+    '.mw-panel', '.mw-well', '.mw-label', '.mw-field', '.mw-input',
+    '.mw-tcard', '.mw-tcard__box', '.mw-tcard__main', '.mw-tcard__title',
+    '.mw-tcard__meta', '.mw-tcard__dept', '.mw-tcard__id', '.mw-tcard__right',
+    '.mw-attr', '.mw-htag', '.mw-due', '.mw-sub',
+    '.mw-st--done', '.mw-st--working', '.mw-st--review',
+    '.mw-st--stuck', '.mw-st--postponed',
+  ];
+  // Boundary-matched, NOT a bare substring check: `.includes('.mw-htag')`
+  // also matches `.mw-htagXX`, so renaming an atom would slip straight past.
+  // A selector must be followed by something that actually ends it.
+  const missing = REQUIRED.filter(sel =>
+    !new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9_-])', 'i').test(SHIPPED_CODE));
+  assert.deepEqual(missing, [],
+    `these design-system atoms are missing from web/gf/mass-weed.css, so markup using ` +
+    `them renders unstyled: ${missing.join(', ')}`);
+});
+
+test('no --mw-* token is referenced without being defined or given a fallback', () => {
+  // A var(--mw-x) that resolves to nothing is exactly the bug this whole port
+  // fixes, so it must not be reintroduced by a future atom import. A var()
+  // WITH a fallback is fine — the design sets --mw-acc inline per department,
+  // by design, and every use of it carries a default.
+  const defined = new Set([...SHIPPED_CODE.matchAll(/(--mw-[a-z0-9-]+)\s*:/g)].map(m => m[1]));
+  const bare = new Set([...SHIPPED_CODE.matchAll(/var\((--mw-[a-z0-9-]+)\s*\)/g)].map(m => m[1]));
+  assert.ok(bare.size >= 10, `parsed only ${bare.size} bare var() uses — the parser is broken`);
+  const dangling = [...bare].filter(t => !defined.has(t)).sort();
+  assert.deepEqual(dangling, [],
+    `referenced with no definition and no fallback: ${dangling.join(', ')}`);
 });
 
 test('mass-weed.css has balanced braces', () => {

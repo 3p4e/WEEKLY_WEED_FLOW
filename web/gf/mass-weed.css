@@ -907,3 +907,222 @@
   :root[data-theme^="mass-weed"] .gf-name,
   :root[data-theme^="mass-weed"] .view-title{animation:none}
 }
+
+/* ═══════════════ 5 · DESIGN-SYSTEM COMPONENT ATOMS (.mw-*) ═══════════════
+
+   Stage 2 of the Mass Weed port. Stage 1 (commit cb74eec) brought in the
+   --mw-* TOKENS; this brings in the component ATOMS those tokens exist to
+   drive, copied verbatim from design/mass-weed-mockup/mass-weed.css.
+
+   WHY THESE NINE FAMILIES AND NOT ALL ~180. The design system defines far
+   more atoms than the app currently has markup for, and importing all of
+   them would ship dead CSS that nothing renders and nothing tests. These are
+   the ones the NEWEST screens depend on — the design notes on depthome-qc
+   name them explicitly as "added to mass-weed.css as shared atoms":
+   .mw-tcard (+ its __box/__main/__title/__meta/__dept/__id/__right/--done),
+   .mw-attr (filled mono attribute chip), .mw-htag (#hash outline chip),
+   .mw-due(+--over), .mw-sub, and the .mw-st--* status pills
+   (done/working/review/stuck/postponed). Added alongside them are the frame
+   primitives every one of those sits inside — .mw-panel(+--alt/--hero/
+   --quiet), .mw-well, .mw-label, .mw-field, .mw-input — because a task card
+   with no panel around it is not the design, it is a floating card.
+
+   VERBATIM, NOT ADAPTED. Same reasoning as the token layer: these can be
+   diffed against the design source forever. They reference only --mw-*
+   tokens, all of which stage 1 defined, so they resolve in both themes.
+   Nothing here overrides an existing app class — .card/.btn/.modal keep the
+   HUD chrome in section 3 — so this is purely additive and no current view
+   changes appearance until its markup opts in.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* ── panel primitives (design lines 117-176) ── */
+
+/* ============================================================
+   CHAMFERED PANEL  — the core frame primitive
+   ============================================================ */
+.mw-panel {
+  position: relative;
+  background: linear-gradient(160deg, var(--mw-panel) 0%, var(--mw-panel-2) 100%);
+  clip-path: polygon(
+    var(--mw-chamfer) 0, 100% 0,
+    100% calc(100% - var(--mw-chamfer)), calc(100% - var(--mw-chamfer)) 100%,
+    0 100%, 0 var(--mw-chamfer));
+  padding: 16px 18px;
+  box-shadow: var(--mw-inner-glow), var(--mw-glow-soft);
+  z-index: 1;
+}
+/* glowing chamfered edge (drawn as a slightly larger clone behind) */
+.mw-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: inherit;
+  padding: 1.5px;
+  background: linear-gradient(150deg, var(--mw-edge), var(--mw-cyan-deep) 55%, var(--mw-edge));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px rgba(94,200,240,0.6));
+}
+/* scanline texture overlay */
+.mw-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: inherit;
+  background: var(--mw-scan);
+  opacity: 0.7;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.mw-panel > * { position: relative; z-index: 2; }
+
+/* opposite-corner chamfer variant */
+.mw-panel--alt {
+  clip-path: polygon(
+    0 0, calc(100% - var(--mw-chamfer)) 0, 100% var(--mw-chamfer),
+    100% 100%, var(--mw-chamfer) 100%, 0 calc(100% - var(--mw-chamfer)));
+}
+/* inset sub-panel (list wells etc.) */
+.mw-well {
+  background: var(--mw-panel-in);
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.6), inset 0 0 1px var(--mw-cyan-deep);
+  clip-path: polygon(
+    var(--mw-chamfer-sm) 0, 100% 0,
+    100% calc(100% - var(--mw-chamfer-sm)), calc(100% - var(--mw-chamfer-sm)) 100%,
+    0 100%, 0 var(--mw-chamfer-sm));
+  position: relative;
+}
+
+/* ============================================================
+
+/* ── elevation tiers (design lines 177-215) ── */
+   ELEVATION TIERS  — focal hierarchy
+   Tier 1 .mw-panel--hero  : the one focal element per screen (raised, brighter)
+   Tier 2 .mw-panel        : default supporting content (unchanged)
+   Tier 3 .mw-panel--quiet : background chrome / lists (recessed, calm)
+   ============================================================ */
+
+/* Tier 1 — hero: brighter fill, lifted shadow, stronger edge + top sheen */
+.mw-panel--hero {
+  background:
+    linear-gradient(160deg, rgba(16,44,78,0.82) 0%, rgba(9,26,50,0.9) 100%);
+  box-shadow:
+    inset 0 0 30px rgba(28,108,163,0.32),
+    0 0 0 1px rgba(94,200,240,0.10),
+    0 14px 40px -12px rgba(0,0,0,0.7),
+    0 0 34px rgba(58,159,212,0.5);
+}
+.mw-panel--hero::before {
+  padding: 2px;
+  background: linear-gradient(150deg, var(--mw-cyan-bright), var(--mw-cyan-deep) 55%, var(--mw-edge));
+  filter: drop-shadow(0 0 6px rgba(94,200,240,0.85));
+}
+/* faint diagonal sheen sweeping the hero panel */
+.mw-panel--hero > .mw-hero-sheen,
+.mw-panel--hero::after {
+  background:
+    linear-gradient(120deg, rgba(143,227,255,0.10) 0%, transparent 34%),
+    var(--mw-scan);
+}
+
+/* Tier 3 — quiet: recede, flatten, drop the edge glow */
+.mw-panel--quiet {
+  background: linear-gradient(160deg, rgba(6,18,34,0.6) 0%, rgba(4,13,26,0.72) 100%);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+.mw-panel--quiet::before {
+  background: linear-gradient(150deg, rgba(77,184,232,0.28), rgba(28,108,163,0.18));
+  filter: none;
+}
+.mw-panel--quiet::after { opacity: 0.4; }
+
+/* ── label (design lines 249-256) ── */
+.mw-label {
+  font-family: var(--mw-font);
+  text-transform: uppercase;
+  letter-spacing: var(--mw-track);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mw-text-dim);
+}
+
+/* ── field + input (design lines 613-630) ── */
+   INPUTS
+   ============================================================ */
+.mw-field { margin-bottom: 14px; }
+.mw-field > label {
+  display:block; font-size:11px; text-transform:uppercase; letter-spacing:var(--mw-track);
+  color: var(--mw-text-dim); margin-bottom:6px;
+}
+.mw-input {
+  width:100%; box-sizing:border-box;
+  font-family: var(--mw-font); font-size:15px; color: var(--mw-ink);
+  background: rgba(4,14,28,0.7); border:none; padding: 11px 14px;
+  clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  box-shadow: inset 0 0 0 1px rgba(58,159,212,0.35);
+  outline:none; transition: box-shadow .15s ease;
+}
+.mw-input::placeholder { color: var(--mw-text-faint); }
+.mw-input:focus { box-shadow: inset 0 0 0 1px var(--mw-cyan), inset 0 0 16px rgba(94,200,240,0.2); }
+
+
+/* ============================================================
+   TASK CARD ATOM  (compact) + meta chips
+   Shared across Dept Home, Exec Report, Board tree. Accent via
+   --mw-acc (dept color) set inline on the card.
+   ============================================================ */
+.mw-tcard{
+  position:relative; display:flex; align-items:flex-start; gap:10px;
+  padding:10px 12px; margin-bottom:8px; cursor:pointer;
+  background:linear-gradient(160deg, rgba(12,40,72,0.5), rgba(6,20,40,0.5));
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%);
+  border-left:3px solid var(--mw-acc,#5ec8f0);
+  transition:transform .12s ease, filter .12s ease;
+}
+.mw-tcard::after{ content:""; position:absolute; inset:0; clip-path:inherit; padding:1px;
+  background:color-mix(in srgb, var(--mw-acc,#5ec8f0) 24%, transparent);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+.mw-tcard:hover{ transform:translateX(2px); filter:brightness(1.12); }
+[data-theme="light"] .mw-tcard{ background:linear-gradient(160deg, rgba(255,255,255,0.8), rgba(238,246,252,0.86)); }
+.mw-tcard__box{ width:17px; height:17px; flex:none; margin-top:2px; box-sizing:border-box;
+  border:1.5px solid color-mix(in srgb, var(--mw-acc,#5ec8f0) 55%, transparent);
+  background:var(--mw-panel-in); clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+  display:grid; place-items:center; color:transparent; font-size:11px; }
+.mw-tcard--done .mw-tcard__box{ background:var(--mw-stat-hi); color:var(--mw-void); }
+.mw-tcard--done .mw-tcard__box::after{ content:"✓"; }
+.mw-tcard--done .mw-tcard__title{ color:var(--mw-text-dim); text-decoration:line-through; text-decoration-color:rgba(120,160,190,.5); }
+.mw-tcard__main{ flex:1; min-width:0; }
+.mw-tcard__title{ font-family:var(--mw-font-cond); font-size:15px; font-weight:600; color:var(--mw-ink); letter-spacing:.02em; line-height:1.25; }
+.mw-tcard__meta{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:7px; }
+.mw-tcard__dept{ font-family:var(--mw-font-cond); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--mw-acc,#5ec8f0); }
+.mw-tcard__id{ font-family:'Saira Condensed',monospace; font-size:11px; color:var(--mw-text-faint); letter-spacing:.03em; }
+.mw-tcard__right{ display:flex; align-items:center; gap:8px; flex:none; align-self:center; }
+
+/* attribute chip — FILLED soft chip, mono value (dept metadata) */
+.mw-attr{ display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--mw-text-dim);
+  background:color-mix(in srgb, var(--mw-acc,#5ec8f0) 15%, transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--mw-acc,#5ec8f0) 32%, transparent);
+  padding:2px 7px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+.mw-attr b{ font-family:'Saira Condensed',monospace; font-weight:700; color:var(--mw-cyan-bright); font-size:11px; letter-spacing:.02em; }
+/* hashtag chip — OUTLINE (free tag) */
+.mw-htag{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:600; letter-spacing:.02em;
+  color:var(--mw-text-dim); background:transparent;
+  box-shadow:inset 0 0 0 1px rgba(94,200,240,0.3);
+  padding:2px 7px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+/* due badge */
+.mw-due{ font-family:'Saira Condensed',monospace; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:1px 8px; color:var(--mw-cyan-bright); background:rgba(58,159,212,.16); }
+.mw-due--over{ color:#fff; background:var(--mw-stat-lo); box-shadow:0 0 8px rgba(239,77,77,.5); }
+/* subtask progress + hours */
+.mw-sub{ font-family:'Saira Condensed',monospace; font-size:11px; font-weight:600; color:var(--mw-text-dim); display:inline-flex; align-items:center; gap:4px; }
+.mw-sub svg{ width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:1.8; }
+/* status pill (task lifecycle) */
+.mw-st{ display:inline-flex; align-items:center; height:20px; padding:0 9px; font-family:var(--mw-font-cond); font-weight:700; font-size:10px; letter-spacing:.08em; text-transform:uppercase; border-radius:10px; white-space:nowrap; }
+.mw-st--done{ color:var(--mw-stat-hi); background:rgba(108,240,90,.14); box-shadow:inset 0 0 0 1px rgba(108,240,90,.4); }
+.mw-st--working{ color:#f0b95e; background:rgba(240,185,94,.14); box-shadow:inset 0 0 0 1px rgba(240,185,94,.42); }
+.mw-st--review{ color:var(--mw-cyan-bright); background:rgba(58,159,212,.16); box-shadow:inset 0 0 0 1px rgba(94,200,240,.4); }
+.mw-st--stuck{ color:var(--mw-stat-lo); background:rgba(239,77,77,.14); box-shadow:inset 0 0 0 1px rgba(239,77,77,.45); }
+.mw-st--postponed{ color:var(--mw-stat-mid); background:rgba(236,236,74,.12); box-shadow:inset 0 0 0 1px rgba(236,236,74,.4); }
