@@ -35,7 +35,7 @@ test('operator lands on department home and creates a room-tagged task', async (
     await page.getByRole('button', { name: 'Create task' }).click();
     // still on dept home — the By-room panel groups the new task under GR-2
     await expect(page.locator('.dh-group-key', { hasText: 'GR-2' })).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('.dh-group .kcard-title', { hasText: taskTitle })).toBeVisible();
+    await expect(page.locator('.dh-group .mw-tcard__title', { hasText: taskTitle })).toBeVisible();
   });
 
   await test.step('the board card shows the attribute chips', async () => {

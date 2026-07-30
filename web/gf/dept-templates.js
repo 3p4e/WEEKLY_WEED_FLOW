@@ -264,9 +264,14 @@ GF.collectDeptAttrs = (deptId, base) => {
 // Card meta chips for a task's attributes — `chip:true` template fields (or,
 // with no template, the first few raw keys). Attribute chips are filled soft
 // chips with a mono value, visually distinct from #tag outline chips.
-GF.attrChips = (t) => {
+/* The label/value pairs behind a task's attribute chips, as DATA — one
+   source of truth for every chip renderer. attrChips (below) draws the
+   classic .attr-chip; depthome's .mw-tcard draws the design system's
+   .mw-attr from the same pairs, so the two can never disagree about WHICH
+   attributes a card shows. */
+GF.attrChipData = (t) => {
   const attrs = t && t.attrs;
-  if (!attrs || typeof attrs !== 'object') return '';
+  if (!attrs || typeof attrs !== 'object') return [];
   const tpl = GF.deptTemplate(t.dept);
   let entries;
   if (tpl) {
@@ -279,6 +284,8 @@ GF.attrChips = (t) => {
   } else {
     entries = Object.entries(attrs).slice(0, 3).map(([k, v]) => ({ label: k, val: String(v) }));
   }
-  return entries.slice(0, 4).map(e =>
-    `<span class="attr-chip" title="${GF.esc(e.label)}">${GF.esc(String(e.val).slice(0, 24))}</span>`).join('');
+  return entries.slice(0, 4).map(e => ({ label: e.label, val: String(e.val).slice(0, 24) }));
 };
+
+GF.attrChips = (t) => GF.attrChipData(t).map(e =>
+  `<span class="attr-chip" title="${GF.esc(e.label)}">${GF.esc(e.val)}</span>`).join('');
