@@ -231,7 +231,10 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
             user["org_id"], body.room_id, body.cultivar_id, body.code, cv["name"],
             body.plant_count, body.phase, body.phase_since, body.note, user["id"])
         await c.execute(
-            "INSERT INTO plant_phase_events(org_id, batch_id, event, to_phase, qty,"
+            # The only interpolation is SITE_TODAY_SQL — a module constant
+            # rendered from settings.snapshot_tz at import, quote-doubled;
+            # user data travels exclusively in the bound parameters.
+            "INSERT INTO plant_phase_events(org_id, batch_id, event, to_phase, qty,"  # nosec B608
             " to_room_id, occurred_on, created_by)"
             f" VALUES ($1,$2,'create',$3,$4,$5,COALESCE($6::date,{SITE_TODAY_SQL}),$7)",
             user["org_id"], row["id"], body.phase, body.plant_count, body.room_id,
@@ -343,7 +346,8 @@ async def move_batch(batch_id: str, body: MoveIn,
             body.to_phase, to_room, body.occurred_on, user["id"],
             list(_TERMINAL), batch_id)
         await c.execute(
-            "INSERT INTO plant_phase_events(org_id, batch_id, event, from_phase, to_phase,"
+            # Same shape as above: SITE_TODAY_SQL only, parameters carry the data.
+            "INSERT INTO plant_phase_events(org_id, batch_id, event, from_phase, to_phase,"  # nosec B608
             " qty, to_room_id, occurred_on, reason, created_by)"
             f" VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,{SITE_TODAY_SQL}),$9,$10)",
             user["org_id"], batch_id,
@@ -356,7 +360,8 @@ async def move_batch(batch_id: str, body: MoveIn,
         # and only ever run once per batch at end of life, not on every move).
         if body.to_phase in _TERMINAL:
             await c.execute(
-                f"UPDATE plants SET status=$1, status_since=COALESCE($2::date, {SITE_TODAY_SQL}),"
+                # Same shape as above: SITE_TODAY_SQL only, parameters carry the data.
+                f"UPDATE plants SET status=$1, status_since=COALESCE($2::date, {SITE_TODAY_SQL}),"  # nosec B608
                 " updated_by=$3, updated_at=now()"
                 " WHERE batch_id=$4 AND status='active'",
                 "harvested" if body.to_phase == "harvested" else "destroyed",
