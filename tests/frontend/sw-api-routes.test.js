@@ -134,3 +134,29 @@ test('every path in the precache list exists, or the service worker never instal
     'precached but missing from web/ — cache.addAll() will reject and the service ' +
     'worker will never install: ' + absent.join(', '));
 });
+
+test('the e2e nginx proxies every prefix production nginx does', () => {
+  // THE BUG THIS FOUND, 2026-07-31 during a comprehensive test pass: the
+  // Playwright proxy (web/e2e/nginx.local.conf) had drifted five prefixes
+  // behind production's web/nginx.conf — cultivation, decon, waste, handoffs
+  // and intake were all absent. An e2e spec driving one of those boards would
+  // hit the SPA fallback (200 index.html on a GET, 405 on a POST) instead of
+  // the backend, so it would fail confusingly or pass against the wrong
+  // response. The existing tests above only compare production nginx.conf to
+  // sw.js and api.js, so nothing watched the e2e proxy at all; the suite
+  // stayed green only because no current spec happened to touch those five.
+  //
+  // The e2e proxy must be a SUPERSET of production's proxied prefixes: it may
+  // add locals (it does not today), but it must never drop one, or the e2e
+  // environment stops being a faithful stand-in for production exactly where a
+  // spec would rely on it.
+  const local = fs.readFileSync(path.join(WEB, 'e2e', 'nginx.local.conf'), 'utf8');
+  const prod = nginxProxiedPrefixes(nginx);
+  const e2e = nginxProxiedPrefixes(local);
+  assert.ok(prod.size >= 15, `parsed only ${prod.size} prod prefixes — parser broken`);
+  assert.ok(e2e.size >= 15, `parsed only ${e2e.size} e2e prefixes — parser broken`);
+  const missing = [...prod].filter(p => !e2e.has(p)).sort();
+  assert.deepEqual(missing, [],
+    'web/e2e/nginx.local.conf does NOT proxy these prefixes that production proxies, so an ' +
+    'e2e spec exercising them silently hits the SPA fallback: ' + missing.join(', '));
+});
