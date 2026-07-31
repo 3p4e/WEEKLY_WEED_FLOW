@@ -2046,6 +2046,24 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v116 only (sectioned create sheet) (2026-07-31)
+
+Owner-authorised, same session as v115. The task-creation UI was still a flat
+modal, not the design's `task-create-*.html` sectioned screen. Frontend-only
+swap (`wwf-growflow:v115 → v116`) from `61e1563`.
+
+`openAdd` now renders the design's sectioned create sheet — dept-tinted
+`.af-sec` section rules (Task title · Department · dept-fields well · Type /
+Priority tier chip groups · Due date / Recurrence · Assignees · Tags / SOP
+reference · Days), two-up rows, widened to 760px. Every field id preserved, so
+submit/collect/prefill are untouched. Verified live: sw `wwf-shell-v3.86.0`,
+`gf/main.js` + `gf/app.css` serve the `.af-sec` layout; `/health` 200. Frontend
+unit 289/0; the three task-creation e2e specs (core-flow ×2, dept-home) pass
+against the restructured DOM. Rollback: `wwf-growflow:v115` +
+`compose.yaml.bak-pre-v116`.
+
+---
+
 ## Production deploy — frontend v115 only (Secure Access login) (2026-07-31)
 
 Owner-authorised, urgent: the deployed login was still the old single centered
