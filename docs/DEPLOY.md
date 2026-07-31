@@ -2046,6 +2046,40 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v118 only (Task Detail screen) (2026-07-31)
+
+Owner-authorised, same session. Clicking **Open** on a task now forwards to a
+full-screen Task Detail SCREEN (`.overlay.as-screen`, the same surface the New
+Task create screen uses) — the design's `task-detail.html` shared shell, bound
+to live task data: header + meta pills, description, subtask tree, attachments
+(task links), comments, a right rail (assignees / dependencies / recurrence /
+SOP / estimate), a Log Progress panel (status, completion, work sessions), and
+an activity feed. Every value comes from the live task object and the same lazy
+endpoints the card already uses — no mock data. Quality-Control tasks also grow
+the deeper `task-detail-qc.html` sections (Lab Testing Lifecycle phase stepper
+QCSOP 001, OOx deviation flag QCSOP 019, Closure certificate QCSOP 012),
+department-gated and informational only, exactly as the design frames them.
+
+Frontend-only swap (`wwf-growflow:v117 → v118`) from `b4418c2`. New file
+`web/gf/task-detail-view.js` (IIFE registering `GF.WWF.openTaskDetail`); page
+CSS scoped under `.td-wrap`; the QC phase stepper uses a namespaced
+`.td-stepper` so it never re-bases the app's older numbered `.mw-stepper`
+(document lifecycle); the missing shared `.mw-stat__track/__fill` progress
+atoms were added with non-mass-weed skin aliases. sw shell bumped to
+`v3.88.0`. Build via the established no-PAT path: `git archive b4418c2:web`
+gzipped, uploaded through the runner's `/file/write`, SHA-256 compared on both
+sides (`d0678580…`), `docker build` on the runner, `docker compose up -d
+--no-deps frontend`. Verified live on `wwf.srv1231216.hstgr.cloud`: `/health`
+200, sw `wwf-shell-v3.88.0`, `/gf/task-detail-view.js` 200 (defines
+`openTaskDetail`), `.td-stepper` in app.css, `open_detail` in data.js;
+image contents checked before the swap (new file present, sw version, nginx
+allowlist intact, tests dir not leaked). Frontend 294/0 (incl. 5 new
+detail-view tests); e2e 15/15 (incl. control-wiring, which resolves the new
+Open handler). Rollback: `wwf-growflow:v117` retained +
+`compose.yaml.bak-pre-v118`.
+
+---
+
 ## Production deploy — frontend v117 only (full-screen create) (2026-07-31)
 
 Owner-authorised, same session. New task now opens a full-screen create SCREEN
