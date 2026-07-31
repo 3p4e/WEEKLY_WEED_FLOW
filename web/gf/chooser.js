@@ -33,10 +33,44 @@ window.GF = window.GF || {};
       + `<span class="sel-cur">${GF.esc(label(cfg, v))}</span>${GF.icon('chevD', 'icon sel-caret')}</button>`;
   };
 
-  // Re-read the hidden input (a writer set .value directly) → refresh the label.
+  // ── Inline chip group (design task-create-*.html): every option VISIBLE,
+  // one tap to pick — the design shows the whole small option set rather than
+  // hiding it behind a popup. Same hidden-input contract as selectField, so
+  // collectDeptAttrs / applyPreset / openEdit keep reading and writing
+  // GF.$(id).value with no idea which control renders it.
+  GF.chipField = (id, cfg) => {
+    REG[id] = Object.assign({ chips: true }, cfg);
+    const v = cfg.value != null ? String(cfg.value) : '';
+    const chips = (cfg.options || []).map((o) => `
+      <button type="button" class="mw-chip mw-chip--sm${String(o.v) === v ? ' on' : ''}"
+        ${o.color ? `style="--cc:${GF.esc(o.color)}"` : ''} data-v="${GF.esc(String(o.v))}"
+        onclick="GF.pickChip('${id}', this.dataset.v)"><span class="d"></span>${GF.esc(o.label)}</button>`).join('');
+    return `<input type="hidden" id="${id}" value="${GF.esc(v)}">`
+      + `<div class="mw-chips" id="${id}-chips" role="radiogroup" aria-label="${GF.esc(cfg.title || '')}">${chips}</div>`;
+  };
+  GF.pickChip = (id, v) => {
+    const cfg = REG[id], inp = GF.$(id);
+    if (!cfg || !inp) return;
+    // Same-chip tap CLEARS an optional field (the design's None chip pattern
+    // without needing an explicit None everywhere).
+    inp.value = (inp.value === v && cfg.clearable !== false) ? '' : v;
+    GF.syncSelect(id);
+    if (cfg.onPick) cfg.onPick(inp.value);
+  };
+
+  // Re-read the hidden input (a writer set .value directly) → refresh the
+  // control: the popup button's label, or every chip's .on state.
   GF.syncSelect = (id) => {
-    const cfg = REG[id], inp = GF.$(id), btn = GF.$(id + '-btn');
-    if (!cfg || !inp || !btn) return;
+    const cfg = REG[id], inp = GF.$(id);
+    if (!cfg || !inp) return;
+    if (cfg.chips) {
+      const host = GF.$(id + '-chips');
+      if (host) host.querySelectorAll('.mw-chip').forEach((c) =>
+        c.classList.toggle('on', c.dataset.v === inp.value));
+      return;
+    }
+    const btn = GF.$(id + '-btn');
+    if (!btn) return;
     btn.querySelector('.sel-cur').textContent = label(cfg, inp.value);
   };
 

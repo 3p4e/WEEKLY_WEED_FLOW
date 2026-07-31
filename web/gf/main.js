@@ -73,12 +73,12 @@ GF.openAdd = (weekId, parentId) => {
     <div class="field" id="add-preset-row" style="display:none"></div>
     <div id="add-dept-fields"></div>
     <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
-    <div class="row" style="gap:10px">
-      <div class="field" style="flex:1"><label>${GF.t('priority')}</label>${GF.selectField('add-pr', {
-        value: 'medium', options: prOptions, title: GF.t('priority'), onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
-      <div class="field" style="flex:1"><label>${GF.t('task_type')}</label>${GF.selectField('add-type', {
-        value: 'other', options: typeOptions, title: GF.t('task_type') })}</div>
-    </div>
+    <div class="field"><label>${GF.t('priority')}</label>${GF.chipField('add-pr', {
+      value: 'medium', clearable: false, title: GF.t('priority'),
+      options: prOptions.map(o => ({ ...o, color: ({ critical: 'var(--red)', high: 'var(--orange)', medium: 'var(--blue)', low: 'var(--ink-3)' })[o.v] })),
+      onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
+    <div class="field"><label>${GF.t('task_type')}</label>${GF.chipField('add-type', {
+      value: 'other', clearable: false, title: GF.t('task_type'), options: typeOptions })}</div>
     <div class="row" style="gap:10px">
       <div class="field" style="flex:1"><label>${GF.t('due_date')}</label><input id="add-due" type="date"></div>
       <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label>${GF.selectField('add-rec', {

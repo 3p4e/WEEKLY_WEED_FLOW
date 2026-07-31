@@ -59,6 +59,18 @@ GF.DEPT_TEMPLATES = {
                { v: 'in_process', en: 'In-process', mk: 'Процесна' }, { v: 'final', en: 'Final', mk: 'Финална' },
                { v: 'environmental', en: 'Environmental', mk: 'Амбиентална' }] },
       { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'text', ph: 'B-2026-041' },
+      // QCSOP 001's five-phase lab-testing lifecycle and QCSOP 019's OOx
+      // deviation flag, exactly as the design's task-create-qc.html offers
+      // them at creation. Both are template ATTRS (the informational layer —
+      // WWF tracks that the work happened, it is not the SFR/register), so
+      // the card chips and dept-home grouping get them for free.
+      { key: 'lifecycle_phase', en: 'Lifecycle phase', mk: 'Фаза', type: 'select', chip: true,
+        opts: [{ v: 'rqs', en: '1 · RQS', mk: '1 · RQS' }, { v: 'sfr', en: '2 · SFR', mk: '2 · SFR' },
+               { v: 'str', en: '3 · STR', mk: '3 · STR' }, { v: 'ari', en: '4 · ARI', mk: '4 · ARI' },
+               { v: 'closure', en: '5 · Closure', mk: '5 · Затворање' }] },
+      { key: 'oox_flag', en: 'Deviation (OOx)', mk: 'Отстапување (OOx)', type: 'select', chip: true,
+        opts: [{ v: 'oos', en: 'OOS', mk: 'OOS' }, { v: 'oot', en: 'OOT', mk: 'OOT' },
+               { v: 'ooe', en: 'OOE', mk: 'OOE' }, { v: 'ooc', en: 'OOC', mk: 'OOC' }] },
     ],
     presets: [
       { en: 'Sampling', mk: 'Земање примероци' },
@@ -156,8 +168,18 @@ GF.renderDeptFields = (deptId, current) => {
   const input = (f) => {
     const v = cur[f.key] != null ? String(cur[f.key]) : '';
     if (f.type === 'select') {
-      // Popup chooser (chooser.js), not a native dropdown — the hidden input
-      // keeps the `GF.$('attr-f-…').value` contract for collectDeptAttrs.
+      // Small option sets render as the design's INLINE chip group — every
+      // option visible, one tap (task-create-*.html shows type, tier, phase
+      // and OOX exactly this way). Larger sets keep the searchable popup.
+      // Both keep the hidden-input `GF.$('attr-f-…').value` contract for
+      // collectDeptAttrs / applyPreset / openEdit.
+      if (f.opts.length <= 6) {
+        return GF.chipField(`attr-f-${f.key}`, {
+          value: v, title: GF.tplLabel(f),
+          options: f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) })),
+          onPick: () => GF.renderAddPreview && GF.renderAddPreview(),
+        });
+      }
       return GF.selectField(`attr-f-${f.key}`, {
         value: v, title: GF.tplLabel(f), placeholder: '—',
         options: [{ v: '', label: '—' }].concat(f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) }))),
