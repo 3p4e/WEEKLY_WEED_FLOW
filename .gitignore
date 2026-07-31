@@ -4,6 +4,11 @@ __pycache__/
 .venv/
 venv/
 env/
+# backend/scripts/run_e2e_backend.sh sources backend/.venv/bin/activate; a
+# local e2e run may satisfy that with a SYMLINK to a venv elsewhere. The
+# `.venv/` pattern above is directory-only and git treats a symlink as a
+# file, so the symlink form needs its own entry — never commit either.
+/backend/.venv
 .env
 *.egg-info/
 
