@@ -2046,6 +2046,94 @@ on *both* new images.
 
 ---
 
+## Production deploy — backend v84 / frontend v114, no migration (2026-07-31)
+
+Owner-authorised ("run the promotion"). Built from `22c107a` — the exact SHA
+CI run 365 validated end-to-end (all nine jobs green); the one commit after it
+adds agent skills only, no app code.
+
+| | before | after |
+|---|---|---|
+| backend | `v83` | **`v84`** |
+| scheduler | `v83` | **`v84`** |
+| frontend | `v113` | **`v114`** |
+| tasks alembic | `0051` | `0051` (unchanged — revision number, not a row count) |
+| users alembic | `0009` | `0009` (unchanged) |
+| service worker | `wwf-shell-v3.79.0` | **`wwf-shell-v3.84.0`** |
+
+**What this ships.** Two independent bodies of work landed since v83:
+
+*The facility-clock fixes (backend behaviour).* v83 carried a nightly 1–2 h
+window (facility-midnight → UTC-midnight) in which naive Python `date.today()`
+and SQL `CURRENT_DATE` disagreed with every timestamp rendered at
+`snapshot_tz`: weekly report windows pointed at the wrong week, batch
+`phase_since` stamps landed on yesterday, the eCoA review clock started a day
+early, and duescan's within-day dedup could re-ping every due task after a
+scheduler restart. All nine Python call sites now route through
+`worktime.facility_today()` and all SQL sites through `SITE_TODAY_SQL` /
+`SITE_TZ_SQL`; two guard tests ban both naive forms app-wide. Found because
+three consecutive CI runs happened to execute inside the window — the tests
+were right, the diffs were innocent.
+
+*The Mass Weed design system, completely implemented (frontend).* The
+2026-07-30 design revision archived and adopted: full token + atom parity, the
+seven-hue color-scheme system (data-skin axis with pre-paint boot healing and
+the picker's dot row), atom portability across all 35 skins, department homes
+on `.mw-tcard` with one `--mw-acc` per department, department colours and
+abbreviations pinned to the design's DEPTS config (five of seven had drifted),
+dependency pills with the met/unmet dot, acknowledgment pills, the subtask
+branch rail, and the New-task surface as the design's create page — inline
+chip groups (type, priority, and every small template select), plus QC's
+QCSOP 001 lifecycle ladder and QCSOP 019 OOx flag as template attrs. The
+design's five handoff documents are archived in
+`design/mass-weed-mockup/docs/`; TASK-WORKFLOW-HANDOFF.md independently
+confirms the implementation choices (chip lockdown, OOx umbrella, colour
+table, and the hard scope rule that WWF references controlled records and
+never reproduces them). Also the Log Work modal no longer discards a
+half-typed entry when the session list re-renders — the bug behind the
+worklog e2e's triple failure.
+
+**No migration ran** — heads verified on the live cluster before the swap, not
+assumed from the diff. Pre-swap dumps at
+`/opt/wwf-backups/20260731-0145-pre-v84/` (`wwf_tasks.dump` 293,901 B,
+`wwf_users.dump` 22,410 B — byte-identical sizes to pre-v83, consistent with
+zero business-data change between the two).
+
+**Build method:** the established no-PAT path — `git archive 22c107a` for
+`backend/` and `web/`, uploaded through the runner's `/file/write`, SHA-256
+compared on both sides before use (`1cab7368…` backend, `8c08c5f4…` web).
+Tree markers verified before building: `facility_today` in worktime,
+`SITE_TZ_SQL` ×2 in duescan, `chipField` in chooser.js, three `data-skin`
+scheme blocks per hue in mass-weed.css, `lifecycle_phase` in dept-templates,
+sw `v3.84.0`. One marker check initially read 0 — the grep pattern was wrong
+(duescan uses SITE_TZ_SQL, not SITE_TODAY_SQL); re-checked with the right
+marker rather than shrugged past, which is the entire point of marker checks.
+
+**Verified against the live public URL, not just from inside the box:**
+`/health/ready` → both databases ok; sw.js reports `wwf-shell-v3.84.0`;
+`GET /cultivation/harvests` → **401** (nginx still proxies; the SPA fallback
+would answer 200); `gf/mass-weed.css` serves 87,102 B with 19 `data-skin`
+selectors, the design dept hexes, and all five new atom families;
+`chooser.js` serves `chipField`; `worklog.js` serves the preserve fix.
+Inside the running backend: `facility_today` ×5 in reports.py, `SITE_TZ_SQL`
+×2 in duescan.py, the headcount lock ×2 in harvest.py. Scheduler started
+clean (`tz=Europe/Skopje; next fire 2026-08-06T14:00`).
+
+**Rollback**, all three parts in place: `weekly_weed_flow-backend:v83` and
+`wwf-growflow:v113` retained; `/opt/stacks/wwf_app/compose.yaml.bak-pre-v84`;
+the pre-v84 dumps above. No schema rollback step — nothing migrated.
+
+**Cleanup:** `/opt/wwf-deploy-v84` removed; no staging remains.
+
+**Operational note:** the GitHub Actions runner wedged during its own
+self-update this night (7½ h in `_update.sh` after run 365's last job
+finished — the run itself had already concluded green). `docker restart
+gh-runner-wwf` completed the update (v2.335.1) and the runner reconnected.
+If future runs sit queued for tens of minutes, check for a wedged updater
+before suspecting the jobs.
+
+---
+
 ## Production deploy — backend v83 / frontend v113, no migration (2026-07-30)
 
 Owner-authorised. Ships two things from `6b159ab`: the **headcount-invariant
