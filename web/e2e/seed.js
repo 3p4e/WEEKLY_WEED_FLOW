@@ -56,7 +56,7 @@ async function login(page, username, password) {
   await revealLoginCard(page);
   await page.locator('#wwf-u').fill(username);
   await page.locator('#wwf-p').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Authenticate' }).click();
   await expect(page.locator('#wwf-login')).toBeHidden({ timeout: 15_000 });
 }
 

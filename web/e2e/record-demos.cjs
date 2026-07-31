@@ -97,7 +97,7 @@ async function uiLogin(page, username) {
   await user.fill(username);
   await page.locator('#wwf-p').fill(PW);
   await pause(page, 500);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Authenticate' }).click();
   await page.locator('#wwf-login').waitFor({ state: 'hidden', timeout: 20000 });
   await pause(page, 1400);
 }

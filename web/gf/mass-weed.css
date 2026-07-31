@@ -1467,3 +1467,67 @@
      another theme in cyan. */
   --mw-glow-cyan:none; --mw-glow-soft:none; --mw-inner-glow:none; --mw-scan:none;
 }
+
+/* ═══════════════ 8 · LOGIN / SECURE ACCESS atoms ═══════════════
+   The design's Secure Access screen (design/mass-weed-mockup/login.html)
+   is built from these atoms, and the shipped skin carried only a COMMENT
+   where .mw-btn should be — so the login's Authenticate button rendered
+   unstyled. Ported verbatim from design/mass-weed-mockup/mass-weed.css:
+   the hexagon command button, the flanked header bar, the HUD title, and
+   the tab buttons. Consumed by web/gf/entry.js. */
+.mw-title {
+  font-family: var(--mw-font-cond);
+  text-transform: uppercase;
+  letter-spacing: var(--mw-track);
+  color: var(--mw-header);
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(94,200,240,0.5);
+  margin: 0;
+}
+.mw-title--xl { font-size: 26px; letter-spacing: var(--mw-track); }
+.mw-title--lg { font-size: 20px; }
+.mw-title--md { font-size: 15px; }
+.mw-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: center;
+  padding: 4px 0 12px;
+}
+.mw-header-bar .mw-rule { height: 1px; flex: 1;
+  background: linear-gradient(90deg, transparent, var(--mw-cyan-dim)); }
+.mw-header-bar .mw-rule:last-child { background: linear-gradient(90deg, var(--mw-cyan-dim), transparent); }
+.mw-btn {
+  position: relative;
+  display: inline-flex; align-items:center; justify-content:center; gap:8px;
+  font-family: var(--mw-font-cond);
+  text-transform: uppercase; letter-spacing: var(--mw-track);
+  font-size: 15px; font-weight: 600;
+  color: var(--mw-cyan-bright);
+  background: linear-gradient(180deg, rgba(28,108,163,0.35), rgba(10,32,55,0.6));
+  padding: 11px 30px;
+  border: none;
+  cursor: pointer;
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+  text-shadow: 0 0 8px rgba(94,200,240,0.5);
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+.mw-btn::before {
+  content:""; position:absolute; inset:0; clip-path:inherit; padding:1.5px;
+  background: linear-gradient(90deg, var(--mw-cyan-dim), var(--mw-cyan), var(--mw-cyan-dim));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none;
+  filter: drop-shadow(0 0 3px rgba(94,200,240,0.5));
+}
+.mw-btn:hover { filter: brightness(1.3); background: linear-gradient(180deg, rgba(58,159,212,0.5), rgba(16,48,80,0.7)); }
+.mw-btn:active { filter: brightness(0.9); }
+.mw-btn--wide { width: 100%; padding-left:0; padding-right:0; }
+.mw-btn--ghost { background: rgba(6,20,40,0.4); }
+.mw-tabbtn {
+  font-family: var(--mw-font); text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 12px; font-weight: 600; color: var(--mw-text-dim);
+  background: none; border:none; cursor:pointer;
+  padding: 8px 20px; position: relative;
+  transition: color 0.12s ease;
+}
+.mw-tabbtn:hover { color: var(--mw-cyan-bright); text-shadow: var(--mw-glow-cyan); }

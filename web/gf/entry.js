@@ -35,27 +35,66 @@ GF.WWF = GF.WWF || {};
     return entrySkin;
   }
 
+  // The design system's "Secure Access" screen (design/mass-weed-mockup/
+  // login.html): a boot-log terminal on the left, an .mw-panel access panel on
+  // the right. This replaces ONLY the presentation — every real-auth hook is
+  // unchanged: the field ids (#wwf-u / #wwf-p / #wwf-login-msg), the doLogin
+  // wiring, the Enter-to-submit handler. The design's own authenticate() was a
+  // mock that redirected to a static page; the real flow stays wired to
+  // GF.WWF.doLogin. The boot-log lines reveal in sequence via bootReveal().
   function loginCardHTML() {
     return `
-      <div class="gf-card-title">Weekly Weed Flow</div>
-      <div class="gf-card-sub">${AL('Sign in to continue', 'Најавете се за да продолжите')}</div>
-      <input id="wwf-u" class="gf-in" placeholder="${AL('Username', 'Корисничко име')}" autocomplete="username" autocapitalize="none" spellcheck="false">
-      <input id="wwf-p" class="gf-in" type="password" placeholder="${AL('Password', 'Лозинка')}" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
-      <button class="gf-btn" onclick="GF.WWF.doLogin()">${AL('Sign in', 'Најави се')}</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>`;
+      <div class="mw-secacc">
+        <div class="mw-secacc__log">
+          <div class="mw-secacc__brand">
+            <div class="mw-secacc__name">Mass&nbsp;Weed</div>
+            <div class="mw-secacc__node">${AL('Cultivation Command · Node 7', 'Команда за одгледување · Јазол 7')}</div>
+          </div>
+          <div class="mw-secacc__boot" id="mw-boot">
+            <div><span class="hd">▸ BIOS</span> ${AL('hydroponic control mesh', 'хидропонска контролна мрежа')} … <span class="ok">${AL('ONLINE', 'ОНЛАЈН')}</span></div>
+            <div><span class="hd">▸ ENV</span> ${AL('climate array 12/12 zones', 'климатски низ 12/12 зони')} … <span class="ok">${AL('NOMINAL', 'НОМИНАЛНО')}</span></div>
+            <div><span class="hd">▸ SEC</span> ${AL('vault seals · chain-of-custody', 'печати · синџир на чување')} … <span class="ok">${AL('LOCKED', 'ЗАКЛУЧЕНО')}</span></div>
+            <div><span class="hd">▸ INV</span> ${AL('strains · batches indexed', 'сорти · серии индексирани')} … <span class="ok">${AL('SYNCED', 'СИНХ.')}</span></div>
+            <div class="cursor"><span class="hd">▸ AUTH</span> ${AL('awaiting operator', 'се чека оператор')}&nbsp;</div>
+          </div>
+        </div>
+        <div class="mw-secacc__panel mw-panel">
+          <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">${AL('Secure Access', 'Безбеден пристап')}</h2><span class="mw-rule"></span></div>
+          <div class="mw-field"><label>${AL('Operator ID', 'ID на оператор')}</label>
+            <input id="wwf-u" class="mw-input" placeholder="${AL('e.g. qcm_bn', 'на пр. qcm_bn')}" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+          <div class="mw-field"><label>${AL('Passphrase', 'Лозинка')}</label>
+            <input id="wwf-p" class="mw-input" type="password" placeholder="••••••••••" autocomplete="current-password"
+                   onkeydown="if(event.key==='Enter')GF.WWF.doLogin()"></div>
+          <button class="mw-btn mw-btn--wide" style="margin-top:8px" onclick="GF.WWF.doLogin()">${AL('Authenticate', 'Автентицирај')}</button>
+          <div id="wwf-login-msg" class="gf-msg"></div>
+        </div>
+      </div>`;
   }
 
   function changePwCardHTML() {
     return `
-      <div class="gf-card-title">${AL('Set a new password', 'Постави нова лозинка')}</div>
-      <div class="gf-card-sub">${AL('First login — choose a password (min 8 characters).',
-                                     'Прва пријава — изберете лозинка (мин. 8 карактери).')}</div>
-      <input id="wwf-np" class="gf-in" type="password" placeholder="${AL('New password', 'Нова лозинка')}" autocomplete="new-password">
-      <input id="wwf-np2" class="gf-in" type="password" placeholder="${AL('Confirm password', 'Потврди лозинка')}" autocomplete="new-password"
-             onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()">
-      <button class="gf-btn" onclick="GF.WWF.doChangePw()">${AL('Set password &amp; continue', 'Постави лозинка и продолжи')}</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>`;
+      <div class="mw-secacc mw-secacc--single">
+        <div class="mw-secacc__panel mw-panel">
+          <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">${AL('Set Passphrase', 'Постави лозинка')}</h2><span class="mw-rule"></span></div>
+          <div class="mw-secacc__hint">${AL('First login — choose a passphrase (min 8 characters).',
+                                             'Прва пријава — изберете лозинка (мин. 8 карактери).')}</div>
+          <div class="mw-field"><label>${AL('New passphrase', 'Нова лозинка')}</label>
+            <input id="wwf-np" class="mw-input" type="password" placeholder="••••••••••" autocomplete="new-password"></div>
+          <div class="mw-field"><label>${AL('Confirm passphrase', 'Потврди лозинка')}</label>
+            <input id="wwf-np2" class="mw-input" type="password" placeholder="••••••••••" autocomplete="new-password"
+                   onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()"></div>
+          <button class="mw-btn mw-btn--wide" style="margin-top:8px" onclick="GF.WWF.doChangePw()">${AL('Set passphrase &amp; continue', 'Постави лозинка и продолжи')}</button>
+          <div id="wwf-login-msg" class="gf-msg"></div>
+        </div>
+      </div>`;
+  }
+
+  // Boot-log staggered reveal (design login.html): each line fades in on a
+  // 260ms cadence once the Secure Access screen is shown. Cheap, decorative,
+  // and skipped entirely if the boot block isn't present (change-pw screen).
+  function bootReveal() {
+    const lines = document.querySelectorAll('#mw-boot > div');
+    lines.forEach((el, i) => setTimeout(() => el.classList.add('in'), 160 * i + 120));
   }
 
   // The demo button is gated on the backend: it only appears where the server
@@ -170,6 +209,7 @@ GF.WWF = GF.WWF || {};
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     setTimeout(() => {
       const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+      bootReveal();
       const u = $('wwf-u') || $('wwf-np'); if (u) setTimeout(() => { try { u.focus(); } catch (e) {} }, 260);
       // Card animates in over ~.55s; run the guard after it settles.
       setTimeout(ensureCardInView, 620);
@@ -188,6 +228,7 @@ GF.WWF = GF.WWF || {};
     opened = true;
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+    bootReveal();
     setTimeout(ensureCardInView, 60);
   }
 
