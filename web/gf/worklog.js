@@ -362,6 +362,7 @@ GF.WWF.openEdit = (taskId) => {
   GF.openAdd(t.weekId);            // builds the form (resets _editTask/_addParent)
   GF._editTask = taskId;
   GF.$('add-title').value = t.title;
+  if (GF.$('add-desc')) GF.$('add-desc').value = t.desc || '';
   GF.$('add-dept').value = t.dept;
   // Re-render the department template fields for the task's real department,
   // prefilled from its attributes (openAdd rendered them for the default

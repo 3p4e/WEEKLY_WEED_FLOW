@@ -55,8 +55,11 @@ GF.openAdd = (weekId, parentId) => {
   // Deactivated accounts stay in GF.PEOPLE for historical name/avatar lookups
   // but must not be offered as Accountable/Responsible for new work.
   const activePeople = Object.entries(GF.PEOPLE).filter(([, v]) => !v.inactive);
+  // Design's avatar picker (.avs/.avw): the avatar IS the control; the name is
+  // a caption. Class contract unchanged — openEdit walks `.chip-opt`, submitAdd
+  // reads `.on` + data-who — only the presentation moved to avatar-first.
   const respChips = activePeople.map(([k, v]) =>
-    `<span class="chip-opt who" data-who="${k}" onclick="this.classList.toggle('on')">${GF.avatar(k,18)}${GF.esc(v.name.split(' ')[0])}</span>`).join('');
+    `<span class="chip-opt who" data-who="${k}" title="${GF.esc(v.name)}" onclick="this.classList.toggle('on')">${GF.avatar(k,28)}<span class="nm">${GF.esc(v.name.split(' ')[0])}</span></span>`).join('');
   const prOptions = ['critical','high','medium','low'].map(p => ({ v: p, label: GF.prLabel(p) }));
   const dayChips = GF.DAYS.slice(0, 5).map(d => `<span class="chip-opt" data-day="${d}" onclick="this.classList.toggle('on')">${GF.dayLabel(d)}</span>`).join('');
   const typeOptions = GF.TASK_TYPES.map(t => ({ v: t, label: GF.taskTypeLabel(t) }));
@@ -70,7 +73,25 @@ GF.openAdd = (weekId, parentId) => {
   // section labels use GF.state.lang inline, the same pattern as the tags row.
   const L = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   const secT = (en, mk, side) => `<p class="af-sec__t">${L(en, mk)}${side ? `<span class="af-sec__side">${side}</span>` : ''}</p>`;
+  // Full-screen create is the design's task-create page (task-create-qc.html):
+  // breadcrumb + department hero, then the sectioned form. The hero re-renders
+  // when the dept chooser changes (updateHero below); edit/subtask popups skip
+  // it — they are contextual and open from a card.
+  const isScreen = !fromEdit && !parentId;
+  const heroFor = (deptId) => {
+    const d = GF.dep(deptId);
+    return `
+      <div class="af-crumb"><span>${GF.esc(GF.depName(deptId))}</span><span>›</span><span>${L('New Task', 'Нова задача')}</span></div>
+      <div class="af-hero" style="--dept-acc:${GF.esc(d.color)}">
+        <div class="af-hero__ic">${GF.icon(d.icon || 'leaf', 'icon')}</div>
+        <div>
+          <h1>${L('New', 'Нова')} ${GF.esc(GF.depName(deptId))} ${L('Task', 'задача')}</h1>
+          <div class="af-hero__sub">${L('Weekly production flow', 'Неделен производствен тек')}</div>
+        </div>
+      </div>`;
+  };
   el.innerHTML = `
+    ${isScreen ? `<div id="add-hero">${heroFor(defaultDept)}</div>` : ''}
     <div class="af-sec">
       ${secT('Task title', 'Наслов на задача')}
       <div class="row" style="gap:8px"><input id="add-title" class="mw-input" placeholder="${GF.t('new_task')}…" style="flex:1">
@@ -80,7 +101,7 @@ GF.openAdd = (weekId, parentId) => {
       ${secT(GF.t('dept_label'), GF.t('dept_label'), deptHint || '')}
       ${GF.selectField('add-dept', {
         value: defaultDept, options: deptOptions, disabled: lockDept, title: GF.t('dept_label'),
-        onPick: (v) => { if (GF.refreshDeptFields) GF.refreshDeptFields(v, null, !fromEdit && !parentId); if (GF._addAccent) GF._addAccent(v); },
+        onPick: (v) => { if (GF.refreshDeptFields) GF.refreshDeptFields(v, null, !fromEdit && !parentId); if (GF._addAccent) GF._addAccent(v); const h = GF.$('add-hero'); if (h) h.innerHTML = heroFor(v); },
       })}
       <div class="af-field" id="add-preset-row" style="display:none"></div>
     </div>
@@ -97,8 +118,9 @@ GF.openAdd = (weekId, parentId) => {
     </div>
     <div class="af-cols">
       <div class="af-sec">${secT('Due date', 'Рок')}<input id="add-due" class="mw-input" type="date"></div>
-      <div class="af-sec">${secT('Recurrence', 'Повторување')}${GF.selectField('add-rec', {
-        value: '', options: recOptions, title: GF.t('recurrence'), onPick: (v) => GF.syncRecFields(v) })}</div>
+      <div class="af-sec">${secT('Recurrence', 'Повторување')}${GF.chipField('add-rec', {
+        value: '', clearable: false, title: GF.t('recurrence'), options: recOptions,
+        onPick: (v) => GF.syncRecFields(v) })}</div>
     </div>
     <div class="af-cols" id="add-rec-extra" style="display:none">
       <div class="af-sec">${secT('Repeat every', 'Повторувај на секои')}<input id="add-rec-n" class="mw-input" type="number" min="1" max="1000" step="1" value="1"></div>
@@ -106,7 +128,15 @@ GF.openAdd = (weekId, parentId) => {
     </div>
     <div class="af-sec">
       ${secT('Assignees', 'Задолжени', GF.t('responsible_hint'))}
-      <div class="chips chips-who" id="add-resp">${respChips}</div>
+      <div class="chips chips-who af-avs" id="add-resp">${respChips}</div>
+    </div>
+    <div class="af-sec">
+      ${secT('Description', 'Опис', L('optional', 'изборно'))}
+      <textarea id="add-desc" class="mw-input af-desc" rows="3" placeholder="${L('What has to happen, and how will we know it did…', 'Што треба да се случи, и како ќе знаеме дека е…')}"></textarea>
+      <div class="af-ghost">
+        <span onclick="GF.ai&&GF.ai.paraphraseInput&&GF.ai.paraphraseInput('add-desc')">⌁ ${L('AI paraphrase', 'ИИ парафраза')} <span class="ai">AI</span></span>
+        <span onclick="GF.voice&&GF.voice.dictate&&GF.voice.dictate('add-desc')">◉ ${L('Voice note', 'Гласовна белешка')}</span>
+      </div>
     </div>
     <div class="af-cols">
       <div class="af-sec">${secT('Tags', 'Ознаки', L('comma-separated', 'одделени со запирка'))}

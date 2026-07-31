@@ -446,8 +446,12 @@ GF.WWF.install = () => {
     const btn = GF.$('add-submit-btn');
     const btnLabel = btn ? btn.textContent : '';
     if (btn) btn.innerHTML = `<span class="spinner"></span> ${AL('Translating…','Преведување…')}`;
-    let biTitle = title, biDesc = '';
-    try { const bi = await GF.ai.bilingual(title, ''); biTitle = bi.title; biDesc = bi.description || ''; }
+    // The typed description (the design's create page has a real Description
+    // field) rides through the same bilingual pass as the title; if the AI is
+    // unavailable the typed text ships as-is.
+    const typedDesc = (GF.$('add-desc')?.value || '').trim();
+    let biTitle = title, biDesc = typedDesc;
+    try { const bi = await GF.ai.bilingual(title, typedDesc); biTitle = bi.title; biDesc = bi.description || typedDesc; }
     finally { if (btn) btn.textContent = btnLabel; }
 
     // Edit mode (openEdit in worklog.js sets GF._editTask) → PATCH instead of POST.
@@ -455,7 +459,7 @@ GF.WWF.install = () => {
       const id = GF._editTask, t = GF.task(id);
       try {
         const patched = await GF.API.updateTask(id, {
-          title: biTitle, priority: P_OUT[GF.$('add-pr').value]||'normal',
+          title: biTitle, description: biDesc, priority: P_OUT[GF.$('add-pr').value]||'normal',
           // Send the department text alongside the id (as the create path
           // does) — reports.py groups the department breakdown by the text
           // column, so updating only department_id leaves the two out of sync.

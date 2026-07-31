@@ -1034,9 +1034,53 @@ body.demo-on .main{padding-bottom:56px}
   border-left: 2px solid var(--dept-acc, var(--primary)); padding-left: 9px;
 }
 .af-sec__side { margin-left: auto; font-size: 10px; letter-spacing: .05em; color: var(--ink-4); text-transform: none; }
+/* the design's section rule: a gradient hairline sweeping right off the title */
+.af-sec__t::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(var(--accent-rgb), .25), transparent); }
+.af-sec__t .af-sec__side + ::after { display: none; }
 .af-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .af-cols > .af-sec { margin-bottom: 18px; }
 @media (max-width: 560px) { .af-cols { grid-template-columns: 1fr; gap: 0; } }
+
+/* ── task-create page chrome (design task-create-qc.html): breadcrumb +
+   department hero above the form. Rendered only on the full-screen create;
+   --dept-acc arrives inline from openAdd's heroFor. ── */
+.af-crumb { display: flex; align-items: center; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-4); margin-bottom: 14px; }
+.af-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.af-hero__ic {
+  width: 46px; height: 46px; flex: none; display: grid; place-items: center;
+  color: var(--dept-acc, var(--primary));
+  background: color-mix(in srgb, var(--dept-acc, var(--primary)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dept-acc, var(--primary)) 40%, transparent);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+.af-hero__ic .icon { width: 24px; height: 24px; }
+.af-hero h1 { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--ink); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
+.af-hero__sub { font-size: 12px; color: var(--ink-4); margin-top: 4px; }
+
+/* the design's avatar-first assignee picker (.avs/.avw): the avatar is the
+   control, ringed when picked; the first name is a caption underneath */
+.af-avs { gap: 12px; }
+.af-avs .chip-opt.who {
+  flex-direction: column; gap: 4px; padding: 4px 6px;
+  background: none; border: none; box-shadow: none; opacity: .5;
+  transition: opacity .15s ease;
+}
+.af-avs .chip-opt.who:hover { opacity: .85; }
+.af-avs .chip-opt.who.on { opacity: 1; background: none; }
+.af-avs .chip-opt.who.on .avatar { box-shadow: 0 0 0 2px var(--primary), 0 0 12px -2px var(--primary); }
+.af-avs .chip-opt.who .nm { font-size: 10px; color: var(--ink-3); letter-spacing: .03em; }
+.af-avs .chip-opt.who.on .nm { color: var(--ink); }
+
+/* description + the design's ghost action row */
+.af-desc { resize: vertical; min-height: 64px; font-family: var(--font); line-height: 1.5; }
+.af-ghost { display: flex; gap: 16px; padding: 6px 2px; font-size: 11.5px; color: var(--ink-3); flex-wrap: wrap; }
+.af-ghost span { cursor: pointer; }
+.af-ghost span:hover { color: var(--primary); }
+.af-ghost .ai {
+  color: var(--purple, #9B7BE8); padding: 1px 6px; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--purple, #9B7BE8) 45%, transparent);
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px); cursor: default;
+}
 
 /* ── New-task full-screen create SCREEN (.overlay.as-screen): a brand-new
    top-level task is a standalone page, not a floating popup — set by openAdd,
@@ -1062,6 +1106,10 @@ body.demo-on .main{padding-bottom:56px}
   background: var(--bg); padding: 20px 30px;
 }
 .overlay.as-screen .modal-head h3 { font-size: 22px; letter-spacing: .01em; }
+/* the create SCREEN's headline is the department hero in the body (design
+   task-create-qc.html has no separate title bar) — the head keeps only the X */
+#add-modal.as-screen .modal-head { padding-top: 12px; padding-bottom: 0; }
+#add-modal.as-screen .modal-head h3 { visibility: hidden; }
 .overlay.as-screen .modal-body { flex: 1; padding: 22px 30px 40px; }
 .overlay.as-screen .modal-foot {
   position: sticky; bottom: 0; z-index: 3;
