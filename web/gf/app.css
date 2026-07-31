@@ -1019,3 +1019,21 @@ body.demo-on .main{padding-bottom:56px}
 .md-m{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink-3);margin-top:2px}
 .md-due{display:inline-flex;align-items:center;gap:4px}
 .md-due.overdue{color:var(--red-fg,var(--red));font-weight:700}
+
+/* ── Add-modal as the design's sectioned create sheet (task-create-*.html):
+   labelled .af-sec groups with a dept-tinted rule, two-up .af-cols rows, and a
+   wider sheet. --dept-acc is set on the modal by GF._addAccent, so every
+   section header tints to the selected department. ── */
+#add-modal .modal { max-width: 760px; }
+.af-sec { margin-bottom: 18px; }
+.af-sec:last-child { margin-bottom: 0; }
+.af-sec__t {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 8px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--ink-3);
+  border-left: 2px solid var(--dept-acc, var(--primary)); padding-left: 9px;
+}
+.af-sec__side { margin-left: auto; font-size: 10px; letter-spacing: .05em; color: var(--ink-4); text-transform: none; }
+.af-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.af-cols > .af-sec { margin-bottom: 18px; }
+@media (max-width: 560px) { .af-cols { grid-template-columns: 1fr; gap: 0; } }

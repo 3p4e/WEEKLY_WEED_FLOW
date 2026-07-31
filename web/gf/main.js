@@ -62,36 +62,59 @@ GF.openAdd = (weekId, parentId) => {
   const typeOptions = GF.TASK_TYPES.map(t => ({ v: t, label: GF.taskTypeLabel(t) }));
   const recOptions = ['', 'daily', 'weekly', 'monthly'].map(r => ({ v: r, label: r ? GF.t('rec_' + r) : GF.t('rec_none') }));
   const defaultDept = deptList[0] ? deptList[0].id : '';
+  // Sectioned create sheet — the design's task-create-*.html layout (labelled
+  // .af-sec groups, chip pickers, a dept-tinted header) rather than a flat
+  // stack of fields. Every field id is unchanged, so submitAdd / collectDeptAttrs
+  // / openEdit's prefill and the e2e all keep working; only the presentation
+  // changed. The AL() helper isn't loaded in main.js's scope, so bilingual
+  // section labels use GF.state.lang inline, the same pattern as the tags row.
+  const L = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
+  const secT = (en, mk, side) => `<p class="af-sec__t">${L(en, mk)}${side ? `<span class="af-sec__side">${side}</span>` : ''}</p>`;
   el.innerHTML = `
-    <div class="field"><label>${GF.t('new_task')}</label>
-      <div class="row" style="gap:8px"><input id="add-title" placeholder="${GF.t('new_task')}…" style="flex:1">
-        <button class="mini-btn" title="${GF.t('dictate')}" id="mic-add-title" onclick="GF.voice.dictate('add-title')">${GF.icon('mic')}</button></div></div>
-    <div class="field"><label>${GF.t('dept_label')} ${deptHint}</label>${GF.selectField('add-dept', {
-      value: defaultDept, options: deptOptions, disabled: lockDept, title: GF.t('dept_label'),
-      onPick: (v) => { if (GF.refreshDeptFields) GF.refreshDeptFields(v, null, !fromEdit && !parentId); if (GF._addAccent) GF._addAccent(v); },
-    })}</div>
-    <div class="field" id="add-preset-row" style="display:none"></div>
-    <div id="add-dept-fields"></div>
-    <div class="field"><label>${GF.t('responsible')} <span class="lbl-hint">${GF.t('responsible_hint')}</span></label><div class="chips chips-who" id="add-resp">${respChips}</div></div>
-    <div class="field"><label>${GF.t('priority')}</label>${GF.chipField('add-pr', {
-      value: 'medium', clearable: false, title: GF.t('priority'),
-      options: prOptions.map(o => ({ ...o, color: ({ critical: 'var(--red)', high: 'var(--orange)', medium: 'var(--blue)', low: 'var(--ink-3)' })[o.v] })),
-      onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
-    <div class="field"><label>${GF.t('task_type')}</label>${GF.chipField('add-type', {
-      value: 'other', clearable: false, title: GF.t('task_type'), options: typeOptions })}</div>
-    <div class="row" style="gap:10px">
-      <div class="field" style="flex:1"><label>${GF.t('due_date')}</label><input id="add-due" type="date"></div>
-      <div class="field" style="flex:1"><label>${GF.t('recurrence')}</label>${GF.selectField('add-rec', {
+    <div class="af-sec">
+      ${secT('Task title', 'Наслов на задача')}
+      <div class="row" style="gap:8px"><input id="add-title" class="mw-input" placeholder="${GF.t('new_task')}…" style="flex:1">
+        <button class="mini-btn" title="${GF.t('dictate')}" id="mic-add-title" onclick="GF.voice.dictate('add-title')">${GF.icon('mic')}</button></div>
+    </div>
+    <div class="af-sec">
+      ${secT(GF.t('dept_label'), GF.t('dept_label'), deptHint || '')}
+      ${GF.selectField('add-dept', {
+        value: defaultDept, options: deptOptions, disabled: lockDept, title: GF.t('dept_label'),
+        onPick: (v) => { if (GF.refreshDeptFields) GF.refreshDeptFields(v, null, !fromEdit && !parentId); if (GF._addAccent) GF._addAccent(v); },
+      })}
+      <div class="af-field" id="add-preset-row" style="display:none"></div>
+    </div>
+    <div class="af-sec" id="add-dept-fields-sec">
+      <div id="add-dept-fields"></div>
+    </div>
+    <div class="af-cols">
+      <div class="af-sec">${secT('Type', 'Тип')}${GF.chipField('add-type', {
+        value: 'other', clearable: false, title: GF.t('task_type'), options: typeOptions })}</div>
+      <div class="af-sec">${secT('Priority tier', 'Ниво на приоритет')}${GF.chipField('add-pr', {
+        value: 'medium', clearable: false, title: GF.t('priority'),
+        options: prOptions.map(o => ({ ...o, color: ({ critical: 'var(--red)', high: 'var(--orange)', medium: 'var(--blue)', low: 'var(--ink-3)' })[o.v] })),
+        onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
+    </div>
+    <div class="af-cols">
+      <div class="af-sec">${secT('Due date', 'Рок')}<input id="add-due" class="mw-input" type="date"></div>
+      <div class="af-sec">${secT('Recurrence', 'Повторување')}${GF.selectField('add-rec', {
         value: '', options: recOptions, title: GF.t('recurrence'), onPick: (v) => GF.syncRecFields(v) })}</div>
     </div>
-    <div class="row" id="add-rec-extra" style="gap:10px;display:none">
-      <div class="field" style="flex:1"><label>${GF.t('rec_every')}</label><input id="add-rec-n" type="number" min="1" max="1000" step="1" value="1"></div>
-      <div class="field" style="flex:1"><label>${GF.t('rec_until')}</label><input id="add-rec-until" type="date"></div>
+    <div class="af-cols" id="add-rec-extra" style="display:none">
+      <div class="af-sec">${secT('Repeat every', 'Повторувај на секои')}<input id="add-rec-n" class="mw-input" type="number" min="1" max="1000" step="1" value="1"></div>
+      <div class="af-sec">${secT('Until', 'До')}<input id="add-rec-until" class="mw-input" type="date"></div>
     </div>
-    <div class="field"><label>${GF.state.lang === 'mk' ? 'Ознаки' : 'Tags'} <span class="lbl-hint">${GF.state.lang === 'mk' ? 'одделени со запирка' : 'comma-separated'}</span></label>
-      <input id="add-tags" placeholder="hlvd, tranche-1" oninput="GF.renderAddPreview&&GF.renderAddPreview()"></div>
-    <div class="field"><label>${GF.t('reference_code')}</label><input id="add-ref" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
-    <div class="field"><label>${GF.t('due')}</label><div class="chips" id="add-days">${dayChips}</div></div>
+    <div class="af-sec">
+      ${secT('Assignees', 'Задолжени', GF.t('responsible_hint'))}
+      <div class="chips chips-who" id="add-resp">${respChips}</div>
+    </div>
+    <div class="af-cols">
+      <div class="af-sec">${secT('Tags', 'Ознаки', L('comma-separated', 'одделени со запирка'))}
+        <input id="add-tags" class="mw-input" placeholder="hlvd, tranche-1" oninput="GF.renderAddPreview&&GF.renderAddPreview()"></div>
+      <div class="af-sec">${secT('SOP reference', 'СОП референца', L('code + link', 'код + линк'))}
+        <input id="add-ref" class="mw-input" placeholder="PP-QC-SOP-012" autocapitalize="characters"></div>
+    </div>
+    <div class="af-sec">${secT('Days', 'Денови')}<div class="chips" id="add-days">${dayChips}</div></div>
     <div class="af-prev" id="add-preview"></div>`;
   // Department template fields (+ quick-add presets in create mode) for the
   // currently selected department; re-rendered by the dept chooser's onPick,
