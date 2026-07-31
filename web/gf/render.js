@@ -342,6 +342,7 @@ GF.render = {
         </div>
         ${handoff}
         <div class="card-actions">
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openTaskDetail&&GF.WWF.openTaskDetail('${t.id}')">${GF.icon('eye','icon','var(--blue)')}${GF.t('open_detail')}</button>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">${GF.icon('clock','icon','var(--blue)')}${GF.t('log_work')}</button>
           <button class="btn btn-sm" onclick="GF.openAdd(${JSON.stringify(t.weekId)},'${t.id}')">${GF.icon('plus','icon')}${GF.t('add_subtask')}</button>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${t.id}')">${GF.icon('settings','icon')}${GF.t('edit')}</button>

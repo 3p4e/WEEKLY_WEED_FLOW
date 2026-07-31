@@ -1191,6 +1191,15 @@
 .mw-step__t{ font-size:11px; font-weight:700; color:var(--mw-text-dim); letter-spacing:.01em; line-height:1.25; }
 .mw-step.done .mw-step__t{ color:var(--mw-stat-hi); }
 
+/* progress meter (design lines 345-365) — the .mw-stat__track / __fill pair the
+   subtask-completion bar and dept-home KPI meters draw. Verbatim from
+   design/mass-weed-mockup/mass-weed.css; --mid/--hi/--lo pick the fill hue. */
+.mw-stat__track{ height:6px; background:var(--mw-stat-track); border-radius:3px; overflow:hidden; }
+.mw-stat__fill{ height:100%; border-radius:3px; position:relative; transition:width .4s ease; }
+.mw-stat__fill--hi { background:linear-gradient(90deg, var(--mw-stat-hi-2), var(--mw-stat-hi));   box-shadow:0 0 8px rgba(108,240,90,0.6); }
+.mw-stat__fill--mid{ background:linear-gradient(90deg, var(--mw-stat-mid-2), var(--mw-stat-mid)); box-shadow:0 0 8px rgba(236,236,74,0.55); }
+.mw-stat__fill--lo { background:linear-gradient(90deg, var(--mw-stat-lo-2), var(--mw-stat-lo));   box-shadow:0 0 8px rgba(239,77,77,0.55); }
+
 
 /* ═══════════════ 6 · COLOR SCHEMES ([data-skin]) — ONE identity, MANY hues ═══
    Ported from design/mass-weed-mockup/mass-weed.css (the 2026-07-30 revision)
@@ -1461,6 +1470,11 @@
   --mw-edge:var(--primary); --mw-header:var(--primary-fg);
   --mw-void:var(--bg); --mw-panel:var(--surface); --mw-panel-2:var(--surface-2); --mw-panel-in:var(--surface-2);
   --mw-stat-hi:var(--teal); --mw-stat-mid:var(--amber); --mw-stat-lo:var(--red);
+  /* progress-meter track + gradient second-stops (.mw-stat__track/__fill):
+     the track takes the app's own progress-bar surface, each fill's darker
+     stop collapses onto its role token so the meter is a flat generic hue. */
+  --mw-stat-track:var(--surface-3);
+  --mw-stat-hi-2:var(--teal); --mw-stat-mid-2:var(--amber); --mw-stat-lo-2:var(--red);
   --mw-font:var(--font); --mw-font-cond:var(--font-display); --mw-mono:var(--mono);
   --mw-track:.09em; --mw-chamfer:10px; --mw-chamfer-sm:6px;
   /* HUD-specific effects have no generic counterpart: neutralise, never glow
