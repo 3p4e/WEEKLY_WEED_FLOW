@@ -2046,6 +2046,25 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v120 only (the design's create page) (2026-07-31)
+
+Owner feedback on v119: "new task ui is the same, just bigger in size" — the
+full-screen create was still the old form in new framing. v120 makes it the
+design's actual task-create page (`task-create-qc.html` structure): breadcrumb
++ department hero (chamfered dept-tinted icon block, condensed uppercase
+headline, live-updating with the dept chooser), gradient-ruled section titles,
+recurrence as chips, the avatar-first assignee picker, and a real Description
+field with the design's ghost action row (AI paraphrase / voice note) — wired
+through submitAdd's bilingual pass on create, added to the edit PATCH, and
+prefilled by openEdit. All field-id/DOM contracts preserved (submitAdd /
+openEdit / e2e untouched). Frontend-only swap (`wwf-growflow:v119 → v120`)
+from `d0ca93a`, sw `v3.90.0`, same no-PAT path (SHA-256 `dd16c572…` equal both
+sides). Verified live: `/health` 200, sw v3.90.0, hero markup + .af-hero/.af-avs
+CSS serving. Frontend 295/295; e2e 15/15; screenshot confirms the design page.
+Rollback: `wwf-growflow:v119` + `compose.yaml.bak-pre-v120`.
+
+---
+
 ## Production deploy — frontend v119 only (exclusive Mass Weed, in full) (2026-07-31)
 
 Owner-directed ("apply the complete mass effect theme to all levels and parts
