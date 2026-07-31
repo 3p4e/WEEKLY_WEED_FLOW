@@ -2046,6 +2046,22 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v117 only (full-screen create) (2026-07-31)
+
+Owner-authorised, same session. New task now opens a full-screen create SCREEN
+instead of a floating popup — the owner's explicit ask and a match to the
+design's standalone `task-create-*.html`. Frontend-only swap
+(`wwf-growflow:v116 → v117`) from `70277a9`. A brand-new top-level task opens
+`.overlay.as-screen` (full-viewport opaque, centered 920px column, sticky
+header + action bar); edit and subtask keep the compact popup. Pure CSS
+framing switch on the same #add-modal DOM — submitAdd/openEdit/e2e untouched.
+Verified live: sw `wwf-shell-v3.87.0`, `.as-screen` serving in main.js +
+app.css, `/health` 200. Frontend 289/0; all three create e2e specs pass
+through the full-screen flow. Rollback: `wwf-growflow:v116` +
+`compose.yaml.bak-pre-v117`.
+
+---
+
 ## Production deploy — frontend v116 only (sectioned create sheet) (2026-07-31)
 
 Owner-authorised, same session as v115. The task-creation UI was still a flat
