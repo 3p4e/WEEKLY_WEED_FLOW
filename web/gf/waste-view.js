@@ -102,15 +102,15 @@
   const ladderAction = (m) => {
     if (m.status === 'draft' && canRecord()) {
       return `<button class="btn btn-orange btn-sm" onclick="GF.WWF.wasteSealForm('${m.id}')">
-        ${GF.icon('shield', 'icon', '#fff')}${AL('Weigh &amp; seal', 'Измери и затвори')}</button>`;
+        ${GF.icon('shield', 'icon', 'currentColor')}${AL('Weigh &amp; seal', 'Измери и затвори')}</button>`;
     }
     if (m.status === 'sealed' && canWitness()) {
       return `<button class="btn btn-orange btn-sm" onclick="GF.WWF.wasteWitnessForm('${m.id}')">
-        ${GF.icon('eye', 'icon', '#fff')}${AL('Witness', 'Потврди како сведок')}</button>`;
+        ${GF.icon('eye', 'icon', 'currentColor')}${AL('Witness', 'Потврди како сведок')}</button>`;
     }
     if (m.status === 'witnessed' && canRecord()) {
       return `<button class="btn btn-orange btn-sm" onclick="GF.WWF.wasteDisposeForm('${m.id}')">
-        ${GF.icon('trash', 'icon', '#fff')}${AL('Record disposal', 'Запиши уништување')}</button>`;
+        ${GF.icon('trash', 'icon', 'currentColor')}${AL('Record disposal', 'Запиши уништување')}</button>`;
     }
     // Sealed and waiting on QA, seen by someone who is not QA: say what it is
     // waiting for instead of showing a card with no action and no explanation.
@@ -223,7 +223,7 @@
     const need = st.tab === 'recon' ? st.recon : st.manifests;
     if (!need && !st.loading && !st.error) GF.WWF.loadWaste();
     const newBtn = canRecord()
-      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.wasteManifestForm()">${GF.icon('plus', 'icon', '#fff')}${AL('New manifest', 'Нов манифест')}</button>`
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.wasteManifestForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('New manifest', 'Нов манифест')}</button>`
       : '';
     const head = GF.viewHead
       ? GF.viewHead('waste', 'waste_sub', newBtn)

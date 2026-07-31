@@ -60,7 +60,7 @@ GF.views = {
         </div></div>`).join('');
 
     const addBtn = GF.can('create')
-      ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus','icon','#fff')}${GF.t('new_task_btn')}</button>` : '';
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus','icon','currentColor')}${GF.t('new_task_btn')}</button>` : '';
     return GF.viewHead('board','board_sub', addBtn)
       + `<div class="kboard">${body}</div>`;
   },
@@ -415,7 +415,7 @@ GF.views = {
     }).join('');
     const addBtn = canManage
       ? `<button class="btn btn-sm" onclick="GF.WWF.openDeletedUsers()">${GF.icon('box','icon')}${AL('Removed accounts','Отстранети сметки')}</button>`
-        + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','#fff')}${GF.t('add_user')}</button>`
+        + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','currentColor')}${GF.t('add_user')}</button>`
       : `<span class="role-lock">${GF.icon('shield','icon','var(--ink-3)')}${GF.t('view_only')}</span>`;
     return GF.viewHead('team','team_sub', addBtn)
       + `<div class="team-count">${ids.length} ${GF.t('members')} · ${GF.t('your_role')}: <b>${GF.roleLabel(GF.curRole())}</b></div>`

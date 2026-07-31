@@ -162,7 +162,7 @@
     if (!st.batches && !st.loading && !st.error) GF.WWF.loadCultivation();
     const right = canWrite()
       ? `<button class="btn btn-sm" onclick="GF.WWF.cultCultivarList()">${GF.icon('leaf', 'icon')}${AL('Cultivars', 'Сорти')}</button>
-         <button class="btn btn-orange btn-sm" onclick="GF.WWF.cultBatchForm()">${GF.icon('plus', 'icon', '#fff')}${AL('Open batch', 'Нов батч')}</button>`
+         <button class="btn btn-orange btn-sm" onclick="GF.WWF.cultBatchForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Open batch', 'Нов батч')}</button>`
       : '';
     const head = GF.viewHead
       ? GF.viewHead('cultivation', 'cultivation_sub', right)

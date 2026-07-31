@@ -120,11 +120,11 @@
     if (!canRecord()) return '';
     if (h.status === 'wet') {
       return `<button class="btn btn-orange btn-sm" onclick="GF.WWF.harvestDryForm('${h.id}')">
-        ${GF.icon('shield', 'icon', '#fff')}${AL('Record yield', 'Запиши принос')}</button>`;
+        ${GF.icon('shield', 'icon', 'currentColor')}${AL('Record yield', 'Запиши принос')}</button>`;
     }
     if (h.status === 'dried') {
       return `<button class="btn btn-orange btn-sm" onclick="GF.WWF.harvestCloseForm('${h.id}')">
-        ${GF.icon('check', 'icon', '#fff')}${AL('Close lot', 'Затвори лот')}</button>`;
+        ${GF.icon('check', 'icon', 'currentColor')}${AL('Close lot', 'Затвори лот')}</button>`;
     }
     return '';
   };
@@ -245,10 +245,10 @@
 
     const newBtn = st.tab === 'ipm'
       ? (canRecord()
-        ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.ipmForm()">${GF.icon('plus', 'icon', '#fff')}${AL('Log application', 'Запиши третман')}</button>`
+        ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.ipmForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Log application', 'Запиши третман')}</button>`
         : '')
       : (canCut()
-        ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.harvestForm()">${GF.icon('plus', 'icon', '#fff')}${AL('Record a cut', 'Запиши жетва')}</button>`
+        ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.harvestForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Record a cut', 'Запиши жетва')}</button>`
         : '');
     const head = GF.viewHead
       ? GF.viewHead('harvest', 'harvest_sub', newBtn)

@@ -103,7 +103,7 @@
         <span id="newtask-label">New task</span>
       </button>
       <button class="btn btn-orange btn-sm" id="voice-btn" onclick="GF.voice.openCapture(GF.state.selWeek)">
-        <svg class="icon" viewBox="0 0 20 20" style="stroke:#fff"><path d="M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5"/></svg>
+        <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5"/></svg>
         <span id="voice-btn-label">Voice task</span>
       </button>
       <button class="icon-btn" id="assistant-btn" title="Assistant" onclick="GF.assistant.open()">
@@ -160,8 +160,8 @@
 <!-- ═══ Voice capture ═══ -->
 <div class="overlay" id="voice-modal">
   <div class="modal voice-modal" style="max-width:440px">
-    <div class="modal-head"><h3 style="color:#fff">Voice task</h3>
-      <button class="btn-ghost" style="color:rgba(255,255,255,.7)" onclick="GF.voice.closeCapture()">
+    <div class="modal-head"><h3>Voice task</h3>
+      <button class="btn-ghost" onclick="GF.voice.closeCapture()">
         <svg class="icon" viewBox="0 0 20 20" style="stroke:currentColor"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>
     <div class="modal-body" id="voice-content" style="padding:0 22px 22px"></div>
   </div>

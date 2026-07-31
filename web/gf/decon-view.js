@@ -133,7 +133,7 @@
       }
       if (releasable) {
         actions.push(`<button class="btn btn-orange btn-sm" onclick="GF.WWF.deconRelease('${cyc.id}')">
-          ${GF.icon('shield', 'icon', '#fff')}${AL('Release room', 'Ослободи соба')}</button>`);
+          ${GF.icon('shield', 'icon', 'currentColor')}${AL('Release room', 'Ослободи соба')}</button>`);
       }
     }
     return `<div class="card" style="padding:12px;margin-bottom:10px">
@@ -322,7 +322,7 @@
     const st = GF.WWF._decon;
     if (!st.cycles && !st.loading && !st.error) GF.WWF.loadDecon();
     const startBtn = canClean()
-      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.deconCycleForm()">${GF.icon('plus', 'icon', '#fff')}${AL('Start room cycle', 'Почни циклус')}</button>`
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.deconCycleForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Start room cycle', 'Почни циклус')}</button>`
       : '';
     const head = GF.viewHead
       ? GF.viewHead('decon', 'decon_sub', startBtn)

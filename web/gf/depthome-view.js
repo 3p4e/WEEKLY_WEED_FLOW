@@ -131,7 +131,7 @@ GF.views = GF.views || {};
           <div class="view-sub">${L('Department home — this week', 'Почетна на одделот — оваа недела')}
             · ${tasks.length} ${L('tasks', 'задачи')} · ${done} ${L('done', 'завршени')}</div></div>
         <div class="spacer"></div>
-        ${GF.can('create') ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus', 'icon', '#fff')}${GF.t('new_task_btn')}</button>` : ''}
+        ${GF.can('create') ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus', 'icon', 'currentColor')}${GF.t('new_task_btn')}</button>` : ''}
       </div>`;
 
     const empty = !tasks.length ? `

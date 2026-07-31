@@ -607,9 +607,10 @@
 :root[data-theme^="mass-weed"] .wl-fill,
 :root[data-theme^="mass-weed"] .exec-dbar > span{
   box-shadow:0 0 10px rgba(var(--accent-rgb),.35)}
-/* — Board columns: HUD header rail — */
-:root[data-theme^="mass-weed"] .kcol-h,
-:root[data-theme^="mass-weed"] .kcol-title{
+/* — Board / timeline columns: HUD header rail. (.kcol-head is what views.js
+     actually renders — the old .kcol-h/.kcol-title selectors matched nothing.) — */
+:root[data-theme^="mass-weed"] .kcol-head,
+:root[data-theme^="mass-weed"] .tlcol-head{
   font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)}
 /* — Calendar cells: angular, today gets a targeting glow — */
 :root[data-theme^="mass-weed"] .cal-cell{border-radius:0;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px)}
@@ -622,9 +623,14 @@
 :root[data-theme^="mass-weed"] .qms-search,
 :root[data-theme^="mass-weed"] .sp-field,
 :root[data-theme^="mass-weed"] .wl-input,
-:root[data-theme^="mass-weed"] .note-input,
+:root[data-theme^="mass-weed"] .note-input input,
 :root[data-theme^="mass-weed"] .pl-range{
   border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px)}
+/* .note-input is the flex CONTAINER (app.css:475); chamfering it sliced the
+   rounded corner of the bare <input> inside and clipped its focus ring. The
+   chamfer belongs on the input itself (rule above); the container stays a
+   plain layout box. */
+:root[data-theme^="mass-weed"] .note-input{border-radius:0;clip-path:none}
 :root[data-theme^="mass-weed"] .search:focus,
 :root[data-theme^="mass-weed"] .sel-search:focus,
 :root[data-theme^="mass-weed"] .qms-search:focus,
@@ -1545,3 +1551,76 @@
   transition: color 0.12s ease;
 }
 .mw-tabbtn:hover { color: var(--mw-cyan-bright); text-shadow: var(--mw-glow-cyan); }
+
+/* ═══════════════ 9 · COVERAGE-AUDIT CLOSURE (2026-07-31) ═══════════════
+   The exclusive-Mass-Weed rollout's adversarially-verified gap list: every
+   surface below rendered with pre-HUD geometry (rounded literals), the
+   retired plasma-green palette, or the base body font while everything
+   around it was chamfered HUD chrome. Additive per-surface rules, same
+   idioms as §6; hue-scheme safe (tokens only, no new hex literals). */
+
+/* — Inbox rows: the design's row silhouette (.mw-tcard) is a chamfered card;
+     .ntf kept app.css's soft 10px card look — */
+:root[data-theme^="mass-weed"] .ntf{
+  border-radius:0;clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%)}
+
+/* — Assistant drawer: the mirror full-height glass panel; its chips, bubbles
+     and composer input were the last rounded controls in the shell — */
+:root[data-theme^="mass-weed"] .asst-status,
+:root[data-theme^="mass-weed"] .asst-act,
+:root[data-theme^="mass-weed"] .asst-bubble{
+  border-radius:0;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+:root[data-theme^="mass-weed"] .asst-foot input{
+  border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px)}
+:root[data-theme^="mass-weed"] .asst-title{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em}
+:root[data-theme^="mass-weed"] .assistant-drawer{position:relative}
+:root[data-theme^="mass-weed"] .assistant-drawer::before{
+  content:"";position:absolute;inset:0;background:var(--scanlines);pointer-events:none;opacity:.5}
+
+/* — Day-filter pills (default screen): interactive filter chips are chamfered
+     in the design (.mw-chip); only STATUS pills stay rounded — */
+:root[data-theme^="mass-weed"] .day-pill{
+  border-radius:0;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);
+  font-family:var(--font-display);letter-spacing:.06em}
+:root[data-theme^="mass-weed"] .day-pill .count{border-radius:0}
+
+/* — Week-strip headline: mirror §8d's .view-title treatment (display font,
+     caps, leading accent bar); .badge-now sheds the 999px lozenge — */
+:root[data-theme^="mass-weed"] .week-title{
+  font-family:var(--font-display);text-transform:uppercase;letter-spacing:.05em;
+  display:inline-flex;align-items:center;gap:10px}
+:root[data-theme^="mass-weed"] .week-title::before{
+  content:"";width:4px;height:1em;background:var(--primary);
+  box-shadow:0 0 10px rgba(var(--accent-rgb),.6);flex:none}
+:root[data-theme^="mass-weed"] .week-dates{font-family:var(--font-display);letter-spacing:.04em}
+:root[data-theme^="mass-weed"] .badge-now{
+  border-radius:0;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);
+  font-family:var(--font-display);letter-spacing:.06em}
+
+/* — Persistent rounded panels that escaped §6's sweep — */
+:root[data-theme^="mass-weed"] .telemetry,
+:root[data-theme^="mass-weed"] .user-card,
+:root[data-theme^="mass-weed"] .exec-brief,
+:root[data-theme^="mass-weed"] .pipe-node{
+  border-radius:0;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+:root[data-theme^="mass-weed"] .sess-row{
+  border-radius:0;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+:root[data-theme^="mass-weed"] .add-row{
+  border-radius:0;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+
+/* — The wordmark's second word: views.css/leaf-fx.css hardcode the retired
+     plasma green→teal gradient with background-clip:text, which token
+     re-derivation can never reach. Re-hue the gradient to the live accent;
+     leaf-fx's background-size + gf-flow animation continue to apply. — */
+:root[data-theme^="mass-weed"] .gf-name b{
+  background-image:linear-gradient(120deg,var(--primary),var(--primary-hover),var(--primary))}
+
+/* — .btn-orange: amber fill is token-driven but the label/icon were forced
+     #fff (1.8:1 on HUD amber). Dark theme gets the same void-ink foreground
+     .btn-primary uses; Cool Mist's darker amber keeps white. — */
+:root[data-theme="mass-weed"] .btn-orange{color:var(--text-on-primary)}
+
+/* — Cool Mist: the sidebar wordmark image was force-inverted to white
+     (invisible on the light rail) — */
+:root[data-theme="mass-weed-light"] .pp-wordmark{filter:brightness(0) opacity(.72)}

@@ -54,7 +54,7 @@
     const st = GF.WWF._fac;
     if (!st.data && !st.loading && !st.error) GF.WWF.loadFacility();
     const addRoomBtn = canWriteRooms()
-      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.openRoomForm(null)">${GF.icon('plus', 'icon', '#fff')}${AL('Add room', 'Додади соба')}</button>`
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.openRoomForm(null)">${GF.icon('plus', 'icon', 'currentColor')}${AL('Add room', 'Додади соба')}</button>`
       : '';
     const head = GF.viewHead
       ? GF.viewHead('facility_map', 'facility_sub', addRoomBtn)
