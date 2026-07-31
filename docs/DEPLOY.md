@@ -2046,6 +2046,32 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v115 only (Secure Access login) (2026-07-31)
+
+Owner-authorised, urgent: the deployed login was still the old single centered
+card wearing Mass Weed colours, not the design's two-column **Secure Access**
+screen (`design/mass-weed-mockup/login.html`). Frontend-only — no backend,
+scheduler, DB, or migration touched — so only the frontend container was
+swapped (`wwf-growflow:v114 → v115`), and no DB snapshot was needed (nothing
+touches the databases).
+
+Built from `5ca4f84`. The login now renders the boot-log terminal + MASS WEED
+brand on the left and the `.mw-panel` Secure Access panel (Operator ID /
+Passphrase / Authenticate) on the right, with the real `GF.WWF.doLogin` wiring
+and all `#wwf-*` field ids preserved. The shipped skin had carried only a
+COMMENT where `.mw-btn` should be, which is why the design's button never
+rendered; section 8 of mass-weed.css now ports it and the other login atoms
+verbatim.
+
+Verified live: sw `wwf-shell-v3.85.0`; `gf/entry.js` serves the Secure Access
+markup + Authenticate button; `gf/mass-weed.css` serves section 8 with the
+`.mw-btn` base rule; `gf/entry.css` serves the two-column layout; `/health`
+200. All 7 login-critical e2e specs passed locally against the rebuilt screen
+before the deploy. Rollback: `wwf-growflow:v114` retained +
+`compose.yaml.bak-pre-v115`.
+
+---
+
 ## Production deploy — backend v84 / frontend v114, no migration (2026-07-31)
 
 Owner-authorised ("run the promotion"). Built from `22c107a` — the exact SHA
