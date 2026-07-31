@@ -74,14 +74,17 @@ GF.DEMO = (function () {
   }
 
   function restoreTheme() {
-    const prev = localStorage.getItem(PREV_THEME_KEY);
+    let prev = localStorage.getItem(PREV_THEME_KEY);
     if (prev === null) return;
+    // Exclusive Mass Weed: a pre-retirement id saved as "previous" heals the
+    // same way the boot script heals gf_theme, or the demo exit would paint a
+    // retired shell until the next reload.
+    if (GF.healTheme) prev = GF.healTheme(prev);
     localStorage.setItem('gf_theme', prev);
     localStorage.removeItem(PREV_THEME_KEY);
     const root = document.documentElement;
     root.dataset.theme = prev;
-    if (GF.THEME_CORE && GF.THEME_CORE[prev]) root.removeAttribute('data-skin-carbon');
-    else root.setAttribute('data-skin-carbon', '');
+    root.removeAttribute('data-skin-carbon');
   }
 
   function banner() {

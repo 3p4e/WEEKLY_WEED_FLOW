@@ -136,16 +136,44 @@ test('an unknown skin id snaps to the default instead of styling nothing', () =>
   h.close();
 });
 
-test('the theme picker offers the hue row on mass-weed and not on carbon skins', () => {
+test('the theme picker always offers the hue row — Mass Weed is the only identity', () => {
   const h = loadGF({ files: ['data.js', 'core.js'] });
   const doc = h.window.document;
   doc.documentElement.dataset.theme = 'mass-weed';
   h.GF.openThemePicker();
   assert.equal(doc.querySelectorAll('.mw-skins__dot').length, h.GF.MW_SKINS.length,
-    'one dot per hue while a mass-weed theme is active');
+    'one dot per hue while the mass-weed theme is active');
+  // Exclusive Mass Weed: a stale retired id on <html> heals to the identity,
+  // so the picker STILL offers the hue row — there is no non-mass-weed state.
   doc.documentElement.dataset.theme = 'nord';
   h.GF.openThemePicker();
-  assert.equal(doc.querySelectorAll('.mw-skins__dot').length, 0,
-    'the hue axis re-tints nothing outside mass-weed, so offering it there teaches the user the panel is decorative');
+  assert.equal(doc.querySelectorAll('.mw-skins__dot').length, h.GF.MW_SKINS.length,
+    'a retired theme id heals to mass-weed (GF.curTheme → healTheme), so the hue row must still render');
+  h.close();
+});
+
+test('every retired theme heals to the Mass Weed identity of the same brightness', () => {
+  const h = loadGF({ files: ['data.js', 'core.js'] });
+  const G = h.GF;
+  // Dark-family retirees (old default, suma, carbon dark) → the dark HUD.
+  for (const id of ['dark', 'suma', 'nord', 'forest', 'digital-rain', 'geth-does-not-exist']) {
+    assert.equal(G.healTheme(id), 'mass-weed', `${id} must heal to mass-weed`);
+  }
+  // Light-family retirees keep their brightness on Cool Mist.
+  for (const id of ['light', 'kawaii', 'retro-98', 'winter-blush-light']) {
+    assert.equal(G.healTheme(id), 'mass-weed-light', `${id} must heal to mass-weed-light`);
+  }
+  // The two survivors pass through untouched.
+  assert.equal(G.healTheme('mass-weed'), 'mass-weed');
+  assert.equal(G.healTheme('mass-weed-light'), 'mass-weed-light');
+  // setTheme() with a retired id lands on the healed identity AND persists it.
+  G.setTheme('dark', { silent: true });
+  assert.equal(h.window.document.documentElement.dataset.theme, 'mass-weed');
+  assert.equal(h.window.localStorage.getItem('gf_theme'), 'mass-weed');
+  // The boot script mirrors the same rule before first paint.
+  const INDEX_NOW = require('node:fs').readFileSync(
+    require('node:path').resolve(__dirname, '..', '..', 'web', 'index.html'), 'utf8');
+  assert.match(INDEX_NOW, /CORE=\['mass-weed','mass-weed-light'\]/,
+    "index.html's boot allow-list must contain ONLY the two Mass Weed identities");
   h.close();
 });

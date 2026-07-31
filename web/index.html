@@ -9,11 +9,18 @@
        (retired skin, corruption, a typo) is HEALED here, synchronously, same
        as the exclusive-Mass-Weed era's boot script: reset to the default and
        overwrite storage, so an invalid value can never paint unstyled. */
-    var CORE=['dark','light','suma','mass-weed','mass-weed-light'];
-    var CARBON=['blurple-chat','blush-slate-dark','code-forge','digital-rain','ebony-amber','forest','heart-of-darkness','indigo-turquoise','lambda-core','mocha-paws','nightfang','nord','nordic','solo-night','tropical-midnight','vapor-classic','vapor-deck','amber-glow-light','aurora-light','azure-silence-light','blush-slate-light','console-horizon-light','jade-matrix-light','jade-mint-light','kawaii','miami-neon-light','playlist-mint-light','retro-98','steel-mist-light','winter-blush-light'];
+    /* EXCLUSIVE MASS WEED (owner directive 2026-07-31): the app has ONE visual
+       identity — the Mass Weed HUD — in a dark and a daylight (Cool Mist)
+       variant, re-huable via the 7 data-skin schemes. Every other saved theme
+       (the pre-Mass-Weed dark/light/suma AND the 30 retired carbon skins) is
+       healed here, synchronously before first paint, or a stale gf_theme traps
+       the user on the old shell forever. Light-family saves keep their
+       brightness by landing on Cool Mist; everything else lands on the HUD. */
+    var CORE=['mass-weed','mass-weed-light'];
+    var LIGHT=['light','amber-glow-light','aurora-light','azure-silence-light','blush-slate-light','console-horizon-light','jade-matrix-light','jade-mint-light','kawaii','miami-neon-light','playlist-mint-light','retro-98','steel-mist-light','winter-blush-light'];
     var t=localStorage.getItem('gf_theme');
-    if(t&&CORE.indexOf(t)<0&&CARBON.indexOf(t)<0){t='mass-weed';try{localStorage.setItem('gf_theme','mass-weed');}catch(e){}}
-    if(t){var r=document.documentElement;r.dataset.theme=t;if(CORE.indexOf(t)<0)r.setAttribute('data-skin-carbon','');else r.removeAttribute('data-skin-carbon');}
+    if(t&&CORE.indexOf(t)<0){t=LIGHT.indexOf(t)<0?'mass-weed':'mass-weed-light';try{localStorage.setItem('gf_theme',t);}catch(e){}}
+    if(t){var r=document.documentElement;r.dataset.theme=t;r.removeAttribute('data-skin-carbon');}
     /* Mass Weed hue scheme (design mw-i18n.js: ONE identity, MANY hues).
        Orthogonal to gf_theme: it only re-hues the two mass-weed themes, so it
        is preserved across theme switches rather than reset by them. Same

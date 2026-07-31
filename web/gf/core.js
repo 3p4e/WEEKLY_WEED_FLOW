@@ -354,52 +354,27 @@ GF.setLang = (l) => { GF.state.lang = l; localStorage.setItem('gf_lang', l); GF.
 // one row here; the 3D leaf auto-derives its colour from the active tokens.
 // Core (non-Carbon) skins: their full derived-token sets live in app.css /
 // mass-weed.css, so they never carry the data-skin-carbon marker.
-GF.THEME_CORE = { dark: 1, light: 1, suma: 1, 'mass-weed': 1, 'mass-weed-light': 1 };
+GF.THEME_CORE = { 'mass-weed': 1, 'mass-weed-light': 1 };
 GF.THEMES = [
-  // Core — Mass Weed is the default; the other skins remain selectable.
-  { id: 'mass-weed',       name: 'Mass Weed (default)', group: 'dark' },
+  // EXCLUSIVE MASS WEED (owner directive 2026-07-31): the app has ONE visual
+  // identity — the Mass Weed HUD — as a dark and a daylight variant, re-huable
+  // via GF.MW_SKINS ("ONE identity, MANY hues", the design's own model). The
+  // pre-Mass-Weed dark/light/suma AND the 30 carbon skins are RETIRED: any
+  // saved id heals to the identity of the same brightness (GF.healTheme; the
+  // index.html boot script mirrors it before first paint).
+  { id: 'mass-weed',       name: 'Mass Weed',             group: 'dark' },
   { id: 'mass-weed-light', name: 'Mass Weed · Cool Mist', group: 'light' },
-  { id: 'dark',  name: 'Plasma',           group: 'dark' },
-  { id: 'suma',  name: 'SUMA · Protoss',   group: 'dark' },
-  { id: 'light', name: 'Cool Mist',        group: 'light' },
-  // Carbon — dark
-  { id: 'blurple-chat',      name: 'Blurple Chat',      group: 'dark' },
-  { id: 'blush-slate-dark',  name: 'Blush Slate',       group: 'dark' },
-  { id: 'code-forge',        name: 'Code Forge',        group: 'dark' },
-  { id: 'digital-rain',      name: 'Digital Rain',      group: 'dark' },
-  { id: 'ebony-amber',       name: 'Ebony Amber',       group: 'dark' },
-  { id: 'forest',            name: 'Forest',            group: 'dark' },
-  { id: 'heart-of-darkness', name: 'Heart of Darkness', group: 'dark' },
-  { id: 'indigo-turquoise',  name: 'Indigo Turquoise',  group: 'dark' },
-  { id: 'lambda-core',       name: 'Lambda Core',       group: 'dark' },
-  { id: 'mocha-paws',        name: 'Mocha (Catppuccin)',group: 'dark' },
-  { id: 'nightfang',         name: 'Nightfang (Dracula)',group: 'dark' },
-  { id: 'nord',              name: 'Nord',              group: 'dark' },
-  { id: 'nordic',            name: 'Nordic',            group: 'dark' },
-  { id: 'solo-night',        name: 'Solo Night',        group: 'dark' },
-  { id: 'tropical-midnight', name: 'Tropical Midnight', group: 'dark' },
-  { id: 'vapor-classic',     name: 'Vapor Classic',     group: 'dark' },
-  { id: 'vapor-deck',        name: 'Vapor Deck',        group: 'dark' },
-  // Carbon — light
-  { id: 'amber-glow-light',     name: 'Amber Glow',      group: 'light' },
-  { id: 'aurora-light',         name: 'Aurora',          group: 'light' },
-  { id: 'azure-silence-light',  name: 'Azure Silence',   group: 'light' },
-  { id: 'blush-slate-light',    name: 'Blush Slate',     group: 'light' },
-  { id: 'console-horizon-light',name: 'Console Horizon', group: 'light' },
-  { id: 'jade-matrix-light',    name: 'Jade Matrix',     group: 'light' },
-  { id: 'jade-mint-light',      name: 'Jade Mint',       group: 'light' },
-  { id: 'kawaii',               name: 'Kawaii',          group: 'light' },
-  { id: 'miami-neon-light',     name: 'Miami Neon',      group: 'light' },
-  { id: 'playlist-mint-light',  name: 'Playlist Mint',   group: 'light' },
-  { id: 'retro-98',             name: 'Retro 98',        group: 'light' },
-  { id: 'steel-mist-light',     name: 'Steel Mist',      group: 'light' },
-  { id: 'winter-blush-light',   name: 'Winter Blush',    group: 'light' },
 ];
+// Retired-theme healing: light-family ids keep their brightness on Cool Mist;
+// every other retired/unknown id lands on the dark HUD.
+GF.LEGACY_LIGHT = ['light', 'amber-glow-light', 'aurora-light', 'azure-silence-light',
+  'blush-slate-light', 'console-horizon-light', 'jade-matrix-light', 'jade-mint-light',
+  'kawaii', 'miami-neon-light', 'playlist-mint-light', 'retro-98', 'steel-mist-light',
+  'winter-blush-light'];
+GF.healTheme = (id) => (GF.themeById(id) ? id
+  : GF.LEGACY_LIGHT.indexOf(id) >= 0 ? 'mass-weed-light' : 'mass-weed');
 GF.themeById = (id) => GF.THEMES.find(t => t.id === id);
-GF.curTheme = () => {
-  const t = document.documentElement.dataset.theme;
-  return GF.themeById(t) ? t : 'mass-weed';
-};
+GF.curTheme = () => GF.healTheme(document.documentElement.dataset.theme);
 GF.syncThemeBtn = () => {
   const btn = GF.$('theme-btn');
   if (btn) {
@@ -412,13 +387,12 @@ GF.syncThemeBtn = () => {
   if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060F0B';
 };
 GF.setTheme = (name, opts) => {
-  if (!GF.themeById(name)) name = 'mass-weed';   // exclusive Mass Weed: unknown/retired skins snap back to it
+  name = GF.healTheme(name);   // exclusive Mass Weed: retired/unknown ids heal to the identity
   const root = document.documentElement;
   root.dataset.theme = name;
-  // Carbon skins need the marker so skins.css's derived-token block applies;
-  // the 3 core skins must NOT have it (they define their own derived tokens).
-  if (GF.THEME_CORE[name]) root.removeAttribute('data-skin-carbon');
-  else root.setAttribute('data-skin-carbon', '');
+  // Both surviving themes are core (define their own derived tokens); the
+  // carbon marker is never set now that the carbon skins are retired.
+  root.removeAttribute('data-skin-carbon');
   // noPersist: apply the skin to the DOM WITHOUT recording it as the user's
   // saved preference — the splash/login screen showcases a random skin each
   // load but must never overwrite the real skin the user picked in the app.
