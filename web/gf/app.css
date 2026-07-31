@@ -1037,3 +1037,37 @@ body.demo-on .main{padding-bottom:56px}
 .af-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .af-cols > .af-sec { margin-bottom: 18px; }
 @media (max-width: 560px) { .af-cols { grid-template-columns: 1fr; gap: 0; } }
+
+/* ── New-task full-screen create SCREEN (.overlay.as-screen): a brand-new
+   top-level task is a standalone page, not a floating popup — set by openAdd,
+   matching the design's task-create-*.html standalone layout. The same
+   #add-modal DOM is reused, so all submit/edit wiring and the e2e are
+   unchanged; only the framing differs. Edit/subtask keep the compact popup. ── */
+.overlay.as-screen {
+  background: var(--bg);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  align-items: stretch; justify-content: center;
+  padding: 0; overflow-y: auto;
+}
+.overlay.as-screen .modal {
+  width: 100%; max-width: 920px;
+  height: auto; min-height: 100vh; max-height: none;
+  border-radius: 0; border: none;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+  box-shadow: none; animation: none;
+  display: flex; flex-direction: column;
+}
+.overlay.as-screen .modal-head {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--bg); padding: 20px 30px;
+}
+.overlay.as-screen .modal-head h3 { font-size: 22px; letter-spacing: .01em; }
+.overlay.as-screen .modal-body { flex: 1; padding: 22px 30px 40px; }
+.overlay.as-screen .modal-foot {
+  position: sticky; bottom: 0; z-index: 3;
+  background: var(--bg); padding: 16px 30px;
+}
+@media (max-width: 640px) {
+  .overlay.as-screen .modal { border-left: none; border-right: none; }
+  .overlay.as-screen .modal-head, .overlay.as-screen .modal-body, .overlay.as-screen .modal-foot { padding-left: 16px; padding-right: 16px; }
+}

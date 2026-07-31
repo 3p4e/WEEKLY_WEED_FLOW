@@ -128,6 +128,15 @@ GF.openAdd = (weekId, parentId) => {
   if (GF.$('add-modal-title')) GF.$('add-modal-title').textContent = GF.t('new_task');
   if (GF.$('add-submit-btn')) GF.$('add-submit-btn').textContent = GF.t('create_task');
   if (GF.$('add-cancel-btn')) GF.$('add-cancel-btn').textContent = GF.t('cancel');
+  // A brand-new TOP-LEVEL task opens as a full-screen create SCREEN, not a
+  // floating popup — the owner's explicit ask, and it matches the design's
+  // task-create-*.html, which is a standalone full page. Editing an existing
+  // task and adding a subtask stay compact popups (they are contextual, opened
+  // from a specific card). The `.as-screen` class is what CSS keys the
+  // full-viewport treatment off; clear it otherwise so a later edit/subtask
+  // reuse of this same modal is a popup again.
+  const modal = GF.$('add-modal');
+  if (modal) modal.classList.toggle('as-screen', !fromEdit && !parentId);
   GF.openModal('add-modal');
 };
 // GF.submitAdd is defined for real by integrate.js (loaded after this file),
