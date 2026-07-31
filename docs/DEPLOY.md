@@ -2046,6 +2046,46 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v119 only (exclusive Mass Weed, in full) (2026-07-31)
+
+Owner-directed ("apply the complete mass effect theme to all levels and parts
+of the application and deploy it in full"). Two commits ship together:
+
+**`ab3a62b` — exclusive Mass Weed.** The owner's production browser still
+painted the pre-Mass-Weed green shell because `gf_theme=dark` was saved from
+an earlier era and the boot script preserved it. The app now has ONE visual
+identity: every non-Mass-Weed theme (pre-era dark/light/suma + all 30 carbon
+skins) is retired; a stale save is healed synchronously before first paint —
+light-family saves land on Cool Mist, everything else on the dark HUD. The
+theme picker offers Mass Weed, Cool Mist, and the 7 hue schemes. Proven in a
+real browser: a seeded `gf_theme=dark` reloads straight into the HUD and the
+healed value persists.
+
+**`4fc0513` — the 22 adversarially-verified coverage gaps closed.** An
+8-angle audit under the exclusive theme confirmed 22 gaps (0 refuted):
+rounded pre-HUD chrome (.ntf, assistant drawer, .day-pill, .telemetry,
+.user-card, .sess-row, .add-row, .pipe-node, .exec-brief, week-strip
+headline), a dead `.kcol-h` selector (real class is `.kcol-head`), a
+mis-targeted `.note-input` chamfer, and hardcoded legacy colors (green FLOW
+gradient, splash backdrop/fonts/text, white-on-amber `.btn-orange` + 17
+`GF.icon('#fff')` emits, invisible voice-modal title on Cool Mist,
+force-white wordmark). All closed, tokens only.
+
+Frontend-only swap (`wwf-growflow:v118 → v119`) from `4fc0513`; sw shell
+`v3.89.0`. Same no-PAT path: `git archive :web` → runner `/file/write`,
+SHA-256 `982ff037…` equal both sides → `docker build` → compose bump →
+`up -d --no-deps frontend`. Verified live on `wwf.srv1231216.hstgr.cloud`:
+`/health` 200, sw v3.89.0, boot heal + §9 closure CSS + tokenized entry.css
+all serving. Frontend 295/295; e2e 15/15 (one earlier control-wiring failure
+was environmental — the local test Postgres came back from a crash with a
+pre-0051 schema, no `harvests`; both test DBs rebuilt per backend/README's
+bootstrap, after which the suite is green — production was never affected).
+Post-fix screenshot sweep confirms the HUD on week view / create / detail,
+and that a seeded stale `dark` browser heals to the identical HUD. Rollback:
+`wwf-growflow:v118` retained + `compose.yaml.bak-pre-v119`.
+
+---
+
 ## Production deploy — frontend v118 only (Task Detail screen) (2026-07-31)
 
 Owner-authorised, same session. Clicking **Open** on a task now forwards to a
