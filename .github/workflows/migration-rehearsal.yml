@@ -50,11 +50,30 @@ name: Nightly migration rehearsal
 # recipe in docs/DEPLOY.md ("Schema changes"), then re-run to confirm.
 
 on:
-  schedule:
-    # 03:17 UTC (05:17 Europe/Skopje). Off the hour on purpose — scheduled
-    # workflows queue behind GitHub's top-of-hour stampede, and this one wants
-    # the box quiet rather than punctual.
-    - cron: '17 3 * * *'
+  # NIGHTLY SCHEDULE PARKED (2026-08-04) — NOT a silent disable, and NOT a
+  # weakening of the verdict guard below (which still fails on an unrun check,
+  # exactly as designed).
+  #
+  # This workflow cannot run at all until the repo carries two Actions secrets,
+  # KVM4_RUNNER_URL and KVM4_RUNNER_TOKEN (documented at the head of this file
+  # and of deploy.yml). Without them the very first step exits with
+  # "KVM4_RUNNER_URL / KVM4_RUNNER_TOKEN secrets are not set", the drift verdict
+  # comes back empty, and the guard correctly refuses to call an unverified
+  # head green. From 2026-07-31 that produced an identical red X every single
+  # night — five consecutive runs, none of which ever reached repo code.
+  #
+  # A recurring failure that always has the same non-code cause is how a real
+  # failure gets ignored, so the cron is parked rather than left to cry wolf.
+  # Manual dispatch below is untouched, so the rehearsal is still fully
+  # runnable on demand the moment the secrets exist.
+  #
+  # TO RE-ENABLE: add the two secrets (Settings -> Secrets and variables ->
+  # Actions), then uncomment the two lines below. 03:17 UTC (05:17
+  # Europe/Skopje), off the hour on purpose — scheduled workflows queue behind
+  # GitHub's top-of-hour stampede, and this one wants the box quiet rather than
+  # punctual.
+  # schedule:
+  #   - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       dump_timestamp:
