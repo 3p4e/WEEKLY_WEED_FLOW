@@ -231,13 +231,23 @@ Decisions only the owner can make, consolidated from every doc:
 11. `/opt` image pruning; orphaned QMS volume archive-then-delete.
 12. Ambient brand motion (plans/005 scope note): keep or tame the wordmark
     loops beyond the storm/rave removal.
+13. **eCoA §6.3.2 filler≠decider** (attempted 2026-08-05, then reverted): does
+    the eCoA review require a *distinct* second person to decide the checklist,
+    or may the Head of QC review a checklist they filled? Implementing the
+    distinct-person control broke 12 existing single-actor eCoA tests — i.e. the
+    established, tested behavior is single-actor — and shipping it would block
+    the lab's real workflow if one QC person legitimately does both. Held for an
+    owner/SOP decision; if distinct-person is required, it lands with the
+    matching test updates (the reverted diff and its test are recoverable from
+    git history at the animation/hardening commit's parent).
 
 ## 10. Recommended sequence (next 4–6 working sessions)
 
 1. **Session 1**: Track E quick wins (watchdog webhook, runner
    `--disableupdate`, nginx/HSTS/fonts, audit-verify QA+index) + Track C
-   S-item sweep (round-3 LOWs, eCoA filler≠decider, audit tiebreaker,
-   dependency lock, report uuid guards). One deploy.
+   S-item sweep (round-3 LOWs, audit tiebreaker, dependency lock, report uuid
+   guards). One deploy. *(Shipped 2026-08-05 as backend v86 — see DEPLOY.md;
+   eCoA filler≠decider deferred, see decision register #13.)*
 2. **Session 2**: MW-1 smalls (7 pages) + animation plans 006/002/001/013.
    One deploy.
 3. **Session 3–4**: MW-1 mediums (dashboard, facility, analytics first).

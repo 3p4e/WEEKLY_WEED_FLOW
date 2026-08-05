@@ -1,4 +1,5 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
+import asyncio
 import logging
 import re
 import secrets
@@ -171,7 +172,9 @@ async def login(body: LoginReq, request: Request):
     # short-circuiting before it is a timing side-channel that lets an
     # attacker enumerate valid usernames by response latency.
     active = row is not None and row["is_active"]
-    ok = verify_password(body.password, row["password_hash"] if active else None)
+    # bcrypt is CPU-bound and blocks the event loop for tens of ms — run it off
+    # the loop so concurrent requests aren't stalled behind each login's hash.
+    ok = await asyncio.to_thread(verify_password, body.password, row["password_hash"] if active else None)
     if not active or not ok:
         _rate_limit_record_failure(f"ip:{ip}", id_key)
         # Forensic trail — audit_log is trigger-driven and never sees a failed
@@ -212,22 +215,24 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
         "SELECT password_hash FROM profiles WHERE id=$1", user["id"])
     # Voluntary change (flag already cleared) must prove the current password.
     if not user["must_change_password"]:
-        if row is None or not body.current_password or not verify_password(body.current_password, row["password_hash"]):
+        if row is None or not body.current_password or not await asyncio.to_thread(
+                verify_password, body.current_password, row["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password incorrect")
     # The new password must not be the one being replaced. Only length was
     # checked before, so on the FORCED (first-login / post-reset) path a user
     # could "change" their password to the one-time password itself — leaving
     # the account on a credential that was transmitted out-of-band, printed on
     # an admin's screen, and is treated everywhere else as single-use.
-    if row is not None and verify_password(body.new_password, row["password_hash"]):
+    if row is not None and await asyncio.to_thread(verify_password, body.new_password, row["password_hash"]):
         raise HTTPException(
             422, "The new password must differ from the current one"
                  " (a one-time password cannot be kept as the permanent password)")
+    new_hash = await asyncio.to_thread(hash_password, body.new_password)
     async with rls_users(user, admin=True) as conn:
         new_pwv = await conn.fetchval(
             "UPDATE profiles SET password_hash=$1, must_change_password=false,"
             " password_set_at=now(), updated_at=now() WHERE id=$2 RETURNING password_set_at",
-            hash_password(body.new_password), user["id"],
+            new_hash, user["id"],
         )
     # The token that authenticated this request is now stale (its pwv claim
     # no longer matches the password_set_at we just wrote) — mint a fresh
@@ -291,13 +296,14 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     await _validate_department(actor["org_id"], body.department_id)
     otp = generate_otp()
+    otp_hash = await asyncio.to_thread(hash_password, otp)
     async with rls_users(actor, admin=True) as conn:
         try:
             row = await conn.fetchrow(
                 "INSERT INTO profiles(org_id,username,email,password_hash,full_name,role,"
                 " department_id,function_role,must_change_password,created_by)"
                 " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) RETURNING *",
-                actor["org_id"], body.username, body.email, hash_password(otp), body.full_name,
+                actor["org_id"], body.username, body.email, otp_hash, body.full_name,
                 body.role, body.department_id, body.function_role, actor["id"],
             )
         except asyncpg.UniqueViolationError:
@@ -450,6 +456,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
         # proves the current password); the admin reset path is for OTHER users.
         raise HTTPException(400, "Use change-password for your own account")
     otp = generate_otp()
+    otp_hash = await asyncio.to_thread(hash_password, otp)
     async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(
             "SELECT id, username, full_name, role, department_id, function_role, must_change_password"
@@ -461,7 +468,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
         row = await conn.fetchrow(
             "UPDATE profiles SET password_hash=$1, must_change_password=true,"
             " password_set_at=now(), updated_at=now() WHERE id=$2 AND org_id=$3 RETURNING *",
-            hash_password(otp), user_id, actor["org_id"])
+            otp_hash, user_id, actor["org_id"])
     return {"user": _public(row), "otp": otp}
 
 

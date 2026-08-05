@@ -873,6 +873,13 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
     if dep == task_id:
         raise HTTPException(422, "A task cannot depend on itself")
     async with rls(user) as c:
+        # Serialize dependency writes within an org so the RECURSIVE cycle check
+        # and the INSERT below act as one critical section. Without this, two
+        # concurrent calls adding the reverse edges (A->B and B->A) can each pass
+        # the cycle check against a graph that doesn't yet contain the other's
+        # edge, then both insert — closing a cycle the guard was meant to reject.
+        # Mirrors the batch/org advisory-lock idiom used in harvest.py / waste.py.
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"taskdeps:{user['org_id']}")
         for tid in (task_id, dep):
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:

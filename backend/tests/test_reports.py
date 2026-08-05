@@ -1,11 +1,24 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
+import uuid
 from datetime import date, timedelta
 from app.worktime import facility_today
 
 from app.api.weekwindow import fri_thu
 from app.db import tasks_admin_pool
 from tests.conftest import create_user, login_and_set_password
+
+
+async def test_report_endpoints_reject_non_uuid_department_id(client, admin_headers):
+    """department_id is a query param bound straight into raw SQL against a uuid
+    column, so a non-uuid value would surface as an asyncpg cast error -> 500.
+    Both report endpoints that accept it (/reports/weekly and /reports/audit-prep)
+    must return a clean 422 instead. A well-formed (if unmatched) uuid is fine."""
+    for path in ("/reports/weekly", "/reports/audit-prep"):
+        r = await client.get(path, params={"department_id": "not-a-uuid"}, headers=admin_headers)
+        assert r.status_code == 422, f"{path}: {r.status_code} {r.text}"
+        r = await client.get(path, params={"department_id": str(uuid.uuid4())}, headers=admin_headers)
+        assert r.status_code == 200, f"{path}: {r.status_code} {r.text}"
 
 
 async def test_weekly_report_summary_counts_postponed_tasks(client, admin_headers):

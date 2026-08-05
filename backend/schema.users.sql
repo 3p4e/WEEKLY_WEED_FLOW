@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict mZtVDvUBWv5GjlWphzEs5TM8qjan3eUMVZXgB3AcBwSI8KiJWd1Jp9GkwUFaeHD
+\restrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -235,6 +235,13 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: audit_log_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
+
+
+--
 -- Name: audit_log_table_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -335,5 +342,5 @@ CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.curre
 -- PostgreSQL database dump complete
 --
 
-\unrestrict mZtVDvUBWv5GjlWphzEs5TM8qjan3eUMVZXgB3AcBwSI8KiJWd1Jp9GkwUFaeHD
+\unrestrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
 

@@ -217,6 +217,39 @@ async def test_delete_binding_forbidden_for_non_admin(client, admin_headers):
     assert r.status_code == 403
 
 
+async def test_put_binding_validates_agent_id_when_letta_reachable(client, admin_headers, org, monkeypatch):
+    """Best-effort typo guard on set_binding: when the Letta agent list CAN be
+    retrieved, a binding to an id that isn't in it is rejected (422), while a
+    binding to a real id succeeds. When the list source is UNavailable (Letta
+    down/offline), the check is skipped and the binding still goes through — the
+    guard defends against typos, it is never a hard dependency that would break
+    binding while Letta is unreachable."""
+    async def fake_agents():
+        return [{"id": "agent-real", "name": "Planner"}]
+    monkeypatch.setattr(ai_module, "_letta_agents", fake_agents)
+    # a bogus id (not in the retrieved roster) is refused
+    r = await client.put("/ai/bindings/weekly_summary",
+                         json={"letta_agent_id": "agent-does-not-exist", "is_active": True},
+                         headers=admin_headers)
+    assert r.status_code == 422, r.text
+    # a real id binds cleanly
+    r = await client.put("/ai/bindings/weekly_summary",
+                         json={"letta_agent_id": "agent-real", "is_active": True},
+                         headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["letta_agent_id"] == "agent-real"
+
+    # Letta unreachable → validation skipped, binding still works (best-effort).
+    async def boom():
+        raise RuntimeError("Letta unreachable")
+    monkeypatch.setattr(ai_module, "_letta_agents", boom)
+    r = await client.put("/ai/bindings/weekly_summary",
+                         json={"letta_agent_id": "agent-unchecked", "is_active": True},
+                         headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["letta_agent_id"] == "agent-unchecked"
+
+
 # ── Admin: the Letta agent picker (GET /ai/agents) ──────────────────────────
 
 

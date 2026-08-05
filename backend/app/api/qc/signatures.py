@@ -1,3 +1,5 @@
+import asyncio
+
 from app.db import rls, users_admin_pool
 from app.deps import require_role
 from app.notify import safe_emit
@@ -67,7 +69,7 @@ async def sign_certificate(coa_id: str, body: SignIn,
     # profile (and its password hash) lives in the separate users DB.
     prof = await users_admin_pool().fetchrow(
         "SELECT full_name, password_hash FROM profiles WHERE id=$1 AND is_deleted=false", user["id"])
-    if prof is None or not verify_password(body.password, prof["password_hash"]):
+    if prof is None or not await asyncio.to_thread(verify_password, body.password, prof["password_hash"]):
         raise HTTPException(401, "Signature not applied — re-authentication failed")
     async with rls(user) as c:
         coa = await c.fetchrow("SELECT id, status FROM qc_certificates WHERE id=$1", coa_id)

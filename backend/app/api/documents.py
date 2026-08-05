@@ -1309,7 +1309,10 @@ async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_RO
         from weasyprint import HTML
     except Exception:
         raise HTTPException(501, "PDF engine not available on this server")
-    pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
+    # write_pdf() is CPU-bound (WeasyPrint lays out the whole document) and
+    # blocks the event loop — run it in a worker thread so other requests aren't
+    # stalled behind a PDF render.
+    pdf = await asyncio.to_thread(lambda: HTML(string=_pdf_html(doc, people)).write_pdf())
     name = f"wwf-{doc['kind']}-{doc['week_start']}{'' if doc['status'] == 'locked' else '-DRAFT'}.pdf"
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
@@ -1550,7 +1553,8 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
         from weasyprint import HTML
     except Exception:
         raise HTTPException(501, "PDF engine not available on this server")
-    pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
+    # CPU-bound render — off the event loop (see the export handler above).
+    pdf = await asyncio.to_thread(lambda: HTML(string=_pdf_html(doc, people)).write_pdf())
     name = f"wwf-{kind}-{doc['week_start']}-PREVIEW.pdf"
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})

@@ -24,6 +24,28 @@ _COMPUTED_KINDS = ("total_thc", "total_cbd")
 _ACID_FACTOR = 0.877
 
 
+def _looks_acidic(*names: str | None) -> bool:
+    """Heuristic: does a parameter name denote the ACID form of a cannabinoid?
+
+    The data model carries no explicit neutral/acid flag on a spec parameter,
+    so the strongest signal available is the name itself: acid forms are
+    abbreviated with a trailing 'A' (THCA, CBDA, CBGA, …) or spell out
+    'acid' / 'киселина'; the neutral forms (THC, CBD, Δ9-THC, …) do neither.
+    Best-effort — used ONLY to catch a confidently-swapped A/B assignment
+    below, never to hard-require a match, so a name the heuristic cannot
+    classify is treated as non-acidic and left alone."""
+    for name in names:
+        if not name:
+            continue
+        n = name.strip().lower()
+        if "acid" in n or "киселина" in n:
+            return True
+        compact = "".join(ch for ch in n if ch.isalnum())
+        if compact.endswith("a"):
+            return True
+    return False
+
+
 _SPEC_TRANSITIONS = {
     "INITIATED": {"DRAFT", "WITHDRAWN"},
     "DRAFT": {"QC_REVIEW", "WITHDRAWN"},
@@ -244,7 +266,8 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
                                      f" ({', '.join(sorted(_EDITABLE_STATUSES))})")
         if body.computed_kind is not None:
             comps = await c.fetch(
-                "SELECT id, spec_id, computed_kind FROM qc_spec_parameters WHERE id = ANY($1::uuid[])",
+                "SELECT id, spec_id, computed_kind, test_name_en, test_name_mk"
+                " FROM qc_spec_parameters WHERE id = ANY($1::uuid[])",
                 [body.component_a_id, body.component_b_id])
             by_id = {str(r["id"]): r for r in comps}
             for label, cid in (("component_a_id", body.component_a_id),
@@ -256,6 +279,21 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
                     raise HTTPException(422, f"{label} must reference a measured parameter, not a computed one")
             if body.component_a_id == body.component_b_id:
                 raise HTTPException(422, "component_a_id and component_b_id must differ")
+            # Ph. Eur. 3028 defines the derived total as neutral + 0.877 × acid,
+            # so the ACID form must occupy component_b and the NEUTRAL form
+            # component_a. Nothing above checks the ORDER — only that both slots
+            # are filled — so a swapped assignment (acid in A, neutral in B)
+            # would silently compute neutral + 0.877 × neutral, a wrong result
+            # that still looks in-range. The model has no form flag, so guard
+            # with the strongest signal the data carries (_looks_acidic): reject
+            # only a CONFIDENTLY-swapped pair — A clearly the acid, B clearly not.
+            comp_a, comp_b = by_id[body.component_a_id], by_id[body.component_b_id]
+            a_acidic = _looks_acidic(comp_a["test_name_en"], comp_a["test_name_mk"])
+            b_acidic = _looks_acidic(comp_b["test_name_en"], comp_b["test_name_mk"])
+            if a_acidic and not b_acidic:
+                raise HTTPException(
+                    422, "component_a_id must be the NEUTRAL form and component_b_id the ACID form"
+                         " (Ph. Eur. 3028: total = neutral + 0.877 × acid) — they appear swapped")
         row = await c.fetchrow(
             "INSERT INTO qc_spec_parameters(org_id, spec_id, test_name_en, test_name_mk,"
             " test_method, spec_type, lower_limit, upper_limit, unit, pharmacopoeia_ref,"

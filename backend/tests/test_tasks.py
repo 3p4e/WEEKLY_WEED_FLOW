@@ -477,6 +477,28 @@ async def test_dependency_add_list_and_cycle_guard(client, admin_headers):
     assert detail["blocked_by"] == []
 
 
+async def test_dependency_transitive_cycle_still_rejected_under_lock(client, admin_headers):
+    """Regression for the concurrency hardening: add_dependency now takes an
+    org-scoped pg_advisory_xact_lock as the first statement in its transaction,
+    so two concurrent reverse-edge writes (A->B and B->A) serialize and can no
+    longer both pass the cycle check. A true race is impractical to drive
+    through the shared ASGI test client, so this pins the invariant the lock
+    protects: cycle detection is not weakened. A transitive cycle A->B->C then
+    C->A is still refused, and the graph is left untouched."""
+    a = (await client.post("/tasks", json={"title": "CycA"}, headers=admin_headers)).json()["id"]
+    b = (await client.post("/tasks", json={"title": "CycB"}, headers=admin_headers)).json()["id"]
+    c = (await client.post("/tasks", json={"title": "CycC"}, headers=admin_headers)).json()["id"]
+    assert (await client.post(f"/tasks/{a}/dependencies", json={"depends_on_task_id": b},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.post(f"/tasks/{b}/dependencies", json={"depends_on_task_id": c},
+                              headers=admin_headers)).status_code == 201
+    # C -> A would close the loop A->B->C->A — rejected, not inserted
+    r = await client.post(f"/tasks/{c}/dependencies", json={"depends_on_task_id": a},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+    assert (await client.get(f"/tasks/{c}", headers=admin_headers)).json()["blocked_by"] == []
+
+
 async def test_task_tree_returns_hierarchy(client, admin_headers):
     parent = (await client.post("/tasks", json={"title": "SOP", "node_kind": "task"},
                                 headers=admin_headers)).json()["id"]

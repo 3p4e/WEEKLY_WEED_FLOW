@@ -1366,6 +1366,28 @@ async def test_computed_param_validation(client, admin_headers):
     assert r.status_code == 422 and "computed" in r.json()["detail"]
 
 
+async def test_computed_param_rejects_swapped_acid_neutral(client, admin_headers):
+    """Ph. Eur. 3028 defines total = neutral + 0.877 × acid, so component_a must
+    be the NEUTRAL form and component_b the ACID form. A swapped assignment
+    (acid in the A slot, neutral in the B slot) is rejected — otherwise the
+    engine would compute neutral + 0.877 × neutral and silently mis-report the
+    total. The correct order is accepted."""
+    spec = await _spec(client, admin_headers, material="PH3028-SWAP")
+    base = f"/qc/specifications/{spec['id']}/parameters"
+    neutral = (await client.post(base, json={"test_name_en": "Delta-9-THC"}, headers=admin_headers)).json()
+    acid = (await client.post(base, json={"test_name_en": "THCA"}, headers=admin_headers)).json()
+    # swapped: acid in A (neutral slot), neutral in B (acid slot) → 422
+    r = await client.post(base, json={"test_name_en": "Total THC", "computed_kind": "total_thc",
+                                      "component_a_id": acid["id"], "component_b_id": neutral["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "swap" in r.json()["detail"].lower(), r.text
+    # correct order (neutral in A, acid in B) is accepted
+    r = await client.post(base, json={"test_name_en": "Total THC", "computed_kind": "total_thc",
+                                      "component_a_id": neutral["id"], "component_b_id": acid["id"]},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 # ── URS increment 3 — accredited laboratory entity (Chapter 7) ──────────────
 async def _lab(client, headers, name="Contract Lab GmbH", **extra):
     body = {"name": name, **extra}

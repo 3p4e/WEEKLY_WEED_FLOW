@@ -20,7 +20,7 @@ from app.api.tasks import _scope_clause
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
-from app.deps import dept_scope, require_password_set
+from app.deps import dept_scope, require_password_set, uuid_or_422
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
 from app.worktime import facility_today, TZ, classify, session_hours
@@ -49,6 +49,13 @@ async def weekly_report(
     department_id: str | None = None,
     user: dict = Depends(require_password_set),
 ):
+    # A caller-supplied department_id is bound straight into raw SQL against a
+    # uuid column, so a non-uuid value would otherwise surface as an asyncpg
+    # cast error -> 500. Validate up front (before the dept_scope override,
+    # which only ever assigns a known-good uuid). None is a legitimate value
+    # (org-wide) so it is skipped — uuid_or_422 would reject str(None).
+    if department_id is not None:
+        uuid_or_422(department_id, "department_id must be a uuid")
     if ref_date:
         try:
             ref = date.fromisoformat(ref_date)
@@ -433,6 +440,10 @@ async def audit_prep(
     """
     if user["role"] == "USER":
         raise HTTPException(status_code=403, detail="Managers and executives only")
+    # Same guard as /reports/weekly: a non-uuid department_id is bound into raw
+    # SQL as ::uuid below and would 500 without this. None (org-wide) is fine.
+    if department_id is not None:
+        uuid_or_422(department_id, "department_id must be a uuid")
     if programs:
         progs = [p.strip() for p in programs.split(",") if p.strip()]
         if len(progs) > 12:

@@ -235,6 +235,20 @@ async def set_binding(function_key: str, body: BindingReq, actor: dict = Depends
     agent = (body.letta_agent_id or "").strip()
     if not agent:
         raise HTTPException(422, "letta_agent_id is required")
+    # Best-effort defense against a typo'd agent id: reject one the bound Letta
+    # instance doesn't actually serve. This is deliberately NOT a hard
+    # dependency — if the agent list can't be retrieved (Letta down/offline, as
+    # it is in tests) we skip the check and allow the binding, matching how the
+    # rest of this module degrades when the stack is unreachable (invoke()
+    # returns available:false, _letta_message swallows and warns). The 422 only
+    # ever fires when the list WAS retrieved and the id is genuinely absent.
+    try:
+        known_ids = {a["id"] for a in await _letta_agents()}
+    except Exception as e:
+        _log.warning("binding agent-id validation skipped (Letta unreachable): %s", e)
+        known_ids = None
+    if known_ids is not None and agent not in known_ids:
+        raise HTTPException(422, f"letta_agent_id '{agent}' is not an available Letta agent")
     async with rls(actor) as c:
         await c.execute(
             "INSERT INTO ai_agent_bindings(org_id, function_key, letta_agent_id, scope, is_active)"

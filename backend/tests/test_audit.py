@@ -50,9 +50,10 @@ async def test_non_elevated_cannot_read_audit(client, admin_headers):
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
-async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin_headers):
-    """QC_MGR is elevated enough for /audit and /audit/tables, but /verify
-    is explicitly ADMIN-only (require_role("ADMIN"), not the _ELEVATED tuple)."""
+async def test_verify_restricted_to_admin_and_qa_auditor_roles(client, admin_headers):
+    """QC_MGR is elevated enough for /audit and /audit/tables, but /verify is
+    limited to ADMIN plus the QA auditor roles (QA_MGR, QP). A QC_MGR is
+    elevated yet not among them, so it is still refused."""
     user, otp = await create_user(client, admin_headers, role="QC_MGR")
     from tests.conftest import login_and_set_password
     token = await login_and_set_password(client, user["username"], otp)
@@ -61,12 +62,31 @@ async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
-async def test_executives_and_qp_are_elevated(client, admin_headers):
-    """OWNER, CEO, COO and QP all sit above USER in the reshaped role model —
-    each is recognized by app.is_elevated(), so each may read the audit trail
-    and its table list, but /verify stays ADMIN-only for all of them."""
+async def test_verify_open_to_qa_manager_and_qp_auditors(client, admin_headers):
+    """Read-only chain verification is an audit function, so QA_MGR and QP (the
+    Qualified Person) may run /audit/verify and get a verdict — not just ADMIN.
+    A plain USER is still refused."""
     from tests.conftest import login_and_set_password
-    for role in ("OWNER", "CEO", "COO", "QP"):
+    for role in ("QA_MGR", "QP"):
+        user, otp = await create_user(client, admin_headers, role=role)
+        token = await login_and_set_password(client, user["username"], otp)
+        headers = {"Authorization": f"Bearer {token}"}
+        r = await client.get("/audit/verify", headers=headers)
+        assert r.status_code == 200, f"{role}: {r.text}"
+        assert "ok" in r.json(), role
+    user, otp = await create_user(client, admin_headers, role="USER")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/audit/verify", headers=headers)).status_code == 403
+
+
+async def test_executives_are_elevated_but_cannot_verify(client, admin_headers):
+    """OWNER, CEO, COO all sit above USER in the reshaped role model — each is
+    recognized by app.is_elevated(), so each may read the audit trail and its
+    table list. But /verify is not an executive function: it is limited to ADMIN
+    and the QA auditor roles (QA_MGR, QP), so the executives are refused it."""
+    from tests.conftest import login_and_set_password
+    for role in ("OWNER", "CEO", "COO"):
         user, otp = await create_user(client, admin_headers, role=role)
         token = await login_and_set_password(client, user["username"], otp)
         headers = {"Authorization": f"Bearer {token}"}

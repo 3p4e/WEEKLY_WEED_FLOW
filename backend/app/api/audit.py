@@ -17,7 +17,8 @@ database.
                           chains have colliding bigint ids. Every row carries
                           `source: "users" | "tasks"`.
   • GET /audit/tables   → distinct table names + counts across both chains.
-  • GET /audit/verify   → walk BOTH global chains (admin pools, ADMIN only)
+  • GET /audit/verify   → walk BOTH global chains (admin pools; ADMIN plus the
+                          QA_MGR / QP auditor roles — read-only verification)
                           and report each one's first linkage break, if any.
 """
 from datetime import datetime
@@ -297,7 +298,7 @@ async def _verify_one(pool) -> dict:
 
 
 @router.get("/verify")
-async def verify_chain(user: dict = Depends(require_role("ADMIN"))):
+async def verify_chain(user: dict = Depends(require_role("ADMIN", "QA_MGR", "QP"))):
     """Validate both global hash chains: recompute each row's hash from its stored
     columns AND check pointer linkage + head anchoring.
 
