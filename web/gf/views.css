@@ -457,9 +457,17 @@
 .wl-fill.wl-hot{background:linear-gradient(90deg,var(--red-soft),var(--red))}
 .wl-pts{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10.5px;color:var(--ink)}
 .wl-chips{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
-.wl-chip{font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
+.wl-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
   border-radius:6px;padding:3px 8px;cursor:grab;white-space:nowrap}
 .wl-chip:hover{color:var(--ink);border-color:var(--primary)}
+/* priority dot on each load chip (Mass Weed workload mockup) — same palette as .prtag */
+.wl-dot{width:6px;height:6px;border-radius:999px;flex:none;background:var(--ink-4)}
+.wl-dot.critical{background:var(--red)}
+.wl-dot.high{background:var(--orange)}
+.wl-dot.medium{background:var(--blue)}
+.wl-dot.low{background:var(--ink-4)}
+/* the 4-KPI band above the crew list reuses the shared .ana-tiles grid */
+.wl-kpis{margin-bottom:14px}
 .wl-none{font-size:11.5px;color:var(--ink-4)}
 @media (max-width:880px){.wl-row{grid-template-columns:1fr;gap:8px}}
 

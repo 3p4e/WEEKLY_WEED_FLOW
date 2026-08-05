@@ -52,6 +52,21 @@ window.GF = window.GF || {};
     // every known person renders, even with zero load — they're drop targets
     Object.keys(GF.PEOPLE).forEach(p => { per[p] = per[p] || { pts: 0, tasks: [] }; });
 
+    // KPI band (Mass Weed mockup workload.html): crew-wide load at a glance.
+    // rawPct is UNCAPPED here (a person can be >100% of the soft capacity),
+    // unlike the per-row bar which clamps for display.
+    const people = Object.values(per);
+    const rawPct = (d) => (d.pts / CAP) * 100;
+    const kOpen = tasks.length;
+    const kOver = people.filter(d => rawPct(d) > 100).length;
+    const kFree = people.filter(d => rawPct(d) < 70).length;
+    const kAvg = people.length ? Math.round(people.reduce((s, d) => s + rawPct(d), 0) / people.length) : 0;
+    const band = `<div class="ana-tiles wl-kpis">
+      ${GF.kpiTile(AL('Open Tasks', 'Отворени задачи'), kOpen, AL('across crew', 'во екипата'))}
+      ${GF.kpiTile(AL('Overloaded', 'Преоптоварени'), kOver, AL('over capacity', 'над капацитет'))}
+      ${GF.kpiTile(AL('Available', 'Достапни'), kFree, AL('under 70%', 'под 70%'))}
+      ${GF.kpiTile(AL('Avg Load', 'Просечна оптовареност'), kAvg + '%', AL('of capacity', 'од капацитет'))}</div>`;
+
     const rows = Object.entries(per)
       .sort((a, b) => b[1].pts - a[1].pts)
       .map(([pid, d]) => {
@@ -62,8 +77,8 @@ window.GF = window.GF || {};
         const shownTasks = expanded ? d.tasks : d.tasks.slice(0, 8);
         const chips = shownTasks.map(t => `
           <span class="wl-chip" draggable="true" ondragstart="GF.wlDragStart(event,'${GF.esc(t.id)}')"
-            title="${GF.esc(t.title)}" onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">
-            ${GF.esc(t.title.length > 34 ? t.title.slice(0, 33) + '…' : t.title)}</span>`).join('')
+            title="${GF.esc(t.title)} · ${GF.esc(GF.prLabel(t.pr))}" onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">
+            <i class="wl-dot ${GF.esc(t.pr || 'medium')}"></i>${GF.esc(t.title.length > 32 ? t.title.slice(0, 31) + '…' : t.title)}</span>`).join('')
           + (d.tasks.length > 8 ? `<span class="wl-chip" style="cursor:pointer;color:var(--ink-3)"
               onclick="GF.wlToggle('${GF.esc(pid)}')">${expanded ? AL('less', 'помалку') : `+${d.tasks.length - 8}`}</span>` : '');
         return `<div class="wl-row" ondragover="GF.wlDragOver(event)" ondragleave="GF.wlDragLeave(event)"
@@ -77,6 +92,7 @@ window.GF = window.GF || {};
       }).join('');
 
     return `${GF.viewHead('workload', 'workload')}
+      ${band}
       <div class="wl-hint">${AL('Drag a task onto a person to add them as a helper. Weights: critical 3 · high 2 · medium 1.5 · low 1.',
                                 'Повлечете задача врз личност за да ја додадете како помошник. Тежини: критично 3 · високо 2 · средно 1.5 · ниско 1 (проценетите часови имаат предност).')}</div>
       <div class="wl-list">${rows}</div>`;
