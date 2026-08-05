@@ -240,6 +240,28 @@ Decisions only the owner can make, consolidated from every doc:
     owner/SOP decision; if distinct-person is required, it lands with the
     matching test updates (the reverted diff and its test are recoverable from
     git history at the animation/hardening commit's parent).
+14. **`facility.html` floor-plan — needs backend data + a CSS untangle**
+    (investigated 2026-08-05; a first agent redesign was reverted for breaking
+    `web/e2e/tests/facility.spec.js`). Two blockers, both owner/dev decisions:
+    (a) **Room layout coordinates.** A faithful floor-plan (the mockup's
+    `.fac-stage` with absolutely-positioned rooms + a corridor) needs per-room
+    x/y/w/h positions. `GET /facility` returns none — rooms have only
+    kind/plant counts/batches. Either add a `layout` field per room (owner
+    decides the physical map) or accept the current card-grid (which is what
+    ships today) instead of a true floor-plan.
+    (b) **A pre-existing `.fac-room` CSS conflict.** `.fac-room` is defined in
+    app.css (`display:flex` card), views.css:235 (`position:absolute`
+    floor-plan variant — **wins** by load order), and mass-weed.css (clip-path
+    only). A full floor-plan+side-panel CSS (`.fac-wrap`/`.fac-stage`/
+    `.fac-panel`/`.fac-chip`) already sits UNUSED in views.css from an earlier
+    pass. The live card view renders acceptably and passes e2e, but the leaked
+    `position:absolute` rule is latent cruft; wiring the real floor-plan means
+    reconciling all three files. That touches shared CSS behind the working
+    production view, so it is deliberately NOT done as an autonomous change —
+    it wants a focused, owner-reviewed facility pass, not a page-batch agent.
+    Contract to preserve either way: `.fac-room .fr-nm`/`.fr-n`/`.fs-nm` cells,
+    cell-click→`#fac-room-modal`, and the `.fac-res` phase-totals strip
+    (`facility.spec.js`).
 
 ## 10. Recommended sequence (next 4–6 working sessions)
 
