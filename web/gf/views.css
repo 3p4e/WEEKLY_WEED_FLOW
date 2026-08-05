@@ -1484,3 +1484,35 @@
   .mwcoq-sigrow{ grid-template-columns:1fr; }
   .mwcoq-sheet{ padding:10mm 8mm 9mm; }
 }
+
+
+/* ── SEARCH page (search-view.js — full-page grouped search) ──────────────
+   A rail-reachable companion to the ⌘K palette; same in-memory sources,
+   grouped. Generic tokens only, so it inherits every skin. */
+.sr-box{display:flex;align-items:center;gap:10px;margin:4px 0 8px;padding:12px 16px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-lg,12px)}
+.sr-box-ic{color:var(--ink-3);flex:none}
+.sr-box-ic .icon{width:20px;height:20px}
+.sr-input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--ink);
+  font:inherit;font-size:17px}
+.sr-input::placeholder{color:var(--ink-3)}
+.sr-hint{font-size:12px;color:var(--ink-3);margin:0 4px 14px;line-height:1.5}
+.sr-results{display:flex;flex-direction:column;gap:16px}
+.sr-group{display:flex;flex-direction:column;gap:2px}
+.sr-group-h{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 2px 6px}
+.sr-count{background:var(--surface-3);border-radius:999px;font-size:10px;font-weight:800;
+  color:var(--ink-3);padding:1px 7px}
+.sr-row{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
+  padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  color:var(--ink);font:inherit;transition:background .12s ease,border-color .12s ease,transform .12s ease}
+.sr-row:hover{background:var(--primary-soft);border-color:var(--primary);transform:translateX(2px)}
+.sr-row:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.sr-ic{flex:none;color:var(--ink-3);display:grid;place-items:center}
+.sr-ic .icon{width:16px;height:16px}
+.sr-label{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-sub{flex:none;font-size:11.5px;color:var(--ink-3)}
+.sr-empty{padding:22px 6px;text-align:center;color:var(--ink-3);font-size:13px;line-height:1.55}
+/* Mass Weed HUD: angular row corners echoing the mockup's clip-path cards. */
+:root[data-theme^="mass-weed"] .sr-row{border-radius:0;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%)}
