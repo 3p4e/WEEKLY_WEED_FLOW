@@ -91,7 +91,7 @@ Each gap below is buildable today against existing APIs. Grouped by size:
 | `coq-print.html` | on-screen A4 paper-preview (watermark, verdict header) before the .docx |
 | `doc-control.html` (L) | document lifecycle state machine (effective/in-review/periodic-review/superseded), review-by KPI, type tabs, detail drawer |
 | `ecoa-intake.html` | per-document workbench: pipeline stepper, countdown chip, SHA custody bar, gate-note blocks |
-| `facility.html` | floor-plan grid-areas layout + corridor + legend; KPI band; side detail panel; per-room open tasks |
+| `facility.html` | ⚠️ **DEFERRED — needs contract-preserving rework.** A first redesign (floor plan + corridor + legend + kpiTile band + side panel) was reverted because it broke `web/e2e/tests/facility.spec.js`: that test (and the owner's stated flow) require the `.fac-room`/`.fr-nm`/`.fr-n`/`.fs-nm` room cells, the cell-click→`#fac-room-modal` add-batch flow, and the `.fac-res` phase-totals strip. The jsdom unit suite doesn't cover those selectors, so it must be re-done by LAYERING the floor-plan/legend on top of the existing markup without changing `.fac-room`/`.fac-res` or the room modal. Original still-live gap: floor-plan grid-areas layout + corridor + legend; per-room open tasks (no room↔task FK — backend-data need) |
 | `leaves.html` | stability drawer with timepoint pull-schedule timeline (0/3/6mo/end with done/due/pending dots) |
 | `my-day.html` | greeting hero, visible ⌘K affordance, 7-day strip with per-day chips |
 | `search.html` | grow cmdk into the full grouped search page; add batches/rooms/documents sources |
