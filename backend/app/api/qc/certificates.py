@@ -521,6 +521,16 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
             if target in _COA_QP_TARGETS and user["role"] not in _QP_ROLES:
                 raise HTTPException(403, f"{target} is a Qualified-Person decision")
+            # A certificate cannot be APPROVED or RELEASED without a recorded
+            # PASS/FAIL disposition — approval attests a decision, and there is
+            # none to attest until one is on record. The effective disposition is
+            # the one this patch sets, else the value already of record.
+            if target in _COA_QP_TARGETS:
+                eff_decision = patch["decision"] if "decision" in patch else cur["decision"]
+                if eff_decision not in ("PASS", "FAIL"):
+                    raise HTTPException(
+                        409, f"record a PASS or FAIL disposition before {target.lower()}"
+                             " — a certificate's approval attests its disposition of record")
             # GxP second-person review: the reviewer must not be anyone who
             # produced the data — neither the CoA's analyst-of-record NOR any
             # analyst who entered a result on it (each qc_results row stamps its
@@ -602,9 +612,11 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
                              user: dict = Depends(require_role(*_WRITERS))):
     """QCSOP 012 §6.7: an approved certificate is immutable — a correction is a
     NEW certificate with a NEW number, carrying "Supersedes [n] — reason".
-    The revision starts as a DRAFT copy (results included, so the compiler
-    corrects from the current state); the original stays RELEASED until the
-    revision is itself RELEASED, at which point it flips to SUPERSEDED."""
+    The revision starts as a DRAFT copy (results AND the PASS/FAIL disposition
+    included, so the compiler corrects from the current state — and no revision
+    can reach APPROVED without a disposition of record, §M3); the original stays
+    RELEASED until the revision is itself RELEASED, at which point it flips to
+    SUPERSEDED."""
     _uuid_or_404(coa_id, "Certificate")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1", coa_id)
@@ -622,11 +634,11 @@ async def revise_certificate(coa_id: str, body: ReviseIn,
         row = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id,"
             " sample_id, cert_type, report_date, source_lab, laboratory_id, notes, analyst_id,"
-            " supersedes_id, revision_reason, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$11,$11) RETURNING *",
+            " supersedes_id, revision_reason, decision, created_by, updated_by)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$11,$11) RETURNING *",
             user["org_id"], coa_number, cur["batch_id"], cur["specification_id"], cur["sample_id"],
             cur["cert_type"], cur["report_date"], cur["source_lab"], cur["laboratory_id"],
-            cur["notes"], user["id"], coa_id, body.reason)
+            cur["notes"], user["id"], coa_id, body.reason, cur["decision"])
         # carry the result set forward so the correction edits the real state
         await c.execute(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"

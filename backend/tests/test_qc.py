@@ -434,6 +434,9 @@ async def test_coa_reviewer_must_differ_from_analyst(client, admin_headers):
 async def test_coa_approve_release_qp_gated(client, admin_headers):
     spec = await _spec(client, admin_headers, material="QPG-MAT")
     coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin
+    # a disposition of record is a precondition of approval (M3)
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
@@ -458,6 +461,8 @@ async def test_coa_approve_rejects_analyst(client, admin_headers):
     _, qp_analyst = await _actor(client, admin_headers, "QP")
     spec = await _spec(client, admin_headers, material="APR-ANALYST")
     coa = await _coa(client, qp_analyst, spec["id"], batch="B-APR-A")  # the QP is the analyst
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=qp_analyst)).status_code == 200  # disposition of record (M3)
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
@@ -469,6 +474,29 @@ async def test_coa_approve_rejects_analyst(client, admin_headers):
     _, qp2 = await _actor(client, admin_headers, "QP")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
                                headers=qp2)).status_code == 200
+
+
+async def test_coa_approve_requires_a_recorded_disposition(client, admin_headers):
+    """M3 — approval attests the certificate's disposition, so a PASS/FAIL must
+    be on record before APPROVED (and therefore RELEASED, which only follows
+    APPROVED). A reviewed-but-undecided certificate cannot be approved; recording
+    the disposition — even in the same PATCH — unblocks it."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="DISP-MAT")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-DISP")
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qc_h)).status_code == 200
+    # no disposition of record → approval refused
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qp)
+    assert r.status_code == 409 and "disposition" in r.json()["detail"]
+    # recording the disposition in the same PATCH satisfies the gate
+    r = await client.patch(f"/qc/certificates/{coa['id']}",
+                           json={"decision": "PASS", "status": "APPROVED"}, headers=qp)
+    assert r.status_code == 200 and r.json()["status"] == "APPROVED"
+    # RELEASED needs no re-statement — the disposition is already of record
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"},
+                               headers=qp)).status_code == 200
 
 
 async def test_results_only_in_draft(client, admin_headers):
