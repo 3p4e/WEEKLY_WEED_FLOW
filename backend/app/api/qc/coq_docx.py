@@ -4,7 +4,7 @@ from app.deps import require_role
 from app.notify import safe_emit
 from fastapi import Depends, HTTPException
 
-from .common import _COQ_ROLES, _evaluate, _uuid_or_404, router
+from .common import _COQ_ROLES, _evaluate, _uuid_or_404, check_derived_total_units, router
 from .laboratories import _lab_scope_set, _result_in_scope
 from .signatures import _sig_out
 from .specs import _ACID_FACTOR
@@ -451,6 +451,7 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
         rb = by_param.get(str(p["component_b_id"])) if p["component_b_id"] else None
         if not (ra and rb and ra["result_numeric"] is not None and rb["result_numeric"] is not None):
             continue
+        check_derived_total_units(dict(p), ra, rb)
         val = round(float(ra["result_numeric"]) + _ACID_FACTOR * float(rb["result_numeric"]), 2)
         lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
         hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None

@@ -1135,6 +1135,8 @@ async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monk
                                     "result_numeric": 22.0, "lower_limit": 10.0,
                                     "upper_limit": 30.0, "unit": "%"},
                               headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
@@ -1146,9 +1148,11 @@ async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monk
 async def test_coq_manifest_blocks_missing_content(client, admin_headers, monkeypatch):
     """A RELEASED certificate whose results all comply and whose spec is fully
     tested still cannot be issued as a CoQ if it is missing mandatory certificate
-    CONTENT — here the report date and the recorded PASS disposition. The gate
-    names each absent element and fabricates none; supplying them lets the same
-    certificate issue."""
+    CONTENT — here the report date. The gate names the absent element and
+    fabricates none; supplying it lets the same certificate issue. (The recorded
+    PASS disposition is now a precondition of approval itself, M3, so a released
+    cert always carries one — the manifest's disposition check is a redundant
+    safety net rather than a reachable state via this path.)"""
     _stub_de(monkeypatch, {"document_id": "DE-COQ-MAN", "verify": "RESULT: PASS"})
     _, qp = await _actor(client, admin_headers, "QP")
     spec = await _spec(client, admin_headers, material="COQ-MANIFEST")
@@ -1158,7 +1162,8 @@ async def test_coq_manifest_blocks_missing_content(client, admin_headers, monkey
                                 "lower_limit": 10.0, "upper_limit": 30.0},
                           headers=admin_headers)
     assert p.status_code == 201
-    # deliberately created with NO report_date and the disposition left unset
+    # deliberately created with NO report_date (the disposition is recorded so the
+    # cert can reach RELEASED under M3 — report_date is the absent mandatory element)
     coa = await _coa(client, admin_headers, spec["id"], batch="B-COQ-MAN")
     assert (await client.post(f"/qc/certificates/{coa['id']}/results",
                               json={"parameter_id": p.json()["id"], "test_name": "Total THC",
@@ -1166,18 +1171,20 @@ async def test_coq_manifest_blocks_missing_content(client, admin_headers, monkey
                                     "upper_limit": 30.0, "unit": "%",
                                     "source_document_code": "ECOA-LAB-9"},
                               headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
-    assert "mandatory content" in detail
-    assert "report date" in detail and "PASS disposition" in detail
+    assert "mandatory content" in detail and "report date" in detail
     # the CoQ is refused because content is absent, not because the batch failed —
-    # recording the report date + disposition lifts the gate (nothing invented)
+    # recording the report date lifts the gate (nothing invented). report_date is a
+    # register/CoQ-template field, so it back-fills on the RELEASED cert in place.
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                               json={"report_date": "2026-07-02", "decision": "PASS"},
+                               json={"report_date": "2026-07-02"},
                                headers=admin_headers)).status_code == 200
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=admin_headers)).status_code == 201
@@ -1339,11 +1346,41 @@ async def test_coq_computed_missing_component_blocks(client, admin_headers, monk
                               json={"parameter_id": pa["id"], "test_name": "Delta-9-THC",
                                     "result_numeric": 1.5, "unit": "%"},
                               headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
+
+
+async def test_coq_computed_total_rejects_mismatched_component_units(client, admin_headers, monkeypatch):
+    """M6 — Ph. Eur. 3028 sums the components directly (total = neutral + 0.877 ×
+    acid), so a total summed across MIXED units is a scientifically meaningless
+    number. The engine refuses to derive it rather than certify conformance
+    against it, naming the offending parameter."""
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="PH3028-U")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-3028-U", report_date="2026-07-01")
+    # component A in %, component B in mg/g — incompatible for a direct sum
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pa["id"], "test_name": "Delta-9-THC",
+                                    "result_numeric": 1.5, "unit": "%"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": pb["id"], "test_name": "THCA",
+                                    "result_numeric": 20.0, "unit": "mg/g"},
+                              headers=admin_headers)).status_code == 201
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
+    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
+        assert (await client.patch(f"/qc/certificates/{coa['id']}",
+                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "different units" in r.json()["detail"] and "Total THC" in r.json()["detail"]
 
 
 async def test_computed_param_validation(client, admin_headers):

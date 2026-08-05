@@ -8,7 +8,8 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .certificates import VoidIn, _mint_cert_number
-from .common import _COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid_or_422, router
+from .common import (_COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid_or_422,
+                     check_derived_total_units, router)
 from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
 from .laboratories import _lab_scope_set, _result_in_scope
 from .specs import _ACID_FACTOR
@@ -291,6 +292,7 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
                     and rb["result_numeric"] is not None):
                 missing.append(p["test_name_en"] or p["test_name_mk"] or "?")
                 continue
+            check_derived_total_units(dict(p), ra, rb)
             val = round(float(ra["result_numeric"]) + _ACID_FACTOR * float(rb["result_numeric"]), 2)
             lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
             hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None

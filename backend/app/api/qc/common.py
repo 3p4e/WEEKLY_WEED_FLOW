@@ -47,6 +47,31 @@ def _evaluate(value: float | None, lo: float | None, hi: float | None):
     return ok, ("pass" if ok else "fail")
 
 
+def _norm_unit(u) -> str:
+    return " ".join((u or "").split()).lower()
+
+
+def check_derived_total_units(p: dict, ra: dict, rb: dict) -> None:
+    """Ph. Eur. 3028 derives total = neutral + 0.877 × acid. The 0.877 factor is a
+    molar-mass ratio (THC/THCA), NOT a unit conversion, so the sum is only
+    meaningful when both component results share ONE unit — % + % or mg/g + mg/g,
+    never % + mg/g. A total summed across mixed units is a scientifically
+    meaningless number that would be certified as conformance, so refuse it rather
+    than emit it. The derived value is reported in the computed parameter's declared
+    unit, so that must agree with the components too. Raises 409 on any mismatch."""
+    ua, ub, up = _norm_unit(ra.get("unit")), _norm_unit(rb.get("unit")), _norm_unit(p.get("unit"))
+    name = p.get("test_name_en") or p.get("test_name_mk") or "computed total"
+    if ua != ub:
+        raise HTTPException(
+            409, f"'{name}' cannot be derived: its components are recorded in different"
+                 f" units ({ra.get('unit') or '—'} vs {rb.get('unit') or '—'}) — Ph. Eur. 3028"
+                 " sums them directly, so both must be expressed in the same unit")
+    if up and ua and up != ua:
+        raise HTTPException(
+            409, f"'{name}' is declared in {p.get('unit')} but its components are recorded in"
+                 f" {ra.get('unit')} — the derived total must be reported in its components' unit")
+
+
 def _lab_verdict_bool(v: str | None) -> bool | None:
     """Best-effort reading of the lab's stated verdict for the reconciliation
     flag. Deliberately conservative: anything ambiguous returns None and no
