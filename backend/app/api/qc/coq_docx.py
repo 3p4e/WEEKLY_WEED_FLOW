@@ -432,8 +432,11 @@ async def generate_coq(coa_id: str, user: dict = Depends(require_role(*_COQ_ROLE
     _uids = [str(v) for v in _role_ids.values() if v]
     if _uids:
         prows = await users_admin_pool().fetch(
-            "SELECT id, full_name FROM profiles WHERE id = ANY($1::uuid[]) AND is_deleted=false",
-            _uids)
+            # org-scope the BYPASSRLS lookup: the ids come from this org's cert, so
+            # a name from another org must never be resolvable even if one slipped in.
+            "SELECT id, full_name FROM profiles WHERE id = ANY($1::uuid[]) AND org_id=$2"
+            " AND is_deleted=false",
+            _uids, user["org_id"])
         _by_id = {str(p["id"]): p["full_name"] for p in prows}
         signer_names = {k: _by_id.get(str(v)) for k, v in _role_ids.items() if v and _by_id.get(str(v))}
     if not results:

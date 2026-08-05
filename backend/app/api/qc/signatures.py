@@ -68,7 +68,8 @@ async def sign_certificate(coa_id: str, body: SignIn,
     # Re-authenticate against the signer's own account (Annex 11 §14) — the
     # profile (and its password hash) lives in the separate users DB.
     prof = await users_admin_pool().fetchrow(
-        "SELECT full_name, password_hash FROM profiles WHERE id=$1 AND is_deleted=false", user["id"])
+        "SELECT full_name, password_hash FROM profiles WHERE id=$1 AND org_id=$2"
+        " AND is_deleted=false", user["id"], user["org_id"])
     if prof is None or not await asyncio.to_thread(verify_password, body.password, prof["password_hash"]):
         raise HTTPException(401, "Signature not applied — re-authentication failed")
     async with rls(user) as c:

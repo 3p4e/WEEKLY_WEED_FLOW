@@ -251,6 +251,13 @@ async def list_coa_originals(doc_id: str, user: dict = Depends(require_role(*ELE
     return [_file_out(dict(r)) for r in rows]
 
 
+# A stored original's content_type is whatever the uploader declared, so it is
+# NOT trusted for serving: anything outside this safe set is served as an opaque
+# octet-stream. Combined with the attachment disposition and nosniff below, this
+# stops a file uploaded as text/html from being sniffed/rendered inline (XSS).
+_SAFE_DOWNLOAD_TYPES = {"application/pdf", "image/png", "image/jpeg", "image/tiff", "image/gif"}
+
+
 @router.get("/document-files/{file_id}/download")
 async def download_document_file(file_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """Return the stored original bytes. Re-hashes on the way out and reports the
@@ -265,7 +272,9 @@ async def download_document_file(file_id: str, user: dict = Depends(require_role
         raise HTTPException(404, "Document file not found")
     data = bytes(row["content"])
     integrity = "OK" if hashlib.sha256(data).hexdigest() == row["sha256"] else "MISMATCH"
-    raw_name = (row["filename"] or "download").replace('"', "").replace("\\", "").replace("\n", "")
+    raw_name = (row["filename"] or "download").replace('"', "").replace("\\", "") \
+        .replace("\n", "").replace("\r", "")   # strip CR too — no header injection
+    ctype = row["content_type"] if row["content_type"] in _SAFE_DOWNLOAD_TYPES else "application/octet-stream"
     # M8: Starlette latin-1-encodes header values, so a Cyrillic filename (routine
     # here) in a bare filename="…" raises UnicodeEncodeError → 500. Emit an RFC-5987
     # filename*=UTF-8'' value for the real name plus an ASCII-only fallback for old
@@ -274,8 +283,10 @@ async def download_document_file(file_id: str, user: dict = Depends(require_role
     disposition = (f"attachment; filename=\"{ascii_name}\"; "
                    f"filename*=UTF-8''{_urlquote(raw_name)}")
     return Response(
-        content=data, media_type=row["content_type"] or "application/octet-stream",
+        content=data, media_type=ctype,
         headers={"Content-Disposition": disposition,
+                 # never let a browser sniff a served original into an active type
+                 "X-Content-Type-Options": "nosniff",
                  "X-Integrity": integrity, "X-Content-SHA256": row["sha256"]})
 
 
@@ -471,8 +482,14 @@ async def upsert_checklist(doc_id: str, body: ChecklistIn,
     _uuid_or_404(doc_id, "eCoA document")
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
-        if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
+        parent = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
+        if parent is None:
             raise HTTPException(404, "eCoA document not found")
+        # A PROMOTED/REJECTED document is terminal — its review is over (or moot), so
+        # its checklist is frozen. Usually caught by the outcome lock below, but a
+        # doc REJECTED via a bare status PATCH can still carry a PENDING checklist.
+        if parent["status"] in ("PROMOTED", "REJECTED"):
+            raise HTTPException(409, f"Document is {parent['status']} — its review checklist is locked")
         # serialise the read-then-insert so two concurrent PUTs can't both create
         # a checklist for the same document (the UNIQUE(org_id, document_id) is the
         # hard backstop; this avoids a unique-violation 500 on the race).
@@ -516,8 +533,12 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
     if body.outcome not in ("ACCEPTED", "REJECTED"):
         raise HTTPException(422, "outcome must be ACCEPTED or REJECTED")
     async with rls(user) as c:
-        if await c.fetchrow("SELECT id FROM qc_coa_documents WHERE id=$1", doc_id) is None:
+        parent = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
+        if parent is None:
             raise HTTPException(404, "eCoA document not found")
+        # a terminal document's review is over (or moot) — no decision to record
+        if parent["status"] in ("PROMOTED", "REJECTED"):
+            raise HTTPException(409, f"Document is {parent['status']} — its review is closed")
         cur = await c.fetchrow("SELECT * FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
         if cur is None:
             raise HTTPException(409, "complete the checklist before deciding")
@@ -782,6 +803,7 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
     (U3). One result per MAPPED extraction, each carrying its source document
     (feeds the U1 COQ's per-line provenance). Unmapped extractions are left in
     the review queue and reported — never fabricated into a result."""
+    _uuid_or_404(doc_id, "eCoA document")
     async with rls(user) as c:
         doc = await c.fetchrow("SELECT * FROM qc_coa_documents WHERE id=$1", doc_id)
         if doc is None:

@@ -2259,6 +2259,41 @@ async def test_coa_original_rejects_bad_input_and_is_gated(client, admin_headers
                              headers=admin_headers)).status_code == 404
 
 
+async def test_download_hardens_served_type_and_headers(client, admin_headers):
+    """A stored original is served defensively: an untrusted uploader content_type
+    outside the safe whitelist is downgraded to application/octet-stream, nosniff is
+    set, and CR/LF are stripped from the disposition filename — an HTML file cannot
+    be sniffed into an active inline response (XSS) or inject a response header."""
+    import base64 as _b64
+    doc = await _ecoa_doc(client, admin_headers, batch="B-DL-HARD")
+    blob = b"<html><script>alert(1)</script></html>"
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/originals",
+                          json={"filename": "evil\r\ninjected.html", "content_type": "text/html",
+                                "content_b64": _b64.b64encode(blob).decode()}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    dl = await client.get(f"/qc/document-files/{r.json()['id']}/download", headers=admin_headers)
+    assert dl.status_code == 200
+    assert dl.headers["content-type"].startswith("application/octet-stream")   # not text/html
+    assert dl.headers["x-content-type-options"] == "nosniff"
+    cd = dl.headers["content-disposition"]
+    assert "\r" not in cd and "\n" not in cd                                    # no header injection
+
+
+async def test_checklist_write_refused_on_terminal_document(client, admin_headers):
+    """A REJECTED (or PROMOTED) document is terminal — its §6.3.2 review checklist
+    is frozen even when it was never decided. A doc rejected via a bare status PATCH
+    (checklist still PENDING) still refuses further checklist writes and decisions."""
+    doc = await _ecoa_doc(client, admin_headers, batch="B-CL-TERM")
+    assert (await client.patch(f"/qc/coa-documents/{doc['id']}", json={"status": "REJECTED"},
+                               headers=admin_headers)).status_code == 200
+    r = await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                         json={"sample_id_match": True}, headers=admin_headers)
+    assert r.status_code == 409 and "REJECTED" in r.json()["detail"]
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                          json={"outcome": "ACCEPTED"}, headers=admin_headers)
+    assert r.status_code == 409
+
+
 # ── URS increment 10 — batch genealogy (item 5, D2 = blending / m:n) ─────────
 async def _edge(client, headers, parent, child, relation="GENERIC"):
     r = await client.post("/qc/genealogy",
