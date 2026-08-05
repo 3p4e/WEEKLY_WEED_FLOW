@@ -566,7 +566,7 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
         # overdue. An explicit ->REVIEWED transition already stamped leaves this be.
         if body.outcome == "ACCEPTED":
             await c.execute(
-                f"UPDATE qc_coa_documents SET reviewed_at=now(),"
+                f"UPDATE qc_coa_documents SET reviewed_at=now(),"  # nosec B608 — SITE_TODAY_SQL is a trusted constant, not input
                 f" review_window_met=({SITE_TODAY_SQL} <= review_deadline),"
                 f" updated_by=$1, updated_at=now() WHERE id=$2 AND reviewed_at IS NULL",
                 user["id"], doc_id)
