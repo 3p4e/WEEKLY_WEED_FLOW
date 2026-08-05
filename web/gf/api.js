@@ -188,6 +188,10 @@ GF.API = {
   deconCorridors(campaign)       { return this._req('GET',  '/decon/corridors' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
   deconCorridorCleanings(roomId) { return this._req('GET',  '/decon/corridors/' + roomId + '/cleanings'); },
   deconCorridorClean(body)       { return this._req('POST', '/decon/corridors/cleanings', body); },
+  // Biosecurity monitoring (migration 0053) — AHU filter, disinfection mat,
+  // contact plate/sentinel bioassay, gowning. Second module on /decon.
+  biosecurity(q = {})            { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/biosecurity' + (u ? '?' + u : '')); },
+  biosecurityLog(body)           { return this._req('POST', '/decon/biosecurity', body); },
 
   // ── Destruction / waste manifests (migration 0048) ──
   // A manifest climbs draft -> sealed -> witnessed -> disposed and each rung is a

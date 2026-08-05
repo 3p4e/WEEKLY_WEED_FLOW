@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dH40jjdE1Bhv5Q4rZ9InNLQ65LVn6F40P6rfB42gvkQUM6cdE40AEymabKsOhu5
+\restrict 6KXkmemMRrPQDLx1v7719WjVfW3Z7NgI3Ye152HyxBaNu0bOoi1DBHxe0YahZI0
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -197,6 +197,38 @@ ALTER TABLE public.audit_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MAXVALUE
     CACHE 1
 );
+
+
+--
+-- Name: biosecurity_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.biosecurity_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    kind text NOT NULL,
+    room_id uuid,
+    location text,
+    occurred_on date DEFAULT CURRENT_DATE NOT NULL,
+    subject text,
+    action text,
+    measure_value numeric,
+    measure_unit text,
+    result text,
+    action_taken text,
+    performed_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT biosecurity_events_action_on_fail_check CHECK (((result IS NULL) OR (result <> ALL (ARRAY['fail'::text, 'below_spec'::text])) OR ((action_taken IS NOT NULL) AND (length(btrim(action_taken)) > 0)))),
+    CONSTRAINT biosecurity_events_kind_check CHECK ((kind = ANY (ARRAY['ahu_filter'::text, 'disinfection_mat'::text, 'contact_plate'::text, 'sentinel_bioassay'::text, 'gowning'::text]))),
+    CONSTRAINT biosecurity_events_measure_check CHECK (((measure_value IS NULL) OR (measure_value >= (0)::numeric))),
+    CONSTRAINT biosecurity_events_result_check CHECK (((result IS NULL) OR (result = ANY (ARRAY['pass'::text, 'fail'::text, 'below_spec'::text, 'pending'::text]))))
+);
+
+ALTER TABLE ONLY public.biosecurity_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2014,6 +2046,14 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: biosecurity_events biosecurity_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.biosecurity_events
+    ADD CONSTRAINT biosecurity_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: calendar_weeks calendar_weeks_org_id_iso_year_iso_week_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2732,6 +2772,27 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: biosecurity_events_open_fail_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX biosecurity_events_open_fail_idx ON public.biosecurity_events USING btree (org_id, occurred_on DESC) WHERE (result = ANY (ARRAY['fail'::text, 'below_spec'::text]));
+
+
+--
+-- Name: biosecurity_events_org_kind_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX biosecurity_events_org_kind_idx ON public.biosecurity_events USING btree (org_id, kind, occurred_on DESC);
+
+
+--
+-- Name: biosecurity_events_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX biosecurity_events_room_idx ON public.biosecurity_events USING btree (room_id, occurred_on DESC) WHERE (room_id IS NOT NULL);
+
+
+--
 -- Name: corridor_cleanings_manifest_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3362,6 +3423,13 @@ CREATE TRIGGER audit_ai_pins AFTER INSERT OR DELETE OR UPDATE ON public.ai_pins 
 
 
 --
+-- Name: biosecurity_events audit_biosecurity_events; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_biosecurity_events AFTER INSERT OR DELETE OR UPDATE ON public.biosecurity_events FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: calendar_weeks audit_calendar_weeks; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3774,6 +3842,14 @@ ALTER TABLE ONLY public.ai_pins
 
 ALTER TABLE ONLY public.ai_pins
     ADD CONSTRAINT ai_pins_week_id_fkey FOREIGN KEY (week_id) REFERENCES public.calendar_weeks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: biosecurity_events biosecurity_events_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.biosecurity_events
+    ADD CONSTRAINT biosecurity_events_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -4457,6 +4533,12 @@ CREATE POLICY audit_read ON public.audit_log FOR SELECT USING ((app.is_elevated(
 
 
 --
+-- Name: biosecurity_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.biosecurity_events ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: calendar_weeks; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4599,6 +4681,13 @@ CREATE POLICY org_isolation ON public.ai_agent_bindings USING ((org_id = app.cur
 --
 
 CREATE POLICY org_isolation ON public.ai_pins USING (((org_id = app.current_org_id()) AND ((subject_user_id IS NULL) OR (subject_user_id = app.current_user_id()) OR app.is_elevated()))) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: biosecurity_events org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.biosecurity_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5301,5 +5390,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dH40jjdE1Bhv5Q4rZ9InNLQ65LVn6F40P6rfB42gvkQUM6cdE40AEymabKsOhu5
+\unrestrict 6KXkmemMRrPQDLx1v7719WjVfW3Z7NgI3Ye152HyxBaNu0bOoi1DBHxe0YahZI0
 

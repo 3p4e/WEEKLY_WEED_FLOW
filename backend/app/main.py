@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, approvals, audit, auth, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, irrigation, notifications, qc, qms, reports, tasks, waste
+from app.api import ai, approvals, audit, auth, biosecurity, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, irrigation, notifications, qc, qms, reports, tasks, waste
 from app.config import docs_kwargs, settings
 from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.logging_config import configure_logging
@@ -88,6 +88,10 @@ app.include_router(harvest.router)
 # the last Phase 2 cultivation record. Standalone because a feed carries no gate.
 app.include_router(irrigation.router)
 app.include_router(decon.router)
+# Second router on the /decon prefix: biosecurity monitoring (AHU filter,
+# disinfection mat, contact plate/sentinel bioassay, gowning — migration 0053)
+# lives on the decon board where the swabs/bleach/tool logs already are.
+app.include_router(biosecurity.router)
 app.include_router(waste.router)
 app.include_router(approvals.router)
 app.include_router(qms.router)

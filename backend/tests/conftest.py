@@ -131,7 +131,7 @@ async def purge_org(org_id) -> None:
                   # harvests, ipm_applications and irrigation_events all cite
                   # batches AND rooms (RESTRICT), so they precede both — same
                   # reason as the waste lines above.
-                  "harvests", "ipm_applications", "irrigation_events",
+                  "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):

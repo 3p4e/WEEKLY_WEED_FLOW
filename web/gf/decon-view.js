@@ -16,7 +16,7 @@
 
 (function () {
   GF.WWF._decon = { cycles: null, loading: false, error: null, campaign: '',
-                    corridors: null };
+                    corridors: null, biosecurity: null };
 
   // The plan's §12 sequence, in order. Labels are bilingual per house style.
   const STEPS = [
@@ -55,12 +55,18 @@
       // 404 here — and with a bare Promise.all that 404 rejected the whole load
       // and replaced the working room-cycle board with an error page. The cycles
       // are the load-bearing half; the cadence panel degrades to absent.
-      const [r, cor] = await Promise.all([
+      // Same "cannot fail the board" rule as the corridor call: biosecurity is
+      // migration 0053, newer than the cycles endpoint, so a frontend deployed
+      // ahead of its backend degrades this panel to absent rather than losing
+      // the room-cycle board underneath it.
+      const [r, cor, bio] = await Promise.all([
         GF.API.deconCycles(st.campaign || undefined),
         GF.API.deconCorridors(st.campaign || undefined).catch(() => null),
+        GF.API.biosecurity({ open_only: 'true', limit: 20 }).catch(() => null),
       ]);
       st.cycles = r.cycles || [];
       st.corridors = cor;
+      st.biosecurity = bio;
     } catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'decon') GF.render.all();
@@ -318,6 +324,139 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   });
 
+  // ── biosecurity monitoring (§18/§20/§27/§23,§28 control 5, migration 0053) ─
+  //
+  // Same shape as the corridor panel above: a self-contained board section, not
+  // a tab, so it is visible alongside the room cycles rather than hidden behind
+  // a click. It shows only OPEN items (fail/below_spec) — a passing check is
+  // routine and does not need a place on the board; a failing one that nobody
+  // has acted on is exactly what §27 exists to surface.
+  const canBio = () => canClean() || canQA();   // crew AND QA both record here
+  const KINDS = [
+    { v: 'ahu_filter',         en: 'AHU filter',            mk: 'AHU филтер' },
+    { v: 'disinfection_mat',   en: 'Disinfection mat',      mk: 'Дезинфекциона прострелка' },
+    { v: 'contact_plate',      en: 'Contact plate',         mk: 'Контактна плоча' },
+    { v: 'sentinel_bioassay',  en: 'Sentinel bioassay',     mk: 'Сентинел биоесеј' },
+    { v: 'gowning',            en: 'Gowning / zone crossing', mk: 'Облекување / премин на зона' },
+  ];
+  const kindLbl = (v) => { const o = KINDS.find(k => k.v === v); return o ? AL(o.en, o.mk) : v; };
+  const RESULTS = [
+    { v: 'pass', en: 'Pass', mk: 'Поминато' }, { v: 'fail', en: 'Fail', mk: 'Неуспешно' },
+    { v: 'below_spec', en: 'Below spec', mk: 'Под спецификација' },
+    { v: 'pending', en: 'Pending', mk: 'Во исчекување' },
+  ];
+
+  const biosecurityPanel = () => {
+    const bio = GF.WWF._decon.biosecurity;
+    const events = (bio && bio.events) || [];
+    const logBtn = canBio()
+      ? `<button class="btn btn-sm" onclick="GF.WWF.bioForm()">${AL('Log check', 'Запиши проверка')}</button>`
+      : '';
+    if (!events.length) {
+      // No open failures — a quiet panel is the correct steady state, but the
+      // action to log a new check must still be reachable from here.
+      return canBio() ? `<div class="card" style="padding:12px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <strong style="flex:1">${AL('Biosecurity monitoring', 'Биобезбедносен мониторинг')}</strong>
+          <span style="color:#2BE8A0;font-size:11px">${AL('no open failures', 'нема отворени неуспеси')}</span>
+          ${logBtn}
+        </div>
+      </div>` : '';
+    }
+    const rows = events.map(e => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;background:rgba(229,72,77,.06)">
+        <span style="width:8px;height:8px;border-radius:50%;background:#E5484D;flex:none"></span>
+        <span style="min-width:110px;font-size:11px;color:var(--ink-3)">${GF.esc(kindLbl(e.kind))}</span>
+        <strong style="flex:1;font-size:12px">${GF.esc(e.subject || e.room_name || '—')}</strong>
+        <span style="color:var(--ink-3);font-size:11px;min-width:80px;text-align:right">${GF.esc(e.occurred_on || '')}</span>
+        <span style="color:var(--ink-3);font-size:11px;flex:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+          GF.esc(e.action_taken || '')}</span>
+      </div>`).join('');
+    return `<div class="card" style="padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <strong style="flex:1">${AL('Biosecurity monitoring', 'Биобезбедносен мониторинг')}</strong>
+        ${logBtn}
+      </div>
+      <div style="color:#E5484D;font-size:12px;margin-bottom:6px">${AL(
+        `${events.length} open failure(s) — AHU filters, mats, contact plates and gowning checks that failed with the response taken.`,
+        `${events.length} отворен(и) неуспех(и) — филтри, прострелки, плочи и проверки со преземена реакција.`)}</div>
+      ${rows}
+    </div>`;
+  };
+
+  GF.WWF.bioForm = async () => {
+    if (!canBio()) return;
+    let rooms = [];
+    try { rooms = (await GF.API.facility()).rooms || []; } catch (e) { rooms = []; }
+    GF.WWF._ensureModal('dc-bio-modal', '440px');
+    GF.$('dc-bio-modal-title').textContent = AL('Log biosecurity check', 'Запиши биобезбедносна проверка');
+    const roomOpts = [{ v: '', label: AL('— no room —', '— без соба —') }]
+      .concat(rooms.map(r => ({ v: r.id, label: r.name })));
+    GF.$('dc-bio-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Kind', 'Вид')}</label>
+        ${GF.selectField('dc-bio-kind', { value: 'ahu_filter', title: AL('Kind', 'Вид'),
+          options: KINDS.map(k => ({ v: k.v, label: AL(k.en, k.mk) })) })}</div>
+      <div class="field"><label>${AL('Room (optional)', 'Соба (опционално)')}</label>
+        ${GF.selectField('dc-bio-room', { value: '', title: AL('Room', 'Соба'), options: roomOpts })}</div>
+      <div class="field"><label>${AL('Subject', 'Предмет')}</label>
+        <input id="dc-bio-subject" maxlength="200" placeholder="${AL('AHU-3, Mat entrance, Cure bench 2, J. Doe…', 'AHU-3, прострелка на влез, клупа за сушење 2…')}"></div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1"><label>${AL('Reading (optional)', 'Мерење (опционално)')}</label>
+          <input id="dc-bio-value" type="number" min="0" step="0.01"></div>
+        <div class="field" style="flex:1"><label>${AL('Unit', 'Единица')}</label>
+          <input id="dc-bio-unit" maxlength="40" placeholder="ppm, CFU"></div>
+      </div>
+      <div class="field"><label>${AL('Result', 'Резултат')}</label>
+        ${GF.selectField('dc-bio-result', { value: '', title: AL('Result', 'Резултат'),
+          options: [{ v: '', label: AL('— not yet read —', '— сè уште нечитано —') }]
+            .concat(RESULTS.map(r => ({ v: r.v, label: AL(r.en, r.mk) }))),
+          onPick: (v) => GF.WWF._bioSync(v) })}</div>
+      <div class="field" id="dc-bio-action-field" style="display:none">
+        <label>${AL('Action taken', 'Преземена мерка')}</label>
+        <input id="dc-bio-action" maxlength="1000"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="dc-bio-note" maxlength="1000"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'A Fail or Below spec result must state what was done about it — a failed biosecurity check with no response is the gap this record exists to close.',
+        'Резултат Неуспешно или Под спецификација мора да наведе што е преземено — неуспешна проверка без реакција е токму празнината што овој запис ја затвора.')}
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="dc-bio-save" onclick="GF.WWF.bioSave()">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('dc-bio-modal');
+    setTimeout(() => { const f = GF.$('dc-bio-subject'); if (f) f.focus(); }, 60);
+  };
+
+  GF.WWF._bioSync = (result) => {
+    const field = GF.$('dc-bio-action-field');
+    if (field) field.style.display = (result === 'fail' || result === 'below_spec') ? '' : 'none';
+  };
+
+  GF.WWF.bioSave = () => GF.once('dc-bio-save', async () => {
+    const result = (GF.$('dc-bio-result') || {}).value || '';
+    const action = ((GF.$('dc-bio-action') || {}).value || '').trim();
+    if ((result === 'fail' || result === 'below_spec') && !action) {
+      GF.toast(AL('State the action taken for a failing result',
+                  'Наведете каква мерка е преземена за неуспешен резултат'), 'error');
+      return;
+    }
+    const numRaw = ((GF.$('dc-bio-value') || {}).value || '').trim();
+    try {
+      await GF.API.biosecurityLog({
+        kind: (GF.$('dc-bio-kind') || {}).value,
+        room_id: ((GF.$('dc-bio-room') || {}).value || '') || null,
+        subject: ((GF.$('dc-bio-subject') || {}).value || '').trim() || null,
+        measure_value: numRaw === '' ? null : parseFloat(numRaw),
+        measure_unit: ((GF.$('dc-bio-unit') || {}).value || '').trim() || null,
+        result: result || null,
+        action_taken: action || null,
+        note: ((GF.$('dc-bio-note') || {}).value || '').trim() || null });
+      GF.closeModal('dc-bio-modal');
+      GF.toast(AL('Biosecurity check logged', 'Проверката е запишана'), 'success');
+      await GF.WWF.loadDecon();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
   GF.views.decon = () => {
     const st = GF.WWF._decon;
     if (!st.cycles && !st.loading && !st.error) GF.WWF.loadDecon();
@@ -334,15 +473,16 @@
     // throughout the campaign, including before the first room cycle is started
     // and after the last one is released.
     const corridors = corridorPanel();
+    const biosecurity = biosecurityPanel();
     if (!cycles.length) {
-      return head + corridors + `<div class="ntf-empty">${AL(
+      return head + corridors + biosecurity + `<div class="ntf-empty">${AL(
         'No room cycles yet. Start one per room — every room passes the full 5-step cycle.',
         'Нема циклуси. Почнете по еден за секоја соба — секоја поминува полн циклус од 5 чекори.')}</div>`;
     }
     const released = cycles.filter(c => c.status === 'released').length;
     const summary = `<div style="margin-bottom:10px;color:var(--ink-3);font-size:12px">
       ${released}/${cycles.length} ${AL('rooms released', 'соби ослободени')}</div>`;
-    return head + corridors + summary + cycles.map(cycleCard).join('');
+    return head + corridors + biosecurity + summary + cycles.map(cycleCard).join('');
   };
 
   // ── actions ───────────────────────────────────────────────────────────────

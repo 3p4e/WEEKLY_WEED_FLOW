@@ -252,6 +252,7 @@ function loadForms(role) {
   w.GF.API.deconSwabResult = async (id, body)  => { w.__res  = [id, body];  return {}; };
   w.GF.API.deconRelease    = async (id, body)  => { w.__rel  = [id, body];  return {}; };
   w.GF.API.deconCycles     = async () => ({ cycles: [] });
+  w.GF.API.biosecurity     = async () => ({ events: [] });
   return h;
 }
 
@@ -606,5 +607,84 @@ test('a reader calling the corridor form directly is refused', async () => {
   await h.window.GF.WWF.deconCorridorForm('r1');
   assert.ok(!h.window.__modals.includes('dc-cor-modal'),
     'hiding the button is not the gate — the handler checks too');
+  h.close();
+});
+
+// ── Biosecurity monitoring panel (migration 0053) ───────────────────────────
+
+function renderBio(h, events) {
+  h.window.GF.WWF._decon.cycles = [];
+  h.window.GF.WWF._decon.biosecurity = { events };
+  h.window.GF.state.view = 'decon';
+  return h.window.GF.views.decon();
+}
+
+test('an open biosecurity failure is shown with its action taken, on the decon board', () => {
+  const h = load('CU_MGR');
+  const body = renderBio(h, [
+    { id: 'b1', kind: 'disinfection_mat', subject: 'Mat entrance', room_name: null,
+      occurred_on: '2026-08-05', action_taken: 'Bleach topped up and re-verified' },
+  ]);
+  assert.match(body, /Mat entrance/);
+  assert.match(body, /Bleach topped up and re-verified/);
+  assert.match(body, /1 open failure/);
+  h.close();
+});
+
+test('with no open failures the panel is quiet but still offers Log check to a recorder', () => {
+  const h = load('CU_MGR');
+  const body = renderBio(h, []);
+  assert.match(body, /no open failures/);
+  assert.match(body, /GF\.WWF\.bioForm\(\)/);
+  h.close();
+});
+
+test('a base USER role gets no biosecurity panel at all when there are no failures', () => {
+  const h = load('USER');
+  // A base USER never reaches this view in practice (the board is guarded),
+  // but the panel itself must not offer a write action to a role that cannot use it.
+  const body = renderBio(h, []);
+  assert.doesNotMatch(body, /Biosecurity monitoring/,
+    'the quiet panel renders nothing for a role that cannot log a check');
+  h.close();
+});
+
+function loadBioForms(role) {
+  const h = loadForms(role);
+  const w = h.window;
+  w.GF.API.facility = async () => ({ rooms: [{ id: 'r1', name: 'Flowering 1.1' }] });
+  w.GF.API.biosecurityLog = async (b) => { w.__bio = b; return { id: 'e9' }; };
+  return h;
+}
+
+test('a Fail result is refused client-side without a stated action, then sent once given', async () => {
+  const h = loadBioForms('QA_MGR');
+  const w = h.window;
+  await w.GF.WWF.bioForm();
+  w.document.getElementById('dc-bio-subject').value = 'Cure bench 2';
+  w.document.getElementById('dc-bio-result').value = 'fail';
+  await w.GF.WWF.bioSave();
+  assert.equal(w.__bio, undefined, 'a failing result with no action must not be sent');
+  assert.match(w.__toasts.at(-1)[0], /action/i);
+
+  w.document.getElementById('dc-bio-action').value = 'Room quarantined, re-swab scheduled';
+  await w.GF.WWF.bioSave();
+  assert.equal(w.__bio.result, 'fail');
+  assert.equal(w.__bio.action_taken, 'Room quarantined, re-swab scheduled');
+  h.close();
+});
+
+test('a blank measurement is sent as null, not zero, and Pass needs no action', async () => {
+  const h = loadBioForms('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.bioForm();
+  w.document.getElementById('dc-bio-kind').value = 'ahu_filter';
+  w.document.getElementById('dc-bio-subject').value = 'AHU-3';
+  w.document.getElementById('dc-bio-result').value = 'pass';
+  await w.GF.WWF.bioSave();
+  assert.equal(w.__bio.result, 'pass');
+  assert.equal(w.__bio.measure_value, null,
+    'an unmeasured reading is null, never coerced to 0');
+  assert.equal(w.__bio.action_taken, null);
   h.close();
 });
