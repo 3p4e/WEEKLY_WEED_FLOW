@@ -11,7 +11,7 @@
    worklog.js (uses AL(), GF.WWF._ensureModal, GF.selectField choosers). */
 
 (function () {
-  GF.WWF._fac = { data: null, loading: false, error: null, sel: null };
+  GF.WWF._fac = { data: null, loading: false, error: null };
 
   const PHASES = {
     clone:  { en: 'Clones',     mk: 'Клонови',    color: '#2BE8A0' },
@@ -68,136 +68,46 @@
         <span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span>
         <button class="btn btn-sm" onclick="GF.WWF.loadFacility()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
     }
-    const d = st.data, t = d.totals || {}, roomsData = d.rooms || [];
-
-    // ── KPI band ── reuses the shared GF.kpiTile / .ana-tiles grid the other
-    // boards use. Every value is real: site-wide phase totals from GET
-    // /facility.totals plus a live active-room count. The mockup's "Zone
-    // Alerts" and "Harvest-Ready" tiles are dropped because no sensor feed or
-    // harvest-ready flag backs them (see this file's header deferred-data note).
-    const activeRooms = roomsData.filter(r => r.plant_total > 0).length;
-    const kpis = `<div class="ana-tiles">
-      ${GF.kpiTile(AL('Total plants', 'Вкупно растенија'), t.total || 0, AL('across live rooms', 'низ активни соби'))}
-      ${GF.kpiTile(AL('Active rooms', 'Активни соби'), activeRooms, AL('of', 'од') + ' ' + roomsData.length)}
-      ${GF.kpiTile(phLbl('veg'), t.veg || 0, AL('vegetating', 'вегетираат'))}
-      ${GF.kpiTile(phLbl('flower'), t.flower || 0, AL('flowering', 'цветаат'))}
-      ${(t.mother || t.drying)
-        ? GF.kpiTile(phLbl('mother') + ' / ' + phLbl('drying'), (t.mother || 0) + (t.drying || 0),
-            AL('mothers + drying', 'мајки + сушење'))
-        : ''}
+    const d = st.data, t = d.totals || {};
+    // Site-wide totals as a resource strip (icon + glowing count), not a tile
+    // grid — the facility board's single "how much is out there right now"
+    // readout, distinct from the .dash-kpis tiles other screens use.
+    const res = (v, l, c) => `<div class="fac-res"><span class="fac-res-ic" style="color:${c}"></span><span class="fac-res-v" style="color:${c}">${v}</span><span class="fac-res-l">${l}</span></div>`;
+    const kpis = `<div class="fac-resbar">
+      ${res(t.total || 0, AL('Total plants', 'Вкупно растенија'), 'var(--ink)')}
+      ${res(t.clone || 0, phLbl('clone'), phCol('clone'))}
+      ${res(t.veg || 0, phLbl('veg'), phCol('veg'))}
+      ${res(t.flower || 0, phLbl('flower'), phCol('flower'))}
+      ${(t.mother || t.drying) ? res((t.mother || 0) + (t.drying || 0),
+          phLbl('mother') + ' / ' + phLbl('drying'), phCol('mother')) : ''}
     </div>`;
-
-    if (!roomsData.length) {
-      return head + kpis + `<div class="ntf-empty">${
+    const rooms = (d.rooms || []).map(r => {
+      const rows = r.batches.map(b => `
+        <div class="fac-strain" title="${GF.esc(b.note || '')}">
+          <span class="fs-dot" style="background:${phCol(b.phase)}"></span>
+          <span class="fs-nm">${GF.esc(b.strain)}</span>
+          <span class="fs-n">${b.plant_count}</span>
+          <span class="fs-ph" style="color:${phCol(b.phase)}">${phLbl(b.phase)} · ${daysIn(b.phase_since)}${AL('d', 'д')}</span>
+        </div>`).join('');
+      return `
+      <div class="fac-room" onclick="GF.WWF.openRoom('${r.id}')">
+        <div class="fac-room-hd">
+          <span class="fr-nm">${GF.esc(roomName(r))}</span>
+          <span class="fr-kind">${AL(KINDS[r.kind]?.en || r.kind, KINDS[r.kind]?.mk || r.kind)}</span>
+        </div>
+        <div class="fr-big"><span class="fr-n">${r.plant_total}</span>
+          <span class="fr-u">${AL('plants', 'растенија')}</span></div>
+        <div class="fac-strains">${rows || `<div class="fr-empty">${AL('Empty', 'Празно')}</div>`}</div>
+      </div>`;
+    }).join('');
+    return head + kpis + `
+      <div class="fac-map">${rooms || `<div class="ntf-empty">${
         canWriteRooms()
           ? AL('No rooms configured yet — use "Add room" above to create the first one.',
                'Сè уште нема соби — користете „Додади соба" погоре за да ја креирате првата.')
           : AL('No rooms configured yet — an administrator sets them up on the facility board.',
                'Сè уште нема соби — администраторот ги поставува на таблата за капацитет.')
-        }</div>`;
-    }
-
-    // Selected room persists across re-renders; default to the first occupied
-    // room (the most interesting), else the first room. Resolved every render
-    // so a stale id (a since-deactivated room) can never point at nothing.
-    let sel = roomsData.find(r => r.id === st.sel);
-    if (!sel) sel = roomsData.find(r => r.plant_total > 0) || roomsData[0];
-    st.sel = sel.id;
-
-    // ── Floor plan ── rooms banded into a "grow" row and a "processing" row by
-    // their real `kind`, split by a corridor: the dynamic, data-driven
-    // equivalent of the mockup's fixed grid-template-areas (room identities are
-    // admin-configured in the registry, so named areas can't be hard-coded).
-    const GROW = { mother: 1, nursery: 1, veg: 1, flower: 1 };
-    const band1 = roomsData.filter(r => GROW[r.kind]);
-    const band2 = roomsData.filter(r => !GROW[r.kind]);
-
-    const cell = (r) => {
-      const dots = r.batches.slice(0, 10).map(b =>
-        `<span class="mwfac-dot" style="background:${phCol(b.phase)}" title="${GF.esc(b.strain)}"></span>`).join('')
-        + (r.batches.length > 10 ? `<span class="mwfac-more">+${r.batches.length - 10}</span>` : '');
-      return `
-      <div class="mwfac-room${r.id === st.sel ? ' is-sel' : ''}" onclick="GF.WWF.selectRoom('${r.id}')">
-        <div class="mwfac-room-hd">
-          <span class="mwfac-room-nm">${GF.esc(roomName(r))}</span>
-          <span class="mwfac-room-kind">${AL(KINDS[r.kind]?.en || r.kind, KINDS[r.kind]?.mk || r.kind)}</span>
-        </div>
-        <div class="mwfac-room-big"><span class="mwfac-room-n">${r.plant_total}</span>
-          <span class="mwfac-room-u">${AL('plants', 'растенија')}</span></div>
-        <div class="mwfac-room-dots">${r.batches.length ? dots : `<span class="mwfac-empty">${AL('Empty', 'Празно')}</span>`}</div>
-      </div>`;
-    };
-    const bandHtml = (arr) => `<div class="mwfac-band">${arr.map(cell).join('')}</div>`;
-    const legend = Object.keys(PHASES).map(p =>
-      `<span class="mwfac-lg"><span class="mwfac-lg-sw" style="background:${phCol(p)}"></span>${phLbl(p)}</span>`).join('');
-
-    const plan = `<div class="mwfac-plan">
-      <div class="mwfac-plan-hd">
-        <span class="mwfac-lvl">${GF.icon('grid', 'icon')}${AL('Cultivation floor', 'Одгледувачки погон')} · ${roomsData.length} ${AL('rooms', 'соби')}</span>
-        <div class="mwfac-legend">${legend}</div>
-      </div>
-      ${band1.length ? bandHtml(band1) : ''}
-      ${(band1.length && band2.length) ? `<div class="mwfac-corr">${AL('Corridor', 'Ходник')}</div>` : ''}
-      ${band2.length ? bandHtml(band2) : ''}
-    </div>`;
-
-    return head + kpis + `<div class="mwfac-cols">${plan}${GF.WWF._facDetail(sel)}</div>`;
-  };
-
-  /* ── Side detail panel for the selected room ──
-     Real occupancy only: a phase breakdown and batch list aggregated from GET
-     /facility. Per-room open tasks render ONLY when the room object carries an
-     `open_tasks` array — a forward-compatible field the backend does not emit
-     today (see the deferred-data note in the report); until it does, that
-     section is simply absent rather than faked. Wrapper reuses the shared
-     .fac-panel / .fac-sec / .fac-kv atoms already in views.css. */
-  GF.WWF._facDetail = (r) => {
-    const byPhase = {};
-    r.batches.forEach(b => { byPhase[b.phase] = (byPhase[b.phase] || 0) + b.plant_count; });
-    const pchips = Object.keys(PHASES).filter(p => byPhase[p]).map(p =>
-      `<span class="mwfac-pchip"><span class="mwfac-sw" style="background:${phCol(p)}"></span>${phLbl(p)} <b>${byPhase[p]}</b></span>`).join('');
-    const batchRows = r.batches.map(b => `
-      <div class="mwfac-brow">
-        <span class="mwfac-dot" style="background:${phCol(b.phase)}"></span>
-        <span class="mwfac-bnm" title="${GF.esc(b.note || '')}">${GF.esc(b.strain)}</span>
-        <span class="mwfac-bn">${b.plant_count}</span>
-        <span class="mwfac-bph" style="color:${phCol(b.phase)}">${phLbl(b.phase)} · ${daysIn(b.phase_since)}${AL('d', 'д')}</span>
-        ${canWrite() ? `<button class="mini-btn mwfac-bedit" title="${GF.t('edit')}" onclick="GF.WWF.openBatch('${b.id}')">${GF.icon('settings')}</button>` : ''}
-      </div>`).join('');
-    const tasks = Array.isArray(r.open_tasks) ? r.open_tasks : null;
-    const tasksSec = tasks
-      ? `<p class="fac-sec">${AL('Open tasks', 'Отворени задачи')} · ${tasks.length}</p>` +
-        (tasks.length
-          ? tasks.map(tk => `<div class="mwfac-trow"><span class="mwfac-tdot" style="background:${
-              tk.priority === 'high' ? 'var(--red)' : tk.priority === 'med' ? 'var(--amber)' : 'var(--primary)'
-            }"></span><span class="mwfac-tt">${GF.esc(tk.title)}</span></div>`).join('')
-          : `<div class="mwfac-empty2">${AL('No open tasks.', 'Нема отворени задачи.')}</div>`)
-      : '';
-    const acts = (canWrite() || canWriteRooms())
-      ? `<div class="mwfac-acts">
-          ${canWrite() ? `<button class="btn btn-primary btn-sm" onclick="GF.WWF.openBatch(null,'${r.id}')">${AL('Add batch', 'Додади серија')}</button>` : ''}
-          ${canWriteRooms() ? `<button class="btn btn-sm" onclick="GF.WWF.openRoomForm('${r.id}')">${GF.icon('settings', 'icon')}${AL('Edit room', 'Уреди соба')}</button>` : ''}
-        </div>`
-      : '';
-    return `<div class="fac-panel">
-      <div class="mwfac-dt-hd">
-        <span class="mwfac-dt-nm">${GF.esc(roomName(r))}</span>
-        <span class="mwfac-dt-kind">${AL(KINDS[r.kind]?.en || r.kind, KINDS[r.kind]?.mk || r.kind)}</span>
-      </div>
-      <div class="fac-kv"><span>${AL('Plants', 'Растенија')}</span><b>${r.plant_total}</b></div>
-      <div class="fac-kv"><span>${AL('Batches', 'Серии')}</span><b>${r.batches.length}</b></div>
-      ${pchips ? `<p class="fac-sec">${AL('Phase breakdown', 'Распределба по фаза')}</p><div class="mwfac-pchips">${pchips}</div>` : ''}
-      <p class="fac-sec">${AL('Batches', 'Серии')}</p>
-      ${batchRows || `<div class="mwfac-empty2">${AL('No live batches — processing room.', 'Нема активни серии — процесна соба.')}</div>`}
-      ${tasksSec}
-      ${acts}
-    </div>`;
-  };
-
-  // Select a room on the floor plan → re-render the board with it detailed.
-  GF.WWF.selectRoom = (roomId) => {
-    GF.WWF._fac.sel = roomId;
-    GF.render.all();
+        }</div>`}</div>`;
   };
 
   /* ── Room detail modal: batches + writer controls ── */
