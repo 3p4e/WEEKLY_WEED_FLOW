@@ -1916,6 +1916,31 @@ async def test_ecoa_promote_creates_certificate_with_provenance(client, admin_he
     assert d["document"]["status"] == "PROMOTED" and d["document"]["promoted_coa_id"] == out["coa_id"]
 
 
+async def test_ecoa_accept_stamps_review_window_on_direct_promote(client, admin_headers):
+    """M4 — the ACCEPTED §6.3.2 decision stops the 5-working-day review clock, so
+    the document's review-window record is stamped at acceptance. A document
+    promoted straight from EXTRACTED (never explicitly moved to REVIEWED) still
+    carries reviewed_at + review_window_met, and no longer reads as overdue once
+    accepted — the clock is no longer silently dropped on the direct-promote path."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-WINDOW")
+    doc = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-WINDOW")
+    assert doc["review_window_met"] is None and doc["review_deadline"] is not None
+    await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                      json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0, "unit": "%"}]},
+                      headers=admin_headers)
+    # accept the checklist WITHOUT any explicit ->REVIEWED status transition
+    await _accept_checklist(client, admin_headers, doc["id"])
+    got = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()["document"]
+    assert got["status"] == "EXTRACTED"          # never moved to REVIEWED
+    assert got["review_window_met"] is True and got["reviewed_at"] is not None
+    assert got["review_overdue"] is False
+    # promote from EXTRACTED — the window record persists onto the promoted doc
+    assert (await client.post(f"/qc/coa-documents/{doc['id']}/promote",
+                              headers=admin_headers)).status_code == 201
+    got = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()["document"]
+    assert got["status"] == "PROMOTED" and got["review_window_met"] is True
+
+
 # ── URS increment 7 — lab-verdict onto the permanent record (completes item 8)
 async def test_promote_carries_lab_verdict_onto_result(client, admin_headers):
     """The lab's stated verdict captured at eCoA extraction (mig 0028) must

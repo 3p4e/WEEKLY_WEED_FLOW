@@ -360,10 +360,12 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             else:
                 args.append(val); fields.append(f"{col}=${len(args)}")
         # §6.3.1: stamp the review timestamp + whether it landed inside the
-        # 5-working-day window (met iff reviewed on/before the deadline).
+        # 5-working-day window (met iff reviewed on/before the deadline). Set-once
+        # (COALESCE) — if the ACCEPTED §6.3.2 decision already stopped the clock,
+        # keep that earlier stamp rather than resetting it to this transition time.
         if review_stamp:
-            fields.append("reviewed_at=now()")
-            fields.append(f"review_window_met=({SITE_TODAY_SQL} <= review_deadline)")
+            fields.append("reviewed_at=COALESCE(reviewed_at, now())")
+            fields.append(f"review_window_met=COALESCE(review_window_met, ({SITE_TODAY_SQL} <= review_deadline))")
         if not fields:
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
@@ -517,6 +519,18 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
             "UPDATE qc_ecoa_checklist SET outcome=$1, reviewed_by=$2, reviewed_at=now(),"
             " notes=COALESCE($3, notes), updated_by=$2, updated_at=now() WHERE id=$4 RETURNING *",
             body.outcome, user["id"], note, cur["id"])
+        # §6.3.1 — the ACCEPTED §6.3.2 decision IS the review completion, so it
+        # stops the 5-working-day clock. Stamp the document's review-window record
+        # here (set-once) so a document promoted straight from EXTRACTED — bypassing
+        # an explicit ->REVIEWED transition — still records whether the review met
+        # its deadline, and an accepted-but-unpromoted document no longer reads as
+        # overdue. An explicit ->REVIEWED transition already stamped leaves this be.
+        if body.outcome == "ACCEPTED":
+            await c.execute(
+                f"UPDATE qc_coa_documents SET reviewed_at=now(),"
+                f" review_window_met=({SITE_TODAY_SQL} <= review_deadline),"
+                f" updated_by=$1, updated_at=now() WHERE id=$2 AND reviewed_at IS NULL",
+                user["id"], doc_id)
         # H1: a REJECTED review voids the eCoA (its docstring's promise, which the
         # code never fulfilled) — drive the still-open document to REJECTED so it
         # can no longer be promoted. An already-terminal doc (PROMOTED/REJECTED) is
@@ -768,7 +782,7 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         # record. The CoQ-aggregation compile enforced this; single-doc promote did
         # not.
         cl = await c.fetchrow(
-            "SELECT outcome FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
+            "SELECT outcome, reviewed_at FROM qc_ecoa_checklist WHERE document_id=$1", doc_id)
         if cl is None or cl["outcome"] != "ACCEPTED":
             raise HTTPException(
                 409, f"eCoA {doc['doc_number']} needs an ACCEPTED §6.3.2 review"
@@ -818,10 +832,17 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         # promoted_coa_id IS NULL predicate makes concurrent promotes race-safe
         # — the loser's UPDATE matches 0 rows and the whole transaction (its
         # duplicate certificate + results included) rolls back with a 409.
+        # §6.3.1 defensive stamp: a promoted eCoA must carry its review-window
+        # record. Normally the ACCEPTED decision already stamped it (set-once
+        # above), so COALESCE keeps that; this only back-fills a document that was
+        # accepted before the stamp existed, using the checklist's own review time.
         tag = await c.execute(
             "UPDATE qc_coa_documents SET status='PROMOTED', promoted_coa_id=$1,"
+            " reviewed_at=COALESCE(reviewed_at, $4),"
+            " review_window_met=COALESCE(review_window_met, ($4::date <= review_deadline)),"
             " updated_by=$2, updated_at=now()"
-            " WHERE id=$3 AND promoted_coa_id IS NULL", coa["id"], user["id"], doc_id)
+            " WHERE id=$3 AND promoted_coa_id IS NULL",
+            coa["id"], user["id"], doc_id, cl["reviewed_at"])
         if tag == "UPDATE 0":
             raise HTTPException(409, "Document was already promoted")
         await safe_emit(c, user, verb="ecoa_promoted", object_type="qc_coa_document",
