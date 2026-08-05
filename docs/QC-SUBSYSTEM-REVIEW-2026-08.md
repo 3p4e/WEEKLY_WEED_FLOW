@@ -24,6 +24,51 @@ and Low hardening items.
 
 ---
 
+## Remediation status (2026-08-05)
+
+Implemented in this branch (`claude/weekly-read-flow-setup-yft7if`), each
+test-gated:
+
+| ID | Fix | Where |
+|----|-----|-------|
+| **H1** | A cited-parameter result's limits come from the spec; a supplied bound that disagrees is 422'd | `certificates.py` |
+| **H2** | Spec-rebind invalidates an ACCEPTED checklist; promote refuses cross-spec grades | `ecoa.py` |
+| **M1** | Aggregation `render_coq` now runs the manifest + per-source ISO-scope + lab resolution | `coq_aggregation.py` |
+| **M2** | QP dropped from the CoQ approval gate (URS §3) | `coq_aggregation.py` |
+| **M3** | A PASS/FAIL disposition is required before APPROVED/RELEASED (+ revise carries it; frontend guard) | `certificates.py`, `qccoa-view.js` |
+| **M4** | The eCoA review-window is stamped at the ACCEPTED decision (and at promote) | `ecoa.py` |
+| **M6** | Ph. Eur. 3028 derived total refuses unit-inconsistent components | `common.py`, `coq_docx.py`, `coq_aggregation.py` |
+| **M7** | eCoA `doc_number` mints per-(org, year); the global `qc_ecoa_id_seq` is dropped (migration 0056) | `ecoa.py`, `0056` |
+| **M8** | Register gap-report reframed: per-org RLS-scoped missing-record signal; modern series floor at 0001 | `cert_register.py` |
+| **M9** | Explicit 32 MB request-body ceiling (nginx + backend content-length guard) | `nginx.conf`, `main.py` |
+| **M10** | A VOIDED/SUPERSEDED certificate refuses a new Annex-11 signature | `signatures.py` |
+| LOW | promote uuid-guard; download content-type whitelist + nosniff + CR strip; org-scoped BYPASSRLS profile lookups; checklist writes refuse a terminal parent | `ecoa.py`, `coq_docx.py`, `coq_aggregation.py`, `signatures.py` |
+
+**Deferred — need an owner decision (not guessed, per instruction):**
+
+- **M5 — filler ≠ decider on the eCoA checklist.** Whether the person who fills
+  the §6.3.2 checklist may also sign its ACCEPTED decision depends on QC
+  headcount: a single-QC-person site cannot segregate these and the control
+  would deadlock; a multi-person QC function should segregate them. Enforcing it
+  blindly broke 12 tests previously. **Owner input required** before implementing.
+- **CoQ spec-must-be-ACTIVE gate (LOW).** `qc_specifications.status` defaults to
+  `DRAFT`; gating CoQ issuance on an `ACTIVE` spec is a lifecycle-policy decision
+  with broad blast radius (every current spec/CoQ path uses non-ACTIVE specs).
+  **Owner input required** on whether spec lifecycle should gate issuance.
+
+**Deferred — need a migration / heavier change (candidate follow-ups):**
+`qc_coa_extractions` UNIQUE(document_id, parameter_id); a DB trigger blocking
+UPDATE/DELETE on `qc_signatures` (append-only immutability); cross-table CoQ
+uniqueness. These are data-integrity hardening with low current exposure
+(production is at zero rows) and are best batched into a dedicated migration PR.
+
+**Not actioned (marginal / requirement-dependent):** the remaining Low
+micro-hardening items (TOCTOU status predicates on low-concurrency single-org
+admin writes, isolation-level pins, assorted 500→409 refinements, OOS actor
+separation) — rated Low by the audit and left for a future hardening pass.
+
+---
+
 ## HIGH — a wrong verdict can reach an issued certificate
 
 ### H1 — `add_result`: a caller-supplied limit overrides the cited spec parameter ✔verified
