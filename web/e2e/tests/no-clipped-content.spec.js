@@ -61,7 +61,14 @@ test('no growing region clips content without a scroll affordance', async ({ pag
   // Realistic short window: real browser chrome (address bar, bookmarks bar)
   // leaves noticeably less than a bare 900px of page height on an ordinary
   // laptop display — this is what actually exposed the sidebar bug.
-  await page.setViewportSize({ width: 1440, height: 820 });
+  // Height lowered 820 -> 760 (2026-08-05): at 820 the admin nav rail overflowed
+  // by only a few px, so the line-91 sanity guard below sat right on the +2
+  // subpixel threshold and flipped on CI font/render variance (a frontend batch
+  // that touched no nav/sidebar/global CSS still tripped it). 760 keeps the nav
+  // overflowing by a comfortable margin — the author-anticipated "shorter
+  // viewport" maintenance (see the note at the sanity check). Both measured
+  // regions are overflow-y:auto, so the real invariant is unaffected by height.
+  await page.setViewportSize({ width: 1440, height: 760 });
   await login(page, creds.username, creds.password);
   await page.waitForSelector('.side-scroll', { timeout: 10_000 });
 
