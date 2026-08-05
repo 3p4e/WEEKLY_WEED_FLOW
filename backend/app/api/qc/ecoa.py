@@ -279,6 +279,24 @@ async def download_document_file(file_id: str, user: dict = Depends(require_role
                  "X-Integrity": integrity, "X-Content-SHA256": row["sha256"]})
 
 
+async def _mint_doc_number(c, org_id: str) -> str:
+    """Advisory-locked per-(org, year) sequential eCoA document number, reset to
+    0001 each 1 January — gap-free within the lock, never reused (M7). Replaces the
+    former global 'qc_ecoa_id_seq', which was ONE counter shared across every
+    tenant: a tenant could infer another's upload volume from its own number gaps,
+    the series never reset per year, and it broke the per-(org, type, year) model
+    every other QC number series (_mint_cert_number) follows. Forward-only —
+    pre-existing 'PP-ECOA-YYYY-NNNN' numbers in this org continue from the org's
+    own max, so the switch never collides with an already-issued number."""
+    yr = await c.fetchval("SELECT to_char(now(),'YYYY')")
+    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"ecoanum:{org_id}:{yr}")
+    seq = await c.fetchval(
+        "SELECT coalesce(max((regexp_match(doc_number, '-([0-9]+)$'))[1]::int), 0) + 1"
+        " FROM qc_coa_documents WHERE org_id=$1 AND doc_number LIKE 'PP-ECOA-' || $2 || '-%'",
+        org_id, yr)
+    return f"PP-ECOA-{yr}-{seq:04d}"
+
+
 @router.post("/coa-documents", status_code=201)
 async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_422(body.specification_id, "specification_id")
@@ -292,13 +310,13 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
                 raise HTTPException(422, "Unknown sample")
         await _resolve_lab(c, user["org_id"], body.laboratory_id)
+        doc_number = await _mint_doc_number(c, user["org_id"])
         row = await c.fetchrow(
             "INSERT INTO qc_coa_documents(org_id, doc_number, source_institution, laboratory_id,"
             " batch_id, material_code, specification_id, sample_id, original_filename, mime_type,"
             " storage_ref, page_count, report_date, notes, review_deadline, uploaded_by,"
             " created_by, updated_by)"
-            " VALUES ($1, 'PP-ECOA-' || to_char(now(),'YYYY') || '-' ||"
-            "         lpad(nextval('qc_ecoa_id_seq')::text, 4, '0'),"
+            " VALUES ($1, $15,"
             "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13,"
             # QCSOP 012 §6.3.1: 5 working days to review. From any weekday that
             # is exactly 7 calendar days (5 business days always cross one
@@ -310,7 +328,7 @@ async def create_coa_document(body: CoaDocIn, user: dict = Depends(require_role(
             user["org_id"], body.source_institution, body.laboratory_id, body.batch_id,
             body.material_code, body.specification_id, body.sample_id, body.original_filename,
             body.mime_type, body.storage_ref, body.page_count, body.report_date, body.notes,
-            user["id"])
+            user["id"], doc_number)
     return _ecoa_out(dict(row))
 
 

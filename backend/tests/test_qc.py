@@ -1780,6 +1780,20 @@ async def test_ecoa_register_grades_and_discovers(client, admin_headers):
     assert any(p["raw_label"] == "Mystery Assay" and p["status"] == "OPEN" for p in ph)
 
 
+async def test_ecoa_doc_number_is_per_org_sequential(client, admin_headers):
+    """M7 — eCoA document numbers mint per-(org, year) via an advisory-locked
+    max+1 (replacing the former global qc_ecoa_id_seq shared across every tenant).
+    Two documents in one org get consecutive PP-ECOA-YYYY-NNNN numbers advancing
+    by exactly one, in the same year series."""
+    spec, _ = await _ecoa_spec_with_param(client, admin_headers, material="ECOA-NUM")
+    d1 = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-ENUM-1")
+    d2 = await _ecoa_doc(client, admin_headers, spec["id"], batch="B-ENUM-2")
+    p1, n1 = d1["doc_number"].rsplit("-", 1)[0], int(d1["doc_number"].rsplit("-", 1)[-1])
+    p2, n2 = d2["doc_number"].rsplit("-", 1)[0], int(d2["doc_number"].rsplit("-", 1)[-1])
+    assert p1.startswith("PP-ECOA-") and p1 == p2   # same PP-ECOA-<year> series
+    assert n2 == n1 + 1                              # advances by exactly one
+
+
 async def test_ecoa_spec_rebind_invalidates_review_and_blocks_promote(client, admin_headers):
     """H2 (§6.3.2): rebinding an eCoA document's specification after its extractions
     were graded and its review ACCEPTED must (a) drop the checklist back to PENDING
