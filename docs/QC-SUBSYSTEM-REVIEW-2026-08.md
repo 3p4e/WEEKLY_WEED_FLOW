@@ -56,11 +56,23 @@ test-gated:
   with broad blast radius (every current spec/CoQ path uses non-ACTIVE specs).
   **Owner input required** on whether spec lifecycle should gate issuance.
 
-**Deferred — need a migration / heavier change (candidate follow-ups):**
-`qc_coa_extractions` UNIQUE(document_id, parameter_id); a DB trigger blocking
-UPDATE/DELETE on `qc_signatures` (append-only immutability); cross-table CoQ
-uniqueness. These are data-integrity hardening with low current exposure
-(production is at zero rows) and are best batched into a dedicated migration PR.
+**Deferred — need a migration / heavier change or a design decision:**
+
+- `qc_coa_extractions` UNIQUE(document_id, parameter_id). `submit_extractions`
+  **appends** rows (it does not replace), so a hard uniqueness constraint would
+  break a legitimate re-extraction / two-labels-one-parameter submission. Needs a
+  decision on re-submit semantics (upsert vs reject) before it is safe.
+- A DB trigger blocking UPDATE/DELETE on `qc_signatures` (append-only). Attempted
+  and **reverted**: an *absolute* BEFORE UPDATE OR DELETE trigger also blocks
+  legitimate lifecycle deletes — the test harness's own row cleanup, and more
+  importantly an end-of-retention org data-purge — so it is not merely a
+  test-fixture inconvenience but a correctness problem. A GUC-gated exemption
+  (`app.allow_signature_purge`) would let a deliberate purge through while blocking
+  casual/accidental writes, but that is a purge-strategy design decision (owner).
+  Current exposure is nil regardless: the app only ever INSERTs signatures, and the
+  hash-chain audit trigger already detects any out-of-band tampering.
+- Cross-table CoQ uniqueness. Low current exposure (production at zero rows); best
+  batched into a dedicated migration PR.
 
 **Not actioned (marginal / requirement-dependent):** the remaining Low
 micro-hardening items (TOCTOU status predicates on low-concurrency single-org
