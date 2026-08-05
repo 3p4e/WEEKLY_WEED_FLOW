@@ -160,6 +160,10 @@ GF.API = {
   harvestDry(id, body)           { return this._req('POST', '/cultivation/harvests/' + id + '/dry', body); },
   harvestClose(id, body)         { return this._req('POST', '/cultivation/harvests/' + id + '/close', body || {}); },
   harvestYield()                 { return this._req('GET',  '/cultivation/yield'); },
+  // Irrigation / feeding (migration 0052) — the last Phase 2 record, room-level
+  // and dated, no downstream gate. A third module on the /cultivation prefix.
+  irrigation(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/cultivation/irrigation' + (u ? '?' + u : '')); },
+  irrigationLog(body)            { return this._req('POST', '/cultivation/irrigation', body); },
 
   // ── Decontamination campaign (migration 0046) ──
   // The 5 steps are ordered and rinse1_whitecloth must PASS before bleach is

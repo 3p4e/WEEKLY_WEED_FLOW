@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict a9TAY61okYYK3llmQDwfuhrI32jeg8J6xer01kletsVg2lFbugrhfOgmC81eGc9
+\restrict dH40jjdE1Bhv5Q4rZ9InNLQ65LVn6F40P6rfB42gvkQUM6cdE40AEymabKsOhu5
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -152,6 +152,15 @@ CREATE TABLE public.ai_pins (
 );
 
 ALTER TABLE ONLY public.ai_pins FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.alembic_version (
+    version_num character varying(32) NOT NULL
+);
 
 
 --
@@ -529,6 +538,40 @@ CREATE TABLE public.ipm_applications (
 );
 
 ALTER TABLE ONLY public.ipm_applications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: irrigation_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.irrigation_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    batch_id uuid,
+    applied_on date DEFAULT CURRENT_DATE NOT NULL,
+    method text,
+    water_volume_l numeric,
+    feed_ec numeric,
+    feed_ph numeric,
+    runoff_ec numeric,
+    runoff_ph numeric,
+    nutrients text,
+    applied_by uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT irrigation_events_feed_ec_check CHECK (((feed_ec IS NULL) OR (feed_ec >= (0)::numeric))),
+    CONSTRAINT irrigation_events_feed_ph_check CHECK (((feed_ph IS NULL) OR ((feed_ph >= (0)::numeric) AND (feed_ph <= (14)::numeric)))),
+    CONSTRAINT irrigation_events_method_check CHECK (((method IS NULL) OR (method = ANY (ARRAY['drip'::text, 'hand'::text, 'flood'::text, 'boom'::text, 'other'::text])))),
+    CONSTRAINT irrigation_events_runoff_ec_check CHECK (((runoff_ec IS NULL) OR (runoff_ec >= (0)::numeric))),
+    CONSTRAINT irrigation_events_runoff_ph_check CHECK (((runoff_ph IS NULL) OR ((runoff_ph >= (0)::numeric) AND (runoff_ph <= (14)::numeric)))),
+    CONSTRAINT irrigation_events_water_check CHECK (((water_volume_l IS NULL) OR (water_volume_l >= (0)::numeric)))
+);
+
+ALTER TABLE ONLY public.irrigation_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1955,6 +1998,14 @@ ALTER TABLE ONLY public.ai_pins
 
 
 --
+-- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alembic_version
+    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
+
+
+--
 -- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2120,6 +2171,14 @@ ALTER TABLE ONLY public.harvests
 
 ALTER TABLE ONLY public.ipm_applications
     ADD CONSTRAINT ipm_applications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: irrigation_events irrigation_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.irrigation_events
+    ADD CONSTRAINT irrigation_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -2799,6 +2858,27 @@ CREATE INDEX ipm_applications_room_idx ON public.ipm_applications USING btree (r
 
 
 --
+-- Name: irrigation_events_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX irrigation_events_batch_idx ON public.irrigation_events USING btree (batch_id, applied_on DESC) WHERE (batch_id IS NOT NULL);
+
+
+--
+-- Name: irrigation_events_org_applied_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX irrigation_events_org_applied_idx ON public.irrigation_events USING btree (org_id, applied_on DESC);
+
+
+--
+-- Name: irrigation_events_room_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX irrigation_events_room_idx ON public.irrigation_events USING btree (room_id, applied_on DESC);
+
+
+--
 -- Name: notifications_coalesce_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3373,6 +3453,13 @@ CREATE TRIGGER audit_ipm_applications AFTER INSERT OR DELETE OR UPDATE ON public
 
 
 --
+-- Name: irrigation_events audit_irrigation_events; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_irrigation_events AFTER INSERT OR DELETE OR UPDATE ON public.irrigation_events FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: plant_batches audit_plant_batches; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3839,6 +3926,22 @@ ALTER TABLE ONLY public.ipm_applications
 
 ALTER TABLE ONLY public.ipm_applications
     ADD CONSTRAINT ipm_applications_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: irrigation_events irrigation_events_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.irrigation_events
+    ADD CONSTRAINT irrigation_events_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: irrigation_events irrigation_events_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.irrigation_events
+    ADD CONSTRAINT irrigation_events_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -4452,6 +4555,12 @@ ALTER TABLE public.harvests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ipm_applications ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: irrigation_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.irrigation_events ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: notifications notif_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4581,6 +4690,13 @@ CREATE POLICY org_isolation ON public.harvests USING ((org_id = app.current_org_
 --
 
 CREATE POLICY org_isolation ON public.ipm_applications USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: irrigation_events org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.irrigation_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5185,5 +5301,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict a9TAY61okYYK3llmQDwfuhrI32jeg8J6xer01kletsVg2lFbugrhfOgmC81eGc9
+\unrestrict dH40jjdE1Bhv5Q4rZ9InNLQ65LVn6F40P6rfB42gvkQUM6cdE40AEymabKsOhu5
 

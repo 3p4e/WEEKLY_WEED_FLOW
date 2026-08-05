@@ -128,10 +128,10 @@ async def purge_org(org_id) -> None:
                   # RESTRICT), so it precedes the manifests as well as the rooms.
                   "corridor_cleanings",
                   "waste_manifest_lines", "waste_manifests",
-                  # harvests and ipm_applications both cite batches AND rooms
-                  # (RESTRICT), so they precede both — same reason as the waste
-                  # lines above.
-                  "harvests", "ipm_applications",
+                  # harvests, ipm_applications and irrigation_events all cite
+                  # batches AND rooms (RESTRICT), so they precede both — same
+                  # reason as the waste lines above.
+                  "harvests", "ipm_applications", "irrigation_events",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
                   "task_dependencies", "tasks", "calendar_weeks", "departments"):

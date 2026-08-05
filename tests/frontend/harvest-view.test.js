@@ -671,3 +671,69 @@ test('a blank interval is sent as null and a stated zero is sent as zero', () =>
     h.close();
   });
 });
+
+// ── Feeding tab (irrigation, migration 0052) ─────────────────────────────────
+
+function renderFeed(h, feeds) {
+  h.window.GF.WWF._harv.tab = 'feed';
+  h.window.GF.WWF._harv.feeds = feeds;
+  h.window.GF.state.view = 'harvest';
+  return h.window.GF.views.harvest();
+}
+
+test('the Feeding tab lists a feed and shows a missing reading as a dash, not zero', () => {
+  const h = load('CU_MGR');
+  const body = renderFeed(h, [
+    { id: 'f1', room_name: 'Flowering 1.1', batch_code: null, applied_on: '2026-08-05',
+      method: 'drip', water_volume_l: 40, feed_ec: 1.8, feed_ph: 6.1,
+      runoff_ec: null, runoff_ph: null, nutrients: 'Base A+B' },
+  ]);
+  assert.match(body, /Flowering 1\.1/);
+  assert.match(body, /EC <b>1\.8/, 'a measured feed EC is shown');
+  // A NULL runoff reading must not render a "runoff EC" chip at all — absent is
+  // "not measured", never 0.
+  assert.doesNotMatch(body, /runoff EC/, 'an unmeasured runoff reading shows no chip');
+  assert.match(body, /Base A\+B/);
+  h.close();
+});
+
+test('the Feeding tab offers Log feed to a recorder and empty-states cleanly', () => {
+  const h = load('CU_MGR');
+  const body = renderFeed(h, []);
+  assert.match(body, /No feeds logged/);
+  assert.match(body, /GF\.WWF\.feedForm\(\)/, 'a recorder is offered the Log feed action');
+  h.close();
+});
+
+function loadFeedForms(role) {
+  const h = loadForms(role);
+  const w = h.window;
+  w.__rooms = [{ id: 'r1', name: 'Flowering 1.1' }];
+  w.GF.API.irrigation = async () => ({ feeds: w.__feeds || [] });
+  w.GF.API.irrigationLog = async (b) => { w.__feed = b; return { id: 'f9' }; };
+  return h;
+}
+
+test('a blank feed reading is sent as null, a room is required, and a value round-trips', () => {
+  const h = loadFeedForms('CU_MGR');
+  const w = h.window;
+  return w.GF.WWF.feedForm().then(async () => {
+    // no room picked yet → refused before any request
+    w.document.getElementById('hv-f-room').value = '';
+    await w.GF.WWF.feedSave();
+    assert.equal(w.__feed, undefined, 'a feed with no room must not be sent');
+    assert.match(w.__toasts.at(-1)[0], /room/i);
+
+    // now a real room + a volume, EC left blank
+    w.document.getElementById('hv-f-room').value = 'r1';
+    w.document.getElementById('hv-f-vol').value = '40';
+    w.document.getElementById('hv-f-fph').value = '6.1';
+    await w.GF.WWF.feedSave();
+    assert.equal(w.__feed.room_id, 'r1');
+    assert.equal(w.__feed.water_volume_l, 40);
+    assert.equal(w.__feed.feed_ph, 6.1, 'a decimal pH round-trips, not rounded to int');
+    assert.equal(w.__feed.feed_ec, null,
+      'a reading left blank is "not measured" (null), never coerced to 0');
+    h.close();
+  });
+});
