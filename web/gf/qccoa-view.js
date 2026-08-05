@@ -346,8 +346,8 @@
   // A4 paper preview of the CoQ — built ONLY from fields present on the loaded
   // certificate detail (d.coa / d.results / d.signatures / d.laboratory). Every
   // row is conditional on its field existing; verdict + watermark are driven by
-  // the real decision/status, never invented. Shared look lives in
-  // web/gf/_mwtmp-coqprint.css (.mwcoq-*); per-element data-driven values inline.
+  // the real decision/status, never invented. Shared look lives in the
+  // .mwcoq-* rules in views.css; per-element data-driven values inline.
   const coqPreview = (d) => {
     const c = d.coa || {};
     const results = d.results || [];

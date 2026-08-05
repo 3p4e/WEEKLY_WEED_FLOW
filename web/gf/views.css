@@ -1264,3 +1264,223 @@
 /* Row action that opens the drawer (reuses the app .btn look) */
 .mwl-sched-btn { display: inline-flex; align-items: center; gap: 5px; }
 .mwl-sched-btn svg { width: 13px; height: 13px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS (batch 4) — team crew-roster + CoQ A4 preview
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── TEAM view (crew roster: hex avatars + stat bars) ────────────────── */
+
+/* ── Hexagonal crew avatar ──────────────────────────────────────────────
+   Wraps the shared GF.avatar so its initials / roster colour / name-title all
+   still come from the real person record; ONLY the hexagon shape + accent glow
+   are added. Accent-aware (cyan under Mass Weed, app accent elsewhere) via the
+   app-wide --accent-rgb the rest of the roster already uses. */
+.mwtm-hex{ display:inline-flex; flex:none; }
+.mwtm-hex .avatar{
+  border-radius:0;
+  clip-path:polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  filter:drop-shadow(0 0 5px rgba(var(--accent-rgb), .55));
+}
+
+/* ── Per-person stat block ──────────────────────────────────────────────
+   Sits between the department row and the action row of each team card. */
+.mwtm-stats{ display:flex; flex-direction:column; gap:9px; margin-bottom:11px; }
+.mwtm-stat{ margin:0; }
+.mwtm-stat__head{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:8px; margin-bottom:4px;
+}
+.mwtm-stat__name{
+  font-size:10.5px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--ink-3);
+}
+.mwtm-stat__val{
+  font-size:12.5px; font-weight:800; color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+
+/* Neutral "active load" fill — load is a magnitude, NOT a good/bad signal, so
+   it must not borrow the green/amber/red semantic .mw-stat__fill hues. It
+   tracks the live theme accent instead (cyan under Mass Weed). Sits inside the
+   shared .mw-stat__track and is driven by an inline transform:scaleX(fraction),
+   the same mechanism the app's .mw-stat__fill already uses. */
+.mwtm-fill{
+  width:100%; height:100%; border-radius:3px;
+  transform-origin:left center; transition:transform .4s ease;
+  background:linear-gradient(90deg, var(--mw-cyan-deep, var(--primary)), var(--primary));
+  box-shadow:0 0 8px rgba(var(--accent-rgb), .5);
+}
+
+/* Honest empty state for a crew member with no owned tasks this week — never a
+   misleading 0% completion bar. */
+.mwtm-quiet{ font-size:11.5px; color:var(--ink-3); font-style:italic; padding:1px 0; }
+
+/* Deferred-metrics note: efficiency / shift / zone need worklog-derived data
+   that is not yet an app data source (a part-owner decision). Rendered as an
+   explicit, low-key placeholder rather than fabricated numbers. */
+.mwtm-defer{
+  font-size:10px; color:var(--ink-3); opacity:.72;
+  letter-spacing:.03em; line-height:1.35;
+}
+
+/* ── CoQ PRINT view (A4 paper preview) ───────────────────────────────── */
+
+/* scroll frame + desk backdrop around the sheet */
+.mwcoq-wrap{
+  margin-top:12px;
+  padding:18px;
+  overflow-x:auto;
+  background:var(--mw-void, #0a0f16);
+  border-radius:8px;
+  display:flex;
+  justify-content:center;
+}
+
+/* the A4 sheet (fixed paper regardless of app theme — it is a document proof) */
+.mwcoq-sheet{
+  width:210mm;
+  max-width:100%;
+  min-height:220mm;
+  box-sizing:border-box;
+  padding:16mm 16mm 14mm;
+  position:relative;
+  background:#f4f8fc;
+  color:#0d2036;
+  box-shadow:0 18px 50px rgba(0,0,0,.45);
+  font-family:'Titillium Web', system-ui, sans-serif;
+}
+.mwcoq-sheet .mono{ font-family:'Geist Mono', ui-monospace, monospace; }
+
+/* watermark (status-driven text supplied inline by the view) */
+.mwcoq-wm{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none; opacity:.05; overflow:hidden;
+}
+.mwcoq-wm span{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:150px; letter-spacing:6px;
+  color:#0a4a6e; transform:rotate(-24deg); white-space:nowrap;
+}
+
+/* header */
+.mwcoq-hd{
+  display:flex; align-items:flex-start; gap:14px;
+  border-bottom:3px solid #0a4a6e; padding-bottom:12px;
+  position:relative;
+}
+.mwcoq-hd__badge{
+  width:46px; height:46px; flex:none;
+  display:grid; place-items:center;
+  background:#0a4a6e; color:#fff; border-radius:6px;
+}
+.mwcoq-hd__badge .icon{ width:26px; height:26px; stroke:#fff; fill:none; }
+.mwcoq-hd__t{ flex:1; }
+.mwcoq-hd__ttl{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:23px; letter-spacing:.02em;
+  text-transform:uppercase; color:#0d2036; line-height:1.05;
+}
+.mwcoq-hd__sub{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:700; font-size:12px; letter-spacing:.06em;
+  text-transform:uppercase; color:#0a4a6e; margin-top:2px;
+}
+.mwcoq-hd__no{ text-align:right; }
+.mwcoq-hd__no .l{
+  font-size:8px; text-transform:uppercase; letter-spacing:.12em; color:#5a7690;
+}
+.mwcoq-hd__no .v{ font-weight:700; font-size:14px; color:#0a4a6e; }
+
+.mwcoq-verdict{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:16px; letter-spacing:.06em;
+  text-transform:uppercase; padding:5px 15px; margin-top:8px;
+  background:#eaf2f9;
+}
+.mwcoq-verdict.pass{ background:#c9f0d6; }
+.mwcoq-verdict.fail{ background:#f7d3d6; }
+.mwcoq-verdict.pending{ background:#e6ecf2; }
+
+/* section label */
+.mwcoq-sec{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.1em;
+  color:#0a4a6e; margin:16px 0 7px; padding-bottom:3px;
+  border-bottom:1.5px solid #0a4a6e;
+}
+
+/* product identity key/value grid */
+.mwcoq-kvgrid{
+  display:grid; grid-template-columns:1fr 1fr; gap:0 26px; margin:2px 0 4px;
+}
+.mwcoq-kv{
+  display:flex; gap:10px; padding:5px 0;
+  border-bottom:1px solid #dbe6f0; font-size:11.5px;
+}
+.mwcoq-kv dt{
+  width:44%; color:#5a7690; text-transform:uppercase; letter-spacing:.04em;
+  font-size:9.5px; padding-top:2px; margin:0;
+}
+.mwcoq-kv dd{
+  margin:0; flex:1; font-size:11px; color:#0d2036; font-weight:600;
+}
+.mwcoq-kv dd.mono{ font-family:'Geist Mono', ui-monospace, monospace; }
+
+/* analytical results table */
+.mwcoq-res{ width:100%; border-collapse:collapse; font-size:10.5px; }
+.mwcoq-res th{
+  text-align:left; background:#0a4a6e; color:#fff;
+  font-family:'Saira Condensed', sans-serif; font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em; font-size:8.5px; padding:5px 8px;
+}
+.mwcoq-res td{
+  padding:5px 8px; border-bottom:1px solid #dbe6f0;
+  font-family:'Geist Mono', ui-monospace, monospace; color:#0d2036;
+}
+.mwcoq-res td.mwcoq-p{ font-family:'Titillium Web', sans-serif; color:#0d2036; }
+.mwcoq-res th.mwcoq-num, .mwcoq-res td.mwcoq-num{ text-align:right; }
+.mwcoq-cmp{ font-weight:700; text-align:center; }
+.mwcoq-prov{ font-size:8.5px; color:#5a7690; }
+
+/* signatures */
+.mwcoq-sigrow{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:6px;
+}
+.mwcoq-sig{ font-size:10px; }
+.mwcoq-sig__l{
+  font-size:8px; text-transform:uppercase; letter-spacing:.08em; color:#5a7690;
+}
+.mwcoq-sig__nm{
+  font-family:'Geist Mono', ui-monospace, monospace; font-weight:700; color:#0d2036;
+  border-top:1px solid #0d2036; margin-top:20px; padding-top:4px; font-size:10.5px;
+}
+.mwcoq-sig__meta{ font-size:8.5px; color:#5a7690; margin-top:2px; }
+
+/* certification note / draft notice */
+.mwcoq-qp{
+  margin-top:14px; padding:11px 14px;
+  background:#eaf2f9; border-left:4px solid #0a4a6e;
+  font-size:10px; line-height:1.5; color:#0d2036;
+}
+.mwcoq-draft-note{
+  margin-top:14px; padding:9px 12px;
+  background:#fff4e0; border-left:4px solid #d08a1a;
+  font-size:10px; line-height:1.4; color:#0d2036;
+}
+
+/* footer */
+.mwcoq-foot{
+  margin-top:16px; display:flex; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; font-size:8px; color:#5a7690;
+  border-top:1px solid #dbe6f0; padding-top:5px;
+}
+
+@media (max-width:640px){
+  .mwcoq-kvgrid{ grid-template-columns:1fr; }
+  .mwcoq-sigrow{ grid-template-columns:1fr; }
+  .mwcoq-sheet{ padding:10mm 8mm 9mm; }
+}
