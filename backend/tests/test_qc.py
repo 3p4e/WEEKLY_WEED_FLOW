@@ -3083,6 +3083,35 @@ async def test_coq_render_document(client, admin_headers, monkeypatch):
     assert "Total THC" in md and "Moisture" in md
 
 
+async def test_coq_render_enforces_mandatory_content(client, admin_headers, monkeypatch):
+    """M1 — the aggregation CoQ render path enforces the SAME WHO/Annex-16
+    mandatory-content manifest as the single-certificate path (parity, not a
+    second-class path): a reported test with no analytical method blocks
+    issuance, and the gate fires before the DocEngine build."""
+    _stub_de(monkeypatch, {"document_id": "DE-COQ-M1", "verify": "RESULT: PASS"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="COQ-AGG-NM")
+    # a single spec parameter carrying no method and no pharmacopoeia reference
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Assay", "test_name_mk": "Анализа",
+                                "unit": "%", "lower_limit": 90.0, "upper_limit": 110.0},
+                          headers=admin_headers)
+    assert p.status_code == 201, p.text
+    coa = await _approved_coa(client, admin_headers, qp, spec["id"], "B-AGG-NM", [
+        {"parameter_id": p.json()["id"], "test_name": "Assay", "result_numeric": 99.0}])
+    coq = (await client.post("/qc/coq", json={"batch_id": "B-AGG-NM", "specification_id": spec["id"]},
+                             headers=admin_headers)).json()
+    assert coq["overall_conform"] is True     # data conforms — only content is short
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post(f"/qc/coq/{coq['id']}/review", headers=qc)).status_code == 200
+    r = await client.post(f"/qc/coq/{coq['id']}/render", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "analytical method" in r.json()["detail"] and "Assay" in r.json()["detail"]
+    # nothing was stamped — the CoQ stays APPROVED, unrendered
+    d = (await client.get(f"/qc/coq/{coq['id']}", headers=admin_headers)).json()
+    assert d["coq"]["coq_document_id"] is None and d["coq"]["status"] == "APPROVED"
+
+
 async def test_coq_non_conforming_batch_never_renders(client, admin_headers, monkeypatch):
     """GxP — a failing line is RECORDED on the CoQ (overall_conform=false), and
     a conformance-asserting document is never rendered over it."""

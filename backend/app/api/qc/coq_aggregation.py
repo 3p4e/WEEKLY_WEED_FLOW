@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 
 from .certificates import VoidIn, _mint_cert_number
 from .common import _COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid_or_422, router
-from .coq_docx import _coq_client, _coq_markdown
+from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
+from .laboratories import _lab_scope_set, _result_in_scope
 from .specs import _ACID_FACTOR
 
 
@@ -504,6 +505,24 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
             pick = next((s for s in src_rows if s["cert_type"] == "ICOA"), src_rows[-1])
             primary = await c.fetchrow("SELECT * FROM qc_certificates WHERE id=$1",
                                        pick["coa_id"])
+        # ISO 17025 scope advisory (parity with the single-certificate CoQ, URS
+        # Ch. 7): an aggregation CoQ draws each line from a DIFFERENT source
+        # certificate — hence a different testing lab — so scope is judged PER
+        # SOURCE: each line's method against ITS OWN lab's accredited scope.
+        # Advisory only (a footnote), never an OOS, never blocking; a lab that
+        # declares no scope is unjudgeable and flags nothing.
+        scope_by_source: dict = {}
+        src_coa_ids = list({ln["source_coa_id"] for ln in lines if ln["source_coa_id"]})
+        if src_coa_ids:
+            lab_of = {r["id"]: r["laboratory_id"] for r in await c.fetch(
+                "SELECT id, laboratory_id FROM qc_certificates WHERE id = ANY($1)", src_coa_ids)}
+            lab_ids = list({v for v in lab_of.values() if v})
+            scope_by_lab = {}
+            if lab_ids:
+                for lr in await c.fetch(
+                        "SELECT id, iso17025_scope FROM qc_laboratories WHERE id = ANY($1)", lab_ids):
+                    scope_by_lab[lr["id"]] = _lab_scope_set(lr["iso17025_scope"])
+            scope_by_source = {cid: scope_by_lab.get(lab_of.get(cid), set()) for cid in src_coa_ids}
     if open_oos:
         # §6.16 (C8) — recorded in its own transaction, before the 409.
         async with rls(user) as c2:
@@ -522,6 +541,9 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
     # source's product metadata. Unknown fields stay absent — never invented.
     coa_view = {
         "coa_number": coq["coq_number"], "cert_type": "COQ", "decision": "PASS",
+        # the CoQ's authorised approver is the HoQC who reviewed/approved it
+        # (§6.4.3) — the mandatory-content manifest requires an approver of record.
+        "approver_id": coq["reviewed_by"],
         "batch_id": coq["batch_id"],
         "manufacture_date": coq["manufacture_date"] or primary.get("manufacture_date"),
         "report_date": coq["compiled_at"].date() if coq["compiled_at"] else None,
@@ -532,7 +554,7 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         "expiry_date": primary.get("expiry_date"), "retest_date": primary.get("retest_date"),
         "source_lab": None,
     }
-    results = []
+    results, out_of_scope = [], []
     for ln in lines:
         p = params_by_id.get(str(ln["parameter_id"])) if ln["parameter_id"] else {}
         p = p or {}
@@ -548,6 +570,14 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
             "source_document_date": issue_by_number.get(ln["source_coa_number"]),
             "source_institution": ln["testing_lab"],
         })
+        # scope check against THIS line's own source lab (the line records its
+        # own test_method; fall back to the spec parameter's method).
+        scope = scope_by_source.get(ln["source_coa_id"], set())
+        if scope and not _result_in_scope(scope, ln["test_method"] or p.get("test_method"),
+                                          ln["parameter_name"]):
+            nm = ln["parameter_name"] or "?"
+            if nm not in out_of_scope:
+                out_of_scope.append(nm)
     # signature block — the CoQ's own two QC signatures (§6.4.3): compiled by /
     # reviewed+approved by HoQC. Names live in the users DB.
     signer_names = {}
@@ -560,8 +590,24 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         _by_id = {str(p["id"]): p["full_name"] for p in prows}
         signer_names = {k: _by_id.get(str(v)) for k, v in _role_ids.items()
                         if v and _by_id.get(str(v))}
+    # WHO TRS 1010 / Annex 16 §9.3 mandatory-CONTENT gate (parity with the
+    # single-certificate CoQ): never render a certificate missing a required
+    # element. cert_type is COQ, so the single-testing-lab element is not
+    # required here — the §02 crossref derives each line's lab from its own
+    # source certificate instead.
+    manifest_missing = _coq_manifest(coa_view, dict(spec) if spec else {},
+                                     params_by_id, results, None)
+    if manifest_missing:
+        raise HTTPException(
+            409, "Certificate is missing WHO/Annex-16 mandatory content: "
+                 + "; ".join(manifest_missing))
+    scope_note = None
+    if out_of_scope:
+        names = ", ".join(out_of_scope[:5])
+        scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
+                      f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
     md = _coq_markdown(coa_view, dict(spec) if spec else {}, params_by_id, results,
-                       lab=None, scope_note=None, sigs=None, signer_names=signer_names)
+                       lab=None, scope_note=scope_note, sigs=None, signer_names=signer_names)
     build = (await docengine.de_forward(
         "POST", "/build",
         {"markdown": md, "out_name": coq["coq_number"],
@@ -582,4 +628,5 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
                    object_id=coq_id, recipients=[],
                    params={"coq_number": coq["coq_number"], "document_id": doc_id})
     return {"coq_number": coq["coq_number"], "document_id": doc_id,
-            "verify": build.get("verify"), "bytes": build.get("bytes")}
+            "verify": build.get("verify"), "bytes": build.get("bytes"),
+            "out_of_scope": out_of_scope}
