@@ -37,6 +37,32 @@ app.add_middleware(
 )
 
 
+# Defence-in-depth request-body ceiling (M9). The per-endpoint limits (the eCoA
+# original's Pydantic max_length + its 20 MB decoded cap, the 8 KB task-attribute
+# cap, …) only run AFTER Starlette has buffered the whole body into memory, so a
+# pathological multi-hundred-MB body would already be resident before any of them
+# fire. Reject by the declared Content-Length up front instead. nginx caps this at
+# the edge too; this guard also holds when the app is reached without the proxy.
+# The ceiling sits just above the largest legitimate body — a base64 eCoA original
+# (~27 MB for the 20 MB decoded cap) — so it never trips a real request.
+_MAX_REQUEST_BYTES = 32 * 1024 * 1024
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            declared = int(cl)
+        except ValueError:
+            return Response('{"detail":"Invalid Content-Length"}', status_code=400,
+                            media_type="application/json")
+        if declared > _MAX_REQUEST_BYTES:
+            return Response('{"detail":"Request body too large"}', status_code=413,
+                            media_type="application/json")
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.monotonic()
