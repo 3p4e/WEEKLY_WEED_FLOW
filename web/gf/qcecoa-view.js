@@ -357,6 +357,124 @@
     </div>`;
   };
 
+  // Business (Mon–Fri) days remaining until the §6.3.1 review deadline, derived
+  // client-side from the real `review_deadline` (never fabricated). Returns the
+  // count of weekdays strictly after today up to and including the deadline.
+  const _workdaysLeft = (iso) => {
+    if (!iso) return null;
+    const dl = new Date(iso + 'T00:00:00');
+    if (isNaN(dl.getTime())) return null;
+    const cur = new Date(); cur.setHours(0, 0, 0, 0);
+    if (dl <= cur) return 0;
+    let n = 0;
+    const d = new Date(cur);
+    while (d < dl) { d.setDate(d.getDate() + 1); const wd = d.getDay(); if (wd !== 0 && wd !== 6) n++; }
+    return n;
+  };
+
+  // ── Mass Weed per-document workbench (ADDITIVE, presentational only) ──
+  // Pipeline stepper + §6.3.1 countdown chip + SHA-256 custody bar + gate-note
+  // blocks. Every value is read from the already-fetched real document payload
+  // ({document, extractions, originals}) plus the in-memory verify/checklist
+  // state — no new handlers, no fabricated hashes / deadlines / stages. All
+  // property access is guarded so it is demo/empty-state safe.
+  const workbench = (d) => {
+    const st = GF.WWF._qcecoa;
+    const doc = (d && d.document) || {};
+    const exs = (d && d.extractions) || [];
+    const files = (d && d.originals) || [];
+    const v = doc.id ? st.verify[doc.id] : null;
+    const verified = !!(v && v.verdict === 'VERIFIED');
+    const rejected = doc.status === 'REJECTED';
+
+    // Pipeline stepper — the real doc lifecycle (DST statuses) plus a terminal
+    // VERIFIED step reflecting the recorded verify verdict.
+    const ORDER = ['UPLOADED', 'EXTRACTED', 'REVIEWED', 'PROMOTED', 'VERIFIED'];
+    const baseIdx = ['UPLOADED', 'EXTRACTED', 'REVIEWED', 'PROMOTED'].indexOf(doc.status);
+    const ci = rejected ? -1 : (verified ? 4 : baseIdx);
+    const stLabel = (k) => k === 'VERIFIED' ? AL('Verified', 'Верифицирано')
+      : (DST[k] ? AL(DST[k].en, DST[k].mk) : k);
+    const steps = ORDER.map((k, i) => {
+      const cls = rejected ? '' : (i < ci ? 'done' : i === ci ? 'cur' : '');
+      const n = (!rejected && i < ci) ? GF.icon('check', 'mwe-n-ic') : String(i + 1);
+      return (i ? '<span class="mwe-arw">→</span>' : '')
+        + `<span class="mwe-st ${cls}"><span class="n">${n}</span>${GF.esc(stLabel(k))}</span>`;
+    }).join('');
+    const rejBadge = rejected
+      ? `<span class="mwe-arw">→</span><span class="mwe-st rej"><span class="n">✕</span>${AL('Rejected', 'Одбиено')}</span>`
+      : '';
+
+    // §6.3.1 countdown chip — from review_deadline / review_overdue / reviewed_at.
+    const dl = doc.review_deadline;
+    let clock = '';
+    if (doc.reviewed_at) {
+      const wm = doc.review_window_met;
+      const lab = wm === true ? AL('Reviewed · in window', 'Прегледано · во рок')
+        : wm === false ? AL('Reviewed · late', 'Прегледано · доцна')
+          : AL('Reviewed', 'Прегледано');
+      clock = `<span class="mwe-clock mwe-clock--${wm === false ? 'bad' : 'ok'}">${GF.icon('check', 'mwe-ic')}${GF.esc(lab)}</span>`;
+    } else if (doc.review_overdue) {
+      clock = `<span class="mwe-clock mwe-clock--bad">${GF.icon('clock', 'mwe-ic')}${AL('Review overdue', 'Прегледот е задоцнет')}${dl ? ' · ' + GF.esc(dl) : ''}</span>`;
+    } else if (dl) {
+      const w = _workdaysLeft(dl);
+      const txt = w == null ? AL('Review by', 'Прегледај до') + ' ' + GF.esc(dl)
+        : w <= 0 ? AL('Review due today', 'Преглед денес')
+          : w === 1 ? AL('1 working day left', '1 работен ден')
+            : AL(w + ' working days left', w + ' работни дена');
+      clock = `<span class="mwe-clock mwe-clock--${(w != null && w <= 1) ? 'warn' : 'ok'}">${GF.icon('clock', 'mwe-ic')}${GF.esc(txt)}${(w != null && w > 0) ? ' · ' + AL('by', 'до') + ' ' + GF.esc(dl) : ''}</span>`;
+    }
+
+    // SHA-256 custody bar — from the stored original file digest (real).
+    let shabar;
+    if (files.length) {
+      const f = files[files.length - 1];               // newest original
+      const sha = f.sha256 || '';
+      const shaShort = sha ? GF.esc(sha.slice(0, 6) + '…' + sha.slice(-5)) : AL('n/a', 'н/д');
+      const kb = Math.round((f.size_bytes || 0) / 1024);
+      shabar = `<div class="mwe-shabar">${GF.icon('shield', 'mwe-ic')}<span>${AL('Original retained in custody', 'Оригинал задржан во старателство')} · <b>${GF.esc(f.filename || 'original')}</b> · ${GF.esc(String(kb))} KB · SHA-256 <b class="mwe-sha">${shaShort}</b>${files.length > 1 ? ' · +' + (files.length - 1) : ''}</span></div>`;
+    } else {
+      shabar = `<div class="mwe-shabar mwe-shabar--empty">${GF.icon('shield', 'mwe-ic')}<span>${AL('No original in custody yet — attach the source PDF for the record.', 'Сè уште нема оригинал во старателство — прикачете го изворниот PDF за евиденција.')}</span></div>`;
+    }
+
+    // Gate-note blocks — reflect the real promotion gate (spec + mapped fields +
+    // ACCEPTED §6.3.2 checklist) and post-promote verify state.
+    const unmapped = exs.filter(e => e && e.grade_status === 'unmapped').length;
+    const mappedCount = exs.filter(e => e && e.parameter_id).length;
+    const cl = doc.id ? st.checklist[doc.id] : null;
+    const clOutcome = cl && cl.outcome;
+    const gIcon = { block: 'flag', ok: 'check', info: 'info' };
+    const gate = (kind, html) => `<div class="mwe-gate ${kind}">${GF.icon(gIcon[kind], 'mwe-ic')}<div>${html}</div></div>`;
+    let gates;
+    if (rejected) {
+      gates = gate('block', AL('<b>Rejected.</b> This eCoA was voided under §6.3.2 and must be replaced by the contract lab — it can no longer be promoted.', '<b>Одбиено.</b> Овој eCoA е поништен според §6.3.2 и мора да се замени од договорната лабораторија.'));
+    } else if (doc.status === 'PROMOTED') {
+      if (verified) gates = gate('ok', AL('<b>Promoted &amp; verified.</b> A DRAFT certificate carries one result per mapped parameter with provenance back to this source; the verify loop reconciled every value with no discrepancy.', '<b>Промовирано и верифицирано.</b> DRAFT сертификат со потекло по параметар; циклусот на проверка совпадна секоја вредност без отстапување.'));
+      else if (v && v.verdict === 'DISCREPANCY') gates = gate('block', AL('<b>Discrepancy on verify.</b> ' + (v.mismatches || 0) + ' of ' + (v.checked || 0) + ' promoted values did not reconcile with the source — a mismatch is reported, never silently corrected.', '<b>Отстапување при проверка.</b> ' + (v.mismatches || 0) + ' од ' + (v.checked || 0) + ' промовирани вредности не се совпаднаа со изворот.'));
+      else gates = gate('info', AL('<b>Promoted to a DRAFT certificate.</b> Run verify vs source to reconcile each promoted value against this document.', '<b>Промовирано во DRAFT сертификат.</b> Изврши проверка според изворот за секоја промовирана вредност.'));
+    } else if (!doc.specification_id) {
+      gates = gate('block', AL('<b>No specification.</b> Attach a specification before fields can be graded and the document promoted.', '<b>Нема спецификација.</b> Прикачете спецификација пред полињата да се оценат и документот да се промовира.'));
+    } else if (unmapped > 0) {
+      gates = gate('block', AL('<b>' + unmapped + ' unresolved placeholder' + (unmapped > 1 ? 's' : '') + '.</b> Unknown extracted labels must be mapped to a spec parameter or ignored before promotion — unmapped values are never fabricated.', '<b>' + unmapped + ' нерешени placeholder-и.</b> Непознатите извлечени ознаки мора да се мапираат или игнорираат пред промоција — не се измислуваат.'));
+    } else if (clOutcome === 'REJECTED') {
+      gates = gate('block', AL('<b>Checklist rejected.</b> The QCT-018 review was signed REJECTED — resolve the finding with the issuing lab.', '<b>Листата е одбиена.</b> QCT-018 прегледот е потпишан ОДБИЕНО — реши со лабораторијата.'));
+    } else if (clOutcome !== 'ACCEPTED') {
+      gates = gate('info', AL('Complete and sign the <b>QCT-018 review checklist</b> (§6.3.2) — every item must be accepted before promotion.', 'Заврши и потпиши ја <b>QCT-018</b> листата за преглед (§6.3.2) — секоја ставка мора да е прифатена пред промоција.'));
+    } else if (!mappedCount) {
+      gates = gate('block', AL('<b>No mapped results.</b> Map at least one extracted field to a spec parameter before promoting.', '<b>Нема мапирани резултати.</b> Мапирај барем едно извлечено поле пред промоција.'));
+    } else {
+      gates = gate('ok', AL('<b>All gates cleared.</b> Placeholders resolved and the QCT-018 checklist is accepted — this eCoA may be promoted into a provenance-carrying DRAFT certificate.', '<b>Сите порти поминати.</b> Placeholder-ите се решени и QCT-018 листата е прифатена — овој eCoA може да се промовира во DRAFT сертификат со потекло.'));
+    }
+
+    return `<div class="mwe-wb">
+      <div class="mwe-wb__top">
+        <div class="mwe-pipe">${steps}${rejBadge}</div>
+        ${clock}
+      </div>
+      ${shabar}
+      <div class="mwe-gates">${gates}</div>
+    </div>`;
+  };
+
   const detail = (d) => {
     const st = GF.WWF._qcecoa;
     const doc = d.document;
@@ -382,6 +500,7 @@
     const canExtract = doc.status !== 'PROMOTED' && doc.status !== 'REJECTED';
     const canPromote = (doc.status === 'EXTRACTED' || doc.status === 'REVIEWED') && !!doc.specification_id;
     return `<div class="qms-detail">
+      ${workbench(d)}
       <div class="qms-dgrid">
         <span>${AL('Document', 'Документ')}</span><b class="mono">${GF.esc(doc.doc_number)}</b>
         <span>${AL('Batch', 'Серија')}</span><b>${GF.esc(doc.batch_id)}</b>
