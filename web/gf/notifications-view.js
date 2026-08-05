@@ -187,7 +187,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       </div>
       ${st.tab === 'inbox' ? `<div class="chips" style="margin:0 4px 10px">${
         Object.keys(REASONS).map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
-      <div class="ntf-list">${!st.loaded
+      <div class="ntf-list ntf-list-enter">${!st.loaded
         ? `<div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
            <div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
            <div class="mw-skel" style="height:52px"></div>`

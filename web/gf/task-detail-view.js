@@ -116,7 +116,7 @@
     return `<div class="sec">
       <div class="sec__t">${L('Subtasks', 'Подзадачи')}<span class="side">· <span>${done}/${kids.length}</span> · ${L('unlimited nesting', 'неограничени нивоа')}</span></div>
       <div id="td-subs">${rows}</div>
-      <div class="mw-stat__track subbar"><div class="mw-stat__fill mw-stat__fill--mid" style="width:${pct}%"></div></div>
+      <div class="mw-stat__track subbar"><div class="mw-stat__fill mw-stat__fill--mid" style="transform:scaleX(${pct / 100})"></div></div>
       ${add}</div>`;
   }
 

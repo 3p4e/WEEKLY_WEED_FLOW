@@ -310,8 +310,10 @@ GF.setStatus = (id, status) => {
 GF.toggleDone = (id) => {
   const t = GF.task(id); if (!t) return;
   if (!GF.can('status', t)) return GF.denyToast();
+  const becameDone = t.status !== 'done';
   t.status = t.status === 'done' ? 'working' : 'done';
   GF.store.save(); GF.render.panels(); GF.render.telemetry();
+  if (becameDone && GF.flashCompleted) GF.flashCompleted(id);
 };
 
 // ── Filters / nav ──

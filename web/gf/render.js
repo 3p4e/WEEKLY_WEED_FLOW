@@ -29,9 +29,31 @@ GF.pickStatus = (id) => {
   GF.choose({
     title: GF.t('change_status'), value: t.status,
     options: GF.STATUS_ORDER.map(s => ({ v: s, label: GF.statusLabel(s), color: GF.STATUS_COLORS[s] })),
-    onPick: (v) => { if (v !== t.status && GF.setStatus(id, v)) { GF.render.panels(); GF.render.telemetry(); } },
+    onPick: (v) => { if (v !== t.status && GF.setStatus(id, v)) { GF.render.panels(); GF.render.telemetry(); if (v === 'done') GF.flashCompleted(id); } },
   });
 };
+
+// One-shot "just completed" feedback, deliberately decoupled from render.panels()'s
+// full innerHTML replace: that replace destroys the task's old card node and
+// creates a new one already in its final (done) state, so a CSS transition on the
+// outgoing node never gets an old/new pair to interpolate (see .card's
+// border-left-color transition, app.css:395 — set up for exactly this and never
+// fires). Call this AFTER render.panels() has already run for the same toggle. It
+// waits one frame (so the freshly-rendered node is guaranteed to be attached),
+// finds it by data-task-id, and toggles the .card--just-completed animation class
+// (app.css). The 400 below must stay in sync with that class's animation-duration.
+GF.flashCompleted = (id) => {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-task-id="${id}"]`);
+    if (!el) return;
+    el.classList.add('card--just-completed');
+    setTimeout(() => el.classList.remove('card--just-completed'), 400);
+  });
+};
+
+// Task ids that have already played their entrance animation once in this
+// browser tab's session. See card()/panels() below.
+const _animatedIds = new Set();
 
 GF.render = {
   all() {
@@ -198,6 +220,7 @@ GF.render = {
         ${GF.icon('chevD', 'icon tele-chev')}
       </div>
       <div class="tele-detail">
+        <div class="tele-detail-inner">
         <div class="track" style="height:9px"><span style="width:${rate}%;background:var(--green)"></span></div>
         <div class="tele-grid">
           <div class="tele-card"><div class="v" style="color:var(--green)">${done}</div><div class="l">${GF.statusLabel('done')}</div></div>
@@ -205,6 +228,7 @@ GF.render = {
           <div class="tele-card"><div class="v" style="color:var(--blue)">${by('review')}</div><div class="l">${GF.statusLabel('review')}</div></div>
           <div class="tele-card"><div class="v" style="color:var(--red)">${by('stuck')}</div><div class="l">${GF.statusLabel('stuck')}</div></div>
           <div class="tele-card"><div class="v" style="color:var(--violet)">${busiest ? GF.dayLabel(busiest[0]) : '—'}</div><div class="l">${GF.t('busiest')}</div></div>
+        </div>
         </div>
       </div>`;
   },
@@ -220,6 +244,10 @@ GF.render = {
       options: [{ v: '', label: GF.t('all_tags') }].concat(allTags.map(tg => ({ v: tg, label: '#' + tg }))),
       onPick: (v) => GF.setTagFilter(v),
     }) : '';
+    const curCards = cur.map(t => this.card(t)).join('');
+    const nxtCards = nxt.map(t => this.card(t)).join('');
+    cur.forEach(t => _animatedIds.add(t.id));
+    nxt.forEach(t => _animatedIds.add(t.id));
     GF.$('panels').innerHTML = `
       <div class="panel">
         <div class="panel-head">
@@ -232,7 +260,7 @@ GF.render = {
           <button class="btn btn-sm" onclick="GF.rollover()">${GF.icon('forward','icon')}${GF.t('rollover')}</button>
         </div>
         <div class="panel-body">
-          ${cur.length ? cur.map(t => this.card(t)).join('') : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
+          ${cur.length ? curCards : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
         </div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus')}<span>${GF.t('add_task')}</span>
           <div class="spacer"></div><span title="${GF.t('voice_task')}" style="cursor:pointer;display:inline-flex" onclick="event.stopPropagation();GF.voice.openCapture(${GF.state.selWeek})">${GF.icon('mic','icon','var(--orange)')}</span></div>` : ''}
@@ -244,7 +272,7 @@ GF.render = {
           <div class="spacer"></div>
           <button class="btn btn-sm" onclick="event.stopPropagation();GF.ai.summary('plan')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_brief')}</button>
         </div>
-        <div class="panel-body">${nxt.map(t => this.card(t)).join('') || `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}</div>
+        <div class="panel-body">${nxtCards || `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}</div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${nextId})">${GF.icon('plus')}<span>${GF.t('add_task')}</span></div>` : ''}
       </div>`;
   },
@@ -253,6 +281,7 @@ GF.render = {
     const d = GF.dep(t.dept);
     const exp = GF.state.expanded.has(t.id);
     const prog = GF.progress(t);
+    const enterCls = _animatedIds.has(t.id) ? '' : ' card-enter';
     const daytags = (t.days || []).map(x => `<span class="daytag">${GF.dayLabel(x)}</span>`).join('');
     const meta = [t.id].filter(Boolean);
     // v2 badges: due date (danger when overdue + not done), type chip,
@@ -302,7 +331,7 @@ GF.render = {
     const tree = treeOpen ? this.treeRows(t.id, 1) : '';
     // Archived cards render muted (inline — archived is a filter state, not a skin token).
     const archMute = t.archived ? ' style="opacity:.55"' : '';
-    if (!exp) return `<div class="card s-${t.status}"${archMute}>${head}${tree}</div>`;
+    if (!exp) return `<div class="card s-${t.status}${enterCls}" data-task-id="${t.id}"${archMute}>${head}${tree}</div>`;
 
     const noteId = 'note-' + t.id;
     // Executive input stands out: notes written by the OWNER get the strongest
@@ -328,6 +357,7 @@ GF.render = {
 
     const body = `
       <div class="card-body">
+        <div class="card-body-inner">
         ${t.status === 'stuck' && t.blocker ? `<div class="blocker">${GF.icon('flag')}<div><div class="bt">${GF.t('blocker')}: ${GF.esc(t.blocker)}</div></div></div>` : ''}
         ${t.status === 'done' && t.outcome ? `<div class="sec-label">${GF.icon('check','icon')}${GF.t('outcome')}</div>
         <div class="card-desc">${GF.esc(t.outcome)}</div>` : ''}
@@ -354,8 +384,9 @@ GF.render = {
             ? `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.unarchiveTask&&GF.WWF.unarchiveTask('${t.id}')">${GF.icon('forward','icon')}${GF.t('unarchive')}</button>`
             : `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>`}
         </div>
+        </div>
       </div>`;
-    return `<div class="card s-${t.status} expanded"${archMute}>${head}${body}${tree}</div>`;
+    return `<div class="card s-${t.status} expanded${enterCls}" data-task-id="${t.id}"${archMute}>${head}${body}${tree}</div>`;
   },
 
   /* ── Tree rows: a parent's children as indented compact rows (theme →
@@ -382,7 +413,7 @@ GF.render = {
         <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
         ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
         ${(() => { const p = GF.progress(c); return p > 0 ? `<span class="tree-prog" title="${GF.t('completion')}: ${p}%">
-          <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="width:${p}%"></span></span>
+          <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="transform:scaleX(${p / 100})"></span></span>
           <span class="tp-val">${p}%</span></span>` : ''; })()}
         <span class="pill s-${c.status}" title="${GF.t('change_status') || 'Change status'}"
           onclick="event.stopPropagation();GF.pickStatus('${c.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>

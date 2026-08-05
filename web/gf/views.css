@@ -34,7 +34,10 @@
 .kcol-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:13px 15px;align-items:start}
 .kcard{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px;cursor:pointer;
   box-shadow:var(--sh-1);transition:transform .12s,box-shadow .12s}
-.kcard:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+@media (hover: hover) and (pointer: fine){
+  .kcard:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+}
+.kcard:active{transform:translateY(-2px) scale(.97)}
 /* Empty day → header bar only, no wasted grid padding. */
 .kcol.empty .kcol-head{color:var(--ink-3)}
 .kcol.empty .kcol-head .dot{opacity:.6}
@@ -59,7 +62,9 @@
 .tlcol-body{display:flex;flex-direction:column;gap:8px}
 .tlcard{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--ink-3);border-radius:10px;
   padding:10px;cursor:pointer;box-shadow:var(--sh-1);transition:transform .12s}
-.tlcard:hover{transform:translateY(-2px)}
+@media (hover: hover) and (pointer: fine){
+  .tlcard:hover{transform:translateY(-2px)}
+}
 .tlcard-title{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:8px}
 .tlcard-meta{display:flex;align-items:center;gap:6px}
 
@@ -137,7 +142,7 @@
 .assistant-drawer{position:fixed;top:0;right:0;height:100vh;width:400px;max-width:92vw;
   background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
   border-left:1px solid var(--glass-border);box-shadow:-12px 0 40px rgba(0,0,0,.5);z-index:130;
-  transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+  transform:translateX(100%);transition:transform .28s var(--ease-out);display:flex;flex-direction:column}
 .assistant-drawer.open{transform:translateX(0)}
 .asst-head{display:flex;align-items:center;gap:11px;padding:18px 18px 14px;border-bottom:1px solid var(--line)}
 .asst-head .pp-leaf{width:26px;height:30px;flex-shrink:0}
@@ -217,7 +222,7 @@
 /* ── Facility floor-plan map ── */
 .fac-chips{display:flex;gap:7px;flex-wrap:wrap}
 .fac-chip{display:inline-flex;align-items:center;gap:7px;font:700 12px/1 'Saira',system-ui,sans-serif;
-  color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;transition:all .15s}
+  color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;transition:border-color .15s,background .15s,opacity .15s}
 .fac-chip.on{border-color:var(--zc);background:rgba(0,0,0,0);outline:1px solid var(--zc)}
 .fac-chip:not(.on){opacity:.5}
 .fac-sw{width:11px;height:11px;border-radius:3px}
@@ -229,7 +234,9 @@
   var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-1);overflow:hidden}
 .fac-room{position:absolute;border:1.5px solid;border-radius:8px;padding:7px 9px;cursor:pointer;overflow:hidden;
   transition:transform .12s,box-shadow .12s,opacity .2s;display:flex;flex-direction:column;gap:3px}
-.fac-room:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.4);z-index:5}
+@media (hover: hover) and (pointer: fine){
+  .fac-room:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.4);z-index:5}
+}
 .fac-room.sel{box-shadow:0 0 0 2px var(--primary),0 8px 20px rgba(0,0,0,.5),0 0 18px rgba(var(--accent-rgb),.2);z-index:6}
 .fac-code{font:800 11px/1 ui-monospace,monospace;display:flex;align-items:center;gap:5px}
 .fac-name{font-size:10.5px;font-weight:600;color:var(--ink-2);line-height:1.2}
@@ -302,8 +309,8 @@
 .sp-lock{display:flex;justify-content:center}
 .sp-switch{position:relative;display:inline-block;width:34px;height:20px;cursor:pointer}
 .sp-switch input{opacity:0;width:0;height:0}
-.sp-switch span{position:absolute;inset:0;background:var(--surface-3);border:1px solid var(--line);border-radius:999px;transition:.2s}
-.sp-switch span:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--ink-3);border-radius:50%;transition:.2s}
+.sp-switch span{position:absolute;inset:0;background:var(--surface-3);border:1px solid var(--line);border-radius:999px;transition:background .2s,border-color .2s}
+.sp-switch span:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--ink-3);border-radius:50%;transition:transform .2s,background .2s}
 .sp-switch input:checked+span{background:var(--primary);border-color:var(--primary)}
 .sp-switch input:checked+span:before{transform:translateX(14px);background:var(--text-on-primary)}
 .sp-mass-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;font-size:12.5px;font-weight:700;color:var(--ink-2)}
@@ -444,7 +451,7 @@
 .wl-name{min-width:0}.wl-name b{display:block;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wl-name span{font-size:11px;color:var(--ink-3)}
 .wl-bar{position:relative;height:18px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.wl-fill{height:100%;border-radius:9px;transition:width .3s ease}
+.wl-fill{width:100%;height:100%;border-radius:9px;transform-origin:left center;transition:transform .3s ease}
 .wl-fill.wl-ok{background:linear-gradient(90deg,var(--green-soft),var(--green))}
 .wl-fill.wl-warm{background:linear-gradient(90deg,var(--orange-soft),var(--orange))}
 .wl-fill.wl-hot{background:linear-gradient(90deg,var(--red-soft),var(--red))}
@@ -501,3 +508,11 @@
 .qms-hit { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
 .qms-hit-h { display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
 .qms-hit-b { font-size:13px; color:var(--ink-2); line-height:1.5; }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce){
+  .kcard:hover{transform:none}
+  .tlcard:hover{transform:none}
+  .fac-room:hover{transform:none}
+  .asst-typing span{animation-duration:2.4s}
+}

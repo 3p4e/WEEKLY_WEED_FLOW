@@ -139,6 +139,7 @@ GF.leafFX = {
   },
 
   tag(stage, mode) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches) return;
     let el = stage.querySelector('.leaf-mode-tag');
     if (!el) {
       el = document.createElement('span');
@@ -155,7 +156,16 @@ GF.leafFX = {
     if (stage._autoIdle) return;
     stage._autoIdle = true;
     opts = opts || {};
-    const active   = ['pulse','shake','spin','bounce','storm','drift'];
+    // 'storm' (wild rotateX/Y/Z 3D tumble; lf-storm keyframe,
+    // leaf-fx.css:91-99) reads as high-energy, attention-grabbing motion —
+    // fine as a rare, user-triggered delight via the click-to-cycle path
+    // (bind()/cycle() above, which still cycles through the full `modes`
+    // list including 'storm' and 'rave'), but not as something that fires
+    // unattended and automatic, indefinitely, on brand chrome visible on
+    // every view. 'rave' (rainbow hue-rotate; lf-rave keyframe,
+    // leaf-fx.css:101-108) was already excluded from this automatic pool —
+    // 'storm' is removed here for the same reason.
+    const active   = ['pulse','shake','spin','bounce','drift'];
     const restMin  = opts.restMin  || 2000;
     const restMax  = opts.restMax  || 5000;
     const holdMin  = opts.holdMin  || 900;
@@ -205,7 +215,7 @@ GF.leafFX = {
       document.querySelectorAll('.gf-grow-word').forEach(w => {
         w.classList.remove('blooming'); void w.offsetWidth; w.classList.add('blooming');
       });
-      setTimeout(bloom, 8000 + Math.random() * 8000);
+      setTimeout(bloom, 45000 + Math.random() * 45000);
     };
     setTimeout(bloom, 2000 + Math.random() * 3000);
   },

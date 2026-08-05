@@ -96,6 +96,17 @@ window.GF = window.GF || {};
   GF.openChooser = (id) => {
     const cfg = REG[id]; if (!cfg) return;
     openId = id; hi = -1;
+    // Anchor the entrance scale on whatever the user actually clicked to get
+    // here — the field's .sel-btn button, or (for the imperative GF.choose()
+    // path, e.g. GF.pickStatus's status pill) the .pill span. window.event
+    // still refers to that live click event here: GF.openChooser only ever
+    // runs synchronously inside an inline onclick handler — either directly
+    // (the .sel-btn's own onclick) or one call deeper through
+    // GF.choose → GF.pickStatus — with no async gap in between, so
+    // .currentTarget has not been reset to null yet by the time we read it.
+    const ev = window.event;
+    const trigger = ev ? (ev.currentTarget || ev.target) : null;
+    const triggerRect = trigger ? trigger.getBoundingClientRect() : null;
     let el = GF.$('gf-chooser');
     if (!el) { el = document.createElement('div'); el.id = 'gf-chooser'; el.className = 'overlay'; document.body.appendChild(el); }
     const cur = GF.$(id) ? GF.$(id).value : (cfg.value != null ? String(cfg.value) : '');
@@ -111,6 +122,20 @@ window.GF = window.GF || {};
         </div>
       </div>`;
     GF.openModal('gf-chooser');
+    // The popup's own box position/size isn't known until it's laid out, so
+    // this has to run AFTER GF.openModal() flips .overlay to display:flex —
+    // but still in this same synchronous tick, before the browser paints the
+    // animation's first frame. transform-origin is expressed in the
+    // element's OWN local coordinate space (0,0 = its own top-left corner),
+    // so the trigger's viewport-space center must be converted into an
+    // offset from the popup's box, not used as a raw viewport coordinate.
+    if (triggerRect) {
+      const modalEl = el.querySelector('.sel-modal');
+      const modalRect = modalEl.getBoundingClientRect();
+      const originX = (triggerRect.left + triggerRect.width / 2) - modalRect.left;
+      const originY = (triggerRect.top + triggerRect.height / 2) - modalRect.top;
+      modalEl.style.transformOrigin = `${originX}px ${originY}px`;
+    }
     const s = GF.$('sel-search'); if (s) s.focus();
   };
 

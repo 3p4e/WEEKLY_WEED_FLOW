@@ -252,8 +252,10 @@
   clip-path:var(--clip-notch);border-radius:0;
   box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.1);
 }
-:root[data-theme^="mass-weed"] .card:hover{
-  box-shadow:var(--sh-2), 0 0 18px rgba(var(--accent-rgb),.28);transform:translateY(-1px)
+@media (hover: hover) and (pointer: fine){
+  :root[data-theme^="mass-weed"] .card:hover{
+    box-shadow:var(--sh-2), 0 0 18px rgba(var(--accent-rgb),.28);transform:translateY(-1px)
+  }
 }
 :root[data-theme="mass-weed"] .card::before{opacity:.5}
 
@@ -304,6 +306,10 @@
 
 @media (prefers-reduced-motion: reduce){
   :root[data-theme^="mass-weed"] .card:hover{transform:none}
+  :root[data-theme^="mass-weed"] .kcard:hover,
+  :root[data-theme^="mass-weed"] .team-card:hover{transform:none!important}
+  :root[data-theme^="mass-weed"] .mw-tcard:hover{transform:none!important}
+  .mw-skins__dot:hover{transform:none!important}
 }
 
 /* Chooser + af-block under the Mass Weed HUD: chamfer + accent glow. */
@@ -339,7 +345,7 @@
 :root[data-theme^="mass-weed"] .tp-fill::after{
   content:"";position:absolute;inset:0;transform:translateX(-100%);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
-  animation:mw-sheen 3.5s ease-in-out infinite;
+  animation:mw-sheen 3.5s ease-in-out 2;
 }
 :root[data-theme^="mass-weed"] .tp-fill.hi{
   background:linear-gradient(90deg,color-mix(in srgb,var(--green) 55%,transparent),var(--green));
@@ -588,9 +594,11 @@
 :root[data-theme^="mass-weed"] .wl-row{
   border-radius:0;clip-path:var(--clip-notch);
   box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.06)}
-:root[data-theme^="mass-weed"] .kcard:hover,
-:root[data-theme^="mass-weed"] .team-card:hover{
-  box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22);transform:translateY(-1px)}
+@media (hover: hover) and (pointer: fine){
+  :root[data-theme^="mass-weed"] .kcard:hover,
+  :root[data-theme^="mass-weed"] .team-card:hover{
+    box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22);transform:translateY(-1px)}
+}
 /* KPI numerals across the generic dashboards get the Orbitron plasma glow */
 :root[data-theme^="mass-weed"] .xr-kpi .v,
 :root[data-theme^="mass-weed"] .xr-kpi b,
@@ -773,7 +781,7 @@
 :root[data-theme^="mass-weed"] .wl-fill::after{
   content:"";position:absolute;inset:0;transform:translateX(-100%);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
-  animation:mw-sheen 3.5s ease-in-out infinite}
+  animation:mw-sheen 3.5s ease-in-out 2}
 
 /* 8f — DEPT-HOME HUD (was entirely un-themed): grouped-key chips, icon glow,
    condensed labels, console empty-state — onto the real .dh-* classes. */
@@ -812,9 +820,12 @@
 :root[data-theme^="mass-weed"] .kcard{
   box-shadow:var(--sh-1), 0 0 0 1px rgba(var(--accent-rgb),.06),
     inset 3px 0 0 var(--dept-acc, var(--primary))}
-:root[data-theme^="mass-weed"] .kcard:hover{
-  box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22),
-    inset 3px 0 0 var(--dept-acc, var(--primary));transform:translateY(-1px)}
+@media (hover: hover) and (pointer: fine){
+  :root[data-theme^="mass-weed"] .kcard:hover{
+    box-shadow:var(--sh-2), 0 0 16px rgba(var(--accent-rgb),.22),
+      inset 3px 0 0 var(--dept-acc, var(--primary));transform:translateY(-1px)}
+}
+:root[data-theme^="mass-weed"] .kcard:active{transform:translateY(-1px) scale(.97)}
 
 /* 9b — resource HUD strip (facility board totals): hexagonal icon badge with
    an inner glow ring + Orbitron numeral, mirroring the mockup's .mw-res. */
@@ -884,13 +895,13 @@
 
 /* 10d — THREAT / OVERDUE PULSE: the mockup's "active alert" bloom, mapped
    onto the real overdue / blocked / critical signal classes. */
-@keyframes mw-alert{0%,100%{box-shadow:0 0 0 0 rgba(239,77,77,0)}50%{box-shadow:0 0 10px 1px rgba(239,77,77,.55)}}
-@keyframes mw-alert-amber{0%,100%{box-shadow:0 0 0 0 rgba(240,185,94,0)}50%{box-shadow:0 0 10px 1px rgba(240,185,94,.5)}}
+@keyframes mw-alert{0%,100%{box-shadow:0 0 10px 1px rgba(239,77,77,.55),0 0 0 0 rgba(239,77,77,0)}50%{box-shadow:0 0 10px 1px rgba(239,77,77,.55),0 0 18px 4px rgba(239,77,77,.6)}}
+@keyframes mw-alert-amber{0%,100%{box-shadow:0 0 10px 1px rgba(240,185,94,.5),0 0 0 0 rgba(240,185,94,0)}50%{box-shadow:0 0 10px 1px rgba(240,185,94,.5),0 0 18px 4px rgba(240,185,94,.55)}}
 :root[data-theme^="mass-weed"] .due-badge.overdue,
 :root[data-theme^="mass-weed"] .attn-tag.overdue,
-:root[data-theme^="mass-weed"] .ops-tag.overdue{animation:mw-alert-amber 2.4s ease-in-out infinite}
+:root[data-theme^="mass-weed"] .ops-tag.overdue{box-shadow:0 0 10px 1px rgba(240,185,94,.5);animation:mw-alert-amber 2.4s ease-in-out 3}
 :root[data-theme^="mass-weed"] .attn-tag.stuck,
-:root[data-theme^="mass-weed"] .prtag.critical{animation:mw-alert 2.4s ease-in-out infinite}
+:root[data-theme^="mass-weed"] .prtag.critical{box-shadow:0 0 10px 1px rgba(239,77,77,.55);animation:mw-alert 2.4s ease-in-out 3}
 
 /* 10e — "SYSTEMS ONLINE" boot-in on the brand lockup + every section title
    (a classic ME power-on cue; stays readable — never fully blanks). */
@@ -1093,7 +1104,9 @@
   background:color-mix(in srgb, var(--mw-acc,#5ec8f0) 24%, transparent);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
   -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
-.mw-tcard:hover{ transform:translateX(2px); filter:brightness(1.12); }
+@media (hover: hover) and (pointer: fine){
+  .mw-tcard:hover{ transform:translateX(2px); filter:brightness(1.12); }
+}
 [data-theme="light"] .mw-tcard{ background:linear-gradient(160deg, rgba(255,255,255,0.8), rgba(238,246,252,0.86)); }
 .mw-tcard__box{ width:17px; height:17px; flex:none; margin-top:2px; box-sizing:border-box;
   border:1.5px solid color-mix(in srgb, var(--mw-acc,#5ec8f0) 55%, transparent);
@@ -1146,8 +1159,9 @@
   background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);
   clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
   font-family:var(--mw-font); font-size:12.5px; font-weight:600; letter-spacing:.03em; color:var(--mw-text-dim);
-  border:none; cursor:pointer; user-select:none; transition:all .13s ease; }
+  border:none; cursor:pointer; user-select:none; transition:color .13s ease, background .13s ease, box-shadow .13s ease, transform .13s ease; }
 .mw-chip:hover{ color:var(--mw-text); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cc) 45%, transparent); }
+.mw-chip:active{ transform:scale(.97); }
 .mw-chip.on{ color:var(--cc); background:color-mix(in srgb, var(--cc) 16%, var(--mw-panel-in));
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cc) 55%, transparent), 0 0 14px -4px var(--cc); }
 .mw-chip .d{ width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 6px currentColor; opacity:.5; flex:none; }
@@ -1201,7 +1215,7 @@
    subtask-completion bar and dept-home KPI meters draw. Verbatim from
    design/mass-weed-mockup/mass-weed.css; --mid/--hi/--lo pick the fill hue. */
 .mw-stat__track{ height:6px; background:var(--mw-stat-track); border-radius:3px; overflow:hidden; }
-.mw-stat__fill{ height:100%; border-radius:3px; position:relative; transition:width .4s ease; }
+.mw-stat__fill{ width:100%; height:100%; border-radius:3px; position:relative; transform-origin:left center; transition:transform .4s ease; }
 .mw-stat__fill--hi { background:linear-gradient(90deg, var(--mw-stat-hi-2), var(--mw-stat-hi));   box-shadow:0 0 8px rgba(108,240,90,0.6); }
 .mw-stat__fill--mid{ background:linear-gradient(90deg, var(--mw-stat-mid-2), var(--mw-stat-mid)); box-shadow:0 0 8px rgba(236,236,74,0.55); }
 .mw-stat__fill--lo { background:linear-gradient(90deg, var(--mw-stat-lo-2), var(--mw-stat-lo));   box-shadow:0 0 8px rgba(239,77,77,0.55); }
@@ -1452,7 +1466,9 @@
 .mw-skins{ display:inline-flex; align-items:center; gap:5px; padding:3px 7px; }
 .mw-skins__dot{ width:15px; height:15px; border-radius:50%; cursor:pointer; padding:0; border:none; position:relative;
   background:var(--sw); box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.25); transition:transform .12s ease, box-shadow .12s ease; }
-.mw-skins__dot:hover{ transform:scale(1.18); }
+@media (hover: hover) and (pointer: fine){
+  .mw-skins__dot:hover{ transform:scale(1.18); }
+}
 .mw-skins__dot.is-active{ box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.9), 0 0 9px 1px var(--sw); transform:scale(1.12); }
 :root[data-theme="mass-weed-light"] .mw-skins__dot{ box-shadow:inset 0 0 0 1.5px rgba(20,50,80,0.3); }
 :root[data-theme="mass-weed-light"] .mw-skins__dot.is-active{ box-shadow:inset 0 0 0 1.5px rgba(20,50,80,0.85), 0 0 9px 1px var(--sw); }
@@ -1530,7 +1546,7 @@
   cursor: pointer;
   clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
   text-shadow: 0 0 8px rgba(94,200,240,0.5);
-  transition: filter 0.15s ease, background 0.15s ease;
+  transition: filter 0.15s ease, background 0.15s ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .mw-btn::before {
   content:""; position:absolute; inset:0; clip-path:inherit; padding:1.5px;
@@ -1540,7 +1556,7 @@
   filter: drop-shadow(0 0 3px rgba(94,200,240,0.5));
 }
 .mw-btn:hover { filter: brightness(1.3); background: linear-gradient(180deg, rgba(58,159,212,0.5), rgba(16,48,80,0.7)); }
-.mw-btn:active { filter: brightness(0.9); }
+.mw-btn:active { filter: brightness(0.9); transform: scale(.97); }
 .mw-btn--wide { width: 100%; padding-left:0; padding-right:0; }
 .mw-btn--ghost { background: rgba(6,20,40,0.4); }
 .mw-tabbtn {

@@ -70,7 +70,7 @@ window.GF = window.GF || {};
                      ondrop="GF.wlDrop(event,'${GF.esc(pid)}')">
           <div class="wl-who">${GF.avatar(pid, 32)}
             <div class="wl-name"><b>${GF.esc(p.name)}</b><span>${GF.esc(p.roleLabel || '')}</span></div></div>
-          <div class="wl-bar"><div class="wl-fill wl-${tier}" style="width:${pct}%"></div>
+          <div class="wl-bar"><div class="wl-fill wl-${tier}" style="transform:scaleX(${pct / 100})"></div>
             <span class="wl-pts">${d.pts.toFixed(1)} ${AL('pts', 'поени')}</span></div>
           <div class="wl-chips">${chips || `<span class="wl-none">${AL('No load this week', 'Нема оптовареност')}</span>`}</div>
         </div>`;

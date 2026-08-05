@@ -50,6 +50,7 @@ GF.voice = {
   _renderCapture() {
     const t = this._transcript, p = this._parsed, live = !!this._modalRec;
     const wave = [10, 22, 38, 26, 48, 64, 40, 72, 30, 54, 84, 46, 68, 34, 58, 24, 44, 30, 18, 40, 60, 36, 50, 26, 14];
+    const waveMax = 84; // must equal the array's max value so the tallest bar renders at scaleY(1)
     const sheet = p ? `
       <div class="sec-label" style="color:var(--ink-3)">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('auto_detected')}</div>
       <div class="parsed-grid">
@@ -78,7 +79,7 @@ GF.voice = {
           <div class="ring r1"></div><div class="ring r2"></div>
           <button class="mic-core ${live ? 'live' : ''}" onclick="GF.voice.toggleCaptureMic()">${GF.icon('mic','icon','#fff')}</button>
         </div>
-        <div class="wave">${wave.map((h, i) => `<span style="height:${live ? h : 8}px;${!live ? 'opacity:.3' : i > 16 ? 'opacity:.35' : ''}"></span>`).join('')}</div>
+        <div class="wave">${wave.map((h, i) => `<span style="transform:scaleY(${((live ? h : 8) / waveMax).toFixed(3)});${!live ? 'opacity:.3' : i > 16 ? 'opacity:.35' : ''}"></span>`).join('')}</div>
       </div>
       <div class="transcript-sheet">
         <div class="transcript">${t ? GF.esc(t) : `<span class="ph">${GF.t('voice_hint')}</span>`}</div>
