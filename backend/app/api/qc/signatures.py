@@ -75,6 +75,15 @@ async def sign_certificate(coa_id: str, body: SignIn,
         coa = await c.fetchrow("SELECT id, status FROM qc_certificates WHERE id=$1", coa_id)
         if coa is None:
             raise HTTPException(404, "Certificate not found")
+        # M10: a VOIDED or SUPERSEDED certificate is a closed record — appending a
+        # fresh Annex-11 attestation (esp. a RELEASED meaning) to a dead cert is
+        # misleading. The rank gate below alone allowed it (SUPERSEDED/VOIDED rank
+        # equal to RELEASED), so block terminal states explicitly. Sign the live /
+        # superseding certificate instead.
+        if coa["status"] in ("VOIDED", "SUPERSEDED"):
+            raise HTTPException(
+                409, f"Certificate is {coa['status']} — a closed record cannot receive new"
+                     " signatures; apply them to the live or superseding certificate.")
         need = _MEANING_MIN_RANK.get(body.meaning)
         if need is not None and _STATUS_RANK.get(coa["status"], 0) < need:
             raise HTTPException(

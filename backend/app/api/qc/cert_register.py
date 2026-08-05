@@ -96,16 +96,19 @@ async def register_numbering_gaps(year: int = Query(..., ge=2000, le=2100),
                                   cert_type: str | None = None,
                                   user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """Numbering-gap data-integrity report (§6.13). Certificate numbering is
-    per-(org, cert_type, year) since the QCSOP 012 alignment (C2); certificates
-    minted before that change instead share one legacy 'PP-COA-' sequence. Each
-    independent numbering SERIES — identified by its own prefix, e.g. 'PP-COA',
-    'iCoA-PP', 'eCoA-PP', 'CoQ-PP' — is gapped separately, so the format
-    transition never produces a false "hundreds of certificates missing"
-    reading from mixing two unrelated counters. Pass cert_type to scope to one
-    certificate type; omit to see every series present that year. A gap is a
-    flag to investigate against the archive — NOT proof of a missing record:
-    numbering is shared across tenants on this database, so a gap may simply
-    belong to another organisation (RLS hides it)."""
+    per-(org, cert_type, year) since the QCSOP 012 alignment (C2) and resets to
+    0001 each 1 January (see _mint_cert_number); certificates minted before that
+    change instead carry one legacy 'PP-COA-' prefix. Each independent numbering
+    SERIES — identified by its own prefix, e.g. 'PP-COA', 'iCoA-PP', 'eCoA-PP',
+    'CoQ-PP' — is gapped separately, so the format transition never produces a
+    false "hundreds of certificates missing" reading from mixing two unrelated
+    counters. Pass cert_type to scope to one certificate type; omit to see every
+    series present that year. Numbering is per-ORGANISATION (each org has its
+    own independent sequence) and this report is row-level-security scoped to the
+    caller's org, so a gap is a genuine missing-record signal within your own
+    series — a deleted or never-persisted record, NOT another organisation's
+    certificate (theirs are a separate sequence RLS never returns here).
+    Investigate each gap against the archive."""
     if cert_type is not None and cert_type not in _CERT_TYPES:
         raise HTTPException(422, f"cert_type must be one of: {', '.join(_CERT_TYPES)}")
     args = [str(year)]
@@ -137,7 +140,15 @@ async def register_numbering_gaps(year: int = Query(..., ge=2000, le=2100),
     for prefix, entry in series.items():
         nums = sorted(entry["nums"])
         present = set(nums)
-        missing = [n for n in range(nums[0], nums[-1] + 1) if n not in present]
+        # Per-(org, type, year) numbering resets to 0001 every 1 January, so a
+        # modern series' expected floor is 1 — a missing PREFIX (0001..min-1
+        # absent) is as real a gap as an interior hole, and baselining the scan
+        # at the lowest present number would silently hide it. The legacy
+        # 'PP-COA' series predates per-type numbering and was imported with an
+        # unknown starting number, so only its interior gaps (min..max) are
+        # scanned to avoid inventing gaps below its true floor.
+        floor = nums[0] if prefix == "PP-COA" else 1
+        missing = [n for n in range(floor, nums[-1] + 1) if n not in present]
         gaps = [f"{prefix}-{year}-{n:04d}" for n in missing]
         by_series[prefix] = {"cert_type": entry["cert_type"], "issued": len(nums),
                              "min": nums[0], "max": nums[-1], "gaps": gaps}
@@ -148,9 +159,12 @@ async def register_numbering_gaps(year: int = Query(..., ge=2000, le=2100),
         "year": year, "issued": total,
         "min": only["min"] if only else None, "max": only["max"] if only else None,
         "gaps": all_gaps, "by_series": by_series,
-        "note": ("Numbering is per certificate-type series since the QCSOP 012 §6.13"
-                 " alignment; each series (prefix) is gapped independently. The sequence is"
-                 " shared across tenants on this database, so a gap may reflect a certificate"
-                 " issued to another organisation rather than a missing record — investigate"
-                 " each against the archive."),
+        "note": ("Numbering is per-(organisation, certificate-type, year) since the"
+                 " QCSOP 012 §6.13 alignment and resets to 0001 each 1 January; each series"
+                 " (prefix) is gapped independently and is scoped to your organisation by"
+                 " row-level security. A gap is therefore a genuine missing-record signal"
+                 " within your own series — a deleted or never-persisted record, not another"
+                 " organisation's certificate — so investigate each against the archive. The"
+                 " legacy 'PP-COA' series predates per-type numbering; only its interior gaps"
+                 " (between its lowest and highest present numbers) are scanned."),
     }

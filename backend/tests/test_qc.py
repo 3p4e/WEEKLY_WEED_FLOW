@@ -1575,8 +1575,9 @@ async def test_register_oos_linked(client, admin_headers):
 
 async def test_register_numbering_gaps(client, admin_headers):
     """The gap report lists absent numbers within a year's issued range. Our own
-    issued numbers are never reported as gaps; the shared-sequence caveat is
-    surfaced in the note (a gap may be another tenant's allocation)."""
+    issued numbers are never reported as gaps. Numbering is per-organisation and
+    RLS-scoped, so the note frames a gap as a genuine missing-record signal
+    within our own series — not another tenant's allocation (M8)."""
     spec = await _spec(client, admin_headers, material="REG-GAP")
     made = [await _coa(client, admin_headers, spec["id"], batch=f"B-GAP-{i}") for i in range(3)]
     year = int(made[0]["coa_number"].split("-")[2])
@@ -1585,7 +1586,10 @@ async def test_register_numbering_gaps(client, admin_headers):
     assert g["min"] is not None and g["max"] >= g["min"]
     mine = {m["coa_number"] for m in made}
     assert not (mine & set(g["gaps"]))          # none of our own numbers are "gaps"
-    assert "shared across tenants" in g["note"]
+    # the corrected note no longer claims a gap is likely another tenant's …
+    assert "shared across tenants" not in g["note"]
+    # … it states the per-org / RLS-scoped missing-record reading instead
+    assert "missing-record signal" in g["note"] and "row-level security" in g["note"]
 
 
 async def test_certificate_numbering_per_type_series(client, admin_headers):
@@ -2048,6 +2052,30 @@ async def test_certificate_esignature_validates_meaning_and_gates(client, admin_
     assert (await client.post("/qc/certificates/not-a-uuid/sign",
                               json={"password": "TestPassword123456", "meaning": "APPROVED"},
                               headers=admin_headers)).status_code == 404
+
+
+async def test_signing_a_closed_certificate_is_refused(client, admin_headers):
+    """M10 — a VOIDED (or SUPERSEDED) certificate is a closed record. The rank
+    gate alone let it through (a terminal status ranks equal to RELEASED), so a
+    fresh Annex-11 attestation could be appended to a dead certificate — a signed
+    claim about a record that has been withdrawn. Terminal states are blocked
+    outright; sign the live / superseding certificate instead."""
+    spec = await _spec(client, admin_headers, material="SIG-CLOSED")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SIG-CLOSED")
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/void",
+                              json={"reason": "wrong sample tested"},
+                              headers=qc)).json()["status"] == "VOIDED"
+    # even AUTHORED — normally always available — cannot be appended to the dead record
+    r = await client.post(f"/qc/certificates/{coa['id']}/sign",
+                          json={"password": "TestPassword123456", "meaning": "AUTHORED"},
+                          headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "closed record" in r.json()["detail"]
+    # and nothing was recorded
+    lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures",
+                            headers=admin_headers)).json()
+    assert lst == []
 
 
 async def test_ecoa_promote_needs_spec_and_mapped_results(client, admin_headers):
@@ -3006,6 +3034,9 @@ async def test_coq_second_person_review_and_void(client, admin_headers):
     # a non-HoQC writer cannot review at all
     _, ceo = await _actor(client, admin_headers, "CEO")
     assert (await client.post(f"/qc/coq/{coq['id']}/review", headers=ceo)).status_code == 403
+    # M2 (URS §3): the QP is dropped from the CoQ approval gate — the QP receives
+    # the CoQ, it carries no QP signature — even though QP is HoQC-rank elsewhere
+    assert (await client.post(f"/qc/coq/{coq['id']}/review", headers=qp)).status_code == 403
     # a second HoQC person approves
     _, qc = await _actor(client, admin_headers, "QC_MGR")
     r = await client.post(f"/qc/coq/{coq['id']}/review", headers=qc)
