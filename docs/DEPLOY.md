@@ -2046,6 +2046,68 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v126 only (Mass Weed MW-1 batch 4, 2026-08-05)
+
+Frontend-only promotion of three more MW-1 pages (`39ed10c`):
+
+- **team (crew roster)** — hex avatars (wrapping the shared `GF.avatar`) + two
+  real stat bars per person: completed-this-week (owned/done/rate from live
+  `GF.weekTasks`, reusing the shipped `mw-stat__*` atoms) and active load.
+  Efficiency / shift / zone deferred (no worklog data — part owner-decision),
+  never faked. Additive to `GF.views.team`; other views.js functions unchanged.
+- **CoQ print** — an on-screen A4 certificate preview (watermark, verdict
+  header, product-identity grid, results table, signatures) toggled before the
+  `.docx`/PDF export, from real `GET /qc/certificates/{id}` fields. SHA/method/
+  batch-size/QP-legal-name deferred (no field). Additive to `qccoa-view.js`;
+  existing download/meta handlers preserved.
+- **search** — a NEW rail-reachable full-page grouped search (`search-view.js`,
+  `GF.views.search`), a page companion to the ⌘K palette: in-memory sources
+  (views, tasks incl. tree children, people, and rooms+batches when the
+  Facility board has loaded this session), grouped, focus-preserving. Documents
+  are not a source (no always-loaded index — honest empty-state). Registered
+  top-of-rail; navigation reuses `GF.setView`/`xrJump`/`openRoom`.
+
+| | before | after |
+|---|---|---|
+| frontend | `v125` | **`v126`** |
+| backend / scheduler | `v86` | `v86` (untouched) |
+| service worker | `wwf-shell-v3.97.0` | **`wwf-shell-v3.98.0`** |
+
+**New view wiring (search):** `search-view.js` added to `index.html`'s script
+list AND to `sw.js`'s offline precache array — the frontend "every gf script
+index.html loads is in the service-worker precache list" test caught the
+precache omission on the first push (b725bb5) and it was fixed in `39ed10c`
+before deploy.
+
+**Build method:** no-PAT git-archive path — `git archive 39ed10c -- web` → gzip
+→ runner `/file/write`, SHA-256 matched both sides (`a314f25c…`). Built
+`wwf-growflow:v126`; `compose.yaml.bak-pre-v126`, tag v125→v126,
+`docker compose up -d --no-deps frontend`. No DB step.
+
+**e2e-gated.** Full CI green on `39ed10c` — frontend unit (jsdom, 306/0),
+backend suite, **e2e (Playwright)** incl. `control-wiring` (renders every view +
+resolves every inline handler — exercises the new search view) and
+`no-clipped-content` (the added top-of-rail nav item only makes the guard more
+robust), schema-diff, DocEngine, security scan.
+
+**Verified against the live public URL:** `sw.js` = `wwf-shell-v3.98.0`;
+`gf/search-view.js` serves 200 and defines `GF.views.search`; `index.html`
+loads it; `gf/views.css` carries `.mwtm-hex` / `.mwcoq-sheet` / `.sr-box`;
+`gf/qccoa-view.js` carries `qcCoaTogglePreview`; `/health/ready` ok;
+`/qc/certificates/{id}` 401. `wwf-watchdog`: **result=OK pass=7 fail=0**.
+
+**Not built — parked (register §3.4 "build/park/drop each"):** `ui-elements`
+(an in-app design-atom gallery — dev/QA tooling, no cultivation-staff value)
+and `decrypt` (porting `mw-menubtn`/`mw-decrypt` atom CSS that nothing consumes
+— dead CSS). Both are cosmetic dev-tools, not product pages; left parked rather
+than adding a developer gallery to staff's nav.
+
+**Rollback:** `wwf-growflow:v125` retained; `compose.yaml.bak-pre-v126`.
+
+**Cleanup:** `/opt/wwf-deploy-v126` removed after the build.
+
+---
+
 ## Production deploy — frontend v125 only (Mass Weed MW-1 batch 3, 2026-08-05)
 
 Frontend-only promotion of the MW-1 batch-3 pages (`283d55d`), built by three

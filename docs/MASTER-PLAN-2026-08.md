@@ -80,7 +80,7 @@ Each gap below is buildable today against existing APIs. Grouped by size:
 | `execreport.html` | ✅ **DONE (v123)** — 4-KPI band parity (On-time % / Overdue / Logged hours / Complexity) from real document `metrics`. (large dept submission tiles: existing xr-sec sections cover this) |
 | `intake.html` | ✅ **DONE (v123)** — two-column layout; char counter; dept accent bars. (source-quote attribution forward-compatible but dormant — backend emits no quote field; register item) |
 | `workload.html` | ✅ **DONE (v123)** — 4-KPI band (Open/Overloaded/Available/Avg load); priority dots on chips; per-person capacity |
-| `decrypt.html` | port `mw-menubtn` menu-list + `mw-decrypt` progress atoms into the app CSS set |
+| `decrypt.html` | ⏸️ **PARKED** — porting `mw-menubtn`/`mw-decrypt` atom CSS that no app view consumes would be dead CSS; not built. Revisit if/when a view actually needs those atoms |
 
 **Medium (M) — 12 pages:**
 | Page | Missing vs design |
@@ -88,15 +88,15 @@ Each gap below is buildable today against existing APIs. Grouped by size:
 | `analytics.html` | ✅ **DONE (v124)** — additive yield-domain band from `GET /cultivation/harvests` (dry-flower KPI + WoW delta, yield-per-cycle, yield-by-strain, g/plant-by-room, output composition). g/W, cost/g, graded A/B/C deferred — no wattage/cost/grade field |
 | `approvals.html` | ✅ **DONE (v125)** — unified pending/approved/rejected sign-off queue (.mwq-*) with live counts, folding in QC CoQ DRAFT/APPROVED/VOIDED + task acks + draft-doc locks. Additive (approvals-myday.spec.js contract preserved). Declined-ack history deferred (no backend list) |
 | `dashboard.html` | ✅ **DONE (v124)** — KPI WoW deltas, real-notification alerts feed with ages, department pipeline lifecycle strip (real task status), resource HUD. QMS module lifecycle / HUD strain-batch-revenue deferred (no in-app field) |
-| `coq-print.html` | on-screen A4 paper-preview (watermark, verdict header) before the .docx |
+| `coq-print.html` | ✅ **DONE (v126)** — on-screen A4 certificate preview (watermark, verdict header, identity grid, results, signatures) toggled before the .docx/PDF export, from real GET /qc/certificates/{id}. SHA/method/batch-size deferred (no field) |
 | `doc-control.html` (L) | document lifecycle state machine (effective/in-review/periodic-review/superseded), review-by KPI, type tabs, detail drawer |
 | `ecoa-intake.html` | ✅ **DONE (v125)** — display-only workbench (pipeline stepper, §6.3.1 review countdown, SHA-256 custody bar, promotion/verify gate notes) from real /qc/coa-documents/{id} fields |
 | `facility.html` | ⚠️ **DEFERRED — needs contract-preserving rework.** A first redesign (floor plan + corridor + legend + kpiTile band + side panel) was reverted because it broke `web/e2e/tests/facility.spec.js`: that test (and the owner's stated flow) require the `.fac-room`/`.fr-nm`/`.fr-n`/`.fs-nm` room cells, the cell-click→`#fac-room-modal` add-batch flow, and the `.fac-res` phase-totals strip. The jsdom unit suite doesn't cover those selectors, so it must be re-done by LAYERING the floor-plan/legend on top of the existing markup without changing `.fac-room`/`.fac-res` or the room modal. Original still-live gap: floor-plan grid-areas layout + corridor + legend; per-room open tasks (no room↔task FK — backend-data need) |
 | `leaves.html` | ✅ **DONE (v125)** — read-only stability drawer + timepoint pull-schedule timeline from real qc_stability_studies (schedule/started/status; CLOSED→done / elapsed→due / else pending). Per-timepoint analytical results deferred (no per-pull table) |
 | `my-day.html` | ✅ **DONE (v124)** — greeting hero, visible ⌘K button wired to `GF.cmdk.open()`, 7-day task strip from state |
-| `search.html` | grow cmdk into the full grouped search page; add batches/rooms/documents sources |
-| `team.html` | hexagonal avatars + stat bars; efficiency/shift/zone need worklog-derived metrics (part owner decision) |
-| `ui-elements.html` | port remaining `mw-*` atoms as views need them; optional in-app gallery for QA |
+| `search.html` | ✅ **DONE (v126)** — new rail-reachable full-page grouped search (search-view.js), companion to ⌘K: views/tasks/people + rooms/batches when Facility is loaded. Documents deferred (no always-loaded index) |
+| `team.html` | ✅ **DONE (v126)** — hex avatars + real completion-this-week & active-load stat bars. efficiency/shift/zone deferred (need worklog-derived metrics — part owner decision), rendered as an honest note |
+| `ui-elements.html` | ⏸️ **PARKED** — an in-app design-atom gallery is dev/QA tooling with no cultivation-staff value; not built (adding a developer gallery to staff's nav isn't warranted). Build only if QA specifically wants an in-app atom reference |
 
 ### 3.2 Phase MW-2 — the 4 unbuilt pages with (mostly) existing backends
 
