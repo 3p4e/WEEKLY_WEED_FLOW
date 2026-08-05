@@ -2046,6 +2046,66 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v125 only (Mass Weed MW-1 batch 3, 2026-08-05)
+
+Frontend-only promotion of the MW-1 batch-3 pages (`283d55d`), built by three
+parallel agents on disjoint files with **additive-only, e2e-contract-preserving**
+prompts, then integrated:
+
+- **approvals** — a unified pending/approved/rejected sign-off queue (`.mwq-*`,
+  added above the existing sections) with live real counts, folding in QC CoQ
+  DRAFT/APPROVED/VOIDED (`GET /qc/coq`) alongside task acks + draft-doc locks.
+  The existing `ackRow`/`.apv-row` markup and accept flow are untouched, so
+  `approvals-myday.spec.js` still passes. Declined-ack history deferred (no
+  backend list).
+- **eCoA intake** — a display-only document workbench (pipeline stepper,
+  §6.3.1 review countdown, SHA-256 custody bar, promotion/verify gate notes)
+  from real `GET /qc/coa-documents/{id}` fields. No new handlers.
+- **leaves / stability** — a read-only pull-schedule drawer + timepoint timeline
+  from real `qc_stability_studies` fields; per-timepoint analytical results
+  deferred (no per-pull table).
+
+| | before | after |
+|---|---|---|
+| frontend | `v124` | **`v125`** |
+| backend / scheduler | `v86` | `v86` (untouched) |
+| service worker | `wwf-shell-v3.96.0` | **`wwf-shell-v3.97.0`** |
+
+**Build method:** no-PAT git-archive path — `git archive 283d55d -- web` → gzip
+→ runner `/file/write`, SHA-256 matched both sides (`4b8835d9…`). Built
+`wwf-growflow:v125`; `compose.yaml.bak-pre-v125`, tag v124→v125,
+`docker compose up -d --no-deps frontend`. No DB step.
+
+**e2e-gated — with a diagnosed flaky-guard fix.** The first batch-3 push
+(`8f850b2`) failed CI e2e on `no-clipped-content.spec.js`, but only its line-91
+*sanity guard* ("the nav rail should overflow at 1440×820 so the test isn't
+vacuous") — the real invariant (line 81, no region clips content without a
+scroll affordance) passed with zero violations. `git diff 1c74b8a..8f850b2`
+proved batch-3 touched no nav/sidebar/dept-rail/global CSS (only view-content +
+namespaced `.mwq/.mwe/.mwl` that matches nothing on the measured default view),
+so the rail height was unchanged; at 820px it overflowed by only a few px and CI
+render variance flipped the ±2px guard. Fix (`283d55d`): lowered the test
+viewport to 760px — the maintenance the test's own comment anticipates — which
+restores a comfortable margin; both measured regions are `overflow-y:auto`, so
+the real assertion is height-invariant. Re-run CI on `283d55d`: **e2e green**,
+backend suite green, schema-diff green, DocEngine green, compose-validate green.
+
+**Verified against the live public URL:** `sw.js` = `wwf-shell-v3.97.0`;
+`/health/ready` → `{ready:true,users:ok,tasks:ok}`; `gf/views.css` carries the
+batch-3 block with `.mwq-row` / `.mwe-wb` / `.mwl-drawer` live; `/audit/verify`,
+`/qc/stability-studies`, `/qc/coq` all **401**; `/` 200. Independent
+`wwf-watchdog` right after swap: **result=OK pass=7 fail=0 warn=0**.
+
+**Integration fix applied before deploy:** the eCoA agent used
+`GF.icon('alert-triangle')` for the block gate — not in the icon registry (would
+render an empty SVG) — swapped to the app's `flag` blocker convention.
+
+**Rollback:** `wwf-growflow:v124` retained; `compose.yaml.bak-pre-v125`.
+
+**Cleanup:** `/opt/wwf-deploy-v125` removed after the build.
+
+---
+
 ## Production deploy — frontend v124 only (Mass Weed MW-1 batch 2, 2026-08-05)
 
 Frontend-only promotion of the MW-1 "most-seen screens" batch (`1c74b8a`),
