@@ -2046,6 +2046,63 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v123 only (Mass Weed MW-1 pages, 2026-08-05)
+
+Frontend-only promotion of the MW-1 design-coverage batch (`13abfc2`) from the
+2026-08 master plan (Track A — "completely implement the Mass Weed theme at all
+app levels"). Four more views brought to structural parity with
+`design/mass-weed-mockup/*`: **audit** (on-demand SHA-256 chain "verify bar"
+gated to ADMIN/QA_MGR/QP, client-side free-text search over loaded rows, chain/
+action filter chips), **calendar** ("Upcoming" strip of the next 6 not-done
+tasks + a department-colour legend scoped to the month on screen), **intake**
+(two-column source|candidates layout, live char counter, dept-coloured candidate
+accent bars), and **execreport** (a 4-KPI cockpit band — on-time / overdue /
+logged hours / complexity — built entirely from the compiled document's real
+`metrics`, colour-toned green/red/amber via a new `GF.kpiTile` `tone` arg).
+Per-page staging sheets were merged into `web/gf/views.css`; no backend, no
+schema, no migration.
+
+| | before | after |
+|---|---|---|
+| frontend | `v122` | **`v123`** |
+| backend / scheduler | `v86` | `v86` (untouched) |
+| tasks / users alembic | `0055` / `0010` | unchanged |
+| service worker | `wwf-shell-v3.94.0` | **`wwf-shell-v3.95.0`** |
+
+**Build method:** no-PAT git-archive path — `git archive 13abfc2 -- web` →
+gzip → runner `/file/write`, SHA-256 matched both sides
+(`f6a848b3…`) before use. Built `wwf-growflow:v123` from the extracted `web/`
+context on the host; `compose.yaml.bak-pre-v123` taken, tag bumped v122→v123,
+`docker compose up -d --no-deps frontend`. No DB step (frontend-only).
+
+**Engineering evidence:** frontend suite **306 passed / 0 failed**;
+`node --check` clean on all touched JS; `views.css` braces balanced (491/491).
+Reviewed the three agent-authored views before integrating — caught and fixed
+`GF.icon('git-branch')` in the audit strip (not in the icon registry, would have
+rendered an empty SVG) → swapped to the existing `link` glyph; verified every
+other icon key, every `GF.API.*` binding, and the `auditVerify` `.ok` response
+shape all resolve.
+
+**Verified against the live public URL:** `sw.js` = `wwf-shell-v3.95.0`;
+`/health/ready` → `{ready:true,users:ok,tasks:ok}`; `gf/views.css` serves the
+merged MW-1 block and the `.ana-tv--good` tone rule; `gf/core.js` carries the
+toned `kpiTile`; `gf/execreport-view.js` carries the new `overdue_open` KPI;
+`/audit/verify`, `/reports/weekly`, `/cultivation/irrigation` all **401**
+(backend, not SPA fallback); `/` 200; `server: nginx` (no version). Independent
+`wwf-watchdog` probe right after the swap: **result=OK pass=7 fail=0 warn=0**
+(only `ci_freshness` SKIP — no GH token, unrelated).
+
+**No business data created in production to test this** (no Purely Plant
+credentials this session); coverage is the local frontend suite + the
+un-authenticated 401-gating and asset checks above.
+
+**Rollback:** `wwf-growflow:v122` retained; `compose.yaml.bak-pre-v123`. Restore
+the backup (or re-tag v122) and `up -d --no-deps frontend` — no schema to unwind.
+
+**Cleanup:** `/opt/wwf-deploy-v123` removed after the build.
+
+---
+
 ## Production deploy — backend v86 / frontend v122, tasks 0054→0055 / users 0009→0010 (2026-08-05)
 
 Two batches from the 2026-08 master plan (`docs/MASTER-PLAN-2026-08.md`),

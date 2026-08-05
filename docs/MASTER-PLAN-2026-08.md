@@ -74,12 +74,12 @@ Each gap below is buildable today against existing APIs. Grouped by size:
 **Small (S) — 7 pages:**
 | Page | Missing vs design |
 |---|---|
-| `audit.html` | free-text search over entity/actor; explicit "Verify chain" action + verdict strip; chip-style filters |
+| `audit.html` | ✅ **DONE (v123)** — free-text search over entity/actor; explicit "Verify chain" action + verdict strip; chip-style filters |
 | `board.html` | kanban-column presentation of cultivation batches by phase; compact strain cards |
-| `calendar.html` | "Upcoming" strip above the grid; event-type legend; surface harvest/decon dates (data exists) |
-| `execreport.html` | KPI band parity (On-time % / Overdue / Logged hours / Complexity); large dept submission tiles |
-| `intake.html` | two-column source-left/candidates-right layout; char counter; dept accent bars; source-quote attribution |
-| `workload.html` | 4-KPI band (Open/Overloaded/Available/Avg load); priority dots on chips; per-person capacity |
+| `calendar.html` | ✅ **DONE (v123)** — "Upcoming" strip above the grid; dept-colour legend. (harvest/decon event types deferred — need new api.js bindings, not faked) |
+| `execreport.html` | ✅ **DONE (v123)** — 4-KPI band parity (On-time % / Overdue / Logged hours / Complexity) from real document `metrics`. (large dept submission tiles: existing xr-sec sections cover this) |
+| `intake.html` | ✅ **DONE (v123)** — two-column layout; char counter; dept accent bars. (source-quote attribution forward-compatible but dormant — backend emits no quote field; register item) |
+| `workload.html` | ✅ **DONE (v123)** — 4-KPI band (Open/Overloaded/Available/Avg load); priority dots on chips; per-person capacity |
 | `decrypt.html` | port `mw-menubtn` menu-list + `mw-decrypt` progress atoms into the app CSS set |
 
 **Medium (M) — 12 pages:**
