@@ -37,6 +37,7 @@
     showClosed: false,
     plants: null,        // { batchId, code, total, offset, rows }
     filling: null,       // batch id currently being materialised
+    tasks: null,          // { batchId, code, rows } — Phase 3 (migration 0054)
   };
 
   // Must stay in step with _PHASES in app/api/cultivation.py and the
@@ -127,6 +128,12 @@
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultPlantList('${b.id}','${GF.esc(b.code)}')">
         ${GF.icon('file', 'icon')}${AL('Plant roster', 'Список на растенија')}</button>`);
     }
+    // Phase 3 (migration 0054): the tasks that reference this batch, whether
+    // auto-generated on a phase move or hand-linked via the task form. Shown
+    // regardless of plant fill — a task can carry batch_id before any plant
+    // id exists.
+    actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultTaskList('${b.id}','${GF.esc(b.code)}')">
+      ${GF.icon('menu', 'icon')}${AL('Batch tasks', 'Задачи на батч')}</button>`);
     if (canWrite() && !terminal) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultMoveForm('${b.id}')">
         ${GF.icon('forward', 'icon')}${AL('Move / advance', 'Премести / фаза')}</button>`);
@@ -305,6 +312,56 @@
         ${from}–${to} ${AL('of', 'од')} ${p.total}</div>
       ${rows || `<div class="ntf-empty">${AL('No plant ids yet', 'Нема ID на растенија')}</div>`}
       ${nav.length ? `<div class="row" style="gap:8px;margin-top:10px">${nav.join('')}</div>` : ''}`;
+  };
+
+  // Phase 3 (migration 0054): the "batch record accumulates from work
+  // actually performed" half of the design doc — every task carrying this
+  // batch's id, whether auto-generated on a phase move or hand-linked
+  // through the ordinary task form. Read-only here; no separate offset
+  // paging like the plant roster, since a batch's task set is small (a
+  // handful of generated tasks per phase plus whatever was hand-linked).
+  const TASK_STATUS = {
+    pending:   { en: 'Pending',   mk: 'Чека',      color: 'var(--ink-3)' },
+    ongoing:   { en: 'Ongoing',   mk: 'Во тек',    color: '#3FA34D' },
+    review:    { en: 'Review',    mk: 'Преглед',   color: '#E0A73E' },
+    stuck:     { en: 'Stuck',     mk: 'Заглавено', color: '#E5484D' },
+    postponed: { en: 'Postponed', mk: 'Одложено',  color: '#8296B4' },
+    completed: { en: 'Completed', mk: 'Завршено',  color: '#2BE8A0' },
+  };
+
+  GF.WWF.cultTaskList = async (batchId, code) => {
+    let r;
+    try { r = await GF.API.cultivationBatchTasks(batchId); }
+    catch (e) { GF.toast(e.message, 'error'); return; }
+    GF.WWF._cult.tasks = { batchId, code, rows: r.tasks || [] };
+    GF.WWF._ensureModal('cu-tasks-modal', '520px');
+    GF.$('cu-tasks-modal-title').textContent =
+      AL('Batch tasks', 'Задачи на батч') + ' — ' + code;
+    GF.WWF._cultRenderTasks();
+    GF.openModal('cu-tasks-modal');
+  };
+
+  GF.WWF._cultRenderTasks = () => {
+    const t = GF.WWF._cult.tasks; if (!t) return;
+    const body = GF.$('cu-tasks-modal-body'); if (!body) return;
+    const rows = t.rows.map(x => {
+      const s = TASK_STATUS[x.status] || {};
+      // phase_gen marks an auto-generated task (see _generate_phase_tasks) —
+      // shown as a small tag so a grower can tell it apart from one they
+      // typed by hand, same distinction the design doc draws.
+      const gen = x.phase_gen
+        ? `<span style="color:var(--ink-3);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 4px">${GF.esc(x.phase_gen)}</span>`
+        : '';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)">
+        <span style="flex:1;font-size:12px">${GF.esc(x.title)}</span>
+        ${gen}
+        <span style="color:${s.color || 'var(--ink-3)'};font-size:11px;min-width:70px;text-align:right">${
+          GF.esc(AL(s.en || x.status, s.mk || x.status))}</span>
+      </div>`;
+    }).join('');
+    body.innerHTML = rows || `<div class="ntf-empty">${AL(
+      'No tasks linked to this batch yet — one is created automatically on the next veg/flower move, or link one by hand from the task form.',
+      'Сè уште нема задачи поврзани со овој батч — се создава автоматски при следното преместување во вег/цвет, или поврзете рачно од формата за задача.')}</div>`;
   };
 
   // ── cultivar registry ─────────────────────────────────────────────────────

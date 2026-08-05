@@ -114,6 +114,13 @@ async def purge_org(org_id) -> None:
                   "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
                   "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
                   "qc_sampling_plans", "qc_specifications",
+                  # tasks.batch_id cites plant_batches (RESTRICT, migration
+                  # 0054), so every task must be gone before plant_batches is
+                  # purged below — moved here from its old spot after
+                  # calendar_weeks/departments for exactly that reason.
+                  # task_dependencies cites tasks (CASCADE either way, but
+                  # explicit) so it precedes it.
+                  "task_dependencies", "tasks",
                   # cultivation — plants + phase events cite batches (RESTRICT),
                   # batches cite cultivars (RESTRICT) and rooms (RESTRICT), so the
                   # order is: leaves -> batches -> cultivars/rooms.
@@ -134,7 +141,7 @@ async def purge_org(org_id) -> None:
                   "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
-                  "task_dependencies", "tasks", "calendar_weeks", "departments"):
+                  "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)
 

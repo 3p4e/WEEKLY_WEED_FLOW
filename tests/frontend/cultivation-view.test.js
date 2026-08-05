@@ -149,6 +149,72 @@ test('the plant roster is read-only: it lists ids and statuses, it does not move
   });
 });
 
+/* ── Phase 3: tasks reference the batch they act on (migration 0054) ─────── */
+
+test('a batch card offers "Batch tasks" regardless of plant fill', () => {
+  // Unlike the plant roster (offered only once plant ids exist), a task can
+  // carry batch_id before any plant is materialised, so the button must not
+  // be gated on plants_materialised.
+  const h = load('CU_MGR');
+  const html = renderBatches(h, [BATCH({ plants_materialised: 0, plants_active: 0 })]);
+  assert.match(html, /cultTaskList\('b1','GP072501'\)/);
+  h.close();
+});
+
+test('the batch tasks modal lists title, status and the phase_gen tag; it is read-only', () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.__modals = [];
+  w.GF.openModal = (id) => { w.__modals.push(id); };
+  w.GF.WWF._ensureModal = function (id) {
+    if (w.document.getElementById(id)) return;
+    const wrap = w.document.createElement('div');
+    wrap.id = id;
+    wrap.innerHTML = '<div id="' + id + '-title"></div><div id="' + id + '-body"></div>';
+    w.document.body.appendChild(wrap);
+  };
+  w.GF.API.cultivationBatchTasks = async () => ({
+    tasks: [
+      { id: 't1', title: 'Трансплантирање — потврда дека е засадено | Transplanting — confirm settled in',
+        status: 'pending', priority: 'medium', task_type: 'other', due_date: null,
+        completed_date: null, phase_gen: 'veg', created_at: '2026-08-05T00:00:00Z' },
+      { id: 't2', title: 'Hand-linked check', status: 'completed', priority: 'medium',
+        task_type: 'other', due_date: null, completed_date: '2026-08-05', phase_gen: null,
+        created_at: '2026-08-05T00:00:00Z' },
+    ],
+  });
+  return w.GF.WWF.cultTaskList('b1', 'GP072501').then(() => {
+    const body = w.document.getElementById('cu-tasks-modal-body').innerHTML;
+    assert.match(body, /Transplanting — confirm settled in/);
+    assert.match(body, /Hand-linked check/);
+    assert.match(body, />veg</, 'the auto-generated task is tagged with its phase');
+    // Read-only: paging itself (there is none — no offset args in the call)
+    // is the only handler the modal may reference.
+    const handlers = [...new Set((body.match(/GF\.WWF\.[A-Za-z_]+/g) || []))];
+    assert.deepEqual(handlers, [], 'the batch-tasks list must offer no mutation of its own');
+    h.close();
+  });
+});
+
+test('a batch with no linked tasks explains how one gets created, instead of an empty box', () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.GF.openModal = () => {};
+  w.GF.WWF._ensureModal = function (id) {
+    if (w.document.getElementById(id)) return;
+    const wrap = w.document.createElement('div');
+    wrap.id = id;
+    wrap.innerHTML = '<div id="' + id + '-title"></div><div id="' + id + '-body"></div>';
+    w.document.body.appendChild(wrap);
+  };
+  w.GF.API.cultivationBatchTasks = async () => ({ tasks: [] });
+  return w.GF.WWF.cultTaskList('b1', 'GP072501').then(() => {
+    const body = w.document.getElementById('cu-tasks-modal-body').innerHTML;
+    assert.match(body, /veg\/flower move/);
+    h.close();
+  });
+});
+
 /* ── the three headcounts ───────────────────────────────────────────────── */
 
 test('an incomplete fill is visible: planned, id-generated and active are separate numbers', () => {

@@ -132,7 +132,7 @@ _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
     "t.task_type,t.node_kind,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
     "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,t.progress,"
-    "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
+    "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at,t.batch_id"
 )
 
 
@@ -289,6 +289,10 @@ class TaskIn(BaseModel):
     attributes: dict | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
     progress: int = Field(default=0, ge=0, le=100)
+    # Migration 0054 (cultivation Phase 3): the batch this task was performed
+    # on, if any. Validated org-scoped below (RLS-filtered SELECT, not the raw
+    # FK — see the note at that check).
+    batch_id: str | None = None
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
@@ -414,19 +418,34 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                 # FOREIGN parent would silently plant the child in that other
                 # department. Default to the manager's own scope in that case.
                 body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
+        if body.batch_id is not None:
+            # Migration 0054: the FK alone is not enough — Postgres validates a
+            # foreign key against the referenced TABLE, not through the
+            # referencing session's RLS, so a bare FK check would accept a real
+            # batch id belonging to ANOTHER org. This SELECT runs under the same
+            # rls(user) connection as everything else in this function, so
+            # plant_batches' org_isolation policy (migration 0045) filters it —
+            # a cross-org id reads back as "no such row" here, the same way
+            # _batch_or_422 already does it in cultivation.py/harvest.py. (This
+            # check does not yet exist for department_id/week_id/parent_id —
+            # a pre-existing gap, out of scope for this change, not one to
+            # silently paper over by pretending batch_id is the only exposed
+            # field.)
+            if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", body.batch_id):
+                raise HTTPException(422, "Unknown batch")
         try:
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
                 " task_type,node_kind,reference_code,external_ref,blocker_reason,recurrence,"
                 " department,department_id,week_id,week_start,due_date,days,tags,attributes,"
-                " estimated_hours,progress,created_by,updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$2,$2)"
+                " estimated_hours,progress,batch_id,created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$2,$2)"
                 " RETURNING *",
                 user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
                 body.priority, body.task_type, body.node_kind, body.reference_code, body.external_ref,
                 body.blocker_reason, body.recurrence, body.department, body.department_id, body.week_id,
                 body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
-                body.estimated_hours, body.progress,
+                body.estimated_hours, body.progress, body.batch_id,
             )
         except asyncpg.UniqueViolationError:
             # M5: a repeated external_ref (at-least-once integration retry) hits
@@ -435,7 +454,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             # it as "already imported".
             raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
-            raise HTTPException(422, "Unknown department, week, or parent task")
+            raise HTTPException(422, "Unknown department, week, parent task, or batch")
         # Feed-only awareness (NO recipients): creation never notifies —
         # Slack/Linear defaults — but the shared activity stream shows it,
         # which is what makes exec-created work visible to the org.
@@ -468,6 +487,7 @@ class TaskPatch(BaseModel):
     tags: list[str] | None = None
     attributes: dict | None = None
     week_id: str | None = None
+    batch_id: str | None = None
     week_start: date | None = None
     due_date: date | None = None
     completed_date: date | None = None
@@ -487,7 +507,12 @@ _NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours
                         # department is its nullable text label — an explicit
                         # PATCH {"department_id": null} must clear the assignment,
                         # not be silently dropped as "field omitted".
-                        "department", "department_id"}
+                        "department", "department_id",
+                        # batch_id (migration 0054): same shape as department_id
+                        # — a nullable FK a caller must be able to explicitly
+                        # unlink, e.g. correcting a task attached to the wrong
+                        # batch.
+                        "batch_id"}
 
 
 def _advance(d: date, rec: dict) -> date:
@@ -618,6 +643,11 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
                 dst_ok = str(patch["department_id"] or "") == scope or delegable
                 if not (src_ok and dst_ok):
                     raise HTTPException(403, "Managers may not move tasks outside their own department")
+        if patch.get("batch_id") is not None:
+            # Same org-scoped existence check as create_task, and for the same
+            # reason: the FK alone would accept another org's real batch id.
+            if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", patch["batch_id"]):
+                raise HTTPException(422, "Unknown batch")
         # Capture the pre-update status so a repeated/retried PATCH that sets
         # status='completed' on an ALREADY-completed recurring task doesn't
         # re-materialize a duplicate next instance (recurrence isn't cleared
@@ -637,7 +667,7 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
             # would otherwise 500 — surface the collision as a 409.
             raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
-            raise HTTPException(422, "Unknown department, week, or parent task")
+            raise HTTPException(422, "Unknown department, week, parent task, or batch")
         if row is None:
             raise HTTPException(404, "Task not found or not permitted")
         out = dict(row)

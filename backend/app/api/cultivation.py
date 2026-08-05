@@ -92,6 +92,86 @@ def _check_phase(phase: str | None) -> None:
         raise HTTPException(422, f"phase must be one of: {', '.join(_PHASES)}")
 
 
+# ── Phase 3: phase-transition task generation (docs/CULTIVATION-DESIGN-2026-07.md §5) ──
+#
+#     "Phase transitions generate the per-phase task sets, and tasks reference
+#      the batch they act on, so the batch record accumulates from work
+#      actually performed. This is the half that makes the two existing
+#      halves one department."
+#
+# Static, code-defined templates — the same posture as the dept-template
+# quick-add presets (web/gf/dept-templates.js) that already name this exact
+# vocabulary for the cultivation department (Watering, Defoliation, IPM check,
+# Transplanting), so a generated task reads like one a grower would have typed
+# by hand rather than a new, unfamiliar list. An admin-editable template TABLE
+# was considered and dropped: the design doc asks the transition to generate
+# something real, not for a new configuration surface, and a static list costs
+# nothing to revisit later if the owner wants it editable.
+#
+# Bilingual titles use the platform's stored convention, "Македонски |
+# English" (see GF.ai.bilingual in web/gf/integrate.js: "the bilingual МК | EN
+# format the platform stores everything in") — so a generated task is
+# indistinguishable in the UI from one a human typed and ran through the AI
+# bilingual pass.
+_PHASE_TASK_TEMPLATES: dict = {
+    "veg": [
+        ("Трансплантирање — потврда дека е засадено", "Transplanting — confirm settled in"),
+        ("ИПМ — скаутинг", "IPM — scouting check"),
+        ("Наводнување — преглед на распоред", "Feeding schedule review"),
+    ],
+    "flower": [
+        ("Дефолијација — долен балдахин", "Defoliation — lower canopy"),
+        ("ИПМ — скаутинг пред жетва", "IPM — pre-harvest scouting check"),
+        ("Наводнување — премин на цветна исхрана", "Feeding schedule review — bloom transition"),
+    ],
+}
+
+
+async def _generate_phase_tasks(c, user: dict, batch, to_phase: str, occurred_on) -> list:
+    """Auto-generate the per-phase task set for a batch entering `to_phase`.
+
+    IDEMPOTENT PER (batch, phase): each generated task is tagged
+    `attributes.phase_gen = <phase>`, checked before generating again — a
+    batch that moves veg -> flower -> veg -> flower (a correction, not the
+    common case) gets the flower set exactly once, not once per visit. Two
+    copies of a plausible-reads-as-real task set would be worse than none.
+
+    Returns the ids it created (empty if the phase has no template, the batch
+    already has this phase's set, or the org has no cultivation department or
+    no calendar week covering `occurred_on` — every one of those is a reason
+    to generate NOTHING, never a reason to fail the move itself: the phase
+    transition is the load-bearing write; this is a convenience layered on
+    top of it, and a convenience that can 500 the record it rides on is not
+    one worth having."""
+    template = _PHASE_TASK_TEMPLATES.get(to_phase)
+    if not template:
+        return []
+    already = await c.fetchval(
+        "SELECT 1 FROM tasks WHERE batch_id=$1 AND attributes->>'phase_gen'=$2 LIMIT 1",
+        batch["id"], to_phase)
+    if already:
+        return []
+    dept = await c.fetchrow(
+        "SELECT id, name FROM departments WHERE org_id=$1 AND code='cultivation'", user["org_id"])
+    if dept is None:
+        return []
+    week = await c.fetchrow(
+        "SELECT id, starts_on FROM calendar_weeks WHERE org_id=$1 AND starts_on<=$2 AND ends_on>=$2",
+        user["org_id"], occurred_on)
+    if week is None:
+        return []
+    ids = []
+    for title_mk, title_en in template:
+        row = await c.fetchrow(
+            "INSERT INTO tasks(org_id,user_id,title,status,priority,task_type,department,"
+            " department_id,week_id,week_start,attributes,batch_id,created_by,updated_by)"
+            " VALUES ($1,$2,$3,'pending','medium','other',$4,$5,$6,$7,$8,$9,$2,$2) RETURNING id",
+            user["org_id"], user["id"], f"{title_mk} | {title_en}", dept["name"], dept["id"],
+            week["id"], week["starts_on"], {"phase_gen": to_phase}, batch["id"])
+        ids.append(str(row["id"]))
+    return ids
+
+
 async def _batch_or_404(c, batch_id: str):
     uuid_or_404(batch_id, "Batch not found")
     row = await c.fetchrow(
@@ -366,9 +446,41 @@ async def move_batch(batch_id: str, body: MoveIn,
                 " WHERE batch_id=$4 AND status='active'",
                 "harvested" if body.to_phase == "harvested" else "destroyed",
                 body.occurred_on, user["id"], batch_id)
+        # Phase 3: the per-phase task set, generated on the SAME transition
+        # that just committed — see _generate_phase_tasks for why it never
+        # raises (a template miss / no department / no week is a reason to
+        # generate nothing, never a reason to fail the move that already
+        # happened above).
+        generated = await _generate_phase_tasks(
+            c, user, {"id": batch_id}, body.to_phase,
+            body.occurred_on or facility_today())
         await safe_emit(c, user, verb="batch_moved", object_type="plant_batch",
                         object_id=batch_id, recipients=[],
                         params={"code": b["code"], "old_phase": b["phase"],
-                                "phase": body.to_phase})
+                                "phase": body.to_phase, "generated_tasks": len(generated)})
     return {"id": batch_id, "code": row["code"], "phase": row["phase"],
-            "phase_since": row["phase_since"].isoformat(), "is_active": row["is_active"]}
+            "phase_since": row["phase_since"].isoformat(), "is_active": row["is_active"],
+            "generated_task_ids": generated}
+
+
+@router.get("/batches/{batch_id}/tasks")
+async def batch_tasks(batch_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """The batch record accumulating from work actually performed (§5, Phase
+    3) — every task, auto-generated or hand-linked, that carries this batch's
+    id. Read-only; linking a task to a batch happens through the ordinary
+    task create/patch endpoints (tasks.py), not here."""
+    async with rls(user) as c:
+        await _batch_or_404(c, batch_id)
+        rows = await c.fetch(
+            "SELECT id, title, status, priority, task_type, due_date, completed_date,"
+            " attributes->>'phase_gen' AS phase_gen, created_at"
+            " FROM tasks WHERE batch_id=$1 AND is_deleted=false ORDER BY created_at DESC",
+            batch_id)
+    return {"tasks": [{
+        "id": str(r["id"]), "title": r["title"], "status": r["status"],
+        "priority": r["priority"], "task_type": r["task_type"],
+        "due_date": r["due_date"].isoformat() if r["due_date"] else None,
+        "completed_date": r["completed_date"].isoformat() if r["completed_date"] else None,
+        "phase_gen": r["phase_gen"],
+        "created_at": r["created_at"].isoformat(),
+    } for r in rows]}

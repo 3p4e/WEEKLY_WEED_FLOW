@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 6KXkmemMRrPQDLx1v7719WjVfW3Z7NgI3Ye152HyxBaNu0bOoi1DBHxe0YahZI0
+\restrict jFc36uDQBKyr1kfuDTGFDEH1jbCwG0Q3VodfGjLhWdEoAefdOrTqfTrF0c1YEHk
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1883,6 +1883,7 @@ CREATE TABLE public.tasks (
     attributes jsonb DEFAULT '{}'::jsonb NOT NULL,
     progress smallint DEFAULT 0 NOT NULL,
     node_kind text DEFAULT 'task'::text NOT NULL,
+    batch_id uuid,
     CONSTRAINT tasks_hours_nonnegative_check CHECK ((((estimated_hours IS NULL) OR (estimated_hours >= (0)::numeric)) AND ((actual_hours IS NULL) OR (actual_hours >= (0)::numeric)))),
     CONSTRAINT tasks_node_kind_check CHECK ((node_kind = ANY (ARRAY['task'::text, 'annex'::text, 'step'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress >= 0) AND (progress <= 100))),
@@ -3290,6 +3291,13 @@ CREATE INDEX task_workflow_events_task_idx ON public.task_workflow_events USING 
 
 
 --
+-- Name: tasks_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_batch_idx ON public.tasks USING btree (batch_id) WHERE (batch_id IS NOT NULL);
+
+
+--
 -- Name: tasks_dept_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4437,6 +4445,14 @@ ALTER TABLE ONLY public.task_workflow_events
 
 
 --
+-- Name: tasks tasks_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tasks
+    ADD CONSTRAINT tasks_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: tasks tasks_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5390,5 +5406,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 6KXkmemMRrPQDLx1v7719WjVfW3Z7NgI3Ye152HyxBaNu0bOoi1DBHxe0YahZI0
+\unrestrict jFc36uDQBKyr1kfuDTGFDEH1jbCwG0Q3VodfGjLhWdEoAefdOrTqfTrF0c1YEHk
 

@@ -135,6 +135,10 @@ GF.API = {
     return this._req('GET', '/cultivation/batches/' + batchId + '/plants' + (u ? '?' + u : ''));
   },
   cultivationMove(batchId, body) { return this._req('POST', '/cultivation/batches/' + batchId + '/move', body); },
+  // Phase 3 (migration 0054): every task that carries this batch's id — the
+  // auto-generated per-phase set plus any hand-linked via the ordinary task
+  // create/PATCH endpoints. Read-only; linking happens on the task side.
+  cultivationBatchTasks(batchId) { return this._req('GET', '/cultivation/batches/' + batchId + '/tasks'); },
 
   // ── Harvest / yield + IPM applications (migration 0051) ──
   // Same /cultivation prefix, separate server module: a harvest and a spray

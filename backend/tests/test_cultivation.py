@@ -6,9 +6,12 @@ Pins the access model (read: every role above USER; write: CU_MGR + executives
 `<clone-date>_<cultivar>_<seq>`), the resumable chunked plant fill, and the
 audit-lock-safe phase move (batch-level, not per plant).
 """
-from datetime import date
+import uuid
+from datetime import date, timedelta
 
-from tests.conftest import create_user, login_and_set_password
+from app.db import tasks_admin_pool, users_admin_pool
+from app.security import hash_password
+from tests.conftest import create_user, login_and_set_password, purge_org
 
 
 async def _actor(client, admin_headers, role):
@@ -162,3 +165,160 @@ async def test_terminal_start_phase_rejected(client, admin_headers):
         "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072505",
         "plant_count": 10, "phase": "harvested"}, headers=cu_h)
     assert r.status_code == 422
+
+
+# ── Phase 3: tasks reference the batch they act on (migration 0054) ──────────
+
+async def _seed_cultivation_week(org, on=None):
+    """_generate_phase_tasks (app/api/cultivation.py) only fires when the org
+    has a code='cultivation' department AND a calendar_weeks row covering the
+    transition date — neither exists by default (the `org` fixture seeds only
+    the admin profile), same precondition test_tasks.py's own week/department
+    tests seed by hand (test_patch_week_id_moves_task_to_a_different_week,
+    test_patch_null_clears_department)."""
+    on = on or date.today()
+    monday = on - timedelta(days=on.weekday())
+    sunday = monday + timedelta(days=6)
+    await tasks_admin_pool().execute(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'cultivation','Cultivation')",
+        org["org_id"])
+    iso = monday.isocalendar()
+    await tasks_admin_pool().execute(
+        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
+        " ($1,$2,$3,$4,$5)", org["org_id"], iso[0], iso[1], monday, sunday)
+
+
+async def test_task_batch_id_round_trips_and_clears(client, admin_headers, org):
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "flower_c185", "Flowering 1.6")
+    cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072506",
+        "plant_count": 10, "phase": "veg"}, headers=cu_h)
+    bid = b.json()["id"]
+
+    r = await client.post("/tasks", json={"title": "Check batch", "status": "pending",
+                                          "batch_id": bid}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+    assert r.json()["batch_id"] == bid
+
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["batch_id"] == bid
+
+    # explicit null clears the link (same shape as department_id)
+    r = await client.patch(f"/tasks/{task_id}", json={"batch_id": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["batch_id"] is None
+
+
+async def test_task_batch_id_cross_org_rejected_on_create_and_patch(client, admin_headers, org):
+    """A real batch id belonging to ANOTHER org must be refused. The bare FK
+    alone would accept it — Postgres validates a foreign key against the
+    referenced TABLE, not through this session's RLS — so create_task/
+    update_task run their own RLS-scoped existence check (see the comment
+    beside it in app/api/tasks.py)."""
+    other_org_id = uuid.uuid4()
+    other_admin_id = uuid.uuid4()
+    other_password = "OtherOrgPassword123456"
+    other_username = f"other_admin_{other_org_id.hex[:8]}"
+    pool = users_admin_pool()
+    await pool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
+                       other_org_id, "Other Org", f"other-{other_org_id.hex[:8]}")
+    await pool.execute(
+        "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
+        " VALUES ($1,$2,$3,$4,$5,'ADMIN',false)",
+        other_admin_id, other_org_id, other_username, hash_password(other_password), "Other Admin")
+    try:
+        r = await client.post("/auth/login", json={"email": other_username, "password": other_password})
+        assert r.status_code == 200, r.text
+        other_h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        room = await _room(client, other_h, "flower_other1", "Other Org Flower")
+        cv = await _cultivar(client, other_h, "OO", "Other Org Strain")
+        b = await client.post("/cultivation/batches", json={
+            "room_id": room["id"], "cultivar_id": cv["id"], "code": "OO072501",
+            "plant_count": 5, "phase": "veg"}, headers=other_h)
+        assert b.status_code == 201, b.text
+        other_batch_id = b.json()["id"]
+
+        r = await client.post("/tasks", json={"title": "Cross-org batch attempt", "status": "pending",
+                                              "batch_id": other_batch_id}, headers=admin_headers)
+        assert r.status_code == 422, r.text
+        assert "batch" in r.json()["detail"].lower()
+
+        mine = await client.post("/tasks", json={"title": "Patch target", "status": "pending"},
+                                 headers=admin_headers)
+        task_id = mine.json()["id"]
+        r = await client.patch(f"/tasks/{task_id}", json={"batch_id": other_batch_id}, headers=admin_headers)
+        assert r.status_code == 422, r.text
+        assert "batch" in r.json()["detail"].lower()
+    finally:
+        await purge_org(other_org_id)
+
+
+async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_headers, org):
+    """veg/flower transitions each generate their 3-task template, linked to
+    the batch, in the org's cultivation department and the calendar week
+    covering the move; revisiting a phase already generated (a correction,
+    not the common case) must not duplicate its set."""
+    await _seed_cultivation_week(org)
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    veg = await _room(client, admin_headers, "veg_c190", "Vegetation 2", "veg")
+    flower = await _room(client, admin_headers, "flower_c190", "Flowering 2.0")
+    cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
+    b = await client.post("/cultivation/batches", json={
+        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "GP072510",
+        "plant_count": 20, "phase": "clone"}, headers=cu_h)
+    bid = b.json()["id"]
+
+    # clone -> veg: generates the veg template
+    mv = await client.post(f"/cultivation/batches/{bid}/move",
+                           json={"to_phase": "veg"}, headers=cu_h)
+    assert mv.status_code == 200, mv.text
+    assert len(mv.json()["generated_task_ids"]) == 3
+
+    tl = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
+    assert tl.status_code == 200, tl.text
+    veg_tasks = tl.json()["tasks"]
+    assert len(veg_tasks) == 3
+    assert {t["phase_gen"] for t in veg_tasks} == {"veg"}
+    assert {t["status"] for t in veg_tasks} == {"pending"}
+    # each generated task is a real task, reachable and batch-linked through
+    # the ordinary task API — not a side record only cultivation.py can see
+    one = await client.get(f"/tasks/{veg_tasks[0]['id']}", headers=admin_headers)
+    assert one.json()["task"]["batch_id"] == bid
+
+    # veg -> flower: generates the flower template ON TOP of the veg set
+    mv2 = await client.post(f"/cultivation/batches/{bid}/move",
+                            json={"to_phase": "flower", "to_room_id": flower["id"]}, headers=cu_h)
+    assert len(mv2.json()["generated_task_ids"]) == 3
+    tl2 = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
+    assert len(tl2.json()["tasks"]) == 6
+
+    # a correction back to veg then forward to flower again must NOT generate
+    # a second flower set — idempotent per (batch, phase), not per visit
+    await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "veg"}, headers=cu_h)
+    mv3 = await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "flower"}, headers=cu_h)
+    assert mv3.status_code == 200, mv3.text
+    assert mv3.json()["generated_task_ids"] == []
+    tl3 = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
+    assert len(tl3.json()["tasks"]) == 6
+
+
+async def test_phase_with_no_template_generates_nothing(client, admin_headers, org):
+    await _seed_cultivation_week(org)
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "nursery_c191", "Nursery 1", "nursery")
+    cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072511",
+        "plant_count": 5, "phase": "clone"}, headers=cu_h)
+    bid = b.json()["id"]
+
+    mv = await client.post(f"/cultivation/batches/{bid}/move",
+                           json={"to_phase": "nursery"}, headers=cu_h)
+    assert mv.status_code == 200, mv.text
+    assert mv.json()["generated_task_ids"] == []
+    tl = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
+    assert tl.json()["tasks"] == []

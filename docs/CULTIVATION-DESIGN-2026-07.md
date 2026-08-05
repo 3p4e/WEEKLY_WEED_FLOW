@@ -185,12 +185,26 @@ interaction should be designed with harvest, not bolted on after.
 > and 0049) because the campaign's destruction window forced it. Harvest/yield and
 > IPM landed together as migration 0051 — see §5f, which explains why the PHI
 > interaction made shipping them separately the wrong call rather than merely the
-> slower one. **Irrigation/feeding is the remaining Phase 2 record.**
+> slower one. Irrigation/feeding (migration 0052) closed Phase 2. **Phase 2 is
+> complete.**
 
 **Phase 3 — tasks on top.**
 Phase transitions generate the per-phase task sets, and tasks reference the batch
 they act on, so the batch record accumulates from work actually performed. This
 is the half that makes the two existing halves one department.
+
+> **Status 2026-08-05.** Built as migration 0054: `tasks.batch_id` (nullable,
+> `ON DELETE RESTRICT`, same convention as harvests/IPM/irrigation/biosecurity's
+> own batch_id columns) plus `_generate_phase_tasks` in `app/api/cultivation.py`,
+> which fires on `POST /batches/{id}/move`. Static, code-defined templates for
+> `veg`/`flower` (the two phases with a well-known task set); other phases
+> generate nothing, which is the correct outcome, not a gap. Idempotent per
+> (batch, phase) via an `attributes.phase_gen` marker, so a correction (a move
+> back and forward again) never duplicates a set. Never raises — a missing
+> `cultivation` department or calendar week is a reason to generate nothing,
+> never a reason to fail the move itself. `GET /batches/{id}/tasks` reads back
+> the accumulated set (auto-generated or hand-linked via the ordinary task
+> create/PATCH endpoints).
 
 Every new table needs an `app.fn_audit_row()` trigger — not as a convention but
 because `backend/tests/test_audit_coverage.py` is default-deny and will fail the
@@ -538,10 +552,12 @@ honest on purpose — the gaps matter more than the coverage.
 | Corridor cleaning cadence (after every waste movement, 4-hourly, shift changeover) | **built 2026-07-30** — migration 0049 + `/decon/corridors` + a panel on the decon board. A *cadence* record, not a log: trigger-classified, derived overdue against a single interval constant, and joined to 0048's movements so a disposal with nothing swept after it is surfaced (§5e) |
 | Harvest / yield record, and the cultivation→QC join | **built 2026-07-30** — migration 0051 + `app/api/harvest.py` + `web/gf/harvest-view.js`: harvest lots with wet/dry weights on a wet→dried→closed ladder, and the `qc_batch_genealogy` edge that finally fills the `relation='CULTIVATION'` slot migration 0036 has carried since before cultivation had an identifier (§5f) |
 | Plant protection (IPM) applications, with re-entry and pre-harvest intervals | **built 2026-07-30** — same migration, deliberately: the PHI is a *harvest gate*, and shipping it later would have meant an untestable placeholder (§5f) |
-| AHU filter pull/refit record (§18) | **NOT built** |
-| Disinfection-mat refill + strip verification (§20) | **NOT built** |
-| Contact plates (drying/curing) and sentinel bioassay (§27) | **NOT built** |
-| Gowning / zone-crossing control (§23, §28 control 5) | **NOT built** |
+| Irrigation / feeding record | **built** — migration 0052 + `app/api/irrigation.py` (third router on `/cultivation`) + a Feeding tab on the harvest board: dated, room-level solution log (volume, feed/runoff EC/pH, recipe, method), optional batch scope for a multi-cultivar room. The last remaining Phase 2 record named above |
+| AHU filter pull/refit record (§18) | **built** — migration 0053, `biosecurity_events` (`kind='ahu_filter'`) |
+| Disinfection-mat refill + strip verification (§20) | **built** — migration 0053, `biosecurity_events` (`kind='disinfection_mat'`) |
+| Contact plates (drying/curing) and sentinel bioassay (§27) | **built** — migration 0053, `biosecurity_events` (`kind='contact_plate'` / `kind='sentinel_bioassay'`) |
+| Gowning / zone-crossing control (§23, §28 control 5) | **built** — migration 0053, `biosecurity_events` (`kind='gowning'`). All four land as ONE table with a `kind` discriminator, not four near-identical ones — see §5c intro. THE invariant: a `fail`/`below_spec` result cannot be recorded without a stated `action_taken` (CHECK constraint + API pre-check) |
+| Tasks reference the batch they act on; phase transitions generate the per-phase task set | **built** — migration 0054, `tasks.batch_id` (RLS-scoped cross-org check, since the bare FK doesn't see RLS) + `_generate_phase_tasks` in `app/api/cultivation.py`'s `move_batch`, idempotent per (batch, phase). See §5, "Phase 3 — tasks on top" |
 | The QMS documents themselves (§31) | **out of scope for software** — they are controlled documents to be authored |
 
 The unbuilt rows are all *additional record types* of the same shape as those
