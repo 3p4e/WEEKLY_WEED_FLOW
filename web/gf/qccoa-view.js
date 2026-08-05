@@ -21,7 +21,7 @@
 (function () {
   GF.WWF._qccoa = { coas: null, sel: null, detail: null, detailError: null, specParams: null,
                     specs: null, samples: null, labs: null, q: '', status: '',
-                    loading: false, error: null };
+                    loading: false, error: null, preview: null };
 
   const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
   const _QP = ['ADMIN', 'QP'];
@@ -216,6 +216,15 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     } catch (e) { GF.toast(e.message, 'error'); }
   };
+  // On-screen A4 paper preview of the Certificate of Quality — lets a reviewer
+  // eyeball the certificate (verdict, product identity, result rows, signatures)
+  // BEFORE the .docx / PDF is rendered by the DocEngine. Pure client render off
+  // the already-loaded detail; no network. Toggles per certificate id.
+  GF.WWF.qcCoaTogglePreview = (id) => {
+    const st = GF.WWF._qccoa;
+    st.preview = (st.preview === id) ? null : id;
+    GF.render.all();
+  };
 
   GF.WWF.qcCoaCreate = async () => {
     const mk = (i) => (document.getElementById(i) || {}).value || '';
@@ -328,7 +337,125 @@
     return hit ? hit.coa_number : id;
   };
 
+  // Resolve the certificate's specification_id to its human spec number from the
+  // already-loaded picker list (real field s.spec_id); null when not resolvable
+  // — never fabricated, the preview simply omits the row.
+  const specRefFor = (c) =>
+    (((GF.WWF._qccoa.specs) || []).find(s => s.id === c.specification_id) || {}).spec_id || null;
+
+  // A4 paper preview of the CoQ — built ONLY from fields present on the loaded
+  // certificate detail (d.coa / d.results / d.signatures / d.laboratory). Every
+  // row is conditional on its field existing; verdict + watermark are driven by
+  // the real decision/status, never invented. Shared look lives in
+  // web/gf/_mwtmp-coqprint.css (.mwcoq-*); per-element data-driven values inline.
+  const coqPreview = (d) => {
+    const c = d.coa || {};
+    const results = d.results || [];
+    const sigs = d.signatures || [];
+    const dec = c.decision;                       // 'PASS' | 'FAIL' | null
+    const released = c.status === 'RELEASED';
+    const stM = ST[c.status] || {};
+    const vClass = dec === 'PASS' ? 'pass' : (dec === 'FAIL' ? 'fail' : 'pending');
+    const vColor = dec === 'PASS' ? 'var(--green)' : (dec === 'FAIL' ? 'var(--red)' : 'var(--ink-3)');
+    const vText = dec === 'PASS' ? AL('Conforms', 'Соодветно')
+      : (dec === 'FAIL' ? AL('Does not conform', 'Несоодветно') : AL('Undecided', 'Неодлучено'));
+    const issued = (c.coq_generated_at || c.report_date || c.updated_at || '').replace('T', ' ').slice(0, 16);
+    const wm = GF.esc(AL(stM.en || c.status || 'DRAFT', stM.mk || c.status || 'DRAFT'));
+    const specRef = specRefFor(c);
+    const labLine = d.laboratory
+      ? GF.esc(d.laboratory.name) + (d.laboratory.accreditation_number ? ' · ' + GF.esc(d.laboratory.accreditation_number) : '')
+      : (c.source_lab ? GF.esc(c.source_lab) : '');
+    // one KV row, rendered only when the value exists (never fabricated)
+    const kv = (label, val, mono) => (val === null || val === undefined || val === '') ? ''
+      : `<div class="mwcoq-kv"><dt>${label}</dt><dd${mono ? ' class="mono"' : ''}>${GF.esc(String(val))}</dd></div>`;
+    const kvRaw = (label, valHtml) => valHtml
+      ? `<div class="mwcoq-kv"><dt>${label}</dt><dd>${valHtml}</dd></div>` : '';
+    const rrows = results.map(r => {
+      const val = r.result_value != null ? r.result_value
+        : (r.result_numeric != null ? String(r.result_numeric) : '—');
+      const lim = (r.lower_limit != null ? String(r.lower_limit) : '—') + ' … '
+        + (r.upper_limit != null ? String(r.upper_limit) : '—');
+      const cy = r.complies === true, cn = r.complies === false;
+      const cmark = cy ? '✓' : (cn ? '✗' : '—');
+      const ccol = cy ? 'var(--green)' : (cn ? 'var(--red)' : 'var(--ink-3)');
+      const prov = r.source_document_code ? ` <span class="mwcoq-prov">· ${GF.esc(r.source_document_code)}</span>` : '';
+      return `<tr>
+        <td class="mwcoq-p">${GF.esc(r.test_name || '—')}${r.in_scope === false ? ` <span class="mwcoq-prov">(${AL('out of scope', 'вон опсег')})</span>` : ''}</td>
+        <td class="mwcoq-num">${GF.esc(lim)} ${GF.esc(r.unit || '')}</td>
+        <td class="mwcoq-num">${GF.esc(val)} ${GF.esc(r.unit || '')}${prov}</td>
+        <td class="mwcoq-cmp" style="color:${ccol}">${cmark}</td>
+      </tr>`;
+    }).join('');
+    const sigCells = sigs.map(s => `
+      <div class="mwcoq-sig">
+        <div class="mwcoq-sig__l">${GF.esc(s.meaning || '')}</div>
+        <div class="mwcoq-sig__nm">${GF.esc(s.signer_name || '—')}</div>
+        <div class="mwcoq-sig__meta">${GF.esc(s.signer_role || '')}${s.signed_at ? ' · ' + GF.esc(s.signed_at.replace('T', ' ').slice(0, 16)) : ''}</div>
+      </div>`).join('');
+    const anLang = c.issue_language
+      ? GF.esc(c.issue_language) + (c.issue_language === 'EN-MK'
+          ? (c.translation_verified_at ? ` <span class="mwcoq-prov" style="color:var(--green)">✓ ${AL('translation verified', 'преводот верификуван')}</span>` : ` <span class="mwcoq-prov">${AL('translation unverified', 'преводот неверификуван')}</span>`)
+          : '')
+      : '';
+    return `<div class="mwcoq-wrap">
+      <div class="mwcoq-sheet" data-screen-label="CoQ">
+        <div class="mwcoq-wm"><span>${wm}</span></div>
+        <div class="mwcoq-hd">
+          <span class="mwcoq-hd__badge">${GF.icon('award', 'icon')}</span>
+          <div class="mwcoq-hd__t">
+            <div class="mwcoq-hd__ttl">${AL('Certificate of Quality', 'Сертификат за квалитет')}</div>
+            <div class="mwcoq-hd__sub">${GF.esc(c.cert_type || '')}${released ? ' · ' + AL('Released', 'Ослободено') : (stM.en ? ' · ' + GF.esc(AL(stM.en, stM.mk)) : '')}</div>
+            <span class="mwcoq-verdict ${vClass}" style="color:${vColor};box-shadow:inset 0 0 0 1.5px ${vColor}">${dec === 'PASS' ? '✓' : (dec === 'FAIL' ? '✗' : '•')} ${vText}</span>
+          </div>
+          <div class="mwcoq-hd__no">
+            <div class="l">${AL('Certificate №', 'Сертификат №')}</div>
+            <div class="v mono">${GF.esc(c.coa_number || '—')}</div>
+            ${issued ? `<div class="l" style="margin-top:6px">${AL('Issued', 'Издаден')}</div><div class="v mono">${GF.esc(issued)}</div>` : ''}
+          </div>
+        </div>
+        <div class="mwcoq-sec">${AL('Product identity', 'Идентитет на производ')}</div>
+        <div class="mwcoq-kvgrid">
+          ${kv(AL('Batch №', 'Серија №'), c.batch_id, true)}
+          ${kv(AL('Product code', 'Код на производ'), c.product_code, true)}
+          ${kv(AL('Cultivation batch', 'Серија на одгледување'), c.cultivation_batch, true)}
+          ${kv(AL('Botanical type', 'Ботанички тип'), c.botanical_type)}
+          ${kv(AL('Chemotype', 'Хемотип'), c.chemotype)}
+          ${kv(AL('Packaging', 'Пакување'), c.packaging)}
+          ${kv(AL('Manufacture date', 'Датум на производство'), c.manufacture_date, true)}
+          ${kv(AL('Packaging date', 'Датум на пакување'), c.packaging_date, true)}
+          ${kv(AL('Expiry date', 'Рок на употреба'), c.expiry_date, true)}
+          ${kv(AL('Retest date', 'Датум на ретест'), c.retest_date, true)}
+          ${kv(AL('Specification', 'Спецификација'), specRef, true)}
+          ${(c.analysis_start_date || c.analysis_end_date) ? kv(AL('Analysis period', 'Период на анализа'), (c.analysis_start_date || '…') + ' → ' + (c.analysis_end_date || '…'), true) : ''}
+          ${kv(AL('Sampling location', 'Локација на мострирање'), c.sampling_location)}
+          ${labLine ? kvRaw(AL('Laboratory', 'Лабораторија'), labLine) : ''}
+          ${anLang ? kvRaw(AL('Language', 'Јазик'), anLang) : ''}
+        </div>
+        <div class="mwcoq-sec">${AL('Analytical results', 'Аналитички резултати')}</div>
+        <table class="mwcoq-res"><thead><tr>
+          <th>${AL('Parameter', 'Параметар')}</th>
+          <th class="mwcoq-num">${AL('Limit', 'Граница')}</th>
+          <th class="mwcoq-num">${AL('Result', 'Резултат')}</th>
+          <th>${AL('Complies', 'Усог.')}</th>
+        </tr></thead><tbody>
+          ${rrows || `<tr><td colspan="4" class="mwcoq-prov">${AL('No results yet', 'Сè уште нема резултати')}</td></tr>`}
+        </tbody></table>
+        ${sigCells ? `<div class="mwcoq-sec">${AL('Certification & signatures', 'Заверка и потписи')}</div>
+          <div class="mwcoq-sigrow">${sigCells}</div>` : ''}
+        ${released ? `<div class="mwcoq-qp">${AL(
+            'This certificate consolidates the recorded analytical results for the batch above against its specification. Electronic signatures applied under EU-GMP Annex 11.',
+            'Овој сертификат ги консолидира евидентираните аналитички резултати за горната серија според нејзината спецификација. Електронски потписи по Анекс 11.')}</div>`
+          : `<div class="mwcoq-draft-note">${AL('Preview — this certificate is not yet released.', 'Преглед — овој сертификат сè уште не е издаден.')}</div>`}
+        <div class="mwcoq-foot">
+          <span class="mono">${released ? AL('Controlled document — do not alter', 'Контролиран документ — не менувај') : AL('On-screen preview — not a controlled copy', 'Преглед на екран — не е контролирана копија')}</span>
+          <span class="mono">${GF.esc(c.coa_number || '')}${c.coq_document_id ? ' · ' + GF.esc(String(c.coq_document_id)) : ''}</span>
+        </div>
+      </div>
+    </div>`;
+  };
+
   const detail = (d) => {
+    const st = GF.WWF._qccoa;
     const c = d.coa;
     const nxt = NEXT[c.status];
     const anyFail = (d.results || []).some(r => r.complies === false);
@@ -357,6 +484,10 @@
         ${d.drafted_same_day === false ? `<span>${AL('Drafting (§6.2.1)', 'Изготвување (§6.2.1)')}</span><b class="ana-note" style="color:var(--orange)">${AL('not drafted same day', 'не е изготвен истиот ден')}</b>` : ''}
       </div>
       ${anyFail ? `<div class="ana-note" style="color:var(--red-fg,var(--red));margin-top:6px">${AL('⚠ One or more results are out of specification.', '⚠ Еден или повеќе резултати се надвор од спецификација.')}</div>` : ''}
+      <div class="qms-dl" style="margin-top:8px">
+        <button class="btn btn-sm" onclick="GF.WWF.qcCoaTogglePreview('${c.id}')" title="${AL('Eyeball the A4 certificate on screen before exporting the .docx / PDF', 'Прегледајте го A4 сертификатот на екран пред извоз на .docx / PDF')}">${GF.icon('eye', 'icon')} ${st.preview === c.id ? AL('Hide preview', 'Сокриј преглед') : AL('Preview (A4)', 'Преглед (A4)')}</button>
+      </div>
+      ${st.preview === c.id ? coqPreview(d) : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
         ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>` : ''}
         ${BACK[c.status] ? `<button class="btn btn-sm" onclick="GF.WWF.qcCoaAdvance('${c.id}','${BACK[c.status]}')">${AL('Return to draft', 'Врати во нацрт')}</button>` : ''}
