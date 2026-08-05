@@ -131,16 +131,31 @@ GF.WWF.xrStatusChips = (status, opts) => {
 
 /* ── section body renderers (all read-only; everything through GF.esc) ── */
 
+// The owner cockpit's headline band (mockup execreport.html .xr-kpis): four
+// tiles built entirely from the compiled document's `metrics` (documents.py
+// _metrics) — on-time rate, open-overdue count, total logged hours, and mean
+// effort ratio. Colour-toned so on-time reads green and overdue reads red at a
+// glance. Every field is degrade-safe: a missing metric shows "—"/0, never NaN.
 const xrKpis = (c) => {
   const m = (c && c.metrics) || {};
-  const tasks = (c && c.tasks) || [];
-  const done = tasks.filter(t => t.status === 'completed').length;
   const ot = m.on_time || {};
   const rate = (ot.rate != null && Number.isFinite(Number(ot.rate))) ? Math.round(ot.rate * 100) + '%' : '—';
+  const overdue = m.overdue_open || [];
+  const oldest = overdue.reduce((mx, o) => Math.max(mx, o.age_days || 0), 0);
+  const hours = (m.per_dept || []).reduce((s, d) => s + (Number(d.hours) || 0), 0);
+  const ratios = (m.complexity || []).map(x => x.est_ratio).filter(r => r != null && Number.isFinite(Number(r)));
+  const cplx = ratios.length ? ratios.reduce((s, r) => s + Number(r), 0) / ratios.length : null;
   return `<div class="ana-tiles">
-    ${GF.kpiTile(AL('Tasks', 'Задачи'), tasks.length)}
-    ${GF.kpiTile(AL('Completed', 'Завршени'), done)}
-    ${GF.kpiTile(AL('On-time', 'Навремено'), rate)}
+    ${GF.kpiTile(AL('On-time', 'Навремено'), rate,
+        ot.measured ? `${ot.on_time || 0}/${ot.measured} ${AL('on time', 'навреме')}` : AL('no deadlines', 'без рокови'),
+        'good')}
+    ${GF.kpiTile(AL('Overdue', 'Задоцнети'), overdue.length,
+        overdue.length ? `${AL('oldest', 'најстаро')} ${oldest}${AL('d', 'д')}` : AL('none past due', 'ништо задоцнето'),
+        overdue.length ? 'bad' : null)}
+    ${GF.kpiTile(AL('Logged hours', 'Логирани часови'), hours ? hours.toFixed(hours < 100 ? 1 : 0) : '0',
+        AL('this week', 'оваа недела'))}
+    ${GF.kpiTile(AL('Complexity', 'Комплексност'), cplx != null ? cplx.toFixed(1) : '—',
+        AL('actual ÷ est', 'реално ÷ план'), cplx != null && cplx > 1.2 ? 'warn' : null)}
   </div>`;
 };
 

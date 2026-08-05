@@ -478,6 +478,11 @@
 .ana-tl { font-size:12px; color:var(--ink-3); margin-bottom:4px; }
 .ana-tv { font-size:26px; font-weight:600; color:var(--ink); }
 .ana-ts { font-size:12px; color:var(--ink-2); margin-top:2px; }
+/* Value tones for the exec cockpit KPI band (GF.kpiTile's 4th arg) — on-time
+   reads green, overdue red, over-budget effort amber. */
+.ana-tv--good { color:var(--primary); }
+.ana-tv--bad  { color:var(--red-fg,var(--red)); }
+.ana-tv--warn { color:var(--amber-fg,var(--amber,var(--orange))); }
 .ana-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
 .ana-panel { padding:14px 16px; }
 .ana-pt { font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
@@ -523,4 +528,275 @@
   .tlcard:hover{transform:none}
   .fac-room:hover{transform:none}
   .asst-typing span{animation-duration:2.4s}
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS — audit / calendar / intake page styling
+   merged in from the per-page staging sheets. Cross-skin generic tokens
+   only, so every rule inherits light / dark / skin theming.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── AUDIT view ──────────────────────────────────────────────────────── */
+
+/* Integrity strip container — the mockup's "verify bar": chain glyph + meta on
+   the left, verdict(s) + Verify action on the right; wraps on narrow widths. */
+.audit-verifybar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 4px 14px;
+  padding: 11px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 11px);
+}
+
+/* Chain glyph well at the strip's left edge. */
+.audit-vb-ic {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: var(--r-md, 8px);
+}
+.audit-vb-ic .icon { width: 18px; height: 18px; }
+
+/* Title + SHA-256 meta line block; takes the remaining row width. */
+.audit-vb-body { flex: 1; min-width: 160px; }
+.audit-vb-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink);
+  letter-spacing: .02em;
+}
+.audit-vb-meta {
+  margin-top: 2px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Verdict pills sit as a group so both chain verdicts stay together and wrap
+   as one unit before the button. */
+.audit-vb-verdicts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Verdict pill — base + ok / bad / idle states. */
+.audit-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.audit-verdict .icon { width: 14px; height: 14px; }
+.audit-verdict.ok {
+  color: var(--green, #2BE8A0);
+  background: var(--green-soft, rgba(43, 232, 160, .12));
+  border: 1px solid var(--green-soft, rgba(43, 232, 160, .25));
+}
+.audit-verdict.bad {
+  color: var(--red, #FF4D5E);
+  background: var(--red-soft, rgba(255, 77, 94, .12));
+  border: 1px solid var(--red-soft, rgba(255, 77, 94, .25));
+}
+.audit-verdict.idle {
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+/* Filter row — chain chips, action chips, table popup and search box, all on
+   one wrapping line. */
+.audit-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 4px 12px;
+}
+
+/* A tight group of related filter chips (chain, or action). */
+.audit-fseg {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Filter chip toggle — the mockup's .fbtn: compact, uppercase, on/off. */
+.audit-fchip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 6px 11px;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 7px);
+  transition: color .12s ease, background .12s ease, border-color .12s ease;
+}
+.audit-fchip:hover { color: var(--ink); border-color: var(--primary); }
+.audit-fchip.on {
+  color: var(--text-on-primary, #041018);
+  background: var(--primary);
+  border-color: transparent;
+}
+
+/* Keeps the table popup trigger from collapsing too narrow beside the chips. */
+.audit-tablesel { min-width: 150px; }
+
+/* Free-text search box — grows to fill leftover width, magnifier + input. */
+.audit-search {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 8px);
+}
+.audit-search .icon { color: var(--ink-3); width: 16px; height: 16px; flex: none; }
+.audit-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.audit-search input::placeholder { color: var(--ink-3); }
+
+/* "Showing N of M" count shown above the list only while a search is active. */
+.audit-count {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin: 0 2px 8px;
+  letter-spacing: .02em;
+}
+
+/* ── CALENDAR view ───────────────────────────────────────────────────── */
+
+/* ── Toolbar legend ──────────────────────────────────────────────────────
+   Decodes the department colours the grid chips are tinted with (each chip's
+   border-left-color = GF.dep(t.dept).color). Only departments present in the
+   month on screen are listed, so it stays small and contextual. */
+.cal-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin-left:auto; }
+.cal-lg{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-3);
+  text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+.cal-lg-dot{ width:10px; height:10px; border-radius:2px; flex:none; }
+
+/* ── "Upcoming" horizontal strip ─────────────────────────────────────────
+   The next several not-done task due-dates from the tasks this view already
+   holds (GF.state.tasks + tree children) — no new data source. Scrolls
+   horizontally; each card deep-links to the task via the same xrJump the chips
+   use. */
+.cal-up-wrap{ margin:2px 0 14px; }
+.cal-up-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--ink-3); margin-bottom:8px; }
+.cal-upstrip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;
+  scrollbar-width:thin; scrollbar-color:var(--glass-border) transparent; }
+.cal-upstrip::-webkit-scrollbar{ height:6px; }
+.cal-upstrip::-webkit-scrollbar-thumb{ background:var(--glass-border); border-radius:3px; }
+.cal-upcard{ flex:none; min-width:170px; max-width:230px; display:flex; gap:10px; align-items:flex-start;
+  text-align:left; padding:10px 13px; cursor:pointer; background:var(--glass-bg);
+  border:1px solid var(--glass-border); border-left:3px solid var(--primary);
+  border-radius:var(--r-md,10px); transition:background .13s ease, box-shadow .13s ease, transform .13s ease; }
+.cal-upcard:hover{ background:var(--primary-soft); box-shadow:0 0 0 1px var(--primary); transform:translateY(-1px); }
+.cal-upcard:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
+.cal-up-dot{ width:9px; height:9px; border-radius:2px; flex:none; margin-top:3px; }
+.cal-up-body{ display:flex; flex-direction:column; min-width:0; }
+.cal-up-title{ font-size:12.5px; font-weight:600; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cal-up-date{ font-size:10.5px; color:var(--ink-4); margin-top:3px;
+  text-transform:uppercase; letter-spacing:.04em; }
+.cal-up-empty{ font-size:12px; color:var(--ink-4); padding:8px 2px; }
+
+/* ── Mass Weed HUD polish: angled corners echoing the mockup's clip-path cards ── */
+:root[data-theme^="mass-weed"] .cal-upcard{ border-radius:0;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
+:root[data-theme^="mass-weed"] .cal-lg-dot,
+:root[data-theme^="mass-weed"] .cal-up-dot{ border-radius:1px; }
+
+/* ── Narrow screens: the base cal- rules already hide grid chips < 880px and
+   fall back to the "+N" pill, so drop the colour legend too (its chips are the
+   thing being decoded). The Upcoming strip keeps its own horizontal scroll. ── */
+@media (max-width:880px){ .cal-legend{ display:none; } }
+
+/* ── AI INTAKE view ──────────────────────────────────────────────────── */
+
+/* Two-column intake layout: source text (left) beside the extracted candidate
+   cards (right). Collapses to a single stacked column on narrow screens. */
+.mwtmp-intake-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 840px) {
+  .mwtmp-intake-layout { grid-template-columns: 1fr; }
+}
+/* Let each grid track shrink below its content width instead of forcing the
+   page to scroll horizontally (long unbroken pasted lines, wide cards). */
+.mwtmp-intake-col { min-width: 0; }
+
+/* Column heading — the small uppercased label above each column. */
+.mwtmp-col-t {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-3);
+  margin: 0 2px 10px;
+}
+
+/* Live character-counter row under the source textarea. */
+.mwtmp-cap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+/* Over the 4000-char advisory cap — the counter turns red (advisory only, the
+   Analyze action is never disabled; the backend imposes no hard limit). */
+.mwtmp-cap.over { color: var(--red-fg, var(--red)); }
+
+/* Idle placeholder shown in the candidates column before any extraction runs. */
+.mwtmp-intake-idle {
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 10px 2px;
+  line-height: 1.5;
+}
+
+/* Source-quote attribution on a candidate card — the source snippet the AI
+   drew the task from. Rendered by the view only when the extraction payload
+   carries the quote; that field is DEFERRED backend data as of this pass (see
+   the note in intake-view.js), so today this rule is defined ahead of the data
+   and simply lies dormant until a quote arrives. */
+.mwtmp-cand-src {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ink-3);
+  line-height: 1.45;
 }

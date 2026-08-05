@@ -13,21 +13,60 @@ const _INTAKE_PRI = ['critical', 'high', 'medium', 'low'];
 const _INTAKE_TYPES = ['capa', 'sop', 'validation', 'document', 'lab', 'meeting', 'admin', 'other'];
 
 GF.views.intake = function () {
-  return `<div id="intake-view" style="padding:4px 2px 40px;max-width:900px">
+  return `<div id="intake-view" style="padding:4px 2px 40px;max-width:1120px">
     <h2 style="margin:6px 4px 6px;font-size:19px;font-weight:800;color:var(--ink)">${AL('AI Intake', 'АИ Внес')}</h2>
     <div style="font-size:13px;color:var(--ink-2);margin:0 4px 14px">
       ${AL('Paste an email, plan or note. The AI extracts every task + subtask it finds across all departments — then pick which to adopt into your account.',
            'Залепете е-пошта, план или белешка. АИ ги извлекува сите задачи и подзадачи по сите оддели — потоа изберете кои да ги внесете во вашата сметка.')}
     </div>
-    <textarea id="intake-text" spellcheck="false"
-      placeholder="${AL('Paste the CEO email / plan text here…', 'Залепете го текстот тука…')}"
-      style="width:100%;min-height:200px;font:13px/1.5 var(--font-ui,system-ui);background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
-      <button class="btn btn-primary" onclick="GF.WWF.runExtract()">${GF.icon('sparkle')} ${AL('Analyze with AI', 'Анализирај со АИ')}</button>
-      <span id="intake-busy" style="display:none;color:var(--ink-3);font-size:13px">${AL('Analyzing…', 'Се анализира…')}</span>
+    <!-- Two-column layout (source text | extracted candidates); collapses to a
+         single column on narrow screens via .mwtmp-intake-layout's media query. -->
+    <div class="mwtmp-intake-layout">
+      <div class="mwtmp-intake-col">
+        <p class="mwtmp-col-t">${AL('Source text', 'Изворен текст')}</p>
+        <textarea id="intake-text" spellcheck="false" oninput="GF.WWF._intakeCap()"
+          placeholder="${AL('Paste the CEO email / plan text here…', 'Залепете го текстот тука…')}"
+          style="width:100%;min-height:260px;font:13px/1.5 var(--font-ui,system-ui);background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"></textarea>
+        <div class="mwtmp-cap" id="intake-cap-row">
+          <span>${AL('tip: one action per line works best', 'совет: една акција по ред')}</span>
+          <span id="intake-cap">0 / 4000</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+          <button class="btn btn-primary" onclick="GF.WWF.runExtract()">${GF.icon('sparkle')} ${AL('Analyze with AI', 'Анализирај со АИ')}</button>
+          <span id="intake-busy" style="display:none;color:var(--ink-3);font-size:13px">${AL('Analyzing…', 'Се анализира…')}</span>
+        </div>
+      </div>
+      <div class="mwtmp-intake-col">
+        <p class="mwtmp-col-t">${AL('Task candidates', 'Предлог задачи')}</p>
+        <div id="intake-result"><div class="mwtmp-intake-idle">${AL('Paste your text and hit Analyze — the AI proposes task candidates here for review.', 'Залепете текст и притиснете Анализирај — предлозите се појавуваат тука за преглед.')}</div></div>
+      </div>
     </div>
-    <div id="intake-result" style="margin-top:18px"></div>
   </div>`;
+};
+
+// Live "N / 4000" character counter under the source textarea. 4000 is an
+// advisory cap mirrored from the intake mockup — the backend imposes no hard
+// limit (ExtractReq.text is unbounded) — so over the cap the counter row just
+// turns red via .over; extraction is not blocked. Called on every keystroke;
+// the initial "0 / 4000" is correct because the textarea mounts empty.
+GF.WWF._intakeCap = () => {
+  const ta = GF.$('intake-text'), cap = GF.$('intake-cap'), row = GF.$('intake-cap-row');
+  if (!ta || !cap) return;
+  const n = (ta.value || '').length;
+  cap.textContent = n + ' / 4000';
+  if (row) row.classList.toggle('over', n > 4000);
+};
+
+// Department accent colour for a candidate card. Candidates carry a canonical
+// department CODE (see backend _norm_candidate); GF.DEPTS — loaded from
+// /departments and pinned to the design palette by mass-weed-dept-colors.test.js
+// — is the app's single source of dept colour, so resolve by code (or id) and
+// reuse .color exactly as every other view does via GF.dep().color. Neutral
+// line colour when the code is unknown or absent.
+GF.WWF._intakeDeptColor = (code) => {
+  if (!code) return 'var(--line)';
+  const d = (GF.DEPTS || []).find((x) => x.code === code || x.id === code);
+  return d ? d.color : 'var(--line)';
 };
 
 GF.WWF.runExtract = async () => {
@@ -79,7 +118,16 @@ GF.WWF._renderCandidates = () => {
     if (st.filter && c.department !== st.filter) return '';
     const subs = (c.subtasks || []).map((s) =>
       `<li style="margin:2px 0"><b>${GF.esc(s.title)}</b>${s.description ? ' — ' + GF.esc(s.description) : ''}</li>`).join('');
-    return `<div style="border:1px solid var(--line);border-left:3px solid ${c._include ? 'var(--primary,#2BE8A0)' : 'var(--line)'};border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--surface,#0B1913)">
+    // Left accent bar tinted by the candidate's department colour when included
+    // (dimmed to the neutral line colour when unchecked, preserving the
+    // include/exclude visual). Colour is per-card dynamic, hence inline.
+    const dc = GF.WWF._intakeDeptColor(c.department);
+    // Source-quote attribution: the snippet the AI drew this task from. The
+    // backend does not emit one today (deferred backend data — see the task
+    // report); this reads a forward-compatible field so it lights up
+    // automatically once the data exists, and renders nothing meanwhile.
+    const srcQuote = c.source_quote || c.source_text || (c.source && c.source.quote) || '';
+    return `<div style="border:1px solid var(--line);border-left:4px solid ${c._include ? dc : 'var(--line)'};border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--surface,#0B1913)">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <input type="checkbox" ${c._include ? 'checked' : ''} onchange="GF.WWF._intakeSet(${i},'_include',this.checked);GF.WWF._renderCandidates()" style="margin-top:5px">
         <div style="flex:1">
@@ -99,6 +147,7 @@ GF.WWF._renderCandidates = () => {
             ${c.due_date ? `<span style="color:var(--ink-3);align-self:center">${AL('due', 'рок')} ${GF.esc(c.due_date)}</span>` : ''}
           </div>
           ${subs ? `<ul style="margin:8px 0 0 4px;padding-left:16px;font-size:12.5px;color:var(--ink-2)">${subs}</ul>` : ''}
+          ${srcQuote ? `<div class="mwtmp-cand-src">“${GF.esc(srcQuote)}”</div>` : ''}
         </div>
       </div>
     </div>`;
