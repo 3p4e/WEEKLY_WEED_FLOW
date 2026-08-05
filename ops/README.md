@@ -164,6 +164,41 @@ If you install it through the kvm4-runner HTTP API, note that `/shell` runs
 commands under `/bin/sh` (dash), so invoke it explicitly:
 `bash /usr/local/sbin/wwf-watchdog.sh`.
 
+**Docker (used in production, 2026-08-05).** Neither systemd nor cron above is
+actually reachable through the kvm4-runner HTTP API: its `/shell` and `/exec`
+endpoints execute *inside the kvm4-runner container itself* (confirmed:
+`hostname` returns a container id, `systemctl`/`crontab` are both absent from
+`PATH`), not on the bare KVM4 host — only `/opt` is the real host filesystem
+there (bind-mounted), everything else is that container's own overlay. That is
+why the script sat staged-but-dormant at `/opt/wwf-ops/watchdog.sh` for a
+week: there was no host init system reachable to schedule it with.
+
+The docker socket *is* reachable from inside that container, though (it is how
+every deploy in this repo's `docs/DEPLOY.md` builds and recreates production
+images), and this host already runs every other piece of long-lived tooling
+(`wwf-scheduler`, `wwf-db-backup`, `wwf-backup-offsite`, …) as its own
+`restart: unless-stopped` container rather than a host cron/systemd job — so
+that is the path actually used: a small Alpine image (`docker-cli` + `bash` +
+`curl` + `python3`) running a `while true; do bash watchdog.sh; sleep
+$INTERVAL; done` loop, as its own stack at `/opt/stacks/wwf-watchdog/`
+(**not** folded into `wwf_app`'s compose or `gh-runner-wwf` — see the "shares
+no component with the things it watches" requirement above), with
+`/var/run/docker.sock` mounted **read-only** and `watchdog.sh` itself
+bind-mounted from `/opt/wwf-ops/watchdog.sh` (not baked into the image) so an
+updated script just needs `docker compose restart watchdog`, no rebuild:
+
+```sh
+cd /opt/stacks/wwf-watchdog && docker compose build && docker compose up -d
+docker logs wwf-watchdog          # PASS/FAIL/WARN lines, one tick per interval
+docker inspect wwf-watchdog --format 'status={{.State.Status}} restarts={{.RestartCount}}'
+```
+
+`restart: unless-stopped` survives both a crash and a host reboot, same as
+every other container here — no host-level scheduler needed at all. See
+`docs/DEPLOY.md`'s 2026-08-05 entry for the exact install and its known gap
+(no webhook/token configured yet, so `docker logs` is the only channel until
+one is added).
+
 ### Configuration
 
 | Variable | Default | Purpose |

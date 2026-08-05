@@ -2046,6 +2046,53 @@ on *both* new images.
 
 ---
 
+## ops/watchdog.sh wired up as its own Docker stack (2026-08-05)
+
+`ops/watchdog.sh` had been staged on the host at `/opt/wwf-ops/watchdog.sh`
+(2026-07-30, byte-identical to the repo copy) but never actually scheduled —
+"dormant" in the literal sense: correct, tested, sitting there, never invoked.
+Wired up now as `/opt/stacks/wwf-watchdog/` (own Dockge-visible stack, `docker
+compose build && up -d` via the kvm4-runner), not folded into `wwf_app`'s
+compose or `gh-runner-wwf`, deliberately: ops/README.md's whole design premise
+is that the watchdog "shares no component with the things it watches", and the
+outage it exists to catch is specifically gh-runner-wwf going down — coupling
+the monitor's own lifecycle to either the thing it watches or the app stack it
+also inspects would reopen exactly that blind spot.
+
+Shape: an Alpine image (`docker-cli` + `bash` + `curl` + `python3`, ~84 MiB)
+running `run-loop.sh`, which just re-invokes `watchdog.sh` every
+`WWF_WATCHDOG_INTERVAL` (default 300s) forever. `watchdog.sh` itself is
+bind-mounted from `/opt/wwf-ops/watchdog.sh` read-only rather than baked into
+the image, so a future script update is a `file/write` + `docker compose
+restart watchdog`, no rebuild. `/var/run/docker.sock` is mounted read-only —
+the script only ever `inspect`/`exec`(read-only commands)/`top`s other
+containers, never mutates. `restart: unless-stopped`, so it survives both a
+crash and a host reboot without any host-level cron or systemd unit — the
+`docker run`-based option this host already uses for every other piece of
+long-lived tooling (`wwf-scheduler`, `wwf-db-backup`, `wwf-backup-offsite`),
+not a new mechanism.
+
+Verified running: `docker logs wwf-watchdog` shows `docker_access`,
+`runner_container`, `runner_listener`, `runner_process`, `app_ready`,
+`db_wwf-db-users`, `db_wwf-db-tasks` all PASS on the first tick;
+`ci_freshness` correctly SKIPs (no `WWF_WATCHDOG_GH_TOKEN_FILE` configured
+yet — see below). `docker inspect wwf-watchdog` shows `restarting=false
+status=running restarts=0`.
+
+**Known gap, left open on purpose:** no `WWF_WATCHDOG_WEBHOOK` or
+`WWF_WATCHDOG_GH_TOKEN_FILE` is configured, so the only channel right now is
+`docker logs` (plus syslog if the host has one reachable, which this minimal
+image does not carry). Every PASS/FAIL/WARN line is real and already being
+produced; what is missing is a push alert on FAIL. Wiring one up needs a
+credential this deploy did not have to hand (a webhook URL, or a GitHub PAT
+scoped to `actions:read` for the `ci` group) — add it to a `.env` mounted into
+the `watchdog` service and recreate the container once one exists; nothing
+else about the install needs to change. Recorded here rather than silently
+left unstated, per ops/README.md's own "a monitor whose alert channel has
+never been exercised is not a monitor" warning.
+
+---
+
 ## Production deploy — frontend v120 only (the design's create page) (2026-07-31)
 
 Owner feedback on v119: "new task ui is the same, just bigger in size" — the
