@@ -1,0 +1,169 @@
+/* _mwtmp-approvals.css — TEMP shareable CSS for the Approvals unified sign-off
+   queue (mockup design/mass-weed-mockup/approvals.html), additive overlay
+   authored in web/gf/approvals-view.js. INTEGRATOR: merge these rules into the
+   shared stylesheet (app.css / mass-weed.css) and delete this file.
+
+   Scope: only the .mwq-* namespace introduced by approvals-view.js. Nothing
+   here touches the existing .apv-row acknowledgment flow. All colour comes from
+   theme tokens (--ink / --surface-* / --green / --red / --amber / --orange /
+   --blue / --accent-rgb), so it adapts to every theme, with a Mass-Weed-only
+   angular-clip + glow layered on at the end. */
+
+/* ── Container ─────────────────────────────────────────────────────────── */
+.mwq {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.mwq-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px 0;
+}
+.mwq-ttl {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+.mwq-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.mwq-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: .03em;
+  color: var(--ink-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color .12s, box-shadow .12s, background .12s;
+}
+.mwq-tab:hover { color: var(--ink); }
+.mwq-tab.on {
+  color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
+  background: rgba(var(--accent-rgb), .08);
+}
+.mwq-c {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  padding: 1px 6px;
+  text-align: center;
+  border-radius: 999px;
+  color: var(--ink-3);
+  background: var(--surface-3);
+}
+.mwq-tab.on .mwq-c { color: var(--primary); background: rgba(var(--accent-rgb), .16); }
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+.mwq-list { padding: 6px 8px 8px; }
+.mwq-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.mwq-row:last-child { border-bottom: none; }
+.mwq-ic {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(var(--accent-rgb), .1);
+}
+.mwq-ic .icon { width: 17px; height: 17px; }
+.mwq-ic--warn { color: var(--orange); background: rgba(230, 160, 40, .14); }
+.mwq-ic--good { color: var(--green);  background: rgba(80, 200, 120, .14); }
+.mwq-ic--bad  { color: var(--red);    background: rgba(230, 80, 80, .14); }
+.mwq-ic--info { color: var(--blue);   background: rgba(70, 150, 230, .14); }
+
+.mwq-body { min-width: 0; }
+.mwq-t {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mwq-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+
+.mwq-kind {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--ink-3);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+/* ── Empty + deferred states ───────────────────────────────────────────── */
+.mwq-empty {
+  text-align: center;
+  color: var(--ink-3);
+  padding: 26px 0;
+  font-size: 12.5px;
+}
+.mwq-defer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 4px 2px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  background: rgba(var(--accent-rgb), .06);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.mwq-defer .icon { width: 15px; height: 15px; flex: none; color: var(--blue); margin-top: 1px; }
+
+/* ── Mass-Weed-only: angular clip + accent glow (matches the mockup HUD) ── */
+:root[data-theme^="mass-weed"] .mwq {
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .22);
+}
+:root[data-theme^="mass-weed"] .mwq-ic {
+  clip-path: polygon(5px 0, 100% 0, 100% 100%, 0 100%, 0 5px);
+  border-radius: 0;
+}
+:root[data-theme^="mass-weed"] .mwq-kind {
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  border-radius: 0;
+}
+:root[data-theme^="mass-weed"] .mwq-tab.on {
+  text-shadow: 0 0 10px rgba(var(--accent-rgb), .5);
+}
+:root[data-theme^="mass-weed"] .mwq-ttl {
+  text-shadow: 0 0 12px rgba(var(--accent-rgb), .3);
+}
