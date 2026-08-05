@@ -323,7 +323,8 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
     _uuid_or_422(patch.get("sample_id"), "sample_id")
     _uuid_or_422(patch.get("laboratory_id"), "laboratory_id")
     async with rls(user) as c:
-        cur = await c.fetchrow("SELECT status FROM qc_coa_documents WHERE id=$1", doc_id)
+        cur = await c.fetchrow(
+            "SELECT status, specification_id FROM qc_coa_documents WHERE id=$1", doc_id)
         if cur is None:
             raise HTTPException(404, "eCoA document not found")
         if patch.get("laboratory_id") is not None:
@@ -370,6 +371,12 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
         row = await c.fetchrow(
             f"UPDATE qc_coa_documents SET {', '.join(fields)}, updated_at=now()"
             f" WHERE id=${len(args)} RETURNING *", *args)
+        # H2: rebinding the specification changes the grading basis, so any
+        # ACCEPTED §6.3.2 review no longer covers the current data — drop it back
+        # to PENDING. The operator must re-extract/re-grade against the new spec
+        # and re-sign; promote_coa_document independently refuses cross-spec grades.
+        if body.specification_id and str(cur["specification_id"]) != str(body.specification_id):
+            await _invalidate_checklist(c, user, doc_id)
     return _ecoa_out(dict(row))
 
 
@@ -771,6 +778,22 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         mapped = [dict(r) for r in rows if r["parameter_id"] is not None]
         if not mapped:
             raise HTTPException(409, "No mapped results to promote — map the discovered fields first")
+        # H2 (§6.3.2): each mapped extraction was graded against whatever spec was
+        # active when it was mapped, and its parameter_id / limits / complies are
+        # stored from that grading. If the document's specification_id was rebound
+        # since (update_coa_document allows it while the doc is non-terminal), those
+        # parameters belong to the OLD spec — certifying their stale grades against
+        # the doc's CURRENT spec would issue a mis-graded conformance. Refuse unless
+        # every mapped parameter belongs to the specification now being certified.
+        param_ids = list({m["parameter_id"] for m in mapped})
+        belong = await c.fetchval(
+            "SELECT count(*) FROM qc_spec_parameters WHERE id = ANY($1) AND spec_id = $2",
+            param_ids, doc["specification_id"])
+        if belong != len(param_ids):
+            raise HTTPException(
+                409, "Some mapped results were graded against a different specification than"
+                     " the one now cited — re-extract and re-grade against the current"
+                     " specification before promoting.")
         coa_number = await _mint_cert_number(c, user["org_id"], "ECOA")
         coa = await c.fetchrow(
             "INSERT INTO qc_certificates(org_id, coa_number, batch_id, specification_id, sample_id,"

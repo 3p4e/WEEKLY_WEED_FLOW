@@ -379,7 +379,11 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
 
 
 @router.post("/coq/{coq_id}/review")
-async def review_coq(coq_id: str, user: dict = Depends(require_role(*_HOQC))):
+async def review_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES))):
+    # M2 (URS §3 / QCSOP-012 C5): the CoQ is approved by the Head of QC and carries
+    # NO QP signature — the QP receives it. The issuing gate already excludes QP
+    # (_COQ_ROLES on render_coq); the approval-of-record here must match, so it is
+    # gated on _COQ_ROLES (ADMIN, QC_MGR), not _HOQC (which still admits QP).
     """§6.4.3 — the Head of QC reviews and approves the compiled CoQ. Second
     person: the reviewer must not be the compiler. No QP signature — the
     approved CoQ is an input TO the QP batch-release decision."""

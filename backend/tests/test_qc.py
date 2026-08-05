@@ -1711,6 +1711,36 @@ async def test_ecoa_register_grades_and_discovers(client, admin_headers):
     assert any(p["raw_label"] == "Mystery Assay" and p["status"] == "OPEN" for p in ph)
 
 
+async def test_ecoa_spec_rebind_invalidates_review_and_blocks_promote(client, admin_headers):
+    """H2 (§6.3.2): rebinding an eCoA document's specification after its extractions
+    were graded and its review ACCEPTED must (a) drop the checklist back to PENDING
+    and (b) block promotion — the stored grades belong to the OLD spec and must never
+    be certified against the newly-cited one."""
+    spec_a, _ = await _ecoa_spec_with_param(client, admin_headers, material="H2-A")
+    spec_b, _ = await _ecoa_spec_with_param(client, admin_headers, material="H2-B")
+    doc = await _ecoa_doc(client, admin_headers, spec_a["id"], batch="B-H2")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/extractions",
+                          json={"items": [{"raw_label": "Total THC", "numeric_value": 22.0, "unit": "%"}]},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    await _accept_checklist(client, admin_headers, doc["id"])
+    cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist", headers=admin_headers)).json()
+    assert cl["outcome"] == "ACCEPTED"
+    # rebind the doc to a DIFFERENT specification
+    r = await client.patch(f"/qc/coa-documents/{doc['id']}",
+                           json={"specification_id": spec_b["id"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    # (a) the ACCEPTED §6.3.2 review is invalidated
+    cl = (await client.get(f"/qc/coa-documents/{doc['id']}/checklist", headers=admin_headers)).json()
+    assert cl["outcome"] == "PENDING"
+    # re-accept so ONLY the cross-spec guard can block promotion
+    await _accept_checklist(client, admin_headers, doc["id"])
+    # (b) promote refuses: the mapped extraction's parameter belongs to spec A, not B
+    prom = await client.post(f"/qc/coa-documents/{doc['id']}/promote", headers=admin_headers)
+    assert prom.status_code == 409, prom.text
+    assert "different specification" in prom.text
+
+
 async def test_ecoa_lab_verdict_reference_only(client, admin_headers):
     """QCSOP 012 §6.3.2: the lab's stated verdict is captured verbatim as
     reference, never as the conformance of record — and a disagreement with
@@ -2750,6 +2780,34 @@ async def test_result_partial_limit_inherits_spec_bound(client, admin_headers):
     body = r.json()
     assert body["upper_limit"] == 30.0        # inherited from the spec
     assert body["complies"] is False          # 40 > 30 — not graded compliant
+
+
+async def test_result_supplied_limit_must_match_spec_parameter(client, admin_headers):
+    """H1 (§6.3.2): a cited spec parameter's limits are authoritative — a caller
+    who supplies a bound that DISAGREES with the spec is refused, never allowed to
+    grade the value against a criterion no specification backs. (The prior code
+    only inherited a null side, so a supplied over-wide bound passed an OOS value
+    as compliant.)"""
+    spec = await _spec(client, admin_headers, material="H1-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Lead", "unit": "ppm",
+                                "lower_limit": 0.0, "upper_limit": 10.0}, headers=admin_headers)
+    param_id = p.json()["id"]
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-H1")
+    # A wider caller upper_limit (100) than the spec (10) would have let 50 grade
+    # compliant — must be refused, not honoured.
+    bad = await client.post(f"/qc/certificates/{coa['id']}/results",
+                            json={"test_name": "Lead", "parameter_id": param_id,
+                                  "upper_limit": 100.0, "result_numeric": 50.0}, headers=admin_headers)
+    assert bad.status_code == 422, bad.text
+    assert "upper_limit" in bad.text
+    # Omitting the limit (the normal path) grades against the spec's 10 → OOS.
+    ok = await client.post(f"/qc/certificates/{coa['id']}/results",
+                           json={"test_name": "Lead", "parameter_id": param_id,
+                                 "result_numeric": 50.0}, headers=admin_headers)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["upper_limit"] == 10.0      # authoritative spec bound
+    assert ok.json()["complies"] is False        # 50 > 10 — correctly OOS
 
 
 async def test_reviewer_cannot_be_a_result_analyst(client, admin_headers):

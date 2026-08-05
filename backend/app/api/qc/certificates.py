@@ -359,14 +359,30 @@ async def add_result(coa_id: str, body: ResultIn, user: dict = Depends(require_r
             if p["computed_kind"] is not None:
                 raise HTTPException(422, "This parameter is computed (Ph. Eur. 3028 derived total)"
                                          " — enter its component results instead")
-            # Snapshot EACH side independently: a caller who supplies only one
-            # limit must still inherit the spec's other bound, or a partial
-            # override would silently disable it (an over-limit value passing as
-            # compliant — a fabricated conformance, which GxP forbids).
-            if lo is None and p["lower_limit"] is not None:
-                lo = float(p["lower_limit"])
-            if hi is None and p["upper_limit"] is not None:
-                hi = float(p["upper_limit"])
+            # H1 (§6.3.2): the acceptance criterion is the APPROVED specification's,
+            # never the request's. Earlier this only FILLED a null side from the
+            # spec — a side the caller *supplied* was kept verbatim, so a bogus
+            # `upper_limit` (or a limit on a side the spec leaves open) graded the
+            # value against a criterion no spec backs (a fabricated conformance).
+            # Now: a supplied bound must MATCH the spec parameter's (within float
+            # tolerance) or it is refused; an omitted side inherits the spec's; and
+            # the stored lo/hi are ALWAYS the spec's authoritative bounds. (The
+            # normal UI never sends limits with a parameter_id — it cites the param
+            # and lets the server snapshot — so only a programmatic caller can trip
+            # this, which is exactly the path that must not override the spec.)
+            spec_lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
+            spec_hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
+            if lo is not None and (spec_lo is None or abs(lo - spec_lo) > 1e-9):
+                raise HTTPException(
+                    422, "lower_limit does not match the cited spec parameter"
+                         f" (spec: {spec_lo}) — the acceptance criterion comes from the"
+                         " specification; omit it to use the spec's bound.")
+            if hi is not None and (spec_hi is None or abs(hi - spec_hi) > 1e-9):
+                raise HTTPException(
+                    422, "upper_limit does not match the cited spec parameter"
+                         f" (spec: {spec_hi}) — the acceptance criterion comes from the"
+                         " specification; omit it to use the spec's bound.")
+            lo, hi = spec_lo, spec_hi
         complies, status = _evaluate(body.result_numeric, lo, hi)
         row = await c.fetchrow(
             "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
