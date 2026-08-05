@@ -2046,6 +2046,88 @@ on *both* new images.
 
 ---
 
+## Production deploy — backend v86 / frontend v122, tasks 0054→0055 / users 0009→0010 (2026-08-05)
+
+Two batches from the 2026-08 master plan (`docs/MASTER-PLAN-2026-08.md`),
+built from `3071510`:
+
+**Frontend batch (`51db304`)** — the 15 audit-derived animation plans
+(`plans/001-015`) plus nginx hardening. Motion tokens (`--ease-out`/
+`--ease-in-out`), the card-entrance replay guard (no re-animate on every
+search keystroke), a real interruptible exit animation on the shared
+overlay/modal/chooser/card-body, task-completion feedback flash,
+trigger-anchored dropdown scale, bounded alert/sheen loops, complete
+reduced-motion coverage, `(hover:hover) and (pointer:fine)` gating on every
+:hover transform, press feedback, `transition:all` narrowed, storm/rave
+dropped from the leaf idle cycle. nginx: `server_tokens off` +
+HSTS `includeSubDomains`.
+
+**Backend batch (`3071510`)** — 7 of 8 hardening fixes (Track C/D):
+reports.py uuid guards; add_dependency org advisory-lock; ai.py binding
+best-effort validation; qc/specs.py Ph.Eur-3028 component-order guard;
+bcrypt + WeasyPrint off the event loop (auth.py/signatures.py/documents.py);
+`/audit/verify` opened to QA_MGR/QP; migration **0055** (tasks) + **0010**
+(users) adding a `btree audit_log(created_at DESC)` index for the trail-list
+keyset query. The 8th (eCoA §6.3.2 filler≠decider) was implemented, then
+**reverted** — it is a process control, not a correctness fix, broke 12
+single-actor eCoA tests (the established behavior), and would block the lab's
+real workflow if one QC person legitimately fills and decides. Held for an
+owner decision (master plan register #13).
+
+| | before | after |
+|---|---|---|
+| backend | `v85` | **`v86`** |
+| scheduler | `v85` | **`v86`** |
+| frontend | `v121` | **`v122`** |
+| tasks alembic | `0054` | **`0055`** |
+| users alembic | `0009` | **`0010`** |
+| service worker | `wwf-shell-v3.93.0` | **`wwf-shell-v3.94.0`** |
+
+**Build method:** no-PAT git-archive path — `git archive 3071510 -- backend`
+/ `-- web`, uploaded via the runner's `/file/write`, SHA-256 matched both
+sides (`edf11e33…` backend, `ea43435f…` web).
+
+**Order: snapshot → migrate both chains → swap.** Pre-migration dumps at
+`/opt/wwf-backups/20260805-0853-pre-v86/` (both `pg_dump -Fc`, restore-listed
+734/60 TOC entries). `alembic upgrade head` for both chains via a one-off
+`docker run` off the v86 image on `weekly_weed_flow_internal` — both
+migrations are index-only/additive, so the v85 backend ran fine against the
+new schema in the seconds between migrate and swap. Then
+`docker compose up -d --no-deps backend scheduler frontend`.
+
+**Verification, engineering evidence first:** full backend suite green
+locally (635 base + the batch; `test_qc` 153/0 after the item-8 revert),
+frontend 306/0, `node --check` clean, and both regenerated schemas verified
+identical to `alembic upgrade head` under CI's exact `dump()` method (both
+chains).
+
+**Verified against the live public URL:** `/health/ready` 200
+`{ready:true,users:ok,tasks:ok}`; `sw.js` = `wwf-shell-v3.94.0`;
+`server: nginx` (no version — `server_tokens off` confirmed);
+`strict-transport-security: max-age=31536000; includeSubDomains`;
+`gf/app.css` serves 200 carrying the new `--ease-out` tokens;
+`/audit/verify`, `/reports/weekly`, `/cultivation/batches/{id}/tasks`,
+`/decon/biosecurity` all 401 (backend, not SPA fallback); live alembic heads
+re-read tasks `0055` / users `0010`. The independent `wwf-watchdog` prod
+probe returned `result=OK pass=4 fail=0` right after the swap (one earlier
+tick FAILed on `app_ready` — it landed mid-swap while the frontend was
+recreating; the next probe was clean).
+
+**No business data created in production to test this.** Coverage is the
+local suites + schema-diff (above). No authenticated prod smoke (no Purely
+Plant credentials this session); the 401-gating checks are the un-auth
+equivalent.
+
+**Rollback:** `weekly_weed_flow-backend:v85` + `wwf-growflow:v121` retained;
+`/opt/stacks/wwf_app/compose.yaml.bak-pre-v86`; pre-migration dumps at
+`/opt/wwf-backups/20260805-0853-pre-v86/`. Schema rollback is
+`alembic -n tasks downgrade 0054` + `-n users downgrade 0009` (each just drops
+`audit_log_created_at_idx`).
+
+**Cleanup:** `/opt/wwf-deploy-v86` (12 MB) removed after the build.
+
+---
+
 ## Production deploy — backend v85 / frontend v121, tasks 0051→0054 (2026-08-05)
 
 Owner-authorised ("build AND deploy them" over the four selected gap-analysis
