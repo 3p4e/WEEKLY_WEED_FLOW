@@ -1,0 +1,63 @@
+/* _mwtmp-team.css — TEMP, shareable CSS for the Mass Weed TEAM (Crew Roster)
+   coverage pass. INTEGRATOR: merge these rules into mass-weed.css / views.css
+   and delete this file. Every rule here is ADDITIVE — it styles NEW markup the
+   team() view emits (mwtm-* classes) or shape-augments the existing shared
+   .avatar inside a new .mwtm-hex wrapper. It renames/removes nothing.
+
+   Real-data only: the bars these rules paint are filled with per-person values
+   the view computes from live weekly tasks (completion, active load). The
+   mockup's efficiency%/shift/zone are DEFERRED in the view (no worklog data
+   source yet) — no CSS for them here. */
+
+/* ── Hexagonal crew avatar ──────────────────────────────────────────────
+   Wraps the shared GF.avatar so its initials / roster colour / name-title all
+   still come from the real person record; ONLY the hexagon shape + accent glow
+   are added. Accent-aware (cyan under Mass Weed, app accent elsewhere) via the
+   app-wide --accent-rgb the rest of the roster already uses. */
+.mwtm-hex{ display:inline-flex; flex:none; }
+.mwtm-hex .avatar{
+  border-radius:0;
+  clip-path:polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  filter:drop-shadow(0 0 5px rgba(var(--accent-rgb), .55));
+}
+
+/* ── Per-person stat block ──────────────────────────────────────────────
+   Sits between the department row and the action row of each team card. */
+.mwtm-stats{ display:flex; flex-direction:column; gap:9px; margin-bottom:11px; }
+.mwtm-stat{ margin:0; }
+.mwtm-stat__head{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:8px; margin-bottom:4px;
+}
+.mwtm-stat__name{
+  font-size:10.5px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--ink-3);
+}
+.mwtm-stat__val{
+  font-size:12.5px; font-weight:800; color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+
+/* Neutral "active load" fill — load is a magnitude, NOT a good/bad signal, so
+   it must not borrow the green/amber/red semantic .mw-stat__fill hues. It
+   tracks the live theme accent instead (cyan under Mass Weed). Sits inside the
+   shared .mw-stat__track and is driven by an inline transform:scaleX(fraction),
+   the same mechanism the app's .mw-stat__fill already uses. */
+.mwtm-fill{
+  width:100%; height:100%; border-radius:3px;
+  transform-origin:left center; transition:transform .4s ease;
+  background:linear-gradient(90deg, var(--mw-cyan-deep, var(--primary)), var(--primary));
+  box-shadow:0 0 8px rgba(var(--accent-rgb), .5);
+}
+
+/* Honest empty state for a crew member with no owned tasks this week — never a
+   misleading 0% completion bar. */
+.mwtm-quiet{ font-size:11.5px; color:var(--ink-3); font-style:italic; padding:1px 0; }
+
+/* Deferred-metrics note: efficiency / shift / zone need worklog-derived data
+   that is not yet an app data source (a part-owner decision). Rendered as an
+   explicit, low-key placeholder rather than fabricated numbers. */
+.mwtm-defer{
+  font-size:10px; color:var(--ink-3); opacity:.72;
+  letter-spacing:.03em; line-height:1.35;
+}

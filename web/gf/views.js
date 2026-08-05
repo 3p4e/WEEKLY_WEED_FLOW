@@ -537,11 +537,38 @@ GF.views = {
     // integrate.js defines canProvision; fall back to the perms gate if it
     // hasn't loaded yet.
     const canManage = GF.WWF && GF.WWF.canProvision ? GF.WWF.canProvision() : GF.can('team');
+
+    // ── Per-person REAL aggregates for the Mass Weed roster stat bars ──────
+    // Computed from the SAME live weekly task data every other view reads
+    // (GF.weekTasks → GF.state.tasks); archived rows are history and stay out,
+    // matching dash()/exec(). No invented fields. Guarded so a demo/empty week
+    // renders without throwing (the control-wiring e2e walks this view). The
+    // mockup's efficiency% / shift / zone need worklog-derived data that is not
+    // an app data source yet (part-owner decision) — DEFERRED below, never
+    // fabricated.
+    const weekly = (typeof GF.weekTasks === 'function'
+      ? GF.weekTasks(GF.state.selWeek) : (GF.state.tasks || [])).filter(t => t && !t.archived);
+    const owned = Object.create(null), doneBy = Object.create(null), load = Object.create(null);
+    weekly.forEach(t => {
+      if (t.owner) {
+        owned[t.owner] = (owned[t.owner] || 0) + 1;
+        if (t.status === 'done') doneBy[t.owner] = (doneBy[t.owner] || 0) + 1;
+      }
+      [t.owner, ...(t.helpers || [])].forEach(pid => { if (pid) load[pid] = (load[pid] || 0) + 1; });
+    });
+    const maxLoad = Math.max(1, ...Object.values(load));   // ≥1 → never divide by zero
+    const barTier = v => v >= 80 ? 'hi' : v >= 50 ? 'mid' : 'lo';
+
     const cards = ids.map(id => {
       const p = GF.PEOPLE[id];
       const isMe = id === GF.state.user;
+      // Real per-person figures (all default to 0 for someone with no weekly
+      // task involvement — the completion bar then yields to an honest note).
+      const own = owned[id] || 0, dn = doneBy[id] || 0;
+      const rate = own ? Math.round(dn / own * 100) : 0;
+      const ld = load[id] || 0, loadPct = Math.round(ld / maxLoad * 100);
       return `<div class="team-card ${isMe?'me':''}">
-        <div class="team-top">${GF.avatar(id,46)}
+        <div class="team-top"><div class="mwtm-hex">${GF.avatar(id,46)}</div>
           <div style="flex:1;min-width:0">
             <div class="tc-name">${GF.esc(p.name)}${isMe?` <span class="tc-you">${GF.t('you')}</span>`:''}</div>
             <div class="tc-role">${GF.esc(GF.roleLabel(p.role))}</div>
@@ -549,6 +576,20 @@ GF.views = {
         <div class="tc-dept">${p.dept
           ? `<span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.esc(GF.depName(p.dept))}`
           : `<span class="dept-dot" style="background:var(--ink-3)"></span>${GF.esc(GF.roleLabel(p.role))}`}</div>
+        <div class="mwtm-stats">
+          ${own ? `<div class="mwtm-stat">
+            <div class="mwtm-stat__head"><span class="mwtm-stat__name">${AL('Completed this week','Завршени оваа недела')}</span>
+              <span class="mwtm-stat__val">${dn}/${own} · ${rate}%</span></div>
+            <div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--${barTier(rate)}" style="transform:scaleX(${(rate/100).toFixed(3)})"></div></div>
+          </div>`
+          : `<div class="mwtm-quiet">${AL('No tasks owned this week','Нема сопствени задачи оваа недела')}</div>`}
+          <div class="mwtm-stat">
+            <div class="mwtm-stat__head"><span class="mwtm-stat__name">${AL('Active load','Активно оптоварување')}</span>
+              <span class="mwtm-stat__val">${ld} ${ld===1?AL('task','задача'):AL('tasks','задачи')}</span></div>
+            <div class="mw-stat__track"><div class="mwtm-fill" style="transform:scaleX(${(loadPct/100).toFixed(3)})"></div></div>
+          </div>
+          <div class="mwtm-defer" title="${GF.esc(AL('Efficiency, shift and zone need worklog-derived data that is not an app data source yet (pending a part-owner decision).','Ефикасноста, смената и зоната бараат податоци од дневник што сè уште не се извор во апликацијата (во исчекување на одлука од сопственик).'))}">${AL('Efficiency · shift · zone — awaiting worklog data','Ефикасност · смена · зона — во исчекување податоци')}</div>
+        </div>
         <div class="tc-actions">
           ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`:''}
           <div class="spacer"></div>
