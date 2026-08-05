@@ -67,13 +67,16 @@ on:
   # Manual dispatch below is untouched, so the rehearsal is still fully
   # runnable on demand the moment the secrets exist.
   #
-  # TO RE-ENABLE: add the two secrets (Settings -> Secrets and variables ->
-  # Actions), then uncomment the two lines below. 03:17 UTC (05:17
-  # Europe/Skopje), off the hour on purpose — scheduled workflows queue behind
-  # GitHub's top-of-hour stampede, and this one wants the box quiet rather than
-  # punctual.
-  # schedule:
-  #   - cron: '17 3 * * *'
+  # RE-ARMED 2026-08-04 at the owner's request, on the understanding that the
+  # two secrets are being added. If a nightly run fails again with "secrets are
+  # not set", the secrets did not land — park the cron again rather than
+  # loosening the guard below.
+  #
+  # 03:17 UTC (05:17 Europe/Skopje), off the hour on purpose — scheduled
+  # workflows queue behind GitHub's top-of-hour stampede, and this one wants
+  # the box quiet rather than punctual.
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       dump_timestamp:
