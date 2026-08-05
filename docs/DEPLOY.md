@@ -2046,6 +2046,68 @@ on *both* new images.
 
 ---
 
+## Production deploy — frontend v124 only (Mass Weed MW-1 batch 2, 2026-08-05)
+
+Frontend-only promotion of the MW-1 "most-seen screens" batch (`1c74b8a`),
+built by four parallel agents on disjoint files, then integrated. Three pages
+shipped to mockup parity; a fourth was **reverted before deploy** — see below.
+
+- **dashboard** (`GF.views.dash`) — KPI week-over-week deltas (prior-week
+  `scopedTasks`, blank when no prior period), a real-notification alerts feed
+  with ages/severity (`GF.WWF._notif.items` via `loadInbox`), a department
+  pipeline lifecycle strip (states from live task status, ordered by
+  `GF.HANDOFF`, click reuses `filterDept`), and a resource HUD reusing the
+  `.fac-resbar` idiom. Purely additive — every existing element/class/handler
+  kept.
+- **analytics** — additive yield-domain band from `GET /cultivation/harvests`
+  (dry-flower KPI + WoW delta, yield-per-cycle, yield-by-strain, g/plant-by-room,
+  output composition). g/W, cost/g, graded A/B/C deferred (no wattage/cost/grade
+  field).
+- **my-day** — greeting hero, a visible ⌘K button wired to the existing
+  `GF.cmdk.open()`, and a 7-day task strip from state.
+
+| | before | after |
+|---|---|---|
+| frontend | `v123` | **`v124`** |
+| backend / scheduler | `v86` | `v86` (untouched) |
+| service worker | `wwf-shell-v3.95.0` | **`wwf-shell-v3.96.0`** |
+
+**facility was reverted, not shipped.** The first facility redesign (floor plan
++ corridor + legend + `kpiTile` band + side panel) **broke the e2e contract** —
+`web/e2e/tests/facility.spec.js` requires the `.fac-room`/`.fr-nm`/`.fr-n`/
+`.fs-nm` room cells, the cell-click→`#fac-room-modal` add-batch flow, and the
+`.fac-res` phase-totals strip; the redesign replaced all three. The jsdom unit
+suite (306/0) doesn't render facility with those selectors, so only the browser
+e2e caught it. facility-view.js was restored to its original and the orphaned
+`.mwfac-*` CSS removed. Facility MW-1 is deferred for a contract-preserving
+rework (layer the floor plan on top of `.fac-room`/`.fac-res` + the modal).
+
+**Build method:** no-PAT git-archive path — `git archive 1c74b8a -- web` → gzip
+→ runner `/file/write`, SHA-256 matched both sides (`b76832ea…`). Built
+`wwf-growflow:v124`; `compose.yaml.bak-pre-v124` taken, tag bumped v123→v124,
+`docker compose up -d --no-deps frontend`. No DB step.
+
+**e2e-gated, deliberately.** After the facility miss, the deploy was held until
+CI End-to-end went green on the exact commit. **Full CI on `1c74b8a`: all green**
+— frontend unit (jsdom), backend suite, e2e (Playwright, 15 specs incl.
+`control-wiring` which renders every view + resolves every inline handler),
+schema-diff, DocEngine, build, compose-validate. (Security scan was still
+queued at swap time; it is backend-only and unaffected by a frontend change.)
+
+**Verified against the live public URL:** `sw.js` = `wwf-shell-v3.96.0`;
+`/health/ready` → `{ready:true,users:ok,tasks:ok}`; `gf/views.css` carries the
+batch-2 block and `.dash-alert` rules and has **zero** `.mwfac-*` residue;
+`gf/views.js` carries the dashboard `modsStrip`; `gf/facility-view.js` is back
+to the `.fac-res` original; `/audit/verify`, `/reports/weekly`,
+`/cultivation/irrigation` all **401**; `/` 200. Independent `wwf-watchdog`
+probe right after swap: **result=OK pass=7 fail=0 warn=0**.
+
+**Rollback:** `wwf-growflow:v123` retained; `compose.yaml.bak-pre-v124`.
+
+**Cleanup:** `/opt/wwf-deploy-v124` removed after the build.
+
+---
+
 ## Production deploy — frontend v123 only (Mass Weed MW-1 pages, 2026-08-05)
 
 Frontend-only promotion of the MW-1 design-coverage batch (`13abfc2`) from the

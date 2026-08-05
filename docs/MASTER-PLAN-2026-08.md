@@ -85,15 +85,15 @@ Each gap below is buildable today against existing APIs. Grouped by size:
 **Medium (M) — 12 pages:**
 | Page | Missing vs design |
 |---|---|
-| `analytics.html` | yield-domain analytics: yield-per-cycle bars, g/W + cost/g KPIs, WoW deltas, grade distribution (harvest yield API exists) |
+| `analytics.html` | ✅ **DONE (v124)** — additive yield-domain band from `GET /cultivation/harvests` (dry-flower KPI + WoW delta, yield-per-cycle, yield-by-strain, g/plant-by-room, output composition). g/W, cost/g, graded A/B/C deferred — no wattage/cost/grade field |
 | `approvals.html` | unified pending/approved/rejected queue with counts, folding in QC review/approve/release items |
-| `dashboard.html` | KPI deltas, alerts feed with ages (notifications exist, not surfaced), modules strip with lifecycle pills, resource HUD |
+| `dashboard.html` | ✅ **DONE (v124)** — KPI WoW deltas, real-notification alerts feed with ages, department pipeline lifecycle strip (real task status), resource HUD. QMS module lifecycle / HUD strain-batch-revenue deferred (no in-app field) |
 | `coq-print.html` | on-screen A4 paper-preview (watermark, verdict header) before the .docx |
 | `doc-control.html` (L) | document lifecycle state machine (effective/in-review/periodic-review/superseded), review-by KPI, type tabs, detail drawer |
 | `ecoa-intake.html` | per-document workbench: pipeline stepper, countdown chip, SHA custody bar, gate-note blocks |
 | `facility.html` | ⚠️ **DEFERRED — needs contract-preserving rework.** A first redesign (floor plan + corridor + legend + kpiTile band + side panel) was reverted because it broke `web/e2e/tests/facility.spec.js`: that test (and the owner's stated flow) require the `.fac-room`/`.fr-nm`/`.fr-n`/`.fs-nm` room cells, the cell-click→`#fac-room-modal` add-batch flow, and the `.fac-res` phase-totals strip. The jsdom unit suite doesn't cover those selectors, so it must be re-done by LAYERING the floor-plan/legend on top of the existing markup without changing `.fac-room`/`.fac-res` or the room modal. Original still-live gap: floor-plan grid-areas layout + corridor + legend; per-room open tasks (no room↔task FK — backend-data need) |
 | `leaves.html` | stability drawer with timepoint pull-schedule timeline (0/3/6mo/end with done/due/pending dots) |
-| `my-day.html` | greeting hero, visible ⌘K affordance, 7-day strip with per-day chips |
+| `my-day.html` | ✅ **DONE (v124)** — greeting hero, visible ⌘K button wired to `GF.cmdk.open()`, 7-day task strip from state |
 | `search.html` | grow cmdk into the full grouped search page; add batches/rooms/documents sources |
 | `team.html` | hexagonal avatars + stat bars; efficiency/shift/zone need worklog-derived metrics (part owner decision) |
 | `ui-elements.html` | port remaining `mw-*` atoms as views need them; optional in-app gallery for QA |
