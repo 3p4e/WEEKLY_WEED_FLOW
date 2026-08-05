@@ -2046,6 +2046,98 @@ on *both* new images.
 
 ---
 
+## Production deploy — backend v85 / frontend v121, tasks 0051→0054 (2026-08-05)
+
+Owner-authorised ("build AND deploy them" over the four selected gap-analysis
+items). Promotes all three schema/API features from `36b414f` in one deploy:
+irrigation/feeding (migration 0052), the four biosecurity record types
+(0053), and cultivation Phase 3 — `tasks.batch_id` plus phase-transition task
+generation (0054). Feature 4 (monitoring) shipped separately and needed no
+app deploy — see the entry directly below this one.
+
+| | before | after |
+|---|---|---|
+| backend | `v84` | **`v85`** |
+| scheduler | `v84` | **`v85`** |
+| frontend | `v120` | **`v121`** |
+| tasks alembic | `0051` | **`0054`** |
+| users alembic | `0009` | `0009` (untouched — 0052-0054 are tasks-only) |
+| service worker | `wwf-shell-v3.92.0` | **`wwf-shell-v3.93.0`** |
+
+**Build method:** same no-PAT path as v82/v83/v84 —
+`git archive bacac42 -- backend` / `-- web`, uploaded through the runner's
+`/file/write`, SHA-256 compared on both sides before use (`86ef7be4…`
+backend, `482f1445…` web). Committed tree at that exact SHA; no credential
+touched the host.
+
+**Order: snapshot, migrate, THEN swap.** Pre-migration dump first
+(`/opt/wwf-backups/20260805-0347-pre-0052/`, both `pg_dump -Fc`, TOC-listed
+clean — 709 tasks entries, 60 users entries). `alembic -n tasks upgrade
+head` run as a one-off `docker run` off the freshly built v85 image on
+`weekly_weed_flow_internal`, applying 0052→0053→0054 in sequence before any
+container was recreated — a v84 backend ran against the new schema for zero
+seconds, since migrate-then-swap happened back to back with no traffic
+window in between where code and schema could disagree (0052/0053 only add
+new tables; 0054 only adds a nullable column + FK + partial index to
+`tasks`, which no running v84 query references). Verified post-migration:
+`irrigation_events` and `biosecurity_events` both carry `relforcerowsecurity`,
+one `fn_audit_row` trigger, one `org_isolation` policy; `tasks.batch_id`
+present with its FK and partial index.
+
+**Verified against the live public URL:**
+
+- `/health/ready` → `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`;
+  `/health` → 200.
+- `sw.js` reports `wwf-shell-v3.93.0`.
+- `GET /cultivation/irrigation`, `/decon/biosecurity`, `/audit/verify`, and
+  `/cultivation/batches/{uuid}/tasks` all return **401**, not 200 — the
+  load-bearing check that nginx proxies these prefixes to the backend rather
+  than answering with the SPA fallback (the exact failure mode that hid the
+  live `/handoffs` 405 bug on 2026-07-30).
+- `gf/api.js`, `gf/cultivation-view.js`, `gf/decon-view.js`,
+  `gf/harvest-view.js` all serve 200 with real byte counts, confirming the
+  updated frontend files actually shipped (not a stale cached set behind
+  nginx).
+- `docker ps` shows all three containers (`weekly_weed_flow-backend-1`,
+  `wwf-scheduler`, `wwf-gf-frontend`) on the new image tags, `Up` since the
+  swap.
+- The newly-wired `wwf-watchdog` (see the entry below) caught this deploy
+  live: its 03:48:56 tick — taken right after the container swap — still
+  shows all 7 checks PASS, an independent confirmation from a process that
+  shares no code with the deploy itself.
+
+**No business data was created in production to test this.** Functional
+coverage is the local full suites — backend 641 passed, frontend 306 + 32
+(cultivation-view.js) passed, both against a real PostgreSQL 16 two-DB
+cluster — plus the alembic-vs-`schema.tasks.sql` diff re-run by hand
+(byte-identical apart from `pg_dump`'s per-run `\restrict` nonce). No
+authenticated production smoke was possible this session (no Purely Plant
+credentials available to it); the 401-gating checks above are the
+un-authenticated equivalent of the same "backend, not SPA fallback" proof
+used in every prior deploy record.
+
+**CI at deploy time:** the *Backend test suite* job for `bacac42` was still
+`in_progress` on the single shared self-hosted runner when this deploy went
+out — queued behind it were Security scan, Validate compose stack, Alembic
+baselines match schema files, Backend deps + import, Frontend unit suite,
+End-to-end (Playwright), Build container images, and DocEngine test suite.
+Same call as the v82 precedent: the deploy did not wait, because the
+independent local evidence (above) was already stronger and complete.
+
+**Rollback**, all three parts in place: `weekly_weed_flow-backend:v84` and
+`wwf-growflow:v120` images retained; `/opt/stacks/wwf_app/compose.yaml.bak-pre-v85`;
+pre-migration dumps at `/opt/wwf-backups/20260805-0347-pre-0052/`
+(`wwf_tasks.dump` 301,687 B, `wwf_users.dump` 22,410 B — the users DB
+untouched, dumped anyway for symmetry with the swap unit). Schema rollback is
+`alembic -n tasks downgrade 0051`, verified locally to reverse all three
+migrations cleanly (drops `tasks.batch_id`/its FK/index, `biosecurity_events`,
+`irrigation_events`, leaves nothing behind).
+
+**Cleanup:** `/opt/wwf-deploy-v85` (12 MB of build context) removed after the
+build; no `/opt/wwf-deploy-*` staging remains.
+
+---
+
 ## ops/watchdog.sh wired up as its own Docker stack (2026-08-05)
 
 `ops/watchdog.sh` had been staged on the host at `/opt/wwf-ops/watchdog.sh`
