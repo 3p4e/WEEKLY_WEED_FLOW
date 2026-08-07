@@ -44,6 +44,11 @@ test-gated:
 | **M10** | A VOIDED/SUPERSEDED certificate refuses a new Annex-11 signature | `signatures.py` |
 | LOW | promote uuid-guard; download content-type whitelist + nosniff + CR strip; org-scoped BYPASSRLS profile lookups; checklist writes refuse a terminal parent | `ecoa.py`, `coq_docx.py`, `coq_aggregation.py`, `signatures.py` |
 
+**CoQ spec-must-be-ACTIVE gate (LOW) — RESOLVED, will NOT implement.** Owner
+decision (2026-08-06): *do not gate the lifecycle.* CoQ issuance stays independent
+of `qc_specifications.status`; the certificate lifecycle is not gated on spec
+lifecycle state. No code change — current behaviour already matches this.
+
 **Deferred — need an owner decision (not guessed, per instruction):**
 
 - **M5 — filler ≠ decider on the eCoA checklist.** Whether the person who fills
@@ -51,10 +56,6 @@ test-gated:
   headcount: a single-QC-person site cannot segregate these and the control
   would deadlock; a multi-person QC function should segregate them. Enforcing it
   blindly broke 12 tests previously. **Owner input required** before implementing.
-- **CoQ spec-must-be-ACTIVE gate (LOW).** `qc_specifications.status` defaults to
-  `DRAFT`; gating CoQ issuance on an `ACTIVE` spec is a lifecycle-policy decision
-  with broad blast radius (every current spec/CoQ path uses non-ACTIVE specs).
-  **Owner input required** on whether spec lifecycle should gate issuance.
 
 **Deferred — need a migration / heavier change or a design decision:**
 
