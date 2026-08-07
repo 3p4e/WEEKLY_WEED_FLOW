@@ -114,6 +114,10 @@ async def purge_org(org_id) -> None:
                   "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
                   "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
                   "qc_sampling_plans", "qc_specifications",
+                  # potency ladders (migration 0057): ranges CASCADE from the
+                  # parent, and the parent cites cultivars (RESTRICT) — so both
+                  # must go before `cultivars` is purged below.
+                  "qc_potency_spec_ranges", "qc_potency_specs",
                   # tasks.batch_id cites plant_batches (RESTRICT, migration
                   # 0054), so every task must be gone before plant_batches is
                   # purged below — moved here from its old spot after

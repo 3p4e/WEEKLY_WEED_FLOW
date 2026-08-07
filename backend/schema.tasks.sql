@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict MYNGZtixgvZDWYXdjoIsavjwTYrL5PBemo4vKpec2pVcSoVLzY9maYbAqDWqveH
+\restrict gZBr2UBw99p88hXkTcAzhdddmCfzOUcOvW7ffqUr9H4Zj4Bqq7quiLy1YOwnPsp
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1244,6 +1244,65 @@ ALTER TABLE ONLY public.qc_oos_register FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: qc_potency_spec_ranges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_potency_spec_ranges (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    potency_spec_id uuid NOT NULL,
+    tier smallint NOT NULL,
+    range_min numeric NOT NULL,
+    range_max numeric NOT NULL,
+    nominal numeric NOT NULL,
+    width_pp numeric,
+    n_batches integer DEFAULT 0 NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_potency_spec_ranges_range_check CHECK ((range_max > range_min)),
+    CONSTRAINT qc_potency_spec_ranges_tier_check CHECK (((tier >= 1) AND (tier <= 6)))
+);
+
+ALTER TABLE ONLY public.qc_potency_spec_ranges FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_potency_specs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_potency_specs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    cultivar_id uuid NOT NULL,
+    spec_code text DEFAULT 'PP-QC-SPEC-001'::text NOT NULL,
+    version text NOT NULL,
+    variant text,
+    basis text DEFAULT 'total_d9_thc'::text NOT NULL,
+    floor_pct numeric NOT NULL,
+    observed_min numeric,
+    observed_max numeric,
+    n_batches integer DEFAULT 0 NOT NULL,
+    data_supported boolean DEFAULT false NOT NULL,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    effective_date date,
+    approved_by uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_potency_specs_basis_check CHECK ((basis = 'total_d9_thc'::text)),
+    CONSTRAINT qc_potency_specs_floor_check CHECK (((floor_pct >= (0)::numeric) AND (floor_pct <= (30)::numeric))),
+    CONSTRAINT qc_potency_specs_n_check CHECK ((n_batches >= 0)),
+    CONSTRAINT qc_potency_specs_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'SUPERSEDED'::text])))
+);
+
+ALTER TABLE ONLY public.qc_potency_specs FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: qc_results; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2466,6 +2525,38 @@ ALTER TABLE ONLY public.qc_oos_register
 
 
 --
+-- Name: qc_potency_spec_ranges qc_potency_spec_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_spec_ranges
+    ADD CONSTRAINT qc_potency_spec_ranges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_potency_spec_ranges qc_potency_spec_ranges_tier_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_spec_ranges
+    ADD CONSTRAINT qc_potency_spec_ranges_tier_key UNIQUE (potency_spec_id, tier);
+
+
+--
+-- Name: qc_potency_specs qc_potency_specs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_specs
+    ADD CONSTRAINT qc_potency_specs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qc_potency_specs qc_potency_specs_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_specs
+    ADD CONSTRAINT qc_potency_specs_version_key UNIQUE (org_id, cultivar_id, version);
+
+
+--
 -- Name: qc_results qc_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3152,6 +3243,20 @@ CREATE INDEX qc_oos_register_oos_idx ON public.qc_oos_register USING btree (org_
 
 
 --
+-- Name: qc_potency_spec_ranges_spec_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_potency_spec_ranges_spec_idx ON public.qc_potency_spec_ranges USING btree (potency_spec_id, tier);
+
+
+--
+-- Name: qc_potency_specs_one_approved_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_potency_specs_one_approved_idx ON public.qc_potency_specs USING btree (org_id, cultivar_id) WHERE (status = 'APPROVED'::text);
+
+
+--
 -- Name: qc_results_coa_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3667,6 +3772,20 @@ CREATE TRIGGER audit_qc_oos_records AFTER INSERT OR DELETE OR UPDATE ON public.q
 --
 
 CREATE TRIGGER audit_qc_oos_register AFTER INSERT OR DELETE OR UPDATE ON public.qc_oos_register FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_potency_spec_ranges audit_qc_potency_spec_ranges; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_potency_spec_ranges AFTER INSERT OR DELETE OR UPDATE ON public.qc_potency_spec_ranges FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: qc_potency_specs audit_qc_potency_specs; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_potency_specs AFTER INSERT OR DELETE OR UPDATE ON public.qc_potency_specs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -4303,6 +4422,22 @@ ALTER TABLE ONLY public.qc_oos_register
 
 
 --
+-- Name: qc_potency_spec_ranges qc_potency_spec_ranges_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_spec_ranges
+    ADD CONSTRAINT qc_potency_spec_ranges_spec_fkey FOREIGN KEY (potency_spec_id) REFERENCES public.qc_potency_specs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_potency_specs qc_potency_specs_cultivar_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_potency_specs
+    ADD CONSTRAINT qc_potency_specs_cultivar_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: qc_results qc_results_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4932,6 +5067,20 @@ CREATE POLICY org_isolation ON public.qc_oos_register USING ((org_id = app.curre
 
 
 --
+-- Name: qc_potency_spec_ranges org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_potency_spec_ranges USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_potency_specs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_potency_specs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_results org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5213,6 +5362,18 @@ ALTER TABLE public.qc_oos_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.qc_oos_register ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_potency_spec_ranges; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_potency_spec_ranges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: qc_potency_specs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_potency_specs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_results; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5400,5 +5561,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict MYNGZtixgvZDWYXdjoIsavjwTYrL5PBemo4vKpec2pVcSoVLzY9maYbAqDWqveH
+\unrestrict gZBr2UBw99p88hXkTcAzhdddmCfzOUcOvW7ffqUr9H4Zj4Bqq7quiLy1YOwnPsp
 
