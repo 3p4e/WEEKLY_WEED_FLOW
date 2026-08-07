@@ -12,6 +12,7 @@ from .common import (_COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid
                      check_derived_total_units, router)
 from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
 from .laboratories import _lab_scope_set, _result_in_scope
+from .potency import disposition_for
 from .specs import _ACID_FACTOR
 
 
@@ -48,6 +49,10 @@ class CoqIn(BaseModel):
     batch_size: str | None = Field(default=None, max_length=120)
     comments: str | None = Field(default=None, max_length=4000)
     oos_reference: str | None = Field(default=None, max_length=300)
+    # The cultivar this batch is — lets the CoQ grade it on Total Δ9-THC against
+    # the cultivar's APPROVED potency ladder (PP-QC-SPEC-001). Optional: without
+    # it the CoQ simply carries no grade (never invented).
+    cultivar_id: str | None = None
 
 
 def _coq_out(r: dict) -> dict:
@@ -69,7 +74,46 @@ def _coq_out(r: dict) -> dict:
         "voided_at": r["voided_at"].isoformat() if r["voided_at"] else None,
         "coq_document_id": r["coq_document_id"],
         "coq_generated_at": r["coq_generated_at"].isoformat() if r["coq_generated_at"] else None,
+        "cultivar_id": str(r["cultivar_id"]) if r.get("cultivar_id") else None,
+        "potency_spec_id": str(r["potency_spec_id"]) if r.get("potency_spec_id") else None,
         "updated_at": r["updated_at"].isoformat(),
+    }
+
+
+async def _coq_disposition(c, coq_row: dict) -> dict | None:
+    """The batch's potency grade (Spec I…N) — resolved against the ladder version
+    FROZEN on the CoQ at compile time (qc_coq.potency_spec_id), read against the
+    CoQ's own Total Δ9-THC line. Returns None when the CoQ carries no frozen
+    ladder (no cultivar mapped, or none APPROVED at compile). Freezing the ladder
+    id keeps the printed grade stable and traceable after later supersession."""
+    spec_id = coq_row.get("potency_spec_id")
+    if not spec_id:
+        return None
+    spec = await c.fetchrow(
+        "SELECT ps.id, ps.version, ps.floor_pct, ps.status, cv.code AS cultivar_code,"
+        " cv.name AS cultivar_name FROM qc_potency_specs ps"
+        " JOIN cultivars cv ON cv.id = ps.cultivar_id WHERE ps.id=$1", spec_id)
+    if spec is None:
+        return None
+    ranges = await c.fetch(
+        "SELECT tier, range_min, range_max, nominal FROM qc_potency_spec_ranges"
+        " WHERE potency_spec_id=$1 ORDER BY tier", spec_id)
+    # The batch's Total Δ9-THC is the computed total_thc CoQ line (Ph. Eur. 3028).
+    total = await c.fetchval(
+        "SELECT l.result_numeric FROM qc_coq_lines l"
+        " JOIN qc_spec_parameters p ON p.id = l.parameter_id"
+        " WHERE l.coq_id=$1 AND p.computed_kind='total_thc'"
+        " AND l.result_numeric IS NOT NULL LIMIT 1", coq_row["id"])
+    total_f = float(total) if total is not None else None
+    disp = disposition_for(spec["floor_pct"], [dict(r) for r in ranges], total_f)
+    return {
+        "potency_spec_id": str(spec["id"]), "version": spec["version"],
+        "spec_status": spec["status"],
+        "cultivar_code": spec["cultivar_code"], "cultivar_name": spec["cultivar_name"],
+        "floor_pct": float(spec["floor_pct"]),
+        "total_d9_thc": total_f,
+        "below_spec": (total_f is not None and disp is None),
+        "disposition": disp,
     }
 
 
@@ -130,9 +174,11 @@ async def get_coq(coq_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
             "SELECT * FROM qc_coq_lines WHERE coq_id=$1 ORDER BY sorting_order, created_at", coq_id)
         sources = await c.fetch(
             "SELECT * FROM qc_coq_sources WHERE coq_id=$1 ORDER BY coa_number", coq_id)
+        disposition = await _coq_disposition(c, dict(row))
     return {"coq": _coq_out(dict(row)),
             "lines": [_coq_line_out(dict(r)) for r in lines],
-            "sources": [_coq_source_out(dict(r)) for r in sources]}
+            "sources": [_coq_source_out(dict(r)) for r in sources],
+            "potency": disposition}
 
 
 @router.post("/coq", status_code=201)
@@ -145,11 +191,25 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
     Aggregation only — no value is invented; a non-conforming line is recorded
     (overall_conform=false), never hidden."""
     _uuid_or_422(body.specification_id, "specification_id")
+    _uuid_or_422(body.cultivar_id, "cultivar_id")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
                                 body.specification_id)
         if spec is None:
             raise HTTPException(422, "Unknown specification")
+        # Optional cultivar grade: validate the cultivar, then FREEZE the ladder
+        # version APPROVED right now — the printed grade must stay stable and
+        # traceable even after the ladder is later superseded. No approved ladder
+        # yet → the CoQ carries the cultivar but no grade (never invented).
+        potency_spec_id = None
+        if body.cultivar_id:
+            cv = await c.fetchrow(
+                "SELECT id FROM cultivars WHERE id=$1 AND is_active", body.cultivar_id)
+            if cv is None:
+                raise HTTPException(422, "Unknown or inactive cultivar")
+            potency_spec_id = await c.fetchval(
+                "SELECT id FROM qc_potency_specs WHERE cultivar_id=$1 AND status='APPROVED'",
+                body.cultivar_id)
         certs = await c.fetch(
             "SELECT * FROM qc_certificates WHERE batch_id=$1 AND specification_id=$2"
             " AND cert_type = ANY($3::text[]) AND status = ANY($4::text[])"
@@ -197,7 +257,8 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
             body.batch_id)
         row = None
         if not open_oos:
-            row = await _compile_coq_tx(c, user, body, spec, certs, params, results)
+            row = await _compile_coq_tx(c, user, body, spec, certs, params, results,
+                                        potency_spec_id)
     if open_oos:
         # §6.16 (C8) — an attempted CoQ compile on an open-OOS batch is itself a
         # reportable deviation, recorded in its own transaction so the 409
@@ -214,7 +275,8 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
     return _coq_out(dict(row))
 
 
-async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, results):
+async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, results,
+                          potency_spec_id=None):
     """The aggregation itself — runs INSIDE the caller's transaction, so the
     validation reads, the advisory-locked number mint, and the inserts are one
     atomic unit (no window for a source to be voided or an OOS to open between
@@ -352,11 +414,13 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
     row = await c.fetchrow(
         "INSERT INTO qc_coq(org_id, coq_number, batch_id, product_name, manufacture_date,"
         " batch_size, specification_id, spec_reference, overall_conform, comments,"
-        " oos_reference, compiled_by, compiled_at, created_by, updated_by)"
-        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12) RETURNING *",
+        " oos_reference, compiled_by, compiled_at, created_by, updated_by,"
+        " cultivar_id, potency_spec_id)"
+        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12,$13,$14) RETURNING *",
         user["org_id"], coq_number, body.batch_id, body.product_name,
         body.manufacture_date, body.batch_size, body.specification_id, spec_ref,
-        overall, body.comments, body.oos_reference, user["id"])
+        overall, body.comments, body.oos_reference, user["id"],
+        body.cultivar_id, potency_spec_id)
     for src_id in sorted(cited_cert_ids):
         src = by_cert[src_id]
         await c.execute(

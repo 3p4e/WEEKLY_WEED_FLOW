@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict gZBr2UBw99p88hXkTcAzhdddmCfzOUcOvW7ffqUr9H4Zj4Bqq7quiLy1YOwnPsp
+\restrict ED2E8u5eHMmLY2ezdzuxUM8r15K2TbksC5PA7BD1hHCIdydhmrRkmmR9T0ND9hg
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -965,6 +965,8 @@ CREATE TABLE public.qc_coq (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    cultivar_id uuid,
+    potency_spec_id uuid,
     CONSTRAINT qc_coq_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'VOIDED'::text])))
 );
 
@@ -4334,11 +4336,27 @@ ALTER TABLE ONLY public.qc_coa_verifications
 
 
 --
+-- Name: qc_coq qc_coq_cultivar_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_cultivar_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: qc_coq_lines qc_coq_lines_coq_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.qc_coq_lines
     ADD CONSTRAINT qc_coq_lines_coq_fkey FOREIGN KEY (coq_id) REFERENCES public.qc_coq(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qc_coq qc_coq_potency_spec_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_potency_spec_fkey FOREIGN KEY (potency_spec_id) REFERENCES public.qc_potency_specs(id) ON DELETE RESTRICT;
 
 
 --
@@ -5561,5 +5579,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict gZBr2UBw99p88hXkTcAzhdddmCfzOUcOvW7ffqUr9H4Zj4Bqq7quiLy1YOwnPsp
+\unrestrict ED2E8u5eHMmLY2ezdzuxUM8r15K2TbksC5PA7BD1hHCIdydhmrRkmmR9T0ND9hg
 
