@@ -557,6 +557,10 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         lines = await c.fetch(
             "SELECT * FROM qc_coq_lines WHERE coq_id=$1 ORDER BY sorting_order, created_at",
             coq_id)
+        # The batch's per-cultivar potency grade, resolved against the ladder
+        # version frozen on the CoQ at compile time (Phase B) — rendered into the
+        # document's meta grid.
+        potency = await _coq_disposition(c, dict(coq))
         # Ordered by real dates (not the coa_number string — per-type/per-year
         # numbering means lexical order doesn't reliably track issuance order),
         # oldest first so the fallback pick below still means "the newest one".
@@ -676,7 +680,8 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
                       f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
     md = _coq_markdown(coa_view, dict(spec) if spec else {}, params_by_id, results,
-                       lab=None, scope_note=scope_note, sigs=None, signer_names=signer_names)
+                       lab=None, scope_note=scope_note, sigs=None, signer_names=signer_names,
+                       potency=potency)
     build = (await docengine.de_forward(
         "POST", "/build",
         {"markdown": md, "out_name": coq["coq_number"],

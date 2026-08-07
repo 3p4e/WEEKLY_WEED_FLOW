@@ -181,9 +181,35 @@ def _coq_sources(results: list, lab: dict | None):
     return letters, crossref, has_internal, any(x == "∑" for x in letters)
 
 
+def _coq_grade_value(potency: dict | None) -> str | None:
+    """The cultivar potency-grade cell for the meta grid, from the CoQ's frozen
+    ladder disposition (Phase B). Language-neutral (proper name + numbers), like
+    the batch/spec cells. None when there's no grade to show — never invented."""
+    if not potency:
+        return None
+    cult = potency.get("cultivar_name") or potency.get("cultivar_code") or ""
+    disp = potency.get("disposition")
+    if disp:
+        gv = " · ".join(x for x in (cult, disp.get("spec"),
+                                    f"nominal {disp['nominal']}%") if x)
+        tot = potency.get("total_d9_thc")
+        if tot is not None:
+            gv += f" (Total Δ9-THC {tot}%)"
+        ver = potency.get("version")
+        if ver:
+            gv += f" — PP-QC-SPEC-001 {ver}"
+        return gv
+    if potency.get("below_spec"):
+        floor = potency.get("floor_pct")
+        base = " · ".join(x for x in (cult, "below specification") if x)
+        return f"{base} (< {floor}% floor)" if floor is not None else base
+    return None
+
+
 def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
                   lab: dict | None = None, scope_note: str | None = None,
-                  sigs: list | None = None, signer_names: dict | None = None) -> str:
+                  sigs: list | None = None, signer_names: dict | None = None,
+                  potency: dict | None = None) -> str:
     """Assemble the Certificate of Quality as DocEngine bilingual Markdown in the
     approved house layout (CoQ_Template_v02_VariationF): product/identity meta
     grid → §01 Analytical Results (№ · parameter · method · acceptance · result ·
@@ -244,6 +270,11 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
         ("Лабораторија", "Laboratory", lab_line, False),
         ("Производител", "Manufacturer", _COQ_MANUFACTURER, True),
     ]
+    # Per-cultivar potency grade (PP-QC-SPEC-001), right after the Potency row —
+    # present only when the CoQ froze a ladder disposition (Phase B).
+    grade_value = _coq_grade_value(potency)
+    if grade_value:
+        grid_rows.insert(4, ("Сорта · Оцена", "Cultivar · Grade", grade_value, False))
     grid = "[[FORM:grid]]\n"
     for mk, en, val, required in grid_rows:
         sval = (str(val).strip() if val is not None else "")
