@@ -222,10 +222,14 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     material = " / ".join(x for x in (spec.get("material_name_mk"),
                                       spec.get("material_name_en") or spec.get("material_code")) if x)
     decision = coa.get("decision") or ""
-    v_mk = "СЕРИЈАТА ЗАДОВОЛУВА — Одобрено за пуштање" if decision == "PASS" \
-        else "СЕРИЈАТА НЕ ЗАДОВОЛУВА"
-    v_en = "Conforms to Specification — Approved for Release" if decision == "PASS" \
-        else "This batch does NOT conform"
+    # A CoQ is a QC-level disposition AGAINST SPECIFICATION — it is NOT the
+    # Qualified Person's Annex-16 batch certification/release. Say so plainly so
+    # the certificate never reads as QP release authority it does not carry
+    # (Draft CoQ; QCSOP-012 — QC disposition, not QP batch release).
+    v_mk = "Ја задоволува спецификацијата — QC диспозиција (не претставува QP пуштање на серијата)" \
+        if decision == "PASS" else "Не ја задоволува спецификацијата — QC диспозиција"
+    v_en = "Conforms to Specification — QC Disposition (not QP batch release)" \
+        if decision == "PASS" else "Does NOT conform to Specification — QC Disposition"
     head = ("<!--HEADERDATA\n"
             "doctype: FORM\n"
             f"code: {c(coa['coa_number'])}\n"

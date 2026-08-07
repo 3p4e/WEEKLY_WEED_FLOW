@@ -923,6 +923,10 @@ async def test_coq_layout_has_house_template_sections(client, admin_headers, mon
                   "Overall Batch Disposition", "QC Compliance Statement", "Signatures",
                   "Manufacturer", "Purely Plant DOOEL", "№~~№"):
         assert token in md, token
+    # A PASS CoQ states a QC disposition against specification — it must NOT
+    # claim the QP's Annex-16 batch release (Draft CoQ; QC disposition ≠ QP release).
+    assert "Conforms to Specification — QC Disposition (not QP batch release)" in md
+    assert "Approved for Release" not in md
     # numbers are labelled with the numero sign, never the "No." abbreviation
     assert "№" in md and "No." not in md
 
