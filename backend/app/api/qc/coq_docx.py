@@ -182,16 +182,16 @@ def _coq_sources(results: list, lab: dict | None):
 
 
 def _coq_grade_value(potency: dict | None) -> str | None:
-    """The cultivar potency-grade cell for the meta grid, from the CoQ's frozen
-    ladder disposition (Phase B). Language-neutral (proper name + numbers), like
-    the batch/spec cells. None when there's no grade to show — never invented."""
+    """The potency-grade cell for the meta grid, from the CoQ's frozen ladder
+    disposition (Phase B). The cultivar name is its OWN meta row, so this carries
+    only the grade: Spec tier · nominal · measured Total Δ9-THC · ladder version.
+    Language-neutral (numbers), like the batch/spec cells. None when there's no
+    grade to show — never invented."""
     if not potency:
         return None
-    cult = potency.get("cultivar_name") or potency.get("cultivar_code") or ""
     disp = potency.get("disposition")
     if disp:
-        gv = " · ".join(x for x in (cult, disp.get("spec"),
-                                    f"nominal {disp['nominal']}%") if x)
+        gv = " · ".join(x for x in (disp.get("spec"), f"nominal {disp['nominal']}%") if x)
         tot = potency.get("total_d9_thc")
         if tot is not None:
             gv += f" (Total Δ9-THC {tot}%)"
@@ -201,8 +201,7 @@ def _coq_grade_value(potency: dict | None) -> str | None:
         return gv
     if potency.get("below_spec"):
         floor = potency.get("floor_pct")
-        base = " · ".join(x for x in (cult, "below specification") if x)
-        return f"{base} (< {floor}% floor)" if floor is not None else base
+        return f"below specification (< {floor}% floor)" if floor is not None else "below specification"
     return None
 
 
@@ -255,6 +254,7 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     grid_rows = [
         ("№ на сертификат", "Certificate №", coa.get("coa_number"), True),
         ("Материјал", "Material", material, True),
+        ("Сорта", "Cultivar", coa.get("cultivar_name"), False),
         ("Ботаничко потекло", "Botanical origin", " · ".join(bot), False),
         ("Јачина", "Potency", _coq_potency(spec), False),
         ("Производна серија", "Production batch", coa.get("batch_id"), True),
@@ -274,7 +274,8 @@ def _coq_markdown(coa: dict, spec: dict, params_by_id: dict, results: list,
     # present only when the CoQ froze a ladder disposition (Phase B).
     grade_value = _coq_grade_value(potency)
     if grade_value:
-        grid_rows.insert(4, ("Сорта · Оцена", "Cultivar · Grade", grade_value, False))
+        pot_at = next((i for i, r in enumerate(grid_rows) if r[1] == "Potency"), len(grid_rows) - 1)
+        grid_rows.insert(pot_at + 1, ("Оцена", "Grade", grade_value, False))
     grid = "[[FORM:grid]]\n"
     for mk, en, val, required in grid_rows:
         sval = (str(val).strip() if val is not None else "")

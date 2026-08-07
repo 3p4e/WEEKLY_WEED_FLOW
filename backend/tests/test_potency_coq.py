@@ -100,8 +100,10 @@ async def test_coq_document_renders_cultivar_grade(client, admin_headers, monkey
     r = await client.post(f"/qc/coq/{coq['id']}/render", headers=admin_headers)
     assert r.status_code == 201, r.text
     md = _FakeDE.last_markdown
-    assert "Cultivar · Grade" in md
-    assert "Grape Pie" in md and "Spec II" in md and "nominal 24.0%" in md
+    # dedicated Cultivar meta row + a grade-only row
+    assert "Сорта~~Cultivar" in md and "Grape Pie" in md
+    assert "Оцена~~Grade" in md
+    assert "Spec II" in md and "nominal 24.0%" in md
     assert "PP-QC-SPEC-001 v5.2" in md
     assert "Total Δ9-THC 23.98%" in md
 

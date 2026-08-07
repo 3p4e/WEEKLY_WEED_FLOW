@@ -561,6 +561,14 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         # version frozen on the CoQ at compile time (Phase B) — rendered into the
         # document's meta grid.
         potency = await _coq_disposition(c, dict(coq))
+        # The cultivar name for the meta grid's own Cultivar row — resolved even
+        # when no ladder is frozen (cultivar set, grade absent).
+        cultivar_name = None
+        if coq["cultivar_id"]:
+            cvrow = await c.fetchrow(
+                "SELECT code, name FROM cultivars WHERE id=$1", coq["cultivar_id"])
+            if cvrow:
+                cultivar_name = cvrow["name"] or cvrow["code"]
         # Ordered by real dates (not the coa_number string — per-type/per-year
         # numbering means lexical order doesn't reliably track issuance order),
         # oldest first so the fallback pick below still means "the newest one".
@@ -614,7 +622,7 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         # the CoQ's authorised approver is the HoQC who reviewed/approved it
         # (§6.4.3) — the mandatory-content manifest requires an approver of record.
         "approver_id": coq["reviewed_by"],
-        "batch_id": coq["batch_id"],
+        "batch_id": coq["batch_id"], "cultivar_name": cultivar_name,
         "manufacture_date": coq["manufacture_date"] or primary.get("manufacture_date"),
         "report_date": coq["compiled_at"].date() if coq["compiled_at"] else None,
         "botanical_type": primary.get("botanical_type"), "chemotype": primary.get("chemotype"),
