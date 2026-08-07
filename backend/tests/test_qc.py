@@ -854,6 +854,26 @@ async def test_ecoa_review_checklist(client, admin_headers):
                               json={"outcome": "REJECTED"}, headers=qc)).status_code == 409
 
 
+async def test_ecoa_checklist_decider_must_differ_from_filler(client, admin_headers):
+    """M5 (§6.3.2 second-person review, multi-person QC): the Head of QC signing the
+    checklist decision must not be the person who filled it. The filler is refused
+    even though they are HoQC-capable; a DISTINCT HoQC actor may decide."""
+    doc = await _ecoa_doc(client, admin_headers, batch="B-CL-M5")
+    assert (await client.put(f"/qc/coa-documents/{doc['id']}/checklist",
+                             json={"sample_id_match": True, "method_per_tqa": True,
+                                   "units_per_spec": True, "conformance_by_pp": True},
+                             headers=admin_headers)).status_code == 200
+    # the filler (admin) cannot also sign the decision — segregation of duties
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                          json={"outcome": "ACCEPTED"}, headers=admin_headers)
+    assert r.status_code == 403 and "different" in r.json()["detail"]
+    # a distinct Head-of-QC actor may
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
+                          json={"outcome": "ACCEPTED"}, headers=qc)
+    assert r.status_code == 200 and r.json()["outcome"] == "ACCEPTED"
+
+
 async def test_register_sop_status_labels(client, admin_headers):
     """§6.13 — the register presents the SOP status vocabulary. A released cert is
     'Issued'; a released revision is 'Revised'."""
@@ -1744,15 +1764,19 @@ async def _ecoa_doc(client, headers, spec_id=None, batch="B-ECOA-1", **extra):
     return r.json()
 
 
-async def _accept_checklist(client, headers, doc_id):
+async def _accept_checklist(client, headers, doc_id, decider=None):
     """§6.3.2 QCT-018 — fill + ACCEPT the eCoA review checklist so the document may
-    be promoted (H1 gate). *headers* must be a Head-of-QC-capable actor."""
+    be promoted (H1 gate). *headers* fills the checklist; a DISTINCT Head-of-QC
+    actor signs the ACCEPTED decision (M5 filler != decider). When no *decider* is
+    passed, a fresh QC_MGR is created via *headers* (which must be admin-capable)."""
     r = await client.put(f"/qc/coa-documents/{doc_id}/checklist",
                          json={"sample_id_match": True, "method_per_tqa": True,
                                "units_per_spec": True, "conformance_by_pp": True}, headers=headers)
     assert r.status_code == 200, r.text
+    if decider is None:
+        _, decider = await _actor(client, headers, "QC_MGR")
     r = await client.post(f"/qc/coa-documents/{doc_id}/checklist/decide",
-                          json={"outcome": "ACCEPTED"}, headers=headers)
+                          json={"outcome": "ACCEPTED"}, headers=decider)
     assert r.status_code == 200, r.text
 
 
@@ -3653,8 +3677,10 @@ async def test_rejected_checklist_voids_document(client, admin_headers):
                              json={"sample_id_match": True, "method_per_tqa": True,
                                    "units_per_spec": True, "conformance_by_pp": False,
                                    "discrepancies": "units differ"}, headers=admin_headers)).status_code == 200
+    # a second HoQC person signs the rejection (M5 filler != decider)
+    _, qc = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.post(f"/qc/coa-documents/{doc['id']}/checklist/decide",
-                              json={"outcome": "REJECTED"}, headers=admin_headers)).status_code == 200
+                              json={"outcome": "REJECTED"}, headers=qc)).status_code == 200
     d = (await client.get(f"/qc/coa-documents/{doc['id']}", headers=admin_headers)).json()
     assert d["document"]["status"] == "REJECTED"
     assert (await client.post(f"/qc/coa-documents/{doc['id']}/promote",

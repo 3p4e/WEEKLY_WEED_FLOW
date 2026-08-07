@@ -37,6 +37,7 @@ test-gated:
 | **M2** | QP dropped from the CoQ approval gate (URS §3) | `coq_aggregation.py` |
 | **M3** | A PASS/FAIL disposition is required before APPROVED/RELEASED (+ revise carries it; frontend guard) | `certificates.py`, `qccoa-view.js` |
 | **M4** | The eCoA review-window is stamped at the ACCEPTED decision (and at promote) | `ecoa.py` |
+| **M5** | §6.3.2 second-person review: the checklist decider must differ from whoever filled it (owner: multi-person QC) | `ecoa.py` |
 | **M6** | Ph. Eur. 3028 derived total refuses unit-inconsistent components | `common.py`, `coq_docx.py`, `coq_aggregation.py` |
 | **M7** | eCoA `doc_number` mints per-(org, year); the global `qc_ecoa_id_seq` is dropped (migration 0056) | `ecoa.py`, `0056` |
 | **M8** | Register gap-report reframed: per-org RLS-scoped missing-record signal; modern series floor at 0001 | `cert_register.py` |
@@ -49,13 +50,11 @@ decision (2026-08-06): *do not gate the lifecycle.* CoQ issuance stays independe
 of `qc_specifications.status`; the certificate lifecycle is not gated on spec
 lifecycle state. No code change — current behaviour already matches this.
 
-**Deferred — need an owner decision (not guessed, per instruction):**
-
-- **M5 — filler ≠ decider on the eCoA checklist.** Whether the person who fills
-  the §6.3.2 checklist may also sign its ACCEPTED decision depends on QC
-  headcount: a single-QC-person site cannot segregate these and the control
-  would deadlock; a multi-person QC function should segregate them. Enforcing it
-  blindly broke 12 tests previously. **Owner input required** before implementing.
+**M5 — filler ≠ decider on the eCoA checklist — RESOLVED, implemented.** Owner
+decision (2026-08-06): the site has **multiple QC people**, so segregation is
+enforced. `decide_checklist` now refuses a decision (ACCEPTED or REJECTED) signed
+by whoever authored (`created_by`) or last edited (`updated_by`) the checklist —
+the Head of QC signing must be a second person (§6.3.2).
 
 **Deferred — need a migration / heavier change or a design decision:**
 

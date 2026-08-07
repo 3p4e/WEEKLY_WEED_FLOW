@@ -544,6 +544,15 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
             raise HTTPException(409, "complete the checklist before deciding")
         if cur["outcome"] != "PENDING":
             raise HTTPException(409, f"checklist already {cur['outcome']}")
+        # M5 — segregation of duties (§6.3.2 second-person review): the person who
+        # FILLED the checklist may not also sign its decision. The Head of QC
+        # deciding must differ from whoever authored (created_by) or last edited
+        # (updated_by) the affirmations. Applies to ACCEPTED and REJECTED alike — a
+        # sign-off either way is the second-person act.
+        if str(user["id"]) in (str(cur["created_by"]), str(cur["updated_by"])):
+            raise HTTPException(
+                403, "The reviewer signing the checklist decision must be a different"
+                     " person than the one who completed it (§6.3.2 second-person review)")
         if body.outcome == "ACCEPTED":
             # §6.3.2 — accept only a complete, discrepancy-free checklist.
             affirmations = (cur["sample_id_match"], cur["method_per_tqa"],
