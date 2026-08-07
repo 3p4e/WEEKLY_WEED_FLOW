@@ -646,6 +646,27 @@
       <tbody>${rows || `<tr><td colspan="5" class="ana-note">${AL('No lines', 'Нема редови')}</td></tr>`}</tbody></table>`;
   };
 
+  // The batch's frozen potency grade (PP-QC-SPEC-001) — shown ONLY when the CoQ
+  // froze a ladder (d.potency present, from the API's disposition read). Cultivar
+  // is its own row; the grade carries tier · nominal · measured Total Δ9-THC ·
+  // ladder version. Nothing is fabricated: no ladder frozen → no rows.
+  const coqPotencyRows = (p) => {
+    if (!p) return '';
+    const cult = p.cultivar_name
+      ? `<span>${AL('Cultivar', 'Сорта')}</span><b>${GF.esc(p.cultivar_name)}${p.cultivar_code ? ` <span class="ana-note mono">${GF.esc(p.cultivar_code)}</span>` : ''}</b>`
+      : '';
+    let grade = '';
+    if (p.disposition) {
+      const tot = (p.total_d9_thc !== null && p.total_d9_thc !== undefined)
+        ? ` <span class="ana-note">(Total Δ9-THC ${GF.esc(String(p.total_d9_thc))}%)</span>` : '';
+      grade = `<span>${AL('Grade', 'Оцена')}</span><b>${GF.esc(p.disposition.spec)} · ${AL('nominal', 'номинал')} ${GF.esc(String(p.disposition.nominal))}%${tot} <span class="ana-note mono">PP-QC-SPEC-001 ${GF.esc(p.version || '')}</span></b>`;
+    } else if (p.below_spec) {
+      const fl = (p.floor_pct !== null && p.floor_pct !== undefined) ? ` <span class="ana-note">(&lt; ${GF.esc(String(p.floor_pct))}%)</span>` : '';
+      grade = `<span>${AL('Grade', 'Оцена')}</span><b style="color:var(--red-fg,var(--red))">${AL('below specification', 'под спецификација')}${fl}</b>`;
+    }
+    return cult + grade;
+  };
+
   const coqDetail = (d) => {
     const q = d.coq;
     const srcs = (d.sources || []).map(s =>
@@ -656,6 +677,7 @@
         <span>${AL('Batch', 'Серија')}</span><b>${GF.esc(q.batch_id)}</b>
         <span>${AL('Status', 'Статус')}</span><b>${stChip(q.status)}</b>
         <span>${AL('Conforms', 'Задоволува')}</span><b>${compliesChip(q.overall_conform)}</b>
+        ${coqPotencyRows(d.potency)}
         ${q.spec_reference ? `<span>${AL('Specification', 'Спецификација')}</span><b class="mono">${GF.esc(q.spec_reference)}</b>` : ''}
         ${q.product_name ? `<span>${AL('Product', 'Производ')}</span><b>${GF.esc(q.product_name)}</b>` : ''}
         ${q.manufacture_date ? `<span>${AL('Mfg. date', 'Датум на производство')}</span><b class="mono">${GF.esc(q.manufacture_date)}</b>` : ''}
@@ -759,7 +781,7 @@
           </select>
         </div>
         <div class="qms-list">${coaList()}</div>
-      </div>`;
+      </div>` + coqPanel();
   };
 
   GF.WWF._registerFullPageView({
