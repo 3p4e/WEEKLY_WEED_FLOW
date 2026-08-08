@@ -68,9 +68,24 @@ documents would be a **new feature**, and it needs the owner's target designs �
 only the Draft **CoQ** (plus the grade ladders) was provided. Not started, to
 avoid guessing a design that wasn't shared.
 
-## Owner-gated: deploy
-The agent cannot dispatch Actions in this environment (see `CLAUDE.md`). To ship
-this increment, the owner runs **Deploy WWF stack to KVM4** with:
-`scope=full`, `sha=<branch head>`, `run_migrations=true`,
-`confirm_destructive_migrations=true` — migration **0057** is purely additive
-(two new tables), so the destructive-migration path is a formality here.
+## Deployed to production — 2026-08-08
+
+Shipped from `02f1460` as **backend v87 / scheduler v87 / frontend v127**, tasks
+chain **0055 → 0058** (users already at `0010`). Actions dispatch is owner-only, so
+this went out directly through the kvm4-runner `/shell` endpoint following
+`deploy.yml`'s own sequence (see `CLAUDE.md` → "Deploying without Actions").
+
+- Verified snapshot (rollback): `/opt/wwf-deploy/snapshots/20260808T185724Z-manual-02f1460/`
+- Image assertion: built backend resolves `users=0010`, `tasks=0058` — the repo's
+  heads at that SHA; both images grepped for symbols only this commit has.
+- Migrations ran BEFORE the image swap; services recreated one at a time,
+  `--no-deps`; no database container touched, no volume pruned.
+- Post-deploy: `https://wwf.srv1231216.hstgr.cloud/health/ready` →
+  `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`; index `200`; the live
+  JS serves this commit; `/qc/potency-specs` and `/qc/potency-disposition` answer
+  `401` (registered) vs `404` for a nonexistent route.
+
+Note on ordering: `0056` drops `qc_ecoa_id_seq`, which the *old* v86 image still
+used, so migrate-before-swap opened a brief window where old code could hit a
+missing sequence. Production data was near-empty and the swap followed
+immediately; on a busier system, swap first or split that migration.
