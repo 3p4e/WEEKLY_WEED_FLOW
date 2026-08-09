@@ -1,5 +1,9 @@
 # docengine/engine — vendored canonical pp-document-suite
 
+> ⚠️ **FROZEN MIRROR (2026-08-09):** engine-line-B development moved to
+> [3p4e/letta-stack](https://github.com/3p4e/letta-stack) `apps/wwf-docengine/`.
+> See `../DEPRECATED.md`.
+
 Assembled per **docs/DOCENGINE-CANON-2026-07.md** (the binding per-component
 version decision). Do not edit these files ad hoc — changes go through a canon
 revision.
