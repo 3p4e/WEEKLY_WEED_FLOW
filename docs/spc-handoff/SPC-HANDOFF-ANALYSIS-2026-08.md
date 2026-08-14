@@ -151,6 +151,17 @@ import/A4 links), the CoQ compile cultivar picker (ladder freezing was
 unreachable from the UI before), the commercial-identity row on the CoQ
 detail, and ICOA-vs-QP button gating.
 
+**Deployed to production 2026-08-14** (commit `61c3aed` → backend **v88**,
+scheduler v88, frontend **v128**; tasks chain **0058 → 0060**, users already
+0010). Verified snapshots of both DBs taken first
+(`/opt/wwf-deploy/snapshots/20260814T-manual-61c3aed/`), image alembic heads
+asserted against the repo at that SHA, migrations run before the swap, services
+recreated one at a time with `--no-deps`, `/health/ready` `{"ready":true}` with
+both DBs ok through the public URL, the new routes answer **401 not 404**
+unauthenticated, and the live JS serves `qcpotency-view.js` (sw
+`wwf-shell-v3.99.0`). Full backend suite 694 passed / 0 failed before shipping.
+Rollback path: `compose.yaml.bak-v87` + the retained v87/v127 image tags.
+
 Still open (unchanged, needs owner/QA decisions): the eCoA *document* series
 `PP-ECOA-` vs `eCoA-PP-`; the legacy global Engine-B sequences; signatures on
 `qc_coq` rows (aggregation CoQs still render the honest no-signature block).
