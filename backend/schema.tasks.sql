@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict l0KeVwBOkC37AXQ4cQIMjpgCh1OkKgBZ549HMr22BGghwI0Lbst9HizLVed8Q9T
+\restrict k2nredfdEznipD9ipEFAWPuHKPY9zgF1awdw93aW2Nt49lZ0gfVQY4eidBuMBTZ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3380,6 +3380,13 @@ CREATE INDEX qc_signatures_object_idx ON public.qc_signatures USING btree (org_i
 
 
 --
+-- Name: qc_signatures_unique_meaning_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_signatures_unique_meaning_idx ON public.qc_signatures USING btree (org_id, object_type, object_id, meaning, signer_id);
+
+
+--
 -- Name: qc_spec_parameters_spec_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5650,5 +5657,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict l0KeVwBOkC37AXQ4cQIMjpgCh1OkKgBZ549HMr22BGghwI0Lbst9HizLVed8Q9T
+\unrestrict k2nredfdEznipD9ipEFAWPuHKPY9zgF1awdw93aW2Nt49lZ0gfVQY4eidBuMBTZ
 

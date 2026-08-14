@@ -9,6 +9,23 @@ async def _actor(client, admin_headers, role):
     return user, {"Authorization": f"Bearer {token}"}
 
 
+async def _hoqc_walk(client, admin_headers, reviewer_headers, coa_id,
+                     targets=("REVIEWED", "APPROVED", "RELEASED")):
+    """Walk an INTERNAL CoA through its lifecycle under the 3-tier chain.
+
+    The iCoA sign-off is Analyst → Senior Analyst → Head of QC — three distinct
+    humans, no Qualified Person (owner decision 2026-08-14). So: REVIEWED by
+    `reviewer_headers` (the second person), then APPROVED/RELEASED by a freshly
+    provisioned QC_MGR (the third). Returns the approver's headers so a caller
+    can keep acting as the HoQC."""
+    _, hoqc = await _actor(client, admin_headers, "QC_MGR")
+    for tgt in targets:
+        h = reviewer_headers if tgt == "REVIEWED" else hoqc
+        assert (await client.patch(f"/qc/certificates/{coa_id}",
+                                   json={"status": tgt}, headers=h)).status_code == 200, tgt
+    return hoqc
+
+
 async def _spec(client, headers, material="CANN-FLOS-D", version=1, **extra):
     body = {"material_code": material, "material_name_en": "Cannabis flos",
             "material_name_mk": "Каннабис цвет", "version": version, **extra}
@@ -431,26 +448,55 @@ async def test_coa_reviewer_must_differ_from_analyst(client, admin_headers):
     assert r.json()["reviewer_id"] is not None
 
 
-async def test_coa_approve_release_qp_gated(client, admin_headers):
+async def test_icoa_approval_is_hoqc_not_qp(client, admin_headers):
+    """The internal-CoA sign-off chain is Analyst → Senior Analyst → Head of QC
+    (handoff, owner decision 2026-08-14): a QP may NOT approve/release an iCoA,
+    the Head of QC may — and the three persons must all differ."""
     spec = await _spec(client, admin_headers, material="QPG-MAT")
-    coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin
+    coa = await _coa(client, admin_headers, spec["id"])   # analyst = admin (ICOA default)
     # a disposition of record is a precondition of approval (M3)
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
-    # QC_MGR cannot APPROVE (Qualified-Person decision)
+    # the QP is NOT part of iCoA sign-off
+    _, qp_h = await _actor(client, admin_headers, "QP")
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qp_h)
+    assert r.status_code == 403 and "Head-of-QC" in r.json()["detail"]
+    # the reviewer cannot ALSO approve — three distinct humans
     r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qc_h)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 403 and "reviewer" in r.json()["detail"]
+    # a second, distinct Head of QC approves and releases
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
+                               headers=qc2)).status_code == 200
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=qc2)
+    assert r.status_code == 200 and r.json()["status"] == "RELEASED" and r.json()["approver_id"] is not None
+
+
+async def test_ecoa_approval_still_requires_qp(client, admin_headers):
+    """The HoQC gate is ICOA-specific: an eCoA (external evidence) keeps the
+    Qualified-Person approval — a QC_MGR gets 403 there."""
+    spec = await _spec(client, admin_headers, material="EQP-MAT")
+    r = await client.post("/qc/certificates",
+                          json={"batch_id": "B-EQP", "specification_id": spec["id"],
+                                "cert_type": "ECOA", "source_lab": "External Lab"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    coa = r.json()
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
+                               headers=qc_h)).status_code == 200
+    # QC_MGR cannot approve an eCoA — Qualified-Person decision
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qc2)
+    assert r.status_code == 403 and "Qualified-Person" in r.json()["detail"]
     _, qp_h = await _actor(client, admin_headers, "QP")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
                                headers=qp_h)).status_code == 200
-    # QC_MGR cannot RELEASE; QP can
-    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"},
-                               headers=qc_h)).status_code == 403
-    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=qp_h)
-    assert r.status_code == 200 and r.json()["status"] == "RELEASED" and r.json()["approver_id"] is not None
 
 
 async def test_coa_approve_rejects_analyst(client, admin_headers):
@@ -458,22 +504,22 @@ async def test_coa_approve_rejects_analyst(client, admin_headers):
     analytical data — mirrors REVIEWED's existing analyst-exclusion check,
     which previously had no equivalent on APPROVED (self-approval was
     possible for anyone who was both the analyst and QP-eligible)."""
-    _, qp_analyst = await _actor(client, admin_headers, "QP")
+    _, qc_analyst = await _actor(client, admin_headers, "QC_MGR")
     spec = await _spec(client, admin_headers, material="APR-ANALYST")
-    coa = await _coa(client, qp_analyst, spec["id"], batch="B-APR-A")  # the QP is the analyst
+    coa = await _coa(client, qc_analyst, spec["id"], batch="B-APR-A")  # the HoQC is the analyst
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
-                               headers=qp_analyst)).status_code == 200  # disposition of record (M3)
+                               headers=qc_analyst)).status_code == 200  # disposition of record (M3)
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
-    # the analyst (also QP-eligible) cannot approve their own certificate
+    # the analyst (also HoQC-eligible) cannot approve their own certificate
     r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
-                           headers=qp_analyst)
+                           headers=qc_analyst)
     assert r.status_code == 403 and "analyst" in r.json()["detail"]
-    # a different QP may
-    _, qp2 = await _actor(client, admin_headers, "QP")
+    # a third, distinct Head of QC may
+    _, qc3 = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
-                               headers=qp2)).status_code == 200
+                               headers=qc3)).status_code == 200
 
 
 async def test_coa_approve_requires_a_recorded_disposition(client, admin_headers):
@@ -481,22 +527,22 @@ async def test_coa_approve_requires_a_recorded_disposition(client, admin_headers
     be on record before APPROVED (and therefore RELEASED, which only follows
     APPROVED). A reviewed-but-undecided certificate cannot be approved; recording
     the disposition — even in the same PATCH — unblocks it."""
-    _, qp = await _actor(client, admin_headers, "QP")
     spec = await _spec(client, admin_headers, material="DISP-MAT")
     coa = await _coa(client, admin_headers, spec["id"], batch="B-DISP")
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qc_h)).status_code == 200
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")   # the (distinct) approver
     # no disposition of record → approval refused
-    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qp)
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"}, headers=qc2)
     assert r.status_code == 409 and "disposition" in r.json()["detail"]
     # recording the disposition in the same PATCH satisfies the gate
     r = await client.patch(f"/qc/certificates/{coa['id']}",
-                           json={"decision": "PASS", "status": "APPROVED"}, headers=qp)
+                           json={"decision": "PASS", "status": "APPROVED"}, headers=qc2)
     assert r.status_code == 200 and r.json()["status"] == "APPROVED"
     # RELEASED needs no re-statement — the disposition is already of record
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"},
-                               headers=qp)).status_code == 200
+                               headers=qc2)).status_code == 200
 
 
 async def test_results_only_in_draft(client, admin_headers):
@@ -775,9 +821,7 @@ async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results
                                   json=r, headers=headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp_headers)).status_code == 200, tgt
+    await _hoqc_walk(client, headers, qp_headers, coa['id'])
     return coa
 
 
@@ -884,9 +928,7 @@ async def test_register_sop_status_labels(client, admin_headers):
     assert row["sop_status"] == "Issued"
     rev = (await client.post(f"/qc/certificates/{coa['id']}/revise",
                              json={"reason": "typo in units"}, headers=admin_headers)).json()
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{rev['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, rev['id'])
     reg = (await client.get("/qc/register", headers=admin_headers)).json()
     assert next(x for x in reg if x["id"] == rev["id"])["sop_status"] == "Revised"
     assert next(x for x in reg if x["id"] == coa["id"])["sop_status"] == "Superseded"
@@ -984,9 +1026,7 @@ async def test_coq_source_crossref_derived_from_provenance(client, admin_headers
                                   json=r, headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=admin_headers)).status_code == 201
     md = _FakeDE.last_markdown
@@ -1015,9 +1055,7 @@ async def test_coq_crossref_sanitizes_source_separators(client, admin_headers, m
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     assert (await client.post(f"/qc/certificates/{coa['id']}/coq",
                               headers=admin_headers)).status_code == 201
     # find the §02 rows in the assembled markdown; the external row must have the
@@ -1047,6 +1085,7 @@ async def test_coq_water_cert_omits_cannabis_species_and_monograph(client, admin
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    # WATER cert: the QP gate still applies (HoQC-only is ICOA-specific)
     for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
         assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                    json={"status": tgt}, headers=qp)).status_code == 200, tgt
@@ -1161,9 +1200,7 @@ async def test_coq_blocks_when_spec_not_fully_tested(client, admin_headers, monk
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
 
@@ -1197,9 +1234,7 @@ async def test_coq_manifest_blocks_missing_content(client, admin_headers, monkey
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
@@ -1237,9 +1272,7 @@ async def test_coq_manifest_requires_method(client, admin_headers, monkeypatch):
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409, r.text
     assert "analytical method" in r.json()["detail"] and "Assay" in r.json()["detail"]
@@ -1277,9 +1310,7 @@ async def test_coa_revision_supersession_chain(client, admin_headers):
                           json={"reason": "Second correction attempt"}, headers=admin_headers)
     assert r.status_code == 409 and "revision already exists" in r.json()["detail"]
     # release the revision → the original flips to SUPERSEDED
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{rev['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, rev['id'])
     orig = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()["coa"]
     assert orig["status"] == "SUPERSEDED"
     # SUPERSEDED is terminal — no further transitions
@@ -1326,9 +1357,7 @@ async def _release_with_components(client, headers, qp, spec, pa, pb, batch,
                                   headers=headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, headers, qp, coa['id'])
     return coa
 
 
@@ -1372,9 +1401,7 @@ async def test_coq_computed_missing_component_blocks(client, admin_headers, monk
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409 and "not fully tested" in r.json()["detail"]
 
@@ -1399,9 +1426,7 @@ async def test_coq_computed_total_rejects_mismatched_component_units(client, adm
                               headers=admin_headers)).status_code == 201
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
                                headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 409, r.text
     assert "different units" in r.json()["detail"] and "Total THC" in r.json()["detail"]
@@ -1570,9 +1595,7 @@ async def test_coq_flags_out_of_scope(client, admin_headers, monkeypatch):
     assert by_name["Moisture"]["in_scope"] is False
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp)).status_code == 200, tgt
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     r = await client.post(f"/qc/certificates/{coa['id']}/coq", headers=admin_headers)
     assert r.status_code == 201, r.text
     assert r.json()["out_of_scope"] == ["Moisture"]
@@ -2089,6 +2112,19 @@ async def test_certificate_esignature_records_and_lists(client, admin_headers):
     assert [x["meaning"] for x in lst] == ["APPROVED", "RELEASED"]
     detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
     assert len(detail["signatures"]) == 2
+    # 0060 — the SAME person re-signing the SAME meaning asserts nothing new: 409,
+    # and no duplicate signatory row appears on the record.
+    r = await client.post(f"/qc/certificates/{coa['id']}/sign",
+                          json={"password": "TestPassword123456", "meaning": "APPROVED"},
+                          headers=admin_headers)
+    assert r.status_code == 409 and "already signed" in r.json()["detail"]
+    lst = (await client.get(f"/qc/certificates/{coa['id']}/signatures", headers=admin_headers)).json()
+    assert len(lst) == 2
+    # a DIFFERENT person signing the same meaning is a real event and stays legal
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/sign",
+                              json={"password": "NewPassword123456", "meaning": "APPROVED"},
+                              headers=qc2)).status_code == 201
 
 
 async def test_signature_meaning_must_match_reached_status(client, admin_headers):
@@ -2359,9 +2395,7 @@ async def test_genealogy_chain_and_inherited_results(client, admin_headers, monk
                             "result_numeric": 22.0, "lower_limit": 10.0, "upper_limit": 30.0},
                       headers=admin_headers)
     await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": tgt},
-                                   headers=qp)).status_code == 200
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     inh = (await client.get(f"/qc/genealogy/{PACK}/inherited-results", headers=admin_headers)).json()
     assert AB in inh["ancestors"]
     assert any(b["from_batch_id"] == AB and b["coa_number"] == coa["coa_number"]
@@ -2431,9 +2465,7 @@ async def test_genealogy_edge_delete_blocked_by_issued_certificate(client, admin
     # DRAFT: still deletable
     assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 204
     edge = await _edge(client, admin_headers, "GDEL-PARENT", "GDEL-CHILD")
-    for tgt in ("REVIEWED", "APPROVED", "RELEASED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": tgt},
-                                   headers=qp)).status_code == 200
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
     # RELEASED: the lineage is locked
     assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 409
 
@@ -3084,9 +3116,7 @@ async def _approved_coa(client, headers, qp_headers, spec_id, batch, results,
                                   json=res, headers=headers)).status_code == 201, res
     assert (await client.patch(f"/qc/certificates/{coa['id']}",
                                json={"decision": decision}, headers=headers)).status_code == 200
-    for tgt in ("REVIEWED", "APPROVED"):
-        assert (await client.patch(f"/qc/certificates/{coa['id']}",
-                                   json={"status": tgt}, headers=qp_headers)).status_code == 200, tgt
+    await _hoqc_walk(client, headers, qp_headers, coa['id'], targets=("REVIEWED", "APPROVED"))
     return coa
 
 
@@ -3611,13 +3641,14 @@ async def test_approved_certificate_freeze_allows_release_transition(client, adm
     await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "REVIEWED"},
                                headers=qp)).status_code == 200
+    _, hoqc = await _actor(client, admin_headers, "QC_MGR")   # iCoA approver = HoQC
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "APPROVED"},
-                               headers=qp)).status_code == 200
+                               headers=hoqc)).status_code == 200
     # content edit on the APPROVED cert is refused …
     assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "FAIL"},
-                               headers=qp)).status_code == 409
-    # … but the QP can still release it
-    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=qp)
+                               headers=hoqc)).status_code == 409
+    # … but the HoQC can still release it
+    r = await client.patch(f"/qc/certificates/{coa['id']}", json={"status": "RELEASED"}, headers=hoqc)
     assert r.status_code == 200 and r.json()["status"] == "RELEASED"
 
 

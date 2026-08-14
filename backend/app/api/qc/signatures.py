@@ -91,13 +91,21 @@ async def sign_certificate(coa_id: str, body: SignIn,
                 409, f"Certificate is {coa['status']} — a '{body.meaning}' signature attests a"
                      " step it has not reached yet (Annex 11 §14: a signature records an act"
                      " that happened)")
-        row = await c.fetchrow(
-            "INSERT INTO qc_signatures(org_id, object_type, object_id, signer_id, signer_name,"
-            " signer_role, meaning, statement) VALUES ($1,'qc_certificate',$2,$3,$4,$5,$6,$7)"
-            " RETURNING *",
-            user["org_id"], coa_id, user["id"],
-            prof["full_name"] or user.get("username") or "—", user["role"], body.meaning,
-            body.statement)
+        try:
+            row = await c.fetchrow(
+                "INSERT INTO qc_signatures(org_id, object_type, object_id, signer_id, signer_name,"
+                " signer_role, meaning, statement) VALUES ($1,'qc_certificate',$2,$3,$4,$5,$6,$7)"
+                " RETURNING *",
+                user["org_id"], coa_id, user["id"],
+                prof["full_name"] or user.get("username") or "—", user["role"], body.meaning,
+                body.statement)
+        except Exception as e:
+            # 0060: the same person signing the same meaning on the same record
+            # twice asserts nothing new — refuse rather than duplicate.
+            if "qc_signatures_unique_meaning_idx" in str(e):
+                raise HTTPException(
+                    409, f"You have already signed '{body.meaning}' on this certificate")
+            raise
         await safe_emit(c, user, verb="coa_signed", object_type="qc_certificate",
                    object_id=coa_id, recipients=[], params={"meaning": body.meaning})
     return _sig_out(dict(row))

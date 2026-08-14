@@ -23,6 +23,13 @@ _CERT_PREFIX = {"ICOA": "iCoA-PP", "ECOA": "eCoA-PP", "COQ": "CoQ-PP",
                 "WATER": "WCoA-PP", "OTHER": "CoA-PP"}
 
 
+# Internal-CoA approval authority (owner decision 2026-08-14, per the handoff's
+# 3-tier chain Analyst → Senior Analyst → Head of QC): ADMIN + Head of QC only.
+# The Qualified Person deliberately does NOT approve internal CoAs — the QP
+# receives them as inputs to the separate Annex-16 batch-release decision.
+_ICOA_APPROVERS = ("ADMIN", "QC_MGR")
+
+
 async def _mint_cert_number(c, org_id: str, cert_type: str) -> str:
     """Advisory-locked per-(org, cert_type, year) sequential number, reset to
     0001 each 1 January — gap-free within the lock, never reused/reassigned.
@@ -520,8 +527,20 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                 raise HTTPException(409, "SUPERSEDED is set by releasing a revision, not directly")
             if target not in _COA_TRANSITIONS.get(cur["status"], set()):
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
-            if target in _COA_QP_TARGETS and user["role"] not in _QP_ROLES:
-                raise HTTPException(403, f"{target} is a Qualified-Person decision")
+            # Approval authority is CERT-TYPE-AWARE (owner decision 2026-08-14,
+            # per the SP-COA-COQ handoff): an INTERNAL CoA is signed off by the
+            # 3-tier chain Analyst → Senior Analyst → Head of QC — no Qualified
+            # Person. Every other type (eCoA, CoQ, water, other) keeps the QP
+            # gate (Annex 16: external evidence and release stay QP decisions).
+            if target in _COA_QP_TARGETS:
+                if cur["cert_type"] == "ICOA":
+                    if user["role"] not in _ICOA_APPROVERS:
+                        raise HTTPException(
+                            403, f"{target} on an internal CoA is a Head-of-QC decision"
+                                 " (3-tier chain: Analyst → Senior Analyst → Head of QC;"
+                                 " the Qualified Person is not part of iCoA sign-off)")
+                elif user["role"] not in _QP_ROLES:
+                    raise HTTPException(403, f"{target} is a Qualified-Person decision")
             # A certificate cannot be APPROVED or RELEASED without a recorded
             # PASS/FAIL disposition — approval attests a decision, and there is
             # none to attest until one is on record. The effective disposition is
@@ -546,16 +565,22 @@ async def update_coa(coa_id: str, body: CoaPatch, user: dict = Depends(require_r
                 extra_args.append(user["id"]); extra_sql.append(f"reviewer_id=${'PLACEHOLDER'}")
             if target == "APPROVED":
                 # Same second-person principle as REVIEWED: the approver must
-                # not be anyone who produced the data. (Reviewer == approver
-                # is NOT restricted here — this codebase's established model
-                # is a single QP walking a cert through REVIEWED->APPROVED->
-                # RELEASED, exercised throughout the existing test suite; only
-                # analyst self-approval was the confirmed gap.)
+                # not be anyone who produced the data. For non-ICOA types,
+                # reviewer == approver stays permitted (a single QP walking a
+                # cert through REVIEWED->APPROVED->RELEASED is the established
+                # model). For ICOA the handoff's 3-tier chain requires THREE
+                # distinct humans — the approver must also differ from the
+                # reviewer-of-record.
                 entered = await c.fetchval(
                     "SELECT 1 FROM qc_results WHERE coa_id=$1 AND analyst_id=$2 LIMIT 1",
                     coa_id, user["id"])
                 if entered or (cur["analyst_id"] and str(cur["analyst_id"]) == str(user["id"])):
                     raise HTTPException(403, "The approver must be a different person than the analyst")
+                if (cur["cert_type"] == "ICOA" and cur["reviewer_id"]
+                        and str(cur["reviewer_id"]) == str(user["id"])):
+                    raise HTTPException(
+                        403, "Internal CoA sign-off is a 3-tier chain — the approver must be"
+                             " a different person than the reviewer as well as the analyst")
                 extra_args.append(user["id"]); extra_sql.append(f"approver_id=${'PLACEHOLDER'}")
         fields, args = [], []
         _NULLABLE = {"source_lab", "laboratory_id", "report_date", "retention_start",
