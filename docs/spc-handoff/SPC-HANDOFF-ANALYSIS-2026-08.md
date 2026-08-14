@@ -136,17 +136,23 @@ is the layout + fixture set to match.
 
 ## 7. Concrete WWF work plan derived from all of the above
 
-| # | Change | Where | Size |
+| # | Change | Where | Status (2026-08-14) |
 |---|--------|-------|------|
-| 1 | Relax ladder validation: allow non-meeting adjacent tiers (ordered, non-overlapping); keep top=30/bottom=floor checks | `backend/app/api/qc/potency.py` `_validate_ladder` + tests | S |
-| 2 | Seed the 71-strain ladder catalogue from `imb_grade_ladders.json` (DRAFT; human approves) — likely as an admin import endpoint or a seed script | backend + script | M |
-| 3 | Batch commercial identity (Original→Neu/brand/label per batch, Portfolio-Master import) | new migration + API; owner to confirm modelling | M-L |
-| 4 | iCoA 3-tier signoff chain (analyst → senior analyst → HoQC, three distinct persons) on the internal-CoA path | certificates/signatures | M |
-| 5 | Verify app doc-number prefixes match `CoQ-PP-` / `iCoA-PP-` / `eCoA-PP-` YYYY-NNNN | cert_register / ecoa | S |
-| 6 | Document templates: ImB per-strain spec + iCoA single-parameter renders in the app (DocEngine or HTML) using the archives' masters as the layout source | coq_docx/DocEngine | L |
-| 7 | IMG spec facts as reference data (packaging master: QCSP-RMI-P0005-v1, 4-cell material master) | docs/reference | S |
+| 1 | Relax ladder validation: ordered + non-overlapping (0.10-gap brackets legal, overlap 422) | `potency.py` `_validate_ladder` | **DONE** — commit "bracket-style tiers" |
+| 2 | Seed the 71-strain catalogue as DRAFT (auto-create cultivars, idempotent, dry-run) | `POST /qc/potency-specs/import` + `app/data/imb_grade_ladders.json` | **DONE** |
+| 3 | Batch commercial identity — full table + API + Portfolio-Master import + CoQ-detail surfacing | migration **0059** + `qc/commercial.py` | **DONE** (owner: full table) |
+| 4 | iCoA 3-tier chain: **HoQC-only** approval (QP 403 on ICOA), analyst≠reviewer≠approver, signature dedup | `certificates.py` + migration **0060** | **DONE** (owner: no QP — breaking) |
+| 5 | Doc-number prefixes already conform; fixed the **UTC-year** defect — numbers now carry the facility year (`SITE_YEAR_SQL`, 13 mint sites, new static guard) | `worktime.py` + qc modules | **DONE** |
+| 6 | Faithful A4 HTML documents: ImB per-strain spec (owner's own archive template, tokenized) + single-parameter iCoA (design-system shell) | `qc/spec_html.py` + `app/data/imb_spec_template.html` | **DONE** (owner: HTML via FastAPI) |
+| 7 | IMG packaging facts as reference (QCSP-RMI-P0005-v1, 4-cell material master) | §5 of this document | **DONE** (documented here) |
 
-Items 1–2 are unambiguous and grounded; 3–6 need an owner "go" on modelling
-depth (they add new concepts). The archives themselves are the layout source of
-truth — masters in `documents/` and `PROD_SPEC/`, curated copies in
-`Final_Docs/` (never edit curated copies; ImB HANDOFF §5).
+Frontend shipped with them: the `qcpotency` view (registry/approve/supersede/
+import/A4 links), the CoQ compile cultivar picker (ladder freezing was
+unreachable from the UI before), the commercial-identity row on the CoQ
+detail, and ICOA-vs-QP button gating.
+
+Still open (unchanged, needs owner/QA decisions): the eCoA *document* series
+`PP-ECOA-` vs `eCoA-PP-`; the legacy global Engine-B sequences; signatures on
+`qc_coq` rows (aggregation CoQs still render the honest no-signature block).
+The archives remain the layout source of truth — masters in `documents/` and
+`PROD_SPEC/`, curated copies in `Final_Docs/` (never edit curated copies).
