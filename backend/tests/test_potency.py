@@ -78,7 +78,7 @@ async def test_provisional_ladder_is_flagged(client, admin_headers):
     assert spec["data_supported"] is False
 
 
-async def test_ladder_must_tile_floor_to_thirty(client, admin_headers):
+async def test_ladder_must_be_ordered_within_floor_and_thirty(client, admin_headers):
     cv = await _cultivar(client, admin_headers, code="BAD", name="Bad Data")
 
     async def expect_422(ranges, floor=13.83, needle=None):
@@ -97,10 +97,11 @@ async def test_ladder_must_tile_floor_to_thirty(client, admin_headers):
     await expect_422([{"tier": 1, "range_min": 20, "range_max": 28, "nominal": 24},
                       {"tier": 2, "range_min": 13.83, "range_max": 20, "nominal": 16}],
                      needle="top out")
-    # a gap between tiers (they do not meet)
-    await expect_422([{"tier": 1, "range_min": 24, "range_max": 30, "nominal": 27},
+    # OVERLAPPING tiers — two tiers claiming one value is never acceptable
+    # (gaps between brackets ARE allowed; see the bracket-style test below)
+    await expect_422([{"tier": 1, "range_min": 20, "range_max": 30, "nominal": 25},
                       {"tier": 2, "range_min": 13.83, "range_max": 22, "nominal": 18}],
-                     needle="do not meet")
+                     needle="overlap")
     # bottom tier does not start at the floor
     await expect_422([{"tier": 1, "range_min": 26, "range_max": 30, "nominal": 28},
                       {"tier": 2, "range_min": 20, "range_max": 26, "nominal": 23}],
@@ -108,6 +109,45 @@ async def test_ladder_must_tile_floor_to_thirty(client, admin_headers):
     # nominal outside its range
     await expect_422([{"tier": 1, "range_min": 20, "range_max": 30, "nominal": 40},
                       {"tier": 2, "range_min": 13.83, "range_max": 20, "nominal": 16}])
+
+
+# The standard QCSP 001 bracket split (31 of the 71 catalogue strains): brackets
+# with a deliberate 0.10-pp gap between tiers — NOT a contiguous tiling.
+STANDARD_BRACKET = [
+    {"tier": 1, "range_min": 27.00, "range_max": 30.00, "nominal": 28.50},
+    {"tier": 2, "range_min": 23.00, "range_max": 26.90, "nominal": 24.95},
+    {"tier": 3, "range_min": 16.00, "range_max": 22.90, "nominal": 19.45},
+    {"tier": 4, "range_min": 5.00, "range_max": 15.90, "nominal": 10.45},
+]
+
+
+async def test_bracket_style_ladder_with_gaps_is_accepted(client, admin_headers):
+    """The 0.10-pp bracket gaps of the standard QCSP 001 split are valid — and a
+    value falling inside a gap grades as the tier BELOW it (it never reached the
+    upper bracket's minimum)."""
+    cv = await _cultivar(client, admin_headers, code="AA", name="Amsterdam Amnesia")
+    _, qc1 = await _actor(client, admin_headers, "QC_MGR")
+    _, qc2 = await _actor(client, admin_headers, "QC_MGR")
+    spec = await _ladder(client, qc1, cv["id"], version="v1", floor=5.00,
+                         ranges=STANDARD_BRACKET, n_batches=0)
+    assert spec["status"] == "DRAFT"
+    assert (await client.post(f"/qc/potency-specs/{spec['id']}/approve", headers=qc2)).status_code == 200
+
+    async def disp(v):
+        r = await client.get("/qc/potency-disposition",
+                             params={"cultivar_id": cv["id"], "total_d9_thc": v},
+                             headers=admin_headers)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    assert (await disp(27.00))["disposition"]["spec"] == "Spec I"
+    # 26.95 sits in the 26.90–27.00 gap: it never reached Grade I's 27.00 floor,
+    # so it grades as Spec II — the tier below the gap.
+    assert (await disp(26.95))["disposition"]["spec"] == "Spec II"
+    assert (await disp(26.90))["disposition"]["spec"] == "Spec II"
+    assert (await disp(15.95))["disposition"]["spec"] == "Spec IV"
+    below = await disp(4.9)
+    assert below["below_spec"] is True and below["disposition"] is None
 
 
 async def test_version_collision_is_409(client, admin_headers):
@@ -198,9 +238,9 @@ async def test_approved_ladder_is_immutable_edit_goes_through_new_version(client
 async def test_patch_ranges_revalidates(client, admin_headers):
     cv = await _cultivar(client, admin_headers, code="PR", name="PatchRanges")
     spec = await _ladder(client, admin_headers, cv["id"])
-    # Replacing the ladder with a broken (non-meeting) one is rejected.
+    # Replacing the ladder with a broken (overlapping) one is rejected.
     r = await client.patch(f"/qc/potency-specs/{spec['id']}",
-                           json={"ranges": [{"tier": 1, "range_min": 24, "range_max": 30, "nominal": 27},
+                           json={"ranges": [{"tier": 1, "range_min": 20, "range_max": 30, "nominal": 27},
                                             {"tier": 2, "range_min": 13.83, "range_max": 22, "nominal": 18}]},
                            headers=admin_headers)
     assert r.status_code == 422

@@ -78,11 +78,19 @@ class PotencySpecPatch(BaseModel):
 
 
 def _validate_ladder(floor_pct: float, ranges: list[RangeIn]) -> None:
-    """A ladder must TILE [floor, 30 %] with no gap and no overlap — that total
-    coverage is exactly what makes a batch's disposition unambiguous. Enforced:
-    tiers are 1..N contiguous; Spec I (tier 1) tops at 30 %; adjacent tiers meet
-    at a shared boundary; the bottom tier bottoms at the floor; each nominal sits
-    inside its own range. Raises 422 on any violation."""
+    """A ladder must cover [floor, 30 %] as ORDERED, NON-OVERLAPPING brackets.
+
+    Two authored styles exist in PP-QC-SPEC-001 / QCSP 001 (both owner-approved,
+    seen across the 71-strain catalogue): CONTIGUOUS ladders whose tiers meet at
+    a shared boundary (Grape Pie: … 22–26 / 18–22 …) and BRACKET ladders with a
+    deliberate 0.10-pp gap between tiers (standard split: I 27.00–30.00 ·
+    II 23.00–26.90 · III 16.00–22.90 · IV 5.00–15.90). Gaps are fine — a value
+    inside a gap belongs to the tier BELOW it (disposition_for picks the largest
+    range_min ≤ v, so 26.95 grades as Spec II: it never reached 27.00). Overlap
+    is NOT fine — an overlapping pair would make two tiers claim one value.
+    Enforced: tiers are 1..N contiguous; Spec I (tier 1) tops at 30 %; adjacent
+    tiers are strictly ordered without overlap; the bottom tier bottoms at the
+    floor; each nominal sits inside its own range. Raises 422 on any violation."""
     tiers = sorted(r.tier for r in ranges)
     if tiers != list(range(1, len(ranges) + 1)):
         raise HTTPException(
@@ -100,10 +108,11 @@ def _validate_ladder(floor_pct: float, ranges: list[RangeIn]) -> None:
         raise HTTPException(
             422, f"Spec I (tier 1) must top out at {_CEILING:.0f} % — got {ordered[0].range_max}")
     for hi, lo in zip(ordered, ordered[1:]):
-        if abs(hi.range_min - lo.range_max) > _EPS:
+        if hi.range_min < lo.range_max - _EPS:
             raise HTTPException(
-                422, f"Spec {_ROMAN[hi.tier]} and Spec {_ROMAN[lo.tier]} do not meet:"
-                     f" {hi.range_min} vs {lo.range_max} — the ladder must tile [floor, 30] with no gap")
+                422, f"Spec {_ROMAN[hi.tier]} and Spec {_ROMAN[lo.tier]} overlap:"
+                     f" {hi.range_min} < {lo.range_max} — adjacent tiers must be ordered"
+                     " brackets (meeting or gapped), never overlapping")
     if abs(ordered[-1].range_min - floor_pct) > _EPS:
         raise HTTPException(
             422, f"the bottom tier (Spec {_ROMAN[ordered[-1].tier]}) must start at the floor"
