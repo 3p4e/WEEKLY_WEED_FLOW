@@ -38,7 +38,11 @@
     SUPERSEDED: { en: 'Superseded', mk: 'Заменето', c: 'var(--ink-3)' },
     VOIDED: { en: 'Voided', mk: 'Поништено', c: 'var(--red)' },
   };
-  // legal moves, mirroring backend qc.py _COA_TRANSITIONS / _COA_QP_TARGETS:
+  // legal moves, mirroring backend qc.py _COA_TRANSITIONS / _COA_QP_TARGETS.
+  // Approval authority is CERT-TYPE-AWARE (2026-08-14): an INTERNAL CoA is
+  // approved/released by the Head of QC (_COQ mirror of _ICOA_APPROVERS — no
+  // QP), every other type by the Qualified Person. The server enforces it;
+  // this only decides which user sees the Advance button.
   // NEXT is the forward chain, BACK the one allowed kick-back (REVIEWED may
   // return to DRAFT on review findings — a writer move, not QP-gated).
   const NEXT = { DRAFT: 'REVIEWED', REVIEWED: 'APPROVED', APPROVED: 'RELEASED' };
@@ -489,7 +493,7 @@
       </div>
       ${st.preview === c.id ? coqPreview(d) : ''}
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
-        ${nxt && (!QP_TARGETS[nxt] || canQP())
+        ${nxt && (!QP_TARGETS[nxt] || (c.cert_type === 'ICOA' ? canCoq() : canQP()))
           ? (QP_TARGETS[nxt] && !c.decision
               ? `<button class="btn btn-sm" disabled title="${AL('Record a PASS or FAIL disposition before approving — approval attests the decision (§6.4)', 'Запишете PASS или FAIL одлука пред одобрување — одобрувањето ја потврдува одлуката (§6.4)')}">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>`
               : `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaAdvance('${c.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en || nxt, (ST[nxt]||{}).mk || nxt))}</button>`)
@@ -570,12 +574,20 @@
   // the compiler cannot approve their own compilation), NO QP signature (it is
   // an input TO the QP batch-release decision). Coexists with the per-
   // certificate CoQ render above.
-  GF.WWF._qccoq = { list: null, sel: null, detail: null, loading: false, error: null };
+  GF.WWF._qccoq = { list: null, sel: null, detail: null, loading: false, error: null,
+                    cultivars: null };
 
   GF.WWF.loadQcCoqs = async () => {
     const st = GF.WWF._qccoq;
     st.loading = true; st.error = null;
-    try { st.list = await GF.API.qcCoqs({}); }
+    try {
+      st.list = await GF.API.qcCoqs({});
+      // cultivar picker data for the compile form — a compiled CoQ freezes the
+      // cultivar's APPROVED potency ladder, so the picker is how grading starts
+      if (st.cultivars === null) {
+        st.cultivars = (await GF.API.cultivars().catch(() => ({ cultivars: [] }))).cultivars || [];
+      }
+    }
     catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'qccoa') GF.render.all();
@@ -605,6 +617,8 @@
     const pn = g('qcq-product').trim(); if (pn) body.product_name = pn;
     const bs = g('qcq-size').trim(); if (bs) body.batch_size = bs;
     const md = g('qcq-mfg'); if (md) body.manufacture_date = md;
+    // freeze the cultivar's APPROVED potency ladder at compile (Phase B)
+    const cv = g('qcq-cultivar'); if (cv) body.cultivar_id = cv;
     try {
       const coq = await GF.API.qcCompileCoq(body);
       GF.toast(AL('CoQ compiled: ', 'CoQ составен: ') + coq.coq_number);
@@ -678,6 +692,7 @@
         <span>${AL('Status', 'Статус')}</span><b>${stChip(q.status)}</b>
         <span>${AL('Conforms', 'Задоволува')}</span><b>${compliesChip(q.overall_conform)}</b>
         ${coqPotencyRows(d.potency)}
+        ${d.commercial ? `<span>${AL('Commercial identity', 'Комерцијален идентитет')}</span><b>${GF.esc(d.commercial.neu_name)}${d.commercial.brand ? ` <span class="chip-opt">${GF.esc(d.commercial.brand)}</span>` : ''}${d.commercial.final_label ? ` <span class="ana-note mono">${GF.esc(d.commercial.final_label)}</span>` : ''}${d.commercial.thc_bracket ? ` <span class="ana-note">${GF.esc(d.commercial.thc_bracket)}</span>` : ''}</b>` : ''}
         ${q.spec_reference ? `<span>${AL('Specification', 'Спецификација')}</span><b class="mono">${GF.esc(q.spec_reference)}</b>` : ''}
         ${q.product_name ? `<span>${AL('Product', 'Производ')}</span><b>${GF.esc(q.product_name)}</b>` : ''}
         ${q.manufacture_date ? `<span>${AL('Mfg. date', 'Датум на производство')}</span><b class="mono">${GF.esc(q.manufacture_date)}</b>` : ''}
@@ -708,10 +723,13 @@
     }
     const specOpts = (st.specs || []).map(s =>
       `<option value="${s.id}">${GF.esc(s.spec_id)} · ${GF.esc(s.material_code)}</option>`).join('');
+    const cvOpts = (cq.cultivars || []).filter(v => v.is_active !== false).map(v =>
+      `<option value="${v.id}">${GF.esc(v.code)} · ${GF.esc(v.name)}</option>`).join('');
     const compile = canWrite() ? `
       <div class="qcs-form" style="margin-bottom:10px">
         <input id="qcq-batch" placeholder="${AL('Batch id', 'Серија')}">
         <select id="qcq-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
+        <select id="qcq-cultivar" title="${AL('Freezes the APPROVED potency ladder of the cultivar on this CoQ — the batch grades against it', 'Ја замрзнува ОДОБРЕНАТА скала на сортата на овој CoQ — серијата се оценува според неа')}"><option value="">${AL('Cultivar (grades the batch)…', 'Сорта (ја оценува серијата)…')}</option>${cvOpts}</select>
         <input id="qcq-product" placeholder="${AL('Product name (opt.)', 'Име на производ (опц.)')}">
         <input id="qcq-size" placeholder="${AL('Batch size (opt.)', 'Големина (опц.)')}">
         <label class="ana-note">${AL('Mfg.', 'Произв.')} <input id="qcq-mfg" type="date"></label>

@@ -254,6 +254,17 @@ GF.API = {
   qcReviewCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/review'); },
   qcVoidCoq(id, reason)    { return this._req('POST', '/qc/coq/' + id + '/void', { reason }); },
   qcRenderCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/render'); },
+  // QC potency ladders (PP-QC-SPEC-001 / QCSP 001) + batch commercial identities
+  qcPotencySpecs(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/potency-specs' + (u?'?'+u:'')); },
+  qcPotencySpec(id)        { return this._req('GET', '/qc/potency-specs/' + id); },
+  qcCreatePotencySpec(b)   { return this._req('POST', '/qc/potency-specs', b); },
+  qcApprovePotencySpec(id) { return this._req('POST', '/qc/potency-specs/' + id + '/approve'); },
+  qcSupersedePotencySpec(id){ return this._req('POST', '/qc/potency-specs/' + id + '/supersede'); },
+  qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
+  qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
+  qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
+  qcCommercialIdentities(q){ const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/commercial-identities' + (u?'?'+u:'')); },
+  qcImportCommercial()     { return this._req('POST', '/qc/commercial-identities/import'); },
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },

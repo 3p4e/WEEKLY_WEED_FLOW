@@ -82,3 +82,73 @@ test('no frozen ladder → no grade is fabricated on the CoQ', () => {
   assert.ok(!html.includes('PP-QC-SPEC-001'), 'no ladder cited when none was frozen');
   assert.ok(!/>\s*(Grade|Оцена)\s*</.test(html), 'no Grade row rendered');
 });
+
+test('commercial identity renders only when present', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+    coas: [], loading: false, error: null, specs: [], samples: [], labs: [],
+    q: '', status: '', sel: null, detail: null,
+  });
+  const coq = { id: 'c2', coq_number: 'CoQ-PP-2026-0009', batch_id: 'GP0824_02',
+                status: 'APPROVED', overall_conform: true };
+  w.GF.WWF._qccoq = {
+    list: [coq], sel: 'c2', loading: false, error: null, cultivars: [],
+    detail: { coq, lines: [], sources: [], potency: null,
+              commercial: { neu_name: 'Grape Pie', brand: 'STEADY',
+                            final_label: 'STEADY GP XY/1', thc_bracket: '22–25%' } },
+  };
+  let html = w.GF.views.qccoa();
+  assert.ok(html.includes('Grape Pie') && html.includes('STEADY GP XY/1'), 'identity shown');
+  // absent → the row disappears entirely (never fabricated)
+  w.GF.WWF._qccoq.detail.commercial = null;
+  html = w.GF.views.qccoa();
+  assert.ok(!/Commercial identity|Комерцијален идентитет/.test(html), 'no identity row');
+});
+
+test('the CoQ compile form carries the cultivar picker and sends cultivar_id', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+    coas: [], loading: false, error: null, specs: [], samples: [], labs: [],
+    q: '', status: '', sel: null, detail: null,
+  });
+  w.GF.WWF._qccoq = { list: [], sel: null, loading: false, error: null, detail: null,
+                      cultivars: [{ id: 'cv9', code: 'GP', name: 'Grape Pie', is_active: true }] };
+  const html = w.GF.views.qccoa();
+  assert.ok(html.includes('qcq-cultivar'), 'cultivar select present');
+  assert.ok(html.includes('GP · Grape Pie'), 'cultivar option rendered');
+  // drive qcCoqCompile: stub the DOM getters + API, assert the payload
+  const fields = { 'qcq-batch': 'GP0824_02', 'qcq-spec': 'spec1', 'qcq-product': '',
+                   'qcq-size': '', 'qcq-mfg': '', 'qcq-cultivar': 'cv9' };
+  w.document.getElementById = (id) => (id in fields ? { value: fields[id] } : null);
+  let sent = null;
+  w.GF.API.qcCompileCoq = async (b) => { sent = b; return { id: 'x', coq_number: 'CoQ-PP-2026-0010' }; };
+  w.GF.API.qcCoqs = async () => [];
+  w.GF.toast = () => {};
+  await w.GF.WWF.qcCoqCompile();
+  assert.ok(sent, 'compile called');
+  assert.equal(sent.cultivar_id, 'cv9', 'cultivar_id sent → ladder freezes');
+});
+
+test('ICOA approve gating is HoQC, other types stay QP', () => {
+  const h = load();   // QC_MGR
+  const w = h.window;
+  const mk = (cert_type) => {
+    w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+      coas: [{ id: 'a1', coa_number: 'iCoA-PP-2026-0001', batch_id: 'B', cert_type,
+               status: 'REVIEWED', decision: 'PASS' }],
+      loading: false, error: null, specs: [], samples: [], labs: [],
+      q: '', status: '', sel: 'a1',
+      detail: { coa: { id: 'a1', coa_number: 'X', batch_id: 'B', cert_type,
+                       status: 'REVIEWED', decision: 'PASS' },
+                results: [], signatures: [], laboratory: null },
+    });
+    w.GF.WWF._qccoq = { list: [], sel: null, loading: false, error: null, detail: null, cultivars: [] };
+    return w.GF.views.qccoa();
+  };
+  // a QC_MGR sees Advance-to-APPROVED on an ICOA (HoQC approves internal CoAs)…
+  assert.ok(mk('ICOA').includes("qcCoaAdvance('a1','APPROVED')"), 'ICOA approve offered to QC_MGR');
+  // …but NOT on an ECOA (QP-only there; the kick-back-to-draft button remains)
+  assert.ok(!mk('ECOA').includes("qcCoaAdvance('a1','APPROVED')"), 'ECOA approve hidden from QC_MGR');
+});
