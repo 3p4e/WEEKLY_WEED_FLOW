@@ -3,7 +3,7 @@ from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
 from datetime import date
-from app.worktime import SITE_TODAY_SQL, facility_today
+from app.worktime import SITE_TODAY_SQL, facility_today, SITE_YEAR_SQL
 from fastapi import Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from urllib.parse import quote as _urlquote
@@ -299,7 +299,7 @@ async def _mint_doc_number(c, org_id: str) -> str:
     every other QC number series (_mint_cert_number) follows. Forward-only —
     pre-existing 'PP-ECOA-YYYY-NNNN' numbers in this org continue from the org's
     own max, so the switch never collides with an already-issued number."""
-    yr = await c.fetchval("SELECT to_char(now(),'YYYY')")
+    yr = await c.fetchval(f"SELECT {SITE_YEAR_SQL}")  # facility year, not UTC  # nosec B608
     await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"ecoanum:{org_id}:{yr}")
     seq = await c.fetchval(
         "SELECT coalesce(max((regexp_match(doc_number, '-([0-9]+)$'))[1]::int), 0) + 1"

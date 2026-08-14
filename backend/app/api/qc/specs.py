@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
@@ -177,7 +178,7 @@ async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS)
                 "INSERT INTO qc_specifications(org_id, spec_id, material_code, material_name_en,"
                 " material_name_mk, version, effective_date, thc_grade, thc_acceptance_min,"
                 " thc_acceptance_max, notes, created_by, updated_by)"
-                " VALUES ($1, 'PP-SPEC-' || to_char(now(),'YYYY') || '-' ||"
+                f" VALUES ($1, 'PP-SPEC-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
                 "         lpad(nextval('qc_spec_id_seq')::text, 4, '0'),"
                 "         $2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$11) RETURNING *",
                 user["org_id"], body.material_code, body.material_name_en, body.material_name_mk,

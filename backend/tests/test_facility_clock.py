@@ -69,6 +69,30 @@ def test_no_naive_sql_today_anywhere_in_the_app():
     )
 
 
+def test_no_naive_sql_year_anywhere_in_the_app():
+    """The YEAR twin of the check above — for document numbers.
+
+    Every QC number series embeds a year (`CoQ-PP-YYYY-NNNN`,
+    `PP-SPEC-YYYY-NNNN`, …). `to_char(now(),'YYYY')` renders that year under
+    the DATABASE's UTC zone, so a certificate issued between facility-midnight
+    and UTC-midnight on 31 December would be numbered into the PREVIOUS year —
+    a mis-serialized GxP record, found in the 2026-08 SPC-handoff conformance
+    sweep (13 mint sites). Use worktime.SITE_YEAR_SQL."""
+    offenders = []
+    for f in sorted(APP.rglob("*.py")):
+        if f.name == "worktime.py":   # defines the replacement
+            continue
+        text = f.read_text()
+        text = re.sub(r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')', "", text)
+        text = re.sub(r"#[^\n]*", "", text)
+        for m in re.finditer(r"to_char\(\s*now\(\)\s*,\s*'YYYY'\)", text, re.IGNORECASE):
+            offenders.append(f"{f.relative_to(APP.parent)}: {m.group(0)}")
+    assert offenders == [], (
+        "naive SQL year in a document number — renders under the database's UTC zone; "
+        "use worktime.SITE_YEAR_SQL: " + "; ".join(offenders)
+    )
+
+
 def test_facility_today_is_the_snapshot_tz_date():
     tz = ZoneInfo(settings.snapshot_tz)
     before = datetime.now(tz).date()

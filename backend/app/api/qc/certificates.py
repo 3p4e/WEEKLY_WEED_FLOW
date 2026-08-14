@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
@@ -30,7 +31,7 @@ async def _mint_cert_number(c, org_id: str, cert_type: str) -> str:
     mint under the new per-type prefix, so the two formats coexist in the
     register by design."""
     prefix = _CERT_PREFIX.get(cert_type, "CoA-PP")
-    yr = await c.fetchval("SELECT to_char(now(),'YYYY')")
+    yr = await c.fetchval(f"SELECT {SITE_YEAR_SQL}")  # facility year, not UTC  # nosec B608
     await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"certnum:{org_id}:{cert_type}:{yr}")
     seq = await c.fetchval(
         "SELECT coalesce(max((regexp_match(coa_number, '-([0-9]+)$'))[1]::int), 0) + 1"

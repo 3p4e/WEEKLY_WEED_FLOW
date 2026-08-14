@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
@@ -209,7 +210,7 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
             "INSERT INTO qc_oos_records(org_id, oos_number, result_id, sample_id, batch_id,"
             " material_code, test_name, method_ref, specification_value, obtained_value, oos_type,"
             " risk_level, detection_date, detected_by_id, timeline_deadline, notes, created_by, updated_by)"
-            " VALUES ($1, 'PP-OOS-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-OOS-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_oos_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
             user["org_id"], body.result_id, body.sample_id, body.batch_id, body.material_code,

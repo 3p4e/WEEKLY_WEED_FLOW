@@ -34,6 +34,11 @@ BUCKETS = ("regular", "overtime", "night", "weekend")
 # the literal. tests/test_facility_clock.py bans CURRENT_DATE app-wide.
 SITE_TZ_SQL = "'" + settings.snapshot_tz.replace("'", "''") + "'"
 SITE_TODAY_SQL = f"(now() AT TIME ZONE {SITE_TZ_SQL})::date"
+# The year for document numbers (CoQ-PP-YYYY-NNNN, PP-SPEC-YYYY-NNNN, ...) —
+# the FACILITY's year, not the database's UTC year. A certificate issued
+# between facility-midnight and UTC-midnight on 31 Dec would otherwise carry
+# the previous year in its number (same nightly off-by-one as SITE_TODAY_SQL).
+SITE_YEAR_SQL = f"to_char(now() AT TIME ZONE {SITE_TZ_SQL},'YYYY')"
 
 
 def facility_today():

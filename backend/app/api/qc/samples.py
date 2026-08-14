@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
@@ -121,7 +122,7 @@ async def create_plan(body: PlanIn, user: dict = Depends(require_role(*_WRITERS)
         row = await c.fetchrow(
             "INSERT INTO qc_sampling_plans(org_id, plan_id, material_code, sampling_frequency,"
             " sample_size_formula, min_sample_size, max_sample_size, created_by, updated_by)"
-            " VALUES ($1, 'PP-SPL-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-SPL-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_sampling_plan_id_seq')::text, 4, '0'),"
             "         $2,$3,COALESCE($4,'ROUNDUP(SQRT(N)*1.5)'),$5,$6,$7,$7) RETURNING *",
             user["org_id"], body.material_code, body.sampling_frequency, body.sample_size_formula,
@@ -175,7 +176,7 @@ async def create_sample(body: SampleIn, user: dict = Depends(require_role(*_WRIT
             " material_name_en, material_name_mk, sampling_date, location, quantity, quantity_unit,"
             " retention_sample, sample_kind, retention_expiry, parent_id, sampling_plan_id, notes,"
             " created_by, updated_by)"
-            " VALUES ($1, 'PP-SMP-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-SMP-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_sample_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$12,$13::date,$14,$15,$16,$17,$17) RETURNING *",
             user["org_id"], body.batch_id, body.material_code, body.sample_type,

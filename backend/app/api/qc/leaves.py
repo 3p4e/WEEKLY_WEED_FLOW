@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from datetime import date
@@ -178,7 +179,7 @@ async def create_water(body: WaterIn, user: dict = Depends(require_role(*_WRITER
         row = await c.fetchrow(
             "INSERT INTO qc_water_tests(org_id, water_test_id, location, grade, result_date,"
             " parameters, passed, ooe, notes, created_by, updated_by)"
-            " VALUES ($1, 'PP-WT-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-WT-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_wt_id_seq')::text, 4, '0'),"
             "         $2,$3,$4::date,$5,$6,$7,$8,$9,$9) RETURNING *",
             user["org_id"], body.location, body.grade, body.result_date, body.parameters,
@@ -223,7 +224,7 @@ async def create_stability(body: StabilityIn, user: dict = Depends(require_role(
             "INSERT INTO qc_stability_studies(org_id, study_id, study_type, material_code,"
             " material_name_en, material_name_mk, batches, started, protocol, schedule, notes,"
             " created_by, updated_by)"
-            " VALUES ($1, 'PP-STB-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-STB-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_stb_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11,$11) RETURNING *",
             user["org_id"], body.study_type, body.material_code, body.material_name_en,
@@ -274,7 +275,7 @@ async def create_transport(body: TransportIn, user: dict = Depends(require_role(
         row = await c.fetchrow(
             "INSERT INTO qc_sample_transports(org_id, transport_id, sample_id, batch_id,"
             " external_lab, tests, notes, created_by, updated_by)"
-            " VALUES ($1, 'PP-TRN-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-TRN-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_trn_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7,$7) RETURNING *",
             user["org_id"], body.sample_id, body.batch_id, body.external_lab, body.tests,

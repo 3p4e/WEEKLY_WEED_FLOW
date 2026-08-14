@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from datetime import datetime
@@ -248,7 +249,7 @@ async def create_rqs(body: RqsIn, user: dict = Depends(require_role(*_WRITERS)))
         # reset on 01 January. The advisory xact-lock serialises concurrent
         # inserts for this org+year so NNN is gap-free; issued numbers are never
         # reused. Legacy PP-RQS-* rows don't match the pattern and are ignored.
-        yr = await c.fetchval("SELECT to_char(now(),'YYYY')")
+        yr = await c.fetchval(f"SELECT {SITE_YEAR_SQL}")  # facility year, not UTC  # nosec B608
         await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"rqsord:{user['org_id']}:{yr}")
         seq = await c.fetchval(
             "SELECT coalesce(max((regexp_match(rqs_number, '-([0-9]+)$'))[1]::int), 0) + 1"
@@ -424,7 +425,7 @@ async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS)))
             " sampling_coordinates, barrel_numbers, num_containers, destination_facility,"
             " destination_location, planned_departure, planned_arrival, sampled_by_id, escort_id,"
             " sample_id, sampling_equipment, notes, created_by, updated_by)"
-            " VALUES ($1, 'PP-SFR-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-SFR-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_sfr_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
             user["org_id"], body.rqs_id, body.sampling_location, body.sampling_coordinates,

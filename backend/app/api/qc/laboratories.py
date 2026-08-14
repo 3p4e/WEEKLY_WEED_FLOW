@@ -1,4 +1,5 @@
 from app.db import rls
+from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from fastapi import Depends, HTTPException
@@ -124,7 +125,7 @@ async def create_lab(body: LabIn, user: dict = Depends(require_role(*_WRITERS)))
             "INSERT INTO qc_laboratories(org_id, lab_code, name, accreditation_body,"
             " accreditation_number, iso17025_scope, quality_agreement_ref, locale,"
             " decimal_separator, country, contact, notes, created_by, updated_by)"
-            " VALUES ($1, 'PP-LAB-' || to_char(now(),'YYYY') || '-' ||"
+            f" VALUES ($1, 'PP-LAB-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
             "         lpad(nextval('qc_lab_id_seq')::text, 4, '0'),"
             "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *",
             user["org_id"], body.name, body.accreditation_body, body.accreditation_number,
