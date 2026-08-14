@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ED2E8u5eHMmLY2ezdzuxUM8r15K2TbksC5PA7BD1hHCIdydhmrRkmmR9T0ND9hg
+\restrict l0KeVwBOkC37AXQ4cQIMjpgCh1OkKgBZ549HMr22BGghwI0Lbst9HizLVed8Q9T
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -197,6 +197,34 @@ ALTER TABLE public.audit_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MAXVALUE
     CACHE 1
 );
+
+
+--
+-- Name: batch_commercial_identities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_commercial_identities (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    batch_code text NOT NULL,
+    tranche smallint,
+    original_name text,
+    neu_name text NOT NULL,
+    brand text,
+    final_label text,
+    thc_declared numeric,
+    thc_bracket text,
+    volume_kg numeric,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT batch_commercial_identities_thc_check CHECK (((thc_declared IS NULL) OR ((thc_declared >= (0)::numeric) AND (thc_declared <= (100)::numeric)))),
+    CONSTRAINT batch_commercial_identities_volume_check CHECK (((volume_kg IS NULL) OR (volume_kg >= (0)::numeric)))
+);
+
+ALTER TABLE ONLY public.batch_commercial_identities FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2095,6 +2123,22 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: batch_commercial_identities batch_commercial_identities_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_commercial_identities
+    ADD CONSTRAINT batch_commercial_identities_batch_key UNIQUE (org_id, batch_code);
+
+
+--
+-- Name: batch_commercial_identities batch_commercial_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_commercial_identities
+    ADD CONSTRAINT batch_commercial_identities_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: biosecurity_events biosecurity_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2860,6 +2904,13 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: batch_commercial_identities_tranche_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX batch_commercial_identities_tranche_idx ON public.batch_commercial_identities USING btree (org_id, tranche);
+
+
+--
 -- Name: biosecurity_events_open_fail_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3529,6 +3580,13 @@ CREATE TRIGGER audit_ai_agent_bindings AFTER INSERT OR DELETE OR UPDATE ON publi
 --
 
 CREATE TRIGGER audit_ai_pins AFTER INSERT OR DELETE OR UPDATE ON public.ai_pins FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: batch_commercial_identities audit_batch_commercial_identities; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_batch_commercial_identities AFTER INSERT OR DELETE OR UPDATE ON public.batch_commercial_identities FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -4696,6 +4754,12 @@ CREATE POLICY audit_read ON public.audit_log FOR SELECT USING ((app.is_elevated(
 
 
 --
+-- Name: batch_commercial_identities; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_commercial_identities ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: biosecurity_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4844,6 +4908,13 @@ CREATE POLICY org_isolation ON public.ai_agent_bindings USING ((org_id = app.cur
 --
 
 CREATE POLICY org_isolation ON public.ai_pins USING (((org_id = app.current_org_id()) AND ((subject_user_id IS NULL) OR (subject_user_id = app.current_user_id()) OR app.is_elevated()))) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: batch_commercial_identities org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.batch_commercial_identities USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5579,5 +5650,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ED2E8u5eHMmLY2ezdzuxUM8r15K2TbksC5PA7BD1hHCIdydhmrRkmmR9T0ND9hg
+\unrestrict l0KeVwBOkC37AXQ4cQIMjpgCh1OkKgBZ549HMr22BGghwI0Lbst9HizLVed8Q9T
 

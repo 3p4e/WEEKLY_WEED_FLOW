@@ -754,7 +754,7 @@ def _stub_de(monkeypatch, resp):
 
 
 async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results=None,
-                        result_numeric=22.0):
+                        result_numeric=22.0, batch="B-COQ"):
     """A CoA driven to RELEASED with the given results. Header user is the
     analyst; qp_headers reviews (must differ from analyst) → approves → releases.
     The default result CITES the spec parameter — the COQ completeness gate
@@ -766,7 +766,7 @@ async def _released_coa(client, headers, qp_headers, material="COQ-MAT", results
                                 "upper_limit": 30.0}, headers=headers)
     assert p.status_code == 201, p.text
     # report_date + PASS disposition are WHO/Annex-16 mandatory COQ content
-    coa = await _coa(client, headers, spec["id"], batch="B-COQ", report_date="2026-07-01")
+    coa = await _coa(client, headers, spec["id"], batch=batch, report_date="2026-07-01")
     for r in (results or [{"parameter_id": p.json()["id"], "test_name": "Total THC",
                            "result_numeric": result_numeric,
                            "lower_limit": 10.0, "upper_limit": 30.0, "unit": "%",

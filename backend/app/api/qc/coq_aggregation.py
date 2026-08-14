@@ -175,10 +175,17 @@ async def get_coq(coq_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
         sources = await c.fetch(
             "SELECT * FROM qc_coq_sources WHERE coq_id=$1 ORDER BY coa_number", coq_id)
         disposition = await _coq_disposition(c, dict(row))
+        # Commercial identity (0059) — read-only companion data joined by the
+        # batch-code string. Absent row → absent key content; never fabricated,
+        # and never part of the certificate content itself.
+        commercial = await c.fetchrow(
+            "SELECT neu_name, brand, final_label, tranche, thc_bracket"
+            " FROM batch_commercial_identities WHERE batch_code=$1", row["batch_id"])
     return {"coq": _coq_out(dict(row)),
             "lines": [_coq_line_out(dict(r)) for r in lines],
             "sources": [_coq_source_out(dict(r)) for r in sources],
-            "potency": disposition}
+            "potency": disposition,
+            "commercial": dict(commercial) if commercial else None}
 
 
 @router.post("/coq", status_code=201)

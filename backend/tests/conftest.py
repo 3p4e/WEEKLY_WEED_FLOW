@@ -118,6 +118,9 @@ async def purge_org(org_id) -> None:
                   # parent, and the parent cites cultivars (RESTRICT) — so both
                   # must go before `cultivars` is purged below.
                   "qc_potency_spec_ranges", "qc_potency_specs",
+                  # commercial identities (0059): standalone, keyed by batch-code
+                  # string — no FK, position uncritical but grouped with QC.
+                  "batch_commercial_identities",
                   # tasks.batch_id cites plant_batches (RESTRICT, migration
                   # 0054), so every task must be gone before plant_batches is
                   # purged below — moved here from its old spot after
