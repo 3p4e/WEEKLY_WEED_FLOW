@@ -300,3 +300,74 @@ Its only edge over Gemini is physical data sovereignty; paid-tier Gemini already
 excludes prompts/files from training and human review contractually (only the free
 tier permits both). Revisit only if policy requires that no document leaves the
 facility - and test Cyrillic before committing to GPU spend.
+
+## 11. Ollama security: public exposure found and closed (2026-08-16)
+
+**The Ollama server was publicly reachable, unauthenticated.** The Hostinger
+template shipped `ollama-bm3e` with a Traefik route (`ollama-bm3e.srv1231216.hstgr.cloud`)
+AND a published host port. Ollama has **no built-in auth**, so from outside the
+network `GET /api/tags` listed all models, and `POST /api/pull` (disk-fill DoS),
+`DELETE /api/delete`, `POST /api/create` were all open. With RAGflow using it for
+OCR, confidential (`СТРОГО ДОВЕРЛИВО`) documents would have been processed by an
+internet-facing service.
+
+**Closed via the Hostinger VPS API** (`POST …/docker` on project `ollama-bm3e`):
+removed the Traefik labels, dropped `ports:` (now `expose: 11434` only), made
+`ai-net` membership + resource limits durable in the compose. Verified from
+outside: public URL → 404, host port → refused; from inside: RAGflow → Ollama on
+`ai-net` still works. Rollback JSON at `/opt/ai-stack/ollama-bm3e-compose.orig.json`.
+**Any Hostinger AI-app template may ship a public route — audit each one.**
+
+## 12. Local-model reality on this box (4 vCPU / 16 GB / no GPU)
+
+Extensive testing on the real scanned CoA `ППК26031.pdf` (150-DPI A4, 1241×1755):
+
+### Vision / OCR bake-off (local)
+| Model | Size | Cyrillic | Table | Values | Time | Verdict |
+|---|---|---|---|---|---|---|
+| **`qwen2.5vl:3b`** | 3.2 GB | ✅ 744 | ✅ **perfect markdown** | ✅ all correct | 336 s | **local winner** |
+| `glm-ocr` | 2.2 GB | ✅ 1277 | ❌ flattened to lists | ✅ | 295 s | removed |
+| `granite3.2-vision:2b` | 2.4 GB | ❌ 0 | ❌ | ❌ repeating-`1` loop | 681 s | removed |
+| `deepseek-ocr` | 6.7 GB | — | — | OOM-killed | — | removed |
+| `fredrezones55/chandra-ocr-2` | 5.8 GB | — | — | OOM-killed | — | removed |
+
+`qwen2.5vl:3b` is the only local model whose output is QC-grade: real
+analyte/limit/result markdown table, correct values (8.06 / 8.89 / 8.00 / 0.20 /
+BLQ), verbatim chemistry footnotes, one typo in the whole page (`Искрра`). Kept as
+the **sole local vision model** for documents too sensitive to send off-site.
+Everything ≥5.8 GB OOMs even post-reboot with ~10 GB free — the practical model
+ceiling here is ~3–4 GB weights; a dense 8B runs but is unreliable under load.
+
+### Dense vs MoE (text) — MoE LOSES on CPU
+Owner hypothesis was that MoE would fit/run better. Tested on the same box:
+| Model | Type | Active | tok/s |
+|---|---|---|---|
+| `phi4-mini` | dense 3.8B | 3.8B | **12.2** |
+| `Huihui-MoE-5B-A1.7B` | MoE | 1.7B | **2.6** (~5× slower) |
+| `Huihui-MoE-4.8B-A1.7B` (MXFP4) | MoE | 1.7B | broken quant (`EOF`) |
+| `qwen3:8b` | dense 8B | 8B | OOM under reasoning+context |
+
+**MoE saves compute, not RAM** — all experts stay resident, so a 12B-A4B still needs
+~8 GB. And on CPU the routing overhead + memory-bandwidth limit erased the
+fewer-active-params advantage: the dense 3.8B ran **4.7× faster** than the 1.7B-active
+MoE. MoE wins on GPUs, not here. Both MoE models removed. Also: Ollama rejects the
+`hf.co`→`huggingface.co` redirect on some GGUF repos (`realm host` error), and the
+`MXFP4_MOE` quant is unsupported by this Ollama version.
+
+## 13. Config changes + standing decisions
+
+- **Ollama memory cap removed** (owner request) — `mem_limit=0`; 3-CPU cap kept so a
+  load can't starve production of cores. Caveat recorded in the compose: with no
+  memory limit a runaway model can now OOM-kill **any** container (incl. the
+  WWF/Letta DBs), not just the ollama process.
+- **RAGflow OCR = `gemini-2.5-flash`** (owner decision) — corpus parser; ~$2.36 /
+  1000 pages, complete metadata capture. `qwen2.5vl:3b` via Ollama is the local
+  fallback for sensitive docs (wire in the RAGflow UI: Ollama provider, `img2txt`,
+  `qwen2.5vl:3b`, base URL `http://ollama-bm3e-ollama-1:11434`).
+- **RAGflow test datasets deleted** — the 8 VLM/OCR bake-off datasets removed; RAGflow
+  clean for real KB creation. Reminder: **embedding model locks at KB creation**, set
+  `voyage-3-large` first; PDF parser never DeepDOC for Cyrillic; delimiter a real
+  newline not `\n`.
+- **Ollama roster after cleanup:** `qwen2.5vl:3b` (vision), `phi4-mini` (fast general),
+  `qwen2.5-coder:7b` + abliterated coder (code), `dolphin3:8b` + `gemma-4-E4B`
+  (uncensored), `granite4.1:8b` (general/tools), `bge-m3` + `qwen3-embedding` (embed).
