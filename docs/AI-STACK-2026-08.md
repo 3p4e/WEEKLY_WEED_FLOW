@@ -371,3 +371,44 @@ MoE. MoE wins on GPUs, not here. Both MoE models removed. Also: Ollama rejects t
 - **Ollama roster after cleanup:** `qwen2.5vl:3b` (vision), `phi4-mini` (fast general),
   `qwen2.5-coder:7b` + abliterated coder (code), `dolphin3:8b` + `gemma-4-E4B`
   (uncensored), `granite4.1:8b` (general/tools), `bge-m3` + `qwen3-embedding` (embed).
+
+## 14. Ollama roster re-cut → uncensored agents (2026-08-16)
+
+Owner asked to strip the roster down to `qwen2.5vl:3b` (vision) + `phi4-mini` (fast
+general) and add **uncensored (abliterated)** models under 8B that can use **tools,
+code, and vision**. Deleted 7 (`qwen3-embedding:0.6b`, `qwen2.5-coder:7b`, the
+abliterated Qwen2.5-Coder-7B, `Huihui-gemma-4-E4B`, `granite4.1:8b`, `dolphin3:8b`,
+`bge-m3`), then searched HF for GGUF-packaged, Ollama-runnable abliterated builds.
+
+**Reality of "tools + code + vision in one <8B uncensored model" on this box:** no
+single model delivers all three in Ollama 0.32.14. Findings, all tested on the box
+(`/api/chat` + `/api/generate` over `ai-net`):
+
+| Model (Ollama tag) | Size | text | tools | code | vision | verdict |
+|---|---|---|---|---|---|---|
+| `hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` | 3.3 GB | ✅ | ✅ (clean `tool_calls`) | ✅ | ❌ **runner crash** | **kept** — uncensored agent |
+| `hf.co/bartowski/mlabonne_Qwen3-4B-abliterated-GGUF:Q4_K_M` | 2.5 GB | ✅ | ✅ | ✅ | — | **kept** — uncensored text agent (thinking) |
+| `hf.co/mradermacher/Huihui-Qwen3-4B-Instruct-2507-abliterated-GGUF` | 2.5 GB | ⚠️ | ✗ | ⚠️ | — | **deleted** — broken template |
+| `hf.co/prithivMLmods/Qwen3-4B-2507-abliterated-GGUF` | 2.5 GB | ⚠️ | ✗ | ⚠️ | — | **deleted** — same bug |
+| `huihui-ai/Huihui-Qwen3.5-4B-abliterated` | — | — | — | — | — | **not pulled** — repo ships only safetensors + mmproj (no main GGUF); `qwen3_5` too new for this llama.cpp |
+
+Gotchas proven this round:
+- **Qwen3-VL vision is broken in Ollama 0.32.14.** The mmproj *does* download (VL tag is
+  3.3 GB = 2.5 GB quant + ~0.8 GB `mmproj-F16`), the chat template correctly advertises
+  `[tools completion vision]`, text/tools/code all work — but any image request dies mid
+  vision-encode: `error: unexpected EOF` during `process_mtmd … encoding mtmd batch`,
+  and it is **not** image-size (crashes identically at 1241 px and 896 px). It's the
+  Ollama-mtmd × Qwen3-VL path, not resources. **Vision stays on `qwen2.5vl:3b`**, whose
+  mtmd path works. (Abliteration buys nothing for OCR anyway — refusals aren't the
+  failure mode when transcribing a CoA.)
+- **`…-2507-abliterated` GGUFs (mradermacher & prithivMLmods) are unusable in Ollama:**
+  the repackaged template routes *all* real output into the `thinking` channel, leaving
+  `message.content` empty and `<tool_call>` tags unparsed (`tool_calls: null`). The
+  original **`mlabonne_Qwen3-4B-abliterated`** (bartowski GGUF) does not have this —
+  `content` populates, `thinking` is separated, tool calls parse. Prefer that lineage.
+
+**Final roster (4 models, ~11.5 GB, /opt at 67%):**
+`qwen2.5vl:3b` (vision/OCR) · `phi4-mini` (fast general) ·
+`hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` (uncensored
+tools+code+text) · `hf.co/bartowski/mlabonne_Qwen3-4B-abliterated-GGUF:Q4_K_M`
+(uncensored text agent, thinking).
