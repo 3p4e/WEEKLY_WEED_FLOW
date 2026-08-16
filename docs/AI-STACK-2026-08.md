@@ -412,3 +412,25 @@ Gotchas proven this round:
 `hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` (uncensored
 tools+code+text) · `hf.co/bartowski/mlabonne_Qwen3-4B-abliterated-GGUF:Q4_K_M`
 (uncensored text agent, thinking).
+
+## 15. Spike: llama.cpp container for uncensored vision (2026-08-16)
+
+Tested whether swapping the runtime rescues Qwen3-VL vision (which crashes under
+Ollama 0.32.14, §14). Ran the official `ghcr.io/ggml-org/llama.cpp:server` in a
+throwaway container on `ai-net`, `-hf noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated
+-GGUF:Q4_K_M` (auto-pulls model + `mmproj-BF16`), posted the same CoA page to the
+OpenAI-compatible `/v1/chat/completions`.
+
+- **The crash is Ollama's, not the model's.** llama.cpp loaded the multimodal model,
+  encoded the image, and generated text **end-to-end — no `unexpected EOF`.** Ollama
+  ships an older/buggier llama.cpp for the Qwen3-VL `mtmd` path.
+- **But unusable on CPU.** The un-quantized BF16 vision tower on 4 cores: image-encode
+  took minutes, generation crawled at **~0.76 tok/s** (`n_gen=244, tg=0.76 t/s`) →
+  **~10+ min/page**. The only mmproj quants offered are BF16/F16/F32 (all heavy).
+
+**Conclusion:** local uncensored vision is blocked by **CPU-only hardware**, not the
+runtime — no engine swap fixes it. Practical stack is unchanged: **Gemini** for OCR,
+`qwen2.5vl:3b` as the only fast-enough *local* vision, the two uncensored 4B agents for
+tools/code/text. llama.cpp is the better *engine* (newer, OpenAI-native, no vision
+crash, leaner than LM Studio) but changes nothing for this workload on this box; a GPU
+host is the real unlock. Spike fully torn down (containers, volume, HF cache, image).
