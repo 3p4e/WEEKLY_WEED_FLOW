@@ -77,6 +77,15 @@ Recommended (panel) env for the stack: `OLLAMA_MAX_LOADED_MODELS=1`,
 `ollama pull hf.co/<user>/<repo>:<quant>` — and everything speaking the Ollama API
 (Letta, Agent Zero, Big-AGI) can use them immediately. Caveat: hf.co pulls don't
 always carry a correct chat/tool template; smoke-test before relying on tools.
+
+**Smoke-test results (2026-08-16):** all 9 pulled OK (35.4 GB). Generation
+verified through LiteLLM → Ollama (`local-small`/phi4-mini returned an exact
+requested string). Tool-calling: `qwen2.5-coder:7b` ✅ produced the correct
+structured `get_batch_potency(batch_id=P160012)` call. **`dolphin3:8b` ❌ — its
+Ollama chat template does not support tools** (registry error "does not support
+tools"); use it for uncensored chat/code *generation* only, and use
+`qwen2.5-coder` (or a custom Modelfile with a tool template) for agentic work.
+The hf.co abliterated pulls carry the same template caveat — test before agent use.
 Ceiling options researched but not pulled: `huihui_ai/gemma-4-abliterated:12b`,
 `hf.co/mradermacher/Huihui-gemma-4-12B-coder-fable5-composer2.5-v1-abliterated-GGUF`
 (the gemma4 **coder** abliterated), `Qwen2.5-Coder-14B-abliterated`.
@@ -96,3 +105,32 @@ through DeepDoc to test **Macedonian Cyrillic** OCR; fallback is Tesseract
 
 Old `letta` production stack: untouched, still the only live copy of the 62
 agents until migration to the fixed letta-6ou3.
+
+## 6. Deployed this session: LiteLLM + RAGflow (2026-08-16, same day)
+
+**LiteLLM** — `/opt/stacks/litellm`, container `litellm` on `ai-net`, 1 CPU/1 GB.
+Master key generated (0600 `.env`); OpenAI+Anthropic keys staged from the
+letta-6ou3 stack env (values never displayed); `VOYAGE_API_KEY`,
+`DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY` are **empty placeholders — owner fills
+them in `/opt/stacks/litellm/.env` and `docker restart litellm`**. Routes:
+`openai/*`, `anthropic/*`, `deepseek/*`, `moonshot/*`, `voyage/*`, plus local
+`local-coder|general|uncensored|small|embed` → Ollama. Verified: liveliness 200,
+chat round-trip via gateway → phi4-mini exact-string reply.
+
+**RAGflow v0.26.4** — `/opt/stacks/ragflow`, official docker dir at the pinned
+tag, dedicated 6-container stack (`ragflow-cpu`, `es01` ES 8.11.3, MySQL 8,
+valkey Redis, MinIO) with its own volumes/network and generated 0600 secrets.
+Adaptations from stock: `MEM_LIMIT` 8 GB→2 GB per service, web ports 80/443 →
+**8090/8493** (Traefik owns 80/443), `docker-compose.override.yml` adds `ai-net`
++ Traefik labels. Gotcha for operators: `.env` sets
+`COMPOSE_PROFILES=elasticsearch,cpu` — run plain `docker compose up -d`; an
+explicit `--profile cpu` overrides the list and silently drops ES.
+Verified: all 6 healthy, ES cluster **green**, HTTP 200 on :8090 and on
+**https://ragflow.srv1231216.hstgr.cloud** (LetsEncrypt via existing Traefik).
+Post-deploy owner steps: create the admin account on first visit; add the
+Voyage key under Model providers (embeddings + rerank); per owner decision
+RAGflow starts on **cloud models, not Ollama**.
+
+Host after everything: MemAvailable ≈ 3 GB idle with the full RAGflow stack up —
+as predicted, heavy ingestion and large local-model inference should not run
+simultaneously. Disk: 63 GB free after all images/models.
