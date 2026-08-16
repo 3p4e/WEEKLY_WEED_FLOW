@@ -246,3 +246,57 @@ RAGflow starts on **cloud models, not Ollama**.
 Host after everything: MemAvailable ≈ 3 GB idle with the full RAGflow stack up —
 as predicted, heavy ingestion and large local-model inference should not run
 simultaneously. Disk: 63 GB free after all images/models.
+
+## 10. OpenAI vision enabled + full VLM parser bake-off (2026-08-16)
+
+### Enabling OpenAI as a VLM (catalogue patch)
+RAGflow's shipped catalogue declares OpenAI's 20 vision models with
+`model_type: "chat"`, carrying vision only in the `tags` string, while Gemini and
+12 other providers use `model_type: ['image2text','chat']`. The provider API reads
+`model_type` and ignores `tags`, so OpenAI never appeared in the VLM dropdown.
+`common/settings.py:249` loads `conf/llm_factories.json` at runtime, so the fix is a
+patched file:
+
+- `/opt/stacks/ragflow/llm_factories.json` (+ `.orig` for rollback), OpenAI-only
+  edit: vision-tagged models get `model_type: ["image2text","chat"]` (20 patched,
+  Gemini's 6 untouched).
+- Mounted read-only via `docker-compose.override.yml`:
+  `./llm_factories.json:/ragflow/conf/llm_factories.json:ro`
+- Verified: `GET /api/v1/providers/OpenAI/models` -> 31 models, 20 image2text.
+
+**Upgrade caveat:** the mount survives restarts but a RAGflow image upgrade ships a
+new catalogue - re-apply and re-verify after upgrading.
+
+**Instance naming:** models are addressed `model@INSTANCE@Factory`. This tenant has
+two OpenAI instances, `OPEN_AI_API` and `OPEN_AI_SERV` (one per key) - using a
+wrong instance name fails with "Instance ... not found".
+
+### Parser bake-off - same scanned CoA (`ППК26031.pdf`), same embedding/delimiter
+
+| Parser | Cyrillic | Tables | Values | Verdict |
+|---|---|---|---|---|
+| **gemini-2.5-flash** | ~1377 | markdown preserved | correct | **standard** |
+| gemini-2.5-flash-lite | 1355 | flattened to parallel lists | correct | narrative SOPs only |
+| gpt-4o-mini (OpenAI) | 1155 | none | **WRONG** | **reject for CoAs** |
+| gemini-2.0-flash / -lite | 0 | - | - | silent failure, DONE with 0 chunks |
+| DeepDoc (built-in) | 0 | yes | no Cyrillic at all | reject |
+
+**Why gpt-4o-mini is rejected:** it reported `Вкупно CBD = 88.90 %` where both
+Gemini models independently read `0.02 %` - and 88.90 % is chemically impossible in
+dried flower. It also read `∆9-THCA` as 8.29 % vs 8.89 %, dropped a digit from the
+batch number (`OPM12501` vs `ОРМ112501`), and mangled Macedonian technical terms
+(`губиток` -> `гутботок`). Wrong numbers on a CoA propagate into batch disposition,
+so this is disqualifying regardless of cost.
+
+**Standing rule:** PDF parser = `gemini-2.5-flash` for CoAs and specifications;
+`gemini-2.5-flash-lite` acceptable for narrative SOPs if cost matters. OpenAI vision
+remains available for non-critical image work.
+
+### Baidu Unlimited-OCR - evaluated, declined
+MIT licensed, OpenAI-compatible API via vLLM/SGLang - clean fit architecturally, but
+**requires an NVIDIA GPU with CUDA** (CUDA 13.0/Hopper images, no CPU path). KVM4 is
+4 vCPU / 16 GB / **no GPU**, so it cannot run here. Cyrillic support is undocumented.
+Its only edge over Gemini is physical data sovereignty; paid-tier Gemini already
+excludes prompts/files from training and human review contractually (only the free
+tier permits both). Revisit only if policy requires that no document leaves the
+facility - and test Cyrillic before committing to GPU spend.
