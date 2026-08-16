@@ -120,6 +120,45 @@ through DeepDoc to test **Macedonian Cyrillic** OCR; fallback is Tesseract
 Old `letta` production stack: untouched, still the only live copy of the 62
 agents until migration to the fixed letta-6ou3.
 
+## 7. Provider keys wired + vision models (2026-08-16, later the same day)
+
+The session secrets manager held real `VOYAGE_API_KEY`, `DEEPSEEK_API_KEY`,
+`MOONSHOT_API_KEY`; all three were written into `/opt/stacks/litellm/.env`.
+**Operational gotcha that cost a debugging loop: `docker restart` does NOT
+reload `env_file` — a compose recreate is required** (`docker compose up -d
+--force-recreate`). Verified through the gateway afterwards:
+
+| Provider | Result |
+|---|---|
+| Voyage (`voyage/voyage-3.5`) | ✅ 1024-dim embedding returned — RAG embedding path live |
+| DeepSeek (`deepseek/deepseek-chat`) | ✅ chat verified (API serves deepseek-v4-flash) |
+| OpenAI / Anthropic | ✅ wired (keys from letta stack) |
+| Moonshot/Kimi | ⚠️ key valid but the **account is suspended** (top-up needed); wiring ready |
+
+**Vision models** (why: RAGflow's DeepDoc covers classical OCR of scans, but
+stamps/signatures/handwriting/figures need a VLM, and it doubles as RAGflow's
+img2txt + a vision tool for Letta/Agent Zero/Big-AGI):
+
+- `glm-ocr` (2.2 GB) — document-OCR specialist (7M pulls). **✅ verified**: read a
+  test image correctly; sub-second inference once loaded. This is the local
+  vision/OCR workhorse.
+- `qwen3-vl:4b` — **❌ removed**: its vision runner crashes reproducibly on this
+  CPU (`unexpected EOF`, twice on clean loads). Re-try with a future Ollama
+  release (`ollama pull qwen3-vl:4b`).
+- cloud tier: OpenAI vision already available through LiteLLM.
+
+Model library: 10 models / ~38 GB.
+
+## 8. Host reboot (owner, 2026-08-16 ~13:50 UTC) — recovery notes
+
+All deployed stacks self-recovered (`restart: unless-stopped`); the Ollama
+CPU/memory caps and `ai-net` membership **survived the reboot** (docker
+persists both). Traefik-routed services 502 for the first ~2 minutes while
+apps boot — not a failure. Two containers with a non-restart policy stayed
+down and were started manually: `deepseek-tui`, `open-webui-deal`. WWF
+production `/health/ready` green post-reboot; RAGflow and letta-6ou3 URLs
+back to 200/ok.
+
 ## 6. Deployed this session: LiteLLM + RAGflow (2026-08-16, same day)
 
 **LiteLLM** — `/opt/stacks/litellm`, container `litellm` on `ai-net`, 1 CPU/1 GB.
