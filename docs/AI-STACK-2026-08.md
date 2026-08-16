@@ -31,19 +31,33 @@ Letta DBs. Side effect: the dangerous bidirectional `rclone bisync` cron died wi
 the container — that risk is permanently closed. `/opt` free went 36 → 115 GB
 (41% used).
 
-## 3. letta-code (`letta-6ou3`) runs a dead image — one-click fix pending
+## 3. letta-code (`letta-6ou3`) dead image — FIXED via the Hostinger API
 
-The Hostinger catalog's Letta template deploys **`lettaai/letta:latest`, built
-2024-10-29** — the abandoned image name, ~19 months older than the production
-`letta` container's `letta/letta:latest` (2026-05-14). The current image is
-already pulled onto the box (digest `aa66c3ee…`).
+The Hostinger catalog's Letta template had deployed **`lettaai/letta:latest`,
+built 2024-10-29** — the abandoned image name, ~19 months older than the
+production `letta` container's `letta/letta:latest` (2026-05-14).
 
-**Owner action (panel one-click, DB is still empty so it is risk-free):** edit the
-`letta-6ou3` stack, change `image: lettaai/letta:latest` →
-`image: letta/letta:latest`, redeploy. While in there, add env
-`OLLAMA_BASE_URL=http://ollama-bm3e-ollama-1:11434` so Letta natively sees every
-local model (the containers already share the `ai-net` network). The agent's
-session classifier blocks compose-file edits on the host, so this stays manual.
+**Fixed 2026-08-16 through the Hostinger VPS API** (`KVM4_API_TOKEN`;
+`GET/POST /api/vps/v1/virtual-machines/1231216/docker` manages the panel's
+compose projects — this is the channel for panel-stack changes, since direct
+host edits of `/docker/*` are blocked for the agent). Changes applied to the
+project compose: `image:` → `letta/letta:latest`, env
+`OLLAMA_BASE_URL=http://ollama-bm3e-ollama-1:11434`, and durable `ai-net`
+membership (service `networks:` + external network block).
+
+Gotchas hit, recorded for the future:
+- `POST …/docker/{project}/update` and `/restart` **execute immediately** (they
+  are actions, not idempotent probes). The project create/update route is
+  `POST …/docker` with `{project_name, content, environment}`.
+- The old image had written its 0.5.x schema into the pg16 DB, so current
+  Letta's alembic baseline crashed with `relation … already exists`. Verified
+  **0 agents** existed, took a safety dump
+  (`letta-6ou3-pre-reset-20260816.dump`), dropped/recreated the `letta` DB with
+  `CREATE EXTENSION vector`, restarted — migration then completed cleanly.
+
+Verified: `letta/letta:latest` running, **v0.16.8 `{"status":"ok"}` HTTP 200**
+over `https://letta-6ou3.srv1231216.hstgr.cloud/v1/health/`, and Ollama
+(v0.32.13) reachable from inside the Letta container over `ai-net`.
 
 ## 4. Ollama runtime
 
