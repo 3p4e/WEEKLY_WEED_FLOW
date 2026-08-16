@@ -149,7 +149,66 @@ img2txt + a vision tool for Letta/Agent Zero/Big-AGI):
 
 Model library: 10 models / ~38 GB.
 
-## 8. Host reboot (owner, 2026-08-16 ~13:50 UTC) — recovery notes
+## 8. RAGflow pipeline configured + Macedonian Cyrillic VALIDATED
+
+Models (set via the RAGflow UI, which creates *provider instances* with 3-part
+IDs `model@INSTANCE@Factory` — the API's legacy `add_llm` makes 2-part IDs the
+parser rejects, so **always configure models in the UI**):
+
+| Role | Model |
+|---|---|
+| Chat | `deepseek-v4-pro@DEEPSEEK_API@DeepSeek` |
+| Embedding | `voyage-3-large@VOYAGE_AI@Voyage AI` |
+| **VLM / page reader** | **`gemini-2.5-flash@GEMINI_BN@Gemini`** |
+| Rerank | `rerank-2.5@VOYAGE_AI@Voyage AI` |
+| ASR / TTS | `whisper-1` / `tts-1` (OpenAI) |
+
+### The Cyrillic finding (the go/no-go test — now GO)
+
+**DeepDoc cannot read Cyrillic.** Its bundled OCR (PaddleOCR-derived) has no
+Cyrillic character set and silently substitutes look-alike Latin glyphs, so it
+fails *quietly* rather than erroring:
+
+- `СТАНДАРДНА ОПЕРАТИВНА ПРОЦЕДУРА` → `CTAHAAPAHA OnEPATNBHA NPOLEAYPA`
+- `Параметар` → `IapaMerap`, `Резултат` → `Pe3yJITaT`
+- Cyrillic chars per chunk: **0**. English + table structure were fine.
+
+**Fix: set the KB's PDF parser (`layout_recognize`) to the VLM, not DeepDOC.**
+Re-parsed the same two real documents (`ППК26031.pdf` scanned ImB CoA,
+`QCSOP 012 v.02.pdf`) through `gemini-2.5-flash`:
+
+- Cyrillic chars per chunk: **0 → 499 / 801**
+- Exact: `Универзитет „Св. Кирил и Методиј“, Скопје, Фармацевтски факултет`,
+  `Проф. д-р Марија Карапанџова`, `BLQ - под лимит на квантификација`
+- Chemistry preserved: `Вкупно Δ9-THC — сума на содржина на Δ9-ТНС и Δ9-ТНСА х 0.877`
+- Tables emitted as clean **markdown**; fewer, cleaner chunks (CoA 6 → 2),
+  embedding 0.52 s.
+
+### Second bug: the `\n` delimiter eats the letter "n"
+
+RAGflow stores the default chunk delimiter as the literal 2-char string `\n`
+and applies it as a **character class**, so it also splits on `n`:
+`Testing` → `Testi⏎g`, `Orange Punch` → `Ora⏎ge Pu⏎ch`. Cyrillic `н` is
+unaffected, which makes it easy to miss. **Set `delimiter` to a real newline**
+in `parser_config`; verified clean afterwards (`Manufacturing`, `Annex`,
+`Sampling`, `Guidelines` all intact).
+
+### Standing config for every new KB
+PDF parser = `gemini-2.5-flash` (**never DeepDOC for MK**), embedding =
+`voyage-3-large`, delimiter = real newline. **The embedding model is locked at
+KB creation** — set it before creating the real KBs. Test KBs left in place:
+`TEST_CYRILLIC_VALIDATION` (DeepDoc, bad), `MK_VLM_TEST` (VLM, good).
+
+### Catalogue seeding caveat (v0.26.4)
+The model catalogue ships **empty** — `init_llm_factory()` is commented out in
+`api/db/init_data.py`, so `--init-model-provider-tables` reports success and
+seeds nothing, and every `add_llm` fails "factory not allowed". Seeded 66
+factories / 1063 models directly from `conf/llm_factories.json` via
+`LLMFactoriesService`/`LLMService`. Note `model_type` there may be a *list*, and
+vision capability is carried in the `tags` field (`IMAGE2TEXT`), not
+`model_type`. Re-check after any RAGflow upgrade.
+
+## 9. Host reboot (owner, 2026-08-16 ~13:50 UTC) — recovery notes
 
 All deployed stacks self-recovered (`restart: unless-stopped`); the Ollama
 CPU/memory caps and `ai-net` membership **survived the reboot** (docker
