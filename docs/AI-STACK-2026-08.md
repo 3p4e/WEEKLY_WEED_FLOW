@@ -434,3 +434,58 @@ runtime — no engine swap fixes it. Practical stack is unchanged: **Gemini** fo
 tools/code/text. llama.cpp is the better *engine* (newer, OpenAI-native, no vision
 crash, leaner than LM Studio) but changes nothing for this workload on this box; a GPU
 host is the real unlock. Spike fully torn down (containers, volume, HF cache, image).
+
+## 16. Resolution: RAM contention (not CPU) + vaultbox qwen3.5 wins (2026-08-16)
+
+§15's "CPU is the wall, ~1 tok/s, unusable" conclusion was **wrong** — it was **RAM
+contention**, and a better model then solved the whole thing natively in Ollama.
+
+**The RAM-contention correction.** The ~0.76–1 tok/s in §15 was measured while the box
+had only ~4.8–6 GB free (RAGflow ~5.5 GB + a zoo of idle agents: agent-zero 1.3 GB,
+big-agi, 3× Letta, sentinel, collabora…). After stopping agent-zero/big-agi/sentinel
+and a reboot (~10 GB free), the **same** llama.cpp + Qwen3-VL-4B ran at **8.8 tok/s gen
++ ~42 s image-encode** (llama.cpp's own `timings`: `predicted_per_second 8.81`) — a
+~9–10× jump. The bottleneck was memory pressure/thrashing on a **0-swap** box, not the
+CPU ceiling. Lesson: on 16 GB with RAGflow resident, a local VLM needs the headroom
+*free* — one model on demand, not concurrent with heavy RAGflow parsing.
+- Caveat found: greedy decode (temp 0, no repeat penalty) makes the raw Q3 GGUF **loop**
+  on a full page (`…П. П. П.` forever). Needs `repeat_penalty`/`presence_penalty`.
+
+**Ollama upgrade (option to fix Qwen3-VL in Ollama) is a dead end:** already on the
+newest Ollama — **v0.32.14, released Aug 15 2026** (nothing newer). Ollama vendors a
+*forked* llama.cpp that lags upstream on the `qwen3vl` mtmd path; release notes show no
+Qwen3-VL fix. So "upgrade Ollama" has nowhere to go until maintainers catch up.
+
+**The winner — `vaultbox/qwen3.5-uncensored:4b` (arch `qwen35`, 4.7B, Q4_K_M, 3.4 GB,
+262K ctx).** A proper Ollama-registry model that passes the **full battery natively in
+Ollama**:
+- content ✅ (clean, `think:false`, no thinking-leak) · tools ✅ (parsed `tool_calls`)
+- **vision ✅ — works in Ollama**, where `qwen3vl` crashes. `qwen35` mtmd IS supported by
+  Ollama 0.32.14's llama.cpp. Encode ~34 s + **8.26 tok/s**; excellent Cyrillic
+  ("MKE EN ISO/IEC 17025", bilingual header, ППК26031, "Orange Punch Mimosa серија
+  OPM112501", got **канабис** right where noctrex wrote "канибис"), **no repetition
+  loop** — its Modelfile bakes `presence_penalty 1.5`.
+- Corrects §14's "`qwen3_5` too new for this llama.cpp" — that was a HF repo with no
+  GGUF; Ollama's build runs `qwen35` incl. vision fine.
+
+**Rejected — `fredrezones55/Gemma-4-Uncensored-HauhauCS-Aggressive` (arch `gemma4`, 8B,
+6.3 GB):** **OOM-killed on load** (`llama-server … signal: killed`, SIGKILL at 30 s) —
+8B + `gemma4a` CLIP projector + KV needs ~8 GB, only ~6 GB free → won't even load. Also
+wrong trade regardless: 8B (heavier/slower on CPU), Gemma has no real tool-calling
+template, and "aggressive" abliteration risks faithfulness in a QMS/OCR context.
+
+**Net:** no runtime switch, no llama.cpp sidecar needed — uncensored vision+tools+code
+runs in the Ollama you already have, via a 4.7B model, provided the RAM is kept free.
+Local vision is ~3 min/page → an overnight-batch option; **Gemini stays the bulk-OCR
+path** (faster, zero-tuning, paid-tier private). Treat vaultbox (unknown publisher) as
+an OCR assistant whose output is human-verified — which CoA review provides anyway.
+
+**Final Ollama roster (4 models, ~12.4 GB, /opt ~66%):**
+- `vaultbox/qwen3.5-uncensored:4b` — uncensored all-rounder: **vision + tools + code**
+- `hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` — uncensored
+  **coding/tools** agent (its vision is dead in Ollama; kept for code)
+- `qwen2.5vl:3b` — light/fast local vision
+- `phi4-mini` — fast general
+Deleted this round: Gemma-4-Aggressive (OOM), `mlabonne_Qwen3-4B` (superseded by
+vaultbox). To wire vaultbox as RAGflow's local VLM: Ollama provider, `img2txt`,
+`vaultbox/qwen3.5-uncensored:4b`, base URL `http://ollama-bm3e-ollama-1:11434`.
