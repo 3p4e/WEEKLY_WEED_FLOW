@@ -261,14 +261,27 @@ def _section_body(sections: list[dict]) -> str:
     asked for was rejected because the body it faithfully reproduced contained
     `# Образец ...`. The sentinel cannot collide with document text."""
     return "\n\n".join(
-        f"{_MARK_OPEN}{s['num']}|{s['mk']}|{s['en']}{_MARK_CLOSE}\n{s['content'].strip()}"
+        f"<<<PP-SECTION {s['num']}|{s['mk']}|{s['en']}>>>\n"
+        f"{s['content'].strip()}\n"
+        f"<<<PP-END {s['num']}>>>"
         for s in sections
     )
 
 
-_MARK_OPEN = "<<<PP-SECTION "
-_MARK_CLOSE = ">>>"
-_SECTION_HEAD = re.compile(r"^<<<PP-SECTION\s+([^|>\s]+)[^>]*>>>[ \t]*$", re.M)
+# Sections are OPENED and CLOSED. Only text between a matching pair becomes
+# document content; everything outside is discarded. That is what keeps an
+# agent's sign-off out of a controlled document — the previous version, which
+# only opened sections, let a repair append "Corrected as required: added the
+# missing Шифра | Code row ... All other content left byte for byte unchanged."
+# to the end of the body, and it was built into the .docx (the §6A auditor
+# passed it without comment). The prompt still invites the agent to declare an
+# unfixable issue; it now does so outside the closing marker, where it can be
+# logged without becoming part of the record.
+_SECTION_BLOCK = re.compile(
+    r"^<<<PP-SECTION[ \t]+([^|>\s]+)[^>\n]*>>>[ \t]*\n(.*?)^<<<PP-END[ \t]+\1[ \t]*>>>[ \t]*$",
+    re.M | re.S,
+)
+_SECTION_OPEN = re.compile(r"^<<<PP-SECTION[ \t]+([^|>\s]+)[^>\n]*>>>[ \t]*$", re.M)
 
 
 def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None, str]:
@@ -287,23 +300,15 @@ def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None,
     from the originals, so a repair cannot rename, reorder, add or drop a
     section — only rewrite bodies."""
     wanted = [s["num"] for s in original]
-    picked: list[re.Match] = []
-    for m in _SECTION_HEAD.finditer(body):
-        if len(picked) < len(wanted) and m.group(1) == wanted[len(picked)]:
-            picked.append(m)
-    if len(picked) != len(wanted):
-        got = [m.group(1) for m in _SECTION_HEAD.finditer(body)]
-        return None, f"expected sections {wanted} in order, found markers {got[:12]}"
-    # Tolerance is for LEADING chatter only. A marker after the last expected
-    # section is structural garbage — an invented section, say — and it would be
-    # swallowed into the final section's body rather than rejected.
-    trailing = [m.group(1) for m in _SECTION_HEAD.finditer(body) if m.start() > picked[-1].start()]
-    if trailing:
-        return None, f"unexpected section marker(s) after the last section: {trailing[:6]}"
+    blocks = [(m.group(1), m.group(2)) for m in _SECTION_BLOCK.finditer(body)]
+    got = [n for n, _ in blocks]
+    if got != wanted:
+        opened = [m.group(1) for m in _SECTION_OPEN.finditer(body)]
+        return None, (f"expected closed sections {wanted}, got {got[:12]}"
+                      f" (open markers seen: {opened[:12]})")
     out = []
-    for i, m in enumerate(picked):
-        end = picked[i + 1].start() if i + 1 < len(picked) else len(body)
-        content = body[m.end():end].strip()
+    for i, (_num, content) in enumerate(blocks):
+        content = content.strip()
         if not content:
             return None, f"section {wanted[i]} came back empty"
         out.append({**original[i], "content": content})
@@ -333,16 +338,20 @@ async def _repair_sections(
             "A §6A reviewer raised the issues below against this document. "
             "Return the CORRECTED document body.\n\n"
             "Rules:\n"
-            f"- Keep every '{_MARK_OPEN}...{_MARK_CLOSE}' section marker line "
-            "exactly as given, in the same order, and put each section's text "
-            "under its own marker. They delimit the document for reassembly; "
-            "they are not part of it. Change section bodies only.\n"
+            "- Every section is wrapped in '<<<PP-SECTION ...>>>' and "
+            "'<<<PP-END <number>>>>' marker lines. Reproduce BOTH, unchanged and "
+            "in the same order, with that section's text between them. They "
+            "delimit the document for reassembly and are not part of it. Change "
+            "section bodies only.\n"
+            "- ONLY text between a matching pair becomes the document. Put any "
+            "remark, summary of what you changed, or issue you could not fix "
+            "AFTER the final '<<<PP-END ...>>>' line — never inside a section.\n"
             "- Change only what the issues require; leave everything else byte "
             "for byte as it is.\n"
             "- NEVER invent data to satisfy an issue. Facility specifics, "
             "measured values, dates, names and signatures stay BLANK write-ins. "
             "If an issue cannot be fixed without inventing something, leave that "
-            "one unfixed and say so after the body.\n"
+            "one unfixed and say so after the final marker.\n"
             "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
             "- Output the document body first, with no preamble.\n\n"
             f"ISSUES:\n{audit.strip()}\n\n"

@@ -492,6 +492,11 @@ async def test_a_pass_with_preamble_reaches_the_builder(monkeypatch):
 
 
 # ---- §6A repair loop ----
+def _blk(num, mk, en, content):
+    """Build one repair-protocol section block."""
+    return f"<<<PP-SECTION {num}|{mk}|{en}>>>\n{content}\n<<<PP-END {num}>>>"
+
+
 _ORIG = [
     {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT", "content": "тело|body one"},
     {"num": "2.0", "mk": "ПОТВРДА", "en": "SIGN-OFF", "content": "тело|body two"},
@@ -499,8 +504,8 @@ _ORIG = [
 
 
 def test_split_repaired_accepts_a_faithful_rewrite():
-    body = ("<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nнов|new one\n\n"
-            "<<<PP-SECTION 2.0|ПОТВРДА|SIGN-OFF>>>\nнов|new two")
+    body = _blk("1.0", "СОДРЖИНА", "CONTENT", "нов|new one") + "\n\n" + \
+        _blk("2.0", "ПОТВРДА", "SIGN-OFF", "нов|new two")
     out, reason = _split_repaired(body, _ORIG)
     assert reason == "ok"
     assert [s["content"] for s in out] == ["нов|new one", "нов|new two"]
@@ -512,8 +517,8 @@ def test_split_repaired_accepts_a_faithful_rewrite():
 def test_split_repaired_ignores_a_retitled_section():
     """The agent may rewrite bodies, not rename sections — but the title it
     supplies is discarded rather than trusted."""
-    body = ("<<<PP-SECTION 1.0|SOMETHING ELSE|WHATEVER>>>\nнов|new one\n\n"
-            "<<<PP-SECTION 2.0|X|Y>>>\nнов|new two")
+    body = _blk("1.0", "SOMETHING ELSE", "WHATEVER", "нов|new one") + "\n\n" + \
+        _blk("2.0", "X", "Y", "нов|new two")
     out, _ = _split_repaired(body, _ORIG)
     assert [s["mk"] for s in out] == ["СОДРЖИНА", "ПОТВРДА"]
 
@@ -523,11 +528,13 @@ def test_split_repaired_ignores_a_retitled_section():
     [
         "",                                                   # nothing back
         "Sure! Here is the fixed document.",                  # no headings
-        "<<<PP-SECTION 1.0|A|B>>>\nonly one section",          # dropped a section
-        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.0|C|D>>>\ny\n\n<<<PP-SECTION 3.0|E|F>>>\nz",  # invented
-        "<<<PP-SECTION 2.0|A|B>>>\nx\n\n<<<PP-SECTION 1.0|C|D>>>\ny",   # reordered
-        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.9|C|D>>>\ny",   # renumbered
-        "<<<PP-SECTION 1.0|A|B>>>\n\n\n<<<PP-SECTION 2.0|C|D>>>\ny",    # emptied a section
+        _blk("1.0", "A", "B", "only one section"),                       # dropped a section
+        _blk("1.0", "A", "B", "x") + _blk("2.0", "C", "D", "y") + _blk("3.0", "E", "F", "z"),
+        _blk("2.0", "A", "B", "x") + _blk("1.0", "C", "D", "y"),          # reordered
+        _blk("1.0", "A", "B", "x") + _blk("2.9", "C", "D", "y"),          # renumbered
+        _blk("1.0", "A", "B", "") + _blk("2.0", "C", "D", "y"),           # emptied a section
+        # opened but never closed — the whole point of the end marker
+        "<<<PP-SECTION 1.0|A|B>>>\nx" + _blk("2.0", "C", "D", "y"),
     ],
 )
 def test_split_repaired_refuses_anything_that_does_not_line_up(body):
@@ -559,7 +566,7 @@ async def test_a_fix_verdict_is_repaired_and_the_document_builds(monkeypatch):
 
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
-                return "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nпоправено|repaired"
+                return _blk("1.0", "СОДРЖИНА", "CONTENT", "поправено|repaired")
             if "§6A" in prompt:
                 self.audits += 1
                 return ("**Verdict: FIX**\n1. missing Code row" if self.audits == 1
@@ -610,7 +617,7 @@ async def test_repair_is_disabled_when_max_repair_rounds_is_zero(monkeypatch):
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
                 repairs.append(1)
-                return "<<<PP-SECTION 1.0|A|B>>>\nx"
+                return _blk("1.0", "A", "B", "x")
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. something"
             return await super().send_message(agent_id, prompt)
@@ -632,7 +639,7 @@ async def test_a_repair_that_breaks_bilingual_parity_is_discarded(monkeypatch):
     class MonolingualRepairClient(FakeClient):
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
-                return "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\n" + ("English only text. " * 20)
+                return _blk("1.0", "СОДРЖИНА", "CONTENT", "English only text. " * 20)
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. something"
             return await super().send_message(agent_id, prompt)
@@ -657,27 +664,41 @@ def test_split_repaired_tolerates_chatter_around_a_correct_document():
     """A model that wraps the right document in a sentence has still done the
     work; throwing the round away over packaging wastes it."""
     body = ("Sure — here is the corrected document.\n\n"
-            "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nнов|new one\n\n"
-            "<<<PP-SECTION 2.0|ПОТВРДА|SIGN-OFF>>>\nнов|new two")
+            + _blk("1.0", "СОДРЖИНА", "CONTENT", "нов|new one") + "\n\n"
+            + _blk("2.0", "ПОТВРДА", "SIGN-OFF", "нов|new two"))
     out, reason = _split_repaired(body, _ORIG)
     assert reason == "ok"
     assert out[0]["content"] == "нов|new one"
 
 
 def test_split_repaired_reason_names_what_came_back():
-    out, reason = _split_repaired("<<<PP-SECTION 9.9|X|Y>>>\nz", _ORIG)
+    out, reason = _split_repaired(_blk("9.9", "X", "Y", "z"), _ORIG)
     assert out is None
     assert "9.9" in reason and "1.0" in reason
 
 
-def test_split_repaired_refuses_a_heading_after_the_last_section():
-    """Leading chatter is tolerated; a trailing heading is not. Without this it
-    would be swallowed into the final section's body instead of rejected."""
-    out, reason = _split_repaired(
-        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.0|C|D>>>\ny\n\n"
-        "<<<PP-SECTION 3.0|INVENTED|SECTION>>>\nz", _ORIG)
-    assert out is None
-    assert "after the last section" in reason
+def test_text_after_the_final_end_marker_never_enters_the_document():
+    """The defect this protocol exists to stop. The prompt invites the agent to
+    declare an issue it could not fix, and a live repair duly appended
+    "Corrected as required: added the missing Шифра | Code row ..." — which was
+    built into the .docx, and the §6A auditor passed it without comment. Only
+    text between a matching pair is document content."""
+    body = (_blk("1.0", "A", "B", "x") + "\n\n" + _blk("2.0", "C", "D", "y")
+            + "\n\n---\nCorrected as required: added the missing row. "
+              "No issues remain unfixed.")
+    out, reason = _split_repaired(body, _ORIG)
+    assert reason == "ok"
+    assert [s["content"] for s in out] == ["x", "y"]
+    assert not any("Corrected as required" in s["content"] for s in out)
+
+
+def test_text_between_sections_is_discarded_too():
+    body = (_blk("1.0", "A", "B", "x")
+            + "\n\nlet me now do the second section\n\n"
+            + _blk("2.0", "C", "D", "y"))
+    out, reason = _split_repaired(body, _ORIG)
+    assert reason == "ok"
+    assert [s["content"] for s in out] == ["x", "y"]
 
 
 def test_section_content_may_contain_markdown_headings():
