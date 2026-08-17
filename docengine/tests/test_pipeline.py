@@ -1,6 +1,7 @@
 # Pipeline unit surface: questionnaire defaulting + Markdown assembly, plus
 # run_workflow's error-path coverage (the Letta round-trips are otherwise
 # exercised live on the wwf_mass stack, not here).
+import inspect
 import sys
 from pathlib import Path
 
@@ -9,10 +10,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import builder, db, fleet  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
-    _brief, _qa_audit_passed,
+    _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -487,3 +489,161 @@ async def test_a_pass_with_preamble_reaches_the_builder(monkeypatch):
     await run_workflow("job-1", client=PreambleAuditClient())
     assert built, "a PASS announced after preamble must still reach builder.build"
     assert updates[-1]["status"] == "done"
+
+
+# ---- §6A repair loop ----
+_ORIG = [
+    {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT", "content": "тело|body one"},
+    {"num": "2.0", "mk": "ПОТВРДА", "en": "SIGN-OFF", "content": "тело|body two"},
+]
+
+
+def test_split_repaired_accepts_a_faithful_rewrite():
+    body = "# 1.0 СОДРЖИНА|CONTENT\nнов|new one\n\n# 2.0 ПОТВРДА|SIGN-OFF\nнов|new two"
+    out = _split_repaired(body, _ORIG)
+    assert [s["content"] for s in out] == ["нов|new one", "нов|new two"]
+    # titles are carried from the originals, never taken from the reply
+    assert [(s["num"], s["mk"], s["en"]) for s in out] == [
+        ("1.0", "СОДРЖИНА", "CONTENT"), ("2.0", "ПОТВРДА", "SIGN-OFF")]
+
+
+def test_split_repaired_ignores_a_retitled_section():
+    """The agent may rewrite bodies, not rename sections — but the title it
+    supplies is discarded rather than trusted."""
+    body = "# 1.0 SOMETHING ELSE|WHATEVER\nнов|new one\n\n# 2.0 X|Y\nнов|new two"
+    out = _split_repaired(body, _ORIG)
+    assert [s["mk"] for s in out] == ["СОДРЖИНА", "ПОТВРДА"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "",                                                   # nothing back
+        "Sure! Here is the fixed document.",                  # no headings
+        "# 1.0 A|B\nonly one section",                        # dropped a section
+        "# 1.0 A|B\nx\n\n# 2.0 C|D\ny\n\n# 3.0 E|F\nz",       # invented a section
+        "# 2.0 A|B\nx\n\n# 1.0 C|D\ny",                       # reordered
+        "# 1.0 A|B\nx\n\n# 2.9 C|D\ny",                       # renumbered
+        "# 1.0 A|B\n\n\n# 2.0 C|D\ny",                        # emptied a section
+    ],
+)
+def test_split_repaired_refuses_anything_that_does_not_line_up(body):
+    """A repair that cannot be parsed with confidence is not a repair. The job
+    must fail on the auditor's verdict rather than build a guess."""
+    assert _split_repaired(body, _ORIG) is None
+
+
+def test_section_body_never_exposes_the_document_header():
+    """Agents own no document metadata — the one defect this pipeline already
+    had to strip. The repair input must not hand it back to them."""
+    body = _section_body(_ORIG)
+    assert "HEADERDATA" not in body
+    assert body.startswith("# 1.0 СОДРЖИНА|CONTENT")
+
+
+@pytest.mark.asyncio
+async def test_a_fix_verdict_is_repaired_and_the_document_builds(monkeypatch):
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+
+    class RepairingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.audits = 0
+
+        async def send_message(self, agent_id, prompt):
+            if "CORRECTED document body" in prompt:
+                return "# 1.0 СОДРЖИНА|CONTENT\nпоправено|repaired"
+            if "§6A" in prompt:
+                self.audits += 1
+                return ("**Verdict: FIX**\n1. missing Code row" if self.audits == 1
+                        else "**Verdict: PASS**")
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=RepairingClient())
+    assert built, "a repaired document must reach the builder"
+    res = updates[-1]["result"]
+    assert updates[-1]["status"] == "done"
+    # trap 2: the record must not read as a first-pass PASS
+    assert res["qa_repair_rounds"] == 1
+    assert len(res["qa_audit_history"]) == 2
+    assert "FIX" in res["qa_audit_history"][0]
+    assert _qa_audit_passed(res["qa_audit"])
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_repair_fails_the_job_on_the_original_verdict(monkeypatch):
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+
+    class GarbageRepairClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "CORRECTED document body" in prompt:
+                return "Sure! I've fixed everything for you."   # unparseable
+            if "§6A" in prompt:
+                return "**Verdict: FIX**\n1. missing Code row"
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=GarbageRepairClient())
+    assert not built, "an unparseable repair must never reach the builder"
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["error"] == "§6A audit did not pass"
+
+
+@pytest.mark.asyncio
+async def test_repair_is_disabled_when_max_repair_rounds_is_zero(monkeypatch):
+    """The knob restores the old fail-on-first-FIX behaviour exactly."""
+    updates = _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 0)
+    repairs = []
+
+    class FixClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "CORRECTED document body" in prompt:
+                repairs.append(1)
+                return "# 1.0 A|B\nx"
+            if "§6A" in prompt:
+                return "**Verdict: FIX**\n1. something"
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=FixClient())
+    assert not repairs, "no repair may be attempted when the knob is 0"
+    assert updates[-1]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_repair_that_breaks_bilingual_parity_is_discarded(monkeypatch):
+    """A reworded cell can drop one language. The per-section gate re-runs on the
+    repair rather than trusting it."""
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+
+    class MonolingualRepairClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "CORRECTED document body" in prompt:
+                return "# 1.0 СОДРЖИНА|CONTENT\n" + ("English only text. " * 20)
+            if "§6A" in prompt:
+                return "**Verdict: FIX**\n1. something"
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=MonolingualRepairClient())
+    assert not built
+    assert updates[-1]["status"] == "failed"
+
+
+def test_repair_prompt_forbids_inventing_data_to_satisfy_an_issue():
+    """Trap 1: a repair loop IS fabrication pressure. Told an issue is blocking,
+    the cheapest way to satisfy "field X is empty" is to fill X in — the one
+    failure the house rules forbid outright. Pinned so no future edit of the
+    prompt quietly drops it."""
+    src = inspect.getsource(_repair_sections)
+    assert "NEVER invent data" in src
+    assert "BLANK write-ins" in src
+    assert "leave that" in src and "unfixed" in src

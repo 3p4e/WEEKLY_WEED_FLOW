@@ -75,9 +75,11 @@ class QaAuditFailed(Exception):
     until the issues are addressed. Consistent with pp_verify's own hard
     PASS/FAIL gate elsewhere in this pipeline: never fabricate, fail loud."""
 
-    def __init__(self, verdict: str):
+    def __init__(self, verdict: str, history: list[str] | None = None):
         super().__init__("§6A audit did not PASS")
         self.verdict = verdict
+        # every verdict in order, so a failed job shows what repair was tried
+        self.history = history or [verdict]
 
 
 class BilingualGap(Exception):
@@ -245,6 +247,88 @@ def _brief(questionnaire_key: str, answers: dict, meta: dict | None = None) -> s
     return "\n".join(lines)
 
 
+def _section_body(sections: list[dict]) -> str:
+    """The document body an authoring agent is allowed to see and rewrite —
+    the same `# num MK|EN` shape assemble_markdown emits, but WITHOUT the
+    HEADERDATA block. Document metadata is never handed to an agent: it owns
+    none of it, and an agent-emitted header is a defect this pipeline already
+    had to strip once."""
+    return "\n\n".join(
+        f"# {s['num']} {s['mk']}|{s['en']}\n{s['content'].strip()}" for s in sections
+    )
+
+
+_SECTION_HEAD = re.compile(r"^#\s+(\S+)[ \t]+(.*)$", re.M)
+
+
+def _split_repaired(body: str, original: list[dict]) -> list[dict] | None:
+    """Parse a repaired body back into sections, or None if it does not line up.
+
+    Strict on purpose. A repair that cannot be parsed with confidence is not a
+    repair, and the job must fail on the auditor's original verdict rather than
+    build something reassembled from a guess. The agent may change section
+    BODIES only: numbering and titles are carried over from the originals, so it
+    cannot rename, reorder, add or drop a section."""
+    heads = list(_SECTION_HEAD.finditer(body))
+    if len(heads) != len(original):
+        return None
+    if [m.group(1) for m in heads] != [s["num"] for s in original]:
+        return None
+    out = []
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(body)
+        content = body[m.end():end].strip()
+        if not content:
+            return None
+        out.append({**original[i], "content": content})
+    return out
+
+
+async def _repair_sections(
+    client: LettaClient, author: str, sections: list[dict], audit: str, job_id: str
+) -> list[dict] | None:
+    """Hand the auditor's issues back to the authoring agent, once.
+
+    Runs on an ephemeral clone for the same reason the reg-checker does: a
+    persistent agent carries every prior turn into the next prompt.
+
+    The no-invention clause is not boilerplate. A repair loop is fabrication
+    pressure by construction — told an issue is blocking, the cheapest way for a
+    model to satisfy "field X is empty" is to fill X in. In a GMP document that
+    is the one failure that matters, so the instruction is explicit that a blank
+    stays blank and an unresolvable issue stays unresolved. The §6A gate then
+    fails the job honestly, which is the correct outcome."""
+    from .fleet import spawn_ephemeral  # late import: fleet needs live Letta
+
+    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}")
+    try:
+        reply = await client.send_message(
+            tmp_id,
+            "A §6A reviewer raised the issues below against this document. "
+            "Return the CORRECTED document body.\n\n"
+            "Rules:\n"
+            "- Keep every '# <number> <MK>|<EN>' heading exactly as given, in the "
+            "same order. Change section bodies only.\n"
+            "- Change only what the issues require; leave everything else byte "
+            "for byte as it is.\n"
+            "- NEVER invent data to satisfy an issue. Facility specifics, "
+            "measured values, dates, names and signatures stay BLANK write-ins. "
+            "If an issue cannot be fixed without inventing something, leave that "
+            "one unfixed and say so after the body.\n"
+            "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
+            "- Output the document body first, with no preamble.\n\n"
+            f"ISSUES:\n{audit.strip()}\n\n"
+            f"DOCUMENT BODY:\n{_section_body(sections)}",
+        )
+    finally:
+        # same rationale as the reg-checker clone: cleanup must never abort a job
+        try:
+            await client.delete_agent(tmp_id)
+        except Exception as e:  # noqa: BLE001
+            log.warning("failed to delete ephemeral repairer %s: %s", tmp_id, e)
+    return _split_repaired(_strip_fences(reply), sections)
+
+
 def assemble_markdown(meta: dict, sections: list[dict]) -> str:
     """Assemble the HEADERDATA block + section bodies into engine Markdown."""
     # A literal "-->" in a meta value would be mistaken for the HEADERDATA
@@ -379,15 +463,44 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             raise BilingualGap(gaps)
 
         # ---- §6A audit ----
+        # A FIX verdict is not the end: the auditor returns concrete, actionable
+        # issues ("add the ~~Шифра | Code~~ row ... after adding it the document
+        # is PASS"), and before this loop the pipeline discarded them and failed
+        # the job. Most first-pass failures are ordinary drafting variance, so
+        # one hand-back converges them. The gate itself is NOT relaxed —
+        # _qa_audit_passed still has to return True on the final verdict; repair
+        # only buys more attempts at earning it.
         await db.job_update(job_id, stage="qa-audit")
+        author = "gf_sop_author" if doctype == "SOP" else "gf_annex_author"
+        audits: list[str] = []
         markdown = assemble_markdown(meta, sections)
-        audit = await client.send_message(
-            agents["gf_qa_auditor"],
-            "Run the §6A review on this assembled document Markdown. "
-            "Return verdict PASS or FIX with issues.\n\n" + markdown,
-        )
-        if not _qa_audit_passed(audit):
-            raise QaAuditFailed(audit)
+        for attempt in range(max(0, settings.max_repair_rounds) + 1):
+            audit = await client.send_message(
+                agents["gf_qa_auditor"],
+                "Run the §6A review on this assembled document Markdown. "
+                "Return verdict PASS or FIX with issues.\n\n" + markdown,
+            )
+            audits.append(audit)
+            if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
+                break
+
+            await db.job_update(job_id, stage=f"qa-repair {attempt + 1}")
+            repaired = await _repair_sections(client, author, sections, audit, job_id)
+            if repaired is None:
+                log.warning("job %s repair %d unusable — failing on the audit", job_id, attempt + 1)
+                break
+            # A repair can break parity (dropping one language while rewording a
+            # cell). Re-run the same per-section gate rather than trusting it.
+            gaps = _bilingual_gaps(repaired)
+            if gaps:
+                log.warning("job %s repair %d broke bilingual parity %s — discarded",
+                            job_id, attempt + 1, gaps)
+                break
+            sections = repaired
+            markdown = assemble_markdown(meta, sections)
+
+        if not _qa_audit_passed(audits[-1]):
+            raise QaAuditFailed(audits[-1], audits)
 
         # ---- format + verify (hard gate) ----
         await db.job_update(job_id, stage="format")
@@ -416,7 +529,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "markdown": markdown,
                 "verify": result.verify_report,
                 "regulatory": reg_findings,
-                "qa_audit": audit,
+                "qa_audit": audits[-1],
+                # Never let a repaired document read as one that passed first
+                # time. Every verdict in order, and how many hand-backs it took.
+                "qa_audit_history": audits,
+                "qa_repair_rounds": len(audits) - 1,
                 "bytes": result.bytes,
             },
         )
@@ -427,7 +544,9 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     except QaAuditFailed as e:
         log.error("job %s §6A audit did not pass", job_id)
         await db.job_update(job_id, status="failed", error="§6A audit did not pass",
-                            result={"qa_audit": e.verdict})
+                            result={"qa_audit": e.verdict,
+                                    "qa_audit_history": e.history,
+                                    "qa_repair_rounds": len(e.history) - 1})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed",

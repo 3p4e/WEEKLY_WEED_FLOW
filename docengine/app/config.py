@@ -29,6 +29,12 @@ class Settings:
     # Where produced .docx artifacts live (volume-mounted in the stack).
     out_dir: Path = Path(os.environ.get("DOCENGINE_OUT_DIR", "/data/docengine-out"))
 
+    # How many times a FIX verdict may be handed back to the authoring agent
+    # before the job fails. Each round costs one repair call + one re-audit, so
+    # this is the per-document cost knob. 0 restores the old behaviour (a single
+    # FIX fails the job outright).
+    max_repair_rounds: int = int(os.environ.get("DOCENGINE_MAX_REPAIR_ROUNDS", "1"))
+
     # Gotenberg for DOCX→PDF (already in the kvm4 letta stack).
     gotenberg_url: str = os.environ.get("GOTENBERG_URL", "").rstrip("/")
 
