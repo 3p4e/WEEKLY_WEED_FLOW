@@ -63,6 +63,9 @@ class LettaClient:
     async def list_sources(self) -> list[dict]:
         return await self._req("GET", "/sources/") or []
 
+    async def list_tools(self) -> list[dict]:
+        return await self._req("GET", "/tools/") or []
+
     # ---- additive fleet ops (gf_* only; guarded) ----
     @staticmethod
     def _guard_gf(name: str) -> None:
@@ -77,6 +80,16 @@ class LettaClient:
         await self._req(
             "PATCH", f"/agents/{agent_id}/sources/attach/{source_id}"
         )
+
+    async def create_tool(self, source_code: str, description: str = "") -> dict:
+        """Register a Python source tool. Name is taken from the def by Letta."""
+        body: dict[str, Any] = {"source_code": source_code}
+        if description:
+            body["description"] = description
+        return await self._req("POST", "/tools/", json=body)
+
+    async def attach_tool(self, agent_id: str, tool_id: str) -> None:
+        await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
 
     async def delete_agent(self, agent_id: str) -> None:
         """Delete an agent by id. Callers must only pass ids of agents they

@@ -32,15 +32,13 @@ class Settings:
     # Gotenberg for DOCX→PDF (already in the kvm4 letta stack).
     gotenberg_url: str = os.environ.get("GOTENBERG_URL", "").rstrip("/")
 
-    # Regulatory sources the checker agents are bound to (names, resolved to
-    # ids at fleet-ensure time). PQ1 is deliberately excluded (3072-dim outlier).
-    reg_sources: tuple = tuple(
-        s.strip()
-        for s in os.environ.get(
-            "DOCENGINE_REG_SOURCES", "DB1_REGULATORY,DB3_PP_CURRENT_unified"
-        ).split(",")
-        if s.strip()
-    )
+    # RAGflow is the single RAG for the whole stack — Letta keeps no sources of
+    # its own. These are injected as tool_exec_environment_variables on each
+    # gf_ agent so the ragflow_search tool can authenticate from its sandbox.
+    # Which datasets each agent may search is declared in agents/fleet.yaml,
+    # not here (one source of truth, versioned with the personas).
+    ragflow_base: str = os.environ.get("RAGFLOW_BASE_URL", "").rstrip("/")
+    ragflow_key: str = os.environ.get("RAGFLOW_API_KEY", "")
 
 
 settings = Settings()

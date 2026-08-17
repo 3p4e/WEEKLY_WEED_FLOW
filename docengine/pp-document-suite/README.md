@@ -5,6 +5,29 @@ inside the `letta` container (`/root/.letta/pp-document-suite`), where it existe
 unversioned files on a container filesystem — no copy in any repository. It is committed here so
 that it survives the container.
 
+## ⚠️ Which engine line this is — read before editing anything
+
+This is **engine line A** — the live-volume ACME_SOP master that the old `letta` container
+actually ran. It is a *preservation snapshot*, not the line this service imports.
+
+`../engine/` is **engine line B**, the canon-assembled fork (see `../engine/PROVENANCE.md`), and
+it is what `docengine.app.builder` imports. The two lines are distinguishable at a glance by
+where the width solver lives:
+
+| | line A (here) | line B (`../engine/`) |
+|---|---|---|
+| `fixed()` / `PAGE_W` | in `pp_report.py` | grafted into `pp_format.py`; `pp_report` imports them |
+| `pp_verify.py` | bilingual always a WARN | `--require-bilingual` flag, can FAIL |
+
+Line B is ahead on both counts. Nothing here is newer than line B — the size differences are the
+solver moving modules, not lost work.
+
+**Do not edit either line in this repo.** Per `../DEPRECATED.md` (owner decision 2026-08-09) all
+Letta/engine development happens in [`3p4e/letta-stack`](https://github.com/3p4e/letta-stack)
+`apps/wwf-docengine/`, where lines A and B are being merged into v2.0.0. This tree is a frozen
+mirror and a consumer. Recovering line A here gives that merge its missing input; evolving the
+engine is a letta-stack change.
+
 ## What it does
 
 `build_from_md.py` renders bilingual Macedonian|English Markdown into a controlled `.docx` in the

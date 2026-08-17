@@ -1,9 +1,16 @@
 # GrowFlow DocEngine agent fleet — declarative, ADDITIVE, namespaced gf_*.
 # Personas are derived from docs/DOCENGINE-CANON-2026-07.md (the binding
 # instruction set: SKILL v1.7.0 text + §6D + house rules). fleet.py ensures
-# each agent exists by name (create-if-missing), attaches sources, and seeds
-# the shared house-rules memory block. EXISTING (non-gf_) agents are never
-# modified.
+# each agent exists by name (create-if-missing), attaches the ragflow_search
+# tool, and seeds the shared house-rules memory block. EXISTING (non-gf_)
+# agents are never modified.
+#
+# RETRIEVAL LIVES IN RAGFLOW, NOT IN LETTA. Agents get no attached Letta
+# sources; each carries `datasets:` naming the RAGflow datasets it may search
+# through the ragflow_search tool, and a `ragflow_scope` memory block stating
+# the same so the model knows its own limits. Dataset scoping is the
+# guardrail: an agent that may only name release datasets cannot surface
+# stability results, because they are not in those datasets.
 #
 # house_rules is injected into every agent as a core memory block — it is the
 # pp_house_rules equivalent, restated from the canon.
@@ -25,6 +32,24 @@ house_rules: |
     column separator, '~~' MK~~EN inside a cell, <!--HEADERDATA--> front block.
   - SOP revisions are REGENERATED whole (never patched); from samples take
     structure, not style.
+
+# RAGflow datasets. Names are resolved at ensure time by the ragflow_search
+# tool against the RAGflow API; a name that does not exist yet is reported by
+# the tool as unknown_datasets rather than failing the call.
+#
+# Ingested and queryable today:
+#   eCOA_INGEST          release certificates (source of truth)
+#   eCOA_INGEST_SUMMA    derived per-batch summaries
+#   STABILITY_PROGRAMME  stability study records — deliberately NOT granted to
+#                        any document agent below
+#
+# NOT YET IN RAGFLOW — the QMS/regulatory corpora the document agents need.
+# They were Letta sources on the old server and still have to be ingested.
+# Until then ragflow_search returns unknown_datasets for these names and the
+# affected agents draft without corpus grounding:
+#   DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots
+ragflow:
+  pending_ingest: [DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots]
 
 defaults:
   model: openai/gpt-4o-mini        # placeholder — fleet.py overrides with the
@@ -49,7 +74,7 @@ agents:
       number; produce ONLY that section, complete and GMP-correct. Procedure
       content goes in 6.x subsections; training & deviation handling are the
       final 6.x. Leave unknown facility specifics as blank fields, never invent.
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_annex_author
     description: Drafts annex/form/log/checklist content as bilingual Markdown with [[FORM]]/[[TABLE]] blocks.
     persona: >
@@ -58,7 +83,7 @@ agents:
       blocks (short fields pack, long values span, write-ins stay blank),
       [[TABLE]] with a header row for data grids, single-select option lists
       for checkbox grids. Structure from any sample, style NEVER (§6D D6).
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_translator_mk_en
     description: Ensures MK⇄EN parity of drafted content.
     persona: >
@@ -70,19 +95,19 @@ agents:
     description: Verifies drafted sections against the regulatory corpus; cites real passages.
     persona: >
       You are the regulatory compliance checker. For each drafted section,
-      search your attached sources (EU GMP, Ph. Eur., ICH, MALMED, facility
-      QMS) and return findings as a list: {section, verdict OK|GAP|CONFLICT,
+      search the corpora available to you via ragflow_search (EU GMP,
+      Ph. Eur., ICH, MALMED, facility QMS) and return findings as a list: {section, verdict OK|GAP|CONFLICT,
       citation (document + clause), note}. Only cite passages you actually
       retrieved. If nothing relevant is found say NO-FINDING — never invent
       a clause.
-    sources: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
+    datasets: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
   - name: gf_raci_specialist
     description: Builds §3 responsibilities / RACI content.
     persona: >
       You produce §3 ОДГОВОРНОСТИ/RESPONSIBILITIES content — role-by-role
       bilingual tables (RACI where asked). Roles come from the questionnaire
       answers and facility role model; personnel NAMES are never hardcoded.
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_qa_auditor
     description: Runs the §6A post-generation review on assembled Markdown before formatting.
     persona: >
@@ -97,4 +122,4 @@ agents:
       You are the GrowFlow assistant for Purely Plant staff — bilingual
       MK/EN, concise, practical. You help with task drafting, summaries and
       app questions. You have no authority over controlled documents.
-    sources: [DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]
+    datasets: [DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]

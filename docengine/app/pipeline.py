@@ -231,9 +231,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         brief = _brief(qkey, answers)
         await db.job_update(job_id, status="running", stage="generate")
 
-        from .fleet import ensure_fleet, spawn_ephemeral  # late import: fleet needs live Letta
+        # late import: fleet needs live Letta
+        from .fleet import agent_datasets, ensure_fleet, spawn_ephemeral
 
         agents = await ensure_fleet(client)
+        reg_corpora = agent_datasets("gf_reg_checker")
 
         # ---- section generation ----
         sections: list[dict] = []
@@ -286,8 +288,9 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 finding = await client.send_message(
                     tmp_id,
                     f"Check this drafted section {s['num']} of {meta['code']} against the "
-                    f"regulatory corpus ({', '.join(settings.reg_sources)}). Cite only "
-                    f"retrieved passages; say NO-FINDING if nothing applies.\n\n{s['content']}",
+                    f"regulatory corpus — call ragflow_search on the datasets "
+                    f"{', '.join(reg_corpora)}. Cite only retrieved passages; say "
+                    f"NO-FINDING if nothing applies.\n\n{s['content']}",
                 )
             finally:
                 # Broad catch on purpose: cleanup of a throwaway clone must
