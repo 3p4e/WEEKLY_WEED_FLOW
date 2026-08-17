@@ -12,6 +12,7 @@ from app import builder, db, fleet  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
+    _brief,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -409,3 +410,24 @@ def test_clean_section_leaves_an_ordinary_html_comment_alone():
     """Only HEADERDATA is the assembler's property."""
     out = _clean_section("## 1. A|B\n<!-- a note -->\ntext\n", structured=True)
     assert "<!-- a note -->" in out
+
+
+def test_brief_says_parenthesised_numbers_are_clause_refs_not_values():
+    """Several questionnaire options read "Version (4.3)", where 4.3 is the EU
+    GMP clause requiring the field. A model that took it as the value produced a
+    form stamped version 4.3 against a document at 1.0 — the §6A auditor's
+    objection was that someone could sign off on the wrong revision."""
+    b = _brief(
+        "annex_form",
+        {"id_fields": ["Doc ID (EU GMP 4.2)", "Version (4.3)", "Date (4.8)"]},
+        {"code": "QASOP_031", "version": "2.0"},
+    )
+    assert "NEVER the field's value" in b
+    assert "clause" in b
+    # and the real identity is stated so the agent has no reason to infer one
+    assert "QASOP_031" in b and "version: 2.0" in b
+
+
+def test_brief_without_meta_still_renders_the_answers():
+    b = _brief("annex_form", {"purpose": "Recording"})
+    assert "purpose: Recording" in b

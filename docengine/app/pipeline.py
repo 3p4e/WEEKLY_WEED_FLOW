@@ -195,10 +195,32 @@ def _clean_section(text: str, structured: bool = False) -> str:
     return cleaned
 
 
-def _brief(questionnaire_key: str, answers: dict) -> str:
+def _brief(questionnaire_key: str, answers: dict, meta: dict | None = None) -> str:
+    """Render the questionnaire answers for an authoring agent.
+
+    Two clarifications are not optional. Several option labels carry a
+    parenthesised EU GMP clause — "Version (4.3)", "Doc ID (EU GMP 4.2)",
+    "Date (4.8)" — and a model reading those as field VALUES writes a form whose
+    version says 4.3. That happened live, and the §6A auditor's objection was the
+    right one: someone could sign off against the wrong revision. So say what the
+    parentheses are, and state the document's real identity instead of leaving
+    the agent to infer it."""
     lines = [f"Questionnaire: {questionnaire_key}"]
+    if meta:
+        lines += [
+            "Document identity (authoritative — use these, do not invent or "
+            "copy numbers out of the field list below):",
+            f"- code: {meta.get('code', '')}",
+            f"- version: {meta.get('version', '1.0')}",
+        ]
     for k, v in answers.items():
         lines.append(f"- {k}: {', '.join(v) if isinstance(v, list) else v}")
+    lines.append(
+        "NOTE: a number in parentheses after a field name is the EU GMP clause "
+        "that requires the field (e.g. 'Version (4.3)' means clause 4.3). It is "
+        "NEVER the field's value. Identification fields such as version, date "
+        "and batch are blank write-ins unless given above."
+    )
     return "\n".join(lines)
 
 
@@ -243,7 +265,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         answers = apply_defaults(qkey, p.get("answers", {}))
         doctype = QUESTIONNAIRES[qkey]["doctype"]
         meta["doctype"] = doctype
-        brief = _brief(qkey, answers)
+        brief = _brief(qkey, answers, meta)
         await db.job_update(job_id, status="running", stage="generate")
 
         # late import: fleet needs live Letta
