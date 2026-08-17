@@ -79,7 +79,21 @@ Verified by direct invocation against live RAGflow:
 | `DB1_REGULATORY` (not ingested) | `ok:false`, lists what *is* available — no silent empty answer |
 | `eCOA_INGEST,DB1_REGULATORY` | searches the real one, returns `unknown_datasets: [DB1_REGULATORY]` |
 
-## BLOCKER: both cloud provider accounts on letta-6ou3 are out of credit
+## ~~BLOCKER~~ RESOLVED — see `LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md`
+
+The blocker below was real and is kept for the record, but it no longer stands.
+The fleet was moved to **DeepSeek v4-flash through the LiteLLM gateway** (funded,
+$3.00 balance) with **local Ollama embeddings**, and the agent-turn → tool-call
+link that this section calls unproven is now **proven**: `gf_app_assistant` calls
+`ragflow_search` itself, scopes it to its permitted dataset from its own memory
+block, and quotes values and source documents that match the corpus exactly.
+`gf_reg_checker` correctly returns NO-FINDING for its un-ingested corpora.
+
+Topping up OpenAI/Anthropic is still worthwhile — with the precedence fix in
+`_resolve_model`, switching back is a one-line `fleet.yaml` change plus a fleet
+recreate — but nothing is waiting on it.
+
+## BLOCKER (historical): both cloud provider accounts on letta-6ou3 are out of credit
 
 No agent can complete a turn. A handle appearing in `/v1/models` does not mean it
 is billable:
@@ -106,6 +120,8 @@ the house rules forbid.
 Consequently one link is **proven** (tool → RAGflow, above) and one is
 **unproven**: agent turn → tool call. It cannot be tested until a billable model
 is available, and the local model is not a valid substitute for that test.
+*(Superseded: proven the same day via DeepSeek — see the note at the top of this
+section.)*
 
 ## Not done, and why
 

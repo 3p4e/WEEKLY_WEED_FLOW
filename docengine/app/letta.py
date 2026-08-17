@@ -66,6 +66,16 @@ class LettaClient:
     async def list_tools(self) -> list[dict]:
         return await self._req("GET", "/tools/") or []
 
+    async def list_models(self) -> list[dict]:
+        """LLM handles the server will accept. Note this is a registry, not a
+        live probe: Letta adds a handle when a provider syncs and never prunes
+        it, so a handle listed here can still belong to a route the upstream
+        gateway no longer serves."""
+        return await self._req("GET", "/models/") or []
+
+    async def list_embedding_models(self) -> list[dict]:
+        return await self._req("GET", "/models/embedding") or []
+
     # ---- additive fleet ops (gf_* only; guarded) ----
     @staticmethod
     def _guard_gf(name: str) -> None:

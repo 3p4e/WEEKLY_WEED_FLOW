@@ -58,33 +58,46 @@ ragflow:
     matching passages with the source document name. Scope the search with the
     dataset names your ragflow_scope memory block allows.
 
-# fleet.py still prefers any handle an existing agent on the server already
-# uses — a handle the server demonstrably accepts beats one we assert. These
-# are the real fallback for a server with no agents yet (letta-6ou3 was empty
-# at cutover), so they are a deliberate choice, not a placeholder:
-#   model      long bilingual MK|EN structured output plus reliable tool-calling,
-#              at a cost that survives ~11 sequential calls per document.
-#   embedding  Letta only embeds its own conversational/archival memory now that
-#              retrieval lives in RAGflow. openai/* uses the server's own
-#              OPENAI_API_KEY; letta/letta-free would route memory through
-#              inference.letta.com, an external dependency for no benefit.
+# These handles are used as declared whenever letta-6ou3 serves them; only an
+# unserved handle falls back to adopting one from a live agent (see
+# fleet.py:_resolve_model). A handle being LISTED is not the same as being
+# billable — as of 2026-08-17 letta-6ou3's own Anthropic key reports "credit
+# balance is too low" and its OpenAI key "You have no credits remaining", which
+# is why neither is named here.
 #
-# A handle being listed by /v1/models is NOT the same as being billable. On
-# letta-6ou3 (2026-08-17) every cloud handle it offers is out of credit —
-# Anthropic returns "credit balance is too low", OpenAI "You have no credits
-# remaining" — so no agent here can complete a turn until credit is added to the
-# account behind that provider's key in the letta-6ou3 container. The fleet
-# itself is fine: agents, tool and scopes are all in place and the ensure loop is
-# idempotent, so nothing needs recreating once the account is funded.
+#   model      DeepSeek v4-flash, reached through the LiteLLM gateway on ai-net.
+#              Funded, cheap enough for the ~11 sequential calls a document
+#              costs, and verified to make real native tool calls: asked for a
+#              batch's THC it called ragflow_search itself, scoped to the one
+#              dataset its ragflow_scope block allows, and quoted the value and
+#              source document exactly as they appear in the corpus.
 #
-# Do NOT work around that by pointing these agents at the local ollama/* handles.
-# Verified live: ollama/phi4-mini answered a retrieval question without calling
-# ragflow_search at all and invented both a source filename and an out-of-range
+#              It MUST go through LiteLLM, not straight at api.deepseek.com. Two
+#              Letta-side problems make the direct route unusable, both
+#              confirmed live and written up in
+#              docs/LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md:
+#                * provider_type "deepseek" drops every current model, because
+#                  its hardcoded context-window map knows only deepseek-chat /
+#                  -reasoner and returns None (= "skip") for v4-*;
+#                * v4 models default to thinking mode and then reject any
+#                  follow-up turn that does not echo `reasoning_content` back,
+#                  which Letta never does, so every tool call died on its second
+#                  hop. LiteLLM disables thinking via extra_body.
+#
+#   embedding  Local Ollama. Letta only embeds its own archival/recall memory now
+#              that retrieval lives in RAGflow, so this needs to be free and
+#              always-available rather than good — and pointing it at either
+#              out-of-credit cloud key would leave a latent failure.
+#
+# Do NOT point the model at the local ollama/* or openai-proxy/local-* handles.
+# Verified live: phi4-mini, asked a retrieval question, never called
+# ragflow_search and invented both a source filename and an out-of-range
 # analytical finding. Fabricating pharmaceutical data is the one thing the house
-# rules forbid outright, and a 4B local model does it readily.
+# rules forbid outright, and a 4B local model does it readily. They stay
+# available for cheap non-document work; they are not fit for this fleet.
 defaults:
-  model: anthropic/claude-sonnet-4-6
-  embedding: openai/text-embedding-3-small
+  model: openai-proxy/deepseek/deepseek-v4-flash
+  embedding: ollama-local/nomic-embed-text:latest
   max_tokens: 4096
 
 agents:

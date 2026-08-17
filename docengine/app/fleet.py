@@ -5,9 +5,9 @@
 #     rejects config writes for the legacy provider enum anyway);
 #   * attach the shared ragflow_search tool and pass it RAGflow credentials;
 #   * seed `gf_house_rules` + `ragflow_scope` core memory blocks.
-# Model/embedding handles are taken from what the server actually serves
-# (first existing agent's config wins over the YAML default), because the
-# handover documented that invented handles are rejected.
+# The declared model/embedding handles win whenever the server actually serves
+# them; only an unserved handle falls back to adopting one a live agent already
+# uses (the handover documented that invented handles are rejected).
 #
 # RETRIEVAL LIVES IN RAGFLOW. Letta sources are not used at all: the fleet
 # reaches the corpora through one registered tool, scoped per agent by dataset
@@ -159,12 +159,46 @@ async def _reconcile_scope(
         log.warning("could not reconcile %s on %s: %s", SCOPE_BLOCK, label, e)
 
 
-def _resolve_model(spec: dict, existing: list[dict]) -> tuple[str, str]:
-    """Adopt a model/embedding handle the server demonstrably accepts: prefer
-    any existing agent's llm_config over the YAML default (invented handles
-    are rejected by this server, per the handover)."""
+async def _served_handles(client: LettaClient) -> tuple[set[str] | None, set[str] | None]:
+    """What the server currently offers. None on failure, which makes
+    _resolve_model fall back to its old adopt-from-live-agent behaviour rather
+    than refusing to work because a listing call failed."""
+    try:
+        llm = {m.get("handle") for m in await client.list_models() if m.get("handle")}
+        emb = {m.get("handle") for m in await client.list_embedding_models() if m.get("handle")}
+        return llm or None, emb or None
+    except LettaError as e:
+        log.warning("could not list served handles (%s); falling back to adoption", e)
+        return None, None
+
+
+def _resolve_model(
+    spec: dict,
+    existing: list[dict],
+    served: set[str] | None = None,
+    served_embeddings: set[str] | None = None,
+) -> tuple[str, str]:
+    """Pick a model/embedding handle the server will actually accept.
+
+    The declared handle in fleet.yaml WINS whenever the server serves it. Only
+    if it does not (an invented or retired handle — the failure the handover
+    warned about) do we fall back to adopting a handle some existing agent
+    already uses, which is proof the server takes it.
+
+    The order matters. Adopting first, unconditionally, meant live state
+    silently overrode the declaration: with the fleet already created on one
+    provider, editing fleet.yaml could never move it to another, because the
+    old handle kept winning. That made the declarative file a lie for the one
+    setting most likely to change — which provider is currently funded."""
     model = spec["defaults"]["model"]
     embedding = spec["defaults"]["embedding"]
+    if served is not None and model in served:
+        emb_ok = served_embeddings is None or embedding in served_embeddings
+        if emb_ok:
+            return model, embedding
+        log.warning("declared embedding %s is not served; adopting from a live agent", embedding)
+    elif served is not None:
+        log.warning("declared model %s is not served; adopting from a live agent", model)
     for a in existing:
         lc = a.get("llm_config") or {}
         if lc.get("handle") or lc.get("model"):
@@ -186,7 +220,8 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
     client = client or LettaClient()
     spec = load_fleet()
     existing = {a.get("name"): a for a in await client.list_agents()}
-    model, embedding = _resolve_model(spec, list(existing.values()))
+    served, served_emb = await _served_handles(client)
+    model, embedding = _resolve_model(spec, list(existing.values()), served, served_emb)
     tool_id = await ensure_tool(client, spec)
 
     out: dict[str, str] = {}
@@ -236,7 +271,8 @@ async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str
     spec = load_fleet()
     ag = next(a for a in spec["agents"] if a["name"] == agent_name)
     existing = await client.list_agents()
-    model, embedding = _resolve_model(spec, existing)
+    served, served_emb = await _served_handles(client)
+    model, embedding = _resolve_model(spec, existing, served, served_emb)
     # The clone must run the SAME model as the agent it clones ("same persona/
     # datasets/model") — the global adoption above picks whatever agent happens
     # to list first, which on a mixed instance (fleet + mirrored planners) can

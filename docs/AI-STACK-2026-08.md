@@ -229,6 +229,15 @@ them in `/opt/stacks/litellm/.env` and `docker restart litellm`**. Routes:
 `local-coder|general|uncensored|small|embed` → Ollama. Verified: liveliness 200,
 chat round-trip via gateway → phi4-mini exact-string reply.
 
+> **Updated 2026-08-17:** the `deepseek/*` wildcard was replaced by explicit
+> `deepseek/deepseek-v4-flash` / `-pro` entries carrying
+> `extra_body: {thinking: {type: disabled}}`, and LiteLLM is now a registered
+> Letta provider serving the `gf_*` fleet. The wildcard could not carry the
+> per-model param that DeepSeek's thinking mode requires, and advertised four
+> models DeepSeek no longer serves. Full reasoning, the two Letta bugs behind it,
+> and the live verification: `LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md`.
+> `DEEPSEEK_API_KEY` is no longer an empty placeholder.
+
 **RAGflow v0.26.4** — `/opt/stacks/ragflow`, official docker dir at the pinned
 tag, dedicated 6-container stack (`ragflow-cpu`, `es01` ES 8.11.3, MySQL 8,
 valkey Redis, MinIO) with its own volumes/network and generated 0600 secrets.

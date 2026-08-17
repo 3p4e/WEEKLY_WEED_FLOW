@@ -141,3 +141,41 @@ def test_declared_model_and_embedding_handles_are_provider_qualified():
     reason _resolve_model refuses to adopt one."""
     d = load_fleet()["defaults"]
     assert "/" in d["model"] and "/" in d["embedding"]
+
+
+def test_declared_handles_win_when_the_server_serves_them():
+    """The whole point of the declarative file: editing defaults must actually
+    move the fleet. Before this, adoption from a live agent ran first and the
+    old handle won forever."""
+    spec = {"defaults": {"model": "yaml/wanted", "embedding": "yaml/wanted-embed"}}
+    existing = [{"llm_config": {"handle": "live/other"},
+                 "embedding_config": {"handle": "live/other-embed"}}]
+    model, embedding = _resolve_model(
+        spec, existing, {"yaml/wanted", "live/other"}, {"yaml/wanted-embed"}
+    )
+    assert (model, embedding) == ("yaml/wanted", "yaml/wanted-embed")
+
+
+def test_unserved_declared_handle_falls_back_to_a_live_agents_handle():
+    """A handle the server does not serve is the invented-handle case the
+    handover warned about; a handle some agent already uses is proof it works."""
+    spec = {"defaults": {"model": "yaml/retired", "embedding": "yaml/retired-embed"}}
+    existing = [{"llm_config": {"handle": "live/works"},
+                 "embedding_config": {"handle": "live/works-embed"}}]
+    model, embedding = _resolve_model(spec, existing, {"live/works"}, {"live/works-embed"})
+    assert (model, embedding) == ("live/works", "live/works-embed")
+
+
+def test_unknown_served_set_keeps_the_old_adoption_behaviour():
+    """If listing the server's handles fails we must not become stricter than
+    before — _served_handles returns None and adoption still applies."""
+    spec = {"defaults": {"model": "yaml/m", "embedding": "yaml/e"}}
+    existing = [{"llm_config": {"handle": "live/m"}, "embedding_config": {"handle": "live/e"}}]
+    assert _resolve_model(spec, existing, None, None) == ("live/m", "live/e")
+
+
+def test_declared_defaults_are_not_an_out_of_credit_provider():
+    """Guards the specific trap that cost a cutover: letta-6ou3 lists Anthropic
+    and OpenAI handles it cannot bill."""
+    model = load_fleet()["defaults"]["model"]
+    assert not model.startswith(("anthropic/", "openai/")), model
