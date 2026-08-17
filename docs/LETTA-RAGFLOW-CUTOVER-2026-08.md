@@ -125,12 +125,13 @@ section.)*
 
 ## Not done, and why
 
-- **`LETTA_BASE_URL` is NOT switched.** `wwf-docengine` still points at the old
-  `wwf-letta`. Two reasons: it repoints the live WWF app and should be confirmed;
-  and it would be pointless now, since the target fleet cannot complete a turn.
-  Note also that `wwf-docengine` sits only on `weekly_weed_flow_internal` — it
-  has **no route to ai-net**, so the cutover also means attaching it to that
-  network (letta-6ou3 and RAGflow are both on `ai-net`).
+- ~~**`LETTA_BASE_URL` is NOT switched.**~~ **DONE 2026-08-17, owner-approved.**
+  `wwf-docengine` now runs `growflow-docengine:v12`, is attached to **both**
+  `weekly_weed_flow_internal` and `ai-net`, and points at
+  `http://letta-6ou3-letta-1:8283`. It also carries `RAGFLOW_BASE_URL` /
+  `RAGFLOW_API_KEY`, which `spawn_ephemeral` stamps onto every clone it creates —
+  without them an ephemeral reg-checker gets the tool but no way to authenticate.
+  See "The cutover" below.
 - **Engine evolution is out of scope for this repo.** Per `docengine/DEPRECATED.md`
   (owner decision 2026-08-09) all Letta/engine development happens in
   `3p4e/letta-stack` `apps/wwf-docengine/`. This session's GitHub scope is
@@ -150,3 +151,103 @@ section.)*
 `RAGFLOW_BASE_URL`/`RAGFLOW_API_KEY`, and must run **on `ai-net`** to reach
 either. The RAGflow key must belong to the tenant that owns the datasets;
 staged credentials were `chmod 600` and `shred -u`'d after use.
+
+---
+
+# The cutover (2026-08-17, owner-approved)
+
+`wwf-docengine` now talks to letta-6ou3. The old `wwf-letta` container is no
+longer referenced by the app.
+
+## What changed on kvm4
+
+`/opt/stacks/wwf_app/` — backups `compose.yaml.bak-pre-letta6ou3` and
+`docengine.env.bak-pre-letta6ou3`:
+
+| | before | after |
+|---|---|---|
+| image | `growflow-docengine:v8` | `growflow-docengine:v12` |
+| networks | `[internal]` | `[internal, ainet]` (`ai-net`, external) |
+| `LETTA_BASE_URL` | `http://letta:8283` | `http://letta-6ou3-letta-1:8283` |
+| `LETTA_API_KEY` | old server | letta-6ou3 |
+| `RAGFLOW_BASE_URL` / `_API_KEY` | absent | set |
+
+The RAGflow pair is not optional: `spawn_ephemeral` stamps it onto every clone
+it creates as `tool_exec_environment_variables`, so without it an ephemeral
+reg-checker gets `ragflow_search` attached and no way to authenticate.
+
+Followed the deploy discipline in CLAUDE.md: both DBs snapshotted and **verified**
+(`gzip -t` + end-marker + size) before touching anything, config backed up, image
+built from a pushed SHA and proved to carry the new code by grepping for symbols
+only it has, then `docker compose up -d --no-deps docengine` — one service, never
+`down`, no DB service touched. No migration was involved.
+
+**Rollback:** restore the two `.bak-pre-letta6ou3` files and
+`docker compose up -d --no-deps docengine`. Images v8–v12 are all retained;
+snapshots in `/opt/wwf-deploy/snap/`.
+
+## Verified after the swap
+
+- `/health` → `{"ok":true,"db":true,"letta":true}`; container on both networks.
+- From inside the container: 8 gf_ agents visible, `ensure_fleet()` created
+  nothing (idempotent), 377 LLM / 8 embedding handles served, RAGflow key present.
+- Rest of the `wwf_app` stack untouched (14 h uptime), backend
+  `/health/ready` → `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}`,
+  `https://wwf.srv1231216.hstgr.cloud` → **200**.
+- A real annex driven through `POST /workflows`: the log shows the whole chain —
+  `ragflow_scope` reconcile on all 8 agents, author turn, `_served_handles`,
+  `ensure_tool`, ephemeral clone created, **tool attached to the clone**,
+  reg-check turn, clone deleted. The cutover works end to end.
+
+## Three real defects the live runs exposed
+
+Running actual documents through the pipeline for the first time since the
+provider change found three bugs, all fixed and pinned by tests. Note the §6A
+auditor caught all three — the gate is doing its job well.
+
+1. **An agent's own `<!--HEADERDATA-->` reaching the document.**
+   `assemble_markdown` prepends the authoritative block and `build_from_md.py`'s
+   parser is line-anchored on the *first* one, so a second block declares a
+   conflicting version or leaks its fields into the body as text. Now stripped in
+   `_clean_section` wherever it sits — a block placed after the first heading
+   survived the structural-token search, which is exactly where it appeared.
+2. **GMP clause references presented as field values.** Options read
+   `Version (4.3)` / `Doc ID (EU GMP 4.2)` / `Date (4.8)`, where the number is
+   the clause requiring the field. The author wrote a form stamped *version 4.3*
+   against a document at 1.0. The auditor's objection was the right one: someone
+   could sign off against the wrong revision. `_brief` now says what the
+   parentheses mean and passes the authoritative code/version through.
+3. **A passing audit recorded as a failure.** `_qa_audit_passed` required the
+   reply to *start with* `PASS`; the auditor opens with a line of preamble and
+   announces `**Verdict: PASS**`. An audit that cleared all six checks was logged
+   as "§6A audit did not pass" and the .docx was never built — meaning the
+   pipeline could essentially never complete. Now reads an explicit
+   `Verdict: X` anywhere, still fail-closed on empty / unrecognisable / both-token
+   replies. The old tests missed it because their fake replies with a bare `PASS`,
+   a shape no real model produces.
+
+Progression across four runs, same annex, as the fixes landed:
+
+| run | image | auditor findings |
+|---|---|---|
+| 1 | v9 | 4 — duplicate HEADERDATA, version conflict, grid columns, SOP numbering in a FORM |
+| 2 | v10 | 2 — version conflict (clause ref read as a value) |
+| 3 | v11 | **PASS** — all six checks cleared (blocked only by defect 3) |
+| 4 | v12 | 1 — missing `Шифра | Code` grid row; 8 checks ✓ |
+
+## Known gap: there is no repair loop
+
+Run 3 proves the content pipeline can reach PASS. Run 4 shows the remaining
+failure mode is **run-to-run variance in the author's output**, not a systematic
+defect — and the pipeline has no answer to it. The auditor returns a concrete,
+actionable fix (run 4: "add the `~~Шифра | Code~~ | QASOP_TEST_A4` row … after
+adding it the document is PASS") and the pipeline **throws that away and fails
+the job**.
+
+One retry that feeds the auditor's issues back to the authoring agent would make
+this converge, and the auditor is already producing exactly the input such a loop
+needs. Not implemented here: it changes pipeline behaviour and per-document cost
+(extra model calls), so it is an owner decision, not a bug fix.
+
+No `QASOP_TEST_*` document was registered — every test run stopped at the audit
+gate, so nothing entered the document registry.
