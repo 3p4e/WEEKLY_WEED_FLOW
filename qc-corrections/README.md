@@ -49,6 +49,12 @@ identical column widths, frozen header.
   The same duplication exists in the register's own strain column. `Cap Junkie` and `Cap Junky`
   were additionally merged into **Cup Junky** — see below.
 - **Batch counts and THC ranges recomputed** per merged group; BLQ/`<LOQ`/ND excluded from ranges.
+- **Stability results included, marked, and excluded from the release range.** The ten stability
+  Total Δ⁹-THC values appear as extra rows against their own batches — P050022 = GP0824_02,
+  P050072 = GP0824_03, P050202 = GP062501 — shaded, italic, with the timepoint and storage
+  condition in the value cell and `STABILITY — not a release value` in the spec column. The group
+  header range is computed from release results only and is labelled "(release)". A stability value
+  is never entered as a release value.
 - **Three OCR-garbled CoA codes resolved** against the certificate text:
   `ППК52211 (likely OCR misread…)`→**ППК25211**, `ППК21554`→**ППК25154**, `ППК52557`→**ППК25257**.
   `НИК22155` (HPA1024_01) carries no ППК number in its certificate text and is left as found.
@@ -105,3 +111,31 @@ What the data shows, stated as the certificates state it:
   its long-term counterpart. That figure is not a transcription error: the certificate gives
   Δ⁹-THC 0.29 % and Δ⁹-THCA 0.97 %, and 0.29 + 0.97 × 0.877 = 1.17, matching the formula the
   certificate itself prints. It is reported as found; interpreting it is QC's call.
+
+## Confirming the stability values against the certificates
+
+Each stability Total Δ⁹-THC was confirmed rather than taken on trust, by recomputing it from the
+same certificate's own components: `Total Δ⁹-THC = Δ⁹-THC + Δ⁹-THCA × 0.877`, the formula each
+certificate prints in its own footnote.
+
+Seven of ten agree to within rounding. Three did not, and the reason was OCR damage in the RAGflow
+text rather than anything wrong with the certificates:
+
+| Certificate | RAGflow text | Problem |
+|---|---|---|
+| ППК26059 | Δ⁹-THC `0.01 %` | the CBD value was duplicated into the Δ⁹-THC row; 0.01 + 13.22 × 0.877 = 11.60, not the stated 23.08 |
+| ППК26060 | Δ⁹-THC `0.01 %` | same duplication; 0.01 + 12.36 × 0.877 = 10.85, not the stated 25.98 |
+| ППК26035 | no values | the result column did not OCR onto the label rows at all |
+
+All three were resolved against the Letta corpus, an independent OCR of the same certificates, and
+the arithmetic then closes exactly:
+
+| Certificate | Δ⁹-THC | Δ⁹-THCA | computed | stated |
+|---|---|---|---|---|
+| ППК26059 | 11.49 | 13.22 | 23.09 | **23.08** |
+| ППК26060 | 15.14 | 12.36 | 25.98 | **25.98** |
+| ППК26035 | 14.98 | BLQ | 14.98 | **14.99** |
+
+So all ten totals are confirmed — seven by internal arithmetic, three by two independent OCRs plus
+arithmetic. The corrected component values are what appear in the `Stability Testing Programme`
+sheet; the mis-OCR'd `0.01 %` figures were never carried into the workbook.
