@@ -261,27 +261,43 @@ def _section_body(sections: list[dict]) -> str:
 _SECTION_HEAD = re.compile(r"^#\s+(\S+)[ \t]+(.*)$", re.M)
 
 
-def _split_repaired(body: str, original: list[dict]) -> list[dict] | None:
-    """Parse a repaired body back into sections, or None if it does not line up.
+def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None, str]:
+    """Parse a repaired body back into sections. Returns (sections, reason);
+    sections is None when the reply cannot be trusted, and reason says why.
 
-    Strict on purpose. A repair that cannot be parsed with confidence is not a
-    repair, and the job must fail on the auditor's original verdict rather than
-    build something reassembled from a guess. The agent may change section
-    BODIES only: numbering and titles are carried over from the originals, so it
-    cannot rename, reorder, add or drop a section."""
-    heads = list(_SECTION_HEAD.finditer(body))
-    if len(heads) != len(original):
-        return None
-    if [m.group(1) for m in heads] != [s["num"] for s in original]:
-        return None
+    Strict about STRUCTURE, tolerant about PACKAGING. A repair that cannot be
+    parsed with confidence is not a repair, and the job must then fail on the
+    auditor's original verdict rather than build something reassembled from a
+    guess — but a model that wraps the right document in a sentence of chatter
+    has still done the work, and throwing that away wastes the round.
+
+    So: every expected section number must appear, exactly once, in order.
+    Anything before the first one is preamble and is dropped (the same treatment
+    _clean_section gives authored sections). Numbering and titles are carried
+    from the originals, so a repair cannot rename, reorder, add or drop a
+    section — only rewrite bodies."""
+    wanted = [s["num"] for s in original]
+    picked: list[re.Match] = []
+    for m in _SECTION_HEAD.finditer(body):
+        if len(picked) < len(wanted) and m.group(1) == wanted[len(picked)]:
+            picked.append(m)
+    if len(picked) != len(wanted):
+        got = [m.group(1) for m in _SECTION_HEAD.finditer(body)]
+        return None, f"expected sections {wanted} in order, found headings {got[:12]}"
+    # Tolerance is for LEADING chatter only. A heading after the last expected
+    # section is structural garbage — an invented section, say — and it would be
+    # swallowed into the final section's body rather than rejected.
+    trailing = [m.group(1) for m in _SECTION_HEAD.finditer(body) if m.start() > picked[-1].start()]
+    if trailing:
+        return None, f"unexpected heading(s) after the last section: {trailing[:6]}"
     out = []
-    for i, m in enumerate(heads):
-        end = heads[i + 1].start() if i + 1 < len(heads) else len(body)
+    for i, m in enumerate(picked):
+        end = picked[i + 1].start() if i + 1 < len(picked) else len(body)
         content = body[m.end():end].strip()
         if not content:
-            return None
+            return None, f"section {wanted[i]} came back empty"
         out.append({**original[i], "content": content})
-    return out
+    return out, "ok"
 
 
 async def _repair_sections(
@@ -326,7 +342,13 @@ async def _repair_sections(
             await client.delete_agent(tmp_id)
         except Exception as e:  # noqa: BLE001
             log.warning("failed to delete ephemeral repairer %s: %s", tmp_id, e)
-    return _split_repaired(_strip_fences(reply), sections)
+    repaired, reason = _split_repaired(_strip_fences(reply), sections)
+    if repaired is None:
+        # Say what came back, not just that it was rejected — a silent "unusable"
+        # is impossible to act on when it happens in production.
+        log.warning("repair reply unusable (%s); first line: %r",
+                    reason, (reply or "").strip().split("\n")[0][:160])
+    return repaired
 
 
 def assemble_markdown(meta: dict, sections: list[dict]) -> str:

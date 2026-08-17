@@ -500,7 +500,8 @@ _ORIG = [
 
 def test_split_repaired_accepts_a_faithful_rewrite():
     body = "# 1.0 СОДРЖИНА|CONTENT\nнов|new one\n\n# 2.0 ПОТВРДА|SIGN-OFF\nнов|new two"
-    out = _split_repaired(body, _ORIG)
+    out, reason = _split_repaired(body, _ORIG)
+    assert reason == "ok"
     assert [s["content"] for s in out] == ["нов|new one", "нов|new two"]
     # titles are carried from the originals, never taken from the reply
     assert [(s["num"], s["mk"], s["en"]) for s in out] == [
@@ -511,7 +512,7 @@ def test_split_repaired_ignores_a_retitled_section():
     """The agent may rewrite bodies, not rename sections — but the title it
     supplies is discarded rather than trusted."""
     body = "# 1.0 SOMETHING ELSE|WHATEVER\nнов|new one\n\n# 2.0 X|Y\nнов|new two"
-    out = _split_repaired(body, _ORIG)
+    out, _ = _split_repaired(body, _ORIG)
     assert [s["mk"] for s in out] == ["СОДРЖИНА", "ПОТВРДА"]
 
 
@@ -530,7 +531,8 @@ def test_split_repaired_ignores_a_retitled_section():
 def test_split_repaired_refuses_anything_that_does_not_line_up(body):
     """A repair that cannot be parsed with confidence is not a repair. The job
     must fail on the auditor's verdict rather than build a guess."""
-    assert _split_repaired(body, _ORIG) is None
+    out, reason = _split_repaired(body, _ORIG)
+    assert out is None and reason
 
 
 def test_section_body_never_exposes_the_document_header():
@@ -647,3 +649,29 @@ def test_repair_prompt_forbids_inventing_data_to_satisfy_an_issue():
     assert "NEVER invent data" in src
     assert "BLANK write-ins" in src
     assert "leave that" in src and "unfixed" in src
+
+
+def test_split_repaired_tolerates_chatter_around_a_correct_document():
+    """A model that wraps the right document in a sentence has still done the
+    work; throwing the round away over packaging wastes it."""
+    body = ("Sure — here is the corrected document.\n\n"
+            "# 1.0 СОДРЖИНА|CONTENT\nнов|new one\n\n"
+            "# 2.0 ПОТВРДА|SIGN-OFF\nнов|new two")
+    out, reason = _split_repaired(body, _ORIG)
+    assert reason == "ok"
+    assert out[0]["content"] == "нов|new one"
+
+
+def test_split_repaired_reason_names_what_came_back():
+    out, reason = _split_repaired("# 9.9 X|Y\nz", _ORIG)
+    assert out is None
+    assert "9.9" in reason and "1.0" in reason
+
+
+def test_split_repaired_refuses_a_heading_after_the_last_section():
+    """Leading chatter is tolerated; a trailing heading is not. Without this it
+    would be swallowed into the final section's body instead of rejected."""
+    out, reason = _split_repaired(
+        "# 1.0 A|B\nx\n\n# 2.0 C|D\ny\n\n# 3.0 INVENTED|SECTION\nz", _ORIG)
+    assert out is None
+    assert "after the last section" in reason
