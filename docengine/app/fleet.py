@@ -25,12 +25,22 @@ from .config import settings
 from .letta import LettaClient, LettaError
 
 log = logging.getLogger("docengine.fleet")
-FLEET_FILE = Path(__file__).resolve().parents[1] / "agents" / "fleet.yaml"
+AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
+FLEET_FILE = AGENTS_DIR / "fleet.yaml"
 TOOL_NAME = "ragflow_search"
+TOOL_FILE = AGENTS_DIR / f"{TOOL_NAME}.py"
 
 
 def load_fleet() -> dict:
     return yaml.safe_load(FLEET_FILE.read_text(encoding="utf-8"))
+
+
+def load_tool_source() -> str:
+    """The tool's source, read by path exactly like fleet.yaml. Not imported:
+    `agents/` is not a package (and would be above this one anyway), and Letta
+    wants the text, so reading the file is both simpler and honest about what
+    gets uploaded — what is committed is what runs in the sandbox."""
+    return TOOL_FILE.read_text(encoding="utf-8")
 
 
 def _scope_block(datasets: list[str], pending: list[str]) -> str:
@@ -60,17 +70,15 @@ def _scope_block(datasets: list[str], pending: list[str]) -> str:
     return "\n".join(lines)
 
 
-async def ensure_tool(client: LettaClient) -> str | None:
+async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | None:
     """Register ragflow_search once, or adopt the existing one. Returns its id."""
-    from ..agents.ragflow_tool import RAGFLOW_SEARCH_DESCRIPTION, RAGFLOW_SEARCH_SOURCE
-
     for t in await client.list_tools():
         if t.get("name") == TOOL_NAME:
             return t.get("id")
+    spec = spec or load_fleet()
+    description = (spec.get("ragflow") or {}).get("tool_description", "")
     try:
-        created = await client.create_tool(
-            RAGFLOW_SEARCH_SOURCE.strip(), RAGFLOW_SEARCH_DESCRIPTION
-        )
+        created = await client.create_tool(load_tool_source(), description)
         log.info("registered tool %s -> %s", TOOL_NAME, created.get("id"))
         return created.get("id")
     except LettaError as e:  # non-fatal: agents still exist, retrieval degraded
@@ -159,7 +167,7 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
     spec = load_fleet()
     existing = {a.get("name"): a for a in await client.list_agents()}
     model, embedding = _resolve_model(spec, list(existing.values()))
-    tool_id = await ensure_tool(client)
+    tool_id = await ensure_tool(client, spec)
 
     out: dict[str, str] = {}
     for ag in spec["agents"]:
@@ -212,7 +220,7 @@ async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str
         f"{agent_name}_tmp_{name_suffix}",
         f"ephemeral clone of {agent_name} for one isolated exchange",
     )
-    tool_id = await ensure_tool(client)
+    tool_id = await ensure_tool(client, spec)
     created = await client.create_agent(body)
     await _attach_retrieval(client, created["id"], ag, tool_id, body["name"])
     return created["id"]

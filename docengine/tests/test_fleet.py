@@ -1,12 +1,20 @@
 # Fleet unit surface: model-handle resolution is pure and worth pinning
 # (the create/attach/delete round-trips are exercised on the wwf_mass stack,
 # same convention as test_pipeline.py).
+import ast
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.fleet import _resolve_model, _scope_block, agent_datasets, load_fleet  # noqa: E402
+from app.fleet import (  # noqa: E402
+    TOOL_NAME,
+    _resolve_model,
+    _scope_block,
+    agent_datasets,
+    load_fleet,
+    load_tool_source,
+)
 
 
 def test_resolve_model_falls_back_to_yaml_defaults_when_no_agents_exist():
@@ -68,3 +76,37 @@ def test_every_agent_with_datasets_gets_a_scope_block_naming_them():
         block = _scope_block(ag.get("datasets", []), pending)
         for d in ag.get("datasets", []):
             assert d in block, (ag["name"], d)
+
+
+def test_tool_source_defines_the_tool_and_nothing_runs_at_module_level():
+    """The file is uploaded verbatim as the tool's source_code and executed in
+    Letta's sandbox, so it must define exactly the one function and carry no
+    module-level statements that would run there."""
+    tree = ast.parse(load_tool_source())
+    funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+    assert funcs == [TOOL_NAME]
+    assert [n for n in tree.body if not isinstance(n, ast.FunctionDef)] == []
+
+
+def test_tool_source_is_stdlib_only_and_imports_nothing_from_this_repo():
+    """Letta's sandbox has no access to this repository."""
+    tree = ast.parse(load_tool_source())
+    names = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            names += [a.name.split(".")[0] for a in n.names]
+        elif isinstance(n, ast.ImportFrom):
+            assert n.level == 0, "no relative imports inside the tool"
+            names.append((n.module or "").split(".")[0])
+    assert set(names) <= {"json", "os", "urllib"}, names
+
+
+def test_tool_has_a_description_for_the_model_to_select_on():
+    assert len((load_fleet().get("ragflow") or {}).get("tool_description", "")) > 80
+
+
+def test_declared_model_and_embedding_handles_are_provider_qualified():
+    """A bare model name is rejected by POST /agents as a handle — the whole
+    reason _resolve_model refuses to adopt one."""
+    d = load_fleet()["defaults"]
+    assert "/" in d["model"] and "/" in d["embedding"]

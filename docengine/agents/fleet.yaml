@@ -50,10 +50,27 @@ house_rules: |
 #   DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots
 ragflow:
   pending_ingest: [DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots]
+  # Registered with the tool on the Letta server; this is what the model reads
+  # when deciding whether to call it. The source is agents/ragflow_search.py.
+  tool_description: >
+    Search the Purely Plant document corpora held in RAGflow (release
+    certificates, per-batch summaries, QMS and regulatory documents) and return
+    matching passages with the source document name. Scope the search with the
+    dataset names your ragflow_scope memory block allows.
 
+# fleet.py still prefers any handle an existing agent on the server already
+# uses — a handle the server demonstrably accepts beats one we assert. These
+# are the real fallback for a server with no agents yet (letta-6ou3 was empty
+# at cutover), so they are a deliberate choice, not a placeholder:
+#   model      long bilingual MK|EN structured output plus reliable tool-calling,
+#              at a cost that survives ~11 sequential calls per document.
+#   embedding  Letta only embeds its own conversational/archival memory now that
+#              retrieval lives in RAGflow. openai/* uses the server's own
+#              OPENAI_API_KEY; letta/letta-free would route memory through
+#              inference.letta.com, an external dependency for no benefit.
 defaults:
-  model: openai/gpt-4o-mini        # placeholder — fleet.py overrides with the
-  embedding: letta/letta-free      # server's actual accepted handles at ensure time
+  model: anthropic/claude-sonnet-4-6
+  embedding: openai/text-embedding-3-small
   max_tokens: 4096
 
 agents:
