@@ -134,8 +134,29 @@ def _bilingual_gaps(sections: list[dict]) -> list[str]:
     return gaps
 
 
+# The auditor is asked for "{verdict PASS|FIX, issues: [...]}" and in practice
+# announces it as "**Verdict: PASS**" after a line of preamble. Matching only a
+# reply that STARTS with PASS therefore rejected genuinely passing audits: seen
+# live, an audit that cleared all six checks was recorded as
+# "§6A audit did not pass" and the document was never built. Allowing a bare
+# leading PASS as well keeps the simple form (and the existing fakes) working.
+_QA_VERDICT = re.compile(r"\bverdict\b\W{0,12}?(PASS|FIX)\b", re.I)
+
+
 def _qa_audit_passed(verdict: str) -> bool:
-    return (verdict or "").strip().upper().startswith("PASS")
+    """True only on an unambiguous PASS.
+
+    Fail-closed on purpose, in three ways: an empty reply fails, a reply with no
+    recognisable verdict fails, and a reply carrying BOTH tokens fails. This gate
+    is what stands between a draft and a formatted controlled document, so
+    "probably fine" has to count as not passing."""
+    t = (verdict or "").strip()
+    if not t:
+        return False
+    found = {m.group(1).upper() for m in _QA_VERDICT.finditer(t)}
+    if found:
+        return found == {"PASS"}
+    return t.upper().startswith("PASS")
 
 
 def _strip_fences(text: str) -> str:

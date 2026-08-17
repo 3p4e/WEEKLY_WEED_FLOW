@@ -12,7 +12,7 @@ from app import builder, db, fleet  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
-    _brief,
+    _brief, _qa_audit_passed,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -431,3 +431,59 @@ def test_brief_says_parenthesised_numbers_are_clause_refs_not_values():
 def test_brief_without_meta_still_renders_the_answers():
     b = _brief("annex_form", {"purpose": "Recording"})
     assert "purpose: Recording" in b
+
+
+# ---- §6A verdict parsing ----
+# The live auditor prefixes a line of preamble and announces "**Verdict: PASS**".
+# Requiring the reply to START with PASS rejected a genuinely passing audit and
+# the document was never built, so these pin the real reply shapes.
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "PASS",
+        "PASS — no issues found",
+        "I'll run the §6A review on this FORM.\n\n**Verdict: PASS**\n\nChecks: ...",
+        "Verdict: PASS",
+        "verdict:  pass\nall six checks cleared",
+    ],
+)
+def test_qa_audit_accepts_a_real_pass_reply(reply):
+    assert _qa_audit_passed(reply)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "",
+        "   ",
+        "FIX: section 2.0 references the wrong regulation",
+        "**Verdict: FIX**\n\n1. Version conflict ...",
+        # no recognisable verdict at all -> fail closed
+        "The document looks broadly reasonable to me.",
+        # both tokens present -> ambiguous -> fail closed
+        "**Verdict: FIX**\nlater corrected to Verdict: PASS",
+        # must not be fooled by prose containing the word
+        "The document did not PASS the bilingual check.",
+    ],
+)
+def test_qa_audit_rejects_anything_short_of_a_clear_pass(reply):
+    assert not _qa_audit_passed(reply)
+
+
+@pytest.mark.asyncio
+async def test_a_pass_with_preamble_reaches_the_builder(monkeypatch):
+    """End-to-end shape of the live failure: the auditor passed the document and
+    the build still never ran."""
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+
+    class PreambleAuditClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "I'll run the §6A review.\n\n**Verdict: PASS**\n\nAll checks cleared."
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=PreambleAuditClient())
+    assert built, "a PASS announced after preamble must still reach builder.build"
+    assert updates[-1]["status"] == "done"
