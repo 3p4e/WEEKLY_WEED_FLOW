@@ -40,11 +40,12 @@ identical column widths, frozen header.
 
 - **80 batches / 97 Total Δ⁹-THC results** — every result on file retained, one row per result,
   re-sequenced 1–80. Matches the register's 80 batches exactly (no batch missing).
-- **22 strain groups, down from 30.** Eight duplicate groups were spacing/concatenation variants
+- **20 strain groups, down from 30.** Eight duplicate groups were spacing/concatenation variants
   of one strain and were merged: `CashCow`→Cash Cow, `FatBastard`→Fat Bastard,
   `GorillaGlue`→Gorilla Glue, `GrapePie`→Grape Pie, `HighProAmnesia`→High Pro Amnesia,
   `JellyDonutz`→Jelly Donutz, `Jokerz31`→Jokerz 31, `OrangePunchMimosa`/`OPM`→Orange Punch Mimosa.
-  The same duplication exists in the register's own strain column.
+  The same duplication exists in the register's own strain column. `Cap Junkie` and `Cap Junky`
+  were additionally merged into **Cup Junky** — see below.
 - **Batch counts and THC ranges recomputed** per merged group; BLQ/`<LOQ`/ND excluded from ranges.
 - **Three OCR-garbled CoA codes resolved** against the certificate text:
   `ППК52211 (likely OCR misread…)`→**ППК25211**, `ППК21554`→**ППК25154**, `ППК52557`→**ППК25257**.
@@ -54,13 +55,15 @@ identical column widths, frozen header.
   so the P-number *is* the batch identifier. Verified against the 81 batch subfolders of
   `16oMK…`, which also supplied the P-number↔batch-code mapping.
 
-### Open item for QC — needs an owner decision
+### Cup Junky — cultivar name resolved by QC
 
-`Cap Junkie` (2 batches), `Cap Junky` (3) and `Cup Junky` (4) are kept as three separate groups.
-These were **not** merged because the source certificates themselves disagree — `CAP JUNKY`,
+The source certificates disagree among themselves on this cultivar's name: `CAP JUNKY`,
 `Cap Junkie`, `CUP JUNKIE`, `Cup Junky` and `Cupjunkie` all appear, in some cases on
-certificates for the same batch. Deciding whether these are one cultivar (and which spelling is
-correct) is a QC call, not something to infer.
+certificates for the same batch. QC confirmed the correct name as **Cup Junky**, so the former
+`Cap Junkie` (2 batches) and `Cap Junky` (3) groups are merged into it:
+
+`CJ1024`, `CJ052501-1`, `CJ052501-2`, `CJ062501-1`, `CJ062501-2`, `CJ072501`, `CJ082501-1`,
+`CJ082501-2`, `CJ092501` — **9 batches, Total Δ⁹-THC 14.93 – 24.96 %**.
 
 ## Sources
 
