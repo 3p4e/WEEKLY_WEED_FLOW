@@ -68,6 +68,20 @@ ragflow:
 #              retrieval lives in RAGflow. openai/* uses the server's own
 #              OPENAI_API_KEY; letta/letta-free would route memory through
 #              inference.letta.com, an external dependency for no benefit.
+#
+# A handle being listed by /v1/models is NOT the same as being billable. On
+# letta-6ou3 (2026-08-17) every cloud handle it offers is out of credit —
+# Anthropic returns "credit balance is too low", OpenAI "You have no credits
+# remaining" — so no agent here can complete a turn until credit is added to the
+# account behind that provider's key in the letta-6ou3 container. The fleet
+# itself is fine: agents, tool and scopes are all in place and the ensure loop is
+# idempotent, so nothing needs recreating once the account is funded.
+#
+# Do NOT work around that by pointing these agents at the local ollama/* handles.
+# Verified live: ollama/phi4-mini answered a retrieval question without calling
+# ragflow_search at all and invented both a source filename and an out-of-range
+# analytical finding. Fabricating pharmaceutical data is the one thing the house
+# rules forbid outright, and a 4B local model does it readily.
 defaults:
   model: anthropic/claude-sonnet-4-6
   embedding: openai/text-embedding-3-small
@@ -139,4 +153,9 @@ agents:
       You are the GrowFlow assistant for Purely Plant staff — bilingual
       MK/EN, concise, practical. You help with task drafting, summaries and
       app questions. You have no authority over controlled documents.
-    datasets: [DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]
+    # eCOA_INGEST_SUMMA is the per-batch release summary set and is ingested
+    # today, so this is the one agent with live grounding until the QMS corpora
+    # land. It is the right agent for it: staff ask batch-QC questions, and the
+    # summaries answer them from the release certificates. STABILITY_PROGRAMME
+    # is deliberately withheld here as everywhere else.
+    datasets: [eCOA_INGEST_SUMMA, DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]

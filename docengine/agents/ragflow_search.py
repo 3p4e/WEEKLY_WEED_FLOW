@@ -8,8 +8,13 @@
 #
 #   1. It must be self-contained — standard library only, no imports from this
 #      repository — because Letta executes it in its own sandbox.
-#   2. Keep it to comments and this one function. Anything at module level runs
-#      inside that sandbox too.
+#   2. Keep it to comments and this ONE function — no module-level statements
+#      (they would run in the sandbox) and no nested defs. Letta derives a JSON
+#      schema from every function it finds in the source and rejects the whole
+#      upload if any of them falls short; a nested helper was refused first for
+#      a missing docstring, then for an unannotated parameter. One function has
+#      no such surface, so the two API calls below are written out in full
+#      rather than sharing a helper. The duplication is deliberate.
 #
 # Configuration comes from the tool's execution environment, set per agent as
 # tool_exec_environment_variables from docengine.app.config:
@@ -41,18 +46,15 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
             {"ok": False, "err": "RAGFLOW_BASE_URL / RAGFLOW_API_KEY not set for this tool"}
         )
 
-    def _call(path, body=None, method="GET"):
+    headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
+
+    # 1. resolve dataset names -> ids
+    try:
         req = urllib.request.Request(
-            base + path,
-            data=(json.dumps(body).encode() if body is not None else None),
-            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
-            method=method,
+            base + "/api/v1/datasets?page=1&page_size=100", headers=headers, method="GET"
         )
         with urllib.request.urlopen(req, timeout=60) as r:
-            return json.loads(r.read().decode())
-
-    try:
-        listing = _call("/api/v1/datasets?page=1&page_size=100")
+            listing = json.loads(r.read().decode())
     except Exception as e:
         return json.dumps({"ok": False, "err": "dataset list failed: %s" % str(e)[:200]})
 
@@ -74,17 +76,22 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
             }
         )
 
+    # 2. retrieve passages from just those datasets
     try:
-        res = _call(
-            "/api/v1/retrieval",
-            {
-                "question": question,
-                "dataset_ids": ids,
-                "top_k": int(top_k),
-                "similarity_threshold": 0.1,
-            },
-            "POST",
+        payload = {
+            "question": question,
+            "dataset_ids": ids,
+            "top_k": int(top_k),
+            "similarity_threshold": 0.1,
+        }
+        req = urllib.request.Request(
+            base + "/api/v1/retrieval",
+            data=json.dumps(payload).encode(),
+            headers=headers,
+            method="POST",
         )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            res = json.loads(r.read().decode())
     except Exception as e:
         return json.dumps({"ok": False, "err": "retrieval failed: %s" % str(e)[:200]})
 

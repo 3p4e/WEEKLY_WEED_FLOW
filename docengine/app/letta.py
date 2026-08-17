@@ -91,6 +91,25 @@ class LettaClient:
     async def attach_tool(self, agent_id: str, tool_id: str) -> None:
         await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
 
+    async def get_block(self, agent_id: str, label: str) -> dict | None:
+        try:
+            return await self._req("GET", f"/agents/{agent_id}/core-memory/blocks/{label}")
+        except LettaError:  # absent on an agent created before the block existed
+            return None
+
+    async def update_block(self, agent_id: str, label: str, value: str) -> None:
+        """Rewrite one core-memory block's value.
+
+        This is a memory write, not a config write — the handover's "never edit
+        an existing agent" caution is about POST/PATCH of llm_config, which this
+        server rejects over the legacy provider enum. Callers must keep it to
+        blocks they own on gf_* agents."""
+        await self._req(
+            "PATCH",
+            f"/agents/{agent_id}/core-memory/blocks/{label}",
+            json={"value": value},
+        )
+
     async def delete_agent(self, agent_id: str) -> None:
         """Delete an agent by id. Callers must only pass ids of agents they
         themselves created (e.g. spawn_ephemeral's short-lived clones) — this

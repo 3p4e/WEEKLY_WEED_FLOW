@@ -88,6 +88,37 @@ def test_tool_source_defines_the_tool_and_nothing_runs_at_module_level():
     assert [n for n in tree.body if not isinstance(n, ast.FunctionDef)] == []
 
 
+def test_tool_source_contains_exactly_one_function_anywhere():
+    """Letta derives a JSON schema from EVERY function it finds in the uploaded
+    source and rejects the whole tool if any falls short. A nested helper was
+    refused first for a missing docstring, then for an unannotated parameter
+    (both observed live against letta-6ou3, where the tool silently failed to
+    register while all 8 agents were created regardless). One function has no
+    such surface, so keep it that way — inline instead of extracting."""
+    funcs = [
+        n.name
+        for n in ast.walk(ast.parse(load_tool_source()))
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    assert funcs == [TOOL_NAME], funcs
+
+
+def test_the_tool_function_is_fully_annotated_and_documented():
+    """The other half of what Letta's schema generation requires: a docstring,
+    and a type annotation on every parameter."""
+    fn = next(
+        n for n in ast.parse(load_tool_source()).body if isinstance(n, ast.FunctionDef)
+    )
+    assert ast.get_docstring(fn)
+    for arg in fn.args.args:
+        assert arg.annotation is not None, arg.arg
+    # every parameter is also described in the docstring, which is what the
+    # model reads when choosing arguments
+    doc = ast.get_docstring(fn)
+    for arg in fn.args.args:
+        assert arg.arg + " (" in doc, arg.arg
+
+
 def test_tool_source_is_stdlib_only_and_imports_nothing_from_this_repo():
     """Letta's sandbox has no access to this repository."""
     tree = ast.parse(load_tool_source())

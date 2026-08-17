@@ -29,6 +29,7 @@ AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 FLEET_FILE = AGENTS_DIR / "fleet.yaml"
 TOOL_NAME = "ragflow_search"
 TOOL_FILE = AGENTS_DIR / f"{TOOL_NAME}.py"
+SCOPE_BLOCK = "ragflow_scope"
 
 
 def load_fleet() -> dict:
@@ -119,7 +120,7 @@ def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, des
         "memory_blocks": [
             {"label": "gf_house_rules", "value": house_rules},
             {"label": "persona", "value": ag["persona"].strip()},
-            {"label": "ragflow_scope", "value": _scope_block(ag.get("datasets", []), pending)},
+            {"label": SCOPE_BLOCK, "value": _scope_block(ag.get("datasets", []), pending)},
         ],
     }
     env = _tool_env()
@@ -137,6 +138,25 @@ async def _attach_retrieval(client: LettaClient, agent_id: str, ag: dict, tool_i
         await client.attach_tool(agent_id, tool_id)
     except LettaError as e:  # non-fatal: agent works, retrieval degraded
         log.warning("attach %s -> %s failed: %s", TOOL_NAME, label, e)
+
+
+async def _reconcile_scope(
+    client: LettaClient, agent_id: str, ag: dict, spec: dict, label: str
+) -> None:
+    """Bring a live agent's ragflow_scope block back in line with fleet.yaml."""
+    pending = (spec.get("ragflow") or {}).get("pending_ingest", [])
+    want = _scope_block(ag.get("datasets", []), pending)
+    try:
+        block = await client.get_block(agent_id, SCOPE_BLOCK)
+        if block is None:
+            log.warning("%s has no %s block to reconcile", label, SCOPE_BLOCK)
+            return
+        if (block.get("value") or "").strip() == want.strip():
+            return
+        await client.update_block(agent_id, SCOPE_BLOCK, want)
+        log.info("updated %s on %s", SCOPE_BLOCK, label)
+    except LettaError as e:  # non-fatal: stale scope is better than a dead ensure
+        log.warning("could not reconcile %s on %s: %s", SCOPE_BLOCK, label, e)
 
 
 def _resolve_model(spec: dict, existing: list[dict]) -> tuple[str, str]:
@@ -172,8 +192,27 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
     out: dict[str, str] = {}
     for ag in spec["agents"]:
         name = ag["name"]
-        if name in existing:
-            out[name] = existing[name]["id"]
+        cur = existing.get(name)
+        if cur:
+            out[name] = cur["id"]
+            # Reconcile an agent that already exists. Create-if-missing alone
+            # cannot, because the agent is no longer missing — and two things
+            # legitimately change under it:
+            #
+            #  * the tool. Registration is non-fatal, so the fleet can come up
+            #    with agents but no tool (seen live: Letta rejected the source
+            #    over a nested helper, all 8 agents were created anyway, and the
+            #    fleet ran with no retrieval at all).
+            #  * its dataset scope. `datasets:` in fleet.yaml is what governs
+            #    which corpora the agent may reach, so an edit there that never
+            #    reaches the live ragflow_scope block leaves the declaration and
+            #    the agent's actual instructions disagreeing about data access.
+            #
+            # Both are bounded: gf_* only, the one block this module owns, and
+            # only when the value actually differs.
+            if TOOL_NAME not in {t.get("name") for t in (cur.get("tools") or [])}:
+                await _attach_retrieval(client, cur["id"], ag, tool_id, name)
+            await _reconcile_scope(client, cur["id"], ag, spec, name)
             continue
         body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""))
         created = await client.create_agent(body)
