@@ -58,14 +58,34 @@ Remaining difference is 15 curated Letta artifacts — 14 `Bundle_*_full_panel` 
 `List_of_COAs` — which are derived convenience documents, not source records. Every underlying
 certificate behind them is present in RAGflow.
 
-## Open item for QC — possible stability value in the release register
+## Checked and cleared — the register's CBN 0.23 is a release value
 
-`ППК26032` (P050022, 6 months, 25 °C/60 % RH) reports **CBN 0.23 %**. The batch-release
-register records CBN **0.23** for GP0824_02, which is that same batch P050022, while the
-release certificate for it reports CBN as **BLQ**.
+An earlier revision of this note raised a suspicion that `ППК26032` (P050022, 6 months,
+25 °C/60 % RH), which reports **CBN 0.23 %**, might have leaked into the batch-release register,
+because the register records CBN **0.23** for GP0824_02 — the same batch — while the UKIM
+release certificate reports CBN as **BLQ**.
 
-That is consistent with a 6-month stability result having been entered into the release
-register, and it is the exact failure mode this separation is meant to prevent. It is not
-proven — the release certificate's CBN line did not extract cleanly — so it is raised here for
-QC to confirm against the paper certificates rather than corrected. It was left unchanged in
-`PP_Batch_Release_QC_Register_CORRECTED.xlsx`.
+**That suspicion is wrong and is withdrawn.** Re-extracting the CBN line from every P050022
+document shows the Farmahem release cannabinoid report `197-11-К/26` states:
+
+| | | value | U |
+|---|---|---|---|
+| Вкупен Cannabinol | Total CBN | **0.23** | 0.01 |
+| Вкупно Δ⁹-Tetrahydrocannabinol | Total Δ⁹-THC | **22.61** | 1.39 |
+
+The register's 0.23 is that release figure. The corroboration is the second number: the same
+report gives Total Δ⁹-THC 22.61, which is exactly the second THC result the register already
+carries for GP0824_02 (`22.61 %w/w (U 1.39) | 197-11-К/26 | Farmahem`). Both values come from
+the same release certificate, so no stability result is involved.
+
+The coincidence with `ППК26032` is only that — and the two are not even the same measurand:
+the stability certificate reports `Содржина на CBN` (CBN content), the release report
+`Вкупен Cannabinol` (Total CBN).
+
+Worth knowing for future comparisons: P050022 has several release documents that legitimately
+disagree on CBN, because they are different analyses — UKIM reports `BLQ`, the in-house bulk
+CoA `0.02 %`, and Farmahem `0.23`. A cross-check that picks the wrong one of these will report
+a false mismatch, which is what happened here.
+
+No change to `PP_Batch_Release_QC_Register_CORRECTED.xlsx` is required; the register is correct
+as it stands.
