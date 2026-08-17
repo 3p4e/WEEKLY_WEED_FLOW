@@ -248,17 +248,27 @@ def _brief(questionnaire_key: str, answers: dict, meta: dict | None = None) -> s
 
 
 def _section_body(sections: list[dict]) -> str:
-    """The document body an authoring agent is allowed to see and rewrite —
-    the same `# num MK|EN` shape assemble_markdown emits, but WITHOUT the
-    HEADERDATA block. Document metadata is never handed to an agent: it owns
-    none of it, and an agent-emitted header is a defect this pipeline already
-    had to strip once."""
+    """The document body an authoring agent is allowed to see and rewrite,
+    WITHOUT the HEADERDATA block. Document metadata is never handed to an agent:
+    it owns none of it, and an agent-emitted header is a defect this pipeline
+    already had to strip once.
+
+    Sections are delimited by an explicit sentinel rather than by the document's
+    own `# num MK|EN` headings. That distinction matters: section CONTENT
+    legitimately contains Markdown headings — an annex body carries its own
+    title line — so a heading-based delimiter cannot tell the protocol from the
+    payload. Seen live: a repair that correctly added the one row the auditor
+    asked for was rejected because the body it faithfully reproduced contained
+    `# Образец ...`. The sentinel cannot collide with document text."""
     return "\n\n".join(
-        f"# {s['num']} {s['mk']}|{s['en']}\n{s['content'].strip()}" for s in sections
+        f"{_MARK_OPEN}{s['num']}|{s['mk']}|{s['en']}{_MARK_CLOSE}\n{s['content'].strip()}"
+        for s in sections
     )
 
 
-_SECTION_HEAD = re.compile(r"^#\s+(\S+)[ \t]+(.*)$", re.M)
+_MARK_OPEN = "<<<PP-SECTION "
+_MARK_CLOSE = ">>>"
+_SECTION_HEAD = re.compile(r"^<<<PP-SECTION\s+([^|>\s]+)[^>]*>>>[ \t]*$", re.M)
 
 
 def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None, str]:
@@ -283,13 +293,13 @@ def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None,
             picked.append(m)
     if len(picked) != len(wanted):
         got = [m.group(1) for m in _SECTION_HEAD.finditer(body)]
-        return None, f"expected sections {wanted} in order, found headings {got[:12]}"
-    # Tolerance is for LEADING chatter only. A heading after the last expected
+        return None, f"expected sections {wanted} in order, found markers {got[:12]}"
+    # Tolerance is for LEADING chatter only. A marker after the last expected
     # section is structural garbage — an invented section, say — and it would be
     # swallowed into the final section's body rather than rejected.
     trailing = [m.group(1) for m in _SECTION_HEAD.finditer(body) if m.start() > picked[-1].start()]
     if trailing:
-        return None, f"unexpected heading(s) after the last section: {trailing[:6]}"
+        return None, f"unexpected section marker(s) after the last section: {trailing[:6]}"
     out = []
     for i, m in enumerate(picked):
         end = picked[i + 1].start() if i + 1 < len(picked) else len(body)
@@ -323,8 +333,10 @@ async def _repair_sections(
             "A §6A reviewer raised the issues below against this document. "
             "Return the CORRECTED document body.\n\n"
             "Rules:\n"
-            "- Keep every '# <number> <MK>|<EN>' heading exactly as given, in the "
-            "same order. Change section bodies only.\n"
+            f"- Keep every '{_MARK_OPEN}...{_MARK_CLOSE}' section marker line "
+            "exactly as given, in the same order, and put each section's text "
+            "under its own marker. They delimit the document for reassembly; "
+            "they are not part of it. Change section bodies only.\n"
             "- Change only what the issues require; leave everything else byte "
             "for byte as it is.\n"
             "- NEVER invent data to satisfy an issue. Facility specifics, "

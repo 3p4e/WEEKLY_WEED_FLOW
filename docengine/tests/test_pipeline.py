@@ -499,7 +499,8 @@ _ORIG = [
 
 
 def test_split_repaired_accepts_a_faithful_rewrite():
-    body = "# 1.0 СОДРЖИНА|CONTENT\nнов|new one\n\n# 2.0 ПОТВРДА|SIGN-OFF\nнов|new two"
+    body = ("<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nнов|new one\n\n"
+            "<<<PP-SECTION 2.0|ПОТВРДА|SIGN-OFF>>>\nнов|new two")
     out, reason = _split_repaired(body, _ORIG)
     assert reason == "ok"
     assert [s["content"] for s in out] == ["нов|new one", "нов|new two"]
@@ -511,7 +512,8 @@ def test_split_repaired_accepts_a_faithful_rewrite():
 def test_split_repaired_ignores_a_retitled_section():
     """The agent may rewrite bodies, not rename sections — but the title it
     supplies is discarded rather than trusted."""
-    body = "# 1.0 SOMETHING ELSE|WHATEVER\nнов|new one\n\n# 2.0 X|Y\nнов|new two"
+    body = ("<<<PP-SECTION 1.0|SOMETHING ELSE|WHATEVER>>>\nнов|new one\n\n"
+            "<<<PP-SECTION 2.0|X|Y>>>\nнов|new two")
     out, _ = _split_repaired(body, _ORIG)
     assert [s["mk"] for s in out] == ["СОДРЖИНА", "ПОТВРДА"]
 
@@ -521,11 +523,11 @@ def test_split_repaired_ignores_a_retitled_section():
     [
         "",                                                   # nothing back
         "Sure! Here is the fixed document.",                  # no headings
-        "# 1.0 A|B\nonly one section",                        # dropped a section
-        "# 1.0 A|B\nx\n\n# 2.0 C|D\ny\n\n# 3.0 E|F\nz",       # invented a section
-        "# 2.0 A|B\nx\n\n# 1.0 C|D\ny",                       # reordered
-        "# 1.0 A|B\nx\n\n# 2.9 C|D\ny",                       # renumbered
-        "# 1.0 A|B\n\n\n# 2.0 C|D\ny",                        # emptied a section
+        "<<<PP-SECTION 1.0|A|B>>>\nonly one section",          # dropped a section
+        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.0|C|D>>>\ny\n\n<<<PP-SECTION 3.0|E|F>>>\nz",  # invented
+        "<<<PP-SECTION 2.0|A|B>>>\nx\n\n<<<PP-SECTION 1.0|C|D>>>\ny",   # reordered
+        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.9|C|D>>>\ny",   # renumbered
+        "<<<PP-SECTION 1.0|A|B>>>\n\n\n<<<PP-SECTION 2.0|C|D>>>\ny",    # emptied a section
     ],
 )
 def test_split_repaired_refuses_anything_that_does_not_line_up(body):
@@ -540,7 +542,7 @@ def test_section_body_never_exposes_the_document_header():
     had to strip. The repair input must not hand it back to them."""
     body = _section_body(_ORIG)
     assert "HEADERDATA" not in body
-    assert body.startswith("# 1.0 СОДРЖИНА|CONTENT")
+    assert body.startswith("<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>")
 
 
 @pytest.mark.asyncio
@@ -557,7 +559,7 @@ async def test_a_fix_verdict_is_repaired_and_the_document_builds(monkeypatch):
 
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
-                return "# 1.0 СОДРЖИНА|CONTENT\nпоправено|repaired"
+                return "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nпоправено|repaired"
             if "§6A" in prompt:
                 self.audits += 1
                 return ("**Verdict: FIX**\n1. missing Code row" if self.audits == 1
@@ -608,7 +610,7 @@ async def test_repair_is_disabled_when_max_repair_rounds_is_zero(monkeypatch):
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
                 repairs.append(1)
-                return "# 1.0 A|B\nx"
+                return "<<<PP-SECTION 1.0|A|B>>>\nx"
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. something"
             return await super().send_message(agent_id, prompt)
@@ -630,7 +632,7 @@ async def test_a_repair_that_breaks_bilingual_parity_is_discarded(monkeypatch):
     class MonolingualRepairClient(FakeClient):
         async def send_message(self, agent_id, prompt):
             if "CORRECTED document body" in prompt:
-                return "# 1.0 СОДРЖИНА|CONTENT\n" + ("English only text. " * 20)
+                return "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\n" + ("English only text. " * 20)
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. something"
             return await super().send_message(agent_id, prompt)
@@ -655,15 +657,15 @@ def test_split_repaired_tolerates_chatter_around_a_correct_document():
     """A model that wraps the right document in a sentence has still done the
     work; throwing the round away over packaging wastes it."""
     body = ("Sure — here is the corrected document.\n\n"
-            "# 1.0 СОДРЖИНА|CONTENT\nнов|new one\n\n"
-            "# 2.0 ПОТВРДА|SIGN-OFF\nнов|new two")
+            "<<<PP-SECTION 1.0|СОДРЖИНА|CONTENT>>>\nнов|new one\n\n"
+            "<<<PP-SECTION 2.0|ПОТВРДА|SIGN-OFF>>>\nнов|new two")
     out, reason = _split_repaired(body, _ORIG)
     assert reason == "ok"
     assert out[0]["content"] == "нов|new one"
 
 
 def test_split_repaired_reason_names_what_came_back():
-    out, reason = _split_repaired("# 9.9 X|Y\nz", _ORIG)
+    out, reason = _split_repaired("<<<PP-SECTION 9.9|X|Y>>>\nz", _ORIG)
     assert out is None
     assert "9.9" in reason and "1.0" in reason
 
@@ -672,6 +674,20 @@ def test_split_repaired_refuses_a_heading_after_the_last_section():
     """Leading chatter is tolerated; a trailing heading is not. Without this it
     would be swallowed into the final section's body instead of rejected."""
     out, reason = _split_repaired(
-        "# 1.0 A|B\nx\n\n# 2.0 C|D\ny\n\n# 3.0 INVENTED|SECTION\nz", _ORIG)
+        "<<<PP-SECTION 1.0|A|B>>>\nx\n\n<<<PP-SECTION 2.0|C|D>>>\ny\n\n"
+        "<<<PP-SECTION 3.0|INVENTED|SECTION>>>\nz", _ORIG)
     assert out is None
     assert "after the last section" in reason
+
+
+def test_section_content_may_contain_markdown_headings():
+    """The delimiter must not collide with the payload. Section content
+    legitimately carries Markdown headings — an annex body has its own title
+    line — and a heading-based delimiter rejected a correct repair over it."""
+    orig = [{"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
+             "content": "# Образец | Form\n[[FORM:grid]]\n~~Шифра | Code~~ ||| X"}]
+    body = _section_body(orig)
+    out, reason = _split_repaired(body, orig)
+    assert reason == "ok", reason
+    assert out[0]["content"] == orig[0]["content"]
+    assert "# Образец | Form" in out[0]["content"]
