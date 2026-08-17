@@ -564,7 +564,7 @@ async def test_a_fix_verdict_is_repaired_and_the_document_builds(monkeypatch):
             self.audits = 0
 
         async def send_message(self, agent_id, prompt):
-            if "CORRECTED document body" in prompt:
+            if "corrected sections and NOTHING" in prompt:
                 return _blk("1.0", "СОДРЖИНА", "CONTENT", "поправено|repaired")
             if "§6A" in prompt:
                 self.audits += 1
@@ -592,7 +592,7 @@ async def test_an_unusable_repair_fails_the_job_on_the_original_verdict(monkeypa
 
     class GarbageRepairClient(FakeClient):
         async def send_message(self, agent_id, prompt):
-            if "CORRECTED document body" in prompt:
+            if "corrected sections and NOTHING" in prompt:
                 return "Sure! I've fixed everything for you."   # unparseable
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. missing Code row"
@@ -614,7 +614,7 @@ async def test_repair_is_disabled_when_max_repair_rounds_is_zero(monkeypatch):
 
     class FixClient(FakeClient):
         async def send_message(self, agent_id, prompt):
-            if "CORRECTED document body" in prompt:
+            if "corrected sections and NOTHING" in prompt:
                 repairs.append(1)
                 return _blk("1.0", "A", "B", "x")
             if "§6A" in prompt:
@@ -637,7 +637,7 @@ async def test_a_repair_that_breaks_bilingual_parity_is_discarded(monkeypatch):
 
     class MonolingualRepairClient(FakeClient):
         async def send_message(self, agent_id, prompt):
-            if "CORRECTED document body" in prompt:
+            if "corrected sections and NOTHING" in prompt:
                 return _blk("1.0", "СОДРЖИНА", "CONTENT", "English only text. " * 20)
             if "§6A" in prompt:
                 return "**Verdict: FIX**\n1. something"
@@ -771,3 +771,61 @@ def test_a_real_opening_heading_is_left_alone(first):
 def test_echoed_heading_strip_only_touches_the_first_line():
     body = "текст|text\n## 1.0 ЦЕЛ | PURPOSE\nповеќе|more"
     assert _drop_echoed_heading(body, "1.0", "ЦЕЛ", "PURPOSE") == body
+
+
+@pytest.mark.asyncio
+async def test_a_deliberating_repair_is_nudged_once_and_still_lands(monkeypatch):
+    """A stateful agent handed a long prompt sometimes spends its turn planning
+    and stops — a whole nine-section SOP run died on exactly that, with no
+    markers emitted. The clone still holds the context, so one nudge recovers it."""
+    updates = _patch_common(monkeypatch)
+    built = []
+    monkeypatch.setattr(builder, "build", lambda *a, **k: built.append(1) or _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+    prompts = []
+
+    class DeliberatingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.audits = 0
+
+        async def send_message(self, agent_id, prompt):
+            prompts.append(prompt)
+            if "Output the corrected sections NOW" in prompt:
+                return _blk("1.0", "СОДРЖИНА", "CONTENT", "поправено|repaired")
+            if "CORRECTED document body" in prompt or "corrected sections and NOTHING" in prompt:
+                return "I need to apply the fixes. Let me review the issues first."
+            if "§6A" in prompt:
+                self.audits += 1
+                return "**Verdict: FIX**\n1. x" if self.audits == 1 else "**Verdict: PASS**"
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=DeliberatingClient())
+    assert any("Output the corrected sections NOW" in p for p in prompts), "nudge not sent"
+    assert built, "the nudged repair must still reach the builder"
+    assert updates[-1]["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_a_repair_that_already_has_markers_is_not_nudged(monkeypatch):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+    prompts = []
+
+    class GoodClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.audits = 0
+
+        async def send_message(self, agent_id, prompt):
+            prompts.append(prompt)
+            if "corrected sections and NOTHING" in prompt:
+                return _blk("1.0", "СОДРЖИНА", "CONTENT", "поправено")
+            if "§6A" in prompt:
+                self.audits += 1
+                return "**Verdict: FIX**\n1. x" if self.audits == 1 else "**Verdict: PASS**"
+            return await super().send_message(agent_id, prompt)
+
+    await run_workflow("job-1", client=GoodClient())
+    assert not any("Output the corrected sections NOW" in p for p in prompts)

@@ -313,6 +313,9 @@ def _section_body(sections: list[dict]) -> str:
 # passed it without comment). The prompt still invites the agent to declare an
 # unfixable issue; it now does so outside the closing marker, where it can be
 # logged without becoming part of the record.
+MARK_OPEN = "<<<PP-SECTION"
+
+
 _SECTION_BLOCK = re.compile(
     r"^<<<PP-SECTION[ \t]+([^|>\s]+)[^>\n]*>>>[ \t]*\n(.*?)^<<<PP-END[ \t]+\1[ \t]*>>>[ \t]*$",
     re.M | re.S,
@@ -380,7 +383,9 @@ async def _repair_sections(
         reply = await client.send_message(
             tmp_id,
             "A §6A reviewer raised the issues below against this document. "
-            "Return the CORRECTED document body.\n\n"
+            "Reply with the corrected sections and NOTHING else — no plan, no "
+            "commentary, no explanation of what you are about to do. Your reply "
+            "is parsed by a machine, not read by a person.\n\n"
             "Rules:\n"
             "- Return ONLY the sections you actually changed. Leave every other "
             "section out entirely — it is kept exactly as it is. Do not echo the "
@@ -403,6 +408,21 @@ async def _repair_sections(
             f"ISSUES:\n{audit.strip()}\n\n"
             f"DOCUMENT BODY:\n{_section_body(sections)}",
         )
+        # A stateful agent handed a long prompt sometimes spends its turn
+        # deliberating and stops: "I need to apply the fixes. Let me review the
+        # issues and determine which sections I actually changed." — a whole
+        # nine-section SOP run died on exactly that, with no markers emitted at
+        # all. The clone still holds the context, so one blunt nudge is nearly
+        # free and asks only for the output it already worked out.
+        if MARK_OPEN not in (reply or ""):
+            log.info("repair reply had no section markers — nudging once")
+            reply = await client.send_message(
+                tmp_id,
+                "Output the corrected sections NOW: only the "
+                f"{MARK_OPEN}...>>> / <<<PP-END n>>> blocks for the sections you "
+                "changed, nothing before or after them. No commentary, no plan, "
+                "no explanation.",
+            )
     finally:
         # same rationale as the reg-checker clone: cleanup must never abort a job
         try:
