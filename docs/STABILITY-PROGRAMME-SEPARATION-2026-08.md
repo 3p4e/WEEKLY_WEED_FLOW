@@ -26,6 +26,38 @@ programme, batch, timepoint and storage condition on the face of the filename.
 | ППК26057 | P050202 | 6 months | 25 °C / 60 % RH | `STABILITY_GrapePie_P050202_m6_25C-60RH_PPK26057.pdf` |
 | ППК26058 | P050202 | 6 months | 40 °C / 75 % RH | `STABILITY_GrapePie_P050202_m6_40C-75RH_PPK26058.pdf` |
 
+### The certificates state the timepoint themselves
+
+Each certificate carries the study point in its sample description, so the designation is taken
+from the record rather than inferred:
+
+```
+примерокот: Сув цвет од медицински канабис од сорта Grape Pie
+            (стабилност месеци 6, 25С/60% RH), серија: Р050022
+```
+
+i.e. `(стабилност месец|месеци N, TT°C/RR% RH), серија: PXXXXXX`. All ten were checked against
+this line and every timepoint and storage condition matches the assigned filename:
+
+| Certificate | Sample description says | Assigned |
+|---|---|---|
+| ППК26032 | стабилност месеци 6, 25С/60% RH, серија Р050022 | P050022 m6 25C-60RH |
+| ППК26033 | стабилност месец 6, 40C/75% RH, серија P050022 | P050022 m6 40C-75RH |
+| ППК26059 | стабилност месец 9, 25C/60% RH, серија PO50022 | P050022 m9 25C-60RH |
+| ППК26034 | стабилност месец 6, 25C/60% RH, серија P050072 | P050072 m6 25C-60RH |
+| ППК26035 | стабилност месеци 6, 40С/75% RH, серија P050072 | P050072 m6 40C-75RH |
+| ППК26060 | стабилност месеци 9, 25С/60% RH, серија P050072 | P050072 m9 25C-60RH |
+| ППК26036 | стабилност месец 3, 25C/60% RH, серија P052022 | P050202 m3 25C-60RH |
+| ППК26037 | стабилност месец 3, 40C/75% RH, серија P052022 | P050202 m3 40C-75RH |
+| ППК26057 | стабилност месец 6, 25С/60% RH, серија PO50202 | P050202 m6 25C-60RH |
+| ППК26058 | стабилност месец 6, 40C/75% RH, серија PO52002 | P050202 m6 40C-75RH |
+
+The batch number is the only field that scans unreliably: `PO50022`, `PO50202` read the leading
+zero as the letter O, and `P052022` / `PO52002` transpose digits. Only three batches are on
+stability — P050022, P050072 and P050202 — and each garbled form resolves to one of them, with
+the m3 and m6 pairs agreeing across their two storage arms. The filenames carry the resolved
+number; the certificates keep whatever they printed.
+
 All ten are Grape Pie, covering three batches at 3/6/9-month timepoints under long-term
 (25 °C/60 % RH) and accelerated (40 °C/75 % RH) conditions. `ППК26036` prints its batch as
 `P052022`, an OCR transposition of `P050202`; the filename carries the corrected number.
