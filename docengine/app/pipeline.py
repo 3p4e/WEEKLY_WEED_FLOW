@@ -573,7 +573,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             audit = await client.send_message(
                 agents["gf_qa_auditor"],
                 "Run the §6A review on this assembled document Markdown. "
-                "Return verdict PASS or FIX with issues.\n\n" + markdown,
+                "Return verdict PASS or FIX with issues.\n\n"
+                "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
+                "`# <number> <MK>|<EN>` section heading lines are emitted by the "
+                "formatter in canonical form — they are not the author's and not "
+                "yours to restyle. Do not raise issues about their spacing, level "
+                "or punctuation; no author can act on those and the document "
+                "cannot pass.\n\n" + markdown,
             )
             audits.append(audit)
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:

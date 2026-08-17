@@ -123,6 +123,14 @@ def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, des
             {"label": SCOPE_BLOCK, "value": _scope_block(ag.get("datasets", []), pending)},
         ],
     }
+    # Letta sizes an unknown model from its DEFAULT (30000) and clamps output
+    # to its own guess. Both are declared in fleet.yaml because the default
+    # broke a real run — see the note there.
+    defaults = spec.get("defaults") or {}
+    if defaults.get("context_window"):
+        body["context_window_limit"] = int(defaults["context_window"])
+    if defaults.get("max_tokens"):
+        body["max_tokens"] = int(defaults["max_tokens"])
     env = _tool_env()
     if env and ag.get("datasets"):
         body["tool_exec_environment_variables"] = env

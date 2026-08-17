@@ -179,3 +179,13 @@ def test_declared_defaults_are_not_an_out_of_credit_provider():
     and OpenAI handles it cannot bill."""
     model = load_fleet()["defaults"]["model"]
     assert not model.startswith(("anthropic/", "openai/")), model
+
+
+def test_context_window_and_max_tokens_are_declared_and_sane():
+    """Letta sizes an unknown model from its DEFAULT of 30000, which truncated a
+    real 9-section repair mid-reply. Both are declared so the model gets what it
+    can actually take."""
+    d = load_fleet()["defaults"]
+    assert d["context_window"] >= 100_000
+    assert d["max_tokens"] >= 8_000
+    assert d["max_tokens"] < d["context_window"]

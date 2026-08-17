@@ -95,10 +95,22 @@ ragflow:
 # analytical finding. Fabricating pharmaceutical data is the one thing the house
 # rules forbid outright, and a 4B local model does it readily. They stay
 # available for cheap non-document work; they are not fit for this fleet.
+#   context_window  Letta sizes an unknown model from LLM_MAX_CONTEXT_WINDOW
+#                   ["DEFAULT"] = 30000, and deepseek-v4-flash is not in its
+#                   table. That is far below what the model takes (LiteLLM
+#                   reports 1,000,000 input tokens) and it broke a real run: the
+#                   repair prompt for a 9-section SOP — the document plus the
+#                   auditor's issues — left too little room for the reply, which
+#                   truncated mid-section and was rejected as unusable. 128k is
+#                   ample headroom while staying well inside what the model
+#                   serves. Passed as context_window_limit at agent creation.
+#   max_tokens      output ceiling per turn; a full SOP section plus its
+#                   surrounding markers needs more than the old 4096.
 defaults:
   model: openai-proxy/deepseek/deepseek-v4-flash
   embedding: ollama-local/nomic-embed-text:latest
-  max_tokens: 4096
+  context_window: 128000
+  max_tokens: 16384
 
 agents:
   - name: gf_doc_orchestrator
