@@ -298,3 +298,69 @@ Test artifacts `QASOP_TEST_A7` and `QASOP_TEST_A8` were removed from
 and contained the agent commentary. The registry holds only
 `WWF-TIMELINE-2026-0814` and `PP-QC-WR-011/2026`, as before.
 
+
+---
+
+# The SOP path (2026-08-17)
+
+Everything above was verified on the single-section annex. The SOP — 9 sections,
+9 ephemeral reg-checkers, translator, audit — is the primary document type and
+was entirely unexercised. It now works:
+
+```
+9 sections generated · 9 ephemeral reg-checks · bilingual gate
+audit 1 -> FIX
+repair accepted: ok (8 of 9 sections rewritten: 1.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0)
+audit 2 -> PASS
+built: 71,873 bytes · 3,578 words · 5 tables · RESULT: PASS · bilingual MK+EN OK
+```
+
+Note the repair left section 2.0 alone — the all-or-nothing protocol could never
+have produced that. Integrity of the built document: 9 section headings and **0**
+doubled, no `PP-SECTION`/`PP-END` leak, one HEADERDATA block, no agent
+commentary, all 9 sections present.
+
+It took four runs, and each failure was a different real defect:
+
+| run | failed on | cause |
+|---|---|---|
+| 1 | repair rejected | all-or-nothing protocol; model rewrote only what it changed |
+| 2 | repair truncated | `context_window` 30000 — Letta's DEFAULT for an unknown model |
+| 3 | repair empty | agent spent its turn deliberating and stopped |
+| 4 | — | **passed** |
+
+Fixes, in order:
+
+1. **Partial repairs.** The agent returns only the sections it changed; anything
+   omitted keeps its original content, so order stops mattering and a nine-section
+   document is never echoed back. Still strict on what a returned section may be:
+   one of the originals, closed, non-empty, at most once, titles carried over.
+2. **Doubled headings.** `assemble_markdown` emits `# <num> <MK>|<EN>` and the
+   author wrote its own heading too, so every section carried its title twice —
+   the auditor caught it across all nine at once. `_drop_echoed_heading` removes a
+   leading heading that echoes the section's own number or titles, and only that.
+3. **A real context window.** Letta sizes an unknown model from
+   `LLM_MAX_CONTEXT_WINDOW["DEFAULT"]` = 30000; LiteLLM reports deepseek-v4-flash
+   at 1,000,000 input tokens. `fleet.yaml` now declares `context_window: 128000`
+   and `max_tokens: 16384`, passed at agent creation — so the fleet had to be
+   recreated, which `ensure_fleet` does not do for an existing agent.
+4. **The auditor was rejecting structure it does not own.** It failed the document
+   because `# 1.0 ЦЕЛ|PURPOSE` lacks spaces around the pipe — but that line is
+   emitted by the formatter in the canon's own `MK|EN` form. No author could act
+   on it, so the document could never pass. The audit prompt now puts the
+   HEADERDATA block and the section heading lines out of scope, leaving the
+   auditor on content, which is where all its useful findings came from.
+5. **A nudge when the agent deliberates.** One follow-up to the same clone, sent
+   only when the reply contains no section marker at all.
+
+**Cost:** the whole session's document runs — 5 annexes, 4 SOPs, plus probes —
+took DeepSeek from $3.00 to **$2.83**. About 2 cents per SOP.
+
+Known cosmetic residue, deliberately not chased: section bodies open with a bold
+restatement of the title (`**6.0 ПОСТАПКА | PROCEDURE**`). It is bold text, not a
+heading, the §6A auditor passes it, and removing it would be a style opinion
+rather than a correctness fix.
+
+All `QASOP_TEST_*` documents were removed from `docengine.documents` and their
+.docx files deleted; the registry holds only `WWF-TIMELINE-2026-0814` and
+`PP-QC-WR-011/2026`.
