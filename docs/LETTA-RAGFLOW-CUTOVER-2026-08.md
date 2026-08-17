@@ -235,19 +235,66 @@ Progression across four runs, same annex, as the fixes landed:
 | 3 | v11 | **PASS** — all six checks cleared (blocked only by defect 3) |
 | 4 | v12 | 1 — missing `Шифра | Code` grid row; 8 checks ✓ |
 
-## Known gap: there is no repair loop
+## ~~Known gap: there is no repair loop~~ — CLOSED
 
-Run 3 proves the content pipeline can reach PASS. Run 4 shows the remaining
-failure mode is **run-to-run variance in the author's output**, not a systematic
-defect — and the pipeline has no answer to it. The auditor returns a concrete,
-actionable fix (run 4: "add the `~~Шифра | Code~~ | QASOP_TEST_A4` row … after
-adding it the document is PASS") and the pipeline **throws that away and fails
-the job**.
+A §6A FIX is now handed back to the authoring agent once before the job fails
+(`DOCENGINE_MAX_REPAIR_ROUNDS`, default 1; `0` restores the old
+fail-on-first-FIX behaviour). The gate is **not** relaxed — `_qa_audit_passed`
+still has to return True on the final verdict; repair only buys more attempts at
+earning it. Live, on the same annex:
 
-One retry that feeds the auditor's issues back to the authoring agent would make
-this converge, and the auditor is already producing exactly the input such a loop
-needs. Not implemented here: it changes pipeline behaviour and per-document cost
-(extra model calls), so it is an owner decision, not a bug fix.
+```
+audit 1 -> FIX      (missing ~~Шифра | Code~~ row)
+repair  -> one hand-back to an ephemeral clone of gf_annex_author
+audit 2 -> PASS
+document built: 57,964 bytes, verify RESULT: PASS, bilingual MK+EN OK
+qa_repair_rounds: 1
+```
 
-No `QASOP_TEST_*` document was registered — every test run stopped at the audit
-gate, so nothing entered the document registry.
+That is the first complete document the pipeline has produced since the cutover.
+
+**The repair behaved correctly under real pressure.** It added only the Code row,
+taking the value from the authoritative meta, and left Doc ID, Date, Reviewed by
+and Signature **blank**. That matters more than the convergence: a repair loop is
+fabrication pressure by construction — told an issue is blocking, the cheapest
+way for a model to satisfy "field X is empty" is to fill X in, which is the one
+thing the house rules forbid. The prompt is explicit that facility specifics,
+measured values, dates, names and signatures stay blank write-ins and that an
+issue which cannot be fixed without inventing something is left unfixed and
+declared.
+
+Every verdict is kept in order (`qa_audit_history`, `qa_repair_rounds`) on both
+the success and failure paths, so a repaired document never reads as one that
+passed first time.
+
+### Three iterations it took to get right, all found by running it
+
+1. **A "PASS" that was not a pass.** The first repair was discarded with only
+   "unusable" in the log. Making the rejection explain itself was the fix that
+   unlocked everything else.
+2. **The delimiter collided with the payload.** Sections were split on the
+   document's own `# num MK|EN` headings — but section CONTENT legitimately
+   contains Markdown headings (an annex body carries its own title line). A
+   correct repair was rejected over `# Образец ...` inside the body it had
+   faithfully reproduced. Sections now use `<<<PP-SECTION ...>>>` markers, which
+   cannot occur in document text.
+3. **Agent commentary reached a controlled document.** With sections only
+   *opened*, a repair appended "Corrected as required: added the missing
+   `~~Шифра | Code~~` row ... All other content left byte for byte unchanged." —
+   and it was built into the .docx, with the §6A auditor passing it without
+   comment. Sections are now opened **and closed** (`<<<PP-END num>>>`); only
+   text between a matching pair becomes document content, so commentary before,
+   between or after sections is discarded, and an unclosed section is refused
+   rather than silently swallowing the rest of the reply.
+
+Structural safety: the agent is handed section bodies only, never the HEADERDATA
+block; numbering and titles are carried from the originals, so a repair cannot
+rename, reorder, add or drop a section; anything that does not line up exactly is
+refused and the job fails on the auditor's original verdict; and bilingual parity
+is re-checked on the repair, since rewording a cell can drop a language.
+
+Test artifacts `QASOP_TEST_A7` and `QASOP_TEST_A8` were removed from
+`docengine.documents` and their .docx files deleted — A7 was built before fix 3
+and contained the agent commentary. The registry holds only
+`WWF-TIMELINE-2026-0814` and `PP-QC-WR-011/2026`, as before.
+
