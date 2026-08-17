@@ -1,10 +1,12 @@
 # Batch Release QC Register — corrections + THC-by-strain consolidation (2026-08-17)
 
-`PP_Batch_Release_QC_Register_CORRECTED.xlsx` contains two sheets:
+`PP_Batch_Release_QC_Register_CORRECTED.xlsx` contains three sheets:
 
 1. **`Batch Release QC`** — the register with four confirmed value corrections applied.
 2. **`THC by Strain`** — `PP_THC_by_Strain.xlsx` rebuilt complete and correct, added as a new sheet
    in the same workbook, in the source document's own format.
+3. **`Stability Testing Programme`** — the stability study results, kept as a separate sheet so they
+   are never read as release values.
 
 Working copy only; not an approved QMS record. Drive file versioning is the change history.
 
@@ -77,3 +79,29 @@ Reference limits: the register's own embedded spec row. The production `qc_spec_
 `qc_specifications` tables are empty, and the limits in `qms-creator/sops_created/QC_01.04` are
 marked "example" and disagree with the register (e.g. Pb ≤2.0 vs ≤0.5), so they were not used.
 Streptococcus and Pseudomonas were out of scope by request.
+
+## Sheet 3 — `Stability Testing Programme`
+
+All ten stability analyses on file, grouped by batch and ordered by timepoint, transcribed from the
+UKIM certificates held in the RAGflow dataset `STABILITY_PROGRAMME`. Columns: batch, variety,
+timepoint, storage condition, report number, issue date, laboratory, then loss on drying, CBDA,
+CBD, CBN, Δ⁹-THC, Δ⁹-THCA, Total CBD and Total Δ⁹-THC, with a remark column.
+
+The sheet header states plainly that these are stability-study results, not batch-release results,
+and that initial (t=0) values live in the `Batch Release QC` sheet. No release value was copied in.
+
+Three batches are on stability, all Grape Pie — P050022 and P050072 at 6 and 9 months, P050202 at
+3 and 6 months — each under long-term 25 °C/60 % RH and, at most points, accelerated 40 °C/75 % RH.
+
+What the data shows, stated as the certificates state it:
+
+- Under **long-term 25 °C/60 % RH** the material is stable. CBN stays at 0.04–0.30 % and Total
+  Δ⁹-THC holds between 21.31 % and 25.98 % out to 9 months.
+- Under **accelerated 40 °C/75 % RH** it degrades sharply. CBN rises to 2.35 %, 2.15 % and 2.05 %,
+  above the ≤ 1.00 % limit printed on those same certificates — flagged in the remark column.
+  Total Δ⁹-THC falls correspondingly: 21.31 → 13.16 % (P050022) and 24.62 → 14.99 % (P050072) at
+  6 months.
+- `ППК26058` (P050202, 6 months, 40 °C/75 % RH) reports Total Δ⁹-THC **1.17 %** against 24.51 % on
+  its long-term counterpart. That figure is not a transcription error: the certificate gives
+  Δ⁹-THC 0.29 % and Δ⁹-THCA 0.97 %, and 0.29 + 0.97 × 0.877 = 1.17, matching the formula the
+  certificate itself prints. It is reported as found; interpreting it is QC's call.
