@@ -58,6 +58,15 @@ _MAX_PREAMBLE_CHARS = 400
 # The first structural token of a real document body: a Markdown heading or a
 # form/table marker. Everything an annex author says before this is commentary.
 _STRUCT = re.compile(r"^\s*(#{1,6}\s|\[\[(FORM|TABLE))", re.M)
+# A HEADERDATA block emitted by an agent inside its section body. Document
+# metadata belongs to assemble_markdown alone, which prepends the authoritative
+# block; build_from_md.py's parser is line-anchored on the FIRST "<!--HEADERDATA"
+# it sees, so a second one either declares a conflicting version or leaks its
+# remaining fields into the body as literal text. Observed live: DeepSeek
+# v4-flash put one mid-body and the §6A auditor caught the version conflict.
+# Line-anchored to mirror that parser exactly — and deliberately not a fail:
+# the agent is answering the brief, it just doesn't own the header.
+_AGENT_HEADERDATA = re.compile(r"^[ \t]*<!--HEADERDATA\b.*?-->[ \t]*$", re.M | re.S)
 
 
 class QaAuditFailed(Exception):
@@ -142,6 +151,12 @@ def _clean_section(text: str, structured: bool = False) -> str:
     legitimately plain text with no heading): only peel conversational lead-in
     lines off the top, so real prose is never lost."""
     t = _strip_fences(text)
+    if not t:
+        return t
+    # Drop any agent-emitted HEADERDATA wherever it sits. Done before the
+    # structural-token search because a block placed AFTER the first heading
+    # survives that search untouched, which is exactly where it was seen.
+    t = _AGENT_HEADERDATA.sub("", t).strip()
     if not t:
         return t
     if structured:
@@ -262,7 +277,12 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "Return ONLY the bilingual Markdown body, using [[FORM:grid]] for the "
                 "metadata block and [[TABLE]] for data grids. Blank write-in values. "
                 "NO commentary, preamble, or explanation — your entire reply is inserted "
-                "verbatim into the document.",
+                "verbatim into the document.\n"
+                "Do NOT emit a <!--HEADERDATA--> block: the document header is added "
+                "around your output and a second one conflicts with it. Do NOT use the "
+                "SOP 9-section numbers (1 ЦЕЛ, 6 ПОСТАПКА, ...) — that structure is for "
+                "SOPs only; number any headings you need from 1 upward, or title them by "
+                "intent. Keep every [[FORM:grid]] row to the same column count.",
             )
             sections.append(
                 {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",

@@ -371,3 +371,41 @@ def test_bilingual_gaps_does_not_fail_a_short_bilingual_section():
     assert _bilingual_gaps([{"num": "2.0", "content": f"{mk}|{en}"}]) == []
     # ...and a longer section with the same lopsided ratio is still fine
     assert _bilingual_gaps([{"num": "3.0", "content": f"{mk * 3}|{en * 3}"}]) == []
+
+
+def test_clean_section_strips_an_agent_emitted_headerdata_block():
+    """assemble_markdown owns document metadata and prepends the authoritative
+    block; build_from_md.py's parser is line-anchored on the FIRST
+    "<!--HEADERDATA" it sees. A second block therefore either declares a
+    conflicting version or leaks its fields into the body as literal text.
+    Observed live: DeepSeek v4-flash emitted one mid-body and the §6A auditor
+    flagged the version conflict."""
+    body = (
+        "## 1. Наслов|Title\n"
+        "<!--HEADERDATA\n"
+        "doc_id: X\n"
+        "version: 4.3\n"
+        "-->\n"
+        "[[TABLE]]\n"
+        "Бр.|||No.\n"
+    )
+    out = _clean_section(body, structured=True)
+    assert "HEADERDATA" not in out
+    assert "version: 4.3" not in out
+    # the real content survives on both sides of where the block was
+    assert "## 1. Наслов|Title" in out
+    assert "[[TABLE]]" in out
+    assert "Бр.|||No." in out
+
+
+def test_clean_section_strips_headerdata_placed_before_any_heading():
+    out = _clean_section(
+        "<!--HEADERDATA\nversion: 9\n-->\n## 1. A|B\ntext\n", structured=True
+    )
+    assert "HEADERDATA" not in out and "## 1. A|B" in out
+
+
+def test_clean_section_leaves_an_ordinary_html_comment_alone():
+    """Only HEADERDATA is the assembler's property."""
+    out = _clean_section("## 1. A|B\n<!-- a note -->\ntext\n", structured=True)
+    assert "<!-- a note -->" in out
