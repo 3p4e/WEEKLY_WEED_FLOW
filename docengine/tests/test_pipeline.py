@@ -15,6 +15,7 @@ from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
     _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
+    _drop_echoed_heading,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -507,7 +508,7 @@ def test_split_repaired_accepts_a_faithful_rewrite():
     body = _blk("1.0", "СОДРЖИНА", "CONTENT", "нов|new one") + "\n\n" + \
         _blk("2.0", "ПОТВРДА", "SIGN-OFF", "нов|new two")
     out, reason = _split_repaired(body, _ORIG)
-    assert reason == "ok"
+    assert reason.startswith("ok")
     assert [s["content"] for s in out] == ["нов|new one", "нов|new two"]
     # titles are carried from the originals, never taken from the reply
     assert [(s["num"], s["mk"], s["en"]) for s in out] == [
@@ -528,9 +529,7 @@ def test_split_repaired_ignores_a_retitled_section():
     [
         "",                                                   # nothing back
         "Sure! Here is the fixed document.",                  # no headings
-        _blk("1.0", "A", "B", "only one section"),                       # dropped a section
         _blk("1.0", "A", "B", "x") + _blk("2.0", "C", "D", "y") + _blk("3.0", "E", "F", "z"),
-        _blk("2.0", "A", "B", "x") + _blk("1.0", "C", "D", "y"),          # reordered
         _blk("1.0", "A", "B", "x") + _blk("2.9", "C", "D", "y"),          # renumbered
         _blk("1.0", "A", "B", "") + _blk("2.0", "C", "D", "y"),           # emptied a section
         # opened but never closed — the whole point of the end marker
@@ -667,7 +666,7 @@ def test_split_repaired_tolerates_chatter_around_a_correct_document():
             + _blk("1.0", "СОДРЖИНА", "CONTENT", "нов|new one") + "\n\n"
             + _blk("2.0", "ПОТВРДА", "SIGN-OFF", "нов|new two"))
     out, reason = _split_repaired(body, _ORIG)
-    assert reason == "ok"
+    assert reason.startswith("ok")
     assert out[0]["content"] == "нов|new one"
 
 
@@ -687,7 +686,7 @@ def test_text_after_the_final_end_marker_never_enters_the_document():
             + "\n\n---\nCorrected as required: added the missing row. "
               "No issues remain unfixed.")
     out, reason = _split_repaired(body, _ORIG)
-    assert reason == "ok"
+    assert reason.startswith("ok")
     assert [s["content"] for s in out] == ["x", "y"]
     assert not any("Corrected as required" in s["content"] for s in out)
 
@@ -697,7 +696,7 @@ def test_text_between_sections_is_discarded_too():
             + "\n\nlet me now do the second section\n\n"
             + _blk("2.0", "C", "D", "y"))
     out, reason = _split_repaired(body, _ORIG)
-    assert reason == "ok"
+    assert reason.startswith("ok")
     assert [s["content"] for s in out] == ["x", "y"]
 
 
@@ -709,6 +708,66 @@ def test_section_content_may_contain_markdown_headings():
              "content": "# Образец | Form\n[[FORM:grid]]\n~~Шифра | Code~~ ||| X"}]
     body = _section_body(orig)
     out, reason = _split_repaired(body, orig)
-    assert reason == "ok", reason
+    assert reason.startswith("ok"), reason
     assert out[0]["content"] == orig[0]["content"]
     assert "# Образец | Form" in out[0]["content"]
+
+
+# ---- partial repair ----
+def test_repair_may_return_only_the_sections_it_changed():
+    """Asked to fix two issues in a nine-section SOP, the model rewrote the
+    sections it needed and stopped. Requiring the whole document back rejected
+    that outright — and echoing nine sections invites truncation besides."""
+    out, reason = _split_repaired(_blk("2.0", "ПОТВРДА", "SIGN-OFF", "поправено"), _ORIG)
+    assert out is not None, reason
+    assert out[0]["content"] == "тело|body one"        # untouched, kept as-is
+    assert out[1]["content"] == "поправено"            # rewritten
+    assert "1 of 2" in reason
+
+
+def test_repair_may_return_sections_out_of_order():
+    body = _blk("2.0", "X", "Y", "two") + "\n\n" + _blk("1.0", "X", "Y", "one")
+    out, reason = _split_repaired(body, _ORIG)
+    assert [s["content"] for s in out] == ["one", "two"], reason
+
+
+def test_repair_returning_nothing_is_not_a_repair():
+    out, reason = _split_repaired("I could not fix anything, sorry.", _ORIG)
+    assert out is None and "no closed sections" in reason
+
+
+def test_repair_may_not_return_the_same_section_twice():
+    body = _blk("1.0", "X", "Y", "a") + "\n\n" + _blk("1.0", "X", "Y", "b")
+    out, reason = _split_repaired(body, _ORIG)
+    assert out is None and "more than once" in reason
+
+
+# ---- echoed heading ----
+@pytest.mark.parametrize(
+    "head",
+    ["# 1.0 ЦЕЛ|PURPOSE", "## 1.0 ЦЕЛ | PURPOSE", "### ЦЕЛ | PURPOSE", "## PURPOSE"],
+)
+def test_echoed_section_heading_is_dropped(head):
+    """assemble_markdown emits the heading; the author writes one too, so every
+    section came out with a doubled title — the §6A auditor flagged it on all
+    nine SOP sections at once."""
+    out = _drop_echoed_heading(f"{head}\nтекст|text", "1.0", "ЦЕЛ", "PURPOSE")
+    assert out == "текст|text"
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        "## 6.1 Подготовка | Preparation",   # a real subsection, not an echo
+        "## Опрема | Equipment",
+        "текст|text",                        # not a heading at all
+    ],
+)
+def test_a_real_opening_heading_is_left_alone(first):
+    body = f"{first}\nостаток|rest"
+    assert _drop_echoed_heading(body, "6.0", "ПОСТАПКА", "PROCEDURE") == body
+
+
+def test_echoed_heading_strip_only_touches_the_first_line():
+    body = "текст|text\n## 1.0 ЦЕЛ | PURPOSE\nповеќе|more"
+    assert _drop_echoed_heading(body, "1.0", "ЦЕЛ", "PURPOSE") == body

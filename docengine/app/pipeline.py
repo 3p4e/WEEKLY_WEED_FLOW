@@ -75,11 +75,14 @@ class QaAuditFailed(Exception):
     until the issues are addressed. Consistent with pp_verify's own hard
     PASS/FAIL gate elsewhere in this pipeline: never fabricate, fail loud."""
 
-    def __init__(self, verdict: str, history: list[str] | None = None):
+    def __init__(self, verdict: str, history: list[str] | None = None,
+                 markdown: str = ""):
         super().__init__("§6A audit did not PASS")
         self.verdict = verdict
         # every verdict in order, so a failed job shows what repair was tried
         self.history = history or [verdict]
+        # the assembled document the verdict was passed on
+        self.markdown = markdown
 
 
 class BilingualGap(Exception):
@@ -143,6 +146,39 @@ def _bilingual_gaps(sections: list[dict]) -> list[str]:
 # "§6A audit did not pass" and the document was never built. Allowing a bare
 # leading PASS as well keeps the simple form (and the existing fakes) working.
 _QA_VERDICT = re.compile(r"\bverdict\b\W{0,12}?(PASS|FIX)\b", re.I)
+
+
+def _norm_head(s: str) -> str:
+    return re.sub(r"[\s|·—–-]+", " ", (s or "").lower()).strip()
+
+
+def _drop_echoed_heading(content: str, num: str, mk: str, en: str) -> str:
+    """Remove a leading heading that just repeats the section's own identity.
+
+    assemble_markdown emits `# <num> <MK>|<EN>` for every section, and the author
+    is told to return the body with no heading line — but it writes one anyway,
+    so every section came out with a doubled title. The §6A auditor caught it on
+    all nine SOP sections at once ("Every major section has a duplicated heading
+    line ... This repeats for all 9 sections"). Asking is not enough; this
+    enforces it.
+
+    Deliberately narrow: only the FIRST line, only if it is a heading, and only
+    if it echoes this section's number or one of its titles. A body that opens on
+    a real subsection heading (`## 6.1 Подготовка | Preparation` under 6.0
+    ПОСТАПКА) matches none of those and is left alone."""
+    lines = (content or "").split("\n")
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines):
+        return content
+    head = lines[i].strip()
+    if not re.match(r"^#{1,6}\s", head):
+        return content
+    text = _norm_head(re.sub(r"^#{1,6}\s*", "", head))
+    if any(t and t in text for t in (_norm_head(num), _norm_head(mk), _norm_head(en))):
+        return "\n".join(lines[i + 1:]).strip()
+    return content
 
 
 def _qa_audit_passed(verdict: str) -> bool:
@@ -285,34 +321,42 @@ _SECTION_OPEN = re.compile(r"^<<<PP-SECTION[ \t]+([^|>\s]+)[^>\n]*>>>[ \t]*$", r
 
 
 def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None, str]:
-    """Parse a repaired body back into sections. Returns (sections, reason);
-    sections is None when the reply cannot be trusted, and reason says why.
+    """Merge a repair reply into the original sections. Returns (sections,
+    reason); sections is None when the reply cannot be trusted.
 
-    Strict about STRUCTURE, tolerant about PACKAGING. A repair that cannot be
-    parsed with confidence is not a repair, and the job must then fail on the
-    auditor's original verdict rather than build something reassembled from a
-    guess — but a model that wraps the right document in a sentence of chatter
-    has still done the work, and throwing that away wastes the round.
+    The agent returns ONLY the sections it changed. Anything it leaves out keeps
+    its original content. Requiring the whole document back does not survive a
+    real SOP: asked to fix two issues in a nine-section document, the model
+    rewrote the sections it needed and stopped — reasonable behaviour that the
+    all-or-nothing protocol rejected outright, and echoing nine full sections
+    invites truncation on top of costing a fortune in tokens.
 
-    So: every expected section number must appear, exactly once, in order.
-    Anything before the first one is preamble and is dropped (the same treatment
-    _clean_section gives authored sections). Numbering and titles are carried
-    from the originals, so a repair cannot rename, reorder, add or drop a
-    section — only rewrite bodies."""
-    wanted = [s["num"] for s in original]
+    Still strict about what a returned section may be: it must be one of the
+    originals (no invented sections), closed by its end marker, non-empty, and
+    sent at most once. Numbering and titles are carried from the originals, so a
+    repair can only rewrite bodies. Text outside a marker pair — preamble,
+    commentary, an unfixable-issue note — is discarded."""
+    by_num = {s["num"]: i for i, s in enumerate(original)}
     blocks = [(m.group(1), m.group(2)) for m in _SECTION_BLOCK.finditer(body)]
-    got = [n for n, _ in blocks]
-    if got != wanted:
+    if not blocks:
         opened = [m.group(1) for m in _SECTION_OPEN.finditer(body)]
-        return None, (f"expected closed sections {wanted}, got {got[:12]}"
-                      f" (open markers seen: {opened[:12]})")
-    out = []
-    for i, (_num, content) in enumerate(blocks):
+        return None, f"no closed sections in the reply (open markers seen: {opened[:12]})"
+
+    seen: set[str] = set()
+    out = [dict(s) for s in original]
+    changed = []
+    for num, content in blocks:
+        if num not in by_num:
+            return None, f"section {num!r} is not part of this document {sorted(by_num)}"
+        if num in seen:
+            return None, f"section {num} returned more than once"
+        seen.add(num)
         content = content.strip()
         if not content:
-            return None, f"section {wanted[i]} came back empty"
-        out.append({**original[i], "content": content})
-    return out, "ok"
+            return None, f"section {num} came back empty"
+        out[by_num[num]]["content"] = content
+        changed.append(num)
+    return out, f"ok ({len(changed)} of {len(original)} sections rewritten: {changed})"
 
 
 async def _repair_sections(
@@ -338,11 +382,13 @@ async def _repair_sections(
             "A §6A reviewer raised the issues below against this document. "
             "Return the CORRECTED document body.\n\n"
             "Rules:\n"
-            "- Every section is wrapped in '<<<PP-SECTION ...>>>' and "
-            "'<<<PP-END <number>>>>' marker lines. Reproduce BOTH, unchanged and "
-            "in the same order, with that section's text between them. They "
-            "delimit the document for reassembly and are not part of it. Change "
-            "section bodies only.\n"
+            "- Return ONLY the sections you actually changed. Leave every other "
+            "section out entirely — it is kept exactly as it is. Do not echo the "
+            "whole document.\n"
+            "- Give each returned section in full, wrapped in its original "
+            "'<<<PP-SECTION ...>>>' and '<<<PP-END <number>>>>' marker lines, "
+            "reproduced unchanged. They delimit the document for reassembly and "
+            "are not part of it.\n"
             "- ONLY text between a matching pair becomes the document. Put any "
             "remark, summary of what you changed, or issue you could not fix "
             "AFTER the final '<<<PP-END ...>>>' line — never inside a section.\n"
@@ -364,6 +410,8 @@ async def _repair_sections(
         except Exception as e:  # noqa: BLE001
             log.warning("failed to delete ephemeral repairer %s: %s", tmp_id, e)
     repaired, reason = _split_repaired(_strip_fences(reply), sections)
+    if repaired is not None:
+        log.info("repair accepted: %s", reason)
     if repaired is None:
         # Say what came back, not just that it was rejected — a silent "unusable"
         # is impossible to act on when it happens in production.
@@ -437,7 +485,10 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     "doing. Your entire reply is inserted verbatim into the document. "
                     "Unknown facility specifics stay as blank fields.",
                 )
-                sections.append({"num": num, "mk": mk, "en": en, "content": _clean_section(text)})
+                sections.append({
+                    "num": num, "mk": mk, "en": en,
+                    "content": _drop_echoed_heading(_clean_section(text), num, mk, en),
+                })
                 await db.job_update(job_id, stage=f"generate {num}")
         else:
             text = await client.send_message(
@@ -456,7 +507,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             )
             sections.append(
                 {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
-                 "content": _clean_section(text, structured=True)}
+                 "content": _drop_echoed_heading(
+                     _clean_section(text, structured=True), "1.0", "СОДРЖИНА", "CONTENT")}
             )
 
         # ---- per-section regulatory check ----
@@ -543,7 +595,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             markdown = assemble_markdown(meta, sections)
 
         if not _qa_audit_passed(audits[-1]):
-            raise QaAuditFailed(audits[-1], audits)
+            raise QaAuditFailed(audits[-1], audits, markdown)
 
         # ---- format + verify (hard gate) ----
         await db.job_update(job_id, stage="format")
@@ -589,7 +641,10 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         await db.job_update(job_id, status="failed", error="§6A audit did not pass",
                             result={"qa_audit": e.verdict,
                                     "qa_audit_history": e.history,
-                                    "qa_repair_rounds": len(e.history) - 1})
+                                    "qa_repair_rounds": len(e.history) - 1,
+                                    # the document the auditor actually judged —
+                                    # without it a FIX verdict cannot be checked
+                                    "markdown": e.markdown})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed",
