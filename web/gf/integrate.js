@@ -173,6 +173,7 @@ GF.WWF.doLogin = async () => {
   try {
     const data = await GF.API.login(u, p);
     if (data.user && data.user.must_change_password) { GF.WWF.showChangePw(p); return; }
+    try { sessionStorage.setItem('wwf_show_module_picker', '1'); } catch (e) {}
     GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
   } catch (e) {
     if (!m) return;
@@ -197,6 +198,7 @@ GF.WWF.doChangePw = async () => {
   try {
     await GF.API.changePassword(a, GF.WWF._curPw);
     try { GF.API.user = await GF.API.me(); sessionStorage.setItem('wwf_user', JSON.stringify(GF.API.user)); } catch (e) {}
+    try { sessionStorage.setItem('wwf_show_module_picker', '1'); } catch (e2) {}
     GF.$('wwf-login').style.display = 'none'; await GF.WWF.loadAndRender();
   } catch (e) { if (m) m.textContent = (mk ? 'Грешка: ' : 'Error: ') + e.message; }
 };
@@ -358,6 +360,13 @@ GF.WWF.loadAndRender = async () => {
     console.error('[WWF] render error', e);
     GF.toast(AL('Render error: ', 'Грешка при прикажување: ') + (e && e.message || e), 'error');
   }
+  // One-shot module picker on fresh login / password change / demo entry.
+  try {
+    if (sessionStorage.getItem('wwf_show_module_picker') === '1') {
+      sessionStorage.removeItem('wwf_show_module_picker');
+      if (GF.openModulePicker) GF.openModulePicker({ mandatory: true });
+    }
+  } catch (e) {}
 };
 
 /* ── persistence overrides (writes -> API) ─────────────────────────── */
@@ -1121,10 +1130,13 @@ GF.WWF.showOtp = (user, otp) => {
    places the item ahead of an existing nav key; `badge` (optional
    () => boolean) toggles a small dot on the item, e.g. "new report ready". */
 GF.WWF._registerFullPageView = ({ key, icon, label, guard, insertBefore, badge }) => {
+  const moduleGuard = () => GF.keyVisibleNow ? GF.keyVisibleNow(key) : true;
+  const effectiveGuard = guard ? () => moduleGuard() && guard() : moduleGuard;
+
   const _sidebar = GF.render.sidebar.bind(GF.render);
   GF.render.sidebar = function () {
     _sidebar();
-    if (guard && !guard()) return;
+    if (!effectiveGuard()) return;
     const nav = GF.$('nav'); if (!nav) return;
     let item = nav.querySelector(`[data-nav="${key}"]`);
     if (!item) {
@@ -1141,7 +1153,7 @@ GF.WWF._registerFullPageView = ({ key, icon, label, guard, insertBefore, badge }
 
   const _all = GF.render.all.bind(GF.render);
   GF.render.all = function () {
-    if (guard && GF.state.view === key && !guard()) GF.state.view = 'mywork';
+    if (GF.state.view === key && !effectiveGuard()) GF.state.view = 'mywork';
     _all();
     if (GF.state.view === key) {
       ['week-strip', 'day-pills', 'telemetry'].forEach(id => { const el = GF.$(id); if (el) el.style.display = 'none'; });

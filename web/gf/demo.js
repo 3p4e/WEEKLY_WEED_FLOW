@@ -56,6 +56,7 @@ GF.DEMO = (function () {
       sessionStorage.setItem(KEY, '1');
       sessionStorage.setItem('wwf_token', data.access_token);
       sessionStorage.setItem('wwf_user', JSON.stringify(data.user));
+      sessionStorage.setItem('wwf_show_module_picker', '1');
     } catch (e) {}
     location.reload();
   }

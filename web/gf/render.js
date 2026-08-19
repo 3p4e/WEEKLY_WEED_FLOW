@@ -63,6 +63,11 @@ GF.render = {
     // department home when the user has no department (execs, QP, ADMIN).
     if (GF.state.view === 'exec' && !(GF.isExec && GF.isExec())) GF.state.view = 'mywork';
     if (GF.state.view === 'depthome' && !(GF.hasDeptHome && GF.hasDeptHome())) GF.state.view = 'mywork';
+    // Bounce stale views that belong to a different module than the active one.
+    if (GF.keyVisibleNow && !GF.keyVisibleNow(GF.state.view)) {
+      const activeMod = GF.moduleById && GF.moduleById(GF.state.module || 'tasks');
+      GF.state.view = (activeMod && activeMod.defaultView) ? activeMod.defaultView() : 'mywork';
+    }
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
@@ -133,14 +138,16 @@ GF.render = {
     // rendered for roles above base USER — same gate as the views themselves —
     // so operators never see an empty group label.
     const role = (GF.API && GF.API.user || {}).role;
-    const qmsGroup = role && role !== 'USER'
+    const activeModule = (GF.state && GF.state.module) || 'tasks';
+    const qmsGroup = activeModule === 'qc' && role && role !== 'USER'
       ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
          <div data-nav="qms-end" style="display:none"></div>` : '';
     GF.$('nav').innerHTML =
-      group(AL('Operations', 'Операции'), ops)
-      + group(AL('Management', 'Менаџмент'), mgr)
+      (activeModule === 'tasks' ? group(AL('Operations', 'Операции'), ops) : '')
+      + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
+    GF.syncModuleBtn && GF.syncModuleBtn();
 
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};

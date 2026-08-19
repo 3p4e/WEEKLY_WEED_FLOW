@@ -33,14 +33,16 @@ GF.views = GF.views || {};
   // Navigation destinations, mirroring cmdk's VIEWS() but tolerant of missing
   // capability helpers (every guard is optional-chained).
   const VIEWS = () => {
-    const v = [
-      ['mywork', 'my_week'], ['board', 'board'], ['timeline', 'timeline'],
-      ['calendar', 'calendar'], ['coord', 'coordination'], ['dash', 'dashboard'], ['team', 'team'],
-    ];
-    if (GF.isExec && GF.isExec()) v.unshift(['exec', 'exec_overview']);
-    if (GF.hasDeptHome && GF.hasDeptHome()) v.unshift(['depthome', 'dept_home']);
-    if (GF.can && GF.can('team')) v.push(['workload', 'workload']);
-    return v.map(([id, key]) => ({ kind: 'view', id, label: (GF.t ? GF.t(key) : key) }));
+    const activeMod = GF.moduleById && GF.moduleById((GF.state && GF.state.module) || 'tasks');
+    if (!activeMod) return [];
+    const FINE_GUARD = {
+      exec: () => GF.isExec && GF.isExec(),
+      depthome: () => GF.hasDeptHome && GF.hasDeptHome(),
+      workload: () => GF.can && GF.can('team'),
+    };
+    return activeMod.keys
+      .filter(k => k !== 'search' && (!FINE_GUARD[k] || FINE_GUARD[k]()))
+      .map(k => ({ kind: 'view', id: k, label: GF.t && GF.VIEW_LABEL_KEY ? GF.t(GF.VIEW_LABEL_KEY[k] || k) : k }));
   };
 
   // Rooms + batches, ONLY if the facility board has already loaded them this

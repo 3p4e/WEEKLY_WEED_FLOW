@@ -186,7 +186,10 @@ document.addEventListener('keydown', (e) => {
     // voice-modal needs its recognizer stopped, not just hidden — route
     // through GF.voice.closeCapture() like the modal's own Cancel/X buttons.
     if (GF.$('voice-modal')?.classList.contains('open')) GF.voice.closeCapture();
-    document.querySelectorAll('.overlay.open').forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.overlay.open').forEach(m => {
+      if (m.getAttribute('data-mandatory') === '1') return;
+      m.classList.remove('open');
+    });
   }
   const modalOpen = document.querySelector('.overlay.open');
   if (!modalOpen && e.key === 'ArrowLeft') GF.selectWeek(GF.state.selWeek - 1);
