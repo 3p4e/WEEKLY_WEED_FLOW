@@ -504,6 +504,23 @@ GF.pickMWSkin = (id) => { GF.setMWSkin(id); GF.openThemePicker(); };  // re-rend
 // Back-compat: the header button previously "toggled"; now it opens the picker.
 GF.toggleTheme = () => GF.openThemePicker();
 GF.setView = (v) => {
+  // Cross-module deep links (exec-report "Open in board", the calendar /
+  // approvals / ⌘K / search jumps, and document task links — all route through
+  // GF.WWF.xrJump → setView('mywork')) target a view that may live in a
+  // different module than the active one. Carry the user into that view's
+  // module when their role can access it, instead of letting render.all()'s
+  // module bounce reset the navigation to the current module's default.
+  // modules.js loads after this file, so the helpers are optional-chained; a
+  // target module the role CANNOT access is left alone (render.all() then
+  // bounces it, preserving the access gate).
+  if (GF.moduleForKey && GF.moduleAccessibleFor && GF.state) {
+    const mod = GF.moduleForKey(v);
+    const role = (GF.API && GF.API.user && GF.API.user.role) || 'USER';
+    if (mod && mod !== (GF.state.module || 'tasks') && GF.moduleAccessibleFor(mod, role)) {
+      GF.state.module = mod;
+      try { localStorage.setItem('gf_module', mod); } catch (e) {}
+    }
+  }
   GF.state.view = v;
   try { localStorage.setItem('gf_view', v); } catch (e) {}
   if (GF.render && GF.render.all) GF.render.all();

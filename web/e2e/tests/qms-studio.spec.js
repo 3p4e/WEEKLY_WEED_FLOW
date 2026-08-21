@@ -5,7 +5,7 @@
 // graceful "QMS service unavailable" state IS the assertion here — the real
 // upstream integration is verified on the wwf_mass test stack.
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, gotoModule } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -18,6 +18,7 @@ test('QMS Studio zone: rail group, both views, graceful unavailable state', asyn
   await login(page, creds.username, creds.password);
 
   await test.step('the rail shows the QMS Studio group with both views', async () => {
+    await gotoModule(page, 'qc');   // QMS Studio + QC views live in the qc module
     await expect(page.locator('.nav-group', { hasText: 'QMS Studio' })).toBeVisible();
     await expect(page.locator('[data-nav="qmsregistry"]')).toBeVisible();
     await expect(page.locator('[data-nav="qmsknow"]')).toBeVisible();

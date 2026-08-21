@@ -58,6 +58,34 @@ async function login(page, username, password) {
   await page.locator('#wwf-p').fill(password);
   await page.getByRole('button', { name: 'Authenticate' }).click();
   await expect(page.locator('#wwf-login')).toBeHidden({ timeout: 15_000 });
+  await dismissModulePicker(page);
 }
 
-module.exports = { seedOrg, login, revealLoginCard };
+// The role-based module switcher pops a MANDATORY module picker once on every
+// login (an undismissable overlay — no close button, Escape suppressed — until
+// a module is chosen). It opens after loadAndRender() finishes, i.e. slightly
+// after the login card hides, so wait for it, then land on the default 'tasks'
+// module so the app is interactive. Specs that need another module call
+// gotoModule() afterwards. Tolerant of its absence (older build / already
+// dismissed) so it can't wedge the shared helper.
+async function dismissModulePicker(page) {
+  const picker = page.locator('#gf-module-modal.overlay.open');
+  try {
+    await picker.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (e) {
+    return;
+  }
+  await page.evaluate(() => window['GF'].pickModule('tasks'));
+  await expect(picker).toBeHidden({ timeout: 5_000 });
+}
+
+// Switch the active functional module the way the header module button does,
+// so a spec can reach a view that lives outside the default 'tasks' module
+// (its sidebar nav item only renders while its module is active). setModule
+// resets to the module's default view and re-renders synchronously.
+async function gotoModule(page, moduleId) {
+  await page.evaluate((m) => window['GF'].setModule(m), moduleId);
+  await page.waitForTimeout(150);
+}
+
+module.exports = { seedOrg, login, revealLoginCard, dismissModulePicker, gotoModule };

@@ -4,7 +4,7 @@
 // through the room modal (strain / count / phase choosers), and the room cell
 // + phase KPI totals reflect it.
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, gotoModule } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -22,6 +22,7 @@ test('facility board: room renders, batch added, totals update', async ({ page }
   });
 
   await test.step('open Facility from the rail', async () => {
+    await gotoModule(page, 'cultivation');   // Facility lives in the cultivation module
     await page.locator('.nav-item', { hasText: 'Facility' }).click();
     await expect(page.locator('.view-title', { hasText: 'Facility' })).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('.fac-room .fr-nm', { hasText: 'Grow Room 1' })).toBeVisible({ timeout: 10_000 });

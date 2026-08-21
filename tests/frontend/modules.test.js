@@ -195,6 +195,38 @@ test('keyVisibleNow: unclassified key fails open', () => {
   close();
 });
 
+// ── setView carries cross-module deep links into the target module ─────
+// (xrJump → setView('mywork'), exec-report "Open in board", calendar/⌘K jumps)
+
+test('setView switches to the target view\'s module when the role can access it', () => {
+  const { GF, close } = loadModules();
+  GF.API = { user: { role: 'QC_MGR' } };
+  GF.state.module = 'tasks';
+  GF.setView('qccoa');            // a qc-module view, reached via a deep link
+  assert.equal(GF.state.module, 'qc');
+  assert.equal(GF.state.view, 'qccoa');
+  close();
+});
+
+test('setView does NOT switch module for a view the role cannot access', () => {
+  const { GF, close } = loadModules();
+  GF.API = { user: { role: 'USER' } };
+  GF.state.module = 'tasks';
+  GF.setView('qccoa');            // USER has no qc access — gate preserved
+  assert.equal(GF.state.module, 'tasks');   // render.all() then bounces the view
+  close();
+});
+
+test('setView leaves the module unchanged for a same-module view', () => {
+  const { GF, close } = loadModules();
+  GF.API = { user: { role: 'USER' } };
+  GF.state.module = 'tasks';
+  GF.setView('board');
+  assert.equal(GF.state.module, 'tasks');
+  assert.equal(GF.state.view, 'board');
+  close();
+});
+
 // ── VIEW_LABEL_KEY completeness ───────────────────────────────────────
 
 test('GF.VIEW_LABEL_KEY covers every key in every module', () => {
