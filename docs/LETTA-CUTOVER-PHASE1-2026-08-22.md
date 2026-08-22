@@ -1,11 +1,12 @@
-# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phase 0/1, 2026-08-22
+# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phases 0–2, 2026-08-22
 
 Owner directive: rewire every app AI function/engine/agent off the old Letta and
 onto **letta-code**, with the sequence *fix letta-code security first → full
 migration → trace, snapshot, then stop `wwf-letta`*.
 
-This document records what was **traced** (Phase 0) and what was **changed**
-(Phase 1). Phases 2–5 are not started. No secret value appears here.
+This document records what was **traced** (Phase 0), the security work
+(Phase 1) and the migration targets built on letta-code (Phase 2). Phase 3
+(repoint + rebind) has not been executed. No secret value appears here.
 
 ## Phase 0 — the trace, and what it corrected
 
@@ -131,6 +132,43 @@ come back *through* it:
 Neither blocks the cutover, but **`gf_*` document runs use
 `openai-proxy/deepseek/deepseek-v4-flash`**, so DeepSeek reachability should be
 re-checked before Phase 3 verification depends on a live agent turn.
+
+## Phase 2 — the planner agents now exist on letta-code
+
+letta-code had the 8 `gf_*` document agents but **nothing to bind the backend and
+scheduler planner functions to**. Created directly on letta-6ou3 (owner's call —
+fleet development itself lives in `3p4e/letta-stack`, out of this repo's scope,
+so these are recorded here for later reconciliation into `fleet.yaml`):
+
+| agent | id |
+|---|---|
+| `wwf_weekly_report` | `agent-d702339a-c346-4f9f-a63a-d565db221852` |
+| `wwf_next_week_plan` | `agent-0eb32b68-053e-4cf6-b2ad-c9315d52326e` |
+| `wwf_coordinator` | `agent-50a3a997-63ef-4c57-b3cc-8171fbb7c22a` |
+
+The system prompts are **the repo's own**, not new text:
+`backend/scripts/planner_prompts.py` already carries the canonical
+`WEEKLY_REPORT_SYSTEM` / `NEXT_WEEK_PLAN_SYSTEM` at version `wwf-prompts/v4`,
+and they were extracted from that module so the agents start at exactly the
+version the scheduler expects. `wwf_coordinator` reuses the same shared `_RULES`
+block. Because the version marker already matches, `planner_prompts.apply()`
+will log "already at wwf-prompts/v4, skip" instead of re-patching on the next
+scheduler boot — the idempotence that module was written for.
+
+Model configuration is copied from the live `gf_app_assistant` rather than
+guessed: `openai-proxy/deepseek/deepseek-v4-flash`, embedding
+`ollama-local/nomic-embed-text:latest`, `context_window_limit` 128000,
+`max_tokens` 16384 — the 128k figure being the fix recorded in
+`LETTA-RAGFLOW-CUTOVER-2026-08.md` for Letta sizing an unknown model at 30000.
+
+Verified after creation: **11 agents** on letta-code (8 `gf_*` + these 3), each
+new one reporting `wwf-prompts/v4`, the DeepSeek handle and ctx 128000. The
+creation script is idempotent — it skips any name that already exists.
+
+Still open for Phase 3: `GrowFlow_Weekly_Snapshots`, `DB1_REGULATORY` and
+`DB3_PP_CURRENT_unified` remain un-ingested in RAGflow, so the snapshot digest
+has no retrieval home on letta-code yet (the digests are regenerable from the
+tasks DB).
 
 ## Open item worth its own attention
 
