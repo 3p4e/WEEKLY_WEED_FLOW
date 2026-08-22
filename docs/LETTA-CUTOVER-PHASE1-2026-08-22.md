@@ -119,19 +119,28 @@ Two gotchas worth keeping:
 ### Inference failures seen during verification are NOT from the rotation
 
 Two upstream faults were visible while testing, both pre-existing and unrelated
-— the authenticated proxy path itself is proven by the fact that these errors
+— the authenticated proxy path itself is proven by the fact that these results
 come back *through* it:
 
-- `deepseek/deepseek-v4-flash` hangs with no response and no litellm log line —
-  upstream DeepSeek latency/availability. An unconfigured model name returns a
-  clean `400` on the same path, so routing and auth are fine.
+- **DeepSeek works, but is very slow.** Diagnosed directly from inside the
+  litellm container, bypassing the proxy: `/user/balance` answers in **0.6 s**
+  (`is_available: true`, **$9.46**), while `/chat/completions` for an 8-token
+  reply took **132 s** and returned `HTTP 200` with the expected content. So it
+  is not credit, not auth, not the key rotation and not the LiteLLM config
+  (`thinking: disabled` is applied as the earlier cutover requires) — it is
+  upstream latency at DeepSeek. Requests through litellm "hang" only because
+  they exceed the client timeout; the call itself eventually succeeds.
 - `local-*` (Ollama) returns `500 Ollama_chatException - llama-server process
   has terminated: signal: killed` — the OOM kill is a casualty of the loadavg-55
   spike, not of this work.
 
-Neither blocks the cutover, but **`gf_*` document runs use
-`openai-proxy/deepseek/deepseek-v4-flash`**, so DeepSeek reachability should be
-re-checked before Phase 3 verification depends on a live agent turn.
+**Consequence for Phase 3.** A `gf_*` document run makes ~11 sequential model
+calls, and the backend's `_letta_message` uses a **30 s** default timeout
+(`backend/app/api/ai.py`), so at the latency measured above an `/ai` call would
+return `{"available": false, "reason": "letta_unreachable"}` — the graceful
+degradation path, not an error, but not a useful answer either. Verification of
+Phase 3 should therefore either wait for DeepSeek latency to normalise or assert
+on the binding/plumbing rather than on a completed agent turn.
 
 ## Phase 2 — the planner agents now exist on letta-code
 
