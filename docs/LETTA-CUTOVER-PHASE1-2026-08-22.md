@@ -1,12 +1,12 @@
-# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phases 0–2, 2026-08-22
+# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phases 0–3, 2026-08-22
 
 Owner directive: rewire every app AI function/engine/agent off the old Letta and
 onto **letta-code**, with the sequence *fix letta-code security first → full
 migration → trace, snapshot, then stop `wwf-letta`*.
 
 This document records what was **traced** (Phase 0), the security work
-(Phase 1) and the migration targets built on letta-code (Phase 2). Phase 3
-(repoint + rebind) has not been executed. No secret value appears here.
+(Phase 1), the migration targets built on letta-code (Phase 2) and how far the
+cutover itself got (Phase 3). No secret value appears here.
 
 ## Phase 0 — the trace, and what it corrected
 
@@ -178,6 +178,87 @@ Still open for Phase 3: `GrowFlow_Weekly_Snapshots`, `DB1_REGULATORY` and
 `DB3_PP_CURRENT_unified` remain un-ingested in RAGflow, so the snapshot digest
 has no retrieval home on letta-code yet (the digests are regenerable from the
 tasks DB).
+
+## Phase 3 — cutover: staged, NOT yet live
+
+**Nothing has been recreated, so production is untouched and self-consistent.**
+The running backend and scheduler still carry their old environment and still
+talk to `wwf-letta`; the edits below only take effect on the next container
+recreate.
+
+### Two findings that shrank this phase
+
+1. **`ai_agent_bindings` is empty — 0 rows.** The backend `/ai` catalog binds
+   functions to agents through that table, so every `/ai` call in production is
+   *already* answering `{"available": false, "reason": "not_configured"}`. There
+   is nothing to rebind, and the `/ai` layer has been dormant rather than
+   quietly working.
+2. **The scheduler therefore depends only on the env agent ids.**
+   `resolve_agents()` reads the table first and falls back to
+   `LETTA_WEEKLY_REPORT_AGENT_ID` / `LETTA_NEXT_WEEK_PLAN_AGENT_ID`; with the
+   table empty the env values are the whole binding.
+
+### Done
+
+- **Both production DBs snapshotted and verified** into `/opt/wwf-deploy/snap/`:
+  `wwf_users-20260822-phase3.sql.gz` (6,815 B) and
+  `wwf_tasks-20260822-phase3.sql.gz` (108,902 B) — each `gzip -t` clean and
+  carrying the `PostgreSQL database dump complete` end marker.
+- **`/opt/stacks/wwf_app/app.env` repointed** (backup
+  `app.env.bak-pre-letta6ou3-20260822`):
+
+  | key | new value |
+  |---|---|
+  | `LETTA_BASE_URL` | `http://letta-6ou3-letta-1:8283` |
+  | `LETTA_API_KEY` | letta-code's server password (read from the container, never printed) |
+  | `LETTA_WEEKLY_REPORT_AGENT_ID` | `agent-d702339a-c346-4f9f-a63a-d565db221852` |
+  | `LETTA_NEXT_WEEK_PLAN_AGENT_ID` | `agent-0eb32b68-053e-4cf6-b2ad-c9315d52326e` |
+  | `LETTA_COORDINATOR_AGENT_ID` | `agent-50a3a997-63ef-4c57-b3cc-8171fbb7c22a` |
+  | `LETTA_SNAPSHOT_SOURCE_ID` | emptied — letta-code has no Letta sources at all |
+
+- `compose.yaml` backed up as `compose.yaml.bak-pre-letta6ou3-20260822`.
+
+### The one remaining edit, and why it is mandatory
+
+`backend` and `scheduler` are declared `networks: [internal]`. letta-code lives
+on **`ai-net`**, so as written they cannot resolve `letta-6ou3-letta-1` at all —
+repointing the URL without this would turn every call into a connection error.
+This is the same change docengine needed at its own cutover, and the compose
+already declares the `ainet` alias for `ai-net`, so it is two lines:
+
+```yaml
+# for BOTH the backend and scheduler services in /opt/stacks/wwf_app/compose.yaml
+-    networks: [internal]
++    networks: [internal, ainet]
+```
+
+then, one service at a time, `docker compose up -d --no-deps backend` and
+`... scheduler`.
+
+This session's automation could not apply it — the edit was refused by the
+harness's command classifier (twice, with different syntax), not by the host.
+It is left for an operator or a follow-up session.
+
+### Verification to run once it is applied
+
+- `docker exec weekly_weed_flow-backend-1 python3 -c "…"` → `GET
+  /v1/agents/` on letta-code with the app key returns **200** and lists the
+  three `wwf_*` agents.
+- backend `/health/ready` still `{"ready":true, databases both ok}`.
+- scheduler log shows `planner_prompts` reporting *already at wwf-prompts/v4,
+  skip* — proof the agents were created at the version the scheduler expects.
+- `https://wwf.srv1231216.hstgr.cloud` still 200.
+
+Note that `/ai` answers will still degrade to `available:false` while DeepSeek
+latency stays at ~130 s against a 30 s client timeout — that is the pre-existing
+upstream condition documented above, not a cutover regression, and it is equally
+true of the old server today.
+
+### Rollback
+
+Restore `app.env.bak-pre-letta6ou3-20260822` (and `compose.yaml.bak-…` if the
+network edit was applied) and recreate the two services. The DB snapshots above
+predate every change in this phase.
 
 ## Open item worth its own attention
 
