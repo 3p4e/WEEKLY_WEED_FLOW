@@ -1,0 +1,133 @@
+# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phase 0/1, 2026-08-22
+
+Owner directive: rewire every app AI function/engine/agent off the old Letta and
+onto **letta-code**, with the sequence *fix letta-code security first → full
+migration → trace, snapshot, then stop `wwf-letta`*.
+
+This document records what was **traced** (Phase 0) and what was **changed**
+(Phase 1). Phases 2–5 are not started. No secret value appears here.
+
+## Phase 0 — the trace, and what it corrected
+
+`LETTA-RAGFLOW-SECURITY-REVIEW-2026-08.md` §MEDIUM guessed `wwf-letta` was "dead
+weight" from 48 h of quiet logs, and left an explicit action: trace `app.env`
+before decommissioning anything. **That trace now says the opposite — the guess
+was wrong.**
+
+| consumer | `LETTA_BASE_URL` | resolves to | server |
+|---|---|---|---|
+| `weekly_weed_flow-backend-1` | `http://letta:8283` | `172.16.31.6` | **`wwf-letta`** |
+| `wwf-scheduler` | `http://letta:8283` | `172.16.31.6` | **`wwf-letta`** |
+| `wwf-docengine` | `http://letta-6ou3-letta-1:8283` | — | letta-code ✅ |
+
+`letta` is a **network alias of the `wwf-letta` container** on the network it
+shares with the backend — not the unrelated multi-tenant `letta` container
+(whose addresses are all `172.16.1x/2x.x`). So `wwf-letta` is **live app
+infrastructure**: it still backs the backend `/ai` catalog and the weekly
+snapshot. It is quiet because those paths are infrequent (a weekly scheduler run
+plus on-demand `/ai`), not because they are gone.
+
+Bound on the old server, and therefore blocking a clean disconnect:
+
+- `LETTA_WEEKLY_REPORT_AGENT_ID`, `LETTA_COORDINATOR_AGENT_ID`,
+  `LETTA_NEXT_WEEK_PLAN_AGENT_ID` (three agent ids, backend **and** scheduler)
+- `LETTA_SNAPSHOT_SOURCE_ID` — a Letta RAG *source*; letta-code has no Letta
+  sources at all (retrieval is RAGflow), and `GrowFlow_Weekly_Snapshots` is
+  still in `fleet.yaml`'s `ragflow.pending_ingest`
+- every `ai_agent_bindings.letta_agent_id` row, which names agents that exist
+  only on the old server
+
+`qms-creator` / `qms-api` still reference Letta but are retired platform-wide
+(`QMS_API_KEY` blanked 2026-07-16); nothing there needs cutting over.
+
+## Phase 1 — letta-code security: 🔴 CRITICAL closed
+
+The review found letta-6ou3 answering `/v1/agents/` with **no credential** and
+leaking the LiteLLM master key through `/v1/providers/`, and deliberately
+stopped without acting. Both are now closed.
+
+**Root cause** (the review left this "unresolved… needs its own investigation"):
+the image's `letta/server/startup.sh` only appends `--secure` when `SECURE=true`
+
+```sh
+CMD="letta server --host $HOST --port $PORT"
+if [ "${SECURE:-false}" = "true" ]; then CMD="$CMD --secure"; fi
+```
+
+`LETTA_SERVER_PASSWORD` was set, `SECURE` was not — so the password was loaded
+and never enforced. Not a Letta bug, a missing flag.
+
+**Changes to `/docker/letta-6ou3/docker-compose.yml`** (backups
+`docker-compose.yml.bak-20260822-presecure`, `.env.bak-20260822-presecure`):
+
+1. added `SECURE: "true"`
+2. removed the `ports: ["8283"]` publish — the short form was binding a random
+   host port (`0.0.0.0:32770→8283`; the review saw `32769`, proving it drifts on
+   every restart)
+
+then `docker compose -p letta-6ou3 up -d`.
+
+**Verified after the recreate**
+
+| check | before | after |
+|---|---|---|
+| `GET /v1/agents/` no credential (over `ai-net`) | 200 + full agent list | **401** |
+| same call with docengine's `LETTA_API_KEY` | 200 | **200** |
+| published host port | `0.0.0.0:32770→8283` | none (`8283/tcp` only) |
+| `letta-6ou3-letta-1` | — | `running`, `restarts=0` |
+
+Safe because docengine's `LETTA_API_KEY` and letta-6ou3's
+`LETTA_SERVER_PASSWORD` were confirmed **identical** (SHA-256 compared, values
+never printed) *before* enforcement was switched on — so the one live consumer
+was already sending the right bearer. The Traefik route stays, and is now
+password-gated like the internal path.
+
+## Deferred, and why — not a decision, an infrastructure block
+
+**LiteLLM master-key rotation.** Recommended once the exposure closed, since the
+key must be treated as compromised. Started, then stopped mid-way:
+
+- a new key was generated and staged, then **reverted**; `.env` is byte-identical
+  to `.env.bak-20260822-prerotate` (hash-compared) and the staged key file is
+  deleted
+- the running litellm, its `.env`, and letta-code's `litellm` provider therefore
+  all still hold the **same old key** — the DeepSeek route is consistent and
+  unbroken, no half-rotation
+- when resumed: new key → litellm `.env` → recreate litellm → `PATCH` provider
+  `provider-a0f4c547-3651-4a17-8824-a24332776e17` (`litellm`, type `openai`,
+  `http://litellm:4000/v1`) → prove a DeepSeek call still routes
+
+**Why it stopped: kvm4 is overloaded.** loadavg **33 → 55 (1 min), 66 (5 min)**
+on **4 vCPU**, climbing, from other tenants on the shared box (agent-zero,
+code-server, label-studio, supabase, …). The docker daemon answers `docker
+version` but times out on anything heavier, so multi-step coordinated changes
+cannot be confirmed promptly — the wrong condition for a two-sided credential
+swap. letta-6ou3 is **not** a contributor (`restarts=0`).
+
+**The Hostinger VPS API is not an alternative from here.** `KVM4_API_TOKEN` is
+present, but both `developers.hostinger.com` and `api.hostinger.com` return
+**Cloudflare error 1010** ("site owner has banned your client") through this
+session's egress proxy — a client-fingerprint block, not an auth failure.
+
+## Open item worth its own attention
+
+`AI-STACK-2026-08.md` §3 records that panel-managed `/docker/*` stacks are meant
+to be changed **through the Hostinger API**, because a panel redeploy overwrites
+direct host edits. The Phase 1 fix above is a direct host edit: correct and live
+now, but it should be **mirrored into the panel's compose for `letta-6ou3`** so
+a future panel action cannot silently reopen the port or drop `SECURE`. That
+mirror needs either a working API path or a manual panel paste.
+
+## What Phase 2+ still needs
+
+1. letta-code has **no planner agents** — nothing to bind `weekly_report`,
+   `next_week_plan`, `template_narrative`, … to. Owner chose to create them
+   **directly on letta-6ou3** and reconcile into `3p4e/letta-stack` later
+   (fleet development lives there per `docengine/DEPRECATED.md`, which is out of
+   this repo's scope).
+2. `GrowFlow_Weekly_Snapshots`, `DB1_REGULATORY`, `DB3_PP_CURRENT_unified` are
+   still un-ingested in RAGflow.
+3. Only then: repoint backend + scheduler, rebind `ai_agent_bindings`, verify,
+   and finally snapshot and stop `wwf-letta` — **keeping** the
+   `wwf_mass_letta_pgdata` volume, which `ops/README.md` flags as live
+   production data despite its name.
