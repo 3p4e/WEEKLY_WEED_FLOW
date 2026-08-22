@@ -82,32 +82,55 @@ never printed) *before* enforcement was switched on — so the one live consumer
 was already sending the right bearer. The Traefik route stays, and is now
 password-gated like the internal path.
 
-## Deferred, and why — not a decision, an infrastructure block
+## LiteLLM master-key rotation — DONE
 
-**LiteLLM master-key rotation.** Recommended once the exposure closed, since the
-key must be treated as compromised. Started, then stopped mid-way:
+The key had to be treated as compromised (it was readable unauthenticated
+through `/v1/providers/` until the fix above). Rotated once kvm4 recovered
+(loadavg 55 -> 0.5).
 
-- a new key was generated and staged, then **reverted**; `.env` is byte-identical
-  to `.env.bak-20260822-prerotate` (hash-compared) and the staged key file is
-  deleted
-- the running litellm, its `.env`, and letta-code's `litellm` provider therefore
-  all still hold the **same old key** — the DeepSeek route is consistent and
-  unbroken, no half-rotation
-- when resumed: new key → litellm `.env` → recreate litellm → `PATCH` provider
-  `provider-a0f4c547-3651-4a17-8824-a24332776e17` (`litellm`, type `openai`,
-  `http://litellm:4000/v1`) → prove a DeepSeek call still routes
+Sequence, both sides swapped back-to-back: new key generated on the box (never
+printed) -> litellm `.env` (backup `.env.bak-20260822-rot2`) -> recreate litellm
+-> `PATCH /v1/providers/provider-a0f4c547-3651-4a17-8824-a24332776e17` on
+letta-code with the same value -> verify -> `shred -u` the staged key.
 
-**Why it stopped: kvm4 is overloaded.** loadavg **33 → 55 (1 min), 66 (5 min)**
-on **4 vCPU**, climbing, from other tenants on the shared box (agent-zero,
-code-server, label-studio, supabase, …). The docker daemon answers `docker
-version` but times out on anything heavier, so multi-step coordinated changes
-cannot be confirmed promptly — the wrong condition for a two-sided credential
-swap. letta-6ou3 is **not** a contributor (`restarts=0`).
+| check | result |
+|---|---|
+| `GET /v1/models` with the NEW key | **200** |
+| same with the OLD key | **400** — rejected, no longer the master key |
+| same with no key | **401** |
+| letta-code `/v1/models/` (its patched provider credential) | **377 handles**, DeepSeek routes present |
+| `litellm`, `letta-6ou3-letta-1` | `running`, **restarts=0** |
 
-**The Hostinger VPS API is not an alternative from here.** `KVM4_API_TOKEN` is
-present, but both `developers.hostinger.com` and `api.hostinger.com` return
-**Cloudflare error 1010** ("site owner has banned your client") through this
-session's egress proxy — a client-fingerprint block, not an auth failure.
+Two gotchas worth keeping:
+
+- **Compose project name matters.** `docker compose up -d` run from a mounted
+  directory defaulted the project to the mount name and tried to *create* a
+  second `litellm` (name conflict) instead of replacing it. The running
+  container has `com.docker.compose.project=litellm` — pass `-p litellm`.
+- **Bind mounts resolve on the HOST, not in the helper container.** Running
+  compose with the stack bind-mounted at `/w` made Docker resolve
+  `./config.yaml` against a path that did not exist on the host and create an
+  empty **directory**, so litellm crash-looped on
+  `IsADirectoryError: /app/config.yaml`. The host file was never touched. Fix:
+  mount the stack at its real path and `-w` there, so relative binds resolve
+  identically to a host-side `docker compose`.
+
+### Inference failures seen during verification are NOT from the rotation
+
+Two upstream faults were visible while testing, both pre-existing and unrelated
+— the authenticated proxy path itself is proven by the fact that these errors
+come back *through* it:
+
+- `deepseek/deepseek-v4-flash` hangs with no response and no litellm log line —
+  upstream DeepSeek latency/availability. An unconfigured model name returns a
+  clean `400` on the same path, so routing and auth are fine.
+- `local-*` (Ollama) returns `500 Ollama_chatException - llama-server process
+  has terminated: signal: killed` — the OOM kill is a casualty of the loadavg-55
+  spike, not of this work.
+
+Neither blocks the cutover, but **`gf_*` document runs use
+`openai-proxy/deepseek/deepseek-v4-flash`**, so DeepSeek reachability should be
+re-checked before Phase 3 verification depends on a live agent turn.
 
 ## Open item worth its own attention
 
