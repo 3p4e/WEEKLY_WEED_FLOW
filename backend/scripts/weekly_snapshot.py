@@ -658,6 +658,14 @@ async def attach_source_once() -> None:
     if not COORDINATOR_AGENT_ID:
         log("LETTA_COORDINATOR_AGENT_ID not set — skipping attach")
         return
+    # The scheduled path guards the digest upload on SNAPSHOT_SOURCE_ID, which
+    # is deliberately empty whenever digests are not being pushed to a Letta
+    # source (as after the 2026-08-22 move to letta-code, where retrieval lives
+    # in RAGflow instead). This one-time command needs the same guard, or it
+    # attaches the empty string as a source id.
+    if not SNAPSHOT_SOURCE_ID:
+        log("LETTA_SNAPSHOT_SOURCE_ID not set — skipping attach")
+        return
     async with httpx.AsyncClient(timeout=30) as client:
         await letta_attach_source(client, COORDINATOR_AGENT_ID, SNAPSHOT_SOURCE_ID)
 
