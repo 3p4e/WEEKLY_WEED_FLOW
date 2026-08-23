@@ -250,28 +250,32 @@ wanted", which for the dormant families is likely far fewer.
 
 ---
 
-## Consumers that must be repointed
+## ~~Consumers that must be repointed~~ — corrected 2026-08-23: none are live WWF dependencies
 
-| Container | Variable | Current value | Notes |
-| --- | --- | --- | --- |
-| `qms-api` | `LETTA_URL` | `http://letta:8283` | also has `LETTA_DAEMON_URL=http://letta-daemon:8420` — **no `letta-daemon` container exists on this host**, so that dependency is already dangling |
-| `suma-api` | `LETTA_URL` | `http://letta:8283` | also carries its own `LETTA_API_KEY` |
-| `letta-mcp-rust` | `LETTA_BASE_URL` | `http://letta:8283` | plus `LETTA_PASSWORD` |
+The three containers below carry `LETTA_URL`/`LETTA_BASE_URL=http://letta:8283`,
+which looked like an active dependency chain. A full code-level audit of this
+repo (`git grep` across `backend/`, `docengine/`, `web/`, `qms-creator/` — see
+`AI-FEATURE-INVENTORY-2026-08-23.md`) found **none of them are actually called
+by the running WWF app**:
 
-New target: `http://letta-6ou3-letta-1:8283` over the **`ai-net`** Docker
-network, with `LETTA_API_KEY` = letta-6ou3's `LETTA_SERVER_PASSWORD`.
+| Container | Reality |
+| --- | --- |
+| `qms-api` | This is the **`qms-creator/` app's own container** (separate deployable, own compose stack, imported into this repo 2026-07-15 as "nothing under `qms-creator/` is imported by `backend/` or `web/`"). The WWF backend's *own* QMS federation proxy (`backend/app/api/qms.py`, hitting the *same default hostname* `qms-api:8000`) has had `QMS_API_KEY` unset in every environment since the 2026-07-16 retirement (`docs/DEPLOY.md` §"qms-api (Phase-1 QMS registry) retired") — confirmed still unset in prod `app.env` tonight. The frontend doesn't even attempt the call any more: `web/gf/qmsknow-view.js` hardcodes "Knowledge search retired (503)" without hitting the network. Also carries `LETTA_DAEMON_URL=http://letta-daemon:8420` pointing at a container that doesn't exist anywhere on this host — a second sign this instance is orphaned, not live infrastructure. **No repoint needed for WWF's sake.**
+| `suma-api` | Zero references anywhere in `backend/` or `web/` — grep confirms nothing in this repo calls it. It belongs to the separate SUMA/ISO17 product line (`docs/DEPLOY.md`'s "SUMA assimilation" section). **Out of scope for this app's migration.**
+| `letta-mcp-rust` | The `LETTA_MCP_URL` setting it would be reached through (`backend/app/config.py`) is dead code — no backend module reads it, confirmed by grep and already dropped from `.env.example` in this migration. `docengine/` explicitly avoids it ("direct REST — deliberately not the Rust MCP bridge — documented decode bug"). Likely serves **operator/tooling MCP access** (e.g. a Claude Code session's Letta MCP connector) rather than the app runtime. **Not an app dependency; repoint only if an operator wants MCP tooling access to letta-6ou3 instead of the old server.**
 
-**Both changes are required, not just the URL.** Each consumer must also be
-joined to `ai-net`, exactly as the WWF backend and scheduler were on 2026-08-22
-— they sit on the `letta` project's networks today and cannot resolve
-`letta-6ou3-letta-1` at all until then. Symptom if you forget:
-`socket.gaierror: [Errno -3] Temporary failure in name resolution`.
+None of this changes the 🔴 finding at the top of this document — the old
+server's `/v1` API being unauthenticated and public is exactly as serious
+regardless of whether anything still calls it. It does mean the "repoint three
+consumers" step is not blocking, and can be dropped from the critical path if
+you'd rather retire `qms-api`/`suma-api` outright than migrate them.
 
-A caution learned on the WWF side: `backend/app/config.py:56` defaulted
-`letta_base_url` to `http://host.docker.internal:8283` — which *is* the old
-server's published port. Any consumer with a similar fallback will silently keep
-using the old server rather than fail closed. Grep each codebase for a default
-before assuming an env change is sufficient.
+If `letta-mcp-rust` IS repointed for operator convenience, the same two changes
+apply as they did for the WWF backend on 2026-08-22: new target
+`http://letta-6ou3-letta-1:8283` over the **`ai-net`** Docker network (it isn't
+on that network today, so it cannot resolve the new hostname at all —
+`socket.gaierror: [Errno -3] Temporary failure in name resolution` is the
+symptom), plus `LETTA_API_KEY` = letta-6ou3's `LETTA_SERVER_PASSWORD`.
 
 ---
 
@@ -340,7 +344,10 @@ either way.
    `build_pp_document` + `fetch_pp_document`), then declare the agents in a
    `fleet.yaml`-style manifest with explicit `context_window_limit` and LiteLLM
    model handles.
-4. Repoint **and re-network** `qms-api`, `suma-api`, `letta-mcp-rust`.
+4. ~~Repoint and re-network `qms-api`, `suma-api`, `letta-mcp-rust`~~ — not
+   needed for the app; see the corrected "Consumers" section above. Only
+   `letta-mcp-rust` is worth repointing, and only for operator MCP tooling
+   access, not app correctness.
 5. Rotate every credential that lived on the old server — the master key was
    `letta-master-key` on an unauthenticated public endpoint.
 6. Retire the `ui.` and `mcp-letta.` Traefik routes once nothing needs them.
