@@ -2,12 +2,17 @@
 
 **Audience:** the agent/engineer who owns the QMS / eCoA / CoQ / sentinel
 codebases. This is the hand-off for moving what still matters off the old Letta
-server and onto **letta-code = `letta-6ou3`**
-(`https://letta-6ou3.srv1231216.hstgr.cloud`).
+server and onto **`letta-6ou3`**
+(`https://letta-6ou3.srv1231216.hstgr.cloud`) — a stock Letta server, image `letta/letta:latest`/`0.16.8`, the same image the old server ran. It is NOT `letta-ai/letta-code` (a separate CLI product); an earlier draft of this migration's docs used that name in error.
 
-**Status at the time of writing (2026-08-23 03:1x UTC):** everything below is
-**still running**. Nothing in this document has been stopped or deleted. Both
-snapshots named below exist and are verified.
+**Status: STOPPED as of 2026-08-23 04:04 UTC.** Step 1 of "Suggested order of
+work" below is done — see the "Execution record" section near the end for
+exactly what ran and what was verified afterward. Nothing has been deleted
+except the two containers step 1 always intended to remove (`wwf-letta`,
+`wwf-letta-db` — already stopped in a prior session, snapshot verified, volume
+and image kept). The rest of this document — which agents to keep, how to
+rebuild them on `letta-6ou3`, and how to repoint the three consumers — is
+still open work and unaffected by the stop.
 
 Companion document: `LETTA-CUTOVER-PHASE1-2026-08-22.md` covers the *WWF app's*
 own migration — a different, already-completed job. The app no longer touches
@@ -269,6 +274,62 @@ using the old server rather than fail closed. Grep each codebase for a default
 before assuming an env change is sufficient.
 
 ---
+
+## Execution record — the stop (2026-08-23 04:04 UTC)
+
+Run from this session, using the runner `/shell` path, mirroring the plan
+below exactly. In order:
+
+1. Both snapshots (`old-letta-db-20260823-preshutdown.sql.gz`,
+   `old-letta-appdata-20260823-preshutdown.tgz`) re-verified: `gzip -t` clean,
+   dump-complete marker present, `tar -t` clean.
+2. `wwf-letta` / `wwf-letta-db` (already `exited` from a prior session)
+   removed with `docker rm`. Verified still present afterward: volume
+   `wwf_mass_letta_pgdata`, image `letta/letta:0.16.8-wwf`.
+3. `letta-scy7-letta-1` / `letta-scy7-db-1` (0 agents, 0 messages, unused)
+   stopped.
+4. `cd /opt/stacks/letta && docker compose stop` — all five services
+   (`letta-mcp-rust`, `suma-api`, `qms-api`, `letta`, `letta-postgres`)
+   stopped cleanly, in that order, exit 0 each.
+5. Verified the public exposure this document opened with is closed:
+
+   | Check | Before | After |
+   | --- | --- | --- |
+   | `GET https://ui.srv1231216.hstgr.cloud/v1/agents/` (no auth) | 200, full agent list | **404** |
+   | `GET https://mcp-letta.srv1231216.hstgr.cloud/` | reachable | **404** |
+
+   404 here means Traefik has no live backend to route to — the routers
+   still exist (nothing in Traefik's own config was touched), they just have
+   nothing running behind them.
+6. Volumes confirmed still present: `letta_letta_data`, `letta_postgres_data`,
+   `wwf_mass_letta_pgdata`.
+7. WWF app and `letta-6ou3` confirmed unaffected by the stop:
+
+   | Check | Result |
+   | --- | --- |
+   | backend `/health/ready` | `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}` |
+   | backend → `letta-6ou3` | HTTP 200, 11 agents |
+   | `https://wwf.srv1231216.hstgr.cloud` | HTTP 200 in 23 ms |
+   | `https://letta-6ou3.srv1231216.hstgr.cloud/v1/agents/` (no auth) | **401** — still enforced |
+
+**What this did NOT do:** decide which of the 58 dormant agents to keep, port
+any custom tool, repoint `qms-api` / `suma-api` / `letta-mcp-rust`, or rotate
+any credential. Those containers are stopped, not migrated — see "What is on
+the old server" and "Consumers that must be repointed" above for that work.
+
+**Rollback**, if anything below turns out to need the old server back before
+migration work starts:
+
+```bash
+cd /opt/stacks/letta && docker compose start
+docker start letta-scy7-db-1 letta-scy7-letta-1
+```
+
+`wwf-letta` / `wwf-letta-db` cannot be rolled back the same way — they were
+`rm`'d, not merely stopped — but the volume and image are intact, so they can
+be recreated from `/opt/stacks/wwf_app/compose.yaml.bak-pre-letta6ou3-20260822`
+(WWF app's own compose backup) if ever needed; the snapshot is the safety net
+either way.
 
 ## Suggested order of work
 

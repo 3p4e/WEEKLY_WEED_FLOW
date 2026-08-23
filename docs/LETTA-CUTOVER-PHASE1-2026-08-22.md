@@ -1,15 +1,27 @@
-# Letta migration: wwf-letta → letta-code (letta-6ou3) — Phases 0–4, 2026-08-22
+# Letta migration: wwf-letta → letta-6ou3 — Phases 0–4, 2026-08-22
 
-**The migration is complete.** The app runs entirely on letta-code; `wwf-letta`
+**The migration is complete.** The app runs entirely on letta-6ou3; `wwf-letta`
 is stopped with its data snapshotted and its volume and image preserved. The
 filename says PHASE1 for link stability — it covers Phases 0 through 4.
 
+**Terminology correction (2026-08-23):** this document originally called the
+target server "letta-code" throughout, following how the task was framed at
+the start of this work. That name is wrong and is corrected below.
+`letta-6ou3` is a stock **Letta server**, image `letta/letta:latest` /
+`0.16.8` — the exact same image the retired `wwf-letta` and the old
+`ui.srv1231216.hstgr.cloud` server ran. `letta-ai/letta-code` is a separate
+product (a CLI coding agent) and is not deployed anywhere in this
+infrastructure; the only trace of it on the host is an unused
+`letta-cowork` demo-UI clone at `/opt/stacks/letta-cowork` with no
+container. The migration performed here — old Letta server to new Letta
+server — is exactly what was intended; only the label was wrong.
+
 Owner directive: rewire every app AI function/engine/agent off the old Letta and
-onto **letta-code**, with the sequence *fix letta-code security first → full
+onto **`letta-6ou3`**, with the sequence *fix letta-6ou3 security first → full
 migration → trace, snapshot, then stop `wwf-letta`*.
 
 This document records what was **traced** (Phase 0), the security work
-(Phase 1), the migration targets built on letta-code (Phase 2) and how far the
+(Phase 1), the migration targets built on letta-6ou3 (Phase 2) and how far the
 cutover itself got (Phase 3). No secret value appears here.
 
 ## Phase 0 — the trace, and what it corrected
@@ -23,7 +35,7 @@ was wrong.**
 |---|---|---|---|
 | `weekly_weed_flow-backend-1` | `http://letta:8283` | `172.16.31.6` | **`wwf-letta`** |
 | `wwf-scheduler` | `http://letta:8283` | `172.16.31.6` | **`wwf-letta`** |
-| `wwf-docengine` | `http://letta-6ou3-letta-1:8283` | — | letta-code ✅ |
+| `wwf-docengine` | `http://letta-6ou3-letta-1:8283` | — | letta-6ou3 ✅ |
 
 `letta` is a **network alias of the `wwf-letta` container** on the network it
 shares with the backend — not the unrelated multi-tenant `letta` container
@@ -36,7 +48,7 @@ Bound on the old server, and therefore blocking a clean disconnect:
 
 - `LETTA_WEEKLY_REPORT_AGENT_ID`, `LETTA_COORDINATOR_AGENT_ID`,
   `LETTA_NEXT_WEEK_PLAN_AGENT_ID` (three agent ids, backend **and** scheduler)
-- `LETTA_SNAPSHOT_SOURCE_ID` — a Letta RAG *source*; letta-code has no Letta
+- `LETTA_SNAPSHOT_SOURCE_ID` — a Letta RAG *source*; letta-6ou3 has no Letta
   sources at all (retrieval is RAGflow), and `GrowFlow_Weekly_Snapshots` is
   still in `fleet.yaml`'s `ragflow.pending_ingest`
 - every `ai_agent_bindings.letta_agent_id` row, which names agents that exist
@@ -45,7 +57,7 @@ Bound on the old server, and therefore blocking a clean disconnect:
 `qms-creator` / `qms-api` still reference Letta but are retired platform-wide
 (`QMS_API_KEY` blanked 2026-07-16); nothing there needs cutting over.
 
-## Phase 1 — letta-code security: 🔴 CRITICAL closed
+## Phase 1 — letta-6ou3 security: 🔴 CRITICAL closed
 
 The review found letta-6ou3 answering `/v1/agents/` with **no credential** and
 leaking the LiteLLM master key through `/v1/providers/`, and deliberately
@@ -96,14 +108,14 @@ through `/v1/providers/` until the fix above). Rotated once kvm4 recovered
 Sequence, both sides swapped back-to-back: new key generated on the box (never
 printed) -> litellm `.env` (backup `.env.bak-20260822-rot2`) -> recreate litellm
 -> `PATCH /v1/providers/provider-a0f4c547-3651-4a17-8824-a24332776e17` on
-letta-code with the same value -> verify -> `shred -u` the staged key.
+letta-6ou3 with the same value -> verify -> `shred -u` the staged key.
 
 | check | result |
 |---|---|
 | `GET /v1/models` with the NEW key | **200** |
 | same with the OLD key | **400** — rejected, no longer the master key |
 | same with no key | **401** |
-| letta-code `/v1/models/` (its patched provider credential) | **377 handles**, DeepSeek routes present |
+| letta-6ou3 `/v1/models/` (its patched provider credential) | **377 handles**, DeepSeek routes present |
 | `litellm`, `letta-6ou3-letta-1` | `running`, **restarts=0** |
 
 Two gotchas worth keeping:
@@ -146,9 +158,9 @@ degradation path, not an error, but not a useful answer either. Verification of
 Phase 3 should therefore either wait for DeepSeek latency to normalise or assert
 on the binding/plumbing rather than on a completed agent turn.
 
-## Phase 2 — the planner agents now exist on letta-code
+## Phase 2 — the planner agents now exist on letta-6ou3
 
-letta-code had the 8 `gf_*` document agents but **nothing to bind the backend and
+letta-6ou3 had the 8 `gf_*` document agents but **nothing to bind the backend and
 scheduler planner functions to**. Created directly on letta-6ou3 (owner's call —
 fleet development itself lives in `3p4e/letta-stack`, out of this repo's scope,
 so these are recorded here for later reconciliation into `fleet.yaml`):
@@ -174,18 +186,18 @@ guessed: `openai-proxy/deepseek/deepseek-v4-flash`, embedding
 `max_tokens` 16384 — the 128k figure being the fix recorded in
 `LETTA-RAGFLOW-CUTOVER-2026-08.md` for Letta sizing an unknown model at 30000.
 
-Verified after creation: **11 agents** on letta-code (8 `gf_*` + these 3), each
+Verified after creation: **11 agents** on letta-6ou3 (8 `gf_*` + these 3), each
 new one reporting `wwf-prompts/v4`, the DeepSeek handle and ctx 128000. The
 creation script is idempotent — it skips any name that already exists.
 
 Still open for Phase 3: `GrowFlow_Weekly_Snapshots`, `DB1_REGULATORY` and
 `DB3_PP_CURRENT_unified` remain un-ingested in RAGflow, so the snapshot digest
-has no retrieval home on letta-code yet (the digests are regenerable from the
+has no retrieval home on letta-6ou3 yet (the digests are regenerable from the
 tasks DB).
 
 ## Phase 3 — cutover: APPLIED AND VERIFIED 2026-08-22 17:14 UTC
 
-backend and scheduler now run on `[internal, ainet]` and talk to letta-code.
+backend and scheduler now run on `[internal, ainet]` and talk to letta-6ou3.
 
 ### Two findings that shrank this phase
 
@@ -211,17 +223,17 @@ backend and scheduler now run on `[internal, ainet]` and talk to letta-code.
   | key | new value |
   |---|---|
   | `LETTA_BASE_URL` | `http://letta-6ou3-letta-1:8283` |
-  | `LETTA_API_KEY` | letta-code's server password (read from the container, never printed) |
+  | `LETTA_API_KEY` | letta-6ou3's server password (read from the container, never printed) |
   | `LETTA_WEEKLY_REPORT_AGENT_ID` | `agent-d702339a-c346-4f9f-a63a-d565db221852` |
   | `LETTA_NEXT_WEEK_PLAN_AGENT_ID` | `agent-0eb32b68-053e-4cf6-b2ad-c9315d52326e` |
   | `LETTA_COORDINATOR_AGENT_ID` | `agent-50a3a997-63ef-4c57-b3cc-8171fbb7c22a` |
-  | `LETTA_SNAPSHOT_SOURCE_ID` | emptied — letta-code has no Letta sources at all |
+  | `LETTA_SNAPSHOT_SOURCE_ID` | emptied — letta-6ou3 has no Letta sources at all |
 
 - `compose.yaml` backed up as `compose.yaml.bak-pre-letta6ou3-20260822`.
 
 ### The network change that made it possible
 
-`backend` and `scheduler` were declared `networks: [internal]`, but letta-code
+`backend` and `scheduler` were declared `networks: [internal]`, but letta-6ou3
 lives on **`ai-net`** — so as written they could not resolve
 `letta-6ou3-letta-1` at all. Measured before the change, not inferred:
 
@@ -357,7 +369,7 @@ the image `letta/letta:0.16.8-wwf` (2.61 GB). Restart is
 | Check | Result |
 | --- | --- |
 | backend `/health/ready` | `{"ready":true,"databases":{"users":"ok","tasks":"ok"}}` |
-| backend → letta-code | HTTP 200, 11 agents |
+| backend → letta-6ou3 | HTTP 200, 11 agents |
 | `https://wwf.srv1231216.hstgr.cloud` | HTTP 200 in 22 ms |
 | `qms-api` / `suma-api` / `letta-mcp-rust` | all `Up … (healthy)` |
 
