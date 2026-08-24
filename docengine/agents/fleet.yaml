@@ -65,14 +65,42 @@ ragflow:
 # balance is too low" and its OpenAI key "You have no credits remaining", which
 # is why neither is named here.
 #
-#   model      DeepSeek v4-flash, reached through the LiteLLM gateway on ai-net.
-#              Funded, cheap enough for the ~11 sequential calls a document
-#              costs, and verified to make real native tool calls: asked for a
-#              batch's THC it called ragflow_search itself, scoped to the one
-#              dataset its ragflow_scope block allows, and quoted the value and
-#              source document exactly as they appear in the corpus.
+#   model      Moonshot Kimi K2.6, reached through the LiteLLM gateway on
+#              ai-net (owner directive, 2026-08-24 — switched from DeepSeek
+#              v4-flash; see docs/LETTA-MOONSHOT-CUTOVER-2026-08-24.md).
+#              Verified live through an actual Letta agent (not just a raw
+#              completion): asked a real retrieval question, it reasoned,
+#              called ragflow_search itself scoped to only its permitted
+#              datasets, and quoted a real value with its exact source
+#              document — same bar the DeepSeek verification set.
 #
-#              It MUST go through LiteLLM, not straight at api.deepseek.com. Two
+#              Two Moonshot-specific gotchas, both checked before switching:
+#                * moonshot-v1-* (the whole classic series) is being retired
+#                  by Moonshot on 2026-08-31 — never point anything at it.
+#                * Kimi K3 (the flagship) has reasoning ALWAYS on with no way
+#                  to disable it, and Moonshot's own docs require echoing
+#                  reasoning_content back on every follow-up turn — the exact
+#                  failure mode that broke DeepSeek v4's direct-to-provider
+#                  route (see below). K2.6 defaults to thinking on but CAN
+#                  disable it (extra_body: {"thinking":{"type":"disabled"}}),
+#                  though in practice Letta's own agent loop handles the
+#                  reasoning/tool-call turns cleanly on its own without that
+#                  flag being set anywhere in this fleet's config — the
+#                  verification above ran with thinking fully engaged and
+#                  still completed the tool-call round trip correctly.
+#
+#              NOTE for whoever edits this file next: changing `model` here
+#              only affects agents CREATED from now on. `fleet.py`'s
+#              ensure_fleet() deliberately never edits an existing agent's
+#              model (the server used to reject that write path outright for
+#              the old llm_config object). The current server DOES support it
+#              via PATCH /v1/agents/{id} {"model": "..."} — that's how the
+#              already-existing 11 agents were actually moved to Moonshot;
+#              this file being updated does not retroactively move them.
+#
+#              DeepSeek v4-flash is still funded and still works (previously
+#              verified the same way); it remains a documented fallback. It
+#              MUST go through LiteLLM, not straight at api.deepseek.com — two
 #              Letta-side problems make the direct route unusable, both
 #              confirmed live and written up in
 #              docs/LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md:
@@ -107,7 +135,7 @@ ragflow:
 #   max_tokens      output ceiling per turn; a full SOP section plus its
 #                   surrounding markers needs more than the old 4096.
 defaults:
-  model: openai-proxy/deepseek/deepseek-v4-flash
+  model: openai-proxy/moonshot/kimi-k2.6
   embedding: ollama-local/nomic-embed-text:latest
   context_window: 128000
   max_tokens: 16384
