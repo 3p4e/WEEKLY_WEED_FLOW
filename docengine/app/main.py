@@ -146,6 +146,16 @@ async def start_workflow(body: WorkflowIn):
     # never an invented option. Unchecked answers flow verbatim into every
     # authoring/repair prompt sent to the Letta agents for this job, so this
     # must run BEFORE the job is created, not after.
+    #
+    # Residual, accepted gap (audit LOW companion to H8, not addressed here):
+    # this closes off `answers` (closed option lists only), but `body.meta`
+    # (title_mk, title_en, code, version, orient) stays free text — checked
+    # only for HEADERDATA-breaking characters (see
+    # _reject_headerdata_breakers in pipeline.py), not for general malformed
+    # content — and flows into every downstream prompt just the same.
+    # Malformed (non-injection) free text there can still degrade document
+    # quality even absent malicious intent; that's inherent to accepting
+    # free-text fields at all, not something this validator can close.
     try:
         validate_answers(body.questionnaire, body.answers)
     except InvalidAnswer as e:

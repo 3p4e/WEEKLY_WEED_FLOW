@@ -7,6 +7,11 @@ the bilingual MK|EN caption is added in the .docx by the figure() helper.
 
 Palette: navy #2B547E primary, red for fails/limits, mint/cream/rose accents (matches the doc palette).
 Each function writes a PNG and returns its path. Requires: matplotlib, numpy.
+
+NOTE (audit ITEM 4, confirmed by grep across docengine/): not imported anywhere in
+DocEngine's own request path (build_from_md.py / builder.py / pipeline.py never call
+this module) — currently unused here. Left in place rather than deleted: it may still
+be live for a separate, related document-authoring skill outside this repo.
 """
 try:
     import matplotlib

@@ -513,7 +513,20 @@ def assemble_markdown(meta: dict, sections: list[dict]) -> str:
 
 async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     """The full Mode-A + Mode-B pipeline for one job. Never raises: every
-    failure lands in the job row as status=failed."""
+    failure lands in the job row as status=failed.
+
+    KNOWN GAP (documented, not fixed here — audit LOW ITEM 3): this function
+    makes roughly 20-40 sequential AI calls for a single job (one per SOP
+    section, one per-section regulatory check, one §6A audit per repair
+    round, plus repair calls) with no retry and no per-section checkpointing.
+    A transient failure late in the run (a Letta timeout on section 8 of 9,
+    say) is caught by the except clauses below and recorded as a normal
+    job failure — correct, but it discards all the work already done, and a
+    retry of the same job starts over from section 1. Real checkpointing
+    (persisting completed sections/findings so a retry resumes instead of
+    restarting) is a genuine feature — a job-resumption model, storage for
+    partial state, etc. — not a mechanical fix, so it is intentionally left
+    for a dedicated pass rather than attempted piecemeal here."""
     client = client or LettaClient()
     try:
         job = await db.job_get(job_id)

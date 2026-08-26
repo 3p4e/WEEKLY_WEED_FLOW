@@ -249,6 +249,112 @@ def test_new_sop_succeeds_with_the_real_template():
     assert d is not None
 
 
+def test_apply_pp_header_raises_when_header_table_missing():
+    """BUG 6 — apply_pp_header used to `return False` on a missing header
+    table, and both new_sop/new_annex ignore that return value, so a base
+    template whose header structure had drifted would silently ship a
+    document with a blank Document-name/Code/Version field. Match the same
+    "loud failure over silent fallback" precedent already applied to the
+    missing-template-file case (see test_new_sop_raises_loudly_when_template_missing)."""
+    import pp_format
+    from docx import Document
+    d = Document()  # no header table at all
+    with pytest.raises(RuntimeError, match="header table not found"):
+        pp_format.apply_pp_header(d, "MK", "CODE-1", "EN")
+
+
+def test_apply_pp_header_raises_on_run_index_mismatch():
+    """BUG 6 — the setrun() helper used to silently no-op whenever the
+    expected run index wasn't present (structure drifted), leaving that one
+    header field blank with no error anywhere. It must now raise instead."""
+    import pp_format
+    from docx import Document
+    from docx.shared import Cm
+    d = Document()
+    h = d.sections[0].header
+    h.is_linked_to_previous = False
+    t = h.add_table(rows=1, cols=3, width=Cm(18))
+    # cell(0,1).paragraphs[1] is expected to carry >= 6 runs; give it 1.
+    p1 = t.cell(0, 1).add_paragraph()
+    p1.add_run("only one run")
+    with pytest.raises(RuntimeError, match="document-name cell"):
+        pp_format.apply_pp_header(d, "MK title", "CODE-1", "EN title")
+
+
+def test_new_sop_succeeds_with_the_real_template_header_intact():
+    """The real PP_TEMPLATE's header must still satisfy every index BUG 6's
+    guard now enforces -- the happy path is unaffected by turning the
+    silent no-op into a raise."""
+    import pp_format
+    d = pp_format.new_sop(code="C-1", mk_title="Наслов", en_title="Title", version="2.0")
+    h = d.sections[0].header.tables[0]
+    nm = h.cell(0, 1).paragraphs[1].runs
+    assert nm[0].text == "Наслов "
+    assert nm[5].text == "Title"
+    cd = h.cell(0, 2).paragraphs[2].runs
+    assert cd[0].text == "C-1"
+    vr = h.cell(1, 2).paragraphs[0].runs
+    assert vr[-1].text == "2.0"
+
+
+def test_omath_count_does_not_double_count_oMathPara_wrapper(tmp_path):
+    """BUG 8 — a bare doc.count("<m:oMath") also matched every <m:oMathPara>
+    wrapper (a display equation is <m:oMathPara><m:oMath>...</m:oMath></m:oMathPara>),
+    over-counting the equation total surfaced to API callers as verification
+    evidence. One real display equation must report omath=1, not 2."""
+    import zipfile
+    import pp_verify
+
+    src = tmp_path / "src.docx"
+    from docx import Document
+    Document().save(src)
+
+    with zipfile.ZipFile(src) as zin:
+        names = zin.namelist()
+        doc_xml = zin.read("word/document.xml").decode("utf-8")
+        others = {n: zin.read(n) for n in names if n != "word/document.xml"}
+
+    # One display equation: <m:oMathPara> wrapping one <m:oMath>. A bare
+    # substring count of "<m:oMath" would see 2 hits here; there is 1 equation.
+    fragment = "<m:oMathPara><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></m:oMathPara>"
+    doc_xml = doc_xml.replace("</w:body>", fragment + "</w:body>")
+
+    out = tmp_path / "with_eqn.docx"
+    with zipfile.ZipFile(out, "w") as zout:
+        zout.writestr("word/document.xml", doc_xml)
+        for n, b in others.items():
+            zout.writestr(n, b)
+
+    r = pp_verify.analyse(str(out))
+    assert r["omath"] == 1, f"expected exactly 1 equation, got {r['omath']}"
+
+
+def test_min_font_ignores_unanchored_text_that_resembles_a_sz_element():
+    """ITEM 9 (investigated) — the font-floor regex used to be a bare
+    substring match with no leading '<' anchor, so literal text containing
+    "w:sz w:val=\"N\"" that is NOT a real <w:sz> element (e.g. embedded in a
+    run's own text content) would be misread as a font-size declaration.
+    Real generated output never produces this (OOXML always orders a
+    border's w:val before its w:sz, and this codebase's own border helpers
+    do too — see the code comment), but the regex itself must not depend on
+    that alone."""
+    import pp_verify
+    xml = ('<w:t>note: w:sz w:val="2" is out of range</w:t>'
+           '<w:rPr><w:sz w:val="16"/></w:rPr>')
+    assert pp_verify._min_font({"word/document.xml": xml}) == 16
+
+
+def test_min_font_still_finds_the_real_minimum_across_parts():
+    import pp_verify
+    parts = {
+        "word/document.xml": '<w:rPr><w:sz w:val="22"/></w:rPr>',
+        "word/header1.xml": '<w:rPr><w:sz w:val="14"/></w:rPr>',
+        "word/footer1.xml": '<w:rPr><w:sz w:val="12"/></w:rPr>',
+        "word/styles.xml": '<w:rPr><w:sz w:val="1"/></w:rPr>',  # not doc/header/footer -> ignored
+    }
+    assert pp_verify._min_font(parts) == 12
+
+
 def test_failed_build_cannot_delete_another_builds_document(tmp_path, monkeypatch):
     """H13 — the FAIL path unlinks its own staging file, which is uniquely
     named, so it can no longer take out a sibling build's passing artifact."""

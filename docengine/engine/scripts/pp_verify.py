@@ -35,7 +35,21 @@ def _min_font(parts):
     mn = None
     for n, x in parts.items():
         if ("document" in n) or ("header" in n) or ("footer" in n):
-            for m in re.findall(r'w:sz w:val="(\d+)"', x):
+            # ITEM 9 (investigated): anchored to the actual <w:sz w:val="N"/>
+            # ELEMENT (leading '<', w:val immediately after w:sz with only
+            # whitespace between) rather than a bare substring match. The
+            # audit's theoretical worry was a table/cell BORDER width being
+            # misread as a font size — checked against this codebase's own
+            # generated output (pp_format.py's cell_borders/table_borders,
+            # and the real PP_BASE_TEMPLATE.docx header/footer) plus the
+            # OOXML schema: a border element always serializes w:val BEFORE
+            # w:sz as its own attributes (e.g. <w:top w:val="single" w:sz="4"
+            # .../>), never as a standalone "w:sz w:val=..." element, so the
+            # collision does not occur in real files. Anchoring costs nothing
+            # and removes even the theoretical risk (e.g. a hand-crafted or
+            # differently-ordered XML attribute sequence) rather than relying
+            # on generation order alone.
+            for m in re.findall(r'<w:sz\s+w:val="(\d+)"', x):
                 v = int(m); mn = v if mn is None else min(mn, v)
     return mn
 
@@ -46,7 +60,13 @@ def analyse(path):
     words = len(re.findall(r"\S+", txt)); chars = len(re.sub(r"\s+", "", txt))
     return dict(
         path=path, words=words, chars=chars, paras=len(d.paragraphs), tables=len(d.tables),
-        omath=doc.count("<m:oMath"), figures=doc.count("<w:drawing"),
+        # BUG 8: a bare doc.count("<m:oMath") also counts every <m:oMathPara>
+        # wrapper (display-equation blocks are <m:oMathPara><m:oMath>...) as
+        # a SEPARATE hit, over-counting equations reported to API callers as
+        # verification evidence. \b anchors on the element name so "oMath"
+        # followed by ">"/whitespace (the real element) matches, but "oMath"
+        # followed by "Para" (no word-boundary between 'h' and 'P') does not.
+        omath=len(re.findall(r'<m:oMath\b', doc)), figures=doc.count("<w:drawing"),
         min_half=_min_font(parts),
         cyr=bool(re.search(r"[Ѐ-ӿ]", txt)), lat=bool(re.search(r"[A-Za-z]", txt)),
     )

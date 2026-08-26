@@ -266,24 +266,53 @@ def apply_pp_header(d, mk_name, code, en_name, version="1.0"):
     own centre-cell run layout has a middle slot (originally used for a secondary identifier) that
     must NOT be reused for the code, or the code appears twice on the same header. That middle
     slot (and its adjoining separator/newline runs) is cleared instead, so the centre cell shows
-    just the bilingual title on two lines: MK title, then EN title."""
+    just the bilingual title on two lines: MK title, then EN title.
+
+    Every index/structure assumption below (header table present, a given paragraph
+    having a given run at a given position) used to silently no-op when it didn't
+    hold — new_sop()/new_annex() call this and ignore its return value, so a base
+    template whose header layout had drifted (an edit to PP_BASE_TEMPLATE.docx that
+    added/removed a run) would ship a GMP document with the Document-name/Code/
+    Version field left BLANK and no error anywhere. Same class of bug as the missing-
+    template case those two functions already fail loudly on (see their
+    FileNotFoundError guards) — match that precedent here too: raise instead of
+    quietly leaving a header field unstamped."""
     try:
         h = d.sections[0].header.tables[0]
-    except (IndexError, AttributeError):
-        return False
-    def setrun(runs, i, t):
-        if i < len(runs):
-            runs[i].text = t
+    except (IndexError, AttributeError) as e:
+        raise RuntimeError(
+            "PP base template header table not found (sections[0].header.tables[0]) "
+            "-- the template's header layout no longer matches what apply_pp_header "
+            "expects, so Document name/Code/Version cannot be stamped."
+        ) from e
+
+    def setrun(runs, i, t, field):
+        if i >= len(runs):
+            raise RuntimeError(
+                f"PP base template header: expected a run at index {i} in the "
+                f"{field} but only {len(runs)} run(s) are present -- the template's "
+                "header structure has changed; refusing to silently leave this "
+                "field blank."
+            )
+        runs[i].text = t
+
     nm = h.cell(0, 1).paragraphs[1].runs
-    setrun(nm, 0, mk_name + " ")
+    setrun(nm, 0, mk_name + " ", "document-name cell")
     for i in (1, 2, 3):          # clear the template's middle line + separator (was: code, duplicating the right cell)
-        setrun(nm, i, "")
-    setrun(nm, 5, en_name)
+        setrun(nm, i, "", "document-name cell (clearing the unused middle slot)")
+    setrun(nm, 5, en_name, "document-name cell")
     cd = h.cell(0, 2).paragraphs[2].runs
-    setrun(cd, 0, code); setrun(cd, 2, ""); setrun(cd, 3, "")
+    setrun(cd, 0, code, "code cell")
+    setrun(cd, 2, "", "code cell (clearing)")
+    setrun(cd, 3, "", "code cell (clearing)")
     vr = h.cell(1, 2).paragraphs[0].runs
-    if vr:
-        vr[-1].text = version
+    if not vr:
+        raise RuntimeError(
+            "PP base template header: version cell has no runs to stamp -- the "
+            "template's header structure has changed; refusing to silently leave "
+            "the version field blank."
+        )
+    vr[-1].text = version
     return True
 
 # ============================ SOP (two-column) ============================

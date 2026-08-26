@@ -142,10 +142,26 @@ class LettaClient:
             json={"value": value},
         )
 
+    async def get_agent(self, agent_id: str) -> dict:
+        """Fetch one agent's full record by id. Used by delete_agent's guard
+        below (it needs the name to check); also handy standalone."""
+        return await self._req("GET", f"/agents/{agent_id}")
+
     async def delete_agent(self, agent_id: str) -> None:
-        """Delete an agent by id. Callers must only pass ids of agents they
-        themselves created (e.g. spawn_ephemeral's short-lived clones) — this
-        has no name guard because the delete path only ever sees an id."""
+        """Delete an agent by id, after confirming its name is one this
+        client is allowed to touch.
+
+        Every caller today only ever passes ids of agents it created itself
+        (e.g. spawn_ephemeral's short-lived clones) — true in practice, but
+        previously nothing enforced it: this took a bare id and issued the
+        DELETE unconditionally, so a future caller passing a wrong/stale/
+        unrelated id would silently delete whatever agent that id happened to
+        name. Guard it the same way create_agent guards its way in (see
+        _guard_gf — the gf_* namespace every agent this client manages,
+        fleet or ephemeral, is created under): look the agent up first and
+        refuse to delete anything outside that namespace."""
+        agent = await self.get_agent(agent_id)
+        self._guard_gf((agent or {}).get("name", ""))
         await self._req("DELETE", f"/agents/{agent_id}")
 
     # ---- conversation ----

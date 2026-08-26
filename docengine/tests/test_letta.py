@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import letta as letta_module  # noqa: E402
-from app.letta import LettaClient  # noqa: E402
+from app.letta import LettaClient, LettaError  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 
@@ -107,3 +107,51 @@ async def test_aclose_on_a_never_used_client_is_a_noop():
     c = LettaClient(base="http://letta.example", key="test-key")
     await c.aclose()  # must not raise even though _client() was never called
     assert _FakeAsyncClient.instances_created == 0
+
+
+# ── delete_agent's name guard (BUG 2) ───────────────────────────────────────
+# delete_agent used to take a bare id and issue DELETE unconditionally, with
+# no check that the id actually names an agent this client should be allowed
+# to touch. It must now look the agent up first (GET) and refuse to delete
+# anything outside the gf_* namespace create_agent's own _guard_gf enforces
+# on the way in.
+class _RoutedFakeAsyncClient:
+    """Like _FakeAsyncClient, but GET /agents/{id} returns a caller-chosen
+    agent record instead of the generic {"ok": True} — needed to drive
+    delete_agent's name-lookup guard end to end."""
+
+    def __init__(self, agent_name):
+        self.agent_name = agent_name
+        self.calls: list[tuple[str, str]] = []
+        self.is_closed = False
+
+    async def request(self, method, path, **kw):
+        self.calls.append((method, path))
+        if method == "GET":
+            return _FakeResponse(200, {"id": "tmp-1", "name": self.agent_name})
+        return _FakeResponse(200, {"ok": True})
+
+    async def aclose(self):
+        self.is_closed = True
+
+
+async def test_delete_agent_looks_up_the_name_then_deletes_a_gf_agent(monkeypatch):
+    fake = _RoutedFakeAsyncClient("gf_reg_checker_tmp_abc123_10")
+    monkeypatch.setattr(letta_module.httpx, "AsyncClient", lambda *a, **k: fake)
+    c = LettaClient(base="http://letta.example", key="test-key")
+
+    await c.delete_agent("tmp-1")
+
+    assert fake.calls == [("GET", "/agents/tmp-1"), ("DELETE", "/agents/tmp-1")]
+
+
+async def test_delete_agent_refuses_a_non_gf_named_agent(monkeypatch):
+    fake = _RoutedFakeAsyncClient("some_unrelated_agent")
+    monkeypatch.setattr(letta_module.httpx, "AsyncClient", lambda *a, **k: fake)
+    c = LettaClient(base="http://letta.example", key="test-key")
+
+    with pytest.raises(LettaError, match="non-gf_"):
+        await c.delete_agent("tmp-1")
+
+    # the guard must fire BEFORE any DELETE is issued
+    assert ("DELETE", "/agents/tmp-1") not in fake.calls
