@@ -276,14 +276,34 @@ async def list_pins(
     user: dict = Depends(require_password_set),
 ):
     """Read the archived AI outputs (weekly report / next-week plan / snapshot
-    digest) the scheduler writes to ai_pins. Newest first. Visibility is the
-    RLS policy's: org-scoped, and per-user pins (subject_user_id set) only to
-    their subject or elevated roles."""
+    digest) the scheduler writes to ai_pins. Newest first. Visibility is two
+    layers stacked:
+      1. RLS (org_isolation policy): org-scoped, and a pin with subject_user_id
+         set is readable only by its subject or an elevated role.
+      2. FUNCTION_ROLES (this module's invoke-time role tier), applied HERE to
+         org-wide pins only (subject_user_id IS NULL). The scheduler archives
+         the org-wide weekly_report/next_week_plan narrative with no subject,
+         and RLS's subject_user_id IS NULL clause opens those rows to every org
+         member — so without this second gate a base USER could read an
+         elevated-only function's org-wide output here even though invoke()
+         would 403 them for calling that function live. A pin that DOES carry
+         a subject_user_id is a personal pin, not a capability grant: its
+         subject may always read it regardless of this tier (layer 1 already
+         confines it to them or an elevated role)."""
+    role = user.get("role", "")
+    # Function keys this caller's role may not invoke fresh — org-wide
+    # (subject-less) pins for them must not be readable through this list
+    # either. Per-user pins for the same key are untouched (see layer 2 above).
+    restricted = [k for k in FUNCTION_ROLES if not _function_allowed(k, role)]
+
     clauses, args = [], []
     if function_key:
         args.append(function_key); clauses.append(f"function_key=${len(args)}")
     if week_id:
         args.append(week_id); clauses.append(f"week_id=${len(args)}")
+    if restricted:
+        args.append(restricted)
+        clauses.append(f"(subject_user_id IS NOT NULL OR function_key <> ALL(${len(args)}::text[]))")
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     args.append(limit)
     async with rls(user) as c:

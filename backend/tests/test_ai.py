@@ -498,3 +498,76 @@ async def test_dependency_advisor_rejects_garbage_task_id(client, admin_headers)
                                 "context": {"task_id": "not-a-uuid"}},
                           headers=admin_headers)
     assert r.status_code == 422
+
+
+# ── GET /ai/pins: FUNCTION_ROLES applied to org-wide (subject-less) pins ────
+# H-severity fix: list_pins used to be gated only by require_password_set, so
+# any authenticated USER could read the org-wide weekly_report/next_week_plan
+# narrative the scheduler archives with subject_user_id NULL — even though
+# invoke() 403s that same USER for POST /ai/next_week_plan. RLS's org_isolation
+# policy opens subject_user_id IS NULL rows to every org member by design (that
+# part is correct and untouched); the missing piece was applying the same
+# role tier invoke() enforces to those subject-less rows specifically.
+
+
+async def test_pins_filter_org_wide_elevated_pin_but_keep_users_own_pin(client, admin_headers, org):
+    headers = await _user_headers(client, admin_headers, role="USER")
+    r = await client.get("/auth/me", headers=headers)
+    assert r.status_code == 200, r.text
+    my_id = r.json()["id"]
+
+    # Org-wide (subject_user_id NULL) pin for an elevated-only function — the
+    # scheduler's real shape for the weekly next_week_plan narrative.
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id)"
+        " VALUES ($1,'next_week_plan','Org next week plan','elevated-only narrative',NULL)",
+        org["org_id"])
+    # The same USER's own per-user pin, under a personal-tier function_key
+    # (weekly_report_user is not in FUNCTION_ROLES, matching what
+    # weekly_snapshot.py actually writes for per-person reports) — must stay
+    # visible regardless of the org-wide filter above.
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id)"
+        " VALUES ($1,'weekly_report_user','My own weekly report','personal narrative',$2)",
+        org["org_id"], my_id)
+
+    # Filtered by the elevated-only function_key: the org-wide pin must not
+    # come back for a base USER.
+    r = await client.get("/ai/pins", params={"function_key": "next_week_plan"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == [], "USER must not read the org-wide pin for an elevated-only function"
+
+    # Unfiltered listing: the org-wide elevated pin is absent, the user's own
+    # personal pin is present.
+    r = await client.get("/ai/pins", headers=headers)
+    assert r.status_code == 200, r.text
+    titles = [p["title"] for p in r.json()]
+    assert "Org next week plan" not in titles
+    assert "My own weekly report" in titles
+
+    # An elevated role (ADMIN) still sees the org-wide pin — this is a read
+    # filter for base USERs, not a data deletion or a blanket block.
+    r = await client.get("/ai/pins", params={"function_key": "next_week_plan"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert any(p["title"] == "Org next week plan" for p in r.json())
+
+
+async def test_pins_user_own_pin_visible_even_under_elevated_function_key(client, admin_headers, org):
+    """Defense in depth: even if a PER-USER pin were archived under an
+    elevated-only function_key (subject_user_id set, not just the
+    _user-suffixed keys the scheduler happens to use today), its subject must
+    still read it — the FUNCTION_ROLES gate in list_pins applies only to
+    subject-less rows, never to a pin that already names its own owner."""
+    headers = await _user_headers(client, admin_headers, role="USER")
+    r = await client.get("/auth/me", headers=headers)
+    my_id = r.json()["id"]
+
+    await tasks_admin_pool().execute(
+        "INSERT INTO ai_pins(org_id, function_key, title, body, subject_user_id)"
+        " VALUES ($1,'next_week_plan','My personal next-week plan','mine',$2)",
+        org["org_id"], my_id)
+
+    r = await client.get("/ai/pins", params={"function_key": "next_week_plan"}, headers=headers)
+    assert r.status_code == 200, r.text
+    titles = [p["title"] for p in r.json()]
+    assert "My personal next-week plan" in titles
