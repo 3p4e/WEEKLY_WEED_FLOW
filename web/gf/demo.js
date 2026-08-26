@@ -70,6 +70,17 @@ GF.DEMO = (function () {
     try {
       sessionStorage.removeItem(KEY); sessionStorage.removeItem('wwf_token'); sessionStorage.removeItem('wwf_user');
       restoreTheme();
+      // Same reasoning as restoreTheme() above, extended to the other UI
+      // preference keys core.js/modules.js read at boot (view/module/lang):
+      // this can be a shared/kiosk browser, so whatever view, module, or
+      // language the demo visitor picked must not silently carry over into
+      // the next real user's session on the same tab. Mirrors boot-guard.js's
+      // wipe of stale gf_* keys on a schema bump — remove, don't try to
+      // restore a "previous" value the way restoreTheme() does, since (unlike
+      // the theme) these were never captured before the demo started.
+      localStorage.removeItem('gf_view');
+      localStorage.removeItem('gf_module');
+      localStorage.removeItem('gf_lang');
     } catch (e) {}
     location.reload();
   }

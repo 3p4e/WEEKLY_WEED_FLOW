@@ -187,11 +187,21 @@ test('keyVisibleNow: a qc key is NOT visible when USER even with module=qc', () 
   close();
 });
 
-test('keyVisibleNow: unclassified key fails open', () => {
+test('keyVisibleNow: unclassified key fails CLOSED (hidden, not visible everywhere)', () => {
   const { GF, close } = loadModules();
   GF.API = { user: { role: 'USER' } };
   GF.state.module = 'tasks';
-  assert.equal(GF.keyVisibleNow('completely-unknown-key'), true);
+  assert.equal(GF.keyVisibleNow('completely-unknown-key'), false);
+  close();
+});
+
+test('keyVisibleNow: unclassified key stays hidden even for a full-access role', () => {
+  const { GF, close } = loadModules();
+  // Fail-closed must not be bypassable by an elevated role — a key missing
+  // from the registry is a gap to fix, not a door any role can walk through.
+  GF.API = { user: { role: 'ADMIN' } };
+  GF.state.module = 'analytics';
+  assert.equal(GF.keyVisibleNow('completely-unknown-key'), false);
   close();
 });
 

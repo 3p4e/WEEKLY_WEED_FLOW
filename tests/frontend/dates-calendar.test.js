@@ -226,6 +226,21 @@ test('GF.people.initials never returns an empty badge', () => {
   h.close();
 });
 
+test('GF.uid and GF.people.upsert/remove are gone — vestigial, never called anywhere', () => {
+  // GF.PEOPLE is a plain object integrate.js fills directly (GF.PEOPLE[p.id] =
+  // {...}) at every real call site across web/gf/*.js; nothing in the shipped
+  // app ever called GF.people.upsert/remove or GF.uid (confirmed by a repo-wide
+  // grep), so they were removed. .load/.save/.initials are real and stay.
+  const h = loadGF();
+  assert.equal(h.GF.uid, undefined);
+  assert.equal(h.GF.people.upsert, undefined);
+  assert.equal(h.GF.people.remove, undefined);
+  assert.equal(typeof h.GF.people.load, 'function');
+  assert.equal(typeof h.GF.people.save, 'function');
+  assert.equal(typeof h.GF.people.initials, 'function');
+  h.close();
+});
+
 /* ── The Sunday off-by-one (regression) ─────────────────────────────────
    Two independent copies of the same mistake, both found by review rather
    than by anyone noticing the app misbehaving.

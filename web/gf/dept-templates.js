@@ -256,7 +256,12 @@ GF.applyPreset = (i) => {
   const p = tpl && tpl.presets && tpl.presets[i];
   if (!p) return;
   const title = GF.$('add-title');
-  if (title) { title.value = `${p.mk} | ${p.en}`; title.focus(); }
+  // Only fill the title when it is still empty/whitespace-only — a Quick-add
+  // tap must never silently discard a title the user already typed. (This
+  // file has no confirm()/toast precedent for this kind of choice, so a
+  // silent skip — the field is simply left as the user left it — is the
+  // simplest option, and the attrs/type below still get applied either way.)
+  if (title && !title.value.trim()) { title.value = `${p.mk} | ${p.en}`; title.focus(); }
   if (p.type && GF.$('add-type')) { GF.$('add-type').value = p.type; if (GF.syncSelect) GF.syncSelect('add-type'); }
   Object.entries(p.attrs || {}).forEach(([k, v]) => {
     const el = GF.$('attr-f-' + k); if (el) { el.value = String(v); if (GF.syncSelect) GF.syncSelect('attr-f-' + k); }
@@ -277,7 +282,26 @@ GF.collectDeptAttrs = (deptId, base) => {
       if (!el) return;
       const raw = (el.value || '').trim();
       if (!raw) { delete out[f.key]; return; }
-      out[f.key] = f.type === 'number' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+      if (f.type === 'number') {
+        // The browser's own <input type="number"> sanitization (renderDeptFields
+        // emits type="number") already blocks most garbage before .value is
+        // ever read here — but it accepts anything that PARSES as a number
+        // syntactically, including "1e400", which overflows to Infinity. The
+        // old `Number.isFinite(...) ? Number(raw) : raw` fallback silently
+        // wrote that raw STRING into a JSONB column later code treats as a
+        // Number (sums, chip formatting, comparisons) — no coercion, no
+        // rejection. Reject it outright instead (same idiom as harvest-view.js's
+        // ipmSave: parseFloat + Number.isFinite, toast, drop the value).
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n)) {
+          GF.toast(AL(`"${f.en}" must be a valid number`, `„${f.mk}“ мора да биде важечки број`), 'error');
+          delete out[f.key];
+          return;
+        }
+        out[f.key] = n;
+        return;
+      }
+      out[f.key] = raw;
     });
   }
   return out;

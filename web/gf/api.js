@@ -129,7 +129,10 @@ GF.API = {
   updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
   resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
   notifications(q)     { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/notifications' + (u?'?'+u:'')); },
-  notifDigest(window)  { return this._req('GET', '/notifications/digest?window=' + (window || 'daily')); },
+  // Param renamed from `window` (shadowed the global `window` for this whole
+  // function body — harmless here since nothing in the body needed it, but a
+  // trap for the next edit that does).
+  notifDigest(win)     { return this._req('GET', '/notifications/digest?window=' + (win || 'daily')); },
   notifUnread()        { return this._req('GET', '/notifications/unread-count'); },
   notifRead(id)        { return this._req('POST', '/notifications/' + id + '/read'); },
   notifReadAll()       { return this._req('POST', '/notifications/read-all'); },
@@ -211,6 +214,10 @@ GF.API = {
   deconCorridors(campaign)       { return this._req('GET',  '/decon/corridors' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
   deconCorridorCleanings(roomId) { return this._req('GET',  '/decon/corridors/' + roomId + '/cleanings'); },
   deconCorridorClean(body)       { return this._req('POST', '/decon/corridors/cleanings', body); },
+  // Two real, migration-backed decon routes have no frontend caller at all
+  // (product/feature-completeness gap, not a bug — no UI built here):
+  //   GET/POST /decon/positive-controls — the frozen positive-controls log
+  //   GET/POST /decon/tool-log          — the tool-sterilization PPM log
   // Biosecurity monitoring (migration 0053) — AHU filter, disinfection mat,
   // contact plate/sentinel bioassay, gowning. Second module on /decon.
   biosecurity(q = {})            { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/biosecurity' + (u ? '?' + u : '')); },
@@ -282,8 +289,15 @@ GF.API = {
   qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
   qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
   qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
+  // GET /qc/certificates/{coa_id}/icoa-html?parameter_id=... (the single-
+  // parameter internal-CoA HTML view, spec_html.py) is real and migration-
+  // backed but has no frontend caller — sibling gap to the one above.
   qcCommercialIdentities(q){ const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/commercial-identities' + (u?'?'+u:'')); },
   qcImportCommercial()     { return this._req('POST', '/qc/commercial-identities/import'); },
+  // PUT/DELETE /qc/commercial-identities/{batch_code} (edit/delete a single
+  // commercial identity) is real and migration-backed but has no frontend
+  // caller — only list + bulk-import are wired here. Feature-completeness
+  // gap, not a bug; out of scope for a Low-severity mechanical fix.
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },

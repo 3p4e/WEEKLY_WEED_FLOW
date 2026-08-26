@@ -64,25 +64,41 @@ GF.assistant = {
 
   _push(role, text, html) { this.msgs.push({ role, text, html }); this.render(); },
 
-  /* ── Backend resolution ── */
+  /* ── Backend resolution ──
+     integrate.js (loaded last, always present in the shipped app)
+     UNCONDITIONALLY overrides provider()/statusInfo()/complete() below with
+     versions that call the real backend `/ai/corpus_qa` catalog entry — see
+     integrate.js's `if (GF.assistant) { ... }` block. What remains here is
+     only the pre-integrate.js fallback (window.claude, when available),
+     exercised solely if integrate.js ever failed to load.
+     A 'gateway' branch used to sit here too (selected via GF.state.aiProvider
+     === 'gateway' + GF.state.aiBase), calling GF.ai._post()/GF.ai._user() —
+     neither function exists anywhere in this codebase (GF.ai only ever grew
+     .summary/.paraphraseInput/.paraphraseTask/.bilingual/.parseVoice, all
+     from integrate.js), so reaching that branch would have thrown. It never
+     could be reached two ways over: integrate.js's override above runs first
+     in every real session, AND gf_ai_base/gf_ai_provider are never written by
+     any screen in the shipped app (that Settings UI lived only in the
+     retired docs/GrowFlow Unified.html prototype, not web/gf/*.js), so
+     aiProvider could never actually become 'gateway' even without the
+     override. Confirmed dead in docs/AI-FEATURE-INVENTORY-2026-08-23.md
+     ("assistant.js itself contains dead-looking logic ... that code never
+     runs in production ... The drawer is correctly wired to the real
+     system"). Removed rather than implemented: integrate.js's real backend
+     path is the one and only supported non-'builtin' backend, so keeping a
+     second, broken implementation of the same idea here would just be a
+     second place for it to rot. */
   _builtin() { return typeof window.claude !== 'undefined' && !!window.claude.complete; },
   provider() {
-    const pref = GF.state.aiProvider || 'builtin';
-    if (pref === 'gateway' && GF.state.aiBase) return 'gateway';
-    if (this._builtin()) return 'builtin';
-    if (GF.state.aiBase) return 'gateway';
-    return 'none';
+    return this._builtin() ? 'builtin' : 'none';
   },
   statusInfo() {
     const p = this.provider();
     if (p === 'builtin') return { dot: 'var(--green)', label: GF.state.lang === 'mk' ? 'Вграден Claude' : 'Built-in Claude', on: true };
-    if (p === 'gateway') return { dot: 'var(--blue)', label: (GF.state.lang === 'mk' ? 'Сервер: ' : 'Gateway: ') + GF.state.aiBase.replace(/^https?:\/\//, ''), on: true };
     return { dot: 'var(--ink-3)', label: GF.state.lang === 'mk' ? 'Нема AI' : 'No AI connected', on: false };
   },
   async complete(prompt) {
-    const p = this.provider();
-    if (p === 'builtin') return await window.claude.complete(prompt);
-    if (p === 'gateway') { const d = await GF.ai._post('/ai/chat', { user: GF.ai._user(), message: prompt }); return d.text; }
+    if (this.provider() === 'builtin') return await window.claude.complete(prompt);
     throw new Error('no-ai');
   },
   async test() {

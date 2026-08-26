@@ -107,7 +107,11 @@ GF.accessibleModules = (role) => {
 GF.keyVisibleNow = (key) => {
   const role = (GF.API && GF.API.user && GF.API.user.role) || 'USER';
   const modId = GF.moduleForKey(key);
-  if (!modId) return true;   // unclassified key — fail open
+  // An unclassified key fails CLOSED: a nav key missing from GF.MODULE_OF_KEY
+  // is a gap in the module registry, not proof the key belongs everywhere —
+  // it must stay invisible until someone deliberately classifies it, not
+  // silently appear in every module by default.
+  if (!modId) return false;
   if (!GF.moduleAccessibleFor(modId, role)) return false;
   const active = GF.state && GF.state.module || 'tasks';
   return active === modId;

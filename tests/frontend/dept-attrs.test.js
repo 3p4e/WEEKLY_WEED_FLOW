@@ -242,6 +242,97 @@ test('collectDeptAttrs returns base untouched when no template or no inputs exis
   h.close();
 });
 
+// ── collectDeptAttrs: number-field rejection (a non-numeric value must be
+//    validated/coerced, never silently stored as a raw string) ────────────
+//
+// The browser's own type="number" sanitization (pinned above) already blocks
+// plain garbage like 'n/a'/'twelve' before collectDeptAttrs ever reads it —
+// and, per a quick check against this harness's jsdom, it ALSO blocks an
+// overflowing-but-syntactically-numeric token like "1e400" the same way,
+// stricter here than the HTML spec strictly requires. Because that path
+// cannot be relied on to be identical in every environment, these tests
+// build the input directly (not through renderDeptFields) so they exercise
+// collectDeptAttrs's OWN validation independent of whichever DOM sanitized
+// what before it got there.
+
+test('collectDeptAttrs rejects a number value that overflows to Infinity, with a toast, instead of storing the raw string', () => {
+  const h = withRealDepts();
+  const doc = h.window.document;
+  const numberKey = h.GF.deptTemplate('d-cu').fields.find(f => f.type === 'number').key;
+  const el = doc.createElement('input');
+  el.id = 'attr-f-' + numberKey;
+  el.value = '1e400';   // syntactically a number; Number(...)/parseFloat(...) both give Infinity
+  doc.body.appendChild(el);
+  const toasts = [];
+  h.GF.toast = (m, k) => toasts.push([m, k]);
+
+  const out = h.GF.collectDeptAttrs('d-cu', { other: 'kept' });
+
+  assert.equal(Object.hasOwn(out, numberKey), false,
+    'a non-finite number must be rejected, not written into the payload as a raw string');
+  assert.equal(out.other, 'kept', 'other attributes must survive the rejection');
+  assert.equal(toasts.length, 1, 'a rejection must toast so the user knows the value was dropped');
+  assert.equal(toasts[0][1], 'error');
+  h.close();
+});
+
+test('collectDeptAttrs coerces a genuinely finite number to a Number, with no toast', () => {
+  const h = withRealDepts();
+  const doc = h.window.document;
+  const numberKey = h.GF.deptTemplate('d-cu').fields.find(f => f.type === 'number').key;
+  const el = doc.createElement('input');
+  el.id = 'attr-f-' + numberKey;
+  el.value = '42';
+  doc.body.appendChild(el);
+  const toasts = [];
+  h.GF.toast = (m, k) => toasts.push([m, k]);
+
+  const out = h.GF.collectDeptAttrs('d-cu', {});
+
+  assert.equal(out[numberKey], 42);
+  assert.equal(typeof out[numberKey], 'number');
+  assert.equal(toasts.length, 0);
+  h.close();
+});
+
+// ── applyPreset: a Quick-add tap must not discard an already-typed title ──
+
+function mountAddForm(h, deptId, titleValue) {
+  const doc = h.window.document;
+  const deptEl = doc.createElement('input'); deptEl.id = 'add-dept'; deptEl.value = deptId;
+  doc.body.appendChild(deptEl);
+  const titleEl = doc.createElement('input'); titleEl.id = 'add-title'; titleEl.value = titleValue || '';
+  doc.body.appendChild(titleEl);
+  return { deptEl, titleEl };
+}
+
+test('applyPreset fills an EMPTY title', () => {
+  const h = withRealDepts();
+  const { titleEl } = mountAddForm(h, 'd-cu', '');
+  h.GF.applyPreset(0);
+  const p = h.GF.DEPT_TEMPLATES.cultivation.presets[0];
+  assert.equal(titleEl.value, `${p.mk} | ${p.en}`);
+  h.close();
+});
+
+test('applyPreset does NOT overwrite a title the user already typed', () => {
+  const h = withRealDepts();
+  const { titleEl } = mountAddForm(h, 'd-cu', 'my own title in progress');
+  h.GF.applyPreset(1);
+  assert.equal(titleEl.value, 'my own title in progress',
+    'a Quick-add tap must never silently discard text the user was mid-typing');
+  h.close();
+});
+
+test('applyPreset treats a whitespace-only title as empty and fills it', () => {
+  const h = withRealDepts();
+  const { titleEl } = mountAddForm(h, 'd-cu', '   ');
+  h.GF.applyPreset(0);
+  const p = h.GF.DEPT_TEMPLATES.cultivation.presets[0];
+  assert.equal(titleEl.value, `${p.mk} | ${p.en}`);
+  h.close();
+});
+
 test('GF.renderDeptFields escapes the values and placeholders it puts in attributes', () => {
   const h = withRealDepts();
   const textKey = h.GF.deptTemplate('d-cu').fields.find(f => f.type === 'text').key;

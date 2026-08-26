@@ -3,7 +3,6 @@ window.GF = window.GF || {};
 
 GF.$ = (id) => document.getElementById(id);
 GF.esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-GF.uid = () => 'T-' + Math.random().toString(36).slice(2, 7).toUpperCase();
 
 // ── Re-entrancy guard for async submit handlers ──
 // The Save buttons are plain inline onclick handlers, and the handlers behind
@@ -106,6 +105,16 @@ GF.ROLES = {
 };
 GF.roleLabel = (r) => (GF.ROLES[r] ? GF.ROLES[r][GF.state.lang] || GF.ROLES[r].en : r);
 GF.AVATAR_COLORS = ['#2FD9D9','#2BE8A0','#E0A73E','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#C2410C','#8FB6A6','#0891B2'];
+
+// ── QC/LIMS role gates (uppercase backend role codes) ──
+// Shared write / Qualified-Person / Head-of-QC role arrays for the QC/LIMS
+// screens (samples, custody, spec, potency, lab, register, genealogy, coa,
+// ecoa, oos, leaves) — previously copy-pasted verbatim (as local `_WRITERS` /
+// `_QP` / `_HOQC` consts) across ten separate view files. Single source now;
+// each view's canWrite()/canQP()/canApprove()-style helper reads these.
+GF.QC_WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
+GF.QC_QP = ['ADMIN', 'QP'];
+GF.QC_HOQC = ['ADMIN', 'QC_MGR', 'QP'];
 
 // ── Permissions per role ──
 //   own = only on tasks the user is Accountable/Responsible for
@@ -284,23 +293,6 @@ GF.people = {
     } catch (e) {}
   },
   save() { try { localStorage.setItem('gf_people_v1', JSON.stringify(GF.PEOPLE)); } catch (e) {} },
-  upsert(id, person) {
-    if (!id) id = 'u_' + Math.random().toString(36).slice(2, 8);
-    GF.PEOPLE[id] = { ...(GF.PEOPLE[id] || {}), ...person };
-    this.save();
-    return id;
-  },
-  remove(id) {
-    if (!GF.PEOPLE[id]) return;
-    // reassign their tasks back to current user so nothing is orphaned
-    GF.state.tasks.forEach(t => {
-      if (t.owner === id) t.owner = GF.state.user === id ? 'marko' : GF.state.user;
-      t.helpers = (t.helpers || []).filter(h => h !== id);
-    });
-    if (GF.state.user === id) GF.state.user = 'marko';
-    delete GF.PEOPLE[id];
-    GF.store.save(); this.save();
-  },
   initials(name) {
     return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
   },
