@@ -58,10 +58,16 @@
         <button class="btn btn-sm" onclick="GF.WWF.loadAuditPrep()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
     }
 
-    const d = st.data;
-    const totalAll = d.programs.reduce((s, p) => s + p.total, 0);
-    const doneAll = d.programs.reduce((s, p) => s + p.completed, 0);
-    const overdueAll = d.programs.reduce((s, p) => s + p.overdue, 0);
+    // Malformed-but-200 defense: every field below comes straight off the
+    // /reports/audit-prep response with no schema validation in between. A
+    // missing/malformed field must degrade (dash, zero, empty section)
+    // instead of throwing and blanking the whole view.
+    const d = st.data || {};
+    const programs = Array.isArray(d.programs) ? d.programs : [];
+    const timeline = Array.isArray(d.timeline) ? d.timeline : [];
+    const totalAll = programs.reduce((s, p) => s + (p?.total || 0), 0);
+    const doneAll = programs.reduce((s, p) => s + (p?.completed || 0), 0);
+    const overdueAll = programs.reduce((s, p) => s + (p?.overdue || 0), 0);
     const readiness = totalAll ? Math.round(100 * doneAll / totalAll) : null;
     const tr = d.traceability || { completed: 0, with_outcome: 0, without_outcome: 0, rate: 0 };
 
@@ -82,37 +88,38 @@
     </div>`;
 
     // Per-programme readiness rows.
-    const progRows = d.programs.map((p) => {
-      const frac = p.total ? p.completed / p.total : 0;
+    const progRows = programs.map((p) => {
+      const total = p?.total || 0, completed = p?.completed || 0;
+      const frac = total ? completed / total : 0;
       const pct = Math.round(100 * frac);
       const chips = [
-        p.ongoing ? `<span><i class="fs-dot" style="background:var(--ch-b)"></i>${p.ongoing} ${AL('ongoing', 'во тек')}</span>` : '',
-        p.stuck ? `<span><i class="fs-dot" style="background:var(--orange)"></i>${p.stuck} ${GF.t('stuck').toLowerCase()}</span>` : '',
-        p.pending ? `<span><i class="fs-dot" style="background:var(--muted)"></i>${p.pending} ${AL('pending', 'на чекање')}</span>` : '',
-        p.overdue ? `<span><i class="fs-dot" style="background:var(--red)"></i>${p.overdue} ${GF.t('overdue').toLowerCase()}</span>` : '',
+        p?.ongoing ? `<span><i class="fs-dot" style="background:var(--ch-b)"></i>${p.ongoing} ${AL('ongoing', 'во тек')}</span>` : '',
+        p?.stuck ? `<span><i class="fs-dot" style="background:var(--orange)"></i>${p.stuck} ${GF.t('stuck').toLowerCase()}</span>` : '',
+        p?.pending ? `<span><i class="fs-dot" style="background:var(--muted)"></i>${p.pending} ${AL('pending', 'на чекање')}</span>` : '',
+        p?.overdue ? `<span><i class="fs-dot" style="background:var(--red)"></i>${p.overdue} ${GF.t('overdue').toLowerCase()}</span>` : '',
       ].filter(Boolean).join('');
       return `<div class="ana-row" style="align-items:flex-start">
-        <div class="ana-rl" title="${GF.esc(p.program)}" style="font-weight:600">${GF.esc(p.program)}</div>
+        <div class="ana-rl" title="${GF.esc(p?.program || '')}" style="font-weight:600">${GF.esc(p?.program || '—')}</div>
         <div style="flex:1;min-width:120px">
           ${bar(frac)}
           <div class="ana-rx" style="margin-top:4px">${chips || `<span class="ana-note">${AL('no tasks tagged', 'нема означени задачи')}</span>`}</div>
         </div>
-        <div class="ana-rv" title="${GF.esc(p.completed)}/${GF.esc(p.total)}">${p.total ? pct + '%' : '—'}</div>
+        <div class="ana-rv" title="${GF.esc(completed)}/${GF.esc(total)}">${total ? pct + '%' : '—'}</div>
       </div>`;
     }).join('');
 
     // Milestone timeline (due-dated audit-prep tasks, soonest first).
-    const tlRows = d.timeline.length ? d.timeline.slice(0, 40).map((t) => {
-      const progChips = (t.programs || []).map((pr) =>
+    const tlRows = timeline.length ? timeline.slice(0, 40).map((t) => {
+      const progChips = (t?.programs || []).map((pr) =>
         `<span class="tag-chip">${GF.esc(pr)}</span>`).join(' ');
-      const sc = statusColor[t.status] || 'var(--muted)';
+      const sc = statusColor[t?.status] || 'var(--muted)';
       return `<div class="ana-row" style="cursor:pointer" onclick="GF.setView('board')" title="${AL('Open the board', 'Отвори ја таблата')}">
-        <div class="ana-rl" style="min-width:92px;${t.overdue ? 'color:var(--red-fg,var(--red))' : ''}">${fmtDate(t.due_date)}</div>
+        <div class="ana-rl" style="min-width:92px;${t?.overdue ? 'color:var(--red-fg,var(--red))' : ''}">${t?.due_date ? fmtDate(t.due_date) : '—'}</div>
         <div style="flex:1;min-width:120px">
-          <div title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
+          <div title="${GF.esc(t?.title || '')}">${GF.esc(t?.title || '—')}</div>
           <div class="ana-rx" style="margin-top:2px">${progChips}
-            <span><i class="fs-dot" style="background:${sc}"></i>${GF.esc(GF.t(t.status) || t.status)}</span>
-            ${t.overdue ? `<span style="color:var(--red-fg,var(--red))">${GF.t('overdue')}</span>` : ''}
+            <span><i class="fs-dot" style="background:${sc}"></i>${GF.esc(GF.t(t?.status) || t?.status || '—')}</span>
+            ${t?.overdue ? `<span style="color:var(--red-fg,var(--red))">${GF.t('overdue')}</span>` : ''}
           </div>
         </div>
       </div>`;

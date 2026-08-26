@@ -59,6 +59,19 @@
     return Math.round(h / 24) + AL('d ago', 'д.');
   };
 
+  // Security note (reviewed, low confidence / not exploitable): x.task_id
+  // below is escaped via GF.esc() before being interpolated into a
+  // single-quoted onclick="...('...')" JS-string context. GF.esc() is an
+  // HTML-attribute escape (&<>"') — it neutralizes breaking out of the
+  // attribute, but does not fully neutralize a JS-string-context injection
+  // (e.g. it would not stop a backslash-based escape sequence). This is the
+  // same escape-then-interpolate pattern used throughout the app (see
+  // calendar-view.js, execreport-view.js, qmsstudio-view.js, workload-view.js,
+  // search-view.js, ...) — there is no stronger `escJs`-style helper in this
+  // codebase, and none of those call sites use one either. Judged safe here:
+  // task_id is always a server-generated UUID (backend/app/api/approvals.py),
+  // never attacker-controlled free text, so no value that can reach this site
+  // is capable of breaking out of the quoted string.
   const ackRow = (x, mine) => `
     <div class="apv-row">
       <span class="fs-dot" style="background:var(--${{critical:'red',high:'orange'}[x.priority] || 'blue'})"></span>
@@ -215,6 +228,8 @@
           <div class="apv-b"><div class="apv-t">${GF.esc(GF.state.lang === 'mk' && d.name_mk ? d.name_mk : (d.name || AL('Org-wide', 'Целата организација')))}</div>
             <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(d.updated_at.slice(0, 16).replace('T', ' ')) : ''}</div></div>
         </div>`).join('') || empty())}
+      ${/* t.id below: same GF.esc()-in-onclick pattern reviewed above ackRow() —
+           server-generated task UUID, judged safe for the same reason. */''}
       ${sec(GF.t('stuck'), stuck.length, stuck.map(t => `
         <div class="apv-row" onclick="GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">
           <span class="fs-dot" style="background:var(--red)"></span>

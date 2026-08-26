@@ -85,7 +85,10 @@
   const chartFlow = (weeks) => {
     const W = 560, H = 180, padL = 30, padB = 20, padT = 12;
     const n = weeks.length;
-    const maxV = nice(Math.max(1, ...weeks.map((w) => Math.max(w.created, w.completed))));
+    // w may be null/malformed (see the Array.isArray/optional-chaining guards
+    // this weeks array already got at its call site) — every per-item field
+    // read below falls back rather than throwing.
+    const maxV = nice(Math.max(1, ...weeks.map((w) => Math.max(w?.created || 0, w?.completed || 0))));
     const slot = (W - padL) / n;
     const bw = Math.min(14, (slot - 8) / 2); // ≤24px, air in the band
     const y = (v) => padT + (H - padB - padT) * (1 - v / maxV);
@@ -96,15 +99,16 @@
     }).join('');
     const bars = weeks.map((w, i) => {
       const x0 = padL + i * slot + (slot - 2 * bw - 2) / 2;
+      const created = w?.created || 0, completed = w?.completed || 0;
       const lbl = (n <= 8 || i % 2 === (n - 1) % 2)
-        ? `<text x="${x0 + bw + 1}" y="${H - 6}" class="ana-tick" text-anchor="middle">${wkLbl(w.week_start)}</text>` : '';
-      const cap = i === n - 1 && w.created > 0
-        ? `<text x="${x0 + bw / 2}" y="${y(w.created) - 4}" class="ana-cap" text-anchor="middle">${w.created}</text>` : '';
-      const cap2 = i === n - 1 && w.completed > 0
-        ? `<text x="${x0 + bw + 2 + bw / 2}" y="${y(w.completed) - 4}" class="ana-cap" text-anchor="middle">${w.completed}</text>` : '';
-      return `<g><title>${wkLbl(w.week_start)} · ${AL('created', 'креирани')} ${w.created} · ${AL('completed', 'завршени')} ${w.completed}</title>
-        <path d="${barPath(x0, y(w.created), bw, (H - padB) - y(w.created))}" fill="var(--ch-a)"/>
-        <path d="${barPath(x0 + bw + 2, y(w.completed), bw, (H - padB) - y(w.completed))}" fill="var(--ch-b)"/>
+        ? `<text x="${x0 + bw + 1}" y="${H - 6}" class="ana-tick" text-anchor="middle">${wkLbl(w?.week_start)}</text>` : '';
+      const cap = i === n - 1 && created > 0
+        ? `<text x="${x0 + bw / 2}" y="${y(created) - 4}" class="ana-cap" text-anchor="middle">${created}</text>` : '';
+      const cap2 = i === n - 1 && completed > 0
+        ? `<text x="${x0 + bw + 2 + bw / 2}" y="${y(completed) - 4}" class="ana-cap" text-anchor="middle">${completed}</text>` : '';
+      return `<g><title>${wkLbl(w?.week_start)} · ${AL('created', 'креирани')} ${created} · ${AL('completed', 'завршени')} ${completed}</title>
+        <path d="${barPath(x0, y(created), bw, (H - padB) - y(created))}" fill="var(--ch-a)"/>
+        <path d="${barPath(x0 + bw + 2, y(completed), bw, (H - padB) - y(completed))}" fill="var(--ch-b)"/>
         ${cap}${cap2}${lbl}</g>`;
     }).join('');
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${AL('Created vs completed per week', 'Креирани наспроти завршени по недела')}">${grid}${bars}</svg>
@@ -120,8 +124,9 @@
     const n = weeks.length;
     const slot = (W - padL) / n;
     const y = (v) => padT + (H - padB - padT) * (1 - v / 100);
-    const pts = weeks.map((w, i) => w.completed > 0
-      ? { x: padL + i * slot + slot / 2, y: y(Math.round(100 * w.on_time / w.completed)), v: Math.round(100 * w.on_time / w.completed), w } : null);
+    // w may be null/malformed — same defense as chartFlow() above.
+    const pts = weeks.map((w, i) => (w?.completed || 0) > 0
+      ? { x: padL + i * slot + slot / 2, y: y(Math.round(100 * (w.on_time || 0) / w.completed)), v: Math.round(100 * (w.on_time || 0) / w.completed), w } : null);
     const line = pts.filter(Boolean);
     const grid = [0, 50, 100].map((v) =>
       `<line x1="${padL}" y1="${y(v)}" x2="${W}" y2="${y(v)}" class="ana-grid"/>
@@ -133,9 +138,9 @@
     const last = line[line.length - 1];
     const dots = line.map((p) =>
       `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--ch-b)" stroke="var(--surface)" stroke-width="2">
-         <title>${wkLbl(p.w.week_start)} · ${p.v}% (${p.w.on_time}/${p.w.completed})</title></circle>`).join('');
+         <title>${wkLbl(p.w?.week_start)} · ${p.v}% (${p.w?.on_time || 0}/${p.w?.completed || 0})</title></circle>`).join('');
     const labels = weeks.map((w, i) => (n <= 8 || i % 2 === (n - 1) % 2)
-      ? `<text x="${padL + i * slot + slot / 2}" y="${H - 6}" class="ana-tick" text-anchor="middle">${wkLbl(w.week_start)}</text>` : '').join('');
+      ? `<text x="${padL + i * slot + slot / 2}" y="${H - 6}" class="ana-tick" text-anchor="middle">${wkLbl(w?.week_start)}</text>` : '').join('');
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${AL('On-time completion rate', 'Стапка на навремено завршување')}">${grid}
       <path d="${area}" fill="var(--ch-b)" opacity="0.1"/>
       <path d="${path}" fill="none" stroke="var(--ch-b)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
@@ -146,7 +151,7 @@
   const hbar = (frac) =>
     `<div class="ana-hb"><div class="ana-hb-f" style="width:${Math.max(2, Math.round(100 * frac))}%"></div></div>`;
 
-  const deptName = (d) => (GF.state.lang === 'mk' && d.name_mk) ? d.name_mk : d.name;
+  const deptName = (d) => d ? ((GF.state.lang === 'mk' && d.name_mk) ? d.name_mk : (d.name || '')) : '';
 
   /* ── Yield-domain band ──────────────────────────────────────────────────
      Sourced ENTIRELY from GET /cultivation/harvests (per dried lot). Fields
@@ -232,7 +237,9 @@
     const plantsDried = sum(dried, (l) => l.plants_harvested);
     const wetDried = sum(dried.filter((l) => l.wet_weight_g != null), (l) => l.wet_weight_g);
     const avgGPlant = plantsDried > 0 ? flowerG / plantsDried : null;
-    const lossPct = wetDried > 0 ? (wetDried - dryTotalG) / wetDried * 100 : null;
+    // Floored at 0: a data-entry error upstream (dry weight recorded > wet
+    // weight) must never surface as a negative "moisture loss" KPI.
+    const lossPct = wetDried > 0 ? Math.max(0, (wetDried - dryTotalG) / wetDried * 100) : null;
     const cycleCodes = new Set(dried.map((l) => l.batch_code));
     const openLots = lots.filter((l) => l.status !== 'closed').length;
 
@@ -363,13 +370,20 @@
         <span style="color:var(--red-fg,var(--red))">${GF.esc(st.error)}</span>
         <button class="btn btn-sm" onclick="GF.WWF.loadAnalytics()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
     }
-    const d = st.data;
-    const cur = d.weeks[d.weeks.length - 1] || {};
-    const doneRange = d.weeks.reduce((s, w) => s + w.completed, 0);
-    const onTimeRange = d.weeks.reduce((s, w) => s + w.on_time, 0);
+    // Malformed-but-200 defense: every field below comes straight off the
+    // /reports/analytics response with no schema validation in between. A
+    // missing/malformed field must degrade (dash, zero, empty section)
+    // instead of throwing and blanking the whole view.
+    const d = st.data || {};
+    const weeks = Array.isArray(d.weeks) ? d.weeks : [];
+    const departments = Array.isArray(d.departments) ? d.departments : [];
+    const taskTypes = Array.isArray(d.task_types) ? d.task_types : [];
+    const cur = weeks[weeks.length - 1] || {};
+    const doneRange = weeks.reduce((s, w) => s + (w?.completed || 0), 0);
+    const onTimeRange = weeks.reduce((s, w) => s + (w?.on_time || 0), 0);
     const pct = doneRange ? Math.round(100 * onTimeRange / doneRange) : null;
-    const openNow = d.departments.reduce((s, x) => s + x.open, 0);
-    const overdueNow = d.departments.reduce((s, x) => s + x.overdue, 0);
+    const openNow = departments.reduce((s, x) => s + (x?.open || 0), 0);
+    const overdueNow = departments.reduce((s, x) => s + (x?.overdue || 0), 0);
 
     const tile = GF.kpiTile;
 
@@ -377,7 +391,7 @@
       ${tile(AL('Open tasks now', 'Отворени задачи сега'), openNow,
              overdueNow ? `${overdueNow} ${GF.t('overdue').toLowerCase()}` : '',
              undefined, overdueNow ? 'bad' : '')}
-      ${tile(AL('Completed', 'Завршени') + ` · ${d.range.weeks}${AL('w', 'н')}`, doneRange, '')}
+      ${tile(AL('Completed', 'Завршени') + ` · ${d.range?.weeks ?? st.weeks}${AL('w', 'н')}`, doneRange, '')}
       ${tile(AL('On time', 'Навреме'), pct === null ? '—' : pct + '%',
              AL('of completed tasks', 'од завршените задачи'))}
       ${tile(AL('Active people this week', 'Активни лица оваа недела'), cur.active_people || 0,
@@ -387,25 +401,25 @@
     const ranges = [4, 8, 12].map((n) =>
       `<button class="ntf-tab${st.weeks === n ? ' on' : ''}" onclick="GF.WWF.anaRange(${n})">${n} ${AL('weeks', 'недели')}</button>`).join('');
 
-    const maxOpen = Math.max(1, ...d.departments.map((x) => x.open));
-    const deptRows = d.departments.map((x) => `
+    const maxOpen = Math.max(1, ...departments.map((x) => x?.open || 0));
+    const deptRows = departments.map((x) => `
       <div class="ana-row">
         <div class="ana-rl" title="${GF.esc(deptName(x))}">${GF.esc(deptName(x))}</div>
-        ${hbar(x.open / maxOpen)}
-        <div class="ana-rv">${x.open}</div>
+        ${hbar((x?.open || 0) / maxOpen)}
+        <div class="ana-rv">${x?.open || 0}</div>
         <div class="ana-rx">
-          ${x.stuck ? `<span><i class="fs-dot" style="background:var(--orange)"></i>${x.stuck} ${GF.t('stuck').toLowerCase()}</span>` : ''}
-          ${x.overdue ? `<span><i class="fs-dot" style="background:var(--red)"></i>${x.overdue} ${GF.t('overdue').toLowerCase()}</span>` : ''}
+          ${x?.stuck ? `<span><i class="fs-dot" style="background:var(--orange)"></i>${x.stuck} ${GF.t('stuck').toLowerCase()}</span>` : ''}
+          ${x?.overdue ? `<span><i class="fs-dot" style="background:var(--red)"></i>${x.overdue} ${GF.t('overdue').toLowerCase()}</span>` : ''}
         </div>
       </div>`).join('');
 
-    const maxType = Math.max(1, ...d.task_types.map((t) => t.count));
-    const typeRows = d.task_types.map((t) => {
-      const lbl = (GF.TASK_TYPE_LABELS[t.task_type] || {})[GF.state.lang === 'mk' ? 'mk' : 'en'] || t.task_type;
+    const maxType = Math.max(1, ...taskTypes.map((t) => t?.count || 0));
+    const typeRows = taskTypes.map((t) => {
+      const lbl = (GF.TASK_TYPE_LABELS[t?.task_type] || {})[GF.state.lang === 'mk' ? 'mk' : 'en'] || t?.task_type || '—';
       return `<div class="ana-row">
         <div class="ana-rl">${GF.esc(lbl)}</div>
-        ${hbar(t.count / maxType)}
-        <div class="ana-rv">${t.count}</div><div class="ana-rx"></div>
+        ${hbar((t?.count || 0) / maxType)}
+        <div class="ana-rv">${t?.count || 0}</div><div class="ana-rx"></div>
       </div>`;
     }).join('');
 
@@ -415,11 +429,11 @@
       <div class="ana-grid2">
         <div class="panel ana-panel">
           <div class="ana-pt">${AL('Task flow per week', 'Проток на задачи по недела')}</div>
-          ${chartFlow(d.weeks)}
+          ${chartFlow(weeks)}
         </div>
         <div class="panel ana-panel">
           <div class="ana-pt">${AL('On-time completion', 'Навремено завршување')}</div>
-          ${chartOnTime(d.weeks)}
+          ${chartOnTime(weeks)}
           <div class="ana-note">${AL('Share of completed tasks finished on or before their due date.',
                                      'Удел на завршени задачи завршени на или пред рокот.')}</div>
         </div>

@@ -174,8 +174,13 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     if (!st.loaded || st.user !== GF.state.user) { GF.WWF.loadInbox(); }
     const tab = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.tab === id ? 'btn-primary on' : ''}"
       onclick="GF.WWF._notif.tab='${id}';GF.render.all()">${lbl}</button>`;
+    // Client-side filter over the already-loaded st.items (see `items` below)
+    // — toggling it must only re-render, never re-fetch all three data
+    // sources from the server. Fetching stays reserved for initial load
+    // (loadInbox() at the top of this view) and explicit refresh actions
+    // (notifOlder, the poll tick, notifDone/notifReadAll's server round-trip).
     const flt = (id, lbl) => `<span class="chip-opt ${st.filter === id ? 'on' : ''}"
-      onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.WWF.loadInbox()">${lbl}</span>`;
+      onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.render.all()">${lbl}</span>`;
     const items = st.filter ? st.items.filter(n => n.reason === st.filter) : st.items;
     return `${GF.viewHead ? GF.viewHead('inbox', 'inbox_sub') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
       ${digestPanel()}

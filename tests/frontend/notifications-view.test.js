@@ -152,3 +152,50 @@ test('openNotif still applies the optimistic mutation on success (behavior uncha
   assert.equal(w.__renderAllCalls, 1, 'the no-task-to-jump-to branch still re-renders on success');
   h.close();
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   Wave 3 LOW fix — the reason-filter chip's onclick handler.
+
+   Filtering by reason (`st.filter`) is applied client-side, over the already-
+   loaded st.items (see the `items = st.filter ? st.items.filter(...) : ...`
+   line in GF.views.inbox()). The chip's onclick nonetheless called
+   GF.WWF.loadInbox() on every toggle, re-fetching notifications, the activity
+   feed, AND the unread count from the server for a filter that never needed
+   new data. Fixed to call GF.render.all() instead — fetching stays reserved
+   for initial load and explicit refresh actions (notifOlder, the poll tick).
+   ════════════════════════════════════════════════════════════════════ */
+
+test('toggling a reason filter chip re-renders from already-loaded data instead of re-fetching', () => {
+  const h = load();
+  const { GF, window: w } = h;
+  const st = GF.WWF._notif;
+  st.loaded = true; st.user = GF.state.user; st.tab = 'inbox'; st.filter = '';
+  st.items = [{
+    id: 'n1', task_id: '', read: false, reason: 'assigned', verb: 'assigned', actor_id: 'u1',
+    params: { title: 'Task X' }, created_at: '2026-07-27T10:00:00',
+  }];
+
+  const html = GF.views.inbox();
+  const m = html.match(/onclick="(GF\.WWF\._notif\.filter=[^"]*)"/);
+  assert.ok(m, 'the reason filter chip renders an inline toggle handler');
+  assert.equal(m[1].includes('loadInbox'), false,
+    'the filter chip must not call loadInbox() — filtering is already client-side over st.items');
+  assert.ok(m[1].includes('GF.render.all()'),
+    'the filter chip re-renders from the already-loaded data instead');
+
+  // Spy on loadInbox (which is what drives the three server fetches:
+  // GF.API.notifications/activity/notifUnread) and actually execute the
+  // extracted handler in the sources' own global scope, proving the fix
+  // end-to-end rather than just by string inspection.
+  let loadInboxCalls = 0;
+  const origLoadInbox = GF.WWF.loadInbox;
+  GF.WWF.loadInbox = (...args) => { loadInboxCalls++; return origLoadInbox.apply(GF.WWF, args); };
+  w.__renderAllCalls = 0;
+
+  h.global(m[1]);
+
+  assert.equal(loadInboxCalls, 0, 'toggling the filter must never re-fetch notifications/activity/unread-count');
+  assert.equal(w.__renderAllCalls, 1, 'toggling the filter still re-renders the view');
+  assert.equal(st.filter, 'assigned', 'the filter state itself is applied');
+  h.close();
+});
