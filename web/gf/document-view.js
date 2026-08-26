@@ -360,7 +360,7 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
     segments.forEach(seg => {
       if (seg.date !== iso) return;
       const x = LEFT + seg.start_h * hw, w = Math.max(2, (seg.end_h - seg.start_h) * hw);
-      s += `<rect x="${x.toFixed(1)}" y="${y + 6}" width="${w.toFixed(1)}" height="${ROW - 12}" rx="3" fill="${seg.color}" fill-opacity="0.92">`
+      s += `<rect x="${x.toFixed(1)}" y="${y + 6}" width="${w.toFixed(1)}" height="${ROW - 12}" rx="3" fill="${GF.esc(seg.color)}" fill-opacity="0.92">`
         + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${seg.start.slice(11, 16)}–${seg.end.slice(11, 16)}</title></rect>`;
     });
   }
@@ -540,7 +540,7 @@ GF.WWF._renderDocPanel = () => {
         ${GF.WWF._ribbonSvg(c.ribbon, c.period && c.period.start, c.period && c.period.days)}
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;font-size:11px;color:var(--ink-2)">
           ${(c.metrics && c.metrics.per_sop || []).slice(0, 12).map(b =>
-            `<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${b.color};margin-right:4px;vertical-align:middle"></span>${GF.esc(b.sop)}</span>`).join('')}
+            `<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${GF.esc(b.color)};margin-right:4px;vertical-align:middle"></span>${GF.esc(b.sop)}</span>`).join('')}
         </div>` : ''}
       ${GF.WWF._docMetricsHtml(c.metrics)}
       ${tsections ? `<div style="font-weight:700;font-size:14px;margin:14px 0 4px">${AL('Department status', 'Статус по оддели')}

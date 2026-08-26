@@ -90,7 +90,28 @@ GF.WWF.loadAudit = async ({ reset = false } = {}) => {
   try {
     const page = await GF.API.audit(q);
     if (gen !== st.gen) return;   // a newer load superseded this one
-    st.entries = st.entries.concat(page);
+    // Defensive tie-breaker (belt-and-suspenders, NOT a full fix — see the
+    // RESIDUAL RISK note below): `id` collides across the two hash chains,
+    // but every row also carries `source` ("users" | "tasks"), so `source+id`
+    // is a reliable per-row key WITHIN a fetched page. Dedupe on it before
+    // appending, so a row can never be rendered/counted twice if the same row
+    // is ever handed back across two fetches (e.g. a retry after a hiccup).
+    const seen = new Set(st.entries.map(e => e.source + ':' + e.id));
+    const fresh = page.filter(e => !seen.has(e.source + ':' + e.id));
+    st.entries = st.entries.concat(fresh);
+    // RESIDUAL RISK — needs backend confirmation, not guessed at here: this
+    // cursor is created_at ALONE, so if several rows from the SAME chain ever
+    // share an identical created_at (e.g. a bulk write inside one DB
+    // transaction under Postgres `now()`, which is constant for the whole
+    // transaction, vs `clock_timestamp()`) and that tied group is larger than
+    // fits on one page, the backend's own per-source
+    // `ORDER BY created_at DESC LIMIT` query (GET /audit in
+    // backend/app/api/audit.py) can already drop the overflow before this
+    // cursor logic ever runs. Nothing in the response lets the FRONTEND
+    // recover a row the backend never sent — closing this fully needs a
+    // compound `(created_at, id)` keyset on the server, plus confirming which
+    // timestamp function the audit trigger uses. The source+id dedup above
+    // only guards against double-counting a row we DID receive.
     st.before = page.length ? page[page.length - 1].created_at : st.before;
     st.hasMore = page.length === q.limit;
     if (st.tables === null) { try { st.tables = await GF.API.auditTables(); } catch (e) { st.tables = []; } }

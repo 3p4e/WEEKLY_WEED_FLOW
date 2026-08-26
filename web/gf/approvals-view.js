@@ -18,6 +18,12 @@
   GF.WWF.loadApprovals = async () => {
     const st = GF.WWF._apv;
     st.loading = true; st.error = null;
+    // Out-of-order guard (mirrors analytics-view.js's st.lseq): apvAck() calls
+    // this unconditionally on every accept/decline with no in-flight check, so
+    // two overlapping calls (e.g. accepting task A then quickly task B) could
+    // otherwise let an older, slower response overwrite state a newer one
+    // already applied — and unlike the polled views, nothing here self-corrects.
+    const seq = (st.lseq = (st.lseq || 0) + 1);
     try {
       const [pending, docs, coqs] = await Promise.all([
         GF.API.approvalsPending(),
@@ -28,10 +34,21 @@
         // don't render — never fabricated.
         GF.API.qcCoqs ? GF.API.qcCoqs().catch(() => null) : null,
       ]);
+      if (seq !== st.lseq) return;   // superseded by a newer load — its state already reflects reality
       st.data = pending; st.docs = docs; st.coqs = coqs;
-    } catch (e) { st.error = e.message; }
+    } catch (e) {
+      if (seq !== st.lseq) return;
+      st.error = e.message;
+    }
+    if (seq !== st.lseq) return;
     st.loading = false;
+    // Re-render whichever surface can show the result: the full panel when
+    // the user is on Approvals, otherwise just the nav badge (bug: the badge
+    // read GF.WWF._apv.data, which only this function ever populates, so a
+    // prefetch call made from off-page — see the boot-time call at the bottom
+    // of this file — needs this branch to make the badge light up at all).
     if (GF.state.view === 'approvals') GF.render.all();
+    else GF.render.sidebar();
   };
 
   const person = (id) => (GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
@@ -213,4 +230,20 @@
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
     badge: () => { const d = GF.WWF._apv.data; return !!(d && (d.mine || []).length); },
   });
+
+  // Prefetch once at boot so the nav badge above can light up for a user with
+  // pending acknowledgments who hasn't opened this view yet — GF.WWF._apv.data
+  // is otherwise populated ONLY by loadApprovals(), which (unlike Notifications'
+  // unread count) nothing else in the app ever calls. Mirrors report-view.js's
+  // _checkNewReportPin (a one-shot setTimeout(...,0) at module scope); there is
+  // no cheaper count-only endpoint on the backend (GET /approvals/pending is
+  // the only aggregate — backend/app/api/approvals.py), so a normal
+  // loadApprovals() call doubles as the prefetch. Guarded on GF.API.token
+  // (like notifications-view.js's poll tick) — an anonymous page load would
+  // otherwise 401 and latch st.error, which would then block the view's own
+  // "!st.data && !st.loading && !st.error" load-gate from ever refetching once
+  // the user actually logs in. A fresh login within this same page load (no
+  // persisted session yet) still only gets the badge once the user visits
+  // Approvals or reloads — same reach as report-view.js's own app-load prefetch.
+  setTimeout(() => { if (GF.API && GF.API.token) GF.WWF.loadApprovals(); }, 0);
 })();

@@ -95,14 +95,14 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   };
 
   const itemRow = (n) => `
-    <div class="ntf${n.read ? '' : ' unread'}" onclick="GF.WWF.openNotif('${n.id}','${n.task_id || ''}')">
+    <div class="ntf${n.read ? '' : ' unread'}" onclick="GF.WWF.openNotif('${GF.esc(n.id)}','${GF.esc(n.task_id || '')}')">
       <div class="ntf-b">
         <div class="ntf-tt">${GF.esc(sentence(n))}</div>
         <div class="ntf-meta"><span class="ntf-reason">${GF.esc(AL(REASONS[n.reason]?.en || n.reason, REASONS[n.reason]?.mk || n.reason))}</span>
           <span class="ntf-ts">${GF.esc(n.created_at.slice(11, 16))}</span></div>
       </div>
       <button class="mini-btn ntf-done" title="${AL('Done', 'Завршено')}"
-        onclick="event.stopPropagation();GF.WWF.notifDone('${n.id}')">${GF.icon('check', 'icon')}</button>
+        onclick="event.stopPropagation();GF.WWF.notifDone('${GF.esc(n.id)}')">${GF.icon('check', 'icon')}</button>
     </div>`;
 
   // Timeline dot colour by verb class (mockup .mw-feed): completions and
@@ -283,7 +283,11 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   };
 
   GF.WWF.openNotif = async (id, taskId) => {
-    try { await GF.API.notifRead(id); } catch (e) {}
+    // Mirror notifDone/notifReadAll: a failed write must abort BEFORE the
+    // optimistic local mutation below, not after — otherwise a network blip
+    // or expired session silently marks the notification read / decrements
+    // the badge client-side even though the server never recorded it.
+    try { await GF.API.notifRead(id); } catch (e) { return; }
     const st = GF.WWF._notif;
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) { n.read = true; st.unread = Math.max(0, st.unread - 1); }
