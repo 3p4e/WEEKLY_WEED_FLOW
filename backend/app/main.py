@@ -60,6 +60,41 @@ async def limit_body_size(request: Request, call_next):
         if declared > _MAX_REQUEST_BYTES:
             return Response('{"detail":"Request body too large"}', status_code=413,
                             media_type="application/json")
+
+    # Backstop for the case the Content-Length check above can't catch: a
+    # request sent with `Transfer-Encoding: chunked` carries no Content-Length
+    # at all, and nothing stops a client from declaring a small one and then
+    # sending more. Either way Starlette would otherwise buffer the whole body
+    # into memory before any per-endpoint cap ever runs — the exact
+    # unbounded-memory DoS this guard exists to close. So count the ACTUAL
+    # bytes as they arrive from the stream and abort the instant the running
+    # total exceeds the ceiling: at most _MAX_REQUEST_BYTES + 1 bytes are ever
+    # held, regardless of what Content-Length claimed or omitted.
+    #
+    # The accumulated body is cached onto `request._body` — exactly what
+    # `Request.body()` does — so this is transparent to every downstream
+    # reader (JSON/form/multipart parsing, and BaseHTTPMiddleware's own replay
+    # into call_next): the body is still read exactly once, just slightly
+    # earlier, and ordinary requests are unaffected.
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > _MAX_REQUEST_BYTES:
+            request_logger.warning(
+                "request_rejected",
+                extra={"fields": {
+                    "method": request.method,
+                    "path": request.url.path,
+                    "reason": "body_too_large_streamed",
+                    "bytes_read": total,
+                }},
+            )
+            return Response('{"detail":"Request body too large"}', status_code=413,
+                            media_type="application/json")
+        chunks.append(chunk)
+    request._body = b"".join(chunks)
+
     return await call_next(request)
 
 

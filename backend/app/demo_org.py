@@ -244,8 +244,33 @@ async def demo_mutex():
 async def wipe_demo_org(org_id: uuid.UUID) -> None:
     """Delete every demo-org row in both DBs EXCEPT audit_log (global hash
     chain) and the organizations row itself (stable identity). Callers must
-    hold demo_mutex() — the wipe itself stays transactional, but serialization
-    against a concurrent reset's SEED phase lives in the mutex."""
+    hold demo_mutex() — serialization against a concurrent reset's SEED phase
+    lives in the mutex, not in this function.
+
+    Atomicity here is PER-DATABASE, not cross-database: Postgres can't span
+    two separate databases in one transaction without two-phase-commit
+    machinery this app doesn't have. The tasks-DB wipe below is one
+    transaction; the users-DB delete is a single statement (atomic on its
+    own — profiles has nothing left to cascade once the tasks-DB wipe is
+    done). They commit as two separate steps, tasks DB first, deliberately:
+    if a crash/connection loss lands between the two commits, the worst case
+    is leftover users-DB profile rows (their department_id now naming a
+    tasks-DB departments row that's already gone — harmless, nothing reads
+    it outside an active session) with no tasks-DB data behind them at all
+    — never the reverse: a fully-populated tasks DB whose every user_id/
+    created_by/updated_by column across the whole org names a profile that
+    no longer exists. That ordering matters because it's the half-state an
+    in-flight demo session would actually notice: a profile vanishing
+    mid-session breaks auth for that visitor, while an inert, data-less
+    profile row does not. Either way the leftover is harmless and
+    self-heals: this DELETE is idempotent (WHERE org_id=$1 matches whatever
+    is left, including nothing, and doesn't care whether the rows it
+    targets still have valid cross-DB references), and reset_demo_org
+    always calls this wipe before it seeds — under the same demo_mutex()
+    serialization — so the next /demo/start cleans up any previous partial
+    wipe before writing a fresh cast. No cross-DB rollback or retry
+    machinery is added for this: the blast radius is the demo org only, and
+    it is self-correcting on the next reset."""
     t = tasks_admin_pool()
     async with t.acquire() as c:
         async with c.transaction():
@@ -278,14 +303,42 @@ async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
            "cur": _monday(today),
            "next": _monday(today) + timedelta(days=7)}
 
-    # Seed writes span both DBs and dozens of statements — a failure partway
-    # through (a bad row, a lost connection) must not leave a half-seeded demo
-    # org for the next visitor to land on. One transaction per DB, held on a
-    # single acquired connection each, so either the whole seed lands or none
-    # of it does (wipe_demo_org above already does the same for its deletes).
+    # Seed writes span both DBs and dozens of statements. Atomicity here is
+    # PER-DATABASE, not cross-database (Postgres can't span two separate
+    # databases in one transaction without two-phase-commit machinery this
+    # app doesn't have — see wipe_demo_org's docstring for the full argument).
+    # One transaction per DB, held on a single acquired connection each, so a
+    # failure partway through a GIVEN database's writes (a bad row, a lost
+    # connection) rolls that database back cleanly on its own — but the two
+    # transactions still commit as two separate steps, and a crash between
+    # them is possible.
+    #
+    # `t` (tasks DB) is entered before `u` (users DB) below, and because
+    # `async with A, B:` exits in reverse (LIFO) order, that makes `u` commit
+    # FIRST and `t` commit LAST. This is deliberate, not incidental.
+    #
+    # The cross-DB references actually run BOTH ways here — profiles.
+    # department_id (users DB) names a departments row seeded in the tasks
+    # DB, while dozens of tasks-DB columns (tasks.user_id, task_assignees,
+    # analyst_id, created_by/updated_by, …) name a profiles row seeded in
+    # the users DB — so no ordering makes a crash between the two commits
+    # fully harmless; one side or the other is left naming a row that isn't
+    # there yet. Committing u first minimizes the damage rather than
+    # eliminating it: the worst case becomes a handful of profile rows
+    # (one per person with a department) with a department_id that doesn't
+    # resolve yet, and NO tasks-DB data at all for the org — versus the
+    # reverse order's worst case, a fully seeded tasks DB (every table
+    # above) with user_id/created_by/updated_by columns naming profiles
+    # that were never persisted, across the whole cast. Either half-state is
+    # inert (no token is ever minted for a run that didn't finish, so nobody
+    # can act as one of these profiles) and harmless and self-heals: the
+    # next reset_demo_org call wipes (idempotently, org_id-scoped deletes
+    # don't care whether the rows they'd point at exist) before it seeds
+    # again, under the same demo_mutex() serialization that guards this
+    # call, so the next /demo/start cleans up before writing a fresh cast.
     upool, tpool = users_admin_pool(), tasks_admin_pool()
     async with upool.acquire() as u, tpool.acquire() as t:
-        async with u.transaction(), t.transaction():
+        async with t.transaction(), u.transaction():
             # departments
             dept_ids: dict[str, uuid.UUID] = {}
             for code, name, name_mk in _DEPARTMENTS:

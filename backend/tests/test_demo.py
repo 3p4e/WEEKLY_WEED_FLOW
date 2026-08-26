@@ -179,3 +179,84 @@ async def test_start_throttled_after_limit(client, demo_on):
         assert r.status_code == 200, r.text
     r = await client.post("/demo/start", json={"cast": "dune"})
     assert r.status_code == 429
+
+
+async def test_reset_commits_profiles_before_tasks_data(client, demo_on, monkeypatch):
+    """The seed in _reset_locked spans two databases with no true
+    cross-database transaction — Postgres can't do that without two-phase-
+    commit machinery this app doesn't have — so the two per-DB transactions
+    commit as two separate steps. The ORDER is a deliberate choice: profiles
+    (users DB) must commit before the tasks-DB rows that name them (tasks,
+    task_assignees, analyst_id, ...), so that a crash between the two commits
+    leaves at worst a blank-but-coherent org (profiles seeded, no task data
+    yet) — never a tasks-DB row naming a profile that was never persisted.
+
+    This proves that ordering directly, by transparently wrapping the two
+    admin pools demo_org.py uses and recording which database's seed
+    transaction actually COMMITS first — rather than asserting on source
+    text, which a refactor could satisfy without preserving the guarantee."""
+    from app import demo_org
+    from app.db import tasks_admin_pool as real_tasks_pool, users_admin_pool as real_users_pool
+
+    commit_order: list[str] = []
+
+    class _RecordingTx:
+        def __init__(self, real_tx, label):
+            self._real_tx, self._label = real_tx, label
+
+        async def __aenter__(self):
+            await self._real_tx.__aenter__()
+            return self
+
+        async def __aexit__(self, *exc):
+            result = await self._real_tx.__aexit__(*exc)
+            if exc[0] is None:          # only a successful commit counts
+                commit_order.append(self._label)
+            return result
+
+    class _RecordingConn:
+        def __init__(self, real_conn, label):
+            self._real_conn, self._label = real_conn, label
+
+        def transaction(self, *a, **kw):
+            return _RecordingTx(self._real_conn.transaction(*a, **kw), self._label)
+
+        def __getattr__(self, name):        # execute/fetchval/fetchrow/... pass through
+            return getattr(self._real_conn, name)
+
+    class _RecordingAcquireCtx:
+        def __init__(self, real_ctx, label):
+            self._real_ctx, self._label = real_ctx, label
+
+        async def __aenter__(self):
+            return _RecordingConn(await self._real_ctx.__aenter__(), self._label)
+
+        async def __aexit__(self, *exc):
+            return await self._real_ctx.__aexit__(*exc)
+
+    class _RecordingPool:
+        def __init__(self, real_pool, label):
+            self._real_pool, self._label = real_pool, label
+
+        def acquire(self, *a, **kw):
+            return _RecordingAcquireCtx(self._real_pool.acquire(*a, **kw), self._label)
+
+        def __getattr__(self, name):        # the pool's own .execute/.fetchrow/...
+            return getattr(self._real_pool, name)
+
+    # Patch the names demo_org.py itself calls (`tasks_admin_pool()` /
+    # `users_admin_pool()`), not app.db's — every other module keeps using
+    # the real, unwrapped pools.
+    monkeypatch.setattr(demo_org, "tasks_admin_pool",
+                         lambda: _RecordingPool(real_tasks_pool(), "tasks"))
+    monkeypatch.setattr(demo_org, "users_admin_pool",
+                         lambda: _RecordingPool(real_users_pool(), "users"))
+
+    await _start(client)
+
+    # wipe_demo_org (called first, inside the same reset) commits its own
+    # tasks-DB transaction ahead of the seed's two — the seed's pair is the
+    # last two entries, and they must read users-then-tasks, never reversed.
+    assert commit_order[-2:] == ["users", "tasks"], (
+        f"expected the users-DB (profiles) seed transaction to commit before "
+        f"the tasks-DB (dependent data) one; got {commit_order!r}")
