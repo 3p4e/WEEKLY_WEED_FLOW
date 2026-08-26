@@ -696,10 +696,25 @@
                   'Изберете соба или батч на кој е применето'), 'error');
       return;
     }
+    // Blank means "not stated" (null); anything else must parse as a whole
+    // number. A garbage/partial paste must NOT fall through to null — that is
+    // indistinguishable from a deliberately blank interval, and the PHI/REI is
+    // what blocks a cut or keeps someone out of a room.
+    let numInvalid = false;
     const num = (id) => {
       const raw = ((GF.$(id) || {}).value || '').trim();
-      return raw === '' ? null : parseInt(raw, 10);
+      if (raw === '') return null;
+      const parsed = parseInt(raw, 10);
+      if (!Number.isFinite(parsed)) { numInvalid = true; return null; }
+      return parsed;
     };
+    const rei_hours = num('hv-i-rei');
+    const phi_days = num('hv-i-phi');
+    if (numInvalid) {
+      GF.toast(AL('Re-entry interval and pre-harvest interval must be whole numbers — leave blank only if none applies',
+                  'Интервалот за повторен влез и интервалот пред жетва мора да бидат цели броеви — оставете празно само ако не важи никаков'), 'error');
+      return;
+    }
     try {
       await GF.API.ipmApply({
         product,
@@ -709,7 +724,7 @@
         room_id: room, batch_id: batch,
         dose: ((GF.$('hv-i-dose') || {}).value || '').trim() || null,
         target: ((GF.$('hv-i-target') || {}).value || '').trim() || null,
-        rei_hours: num('hv-i-rei'), phi_days: num('hv-i-phi'),
+        rei_hours, phi_days,
         note: ((GF.$('hv-i-note') || {}).value || '').trim() || null });
       GF.closeModal('hv-ipm-modal');
       GF.toast(AL('Application logged', 'Третманот е запишан'), 'success');

@@ -672,6 +672,44 @@ test('a blank interval is sent as null and a stated zero is sent as zero', () =>
   });
 });
 
+test('a garbage interval is refused before the request, not silently sent as null', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  return w.GF.WWF.ipmForm().then(async () => {
+    w.document.getElementById('hv-i-product').value = 'Predatory mites';
+    w.document.getElementById('hv-i-room').value = 'r1';
+    // A real <input type="number"> sanitizes an assigned non-numeric string
+    // back to "" (jsdom matches browser behaviour here), which would mask the
+    // very bug under test. Force the underlying value the way a bad-input
+    // browser quirk or a paste actually can, so the raw string that reaches
+    // ipmSave's num() is really the non-numeric garbage, not "".
+    const phi = w.document.getElementById('hv-i-phi');
+    phi.setAttribute('type', 'text');
+    phi.value = 'abc';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied, undefined,
+      'a garbage PHI must not reach the API as a silent null — that is indistinguishable from "not stated"');
+    assert.match(w.__toasts.at(-1)[0], /whole numbers/);
+    h.close();
+  });
+});
+
+test('a valid interval, including a legitimate 0, still submits (not mistaken for garbage)', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  return w.GF.WWF.ipmForm().then(async () => {
+    w.document.getElementById('hv-i-product').value = 'Predatory mites';
+    w.document.getElementById('hv-i-room').value = 'r1';
+    w.document.getElementById('hv-i-rei').value = '0';
+    w.document.getElementById('hv-i-phi').value = '3';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied.rei_hours, 0,
+      'a legitimate zero must still submit, not be mistaken for garbage');
+    assert.equal(w.__applied.phi_days, 3);
+    h.close();
+  });
+});
+
 // ── Feeding tab (irrigation, migration 0052) ─────────────────────────────────
 
 function renderFeed(h, feeds) {
