@@ -29,7 +29,7 @@
     return `
     <div class="md-task${t.status === 'done' ? ' is-done' : ''}">
       <button class="check ${t.status === 'done' ? 'done' : ''}"
-        onclick="event.stopPropagation();GF.toggleDone('${t.id}')">${t.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
+        onclick="event.stopPropagation();GF.toggleDone('${t.id}')">${t.status === 'done' ? GF.icon('check', 'icon', 'var(--text-on-primary)') : ''}</button>
       <div class="md-b" onclick="GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">
         <div class="md-t">${GF.esc(t.title)}</div>
         <div class="md-m">

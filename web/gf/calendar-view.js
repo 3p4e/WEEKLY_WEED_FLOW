@@ -125,7 +125,7 @@ window.GF = window.GF || {};
           `<div class="cal-up-empty">${AL('Nothing upcoming', 'Нема претстојни задачи')}</div>`}</div>
       </div>`;
 
-    return `${GF.viewHead('calendar', 'calendar')}
+    return `${GF.viewHead('calendar', 'calendar_sub')}
       <div class="cal-bar">
         <button class="btn btn-sm" onclick="GF.calNav(-1)">${GF.icon('chevL', 'icon')}</button>
         <div class="cal-title">${MONTHS[GF.state.lang][m] || MONTHS.en[m]} ${y}</div>

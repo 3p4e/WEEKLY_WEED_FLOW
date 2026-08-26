@@ -64,7 +64,7 @@ GF.WWF.loadReport = async () => {
   } catch (e) {
     if (my !== st.lseq) return;                   // a newer load owns the view
     const v = GF.$('report-view');
-    if (v) v.innerHTML = `<div style="padding:40px;text-align:center;color:#E5484D">${AL('Failed to load report', 'Не може да се вчита извештај')}: ${GF.esc(e.message)}</div>`;
+    if (v) v.innerHTML = `<div style="padding:40px;text-align:center;color:var(--red)">${AL('Failed to load report', 'Не може да се вчита извештај')}: ${GF.esc(e.message)}</div>`;
   } finally {
     if (my === st.lseq) st.loading = false;
   }
@@ -201,15 +201,15 @@ GF.WWF._renderTimeBand = (band) => {
     const total = day.hours.reduce((a, b) => a + b, 0);
 
     html += `<div style="flex:1;min-width:58px;text-align:center">
-      <div style="font-size:11px;font-weight:600;color:${isWe ? '#E5484D' : 'var(--ink-2)'};margin-bottom:6px;line-height:1.3">${lbl}</div>
+      <div style="font-size:11px;font-weight:600;color:${isWe ? 'var(--red)' : 'var(--ink-2)'};margin-bottom:6px;line-height:1.3">${lbl}</div>
       <div style="display:flex;flex-direction:column;gap:1px;background:var(--surface-3);border-radius:4px;padding:2px;overflow:hidden">`;
 
     for (let h = 0; h < 24; h++) {
       const count = day.hours[h];
       let color;
-      if (isWe) color = '#E5484D';
-      else if (h >= 8 && h < 17) color = '#2BE8A0';
-      else color = '#E0A73E';
+      if (isWe) color = 'var(--red)';
+      else if (h >= 8 && h < 17) color = 'var(--primary)';
+      else color = 'var(--orange)';
       const opacity = count > 0 ? Math.min(0.3 + (count / maxCount) * 0.7, 1) : 0.05;
       const tip = day.day_name + ' ' + String(h).padStart(2, '0') + ':00 — ' + count + ' event' + (count !== 1 ? 's' : '');
       html += `<div title="${GF.esc(tip)}" style="height:3px;background:${color};opacity:${opacity.toFixed(2)};border-radius:1px"></div>`;
@@ -222,9 +222,9 @@ GF.WWF._renderTimeBand = (band) => {
 
   html += '</div>';
   html += `<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--ink-3)">
-    <span><span style="display:inline-block;width:10px;height:10px;background:#2BE8A0;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#E0A73E;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#E5484D;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Weekend', 'Викенд')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--orange);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--red);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Weekend', 'Викенд')}</span>
   </div></div>`;
   return html;
 };
@@ -244,8 +244,8 @@ GF.WWF._reportMarkup = () => {
       </h2>
       <div style="flex:1"></div>
       <div style="display:flex;gap:4px">
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Report', 'Извештај')}</button>
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Plan', 'План')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:var(--text-on-primary)' : ''}">${AL('Report', 'Извештај')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:var(--text-on-primary)' : ''}">${AL('Plan', 'План')}</button>
       </div>
       <div style="display:flex;gap:4px;align-items:center">
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
@@ -267,10 +267,10 @@ GF.WWF._reportMarkup = () => {
       ${GF.WWF._sc(AL('Total', 'Вкупно'), s.total, 'var(--blue)')}
       ${GF.WWF._sc(AL('Completed', 'Завршени'), s.completed, 'var(--primary)')}
       ${GF.WWF._sc(AL('In Progress', 'Во тек'), s.in_progress, 'var(--orange)')}
-      ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, '#E5484D')}
-      ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, '#5A6B82')}
-      ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, '#7A5BE0') : ''}
-      ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, '#F6A609') : ''}
+      ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, 'var(--red)')}
+      ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, 'var(--ink-3)')}
+      ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, 'var(--violet)') : ''}
+      ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, 'var(--amber)') : ''}
     </div>`;
 
   const band = isR ? GF.WWF._renderTimeBand(d.time_band) : '';
@@ -288,13 +288,13 @@ GF.WWF._reportMarkup = () => {
     // extra day to every count (same idiom as GF.WWF.shiftReportWeek above).
     const today = new Date(GF.todayISO() + 'T00:00:00');
     overdueList = `<div style="margin:18px 0" id="report-overdue">
-      <div style="font-weight:700;font-size:14px;color:#E5484D;margin-bottom:8px">${GF.icon('flag', 'icon', '#E5484D')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
+      <div style="font-weight:700;font-size:14px;color:var(--red);margin-bottom:8px">${GF.icon('flag', 'icon', 'var(--red)')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {
         const daysLate = Math.max(1, Math.round((today - new Date(t.due_date + 'T00:00:00')) / 86400000));
-        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid var(--red);border-radius:9px;margin-bottom:5px">
           <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>
-          <span style="font-size:11px;font-weight:800;color:#E5484D;white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
+          <span style="font-size:11px;font-weight:800;color:var(--red);white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -328,19 +328,33 @@ GF.WWF._reportMarkup = () => {
     </div>`;
   }
 
-  const SC = { completed: '#2BE8A0', done: '#2BE8A0', ongoing: '#E0A73E', in_progress: '#E0A73E',
-               stuck: '#E5484D', pending: '#5A6B82', review: '#7A5BE0', postponed: '#F6A609' };
+  // Theme-aware tokens, not hardcoded hex — this map still covers BOTH the raw
+  // backend vocabulary (completed/ongoing) and the frontend one (done/in_progress)
+  // defensively, same as before. A parallel *_BG map supplies the soft chip
+  // background (var(--x-soft) tokens), since CSS custom properties can't take
+  // the old `${col}1A` hex-alpha-suffix trick that only works on hex literals.
+  const SC = { completed: 'var(--primary)', done: 'var(--primary)', ongoing: 'var(--orange)', in_progress: 'var(--orange)',
+               stuck: 'var(--red)', pending: 'var(--ink-3)', review: 'var(--violet)', postponed: 'var(--amber)' };
+  const SC_BG = { completed: 'var(--primary-soft)', done: 'var(--primary-soft)', ongoing: 'var(--orange-soft)', in_progress: 'var(--orange-soft)',
+                  stuck: 'var(--red-soft)', pending: 'var(--surface-3)', review: 'var(--violet-soft)', postponed: 'var(--amber-soft)' };
   let taskList;
   if (d.tasks.length) {
     taskList = `<div style="margin:18px 0">
       <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Tasks', 'Задачи')} (${d.tasks.length})</div>
       ${d.tasks.map(t => {
-        const col = SC[t.status] || '#5A6B82';
+        const col = SC[t.status] || 'var(--ink-3)';
+        const bg = SC_BG[t.status] || 'var(--surface-3)';
+        // d.tasks[].status is the RAW backend status ('ongoing'/'completed'/…),
+        // not the frontend-normalized vocabulary GF.STATUS/GF.statusLabel knows
+        // about — this endpoint doesn't go through the /tasks S_IN map. Same
+        // raw-status shape, same normalization xrTasks() in execreport-view.js
+        // already applies before calling GF.statusLabel.
+        const normStatus = (t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending';
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;margin-bottom:5px">
           <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span>
           <span style="flex:1;font-size:13px;font-weight:500;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${GF.esc(t.department || '')}</span>
-          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${col}1A;border-radius:6px">${GF.esc(GF.statusLabel ? GF.statusLabel(t.status) : t.status)}</span>
+          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${bg};border-radius:6px">${GF.esc(GF.statusLabel ? GF.statusLabel(normStatus) : normStatus)}</span>
         </div>`;
       }).join('')}
     </div>`;

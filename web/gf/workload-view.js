@@ -49,8 +49,11 @@ window.GF = window.GF || {};
       const people = [t.owner].concat(t.helpers || []).filter(Boolean);
       people.forEach(p => { (per[p] = per[p] || { pts: 0, tasks: [] }); per[p].pts += load(t) / people.length; per[p].tasks.push(t); });
     });
-    // every known person renders, even with zero load — they're drop targets
-    Object.keys(GF.PEOPLE).forEach(p => { per[p] = per[p] || { pts: 0, tasks: [] }; });
+    // every ACTIVE person renders, even with zero load — they're drop targets.
+    // Deactivated/removed accounts are excluded, matching views.js's team()
+    // and dash()'s crewN computation (same .filter(id => !GF.PEOPLE[id].inactive)).
+    Object.keys(GF.PEOPLE).filter(id => !GF.PEOPLE[id].inactive)
+      .forEach(p => { per[p] = per[p] || { pts: 0, tasks: [] }; });
 
     // KPI band (Mass Weed mockup workload.html): crew-wide load at a glance.
     // rawPct is UNCAPPED here (a person can be >100% of the soft capacity),
@@ -91,10 +94,10 @@ window.GF = window.GF || {};
         </div>`;
       }).join('');
 
-    return `${GF.viewHead('workload', 'workload')}
+    return `${GF.viewHead('workload', 'workload_sub')}
       ${band}
       <div class="wl-hint">${AL('Drag a task onto a person to add them as a helper. Weights: critical 3 · high 2 · medium 1.5 · low 1.',
-                                'Повлечете задача врз личност за да ја додадете како помошник. Тежини: критично 3 · високо 2 · средно 1.5 · ниско 1 (проценетите часови имаат предност).')}</div>
+                                'Повлечете задача врз личност за да ја додадете како помошник. Тежини: критично 3 · високо 2 · средно 1.5 · ниско 1.')}</div>
       <div class="wl-list">${rows}</div>`;
   };
 })();
