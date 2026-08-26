@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict k2nredfdEznipD9ipEFAWPuHKPY9zgF1awdw93aW2Nt49lZ0gfVQY4eidBuMBTZ
+\restrict 1vCy6MtT539qAMqrBwmNTXT8y7TbCuLPsAo7tLzR3EHiorVWmhJ509jw5TRynsb
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -5219,13 +5219,6 @@ CREATE POLICY org_isolation ON public.qc_sampling_requests USING ((org_id = app.
 
 
 --
--- Name: qc_signatures org_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY org_isolation ON public.qc_signatures USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
-
-
---
 -- Name: qc_spec_parameters org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5324,10 +5317,24 @@ CREATE POLICY org_isolation_insert ON public.qc_chain_of_custody FOR INSERT WITH
 
 
 --
+-- Name: qc_signatures org_isolation_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_insert ON public.qc_signatures FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_chain_of_custody org_isolation_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY org_isolation_select ON public.qc_chain_of_custody FOR SELECT USING ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_signatures org_isolation_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_select ON public.qc_signatures FOR SELECT USING ((org_id = app.current_org_id()));
 
 
 --
@@ -5657,5 +5664,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict k2nredfdEznipD9ipEFAWPuHKPY9zgF1awdw93aW2Nt49lZ0gfVQY4eidBuMBTZ
+\unrestrict 1vCy6MtT539qAMqrBwmNTXT8y7TbCuLPsAo7tLzR3EHiorVWmhJ509jw5TRynsb
 
