@@ -688,3 +688,38 @@ test('a blank measurement is sent as null, not zero, and Pass needs no action', 
   assert.equal(w.__bio.action_taken, null);
   h.close();
 });
+
+test('a garbage reading is refused before the request, not silently sent as null', async () => {
+  const h = loadBioForms('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.bioForm();
+  w.document.getElementById('dc-bio-subject').value = 'AHU-3';
+  w.document.getElementById('dc-bio-result').value = 'pass';
+  // A real <input type="number"> sanitizes an assigned non-numeric string back
+  // to "" (jsdom matches browser behaviour here), which would mask the very bug
+  // under test. Force the underlying value the way a bad-input browser quirk or
+  // a paste actually can, so the raw string that reaches bioSave's parseFloat
+  // is really the non-numeric garbage, not "" — same technique as
+  // harvest-view.test.js's ipmSave garbage-interval test.
+  const val = w.document.getElementById('dc-bio-value');
+  val.setAttribute('type', 'text');
+  val.value = 'abc';
+  await w.GF.WWF.bioSave();
+  assert.equal(w.__bio, undefined,
+    'a garbage reading must not reach the API as a silent null — that is indistinguishable from "not read"');
+  assert.match(w.__toasts.at(-1)[0], /number/i);
+  h.close();
+});
+
+test('a legitimate zero reading still submits as zero, not mistaken for garbage or blank', async () => {
+  const h = loadBioForms('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.bioForm();
+  w.document.getElementById('dc-bio-subject').value = 'AHU-3';
+  w.document.getElementById('dc-bio-result').value = 'pass';
+  w.document.getElementById('dc-bio-value').value = '0';
+  await w.GF.WWF.bioSave();
+  assert.equal(w.__bio.measure_value, 0,
+    'a declared zero reading must survive as zero, not become null');
+  h.close();
+});

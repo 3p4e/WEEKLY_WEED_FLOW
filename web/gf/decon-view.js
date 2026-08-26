@@ -440,13 +440,23 @@
                   'Наведете каква мерка е преземена за неуспешен резултат'), 'error');
       return;
     }
+    // Blank means "not read" (null) — a legitimate 0 reading must still pass
+    // through. A garbage/partial paste must NOT fall through to null: that is
+    // indistinguishable from a deliberately blank reading, so reject it before
+    // submit rather than write a NaN into the record.
     const numRaw = ((GF.$('dc-bio-value') || {}).value || '').trim();
+    const measureValue = numRaw === '' ? null : parseFloat(numRaw);
+    if (numRaw !== '' && !Number.isFinite(measureValue)) {
+      GF.toast(AL('Reading must be a number — leave it blank if none was taken',
+                  'Мерењето мора да е број — оставете празно ако не е земено'), 'error');
+      return;
+    }
     try {
       await GF.API.biosecurityLog({
         kind: (GF.$('dc-bio-kind') || {}).value,
         room_id: ((GF.$('dc-bio-room') || {}).value || '') || null,
         subject: ((GF.$('dc-bio-subject') || {}).value || '').trim() || null,
-        measure_value: numRaw === '' ? null : parseFloat(numRaw),
+        measure_value: measureValue,
         measure_unit: ((GF.$('dc-bio-unit') || {}).value || '').trim() || null,
         result: result || null,
         action_taken: action || null,
