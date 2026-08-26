@@ -26,6 +26,29 @@ _MENTION_RE = re.compile(r"(?<![\w@])@([a-z0-9][a-z0-9_.\-]{1,63})", re.IGNORECA
 
 router = APIRouter(tags=["collab"])
 
+# LOW (reviewed, Wave 3 item 2) — accepted-for-now, not overlooked: none of
+# this module's write endpoints (add_comment, assign/unassign, acknowledge,
+# propose_handoff/resolve_handoff) carry a per-actor rate limit. A malicious
+# or malfunctioning authenticated client could still hammer any of them —
+# spamming comments, thrashing assignments, flooding handoff proposals — no
+# faster than auth.py's own mutation endpoints are throttled, but with no
+# throttle of its own here.
+#
+# This is a real gap, but implementing a limiter is deliberately OUT of
+# scope for this LOW-severity pass — it is genuine design work (choosing
+# per-actor vs. per-task keys, windows, and whether a shared in-process
+# limiter like auth.py's `_throttle_action` is even the right shape for
+# comment-volume abuse specifically), not a small fix. It may be acceptable
+# as-is under this app's threat model: every caller here is an authenticated,
+# already-provisioned member of a single facility's staff (no self-signup —
+# see auth.py's module docstring), so the realistic abuse case is an
+# already-trusted account being careless or compromised, not an anonymous
+# attacker. Whether that trust model is sufficient, or this surface needs
+# the same throttle treatment auth.py's mutations got, is a security-policy
+# decision for a human to make deliberately — not something to bolt on here
+# as an incidental side effect of a LOW-severity documentation pass.
+# Revisit if/when that policy decision is made.
+
 # Roles allowed to (un)assign others, in addition to a task's own owner —
 # app.roles.ELEVATED_ROLES is the single source of truth (mirrors the DB's
 # app.is_elevated()).

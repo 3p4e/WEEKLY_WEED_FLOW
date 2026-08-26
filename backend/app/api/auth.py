@@ -28,6 +28,24 @@ _OTP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
 
 
 def generate_otp() -> str:
+    # LOW (reviewed, Wave 3 item 1) — accepted design, not a bug: this OTP
+    # carries no TTL/expiry. It stays valid until the recipient's first login
+    # (create_user) or next-forced login (reset_password) changes it, at
+    # which point change_password's "new password must differ from the OTP"
+    # check (see there) forces it out of use for good — there is no window
+    # where BOTH the OTP and a real password are simultaneously valid long-
+    # term. The OTP is never transmitted over this app's own channels: it is
+    # shown once on the creating admin/manager's screen and handed to the
+    # recipient out-of-band (in person, a call, etc — see create_user's
+    # docstring, "email delivery is best-effort, added later"), so there is
+    # no email/SMS log or transit hop for a TTL to defend against; the
+    # exposure this credential actually has is bounded by how the org
+    # chooses to deliver it, not by anything this function could enforce.
+    # Adding a TTL would only turn a legitimately slow first login (a new
+    # hire's IT onboarding, a manager resetting an account while the
+    # recipient is away) into a support ticket, for no real security gain
+    # over the existing single-use-in-practice + forced-rotation behavior.
+    # Do not "fix" this into an expiring code without a real threat driving it.
     g = lambda: "".join(secrets.choice(_OTP_ALPHABET) for _ in range(4))
     return f"{g()}-{g()}-{g()}"
 

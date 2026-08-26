@@ -4,6 +4,8 @@ forward-only status merges, session/link/subtask dedup, owner gating, and
 per-task skip (one bad task never aborts the batch)."""
 import os
 
+import asyncpg
+
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -288,7 +290,13 @@ async def test_import_update_reauthorizes_against_real_row_not_payload_owner(cli
     body = r.json()
     assert body["created"] == 0 and body["updated"] == 0, body
     assert len(body["skipped"]) == 1, body
-    assert "not allowed" in body["skipped"][0]["reason"], body
+    # LOW existence-oracle fix: the reason is deliberately the SAME generic
+    # phrasing _assert_scope_visible itself uses for a genuinely-missing task
+    # (see test_import_out_of_scope_skip_matches_generic_not_found_wording
+    # below) — it must not say anything ("outside your department scope",
+    # etc.) that would confirm a real task sits behind this external_ref in
+    # a department the attacker cannot see.
+    assert body["skipped"][0]["reason"] == "task not found or not permitted", body
 
     # The row's real fields are untouched.
     tasks = (await client.get("/tasks?include_archived=true", headers=admin_headers)).json()
@@ -298,6 +306,62 @@ async def test_import_update_reauthorizes_against_real_row_not_payload_owner(cli
     assert victim["priority"] == "medium"
     assert victim["department"] == "qc"
     assert victim.get("blocker_reason") is None
+
+
+async def test_import_out_of_scope_skip_matches_generic_not_found_wording(client, admin_headers, org):
+    """LOW existence-oracle (Wave 3, item 3): a dept-scoped manager who
+    matches an existing task in ANOTHER department purely by guessing its
+    external_ref used to get back "not allowed to update this task (outside
+    your department scope)" — wording that itself confirms a real task sits
+    behind that ref, just somewhere the manager can't see. The skip reason
+    must now be the same generic, ambiguous phrasing _assert_scope_visible
+    uses everywhere else (its own 404 "Task not found or not permitted"),
+    so the response looks identical whether the ref matches a real
+    out-of-scope task or nothing was ever recognisable about it at all."""
+    qc, pr = await _two_departments(org)
+    attacker, otp = await create_user(client, admin_headers, role="CU_MGR",
+                                      full_name="Cultivation Manager", department_id=pr)
+    attacker_token = await login_and_set_password(client, attacker["username"], otp)
+    attacker_headers = {"Authorization": f"Bearer {attacker_token}"}
+
+    r = await client.post("/capture/import", json=_payload(
+        ref="hidden-elsewhere", department="qc"), headers=admin_headers)
+    assert r.json()["created"] == 1, r.text
+
+    r = await client.post("/capture/import", json=_payload(
+        ref="hidden-elsewhere", owner=attacker["username"], department="pr"),
+        headers=attacker_headers)
+    body = r.json()
+    assert body["created"] == 0 and body["updated"] == 0, body
+    reason = body["skipped"][0]["reason"]
+    assert reason == "task not found or not permitted", body
+    # None of the old wording — which would confirm a real, hidden task —
+    # may leak back out.
+    for leaky in ("outside your department scope", "not allowed", "department"):
+        assert leaky not in reason, body
+
+
+async def test_import_generic_error_does_not_leak_exception_type(client, admin_headers, org, monkeypatch):
+    """LOW existence-oracle (Wave 3, item 3): the outer catch-all used to echo
+    the raw DB exception class name (e.g. "db error: UniqueViolationError",
+    seen on the tasks_org_external_ref_key race below) straight back to the
+    caller — enough, combined with a probed external_ref, to confirm a
+    conflicting row exists elsewhere. Any unexpected DB-layer failure must
+    report the same generic reason no matter what actually went wrong
+    server-side (which is now logged instead, not returned)."""
+    import app.api.capture as capture_mod
+
+    async def _boom(*a, **kw):
+        raise asyncpg.exceptions.UniqueViolationError("synthetic conflict")
+
+    monkeypatch.setattr(capture_mod, "ensure_week", _boom)
+    r = await client.post("/capture/import", json=_payload(ref="boom-1"), headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 0 and body["skipped"], body
+    reason = body["skipped"][0]["reason"]
+    assert reason == "import failed for this task", body
+    assert "UniqueViolationError" not in reason and "db error" not in reason
 
 
 async def test_import_unscoped_user_unaffected_by_scope_guard(client, admin_headers, org):

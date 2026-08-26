@@ -1569,7 +1569,24 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
     posted back (there is no stored row to read) and rendered through the same
     _pdf_html — every field is HTML-escaped there, so client-supplied content
     cannot inject markup or a server-side fetch. Always a DRAFT (a preview is
-    never a locked submitted record)."""
+    never a locked submitted record).
+
+    LOW (reviewed, Wave 3 item 6) — accepted as-is, not overlooked: `content`
+    here is entirely client-authored JSON (this range was never compiled or
+    persisted server-side — see the docstring above), rendered with no
+    cross-check against what the document's own compile/preview pipeline
+    (_compile_content et al.) would have produced for the same period. That
+    is intentional, not a data-integrity gap: this route is a rendering
+    convenience for a caller who already has (and, being ELEVATED-role-gated,
+    is trusted with) that exact content in front of them in the UI — it is
+    not a boundary between two different levels of trust, and it writes
+    nothing to the database (no persisted row, no downstream reader, no
+    audit-trail entry). Any mismatch between what was posted and what the
+    real compiled data would say is visible to, and self-correcting by, the
+    same person who is about to download the PDF — the same person who
+    supplied the content in the first place. Do not add a server-side
+    recompute-and-compare here without a concrete case where that mismatch
+    actually misleads someone other than the requester."""
     if body.kind not in ("report", "plan"):
         raise HTTPException(422, "kind must be 'report' or 'plan'")
     content = body.content or {}

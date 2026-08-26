@@ -15,6 +15,7 @@ Two ways in:
     (qcm.blani). The token is valid ONLY on this route.
 """
 import hmac
+import logging
 import os
 from datetime import date, datetime
 
@@ -29,6 +30,7 @@ from app.deps import dept_scope, require_password_set
 from app.worktime import TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])
+_log = logging.getLogger("app.capture")
 
 _STATUSES = {"pending", "ongoing", "review", "stuck", "postponed", "completed"}
 _TYPES = {"capa", "sop", "validation", "document", "lab", "meeting", "admin", "other"}
@@ -107,6 +109,21 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     honored on this route) acting as the configured capture user."""
     token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
     username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
+    # LOW (reviewed, Wave 3 item 4) — accepted as an operational concern, not
+    # a code bug: this single static token grants full import authority as
+    # whatever role CAPTURE_IMPORT_USER holds (an ADMIN-equivalent account in
+    # practice, e.g. qcm.blani) with no rotation happening anywhere in THIS
+    # code. That is deliberate — rotation of a deployment secret is the
+    # deployment's job, not the application's: this route only ever compares
+    # whatever value CAPTURE_IMPORT_TOKEN currently holds (env var, likely
+    # backed by the platform's secret manager — see docs/DEPLOY.md), so
+    # rotating it is a matter of issuing a new value there and restarting/
+    # redeploying, with no schema or code change required on this end. The
+    # code cannot enforce an operational policy (how often, by whom, on what
+    # trigger) it has no visibility into — that responsibility belongs with
+    # whoever owns the deployment's secret-management process. Do not read
+    # the absence of in-code rotation logic here as an oversight.
+    #
     # Constant-time compare so the static token can't be recovered byte-by-byte
     # via response-timing (same reason security.py always pays the bcrypt cost).
     if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
@@ -267,12 +284,22 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                     # assignees using the SAME rule every other task mutation
                     # enforces (tasks.py:_assert_scope_visible) rather than a
                     # re-derived (and possibly looser) copy of it.
+                    # LOW (existence-oracle, reviewed): the skip reason here must
+                    # NOT distinguish "this external_ref matches a real task you
+                    # can't see" from "this external_ref matches nothing at all"
+                    # — a dept-scoped actor probing external_refs could otherwise
+                    # use the wording to learn that a task exists in a department
+                    # invisible to them. _assert_scope_visible's own 404 is
+                    # already deliberately ambiguous for exactly this reason (see
+                    # its docstring: "Raises 404 rather than 403 to avoid
+                    # confirming a foreign task's existence"); mirror that same
+                    # generic phrasing here instead of composing a more specific
+                    # ("outside your department scope") message.
                     try:
                         await _assert_scope_visible(c, str(row["id"]), actor)
                     except HTTPException:
                         skipped.append({"external_ref": t.external_ref,
-                                         "reason": "not allowed to update this task"
-                                                   " (outside your department scope)"})
+                                         "reason": "task not found or not permitted"})
                         continue
                     # Forward-only merge: never regress status; fill blanks;
                     # union tags. Title/description follow the capture (it is
@@ -341,7 +368,17 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                         dept_code, dept_id, week_id, t.week_start, actor["id"])
                     have_titles.add(st.title)
         except Exception as e:
-            skipped.append({"external_ref": t.external_ref, "reason": f"db error: {type(e).__name__}"})
+            # LOW (existence-oracle, reviewed): echoing the raw exception class
+            # name (e.g. "UniqueViolationError" from the tasks_org_external_ref_key
+            # race below) back to the caller is the same class of leak as the
+            # _assert_scope_visible catch above — it can confirm a conflicting
+            # row exists for this external_ref even when the caller never
+            # otherwise learns why. Log the real exception server-side (where an
+            # operator can act on it) and return one generic reason to the
+            # client regardless of which DB error actually occurred.
+            _log.warning("capture import: unhandled error for external_ref=%r (org=%s): %s: %s",
+                         t.external_ref, actor["org_id"], type(e).__name__, e, exc_info=True)
+            skipped.append({"external_ref": t.external_ref, "reason": "import failed for this task"})
 
     return {"ok": True, "created": created, "updated": updated,
             "sessions_added": sessions_added, "skipped": skipped,
