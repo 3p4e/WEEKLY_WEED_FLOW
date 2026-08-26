@@ -251,6 +251,55 @@ async def test_import_batch_continues_past_out_of_scope_task(client, admin_heade
     assert [s["external_ref"] for s in body["skipped"]] == ["out-of-scope"]
 
 
+async def test_import_update_reauthorizes_against_real_row_not_payload_owner(client, admin_headers, org):
+    """IDOR regression — the update-merge branch used to trust the PAYLOAD's
+    declared `owner` field and never re-checked the actor against the
+    EXISTING row's real user_id/department_id. A dept-scoped manager who
+    knew (or could guess) a target task's external_ref could claim
+    ownership of it in the payload — passing the naive owner check
+    trivially — and silently rewrite a task that belonged to a different
+    department and a different real owner.
+
+    The victim task is created by ADMIN (real owner = admin, real
+    department = qc). The attacker is a CU_MGR scoped to a DIFFERENT
+    department (pr) who is neither the row's owner nor an assignee. Their
+    import declares owner=themselves (so the old owner check passed) and
+    department=their own scope (so the old payload-department check also
+    passed) — only a re-check against the row's REAL data can catch this."""
+    qc, pr = await _two_departments(org)
+    attacker, otp = await create_user(client, admin_headers, role="CU_MGR",
+                                      full_name="Cultivation Manager", department_id=pr)
+    attacker_token = await login_and_set_password(client, attacker["username"], otp)
+    attacker_headers = {"Authorization": f"Bearer {attacker_token}"}
+
+    # Victim task: real owner = admin, real department = qc.
+    r = await client.post("/capture/import", json=_payload(
+        ref="victim-1", department="qc", title="Original Title", status="ongoing",
+        priority="medium"), headers=admin_headers)
+    assert r.json()["created"] == 1, r.text
+
+    # Attack: same external_ref, payload claims the attacker as owner and
+    # the attacker's OWN department — both checks that existed before this
+    # fix would have let this through.
+    r = await client.post("/capture/import", json=_payload(
+        ref="victim-1", owner=attacker["username"], department="pr",
+        title="HACKED TITLE", status="stuck", priority="critical",
+        blocker_reason="pwned"), headers=attacker_headers)
+    body = r.json()
+    assert body["created"] == 0 and body["updated"] == 0, body
+    assert len(body["skipped"]) == 1, body
+    assert "not allowed" in body["skipped"][0]["reason"], body
+
+    # The row's real fields are untouched.
+    tasks = (await client.get("/tasks?include_archived=true", headers=admin_headers)).json()
+    victim = next(t for t in tasks if t.get("external_ref") == "victim-1")
+    assert victim["title"] == "Original Title"
+    assert victim["status"] == "ongoing"
+    assert victim["priority"] == "medium"
+    assert victim["department"] == "qc"
+    assert victim.get("blocker_reason") is None
+
+
 async def test_import_unscoped_user_unaffected_by_scope_guard(client, admin_headers, org):
     """H2 hazard check — dept_scope() is None for a plain USER (and for any
     manager with no department assigned), so the guard must not touch them."""

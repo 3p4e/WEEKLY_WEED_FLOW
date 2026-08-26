@@ -22,6 +22,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.tasks import _assert_scope_visible
 from app.api.weekwindow import ensure_week
 from app.db import rls, rls_users, users_admin_pool
 from app.deps import dept_scope, require_password_set
@@ -253,6 +254,26 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                 if is_new:
                     created += 1
                 else:
+                    # Re-authorize against the REAL existing row before merging
+                    # into it. The owner-scoping check above (matching payload
+                    # owner vs actor) only looked at the PAYLOAD's declared
+                    # `owner` field — but external_ref is exactly the kind of
+                    # identifier a dept-scoped (or DB-elevated) actor could
+                    # know or guess, so trusting a self-declared owner would
+                    # let them silently edit ANY task — any real owner, any
+                    # department — just by matching its external_ref and
+                    # claiming ownership of it in the payload. Re-check the
+                    # actor against the row's actual department_id/user_id/
+                    # assignees using the SAME rule every other task mutation
+                    # enforces (tasks.py:_assert_scope_visible) rather than a
+                    # re-derived (and possibly looser) copy of it.
+                    try:
+                        await _assert_scope_visible(c, str(row["id"]), actor)
+                    except HTTPException:
+                        skipped.append({"external_ref": t.external_ref,
+                                         "reason": "not allowed to update this task"
+                                                   " (outside your department scope)"})
+                        continue
                     # Forward-only merge: never regress status; fill blanks;
                     # union tags. Title/description follow the capture (it is
                     # the newer statement of the work).
