@@ -4148,3 +4148,64 @@ async def test_coa_original_cyrillic_filename_downloads(client, admin_headers):
     dl = await client.get(f"/qc/document-files/{f['id']}/download", headers=admin_headers)
     assert dl.status_code == 200 and dl.content == blob
     assert "filename*=UTF-8''" in dl.headers["content-disposition"]
+
+
+# ── Wave 3 LOW-severity regression tests ────────────────────────────────────
+
+def test_hoqc_and_qc_registrar_are_the_same_role_set():
+    """common.py's Head-of-QC role tuple must not exist as two independently-
+    literal copies (_HOQC used by certificates/commercial/coq_aggregation/ecoa/
+    potency/specs, _QC_REGISTRAR used by custody.py's sampling-request
+    registrar gate) — a future role-model edit to one could then silently
+    diverge from the other. _QC_REGISTRAR must be a true alias."""
+    from app.api.qc.common import _HOQC, _QC_REGISTRAR
+    assert _QC_REGISTRAR is _HOQC
+    assert _QC_REGISTRAR == (_HOQC[0], "QC_MGR", "QP")
+
+
+async def test_sample_create_rejects_blank_batch_id(client, admin_headers):
+    """qc_samples.batch_id is NOT NULL and every downstream release-time gate
+    (update_sample's `if cur["batch_id"]:` OOS check) treats a blank string as
+    falsy exactly like None — so an empty/whitespace batch_id must never reach
+    the DB as "valid" in the first place, or it silently bypasses that gate
+    the same way a genuinely batch-less sample would."""
+    for bad in ("", "   ", "\t\n"):
+        r = await client.post("/qc/samples",
+                              json={"batch_id": bad, "material_code": "CANN-FLOS-D"},
+                              headers=admin_headers)
+        assert r.status_code == 422, (bad, r.text)
+        assert "batch_id" in r.text
+    # a real, whitespace-padded batch_id is accepted but stored trimmed — so
+    # exact-match downstream queries (the OOS gate, CoQ compile, certs) keyed
+    # on the canonical batch code still find it
+    s = await _sample(client, admin_headers, batch="  B-TRIM-1  ")
+    assert s["batch_id"] == "B-TRIM-1"
+
+
+async def test_concurrent_potency_import_creates_cultivar_once(client, admin_headers):
+    """potency_import.py's cultivar auto-create resolves a never-before-seen
+    strain code via INSERT ... ON CONFLICT (org_id, code) DO NOTHING + a
+    re-fetch on the losing side (cultivars carries UNIQUE(org_id, code) —
+    schema.tasks.sql). Two imports racing on the same brand-new strain must
+    both succeed (no unhandled UniqueViolationError / 500) and must not leave
+    two cultivar rows behind. Each request uses its own `version` so this
+    isolates the cultivar race from qc_potency_specs' own idempotency check —
+    same family, same strains, same cultivars, no version collision."""
+    import asyncio
+    r1, r2 = await asyncio.gather(
+        client.post("/qc/potency-specs/import",
+                    json={"family": "NEWs", "version": "TEST-RACE-A"},
+                    headers=admin_headers),
+        client.post("/qc/potency-specs/import",
+                    json={"family": "NEWs", "version": "TEST-RACE-B"},
+                    headers=admin_headers),
+    )
+    assert r1.status_code == 200, r1.text
+    assert r2.status_code == 200, r2.text
+    b1, b2 = r1.json(), r2.json()
+    assert b1["conflicts"] == [] and b2["conflicts"] == []
+    # neither request silently lost a strain to the other's race
+    assert len(b1["created"]) == len(b2["created"]) > 0
+    cults = (await client.get("/cultivation/cultivars", headers=admin_headers)).json()["cultivars"]
+    codes = [c["code"] for c in cults]
+    assert len(codes) == len(set(codes)), "concurrent import created a duplicate cultivar"

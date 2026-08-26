@@ -112,6 +112,18 @@ async def import_potency_catalogue(body: CatalogueImportIn,
                         cultivars_created.append({"code": acr, "name": strain})
                         cv = None
                     else:
+                        # Two concurrent imports can both reach this branch for the
+                        # same never-before-seen strain code. cultivars carries
+                        # UNIQUE(org_id, code) (schema.tasks.sql), so rather than a
+                        # plain INSERT that would 500 the loser with a raw
+                        # UniqueViolationError, use ON CONFLICT DO NOTHING and
+                        # re-fetch: Postgres blocks this INSERT on the other
+                        # transaction's row lock until it resolves, so by the time
+                        # DO NOTHING skips (cv is None) the winner has necessarily
+                        # committed — the re-fetch is guaranteed to see it. Still
+                        # never trust that blindly: guard against a None surviving
+                        # the re-fetch so a `cv["id"]` below can never raise a bare
+                        # TypeError as an unhandled 500.
                         cv = await c.fetchrow(
                             "INSERT INTO cultivars(org_id, code, name, created_by, updated_by)"
                             " VALUES ($1,$2,$3,$4,$4)"
@@ -120,6 +132,11 @@ async def import_potency_catalogue(body: CatalogueImportIn,
                         if cv is None:   # lost a race — re-read
                             cv = await c.fetchrow(
                                 "SELECT id, code, name FROM cultivars WHERE code=$1", acr)
+                        if cv is None:
+                            raise HTTPException(
+                                409, f"{strain}: cultivar '{acr}' could not be created or"
+                                     " resolved after a concurrent import created it —"
+                                     " retry the import")
                         cultivars_created.append({"code": acr, "name": strain})
                 # ── idempotency: version already present? ──────────────────
                 if cv is not None:

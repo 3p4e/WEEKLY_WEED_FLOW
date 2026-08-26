@@ -93,7 +93,10 @@ def _lab_verdict_bool(v: str | None) -> bool | None:
 _SAMPLE_KINDS = ("PC", "MB", "EXT", "RET", "STAB", "RT", "CC")
 
 
-_QC_REGISTRAR = (ADMIN, "QC_MGR", "QP")
+# custody.py's registrar gate is the same Head-of-QC role set as every other
+# _HOQC gate in this package — alias, never a second literal tuple, so a
+# future role-model change to one can't silently leave the other behind.
+_QC_REGISTRAR = _HOQC
 
 
 def splice_stamps(fields: list[str], args: list, extra_sql: list[str], extra_args: list):

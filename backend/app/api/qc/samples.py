@@ -5,7 +5,7 @@ from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
 from datetime import date
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .common import _QP_ROLES, _SAMPLE_KINDS, _WRITERS, _uuid_or_404, _uuid_or_422, router
 from .leaves import _assert_leaf_open
@@ -61,6 +61,25 @@ class SampleIn(BaseModel):
     parent_id: str | None = None
     sampling_plan_id: str | None = None
     notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("batch_id")
+    @classmethod
+    def _batch_id_not_blank(cls, v: str) -> str:
+        # qc_samples.batch_id is NOT NULL, so an empty/whitespace-only value
+        # can't be normalized to NULL (that would just trade a silent bug for
+        # a raw asyncpg NotNullViolation). Pydantic's plain `str` type also
+        # accepts "" as a valid non-null value, so nothing upstream of this
+        # rejected it — and a blank batch_id is falsy exactly like `None`,
+        # which caused the release-time OOS gate in update_sample() to
+        # silently skip its `qc_oos_records` check instead of ever running
+        # it. Normalize (strip) and reject here, at the one place batch_id is
+        # first accepted, so no sample can ever reach the DB — or that gate
+        # — carrying a blank batch_id. Mirrors genealogy.py's
+        # parent/child_batch_id blank rejection.
+        v = v.strip()
+        if not v:
+            raise ValueError("batch_id must not be blank")
+        return v
 
 
 class SamplePatch(BaseModel):

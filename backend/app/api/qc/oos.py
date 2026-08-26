@@ -280,6 +280,39 @@ async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_r
                 extra_sql.append("phase_i_completed_by_id=$PLACEHOLDER")
                 extra_sql.append("phase_i_completed_at=now()")
             if target == "CLOSED":
+                # 2026-08 audit, LOW finding (uncertain, flagged for a
+                # domain-owner decision rather than silently "fixed" — same
+                # posture as signatures.py's role-of-record comment above
+                # sign_certificate): every OTHER sign-off in this codebase's
+                # QC module enforces a second person — samples.py's H2
+                # (reviewer must not be the analyst), potency.py's M5
+                # (approver must not be the author), certificates.py's
+                # reviewer/verifier vs. the analyst-of-record. Closing an OOS
+                # here does NOT require the closer (user["id"], stamped below
+                # into both closed_by_id and qp_approved_by_id) to differ from
+                # whoever detected it (detected_by_id) or ran its Phase I/II
+                # investigation (phase_i_completed_by_id,
+                # phase_ii_completed_by_id, stamped above/below). The only
+                # gates on reaching CLOSED are role (_QP_ROLES, checked via
+                # _OOS_QP_TARGETS above) and the §6.x documentation
+                # requirements just below (disposition + root cause, plus
+                # impact assessment for a Phase-II close).
+                #
+                # May be intentional: QP disposition IS the terminal quality
+                # decision the other modules' segregation controls are
+                # building toward, and at a small facility the QP is very
+                # plausibly the same person who detected the OOS or ran its
+                # investigation — requiring a DIFFERENT QP to close every OOS
+                # could be operationally unworkable with one QP on staff,
+                # unlike the reviewer/analyst splits above, which assume
+                # multiple qualified staff at that step. But it could also be
+                # a real gap: this module's own pattern elsewhere is "the
+                # sign-off is not the same person as the work being signed
+                # off", and disposition is exactly that kind of act. Do not
+                # silently add or restrict a same-person check here — this
+                # needs an SOP-owner call on the facility's actual QP model,
+                # same as the signatures.py finding it mirrors.
+                #
                 # §6.x — an OOS is not closed until it is investigated: a batch
                 # disposition and a documented root cause are mandatory, and a
                 # Phase-II close additionally needs its impact assessment. The
