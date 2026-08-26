@@ -461,12 +461,34 @@ async def audit_prep(
     scope = dept_scope(user)
     if scope:
         department_id = scope
-    dept = department_id  # local alias for the per-query clauses below
+
+    def _dept_filter(args: list) -> str:
+        """Same clause selection /reports/weekly makes for its own queries: a
+        dept-scoped manager gets the full _scope_clause family-visibility
+        predicate (own dept OR personally owned/assigned OR either side of a
+        cross-department delegation) — a plain `department_id =` equality
+        silently dropped their own audit-prep tasks living in another
+        department, and subtasks delegated to them cross-department, from
+        every readiness number below, contradicting this endpoint's own
+        docstring ("pinned to their own department exactly like
+        /reports/analytics"). An org-wide caller's own explicit
+        ?department_id= choice stays a plain filter — same as weekly/
+        analytics, they're choosing to view one department, not restricted
+        to it. Appends its own bind params to `args`, same calling
+        convention as _scope_clause itself."""
+        if scope:
+            return _scope_clause(user, args)
+        if department_id:
+            args.append(department_id)
+            return f" AND t.department_id=${len(args)}::uuid"
+        return ""
 
     async with rls(user) as c:
         # Per-program readiness. unnest($1) LEFT JOIN tasks so a program with
         # zero matching tasks still returns a row (total 0) rather than
-        # silently vanishing from the tracker. $2=today (overdue), $3=dept.
+        # silently vanishing from the tracker. $2=today (overdue).
+        prog_args = [progs, today]
+        prog_dept = _dept_filter(prog_args)
         prog_rows = await c.fetch(
             "SELECT p.prog,"
             " count(t.id) AS total,"
@@ -481,48 +503,56 @@ async def audit_prep(
             " FROM unnest($1::text[]) AS p(prog)"
             " LEFT JOIN tasks t ON p.prog = ANY(t.tags)"
             "   AND t.is_deleted=false AND t.is_archived=false"
-            + (" AND t.department_id = $3::uuid" if dept else "") +
+            + prog_dept +
             " GROUP BY p.prog",
-            progs, today, *([dept] if dept else []))
+            *prog_args)
 
         # Milestone timeline — every program-tagged task carrying a due_date,
-        # soonest first. $1=programs, $2=dept. overdue computed in Python.
+        # soonest first. $1=programs. overdue computed in Python.
+        tl_args = [progs]
+        tl_dept = _dept_filter(tl_args)
         tl_rows = await c.fetch(
             "SELECT t.id, t.title, t.status, t.due_date, t.tags, t.department_id"
             " FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false"
             "   AND t.due_date IS NOT NULL AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + tl_dept +
             " ORDER BY t.due_date, t.created_at LIMIT 200",
-            progs, *([dept] if dept else []))
+            *tl_args)
 
         # Status distribution across the whole audit-prep task set.
+        status_args = [progs]
+        status_dept = _dept_filter(status_args)
         status_rows = await c.fetch(
             "SELECT t.status, count(*) AS n FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + status_dept +
             " GROUP BY t.status",
-            progs, *([dept] if dept else []))
+            *status_args)
 
         # Busiest scheduled day — unnest the days[] tags over the audit-prep set.
+        day_args = [progs]
+        day_dept = _dept_filter(day_args)
         day_rows = await c.fetch(
             "SELECT d AS day, count(*) AS n FROM tasks t, unnest(t.days) AS d"
             " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + day_dept +
             " GROUP BY d",
-            progs, *([dept] if dept else []))
+            *day_args)
 
         # Outcome-traceability sanity check — completed audit-prep tasks that
         # carry an outcome vs those left blank. A PLANNING nudge (SUMA's
         # "Outcome Traceability" / detectAnomalies), explicitly not a GMP gate.
+        trace_args = [progs]
+        trace_dept = _dept_filter(trace_args)
         trace = await c.fetchrow(
             "SELECT count(*) AS completed,"
             " count(*) FILTER (WHERE t.outcome IS NOT NULL AND btrim(t.outcome) <> '') AS with_outcome"
             " FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false"
             "   AND t.status='completed' AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else ""),
-            progs, *([dept] if dept else []))
+            + trace_dept,
+            *trace_args)
 
     by_prog = {r["prog"]: r for r in prog_rows}
     programs_out = []

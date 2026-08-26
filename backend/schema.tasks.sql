@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1vCy6MtT539qAMqrBwmNTXT8y7TbCuLPsAo7tLzR3EHiorVWmhJ509jw5TRynsb
+\restrict pFbHOS7LN8qCApeP2pYF2WRGxSauhYOGffvMXwfFkgAafFKevg4EGRRYXAtp909
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1161,19 +1161,6 @@ CREATE TABLE public.qc_laboratories (
 );
 
 ALTER TABLE ONLY public.qc_laboratories FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: qc_oos_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_oos_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 
 --
@@ -5664,5 +5651,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 1vCy6MtT539qAMqrBwmNTXT8y7TbCuLPsAo7tLzR3EHiorVWmhJ509jw5TRynsb
+\unrestrict pFbHOS7LN8qCApeP2pYF2WRGxSauhYOGffvMXwfFkgAafFKevg4EGRRYXAtp909
 

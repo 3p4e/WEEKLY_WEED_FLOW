@@ -16,6 +16,10 @@ Access model:
               else can release a room, and no room is released verbally."
               QA_MGR + executives + ADMIN only, and only against a complete
               record (see release_room below).
+  fail      — explicitly failing/abandoning a cycle (e.g. after a positive
+              swab) is the mirror-image QA judgement call to release, so it
+              is gated the same: QA_MGR + executives + ADMIN only (see
+              fail_cycle below).
 
 THE TWO GATES THE PLAN INSISTS ON, ENFORCED HERE, NOT LEFT TO DISCIPLINE:
   1. Steps are IN ORDER, and rinse1_whitecloth must PASS before bleach is
@@ -93,6 +97,10 @@ class SwabResultIn(BaseModel):
 
 class ReleaseIn(BaseModel):
     release_note: str | None = Field(default=None, max_length=1000)
+
+
+class CycleFailIn(BaseModel):
+    reason: str = Field(max_length=1000)
 
 
 class PositiveControlIn(BaseModel):
@@ -418,6 +426,51 @@ async def release_room(cycle_id: str, body: ReleaseIn,
                         object_id=cycle_id, recipients=[],
                         params={"room": cyc["room_name"], "campaign": cyc["campaign"]})
     return {"id": cycle_id, "status": row["status"], "released_at": row["released_at"].isoformat()}
+
+
+@router.post("/cycles/{cycle_id}/fail")
+async def fail_cycle(cycle_id: str, body: CycleFailIn,
+                     user: dict = Depends(require_role(*_QA_WRITERS))):
+    """The counterpart to release_room — explicitly fail/abandon a cycle.
+
+    A positive (or otherwise disqualifying) swab result can land on a cycle at
+    ANY status, since record_swab_result does not check cycle status. Once a
+    cycle reaches awaiting_verification, record_step refuses any further step
+    (409) — so without this endpoint a cycle that will never pass is a dead
+    end: no re-clean path exists, and create_cycle's duplicate-campaign guard
+    keeps treating the room as occupied for that campaign (it only lets a
+    fresh cycle start once the old one is no longer 'in_progress' or
+    'awaiting_verification' — see the open_cyc query in create_cycle, which
+    already excludes 'failed' the same way it excludes 'released').
+
+    Gated to the same QA_MGR-tier writers as release_room and record_swab_
+    result: failing a cycle is the QA judgement call that a room did not pass
+    verification, the mirror image of releasing one.
+
+    Requires a stated reason — same discipline as biosecurity.py's fail-must-
+    have-action_taken gate (`_FAIL_RESULTS`): a failed cycle with no reason on
+    file recorded is exactly the kind of undocumented quality call that gate
+    exists to prevent."""
+    if not body.reason or not body.reason.strip():
+        raise HTTPException(422, "a failed cycle must state a reason")
+    async with rls(user) as c:
+        cyc = await _cycle_or_404(c, cycle_id)
+        if cyc["status"] not in ("in_progress", "awaiting_verification"):
+            raise HTTPException(
+                409, f"cycle is {cyc['status']}; only an open cycle "
+                "(in_progress or awaiting_verification) can be failed")
+        note = (f"FAILED: {body.reason}" if not cyc["note"]
+               else f"{cyc['note']} | FAILED: {body.reason}")
+        row = await c.fetchrow(
+            "UPDATE decon_room_cycles SET status='failed', note=$1,"
+            " updated_by=$2, updated_at=now() WHERE id=$3 RETURNING *",
+            note, user["id"], cycle_id)
+        await safe_emit(c, user, verb="decon_cycle_failed", object_type="decon_room_cycle",
+                        object_id=cycle_id, recipients=[],
+                        params={"room": cyc["room_name"], "campaign": cyc["campaign"],
+                                "reason": body.reason})
+    return {"id": cycle_id, "status": row["status"], "note": row["note"],
+            "failed_at": row["updated_at"].isoformat()}
 
 
 # ── frozen positive controls ─────────────────────────────────────────────────

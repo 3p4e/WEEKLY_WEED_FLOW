@@ -805,6 +805,63 @@ async def test_oos_role_gating(client, admin_headers):
     assert (await client.post("/qc/oos", json={"batch_id": "B"}, headers=cu_h)).status_code == 403
 
 
+async def test_oos_numbering_is_per_org_not_global(client, admin_headers):
+    """M7: oos_number used to be minted from ONE global sequence shared across
+    every tenant (qc_oos_id_seq) — an org's own numbers showed gaps caused
+    purely by OTHER orgs' investigations, and a tenant could infer another
+    tenant's investigation volume from its own gap size. Now (mirroring
+    _mint_doc_number / _mint_cert_number) numbering is per-(org, year):
+    two orgs opening OOS records interleaved must each start fresh at 0001
+    and stay gap-free, independent of what the other org is doing."""
+    import uuid as _uuid
+
+    from app.db import users_admin_pool
+    from app.security import hash_password
+    from tests.conftest import purge_org
+
+    def _seq(oos_number: str) -> str:
+        return oos_number.rsplit("-", 1)[-1]
+
+    # Org A: two OOS records back to back — 0001, 0002.
+    a1 = await _oos(client, admin_headers, batch="B-NUM-A1")
+    assert _seq(a1["oos_number"]) == "0001", a1["oos_number"]
+    a2 = await _oos(client, admin_headers, batch="B-NUM-A2")
+    assert _seq(a2["oos_number"]) == "0002", a2["oos_number"]
+
+    # Org B: a second, independent org.
+    other_org_id = _uuid.uuid4()
+    other_admin_id = _uuid.uuid4()
+    other_password = "OtherOrgPassword123456"
+    other_username = f"other_admin_{other_org_id.hex[:8]}"
+    pool = users_admin_pool()
+    await pool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
+                       other_org_id, "Other Org", f"other-{other_org_id.hex[:8]}")
+    await pool.execute(
+        "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
+        " VALUES ($1,$2,$3,$4,$5,'ADMIN',false)",
+        other_admin_id, other_org_id, other_username, hash_password(other_password), "Other Admin")
+    try:
+        r = await client.post("/auth/login", json={"email": other_username, "password": other_password})
+        assert r.status_code == 200, r.text
+        other_h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        # Org B's FIRST OOS must start fresh at 0001 — not continue from org A's
+        # 0002 (which a shared global sequence would produce).
+        b1 = await _oos(client, other_h, batch="B-NUM-B1")
+        assert _seq(b1["oos_number"]) == "0001", b1["oos_number"]
+
+        # Org A's numbering keeps going from its own max, unaffected by org B's
+        # record having been minted in between.
+        a3 = await _oos(client, admin_headers, batch="B-NUM-A3")
+        assert _seq(a3["oos_number"]) == "0003", a3["oos_number"]
+
+        # And a second org-B record continues org B's own series, not org A's.
+        b2 = await _oos(client, other_h, batch="B-NUM-B2")
+        assert _seq(b2["oos_number"]) == "0002", b2["oos_number"]
+    finally:
+        await purge_org(other_org_id)
+
+
 # ── Phase 3 U1 — Certificate of Quality (COQ) generation ────────────────────
 from app.api.qc import coq_docx as _qc_mod          # noqa: E402
 from app.api.qc import coq_aggregation as _qc_agg_mod  # noqa: E402

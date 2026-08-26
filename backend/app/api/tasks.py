@@ -255,14 +255,28 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         # Dependency edges: what this task is blocked_by, and (reverse) what it
         # blocks. Each carries the depended-on task's title + status so the UI
         # can render "blocked by X (ongoing)" without a second round trip.
+        # The linked task gets the SAME department-scope predicate as every
+        # other cross-task exposure point in this file (_scope_clause, the
+        # list_tasks/task_tree/reports rule) — without it a dept-scoped
+        # manager viewing an in-scope task could read the title/status of any
+        # task it depends on/blocks, including one in a department they have
+        # no visibility into at all. Out-of-scope links are omitted entirely
+        # (not shown as a placeholder), matching _assert_scope_visible's
+        # existence-hiding convention elsewhere in this module. No-ops (and
+        # appends nothing) for an org-wide caller, same as everywhere else
+        # _scope_clause is used.
+        blocked_by_args = [task_id]
+        blocked_by_scope = _scope_clause(user, blocked_by_args)
         blocked_by = await c.fetch(
             "SELECT d.depends_on_task_id AS id, t.title, t.status FROM task_dependencies d"
             " JOIN tasks t ON t.id=d.depends_on_task_id AND t.is_deleted=false"
-            " WHERE d.task_id=$1 ORDER BY t.created_at", task_id)
+            f" WHERE d.task_id=$1{blocked_by_scope} ORDER BY t.created_at", *blocked_by_args)
+        blocks_args = [task_id]
+        blocks_scope = _scope_clause(user, blocks_args)
         blocks = await c.fetch(
             "SELECT d.task_id AS id, t.title, t.status FROM task_dependencies d"
             " JOIN tasks t ON t.id=d.task_id AND t.is_deleted=false"
-            " WHERE d.depends_on_task_id=$1 ORDER BY t.created_at", task_id)
+            f" WHERE d.depends_on_task_id=$1{blocks_scope} ORDER BY t.created_at", *blocks_args)
         return {"task": dict(task), "subtasks": _ser(subs), "progress": _ser(prog),
                 "sessions": [_session_out(s) for s in sessions], "links": _ser(links),
                 "blocked_by": _ser(blocked_by), "blocks": _ser(blocks)}
@@ -855,8 +869,12 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
 
 # ── Task links (external references — Drive docs, SOPs) ─────────────────────
 class LinkIn(BaseModel):
-    url: str
-    label: str | None = None
+    # max_length bounds are DoS hygiene (same convention as TaskIn/TaskPatch
+    # above) — url matches external_ref-scale free text (200) rounded up for
+    # real-world Drive/SOP URL length, label matches the file's other
+    # short-label fields (external_ref, department).
+    url: str = Field(max_length=2000)
+    label: str | None = Field(default=None, max_length=200)
     kind: Literal["drive", "sop", "doc", "other"] = "other"
 
 

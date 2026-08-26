@@ -402,6 +402,32 @@ async def test_delete_link_requires_task_visibility(client, admin_headers):
     assert any(l["id"] == link_id for l in r.json()["links"])
 
 
+async def test_link_url_and_label_bounds_rejected_with_422(client, admin_headers):
+    """DoS hygiene (L5, same convention as every other free-text field in this
+    file — see TaskIn's docstring): LinkIn.url/label had no max_length at all,
+    unlike every comparable field (external_ref=200, blocker_reason=2000). An
+    oversized url or label must be a clean 422, not accepted unbounded."""
+    r = await client.post("/tasks", json={"title": "Link bounds check"}, headers=admin_headers)
+    task_id = r.json()["id"]
+
+    over_url = "https://example.com/" + "a" * 2000  # > 2000 chars total
+    r = await client.post(f"/tasks/{task_id}/links",
+                          json={"url": over_url, "label": "fine"}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    over_label = "x" * 201  # > 200 chars
+    r = await client.post(f"/tasks/{task_id}/links",
+                          json={"url": "https://example.com/sop", "label": over_label},
+                          headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # sanity: bounds-respecting values still succeed
+    r = await client.post(f"/tasks/{task_id}/links",
+                          json={"url": "https://example.com/sop", "label": "SOP-001"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
 async def test_negative_hours_rejected_with_422(client, admin_headers):
     r = await client.post("/tasks", json={"title": "Bad estimate", "estimated_hours": -1}, headers=admin_headers)
     assert r.status_code == 422

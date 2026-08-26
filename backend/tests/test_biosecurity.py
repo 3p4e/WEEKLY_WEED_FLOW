@@ -102,6 +102,68 @@ async def test_pass_and_pending_need_no_action(client, admin_headers):
                          subject="Cure bench 2")).status_code == 201
 
 
+# ── resolving a pending result (PATCH .../result) ───────────────────────────
+
+async def test_pending_event_can_be_resolved_and_fail_still_requires_action(
+        client, admin_headers):
+    """A contact plate is plated now, read days later after incubation — before
+    this endpoint nothing could ever move a `pending` record to a final
+    result. And resolving to fail/below_spec through this path must be gated
+    exactly like POST is: no action_taken, no fail."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+
+    plated = await _event(client, cu_h, "contact_plate", subject="Cure bench 3",
+                          result="pending")
+    assert plated.status_code == 201
+    eid = plated.json()["id"]
+
+    # a different manager (QC) is not a recorder on this board — same gate as POST
+    denied = await client.patch(f"/decon/biosecurity/{eid}/result",
+                                json={"result": "pass"}, headers=qc_h)
+    assert denied.status_code == 403
+
+    # resolving to fail with no action_taken is refused, same as POST
+    no_action = await client.patch(f"/decon/biosecurity/{eid}/result",
+                                   json={"result": "fail"}, headers=cu_h)
+    assert no_action.status_code == 422
+    assert "action" in no_action.json()["detail"].lower()
+
+    # ...and below_spec with a blank action_taken is refused too
+    blank_action = await client.patch(f"/decon/biosecurity/{eid}/result",
+                                      json={"result": "below_spec", "action_taken": "   "},
+                                      headers=cu_h)
+    assert blank_action.status_code == 422
+
+    # resolving back to "pending" is not a valid final result
+    still_pending = await client.patch(f"/decon/biosecurity/{eid}/result",
+                                       json={"result": "pending"}, headers=cu_h)
+    assert still_pending.status_code == 422
+
+    resolved = await client.patch(f"/decon/biosecurity/{eid}/result",
+                                  json={"result": "fail",
+                                        "action_taken": "Plate re-read, room flagged"},
+                                  headers=cu_h)
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["result"] == "fail"
+    assert "flagged" in resolved.json()["action_taken"]
+
+    # a pass needs no action_taken and can resolve a different pending event
+    plated2 = await _event(client, cu_h, "sentinel_bioassay", subject="Sentinel plate 9",
+                           result="pending")
+    eid2 = plated2.json()["id"]
+    passed = await client.patch(f"/decon/biosecurity/{eid2}/result",
+                                json={"result": "pass"}, headers=cu_h)
+    assert passed.status_code == 200
+    assert passed.json()["result"] == "pass"
+
+    # an unknown event id is a clean 404
+    missing = await client.patch(
+        "/decon/biosecurity/00000000-0000-0000-0000-000000000000/result",
+        json={"result": "pass"}, headers=cu_h)
+    assert missing.status_code == 404
+
+
 # ── room is optional but validated when given ───────────────────────────────
 
 async def test_room_is_optional_but_must_exist_when_given(client, admin_headers):

@@ -15,7 +15,8 @@ Access model:
   record  — cultivation crew (CU_MGR) AND QA (QA_MGR) + executives + ADMIN. Both,
             because these records straddle the two: the crew refill mats and pull
             filters, QA reads plates and runs the bioassay, and either may verify
-            gowning.
+            gowning. Resolving a `pending` event's result (PATCH .../result) is
+            gated the same as recording one — same recorders, same fail gate.
 
 THE ONE GATE, MIRRORED FROM THE DATABASE. A result of `fail` or `below_spec`
 must carry an `action_taken`. It is pre-checked here for a clean 422 with a
@@ -34,7 +35,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db import rls
-from app.deps import require_role, uuid_or_422
+from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
@@ -67,6 +68,11 @@ async def _room_or_422(c, room_id: str):
 
 def _num(v):
     return float(v) if v is not None else None
+
+
+class BioResultIn(BaseModel):
+    result: str
+    action_taken: str | None = Field(default=None, max_length=1000)
 
 
 class BioIn(BaseModel):
@@ -151,4 +157,51 @@ async def create_biosecurity(body: BioIn, user: dict = Depends(require_role(*_RE
                         object_id=row["id"], recipients=[],
                         params={"kind": row["kind"], "result": row["result"],
                                 "room_name": row["room_name"]})
+    return _bio_out(row)
+
+
+@router.patch("/biosecurity/{event_id}/result")
+async def record_biosecurity_result(event_id: str, body: BioResultIn,
+                                    user: dict = Depends(require_role(*_RECORDERS))):
+    """Resolve a `pending` event to its final result — the second phase of the
+    two-phase workflow `_RESULTS` implies (a contact plate is plated now, read
+    days later after incubation; a sentinel bioassay is started, then scored)
+    but that, before this endpoint, nothing in this module could ever
+    complete: POST only ever creates a new row, so a `pending` record was
+    permanently pending.
+
+    Mirrors decon.py's `PATCH /decon/swabs/{id}/result` — the established
+    "record now, resolve later" shape for this module family — down to
+    allowing the same id/URL pattern and re-patching an already-resolved
+    event (that endpoint does not require the prior result to be 'pending'
+    either; see test_decon.py's release test, which re-patches a swab from
+    positive to negative).
+
+    Enforces the SAME fail-must-have-action_taken gate as POST /biosecurity:
+    a result changing TO fail/below_spec through this path is not a back door
+    around the §27 discipline — the DB constraint
+    (biosecurity_events_action_on_fail_check) backstops it either way, but the
+    pre-check here keeps the refusal a clean 422 with a reason."""
+    uuid_or_404(event_id, "Event not found")
+    if body.result not in _RESULTS or body.result == "pending":
+        raise HTTPException(
+            422, f"result must be one of: {', '.join(r for r in _RESULTS if r != 'pending')}")
+    if body.result in _FAIL_RESULTS and not (body.action_taken and body.action_taken.strip()):
+        raise HTTPException(
+            422, "a failing result must state the action taken — a below-spec or"
+                 " positive biosecurity check with no response is the gap this"
+                 " record exists to close")
+    async with rls(user) as c:
+        row = await c.fetchrow(
+            "UPDATE biosecurity_events SET result=$1, action_taken=$2,"
+            " updated_by=$3, updated_at=now() WHERE id=$4"
+            " RETURNING *, (SELECT name FROM rooms WHERE id=room_id) AS room_name",
+            body.result, body.action_taken, user["id"], event_id)
+        if row is None:
+            raise HTTPException(404, "Event not found")
+        if body.result in _FAIL_RESULTS:
+            await safe_emit(c, user, verb="biosecurity_logged", object_type="biosecurity_event",
+                            object_id=event_id, recipients=[],
+                            params={"kind": row["kind"], "result": row["result"],
+                                    "room_name": row["room_name"]})
     return _bio_out(row)

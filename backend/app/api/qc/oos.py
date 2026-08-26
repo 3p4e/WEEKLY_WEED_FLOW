@@ -88,6 +88,25 @@ class OosNotifyIn(BaseModel):
     message: str | None = Field(default=None, max_length=2000)
 
 
+async def _mint_oos_number(c, org_id: str) -> str:
+    """Advisory-locked per-(org, year) sequential OOS number, reset to 0001 each
+    1 January — gap-free within the lock, never reused (M7). Replaces the former
+    global 'qc_oos_id_seq', which was ONE counter shared across every tenant: an
+    org's own OOS numbers showed gaps caused purely by OTHER orgs' investigations,
+    a tenant could infer another tenant's investigation volume/cadence from its
+    own gap size, and the series never reset per year — unlike every sibling QC
+    number series (_mint_doc_number, _mint_cert_number). Forward-only —
+    pre-existing 'PP-OOS-YYYY-NNNN' numbers in this org continue from the org's
+    own max, so the switch never collides with an already-issued number."""
+    yr = await c.fetchval(f"SELECT {SITE_YEAR_SQL}")  # facility year, not UTC  # nosec B608
+    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"oosnum:{org_id}:{yr}")
+    seq = await c.fetchval(
+        "SELECT coalesce(max((regexp_match(oos_number, '-([0-9]+)$'))[1]::int), 0) + 1"
+        " FROM qc_oos_records WHERE org_id=$1 AND oos_number LIKE 'PP-OOS-' || $2 || '-%'",
+        org_id, yr)
+    return f"PP-OOS-{yr}-{seq:04d}"
+
+
 def _oos_out(r: dict) -> dict:
     return {
         "id": str(r["id"]), "oos_number": r["oos_number"],
@@ -206,17 +225,16 @@ async def create_oos(body: OosIn, user: dict = Depends(require_role(*_WRITERS)))
         if body.sample_id:
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
                 raise HTTPException(422, "Unknown sample")
+        oos_number = await _mint_oos_number(c, user["org_id"])
         row = await c.fetchrow(
             "INSERT INTO qc_oos_records(org_id, oos_number, result_id, sample_id, batch_id,"
             " material_code, test_name, method_ref, specification_value, obtained_value, oos_type,"
             " risk_level, detection_date, detected_by_id, timeline_deadline, notes, created_by, updated_by)"
-            f" VALUES ($1, 'PP-OOS-' || {SITE_YEAR_SQL} || '-' ||"  # nosec B608 — SITE_YEAR_SQL is a trusted constant
-            "         lpad(nextval('qc_oos_id_seq')::text, 4, '0'),"
-            "         $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
-            user["org_id"], body.result_id, body.sample_id, body.batch_id, body.material_code,
-            body.test_name, body.method_ref, body.specification_value, body.obtained_value,
-            body.oos_type, body.risk_level, body.detection_date, user["id"], body.timeline_deadline,
-            body.notes, user["id"])
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17) RETURNING *",
+            user["org_id"], oos_number, body.result_id, body.sample_id, body.batch_id,
+            body.material_code, body.test_name, body.method_ref, body.specification_value,
+            body.obtained_value, body.oos_type, body.risk_level, body.detection_date, user["id"],
+            body.timeline_deadline, body.notes, user["id"])
         await c.execute(
             "INSERT INTO qc_oos_register(org_id, oos_id, action, actor_id, details)"
             " VALUES ($1,$2,'opened',$3,$4)",

@@ -170,6 +170,66 @@ async def test_release_requires_complete_cycle_and_all_negative_swabs(client, ad
     assert again.status_code == 409
 
 
+async def test_positive_swab_on_awaiting_verification_cycle_can_be_failed_and_reopened(
+        client, admin_headers):
+    """The bug this endpoint fixes: a positive swab on an awaiting_verification
+    cycle used to be a dead end — record_step refuses further steps once the
+    cycle is awaiting_verification, there was no way to fail the cycle, and
+    create_cycle's duplicate-campaign guard blocked a fresh start for the
+    room. Now: QA fails the cycle (with a reason), and a fresh cycle for the
+    same room/campaign is accepted."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "c178_t", "Flowering 1.7")
+    campaign = "hlvd-2026-07"
+    cid = await _run_full_cycle(client, cu_h, room["id"], campaign)
+
+    swab = await client.post("/decon/swabs", json={
+        "room_id": room["id"], "cycle_id": cid, "swab_code": "RR-01-200"}, headers=qa_h)
+    sid = swab.json()["id"]
+    positive = await client.patch(f"/decon/swabs/{sid}/result",
+                                  json={"result": "positive", "ct_value": 22.1},
+                                  headers=qa_h)
+    assert positive.status_code == 200
+
+    # record_step still refuses — the cycle is awaiting_verification, and no
+    # step endpoint reopens it.
+    stuck = await client.post(f"/decon/cycles/{cid}/steps",
+                              json={"step": "dry_clean"}, headers=cu_h)
+    assert stuck.status_code == 409
+
+    # a reason is required
+    no_reason = await client.post(f"/decon/cycles/{cid}/fail", json={"reason": ""},
+                                  headers=qa_h)
+    assert no_reason.status_code == 422
+
+    # the cleaning crew is not QA-tier — cannot fail a cycle
+    denied = await client.post(f"/decon/cycles/{cid}/fail",
+                               json={"reason": "positive swab RR-01-200"}, headers=cu_h)
+    assert denied.status_code == 403
+
+    failed = await client.post(f"/decon/cycles/{cid}/fail",
+                               json={"reason": "positive swab RR-01-200, CT 22.1"},
+                               headers=qa_h)
+    assert failed.status_code == 200, failed.text
+    assert failed.json()["status"] == "failed"
+    assert "positive swab RR-01-200" in failed.json()["note"]
+
+    # a failed cycle cannot be failed or released again — it is terminal
+    again = await client.post(f"/decon/cycles/{cid}/fail",
+                              json={"reason": "x"}, headers=qa_h)
+    assert again.status_code == 409
+    cant_release = await client.post(f"/decon/cycles/{cid}/release", json={}, headers=qa_h)
+    assert cant_release.status_code == 409
+
+    # the duplicate-campaign guard no longer blocks a fresh cycle for the room
+    fresh = await client.post("/decon/cycles",
+                              json={"room_id": room["id"], "campaign": campaign},
+                              headers=cu_h)
+    assert fresh.status_code == 201, fresh.text
+    assert fresh.json()["status"] == "in_progress"
+
+
 async def test_only_qa_can_release_not_the_cleaning_crew(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c181_t", "Flowering 1.2")
