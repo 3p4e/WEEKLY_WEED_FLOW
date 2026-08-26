@@ -49,6 +49,46 @@ def test_assemble_markdown_rejects_embedded_comment_terminator():
         )
 
 
+def test_assemble_markdown_rejects_embedded_newline_in_orient():
+    # HIGH: a meta.orient value with an embedded newline could smuggle a
+    # forged `code:`/`version:` HEADERDATA line in AFTER the real ones.
+    # build_from_md.py's parser is line-anchored key:value with last-line-
+    # wins, so the forged fields would win when the document is built —
+    # diverging the .docx's printed code/version from the registry row this
+    # same pipeline records from the caller's original, unmodified metadata.
+    # Must be rejected at assembly time, same as the existing '-->' guard.
+    with pytest.raises(ValueError):
+        assemble_markdown(
+            {
+                "title_mk": "МК", "title_en": "EN", "code": "SOP-REAL",
+                "doctype": "SOP", "version": "1.0",
+                "orient": "portrait\ncode: SOP-FORGED\nversion: 9.9",
+            },
+            [{"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Текст.|Text."}],
+        )
+
+
+def test_assemble_markdown_rejects_bare_carriage_return():
+    # \r alone (no \n) is just as capable of confusing a line-oriented
+    # parser/renderer as \n — reject both.
+    with pytest.raises(ValueError):
+        assemble_markdown(
+            {"title_mk": "МК", "title_en": "EN", "code": "C-1", "doctype": "SOP",
+             "orient": "portrait\rcode: SOP-FORGED"},
+            [{"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Текст.|Text."}],
+        )
+
+
+def test_assemble_markdown_rejects_embedded_newline_in_any_headerdata_field():
+    # Not just orient — every field written into the block is guarded the
+    # same way (title_mk here, arbitrarily chosen among the rest).
+    with pytest.raises(ValueError):
+        assemble_markdown(
+            {"title_mk": "МК\ncode: SOP-FORGED", "title_en": "EN", "code": "C-1", "doctype": "SOP"},
+            [{"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Текст.|Text."}],
+        )
+
+
 def test_strip_fences():
     assert _strip_fences("```markdown\nhello\n```") == "hello"
     assert _strip_fences("plain") == "plain"

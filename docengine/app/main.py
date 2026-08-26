@@ -27,7 +27,7 @@ from . import builder, db
 from .config import settings
 from .letta import LettaClient
 from .pipeline import run_workflow
-from .questionnaires import QUESTIONNAIRES, questionnaire_index
+from .questionnaires import QUESTIONNAIRES, InvalidAnswer, questionnaire_index, validate_answers
 from .security import require_api_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -118,6 +118,15 @@ async def start_workflow(body: WorkflowIn):
     for k in ("title_mk", "title_en", "code"):
         if not body.meta.get(k):
             raise HTTPException(400, f"meta.{k} required")
+    # Pre-populated-answers gate (DOCENGINE-CANON §5): every value the caller
+    # supplied must be a defined option for that question — never free text,
+    # never an invented option. Unchecked answers flow verbatim into every
+    # authoring/repair prompt sent to the Letta agents for this job, so this
+    # must run BEFORE the job is created, not after.
+    try:
+        validate_answers(body.questionnaire, body.answers)
+    except InvalidAnswer as e:
+        raise HTTPException(422, f"invalid answer for '{e.qkey}': not a defined option") from e
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     if not LettaClient().configured:

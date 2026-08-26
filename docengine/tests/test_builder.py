@@ -142,6 +142,31 @@ def test_parse_survives_embedded_comment_terminator_in_value():
     assert "en_title" not in body_text and "doctype" not in body_text and "version" not in body_text
 
 
+def test_parse_rejects_duplicate_headerdata_key():
+    # HIGH: last-line-wins on a repeated key is exactly what would let an
+    # injected/forged `code:` line (smuggled in via an embedded newline in
+    # some upstream field, e.g. meta.orient) silently override the real
+    # code — diverging the built .docx's printed identity from the
+    # audit-trail registry row. Reject at parse time too, independent of
+    # whether the caller that assembled the Markdown sanitized its inputs.
+    import build_from_md
+    md = (
+        "<!--HEADERDATA\n"
+        "mk_title: МК\n"
+        "en_title: EN\n"
+        "code: SOP-REAL\n"
+        "code: SOP-FORGED\n"
+        "version: 1.0\n"
+        "doctype: SOP\n"
+        "orient: portrait\n"
+        "-->\n"
+        "# 1.0 ЦЕЛ|PURPOSE\n"
+        "Текст.|Text.\n"
+    )
+    with pytest.raises(ValueError):
+        build_from_md.parse(md)
+
+
 def test_house_style_in_output(tmp_path):
     # The produced docx carries the house navy #2B547E and Calibri.
     import zipfile

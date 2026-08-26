@@ -440,17 +440,34 @@ async def _repair_sections(
     return repaired
 
 
+def _reject_headerdata_breakers(field: str, value) -> None:
+    """A HEADERDATA field value must never contain the block terminator or a
+    line break. A literal "-->" would be mistaken for the HEADERDATA block's
+    own terminator by build_from_md.py's parser, truncating the header and
+    leaking the remaining fields into the document body. An embedded
+    newline/carriage-return is the same class of attack one level down:
+    build_from_md.py's parse() reads every line between the markers as its
+    own line-anchored "key: value" pair, so a value containing e.g.
+    "portrait\ncode: SOP-FORGED\nversion: 9.9" injects forged fields that
+    land AFTER (and therefore win over) the real ones — letting a single
+    crafted request make the built .docx's printed code/version diverge from
+    the registry row this same pipeline writes from the caller's original
+    metadata. Reject rather than silently strip/sanitize — fail loud, never
+    ship a corrupted controlled document.
+    """
+    if not value:
+        return
+    s = str(value)
+    if "-->" in s:
+        raise ValueError(f"meta.{field} may not contain '-->' (breaks the HEADERDATA block terminator)")
+    if "\n" in s or "\r" in s:
+        raise ValueError(f"meta.{field} may not contain a line break (would inject forged HEADERDATA fields)")
+
+
 def assemble_markdown(meta: dict, sections: list[dict]) -> str:
     """Assemble the HEADERDATA block + section bodies into engine Markdown."""
-    # A literal "-->" in a meta value would be mistaken for the HEADERDATA
-    # block's own terminator by build_from_md.py's parser, truncating the
-    # header and leaking the remaining fields into the document body. Reject
-    # rather than silently strip/sanitize — fail loud, never ship a
-    # corrupted controlled document.
     for _k in ("title_mk", "title_en", "code", "version", "doctype", "orient"):
-        _v = meta.get(_k)
-        if _v and "-->" in str(_v):
-            raise ValueError(f"meta.{_k} may not contain '-->' (breaks the HEADERDATA block terminator)")
+        _reject_headerdata_breakers(_k, meta.get(_k))
     hd = (
         "<!--HEADERDATA\n"
         f"mk_title: {meta['title_mk']}\n"

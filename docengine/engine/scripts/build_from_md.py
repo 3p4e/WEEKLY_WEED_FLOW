@@ -49,7 +49,26 @@ def parse(md):
     if hd_start is not None and hd_end is not None:
         for ln in all_lines[hd_start+1:hd_end]:
             if ':' in ln:
-                k,v=ln.split(':',1); hd[k.strip()]=v.strip()
+                k,v=ln.split(':',1); k=k.strip()
+                # Reject a repeated key rather than silently keeping the last
+                # occurrence: a caller that lets a HEADERDATA field value
+                # contain an embedded newline (assemble_markdown now rejects
+                # that at the source, but this parser must not depend on
+                # every caller remembering to) can smuggle extra fabricated
+                # "key: value" lines into the block. Last-line-wins would let
+                # that forged line silently override the real code/version/
+                # title field the rest of the pipeline (and the audit-trail
+                # registry row) actually recorded. No legitimate HEADERDATA
+                # producer in this codebase ever repeats a key (see
+                # PP_UNIFIED_DOCX_GUIDE.md's field list and every generator:
+                # each key appears at most once), so this can never reject a
+                # genuine document.
+                if k in hd:
+                    raise ValueError(
+                        f"HEADERDATA has a duplicate key {k!r} — refusing to parse "
+                        "(last-line-wins would let an injected line override the real value)"
+                    )
+                hd[k]=v.strip()
         md="\n".join(all_lines[hd_end+1:])
     blocks=[]; lines=md.splitlines(); i=0
     while i<len(lines):
