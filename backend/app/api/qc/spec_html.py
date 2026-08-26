@@ -134,6 +134,11 @@ _ICOA_CSS = """
   .mono, .code { font-family:'Roboto Mono',monospace; }
   .page { width:210mm; min-height:297mm; margin:0 auto; position:relative;
           display:flex; flex-direction:column; padding-bottom:0; }
+  .wm { position:absolute; top:45%; left:50%; transform:translate(-50%,-50%) rotate(-28deg);
+        font:800 56px 'Montserrat',sans-serif; letter-spacing:4px; z-index:9; pointer-events:none;
+        text-transform:uppercase; white-space:nowrap; text-align:center; }
+  .draft-wm { color:rgba(178,34,52,.16); }
+  .void-wm { color:rgba(178,34,52,.42); font-size:64px; }
   .header-bar { background:var(--navy); color:#fff; display:flex; align-items:center;
                 justify-content:space-between; padding:14px 0.35in; }
   .hb-title { font-size:16px; font-weight:800; letter-spacing:.5px; }
@@ -144,6 +149,8 @@ _ICOA_CSS = """
               padding:8px 0.35in; display:flex; justify-content:space-between;
               align-items:baseline; font-size:10px; }
   .id-strip b { color:var(--navy); }
+  .stat-ok { color:#1F7A3D; font-weight:700; }
+  .stat-bad { color:#B22234; font-weight:800; }
   .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
           border:1px solid var(--line); margin:10px 0.35in; }
   .grid > div { background:#fff; padding:6px 8px; }
@@ -175,6 +182,17 @@ _ICOA_CSS = """
   .footer .r { text-align:right; color:#fff; }
   @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
 """
+
+# A document must never look released before its data is (same principle as
+# spec_document's __DRAFT_WM__). APPROVED/RELEASED are the only statuses an
+# internal CoA is meant to be read in; anything pre-approval gets the same
+# soft "Draft — not approved" stamp spec_document uses, and an archived
+# certificate (voided under QCSOP 012 §6.6, or superseded by a revision) gets
+# a stronger, unmistakable stamp — a VOIDED/SUPERSEDED cert can otherwise
+# render as a polished, signature-bearing, passing-verdict document with only
+# a small status token as the tell.
+_ICOA_ARCHIVED_STATUSES = {"VOIDED", "SUPERSEDED"}
+_ICOA_PRESENTABLE_STATUSES = {"APPROVED", "RELEASED"}
 
 
 @router.get("/certificates/{coa_id}/icoa-html", response_class=HTMLResponse)
@@ -253,12 +271,29 @@ async def icoa_document(coa_id: str, parameter_id: str = Query(...),
     verdict = ("Conforms to Specification" if coa["decision"] == "PASS"
                else "Does NOT conform to Specification" if coa["decision"] == "FAIL"
                else "Disposition pending")
+    # Status gate: an internal CoA must never look released before its data is
+    # (same principle as spec_document's __DRAFT_WM__). Archived certs (VOIDED
+    # under QCSOP 012 §6.6, or SUPERSEDED by a revision) get the strongest
+    # stamp; anything else short of APPROVED/RELEASED gets the softer
+    # pre-approval stamp. Any status is covered — an unrecognized one falls
+    # through to the soft stamp rather than rendering clean by default.
+    cert_status = coa["status"]
+    if cert_status in _ICOA_ARCHIVED_STATUSES:
+        wm_html = f'<div class="wm void-wm">{_e(cert_status)} — Do Not Use</div>'
+        status_cls = "stat-bad"
+    elif cert_status not in _ICOA_PRESENTABLE_STATUSES:
+        wm_html = '<div class="wm draft-wm">Draft — Not Approved</div>'
+        status_cls = "stat-bad"
+    else:
+        wm_html = ""
+        status_cls = "stat-ok"
     doc = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Internal Certificate of Analysis — {_e(coa['coa_number'])}</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Roboto+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>{_ICOA_CSS}</style></head>
 <body><div class="page">
+  {wm_html}
   <div class="header-bar">
     <div><div class="hb-title">Internal Certificate of Analysis</div>
          <div class="hb-sub">Интерен сертификат за анализа — Single-parameter report</div></div>
@@ -266,7 +301,7 @@ async def icoa_document(coa_id: str, parameter_id: str = Query(...),
   </div>
   <div class="id-strip"><span><b>Production Batch №</b> <span class="mono">{_e(coa['batch_id'])}</span></span>
     <span><b>Requested Test</b> {_e(test_name)}</span>
-    <span><b>Status</b> {_e(coa['status'])}</span></div>
+    <span><b>Status</b> <span class="{status_cls}">{_e(cert_status)}</span></span></div>
   <div class="grid">
     <div><div class="g-label">Certificate №</div><div class="g-val">{_e(coa['coa_number'])}</div></div>
     <div><div class="g-label">Report Date</div><div class="g-val">{_e(_ddmmyyyy(coa['report_date']))}</div></div>

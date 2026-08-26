@@ -135,3 +135,57 @@ async def test_icoa_html_rejects_non_internal_certs(client, admin_headers):
         headers=admin_headers)
     assert r.status_code == 409
     assert "INTERNAL" in r.json()["detail"]
+
+
+async def test_icoa_html_watermarks_non_presentable_status(client, admin_headers):
+    """A document must never look released before its data is (same principle
+    as the ImB spec's DRAFT watermark). DRAFT and VOIDED certificates must
+    carry an unmistakable stamp; only APPROVED/RELEASED renders clean."""
+    from tests.test_qc import _coa, _hoqc_walk, _spec
+    spec = await _spec(client, admin_headers, material="IHTML-WM")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Loss on Drying", "test_method": "Ph. Eur. 2.2.32",
+                                "unit": "%", "upper_limit": 12.0}, headers=admin_headers)
+    pid = p.json()["id"]
+
+    async def _coa_with_result(batch):
+        coa = await _coa(client, admin_headers, spec["id"], batch=batch, report_date="2026-07-01")
+        assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                                  json={"parameter_id": pid, "test_name": "Loss on Drying",
+                                        "result_numeric": 6.77, "upper_limit": 12.0, "unit": "%",
+                                        "result_date": "2026-07-01"},
+                                  headers=admin_headers)).status_code == 201
+        return coa
+
+    # DRAFT (pre-approval) — the softer "not approved" stamp. Check for the
+    # rendered watermark DIV itself, not just the (always-present) stylesheet
+    # rule defining .draft-wm/.void-wm.
+    draft_coa = await _coa_with_result("B-WM-DRAFT")
+    doc = (await client.get(f"/qc/certificates/{draft_coa['id']}/icoa-html?parameter_id={pid}",
+                            headers=admin_headers)).text
+    assert 'class="wm draft-wm"' in doc and "Draft — Not Approved" in doc
+
+    # VOIDED (QCSOP 012 §6.6) — the strongest stamp; the pass/fail verdict
+    # badge is left untouched (it's driven by the decision field), so the
+    # watermark is the real, hard-to-miss tell that the document is invalid
+    void_coa = await _coa_with_result("B-WM-VOID")
+    assert (await client.patch(f"/qc/certificates/{void_coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    assert (await client.post(f"/qc/certificates/{void_coa['id']}/void",
+                              json={"reason": "wrong batch identified on sampling"},
+                              headers=admin_headers)).status_code == 200
+    doc = (await client.get(f"/qc/certificates/{void_coa['id']}/icoa-html?parameter_id={pid}",
+                            headers=admin_headers)).text
+    assert 'class="wm void-wm"' in doc and "VOIDED — Do Not Use" in doc
+    assert "Conforms to Specification" in doc
+
+    # APPROVED/RELEASED — the presentable states — carry NEITHER watermark
+    _, qp = await _actor(client, admin_headers, "QP")
+    ok_coa = await _coa_with_result("B-WM-OK")
+    assert (await client.patch(f"/qc/certificates/{ok_coa['id']}",
+                               json={"decision": "PASS"}, headers=admin_headers)).status_code == 200
+    await _hoqc_walk(client, admin_headers, qp, ok_coa["id"])
+    doc = (await client.get(f"/qc/certificates/{ok_coa['id']}/icoa-html?parameter_id={pid}",
+                            headers=admin_headers)).text
+    assert 'class="wm draft-wm"' not in doc and 'class="wm void-wm"' not in doc
+    assert "Not Approved" not in doc and "Do Not Use" not in doc
