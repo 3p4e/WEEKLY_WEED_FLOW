@@ -136,6 +136,17 @@ async def create_lab(body: LabIn, user: dict = Depends(require_role(*_WRITERS)))
 
 @router.patch("/laboratories/{lab_id}")
 async def update_lab(lab_id: str, body: LabPatch, user: dict = Depends(require_role(*_WRITERS))):
+    # NOTE (cross-ref: certificates.py get_coa, the `in_scope` computation) —
+    # accreditation_body/accreditation_number/iso17025_scope/status carry no
+    # historical protection here: nothing snapshots them at CoA issuance.
+    # get_coa recomputes each result's ISO-17025 in_scope flag by joining this
+    # table LIVE at read time, so editing a lab's declared scope today can
+    # change what an ALREADY-ISSUED certificate displays tomorrow. Accepted
+    # tradeoff for now — _result_in_scope's docstring calls the flag "advisory
+    # only" — but it's a live gap, not a frozen one; if that stops being an
+    # acceptable tradeoff, the fix belongs on the get_coa side (snapshot the
+    # scope at issuance), not by freezing edits here. Keep both comments in
+    # sync if either side changes.
     _uuid_or_404(lab_id, "Laboratory")
     patch = body.model_dump(exclude_unset=True)
     if patch.get("status") is not None and patch["status"] not in _LAB_STATUSES:

@@ -198,6 +198,71 @@ async def test_bad_thc_grade_rejected(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_inverted_thc_acceptance_range_rejected(client, admin_headers):
+    """thc_acceptance_min must not exceed thc_acceptance_max — checked on both
+    create and patch, only when both bounds are present in the same request."""
+    r = await client.post("/qc/specifications",
+                          json={"material_code": "RNG-MAT", "material_name_en": "x",
+                                "thc_acceptance_min": 30.0, "thc_acceptance_max": 18.0},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "thc_acceptance_min" in r.text
+    # a valid (or open-ended) range is accepted
+    spec = await _spec(client, admin_headers, material="RNG-MAT",
+                       thc_acceptance_min=18.0, thc_acceptance_max=30.0)
+    assert spec["thc_acceptance_min"] == 18.0 and spec["thc_acceptance_max"] == 30.0
+    # patch: inverting the range is rejected while still DRAFT (editable)
+    r = await client.patch(f"/qc/specifications/{spec['id']}",
+                           json={"thc_acceptance_min": 40.0, "thc_acceptance_max": 20.0},
+                           headers=admin_headers)
+    assert r.status_code == 422 and "thc_acceptance_min" in r.text
+    # a valid patched range still goes through
+    r = await client.patch(f"/qc/specifications/{spec['id']}",
+                           json={"thc_acceptance_min": 20.0, "thc_acceptance_max": 25.0},
+                           headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["thc_acceptance_min"] == 20.0 and r.json()["thc_acceptance_max"] == 25.0
+
+
+async def test_inverted_parameter_limits_rejected(client, admin_headers):
+    """A spec parameter's lower_limit must not exceed its upper_limit."""
+    spec = await _spec(client, admin_headers, material="PLIM-MAT")
+    r = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Moisture", "lower_limit": 12.0, "upper_limit": 5.0},
+                          headers=admin_headers)
+    assert r.status_code == 422 and "lower_limit" in r.text
+    # a one-sided (open-ended) limit is never a violation
+    r = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Water", "lower_limit": None, "upper_limit": 10.0},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # a valid two-sided range is accepted
+    r = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "lower_limit": 18.0, "upper_limit": 30.0},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_delete_component_parameter_conflicts_then_succeeds(client, admin_headers):
+    """component_a_id/component_b_id (the computed-total FKs) carry no
+    ON DELETE clause — deleting a parameter another parameter still cites as a
+    component must be a clean 409, not an uncaught
+    asyncpg.ForeignKeyViolationError -> 500. Removing the computed parameter
+    first clears the way for the component deletes to succeed."""
+    spec, pa, pb, pt = await _computed_spec(client, admin_headers, material="DEL-COMP")
+    r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{pa['id']}", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    assert "computed total" in r.json()["detail"].lower()
+    r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{pb['id']}", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    # remove the computed parameter first, then the components delete cleanly
+    r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{pt['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{pa['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.delete(f"/qc/specifications/{spec['id']}/parameters/{pb['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+
 async def test_parameters_add_and_lock_after_authoring(client, admin_headers):
     spec = await _spec(client, admin_headers, material="PARAM-MAT")
     # add a parameter while DRAFT (authoring) — limits may be null (never fabricated)
@@ -309,6 +374,44 @@ async def test_release_reject_is_qp_gated(client, admin_headers):
     _, qp_h = await _actor(client, admin_headers, "QP")
     r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "RELEASED"}, headers=qp_h)
     assert r.status_code == 200, r.text          # QP may
+
+
+async def test_sample_fields_frozen_after_release(client, admin_headers):
+    """H5 — once a sample reaches a terminal status (RELEASED/REJECTED), only
+    `notes` may still change; every other field is frozen. Mirrors leaves.py's
+    terminal-leaf guard (_assert_leaf_open) for stability studies / transports."""
+    s = await _sample(client, admin_headers, batch="B-FRZ-1")
+    for tgt in ("RECEIVED", "IN_TEST", "TESTED"):
+        assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
+                                   headers=admin_headers)).status_code == 200
+    _, reviewer = await _actor(client, admin_headers, "QC_MGR")
+    for tgt in ("REVIEWED", "APPROVED"):
+        assert (await client.patch(f"/qc/samples/{s['id']}", json={"status": tgt},
+                                   headers=reviewer)).status_code == 200
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "RELEASED"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    # every substantive field is now frozen
+    for field, val in (("quantity", 5.0), ("location", "elsewhere"), ("sample_kind", "RET"),
+                       ("retention_expiry", "2030-01-01"), ("non_conforming", True),
+                       ("non_conforming_reason", "late flag")):
+        r = await client.patch(f"/qc/samples/{s['id']}", json={field: val}, headers=admin_headers)
+        assert r.status_code == 409, (field, r.text)
+        assert "RELEASED" in r.json()["detail"]
+    # ...except notes, which may still be added
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"notes": "post-release note"},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["notes"] == "post-release note"
+
+
+async def test_sample_fields_frozen_after_reject(client, admin_headers):
+    """Same H5 freeze, on the REJECTED terminal status."""
+    s = await _sample(client, admin_headers, batch="B-FRZ-2")
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"status": "REJECTED"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"location": "elsewhere"}, headers=admin_headers)
+    assert r.status_code == 409 and "REJECTED" in r.json()["detail"]
+    r = await client.patch(f"/qc/samples/{s['id']}", json={"notes": "rejected note"}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["notes"] == "rejected note"
 
 
 async def test_sample_genealogy(client, admin_headers):
@@ -1670,6 +1773,42 @@ async def test_certificate_links_laboratory(client, admin_headers):
     assert r.status_code == 422 and "laboratory" in r.json()["detail"].lower()
 
 
+async def test_lab_scope_edit_after_issuance_is_live_not_snapshotted(client, admin_headers):
+    """DOCUMENTS the current tradeoff (see the cross-referencing comments on
+    laboratories.update_lab and certificates.get_coa's in_scope computation):
+    a certificate's ISO 17025 in_scope flag is recomputed from the lab's
+    CURRENT iso17025_scope on every read, not a snapshot taken at issuance —
+    even on an ALREADY-RELEASED certificate. This is a deliberate, accepted
+    tradeoff (the flag is advisory only, per _result_in_scope's docstring),
+    not a bug — this test pins the behavior so a future change is a
+    conscious decision, not an accidental regression of either side."""
+    _, qp = await _actor(client, admin_headers, "QP")
+    lab = await _lab(client, admin_headers, name="Drift Lab", iso17025_scope=["HPLC"])
+    spec = await _spec(client, admin_headers, material="SCOPE-DRIFT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_method": "HPLC",
+                                "unit": "%", "lower_limit": 10.0, "upper_limit": 30.0},
+                          headers=admin_headers)
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-SCOPE-DRIFT",
+                     laboratory_id=lab["id"], report_date="2026-07-01")
+    assert (await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0}, headers=admin_headers)).status_code == 201
+    detail = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert detail["results"][0]["in_scope"] is True
+    # walk the certificate all the way to RELEASED — "already issued"
+    assert (await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"},
+                               headers=admin_headers)).status_code == 200
+    await _hoqc_walk(client, admin_headers, qp, coa['id'])
+    # now edit the lab's declared scope, dropping HPLC entirely
+    assert (await client.patch(f"/qc/laboratories/{lab['id']}", json={"iso17025_scope": []},
+                               headers=admin_headers)).status_code == 200
+    # the ALREADY-RELEASED certificate now reads differently — live, not frozen
+    # (an empty declared scope is unjudgeable, so in_scope goes to None, not False)
+    detail2 = (await client.get(f"/qc/certificates/{coa['id']}", headers=admin_headers)).json()
+    assert detail2["results"][0]["in_scope"] is None
+
+
 async def test_coq_flags_out_of_scope(client, admin_headers, monkeypatch):
     """URS Chapter 7: a result run on a method outside the lab's ISO 17025 scope
     is flagged on the COQ — advisory, never a block. In-scope results carry no
@@ -2193,6 +2332,33 @@ async def test_result_lab_verdict_manual_reference_only(client, admin_headers):
                            json={"parameter_id": p["id"], "test_name": "Total THC",
                                  "result_numeric": 25.0}, headers=admin_headers)
     assert r2.json()["lab_verdict"] is None and r2.json()["lab_verdict_mismatch"] is False
+
+
+async def test_result_lab_verdict_ambiguous_phrasing_is_no_verdict(client, admin_headers):
+    """QCSOP 012 §6.3.2 — 'Not Tested'/'Not Applicable'/'N/A' assert NO lab
+    verdict at all. They contain the substring "not" so a naive fail-branch
+    match would wrongly read them as an explicit lab FAIL — on a PASSING
+    result that would manufacture a false reconciliation mismatch. They must
+    normalize to no verdict, so no mismatch is ever computed for them."""
+    spec, p = await _ecoa_spec_with_param(client, admin_headers, material="RES-LABV-AMB")
+    coa = await _coa(client, admin_headers, spec["id"], batch="B-RES-LABV-AMB")
+    for verdict in ("Not Tested", "Not Applicable", "N/A", "not tested"):
+        r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                              json={"parameter_id": p["id"], "test_name": "Total THC",
+                                    "result_numeric": 22.0, "lab_verdict": verdict},
+                              headers=admin_headers)
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["complies"] is True                # in-range, in-house PASS
+        assert body["lab_verdict"] == verdict           # kept verbatim
+        assert body["lab_verdict_mismatch"] is False, verdict  # no verdict -> no mismatch
+    # genuine fail-wording still normalizes to an explicit lab FAIL and can
+    # still surface a mismatch — the exclusion above must not have swallowed it
+    r = await client.post(f"/qc/certificates/{coa['id']}/results",
+                          json={"parameter_id": p["id"], "test_name": "Total THC",
+                                "result_numeric": 22.0, "lab_verdict": "Does not conform"},
+                          headers=admin_headers)
+    assert r.status_code == 201 and r.json()["lab_verdict_mismatch"] is True
 
 
 # ── URS increment 8 — Annex 11 electronic signatures (URS §14 / item 11) ────
@@ -2818,6 +2984,31 @@ async def test_release_related_flag_cannot_be_dropped_to_dodge_qp(client, admin_
     _, qp_h = await _actor(client, admin_headers, "QP")
     r = await client.patch(f"/qc/sampling-requests/{rqs['id']}", json={"status": "REGISTERED"}, headers=qp_h)
     assert r.status_code == 200
+
+
+async def test_urgent_justification_cannot_be_cleared_via_omitted_priority(client, admin_headers):
+    """§6.1.4 — the URGENT-justification rule must be checked against the
+    EFFECTIVE (DB-merged) priority, not just the raw PATCH body. A PATCH that
+    omits `priority` entirely must still be judged against the record's
+    CURRENT priority — exactly like release_related's eff() merge above."""
+    rqs = await _rqs(client, admin_headers, batch_id="B-URG-1", priority="URGENT",
+                     priority_justification="stability pull due", **_RQS_COMPLETE)
+    assert rqs["priority"] == "URGENT"
+    # PATCH clears priority_justification alone (priority not mentioned) —
+    # the record's CURRENT priority is still URGENT, so this must 422
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                           json={"priority_justification": None}, headers=admin_headers)
+    assert r.status_code == 422 and "justification" in r.text
+    # the record is unchanged — the rejected attempt must not have cleared it
+    r = await client.get(f"/qc/sampling-requests/{rqs['id']}", headers=admin_headers)
+    assert r.json()["priority_justification"] == "stability pull due"
+    # clearing the justification legitimately requires dropping priority back
+    # to ROUTINE in the same patch (or supplying a real justification)
+    r = await client.patch(f"/qc/sampling-requests/{rqs['id']}",
+                           json={"priority": "ROUTINE", "priority_justification": None},
+                           headers=admin_headers)
+    assert r.status_code == 200 and r.json()["priority"] == "ROUTINE"
+    assert r.json()["priority_justification"] is None
 
 
 async def test_registration_rejects_blank_and_zero_fields(client, admin_headers):

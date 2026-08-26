@@ -77,6 +77,12 @@ def _lab_verdict_bool(v: str | None) -> bool | None:
     if not v:
         return None
     t = v.strip().lower()
+    # "Not applicable" / "not tested" / "n/a" assert NO verdict at all — they
+    # contain the substring "not" and would otherwise fall into the fail
+    # branch below and normalize to an explicit lab FAIL, which could
+    # manufacture a false reconciliation mismatch. Must be excluded first.
+    if any(p in t for p in ("not applicable", "not tested", "not performed", "n/a")):
+        return None
     if t in ("no", "не") or any(n in t for n in ("not", "non", "fail", "oos", "не ")):
         return False
     if any(p in t for p in ("pass", "conform", "compl", "задоволува", "соодветств")):

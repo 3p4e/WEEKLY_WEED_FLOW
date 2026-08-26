@@ -1,3 +1,4 @@
+import asyncpg
 from app.db import rls
 from app.worktime import SITE_YEAR_SQL
 from app.deps import require_role
@@ -112,6 +113,15 @@ def _check_grade(g: str | None) -> None:
         raise HTTPException(422, f"thc_grade must be one of: {', '.join(_THC_GRADES)}")
 
 
+def _check_range(lo: float | None, hi: float | None, what: str) -> None:
+    """A caller-supplied min/max (or lower/upper) pair must not be inverted.
+    Only judged when BOTH bounds are present in the same request — an
+    open-ended range (either side null) is never a violation."""
+    if lo is not None and hi is not None and lo > hi:
+        raise HTTPException(
+            422, f"{what}: the lower/min bound ({lo}) must not exceed the upper/max bound ({hi})")
+
+
 def _spec_out(r: dict) -> dict:
     return {
         "id": str(r["id"]), "spec_id": r["spec_id"], "material_code": r["material_code"],
@@ -172,6 +182,8 @@ async def get_spec(spec_id: str, user: dict = Depends(require_role(*ELEVATED_ROL
 @router.post("/specifications", status_code=201)
 async def create_spec(body: SpecIn, user: dict = Depends(require_role(*_WRITERS))):
     _check_grade(body.thc_grade)
+    _check_range(body.thc_acceptance_min, body.thc_acceptance_max,
+                "thc_acceptance_min/thc_acceptance_max")
     async with rls(user) as c:
         try:
             row = await c.fetchrow(
@@ -200,6 +212,12 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
     _uuid_or_404(spec_id, "Specification")
     patch = body.model_dump(exclude_unset=True)
     _check_grade(patch.get("thc_grade"))
+    # Only judged when BOTH bounds are supplied together in THIS patch — a
+    # partial patch (e.g. only thc_acceptance_max, leaving min at its stored
+    # value) is not cross-checked against the stored counterpart here.
+    if "thc_acceptance_min" in patch and "thc_acceptance_max" in patch:
+        _check_range(patch["thc_acceptance_min"], patch["thc_acceptance_max"],
+                    "thc_acceptance_min/thc_acceptance_max")
     async with rls(user) as c:
         cur = await c.fetchrow(
             "SELECT status, created_by, updated_by FROM qc_specifications WHERE id=$1", spec_id)
@@ -274,6 +292,7 @@ async def add_parameter(spec_id: str, body: ParamIn, user: dict = Depends(requir
         raise HTTPException(422, "component ids are only valid with computed_kind")
     _uuid_or_422(body.component_a_id, "component_a_id")
     _uuid_or_422(body.component_b_id, "component_b_id")
+    _check_range(body.lower_limit, body.upper_limit, "lower_limit/upper_limit")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
         if spec is None:
@@ -333,8 +352,18 @@ async def delete_parameter(spec_id: str, param_id: str, user: dict = Depends(req
             raise HTTPException(404, "Specification not found")
         if spec["status"] not in _EDITABLE_STATUSES:
             raise HTTPException(409, "Parameters are locked once the spec leaves authoring")
-        res = await c.execute(
-            "DELETE FROM qc_spec_parameters WHERE id=$1 AND spec_id=$2", param_id, spec_id)
+        # component_a_id/component_b_id (the computed-total FKs) carry no
+        # ON DELETE clause (default NO ACTION) — deleting a parameter another
+        # parameter still cites as a component otherwise raises an uncaught
+        # asyncpg.ForeignKeyViolationError -> 500. Map it to a clean 409
+        # instead (same idiom as tasks.py's _FK_ERRORS handling).
+        try:
+            res = await c.execute(
+                "DELETE FROM qc_spec_parameters WHERE id=$1 AND spec_id=$2", param_id, spec_id)
+        except asyncpg.ForeignKeyViolationError:
+            raise HTTPException(
+                409, "parameter is used as a component of a computed total; remove the"
+                     " computed parameter first.")
     if res.split()[-1] == "0":
         raise HTTPException(404, "Parameter not found")
     return {"ok": True}

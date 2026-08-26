@@ -231,8 +231,23 @@ def _validate_rqs_fields(body):
         raise HTTPException(422, f"priority must be one of: {', '.join(_RQS_PRIORITIES)}")
     if body.material_status is not None and body.material_status not in _RQS_MATERIAL_STATUSES:
         raise HTTPException(422, f"material_status must be one of: {', '.join(_RQS_MATERIAL_STATUSES)}")
-    # §6.1.4: an URGENT request carries a written justification.
+    # §6.1.4: an URGENT request carries a written justification. This checks
+    # only the RAW body — correct for create_rqs, where every field IS the
+    # effective value (there is no prior record). update_rqs has a prior
+    # record, so it re-checks with the EFFECTIVE (DB-merged) value below via
+    # _check_urgent_justification — see the comment there for why this
+    # narrower check isn't enough on its own for a PATCH.
     if body.priority == "URGENT" and not (body.priority_justification or "").strip():
+        raise HTTPException(422, "an URGENT request requires a written priority_justification (§6.1.4)")
+
+
+def _check_urgent_justification(priority, justification) -> None:
+    """§6.1.4: an URGENT request carries a written justification. Takes the
+    EFFECTIVE priority/justification, not a raw PATCH body — the caller must
+    merge a partial patch against the current record first (see update_rqs's
+    `eff()`), or an URGENT record's justification could be cleared by a PATCH
+    that never mentions `priority` at all."""
+    if priority == "URGENT" and not (justification or "").strip():
         raise HTTPException(422, "an URGENT request requires a written priority_justification (§6.1.4)")
 
 
@@ -302,6 +317,13 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
                 and user["role"] not in _QP_ROLES):
             raise HTTPException(403, "only the Qualified Person may clear the release-related"
                                      " flag on a sampling request (§6.1.2)")
+        # §6.1.4 — same "effective value" merge as release_related above: a
+        # PATCH that omits `priority` entirely (e.g. only clearing
+        # priority_justification) must still be judged against the record's
+        # CURRENT priority, or an already-URGENT request's justification could
+        # be wiped out by a PATCH the raw-body check in _validate_rqs_fields
+        # never looks at (it only sees the field values IN this patch).
+        _check_urgent_justification(eff("priority"), eff("priority_justification"))
         fields, args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]

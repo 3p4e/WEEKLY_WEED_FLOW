@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .common import _QP_ROLES, _SAMPLE_KINDS, _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .leaves import _assert_leaf_open
 
 
 _SAMPLE_STATUSES = (
@@ -199,6 +200,14 @@ async def update_sample(sample_id: str, body: SamplePatch, user: dict = Depends(
             "SELECT status, batch_id, tested_by FROM qc_samples WHERE id=$1", sample_id)
         if cur is None:
             raise HTTPException(404, "Sample not found")
+        # H5 — RELEASED/REJECTED is the Qualified Person's terminal decision;
+        # the record of what was tested/measured must not be silently
+        # rewritten afterwards. Same guard as leaves.py's terminal-leaf freeze
+        # (stability studies / transports); reused here for the sample's two
+        # terminal statuses — only one can ever equal cur["status"] at once,
+        # so the call for the OTHER terminal is a harmless no-op.
+        _assert_leaf_open(patch, cur["status"], "RELEASED", "Sample")
+        _assert_leaf_open(patch, cur["status"], "REJECTED", "Sample")
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
             if target not in _SAMPLE_STATUSES:

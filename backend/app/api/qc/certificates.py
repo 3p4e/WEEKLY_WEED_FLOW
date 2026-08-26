@@ -267,6 +267,12 @@ async def get_coa(coa_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
     # ISO 17025 scope flag: when the issuing lab declares an accredited scope,
     # mark each result whose method/test is not accredited (advisory, per URS
     # Chapter 7 — surfaced for the reviewer, never an automatic OOS).
+    # NOTE (cross-ref: laboratories.py update_lab) — this joins qc_laboratories
+    # LIVE at read time, not a snapshot taken when the CoA was issued: editing
+    # the lab's iso17025_scope after issuance changes what an ALREADY-ISSUED
+    # certificate shows here. Accepted tradeoff for now (the flag is advisory
+    # only, per _result_in_scope's docstring) — see update_lab's matching note
+    # before changing either side on its own.
     scope = _lab_scope_set(lab["iso17025_scope"]) if lab else set()
     out_results = []
     for r in results:
