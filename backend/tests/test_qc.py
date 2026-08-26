@@ -108,17 +108,26 @@ async def test_role_gating(client, admin_headers):
 async def test_only_one_active_spec_per_material(client, admin_headers):
     """The partial unique index guards dual-activation. Walk one spec to ACTIVE,
     then a second version of the SAME material must not also go ACTIVE."""
+    # QC_REVIEW -> QA_APPROVED is segregation-of-duties gated (approver != the
+    # admin who authored/submitted the spec), so it needs a second actor.
+    _, approver = await _actor(client, admin_headers, "QC_MGR")
+
     async def _to_active(sid):
-        for tgt in ("QC_REVIEW", "QA_APPROVED", "NUMBERED", "TRAINED", "ACTIVE"):
-            r = await client.patch(f"/qc/specifications/{sid}", json={"status": tgt}, headers=admin_headers)
+        assert (await client.patch(f"/qc/specifications/{sid}", json={"status": "QC_REVIEW"},
+                                   headers=admin_headers)).status_code == 200
+        for tgt, hdr in (("QA_APPROVED", approver), ("NUMBERED", admin_headers),
+                         ("TRAINED", admin_headers), ("ACTIVE", admin_headers)):
+            r = await client.patch(f"/qc/specifications/{sid}", json={"status": tgt}, headers=hdr)
             assert r.status_code == 200, (tgt, r.text)
     a = await _spec(client, admin_headers, material="DUP-MAT", version=1)
     await _to_active(a["id"])
     b = await _spec(client, admin_headers, material="DUP-MAT", version=2)
     # drive b to TRAINED, then the ACTIVE step must 409 (index conflict)
-    for tgt in ("QC_REVIEW", "QA_APPROVED", "NUMBERED", "TRAINED"):
+    assert (await client.patch(f"/qc/specifications/{b['id']}", json={"status": "QC_REVIEW"},
+                               headers=admin_headers)).status_code == 200
+    for tgt, hdr in (("QA_APPROVED", approver), ("NUMBERED", admin_headers), ("TRAINED", admin_headers)):
         assert (await client.patch(f"/qc/specifications/{b['id']}", json={"status": tgt},
-                                   headers=admin_headers)).status_code == 200
+                                   headers=hdr)).status_code == 200
     r = await client.patch(f"/qc/specifications/{b['id']}", json={"status": "ACTIVE"}, headers=admin_headers)
     assert r.status_code == 409, r.text
 
@@ -136,6 +145,42 @@ async def test_illegal_lifecycle_transition_rejected(client, admin_headers):
     # unknown status is 422
     assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "BOGUS"},
                                headers=admin_headers)).status_code == 422
+
+
+async def test_spec_approval_requires_a_different_person(client, admin_headers):
+    """QC_REVIEW -> QA_APPROVED is a GMP sign-off: the tighter Head-of-QC role
+    (ADMIN/QC_MGR/QP — no executives) AND segregation of duties (the approver
+    must differ from whoever authored or last edited the spec). Mirrors
+    test_potency.py's test_approval_requires_a_different_person for the
+    analogous potency-ladder approval step."""
+    _, author = await _actor(client, admin_headers, "QC_MGR")
+    spec = await _spec(client, author, material="SOD-MAT")
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QC_REVIEW"},
+                               headers=author)).status_code == 200
+
+    # (a) the author cannot self-approve their own spec
+    r = await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QA_APPROVED"},
+                           headers=author)
+    assert r.status_code == 403, r.text
+    assert "segregation of duties" in r.text.lower()
+    # still QC_REVIEW — the rejected attempt must not have moved the state
+    assert (await client.get(f"/qc/specifications/{spec['id']}",
+                             headers=admin_headers)).json()["spec"]["status"] == "QC_REVIEW"
+
+    # (b) an executive (OWNER/CEO/COO) — a _WRITERS role — cannot approve either,
+    # even though they pass the endpoint's blanket writer-role check.
+    _, owner_h = await _actor(client, admin_headers, "OWNER")
+    r = await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QA_APPROVED"},
+                           headers=owner_h)
+    assert r.status_code == 403, r.text
+
+    # (c) a DIFFERENT QC_MGR/QP/ADMIN than the author CAN approve — the
+    # legitimate path still works.
+    _, approver = await _actor(client, admin_headers, "QC_MGR")
+    r = await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QA_APPROVED"},
+                           headers=approver)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "QA_APPROVED"
 
 
 async def test_duplicate_material_version_conflicts(client, admin_headers):
@@ -165,10 +210,13 @@ async def test_parameters_add_and_lock_after_authoring(client, admin_headers):
     assert r.json()["lower_limit"] is None and r.json()["upper_limit"] == 30.0
     detail = (await client.get(f"/qc/specifications/{spec['id']}", headers=admin_headers)).json()
     assert len(detail["parameters"]) == 1
-    # move past authoring → parameters lock
-    for tgt in ("QC_REVIEW", "QA_APPROVED"):
-        assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": tgt},
-                                   headers=admin_headers)).status_code == 200
+    # move past authoring → parameters lock. QA_APPROVED needs a different
+    # actor than admin (the spec's author) — segregation of duties.
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QC_REVIEW"},
+                               headers=admin_headers)).status_code == 200
+    _, approver = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QA_APPROVED"},
+                               headers=approver)).status_code == 200
     r = await client.post(f"/qc/specifications/{spec['id']}/parameters",
                           json={"test_name_en": "Water"}, headers=admin_headers)
     assert r.status_code == 409
@@ -2470,6 +2518,52 @@ async def test_genealogy_edge_delete_blocked_by_issued_certificate(client, admin
     assert (await client.delete(f"/qc/genealogy/{edge['id']}", headers=admin_headers)).status_code == 409
 
 
+async def test_genealogy_edge_delete_blocked_by_cert_further_down_chain(client, admin_headers, monkeypatch):
+    """The issued-certificate guard on edge deletion must walk the FULL
+    closure through the edge, not just its own two endpoints. Chain
+    A→B→C with a RELEASED certificate on C only (neither endpoint of the
+    A→B edge): deleting A→B must still be refused, because it would
+    silently drop A from C's traceable ancestor lineage — exactly the
+    "rewrite history for a document already handed out" scenario the
+    guard exists to prevent. An edge with no issued certificate anywhere
+    in its closure must still delete cleanly (the legitimate case)."""
+    _stub_de(monkeypatch, {"document_id": "X"})
+    _, qp = await _actor(client, admin_headers, "QP")
+    spec = await _spec(client, admin_headers, material="GCHAIN-MAT")
+    p = await client.post(f"/qc/specifications/{spec['id']}/parameters",
+                          json={"test_name_en": "Total THC", "test_name_mk": "ТХЦ",
+                                "test_method": "HPLC", "unit": "%", "lower_limit": 10.0,
+                                "upper_limit": 30.0}, headers=admin_headers)
+    A, B, C = "GCHAIN-A", "GCHAIN-B", "GCHAIN-C"
+    edge_ab = await _edge(client, admin_headers, A, B)
+    edge_bc = await _edge(client, admin_headers, B, C)
+    # Issue (RELEASE) a certificate on C only — neither immediate endpoint of
+    # the A→B edge carries a cert.
+    coa = await _coa(client, admin_headers, spec["id"], batch=C, report_date="2026-07-01")
+    await client.post(f"/qc/certificates/{coa['id']}/results",
+                      json={"parameter_id": p.json()["id"], "test_name": "Total THC",
+                            "result_numeric": 22.0, "lower_limit": 10.0, "upper_limit": 30.0},
+                      headers=admin_headers)
+    await client.patch(f"/qc/certificates/{coa['id']}", json={"decision": "PASS"}, headers=admin_headers)
+    await _hoqc_walk(client, admin_headers, qp, coa["id"])
+    # Sanity: C's ancestor lineage includes A through the two-hop chain.
+    g = (await client.get(f"/qc/genealogy/{C}", headers=admin_headers)).json()
+    assert {a["batch_id"] for a in g["ancestors"]} == {A, B}
+    # Deleting A→B would silently strip A from C's issued-certificate
+    # lineage — must be REJECTED even though neither A nor B has a cert.
+    r = await client.delete(f"/qc/genealogy/{edge_ab['id']}", headers=admin_headers)
+    assert r.status_code == 409, r.text
+    g = (await client.get(f"/qc/genealogy/{C}", headers=admin_headers)).json()
+    assert {a["batch_id"] for a in g["ancestors"]} == {A, B}, "edge must not have been removed"
+    # An edge with no issued certificate anywhere in its closure (a sibling
+    # chain untouched by C's certificate) still deletes cleanly.
+    D, E = "GCHAIN-D", "GCHAIN-E"
+    edge_de = await _edge(client, admin_headers, D, E)
+    assert (await client.delete(f"/qc/genealogy/{edge_de['id']}", headers=admin_headers)).status_code == 204
+    # And B→C itself is now also locked (it directly feeds C, as before the fix).
+    assert (await client.delete(f"/qc/genealogy/{edge_bc['id']}", headers=admin_headers)).status_code == 409
+
+
 async def test_ecoa_is_write_gated(client, admin_headers):
     _, user_headers = await _actor(client, admin_headers, "USER")
     r = await client.post("/qc/coa-documents", json={"batch_id": "B-X"}, headers=user_headers)
@@ -2759,12 +2853,43 @@ async def test_custody_continuity_enforced(client, admin_headers):
         "to_user_id": other["id"], "transfer_type": "FIELD_TO_LAB"}, headers=admin_headers)
     assert r.status_code == 201, r.text
     # a THIRD entry that doesn't start from "other" breaks the chain
+    # (to_location is set on both of these so they clear the destination
+    # requirement and exercise the WHO continuity check on its own)
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
-        "from_user_id": admin_me["id"], "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+        "from_user_id": admin_me["id"], "to_location": "QC Lab",
+        "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
     assert r.status_code == 409
     # the correct continuation (from_user_id = other, the actual current custodian) succeeds
     r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
-        "from_user_id": other["id"], "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+        "from_user_id": other["id"], "to_location": "QC Lab",
+        "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_custody_requires_a_destination(client, admin_headers):
+    """A custody entry with neither to_user_id nor to_location records no
+    destination at all ("transferred to nobody, nowhere"). The continuity
+    guard on the NEXT entry trusts the previous entry's to_user_id/to_location
+    to anchor that next entry's declared origin — a vacuous entry would make
+    both halves of that check silently no-op, letting the entry after it
+    declare any origin unchecked. Reject the vacuous entry outright."""
+    sample = await _sample(client, admin_headers, batch="B-CUST-3")
+    other, _ = await _actor(client, admin_headers, "USER")
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "transfer_reason": "no recipient, no location"}, headers=admin_headers)
+    assert r.status_code == 422 and "destination" in r.text
+    assert (await client.get(f"/qc/samples/{sample['id']}/custody",
+                             headers=admin_headers)).json() == []  # nothing was recorded
+    # a recipient with no location is a legitimate entry (e.g. an internal
+    # same-location handoff between people)
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "to_user_id": other["id"], "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # and a location with no named recipient is legitimate too (e.g. a
+    # location-only drop) — continuing from the sample's actual holder
+    r = await client.post(f"/qc/samples/{sample['id']}/custody", json={
+        "from_user_id": other["id"], "to_location": "QC Lab - Shelf 2",
+        "transfer_type": "LAB_INTERNAL"}, headers=admin_headers)
     assert r.status_code == 201, r.text
 
 
@@ -3064,7 +3189,13 @@ async def test_spec_acceptance_criteria_locked_after_authoring(client, admin_hea
     same control the child parameters already enforce. notes + a lifecycle
     transition stay allowed."""
     spec = await _spec(client, admin_headers, material="LOCK-MAT")
-    for tgt in ("QC_REVIEW", "QA_APPROVED", "NUMBERED", "TRAINED", "ACTIVE"):
+    # QA_APPROVED needs a different actor than admin (the spec's author).
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QC_REVIEW"},
+                               headers=admin_headers)).status_code == 200
+    _, approver = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": "QA_APPROVED"},
+                               headers=approver)).status_code == 200
+    for tgt in ("NUMBERED", "TRAINED", "ACTIVE"):
         assert (await client.patch(f"/qc/specifications/{spec['id']}", json={"status": tgt},
                                    headers=admin_headers)).status_code == 200, tgt
     r = await client.patch(f"/qc/specifications/{spec['id']}",

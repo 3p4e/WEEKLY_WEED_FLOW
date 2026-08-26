@@ -7,7 +7,7 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import _WRITERS, _uuid_or_404, _uuid_or_422, router
+from .common import _HOQC, _WRITERS, _uuid_or_404, _uuid_or_422, router
 
 
 _SPEC_STATUSES = (
@@ -201,7 +201,8 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
     patch = body.model_dump(exclude_unset=True)
     _check_grade(patch.get("thc_grade"))
     async with rls(user) as c:
-        cur = await c.fetchrow("SELECT status FROM qc_specifications WHERE id=$1", spec_id)
+        cur = await c.fetchrow(
+            "SELECT status, created_by, updated_by FROM qc_specifications WHERE id=$1", spec_id)
         if cur is None:
             raise HTTPException(404, "Specification not found")
         # The pharmaceutically load-bearing fields (acceptance criteria, grade,
@@ -222,6 +223,21 @@ async def update_spec(spec_id: str, body: SpecPatch, user: dict = Depends(requir
                 raise HTTPException(422, "Unknown status")
             if target not in _SPEC_TRANSITIONS.get(cur["status"], set()):
                 raise HTTPException(409, f"Illegal transition {cur['status']} -> {target}")
+            # QC_REVIEW -> QA_APPROVED is the GMP sign-off, not just another
+            # lifecycle move: it requires the tighter Head-of-QC role (no
+            # executives — the blanket _WRITERS gate on this endpoint is too
+            # wide for a QA release decision) AND segregation of duties — the
+            # approver must be a different person than whoever authored
+            # (created_by) or last edited (updated_by) the spec. Mirrors
+            # potency.py's approve_potency_spec (PP-QC-SPEC-001) exactly.
+            if cur["status"] == "QC_REVIEW" and target == "QA_APPROVED":
+                if user["role"] not in _HOQC:
+                    raise HTTPException(
+                        403, "Only Head of QC (ADMIN/QC_MGR/QP) may approve a specification")
+                if str(user["id"]) in (str(cur["created_by"]), str(cur["updated_by"])):
+                    raise HTTPException(
+                        403, "The person approving a specification must be different from the"
+                             " person who authored it (segregation of duties)")
         fields, args = [], []
         _NULLABLE = {"material_name_mk", "effective_date", "thc_grade",
                      "thc_acceptance_min", "thc_acceptance_max", "notes"}

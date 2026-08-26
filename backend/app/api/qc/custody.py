@@ -501,6 +501,19 @@ async def add_custody(sample_id: str, body: CustodyIn, user: dict = Depends(requ
     async with rls(user) as c:
         if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", sample_id) is None:
             raise HTTPException(404, "Sample not found")
+        # A custody entry with neither a recipient nor a location is "transferred
+        # to nobody, nowhere" — it records no destination at all. The continuity
+        # guard below trusts the PREVIOUS entry's to_user_id/to_location to
+        # anchor the NEXT entry's declared origin; a vacuous entry makes both
+        # halves of that check no-op (both previous values are falsy), so the
+        # entry after a vacuous one could declare any origin unchecked — exactly
+        # the gap-in-the-chain this guard exists to close. At least one of the
+        # two is required; which one is a legitimate domain choice (e.g. an
+        # internal same-location handoff between people needs only to_user_id, a
+        # location-only drop needs only to_location), so both are not required.
+        if body.to_user_id is None and body.to_location is None:
+            raise HTTPException(422, "a custody transfer must record a destination — at minimum a"
+                                     " recipient or a location")
         if body.sfr_id:
             if await c.fetchrow("SELECT id FROM qc_sample_field_records WHERE id=$1", body.sfr_id) is None:
                 raise HTTPException(422, "Unknown field record")

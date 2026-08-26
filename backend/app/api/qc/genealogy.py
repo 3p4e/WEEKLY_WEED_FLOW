@@ -82,10 +82,29 @@ async def delete_genealogy_edge(edge_id: str, user: dict = Depends(require_role(
             raise HTTPException(404, "Genealogy edge not found")
         # An issued (APPROVED/RELEASED) certificate's batch lineage is part of
         # its traceable record — removing an edge that feeds it would silently
-        # rewrite history for a document already handed out.
+        # rewrite history for a document already handed out. It's not enough to
+        # check the edge's own two endpoints: in a longer chain (e.g. A→B→C)
+        # a cert issued on C doesn't sit on the A→B edge directly, yet deleting
+        # A→B still silently drops A from C's traceable ancestor lineage. So
+        # walk the FULL closure reachable from either endpoint — ancestors and
+        # descendants both — using the same recursive-CTE shape as
+        # get_genealogy's ancestor/descendant walk above, just seeded from both
+        # endpoints of this edge instead of one batch_id.
+        seeds = [edge["parent_batch_id"], edge["child_batch_id"]]
         issued = await c.fetchval(
-            "SELECT 1 FROM qc_certificates WHERE batch_id = ANY($1) AND status = ANY($2) LIMIT 1",
-            [edge["parent_batch_id"], edge["child_batch_id"]], list(_ISSUED_FROZEN))
+            "WITH RECURSIVE up AS ("
+            "  SELECT parent_batch_id AS b FROM qc_batch_genealogy WHERE child_batch_id = ANY($1::text[])"
+            "  UNION"
+            "  SELECT g.parent_batch_id FROM qc_batch_genealogy g JOIN up ON g.child_batch_id = up.b),"
+            " down AS ("
+            "  SELECT child_batch_id AS b FROM qc_batch_genealogy WHERE parent_batch_id = ANY($1::text[])"
+            "  UNION"
+            "  SELECT g.child_batch_id FROM qc_batch_genealogy g JOIN down ON g.parent_batch_id = down.b),"
+            " closure AS ("
+            "  SELECT b FROM up UNION SELECT b FROM down UNION SELECT unnest($1::text[]))"
+            " SELECT 1 FROM qc_certificates"
+            " WHERE batch_id IN (SELECT b FROM closure) AND status = ANY($2::text[]) LIMIT 1",
+            seeds, list(_ISSUED_FROZEN))
         if issued:
             raise HTTPException(409, "That edge feeds an issued (APPROVED/RELEASED) certificate's"
                                      " batch lineage and cannot be removed")
