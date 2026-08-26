@@ -31,28 +31,50 @@ class LettaClient:
             settings.letta_read_timeout,
             connect=settings.letta_connect_timeout,
         )
+        # Lazily created, then held for this instance's lifetime. A single
+        # document workflow threads ONE LettaClient through the whole run
+        # (pipeline.run_workflow does `client = client or LettaClient()` once,
+        # then passes that same instance to ensure_fleet/spawn_ephemeral/
+        # send_message/... throughout — see pipeline.py, fleet.py) and makes
+        # 50-70 separate REST calls on it. Building a brand-new
+        # httpx.AsyncClient (fresh TCP+TLS connection) per call paid full
+        # connection setup 50-70 times over; one shared, pooled client reuses
+        # the underlying connection across calls instead. httpx.AsyncClient's
+        # connection pooling is safe for this — the calls here are sequential
+        # awaits on one job, never concurrent on the same instance.
+        self._client_instance: httpx.AsyncClient | None = None
 
     @property
     def configured(self) -> bool:
         return bool(self.base and self.key)
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            base_url=self.base + "/v1",
-            headers={"Authorization": f"Bearer {self.key}"},
-            timeout=self.timeout,
-        )
+        if self._client_instance is None or self._client_instance.is_closed:
+            self._client_instance = httpx.AsyncClient(
+                base_url=self.base + "/v1",
+                headers={"Authorization": f"Bearer {self.key}"},
+                timeout=self.timeout,
+            )
+        return self._client_instance
+
+    async def aclose(self) -> None:
+        """Release the pooled connection(s). Callers that own a LettaClient
+        for a bounded span of work (e.g. pipeline.run_workflow, one job) must
+        call this when done so file descriptors don't accumulate across many
+        requests/jobs, each of which constructs its own LettaClient."""
+        if self._client_instance is not None and not self._client_instance.is_closed:
+            await self._client_instance.aclose()
 
     async def _req(self, method: str, path: str, **kw) -> Any:
         if not self.configured:
             raise LettaError("Letta not configured")
-        async with self._client() as c:
-            r = await c.request(method, path, **kw)
-            if r.status_code >= 400:
-                raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
-            if not r.content:
-                return None
-            return r.json()
+        c = self._client()
+        r = await c.request(method, path, **kw)
+        if r.status_code >= 400:
+            raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
+        if not r.content:
+            return None
+        return r.json()
 
     # ---- reads ----
     async def list_agents(self, name: str | None = None) -> list[dict]:

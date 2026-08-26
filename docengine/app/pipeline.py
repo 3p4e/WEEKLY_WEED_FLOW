@@ -181,6 +181,31 @@ def _drop_echoed_heading(content: str, num: str, mk: str, en: str) -> str:
     return content
 
 
+# A reg-checker finding that is routine ("nothing applies") vs one that
+# actually flagged something — used only to keep the §6A prompt from burying
+# a real finding under a wall of NO-FINDING lines on a clean document. See
+# _reg_findings_context() and the cross-referenced note at the regulatory-
+# check loop in run_workflow().
+_NO_FINDING = re.compile(r"^\s*NO-FINDING\b", re.I)
+
+
+def _reg_findings_context(reg_findings: list[str]) -> str:
+    """Render the per-section regulatory-checker findings as EXTRA CONTEXT for
+    the §6A auditor prompt — informational only, not a gate (see the note at
+    the regulatory-check loop in run_workflow() for why this stays advisory).
+    Routine NO-FINDING sections are omitted so a long clean document doesn't
+    bury the section(s) that actually flagged something; if every section
+    came back clean, say that plainly instead of an empty/misleading block."""
+    flagged = [f for f in reg_findings if not _NO_FINDING.search(f.split("]", 1)[-1])]
+    if not flagged:
+        return "REGULATORY CHECK: no section flagged a conflict or gap.\n\n"
+    return (
+        "REGULATORY CHECK (per-section, informational — use your own judgement "
+        "on whether any of this should factor into your verdict):\n"
+        + "\n".join(flagged) + "\n\n"
+    )
+
+
 def _qa_audit_passed(verdict: str) -> bool:
     """True only on an unambiguous PASS.
 
@@ -556,6 +581,22 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # window by the last section or two (observed live, twice, including
         # against a freshly-created agent) — isolating each check per-section
         # keeps the prompt size constant regardless of section count.
+        #
+        # NOTE on reg_findings and gating (cross-ref: the §6A audit prompt
+        # below, where reg_findings is consumed): a per-section CONFLICT or
+        # GAP finding here does NOT block the job and is not itself checked
+        # against any pass/fail gate — it is folded into the §6A auditor's
+        # prompt as additional context (below) so the AI auditor can decide
+        # whether to raise it, but the auditor is free to PASS a document
+        # despite an open regulatory finding. That is a real gap relative to
+        # this pipeline's other gates (the §6A PASS gate itself, pp_verify's
+        # PASS gate, the bilingual gate), all of which are hard-enforced.
+        # Whether findings SHOULD hard-block is a product decision this
+        # comment deliberately does not make — the regulatory-checker's
+        # false-positive rate is unknown, and a hard gate here could break
+        # legitimate document generation on a noisy checker. A future editor
+        # who wants to change this should make it a deliberate call, not a
+        # side effect of an unrelated change.
         await db.job_update(job_id, stage="regulatory-check")
         reg_findings: list[str] = []
         for s in sections:
@@ -606,6 +647,12 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         author = "gf_sop_author" if doctype == "SOP" else "gf_annex_author"
         audits: list[str] = []
         markdown = assemble_markdown(meta, sections)
+        # Cross-ref: the regulatory-check loop above computes reg_findings and
+        # explains there why it is advisory context here rather than a hard
+        # gate. Folded into the prompt (not the pass/fail mechanics) so the AI
+        # auditor at least has visibility into what the regulatory-checker
+        # found and can choose to raise it as an issue itself.
+        reg_context = _reg_findings_context(reg_findings)
         for attempt in range(max(0, settings.max_repair_rounds) + 1):
             audit = await client.send_message(
                 agents["gf_qa_auditor"],
@@ -616,7 +663,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "formatter in canonical form — they are not the author's and not "
                 "yours to restyle. Do not raise issues about their spacing, level "
                 "or punctuation; no author can act on those and the document "
-                "cannot pass.\n\n" + markdown,
+                "cannot pass.\n\n" + reg_context + markdown,
             )
             audits.append(audit)
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
@@ -702,3 +749,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # record the type name so the job row never shows a blank error.
         detail = str(e).strip() or repr(e)
         await db.job_update(job_id, status="failed", error=f"{type(e).__name__}: {detail}"[:500])
+    finally:
+        # This LettaClient (whether passed in or created above) is scoped to
+        # this one job — nothing else holds a reference to it once
+        # run_workflow returns. Its pooled httpx.AsyncClient (see letta.py)
+        # must be closed here or the connection/file descriptor it holds
+        # outlives the job that opened it, across every job this worker runs.
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001 — cleanup must never mask a job result
+            log.warning("job %s: failed to close Letta client", job_id, exc_info=True)

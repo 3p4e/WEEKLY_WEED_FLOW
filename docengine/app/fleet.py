@@ -32,8 +32,25 @@ TOOL_FILE = AGENTS_DIR / f"{TOOL_NAME}.py"
 SCOPE_BLOCK = "ragflow_scope"
 
 
+# fleet.yaml is static for the life of the process (it's a declarative spec,
+# not runtime state), but load_fleet() is called synchronously — no
+# asyncio.to_thread — from spawn_ephemeral() (~a dozen times per single
+# document job: once per section in the regulatory-check loop, plus per
+# repair round) and agent_datasets(). Re-reading + re-parsing the YAML on
+# every one of those calls blocks the event loop each time, briefly stalling
+# every other coroutine on that worker (including /health and other jobs'
+# polls) — the same defect class as H14 elsewhere in this codebase, recurring
+# here at smaller scale but higher frequency. Memoize instead of wrapping
+# every call in asyncio.to_thread: the data never changes, so caching removes
+# the repeated parse work entirely rather than merely moving it off-thread.
+_FLEET_SPEC: dict | None = None
+
+
 def load_fleet() -> dict:
-    return yaml.safe_load(FLEET_FILE.read_text(encoding="utf-8"))
+    global _FLEET_SPEC
+    if _FLEET_SPEC is None:
+        _FLEET_SPEC = yaml.safe_load(FLEET_FILE.read_text(encoding="utf-8"))
+    return _FLEET_SPEC
 
 
 def load_tool_source() -> str:

@@ -299,7 +299,23 @@ def new_sop(margin_cm=1.27, from_template=True, code=None,
     tpl = template or PP_TEMPLATE
     hdr_mk = mk_title or mk_name
     hdr_en = en_title or en_name or ("STANDARD OPERATING PROCEDURE — %s" % (code or ""))
-    if from_template and os.path.exists(tpl):
+    if from_template:
+        if not os.path.exists(tpl):
+            # A missing template here is a deployment defect (container image
+            # missing assets/PP_BASE_TEMPLATE.docx, or a bad relative path),
+            # NOT a legitimate "no template wanted" case — from_template=True
+            # means the caller wants the mandatory header/footer/logo. Silently
+            # falling through to a bare Document() below would build (and
+            # PASS pp_verify's gate — it never checks the header/footer table
+            # exists) a document missing the running header and "Page X of Y"
+            # footer this module's own docstring calls MANDATORY on every
+            # Purely Plant document. Fail loud instead.
+            raise FileNotFoundError(
+                f"PP base template not found at {tpl!r} — cannot build a "
+                "from_template=True SOP without it (the mandatory header/logo/"
+                "footer live there). Pass from_template=False explicitly if a "
+                "templateless document is actually intended."
+            )
         d = Document(tpl)
         apply_pp_header(d, hdr_mk, code or "", hdr_en, version)
         wipe_body(d)
@@ -441,7 +457,17 @@ def new_annex(orient="portrait", from_template=True, code=None,
     tpl = template or PP_TEMPLATE
     hdr_mk = mk_title or mk_name
     hdr_en = en_title or en_name or ("ANNEX — %s" % (code or ""))
-    if from_template and os.path.exists(tpl):
+    if from_template:
+        if not os.path.exists(tpl):
+            # See new_sop()'s identical guard: from_template=True asked for the
+            # mandatory header/footer/logo, so a missing template file is a
+            # deployment defect to fail loudly on, not a silent bare Document().
+            raise FileNotFoundError(
+                f"PP base template not found at {tpl!r} — cannot build a "
+                "from_template=True annex without it (the mandatory header/logo/"
+                "footer live there). Pass from_template=False explicitly if a "
+                "templateless document is actually intended."
+            )
         d = Document(tpl)
         apply_pp_header(d, hdr_mk, code or "", hdr_en, version)
         wipe_body(d)

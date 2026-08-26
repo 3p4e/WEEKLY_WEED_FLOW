@@ -5,8 +5,11 @@ import ast
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app import fleet  # noqa: E402
 from app.fleet import (  # noqa: E402
     TOOL_NAME,
     _resolve_model,
@@ -15,6 +18,15 @@ from app.fleet import (  # noqa: E402
     load_fleet,
     load_tool_source,
 )
+
+
+@pytest.fixture
+def _fresh_fleet_cache(monkeypatch):
+    """Force the module-level memoization in load_fleet() back to "never
+    loaded" so a test can observe the FIRST load, independent of whatever
+    earlier tests in this session already cached."""
+    monkeypatch.setattr(fleet, "_FLEET_SPEC", None)
+    yield
 
 
 def test_resolve_model_falls_back_to_yaml_defaults_when_no_agents_exist():
@@ -179,6 +191,51 @@ def test_declared_defaults_are_not_an_out_of_credit_provider():
     and OpenAI handles it cannot bill."""
     model = load_fleet()["defaults"]["model"]
     assert not model.startswith(("anthropic/", "openai/")), model
+
+
+def test_load_fleet_reads_the_file_only_once(_fresh_fleet_cache, monkeypatch):
+    """MEDIUM: load_fleet() used to do a synchronous Path.read_text() +
+    yaml.safe_load() on the event-loop thread on EVERY call. spawn_ephemeral
+    (the fix's actual target) calls load_fleet() roughly a dozen times per
+    single document job. Assert the read function itself is invoked at most
+    once across many load_fleet() calls -- the caching, not just its result."""
+    # Path is a slotted C type -- an instance attribute like FLEET_FILE can't
+    # carry a monkeypatched method, so spy on yaml.safe_load instead (the
+    # other half of load_fleet()'s read-and-parse work, and just as good a
+    # proof that the file wasn't re-read-and-reparsed).
+    calls = []
+    real_safe_load = fleet.yaml.safe_load
+
+    def counting_safe_load(*a, **k):
+        calls.append(1)
+        return real_safe_load(*a, **k)
+
+    monkeypatch.setattr(fleet.yaml, "safe_load", counting_safe_load)
+
+    first = load_fleet()
+    for _ in range(11):  # mirrors "roughly a dozen times per job"
+        again = load_fleet()
+        assert again is first  # same cached object, not just equal content
+
+    assert len(calls) == 1, f"fleet.yaml was read {len(calls)} times, expected 1"
+
+
+def test_agent_datasets_reuses_the_cached_spec_too(_fresh_fleet_cache, monkeypatch):
+    """agent_datasets() is the other unconditional load_fleet() caller named
+    in the bug report -- same cache, same guarantee."""
+    calls = []
+    real_safe_load = fleet.yaml.safe_load
+
+    def counting_safe_load(*a, **k):
+        calls.append(1)
+        return real_safe_load(*a, **k)
+
+    monkeypatch.setattr(fleet.yaml, "safe_load", counting_safe_load)
+
+    agent_datasets("gf_reg_checker")
+    agent_datasets("gf_sop_author")
+    load_fleet()
+    assert len(calls) == 1
 
 
 def test_context_window_and_max_tokens_are_declared_and_sane():

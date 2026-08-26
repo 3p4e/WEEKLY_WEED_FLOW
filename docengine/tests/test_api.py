@@ -170,6 +170,41 @@ def test_workflow_rejects_bad_multi_option(client, monkeypatch):
     assert "sample_types" in r.json()["detail"]
 
 
+def test_workflow_rejects_oversized_answers(client, monkeypatch):
+    """MEDIUM: unlike BuildIn's markdown/out_name (Field(max_length=...)),
+    WorkflowIn.answers/meta had no size bound at all, and every value flows
+    verbatim into every agent prompt for the job (see pipeline._brief). An
+    arbitrarily large payload must be rejected before a job is ever created —
+    same rule the pre-populated-answers gate already runs by."""
+    _stub_job_pipeline(monkeypatch)
+    r = client.post(
+        "/workflows", headers=h(),
+        json={
+            "questionnaire": "sop_qc",
+            "answers": {"focus": "x" * 200_000},
+            "meta": {"title_mk": "а", "title_en": "a", "code": "X-5"},
+        },
+    )
+    assert r.status_code == 422
+    assert "answers" in r.text
+
+
+def test_workflow_rejects_oversized_meta(client, monkeypatch):
+    """Same cap, the other dict-shaped field on the model."""
+    _stub_job_pipeline(monkeypatch)
+    r = client.post(
+        "/workflows", headers=h(),
+        json={
+            "questionnaire": "sop_qc",
+            "answers": {},
+            "meta": {"title_mk": "а", "title_en": "a", "code": "X-6",
+                      "junk": "y" * 200_000},
+        },
+    )
+    assert r.status_code == 422
+    assert "meta" in r.text
+
+
 def test_workflow_accepts_defined_options(client, monkeypatch):
     """The legitimate path must keep working: real option values -- including
     a dict-shaped default option's "v" and a non-default plain-string option

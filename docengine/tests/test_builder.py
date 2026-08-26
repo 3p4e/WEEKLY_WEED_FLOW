@@ -205,6 +205,50 @@ def test_concurrent_builds_of_same_code_produce_two_intact_documents(tmp_path):
     assert not list(tmp_path.glob(".*partial*"))
 
 
+def test_new_sop_raises_loudly_when_template_missing(tmp_path):
+    """MEDIUM: new_sop(from_template=True) used to silently fall back to a
+    bare Document() with NO mandatory header/footer/logo when PP_TEMPLATE
+    didn't exist -- no log, no exception -- and that bare document could still
+    PASS pp_verify's gate (it never checks the header/footer table exists).
+    A missing template file (bad container image, bad relative path) must
+    fail loudly instead."""
+    import pp_format
+    missing = tmp_path / "does_not_exist.docx"
+    with pytest.raises(FileNotFoundError, match=str(missing)):
+        pp_format.new_sop(code="C-1", template=str(missing))
+
+
+def test_new_annex_raises_loudly_when_template_missing(tmp_path):
+    import pp_format
+    missing = tmp_path / "does_not_exist.docx"
+    with pytest.raises(FileNotFoundError, match=str(missing)):
+        pp_format.new_annex(code="C-1", template=str(missing))
+
+
+def test_new_sop_from_template_false_is_unaffected():
+    """The other branch must keep working: a caller that deliberately asks
+    for NO template (from_template=False) still gets a plain Document(), not
+    an exception -- the guard is scoped to the "wanted a template but it's
+    missing" case only."""
+    import pp_format
+    d = pp_format.new_sop(from_template=False)
+    assert d is not None
+
+
+def test_new_annex_from_template_false_is_unaffected():
+    import pp_format
+    d = pp_format.new_annex(from_template=False)
+    assert d is not None
+
+
+def test_new_sop_succeeds_with_the_real_template():
+    """The happy path is untouched by the guard: the real PP_TEMPLATE exists
+    in this checkout, so from_template=True (the default) must still build."""
+    import pp_format
+    d = pp_format.new_sop(code="C-1", mk_title="Наслов", en_title="Title")
+    assert d is not None
+
+
 def test_failed_build_cannot_delete_another_builds_document(tmp_path, monkeypatch):
     """H13 — the FAIL path unlinks its own staging file, which is uniquely
     named, so it can no longer take out a sibling build's passing artifact."""

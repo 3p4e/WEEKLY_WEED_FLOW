@@ -13,6 +13,7 @@
 #   GET  /documents/{id}/download         the .docx (only ever PASS docs)
 #   GET  /documents/{id}/pdf              Gotenberg-rendered PDF
 import asyncio
+import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -21,7 +22,7 @@ from pathlib import Path
 import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import builder, db
 from .config import settings
@@ -104,11 +105,33 @@ async def get_questionnaire(key: str):
 
 
 # ---------- workflows ----------
+# Unlike BuildIn's markdown/out_name below (Field(max_length=...)), a bare
+# `dict` field can't carry a length bound directly — so this is a validator
+# instead of a Field kwarg. Every value in answers/meta flows verbatim into
+# every agent prompt for the job (see _brief() / assemble_markdown() in
+# pipeline.py), so an unbounded payload is the same class of risk BuildIn's
+# bounds already guard against, just on a dict-shaped field instead of a str
+# one. The cap is generous (comfortably above any real questionnaire's
+# answers or a normal meta block) while staying well below "clearly abusive".
+_MAX_DICT_JSON_CHARS = 80_000
+
+
 class WorkflowIn(BaseModel):
     questionnaire: str
     answers: dict = Field(default_factory=dict)
     meta: dict  # {title_mk, title_en, code, version?, orient?}
     requested_by: str = ""
+
+    @field_validator("answers", "meta")
+    @classmethod
+    def _bound_json_size(cls, v: dict, info) -> dict:
+        size = len(json.dumps(v, ensure_ascii=False))
+        if size > _MAX_DICT_JSON_CHARS:
+            raise ValueError(
+                f"{info.field_name} is too large ({size} chars serialized JSON; "
+                f"max {_MAX_DICT_JSON_CHARS})"
+            )
+        return v
 
 
 @app.post("/workflows", dependencies=[Depends(require_api_key)])

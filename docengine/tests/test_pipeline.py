@@ -15,7 +15,7 @@ from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
     _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
-    _drop_echoed_heading,
+    _drop_echoed_heading, _reg_findings_context,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -113,6 +113,33 @@ def test_clean_section_prose_peels_leading_commentary_only():
     raw = "Here is the section body:\n\nThe purpose of this SOP is to define X."
     out = _clean_section(raw, structured=False)
     assert out == "The purpose of this SOP is to define X."
+
+
+def test_reg_findings_context_all_clean_sections_read_as_clean():
+    ctx = _reg_findings_context(["[1.0] NO-FINDING", "[2.0] NO-FINDING: nothing applies"])
+    assert "no section flagged" in ctx
+    assert "1.0" not in ctx  # no per-section noise when everything's clean
+
+
+def test_reg_findings_context_surfaces_only_the_flagged_sections():
+    # reg_findings is computed but not gated on (see the cross-referenced
+    # notes in pipeline.py) -- this is the conservative middle ground: fold
+    # it into the §6A prompt as advisory context, but keep a clean document's
+    # long NO-FINDING run from burying the one section that actually flagged
+    # something.
+    findings = [
+        "[1.0] NO-FINDING",
+        "[3.0] CONFLICT: dwell time contradicts EU GMP Annex 1 clause 4.2",
+        "[6.0] NO-FINDING: nothing applies",
+    ]
+    ctx = _reg_findings_context(findings)
+    assert "[3.0] CONFLICT: dwell time contradicts EU GMP Annex 1 clause 4.2" in ctx
+    assert "[1.0]" not in ctx and "[6.0]" not in ctx
+    assert "informational" in ctx.lower()
+
+
+def test_reg_findings_context_empty_list_reads_as_clean():
+    assert "no section flagged" in _reg_findings_context([])
 
 
 def test_clean_section_keeps_legitimate_prose():
@@ -256,6 +283,40 @@ async def test_qa_audit_pass_verdict_proceeds_to_build(monkeypatch):
     monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
     await run_workflow("job-1", client=FakeClient())
     assert updates[-1]["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_qa_audit_prompt_carries_the_regulatory_findings_as_context(monkeypatch):
+    """The conservative middle-ground fix for the reg_findings/§6A gap: a
+    regulatory-check CONFLICT must reach the §6A auditor's prompt as
+    context, even though it still doesn't hard-block the job on its own
+    (that decision is deliberately left to a human/future editor -- see the
+    comments at both sites in pipeline.py)."""
+    updates = _patch_common(monkeypatch, qkey="annex_form")  # single section
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class ConflictClient(FakeClient):
+        def __init__(self):
+            self.audit_prompts = []
+
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                self.audit_prompts.append(prompt)
+                return "PASS"
+            if "regulatory corpus" in prompt:
+                return "CONFLICT: dwell time contradicts EU GMP Annex 1 clause 4.2"
+            return await super().send_message(agent_id, prompt)
+
+    client = ConflictClient()
+    await run_workflow("job-1", client=client)
+
+    assert updates[-1]["status"] == "done"
+    assert len(client.audit_prompts) == 1
+    assert "CONFLICT: dwell time contradicts EU GMP Annex 1 clause 4.2" in client.audit_prompts[0]
+    # advisory only: the auditor's own PASS still stands as the job's verdict
+    assert updates[-1]["result"]["qa_audit"] == "PASS"
+    # and the raw finding is still recorded separately, same as before
+    assert any("CONFLICT" in f for f in updates[-1]["result"]["regulatory"])
 
 
 @pytest.mark.asyncio
