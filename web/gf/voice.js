@@ -3,12 +3,27 @@ window.GF = window.GF || {};
 
 GF.voice = {
   _rec: null,
+  _recFor: null,   // which inputId `_rec` is actually recording for
 
   /* Inline dictation into an input field (mic toggle) */
   dictate(inputId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
-    if (this._rec) { this._rec.stop(); this._rec = null; this._setMicUI(inputId, false); return; }
+    if (this._rec) {
+      // Stop the recognizer that is ACTUALLY running, and reset the UI of
+      // the field it was ACTUALLY recording (_recFor) — not the field that
+      // was just clicked. Without tracking _recFor, clicking mic B while mic
+      // A was recording stopped A's recognizer but flipped B's UI to "off"
+      // (a no-op — B was never on), leaving A's button stuck showing
+      // "recording" forever and eating this click.
+      const wasFor = this._recFor;
+      this._rec.stop(); this._rec = null; this._recFor = null;
+      this._setMicUI(wasFor, false);
+      // Clicking the SAME field's mic again is "stop" and nothing else. A
+      // DIFFERENT field's mic falls through to start recording it right in
+      // this same click, instead of requiring the user to click it twice.
+      if (wasFor === inputId) return;
+    }
 
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
     const rec = new SR();
@@ -23,11 +38,12 @@ GF.voice = {
       const el = GF.$(inputId); if (el) el.value = (final + interim).trim();
     };
     rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast(AL('Mic error: ', 'Грешка со микрофон: ') + e.error, 'error'); };
-    // Only clear _rec if it still points at THIS recognizer — a fast
-    // stop-then-start-elsewhere can leave a newer recognizer's reference
-    // wiped by this (older) instance's late-firing 'end' event otherwise.
-    rec.onend = () => { if (this._rec === rec) this._rec = null; this._setMicUI(inputId, false); };
-    rec.start(); this._rec = rec;
+    // Only clear _rec (and _recFor) if it still points at THIS recognizer —
+    // a fast stop-then-start-elsewhere can leave a newer recognizer's
+    // reference wiped by this (older) instance's late-firing 'end' event
+    // otherwise.
+    rec.onend = () => { if (this._rec === rec) { this._rec = null; this._recFor = null; } this._setMicUI(inputId, false); };
+    rec.start(); this._rec = rec; this._recFor = inputId;
     this._setMicUI(inputId, true);
     GF.toast(GF.t('listening'), 'info');
   },

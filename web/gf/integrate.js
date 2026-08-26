@@ -404,10 +404,37 @@ GF.WWF.install = () => {
       else if (t.status === 'stuck' && GF.WWF.promptBlocker) GF.WWF.promptBlocker(id);
     }
     catch(e){ if (prevStatus !== undefined) { t.status = prevStatus; GF.render.panels(); } GF.toast(e.message || 'Save failed','error'); } };
-  GF.cycleStatus = (id) => { const t = GF.task(id); const prev = t && t.status; origCycle(id); pushStatus(id, prev); };
-  GF.toggleDone  = (id) => { const t = GF.task(id); const prev = t && t.status; origToggle(id); pushStatus(id, prev); };
-  GF.setStatus   = (id, s) => { const t = GF.task(id); const prev = t && t.status;
-    const ok = origSet(id, s); if (ok) pushStatus(id, prev); return ok; };
+  // Re-entrancy guard, same GF.once() pattern as submitAdd/submitUser below —
+  // but keyed on the TASK id rather than a button id, since these three fire
+  // from per-task inline controls (a checkbox, a status-cycle click, a picker
+  // pick), not one shared modal button. A fast double-click computed its PATCH
+  // body from the mutating LOCAL status, so two overlapping in-flight
+  // requests could race and let network timing — not the user's actual last
+  // click — decide what got persisted. Sharing one key ('status-'+id) across
+  // all three functions guards any combination of them on the SAME task,
+  // while a different task id is never blocked (GF.once's busy flag is keyed
+  // per id, and GF.$('status-'+id) resolves to no real DOM node, so the
+  // disable/re-enable it also does is a harmless no-op here).
+  // GF.once's synchronous prefix — the busy check, then this callback's own
+  // code up to its first genuine await (pushStatus's fetch) — still runs
+  // before GF.once(...) returns, so callers reading GF.setStatus's return
+  // value synchronously (render.js's status picker, worklog.js) keep working:
+  // a dropped (already-busy) call yields `false`, exactly like a rejected one.
+  GF.cycleStatus = (id) => { GF.once('status-' + id, async () => {
+    const t = GF.task(id); const prev = t && t.status; origCycle(id); await pushStatus(id, prev);
+  }); };
+  GF.toggleDone = (id) => { GF.once('status-' + id, async () => {
+    const t = GF.task(id); const prev = t && t.status; origToggle(id); await pushStatus(id, prev);
+  }); };
+  GF.setStatus = (id, s) => {
+    let ok = false;
+    GF.once('status-' + id, async () => {
+      const t = GF.task(id); const prev = t && t.status;
+      ok = origSet(id, s);
+      if (ok) await pushStatus(id, prev);
+    });
+    return ok;
+  };
 
   GF.deleteTask = (id) => GF.toast(GF.state.lang==='mk'?'Бришењето е оневозможено (ревизија)':'Delete disabled (audit retention)','info');
 

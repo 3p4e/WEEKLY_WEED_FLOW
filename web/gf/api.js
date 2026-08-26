@@ -14,6 +14,12 @@ GF.API = {
     return h;
   },
   async _req(method, path, body) {
+    // Capture the token THIS request actually sends, before the fetch's
+    // await hands control back to the event loop. _headers() reads
+    // `this.token` synchronously right here, so `sentToken` is exactly what
+    // went out on the wire for this call — even if `this.token` is rotated
+    // to a different value while this request is still in flight.
+    const sentToken = this.token;
     const res = await fetch(this.base + path, {
       method, headers: this._headers(),
       body: body == null ? undefined : JSON.stringify(body),
@@ -25,16 +31,29 @@ GF.API = {
       // username or password" message was written into a dead element and the
       // user got silently bounced back to the leaf splash with no feedback.
       // doLogin's own catch renders the error on the live card instead.
-      const hadSession = !!GF.API.token;
       if (path !== '/auth/login') {
-        GF.API.logout();
-        // Re-show the login overlay from every call site, not just the 3 that
-        // happened to check for it — otherwise an expired/invalidated token
-        // mid-session leaves a half-rendered app behind a toast. BUT only when
-        // a session actually existed: a stray boot-time 401 with no token
-        // means the user is ALREADY at the splash — rebuilding it out from
-        // under them resets the reveal and eats whatever they were typing.
-        if (hadSession && GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
+        // A 401 only means "this session is dead" if the token that was
+        // ACTUALLY REJECTED (sentToken) still matches the token GF.API is
+        // CURRENTLY using. changePassword() installs a fresh token the
+        // instant the server confirms the change, and the server invalidates
+        // the OLD token immediately — so a request that was already in
+        // flight with that old token (a background poll, say) can 401 AFTER
+        // the swap. That is not the current session dying; it is a stale
+        // request meeting a token that was legitimately rotated out from
+        // under it. Logging out here would undo a successful, intentional
+        // credential change, so only tear the session down when nothing has
+        // rotated the token since this request was sent.
+        if (sentToken === GF.API.token) {
+          const hadSession = !!GF.API.token;
+          GF.API.logout();
+          // Re-show the login overlay from every call site, not just the 3 that
+          // happened to check for it — otherwise an expired/invalidated token
+          // mid-session leaves a half-rendered app behind a toast. BUT only when
+          // a session actually existed: a stray boot-time 401 with no token
+          // means the user is ALREADY at the splash — rebuilding it out from
+          // under them resets the reveal and eats whatever they were typing.
+          if (hadSession && GF.WWF && GF.WWF.showLogin) GF.WWF.showLogin();
+        }
       }
       const authErr = new Error('unauthorized');
       authErr.status = 401;   // parity with the generic branch (callers key on e.status)
