@@ -3,9 +3,12 @@ bug: the frontend's S_OUT map used to collapse 'review'/'postponed' into
 other values on save (fixed this session). The bug was entirely
 client-side, but this pins the backend's side of that contract: every
 status the frontend can send must round-trip through PATCH unchanged."""
+import asyncio
+
 import pytest
 
 from app.db import tasks_admin_pool
+from app.worktime import facility_today
 
 ALL_STATUSES = ["pending", "ongoing", "review", "stuck", "postponed", "completed"]
 
@@ -653,3 +656,150 @@ async def test_external_ref_duplicate_is_409_not_500(client, admin_headers):
     r = await client.patch(f"/tasks/{other['id']}", json={"external_ref": "ext-dup-001"},
                            headers=admin_headers)
     assert r.status_code == 409, r.text
+
+
+async def test_delete_dependency_scope_checks_both_sides_of_the_edge(client, admin_headers, org):
+    """Regression: delete_dependency only scope-checked task_id, unlike
+    add_dependency (which checks both sides via `for tid in (task_id, dep):`).
+    That made dep_id's visibility an existence oracle — a dept-scoped manager
+    could learn whether a specific out-of-scope task id exists (and has a real
+    edge to one of their own tasks) purely from whether the delete succeeded
+    vs 404'd, without ever being able to see that task any other way."""
+    from tests.conftest import create_user, login_and_set_password
+
+    dept_a = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'da','Dept A') RETURNING id", org["org_id"])
+    dept_b = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'db','Dept B') RETURNING id", org["org_id"])
+
+    r = await client.post("/tasks", json={"title": "In dept A", "department_id": str(dept_a["id"])},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_a = r.json()["id"]
+    r = await client.post("/tasks", json={"title": "In dept B", "department_id": str(dept_b["id"])},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_b = r.json()["id"]
+
+    # Admin (org-wide) can create the edge: A is blocked by B.
+    r = await client.post(f"/tasks/{task_a}/dependencies", json={"depends_on_task_id": task_b},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+    # A manager scoped to Dept A can see task_a but not task_b.
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=str(dept_a["id"]))
+    token = await login_and_set_password(client, mgr["username"], otp)
+    mgr_h = {"Authorization": f"Bearer {token}"}
+    assert (await client.get(f"/tasks/{task_a}", headers=mgr_h)).status_code == 200
+    assert (await client.get(f"/tasks/{task_b}", headers=mgr_h)).status_code == 404
+
+    # The manager must not be able to delete an edge whose OTHER side (dep_id)
+    # they can't see — even though the edge is real and task_id is in scope.
+    r = await client.delete(f"/tasks/{task_a}/dependencies/{task_b}", headers=mgr_h)
+    assert r.status_code == 404, r.text
+
+    # The edge must still be intact — the manager's request must not have
+    # silently deleted it before/without the scope check applying.
+    detail = (await client.get(f"/tasks/{task_a}", headers=admin_headers)).json()
+    assert [d["id"] for d in detail["blocked_by"]] == [task_b]
+
+    # Sanity: admin (org-wide) can still delete it.
+    r = await client.delete(f"/tasks/{task_a}/dependencies/{task_b}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+
+async def test_patch_noop_on_nonexistent_task_returns_404(client, admin_headers):
+    """Regression: an empty-body PATCH to a nonexistent task id used to return
+    200 {"noop": True} for org-wide callers — _assert_scope_visible no-ops
+    when dept_scope() is None, so it never confirmed the row actually
+    existed, inconsistent with a non-empty PATCH to the same id (which
+    already 404's via UPDATE ... RETURNING NULL) and letting a caller infer
+    task-id existence from the response shape alone."""
+    r = await client.patch("/tasks/00000000-0000-0000-0000-000000000000", json={}, headers=admin_headers)
+    assert r.status_code == 404
+    assert "detail" in r.json()
+
+
+async def test_department_move_permission_enforced_after_lock_reorder(client, admin_headers, org):
+    """Companion to the FOR UPDATE reordering fix in update_task: the
+    department-move permission check now reads department_id/user_id off the
+    row locked by the same FOR UPDATE select prev_status uses (instead of a
+    separate, earlier, unlocked read) — pin that the permission logic itself
+    still behaves correctly off that row."""
+    dept_a = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'ma','Move A') RETURNING id", org["org_id"])
+    dept_b = await tasks_admin_pool().fetchrow(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'mb','Move B') RETURNING id", org["org_id"])
+    from tests.conftest import create_user, login_and_set_password
+
+    mgr, otp = await create_user(client, admin_headers, role="QC_MGR", department_id=str(dept_a["id"]))
+    token = await login_and_set_password(client, mgr["username"], otp)
+    mgr_h = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post("/tasks", json={"title": "In dept A"}, headers=mgr_h)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+    assert r.json()["department_id"] == str(dept_a["id"])
+
+    # A manager may not move their own task out to a department they don't own.
+    r = await client.patch(f"/tasks/{task_id}", json={"department_id": str(dept_b["id"])}, headers=mgr_h)
+    assert r.status_code == 403, r.text
+
+    # An org-wide caller can — the check isn't over-broad.
+    r = await client.patch(f"/tasks/{task_id}", json={"department_id": str(dept_b["id"])}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["department_id"] == str(dept_b["id"])
+
+
+async def test_update_task_concurrent_completions_materialize_once(client, admin_headers):
+    """H8-style companion for update_task's own FOR UPDATE guard (relocated
+    earlier in the function by the lock-reorder fix, ahead of the
+    department-move permission check, but still covering prev_status the same
+    way): two concurrent PATCHes completing the same recurring task must
+    serialize on the row lock, not both read a pre-completion status and each
+    materialize a duplicate 'next' recurring instance."""
+    r = await client.post("/tasks", json={
+        "title": "Concurrent completion", "status": "ongoing",
+        "recurrence": {"freq": "daily", "interval": 1}, "due_date": "2026-07-06"},
+        headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+
+    r1, r2 = await asyncio.gather(
+        client.patch(f"/tasks/{task_id}", json={"status": "completed"}, headers=admin_headers),
+        client.patch(f"/tasks/{task_id}", json={"status": "completed"}, headers=admin_headers),
+    )
+    assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
+    next_instances = [j.get("next_instance") for j in (r1.json(), r2.json()) if j.get("next_instance")]
+    assert len(next_instances) == 1, "exactly one concurrent completion must materialize the next instance"
+
+
+async def test_patch_completed_with_null_completed_date_autofills_today(client, admin_headers):
+    """Regression: status='completed' + completed_date=null used to be
+    accepted verbatim, leaving completed_date NULL on a 'completed' task and
+    silently dropping it out of completion-rate analytics (which filters/
+    aggregates on completed_date being non-null). An explicit null is now
+    treated the same as an omitted completed_date: auto-filled to today,
+    matching this codebase's existing auto-fill/auto-clear convention for
+    status-driven side effects on this column."""
+    r = await client.post("/tasks", json={"title": "Complete with null date", "status": "ongoing"},
+                           headers=admin_headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+
+    r = await client.patch(f"/tasks/{task_id}",
+                            json={"status": "completed", "completed_date": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["completed_date"] == facility_today().isoformat()
+
+    r = await client.get(f"/tasks/{task_id}", headers=admin_headers)
+    assert r.json()["task"]["completed_date"] == facility_today().isoformat()
+
+    # Sanity: an explicit, real completed_date is still respected verbatim.
+    r = await client.post("/tasks", json={"title": "Complete with real date", "status": "ongoing"},
+                           headers=admin_headers)
+    task_id2 = r.json()["id"]
+    r = await client.patch(f"/tasks/{task_id2}",
+                            json={"status": "completed", "completed_date": "2026-01-15"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["completed_date"] == "2026-01-15"

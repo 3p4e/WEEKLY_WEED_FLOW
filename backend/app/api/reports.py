@@ -179,7 +179,7 @@ async def weekly_report(
                 over_clause = _scope_clause(user, over_args)
             elif department_id:
                 over_args.append(department_id)
-                over_clause = " AND t.department_id=$2"
+                over_clause = f" AND t.department_id=${len(over_args)}"
             else:
                 over_clause = ""
             over_rows = await c.fetch(
@@ -263,13 +263,22 @@ async def weekly_report(
         if t["status"] == "completed":
             dept_map[dn]["completed"] += 1
 
-    iso_week = fri.isocalendar()[1]
+    # Label the window from the Monday it contains, not its leading Friday.
+    # Of the window's 5 business days (Fri + Mon-Thu), the 4 weekdays Mon-Thu
+    # fall in the ISO (Mon->Sun) week that Monday belongs to; only the single
+    # leading Friday belongs to the earlier ISO week. fri.isocalendar()
+    # labeled the whole window with that earlier week — wrong for most of it.
+    # iso_year is taken from the SAME reference (not fri.year) so the label
+    # stays internally self-consistent across a Dec/Jan-crossing window, the
+    # same (year, week) pairing convention weekwindow.ensure_week uses.
+    label_ref = fri + timedelta(days=3)  # the window's Monday
+    iso_year, iso_week, _ = label_ref.isocalendar()
     return {
         "period": {
             "start": fri.isoformat(),
             "end": thu.isoformat(),
             "label": (
-                f"W{iso_week} {fri.year} "
+                f"W{iso_week} {iso_year} "
                 f"({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"
             ),
         },

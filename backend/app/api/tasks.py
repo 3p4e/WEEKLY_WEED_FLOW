@@ -623,18 +623,27 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # which is the empty map (recurrence, by contrast, genuinely nulls out).
         if patch["attributes"] is None:
             patch["attributes"] = {}
+    # A completed task must carry a completed_date — completion-rate
+    # analytics filters/aggregates on it being non-null (matching the
+    # auto-fill/auto-clear convention below for other status-driven
+    # side-effects on this column). An explicit `completed_date: null`
+    # alongside `status: "completed"` used to be honored verbatim and
+    # silently dropped the task out of that analytics; treat it the same as
+    # an omitted completed_date (auto-fill today) instead of accepting it.
+    if patch.get("status") == "completed" and patch.get("completed_date") is None:
+        patch["completed_date"] = facility_today()
     scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():
         if val is None and col not in _NULLABLE_PATCH_COLS:
             continue
         args.append(val); fields.append(f"{col}=${len(args)}")
-    # Completing a task stamps completed_date unless the caller set one;
-    # reopening it (status moves away from completed) clears the stale stamp
-    # unless the caller is explicitly setting completed_date themselves.
-    if patch.get("status") == "completed" and "completed_date" not in patch:
-        args.append(facility_today()); fields.append(f"completed_date=${len(args)}")
-    elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
+    # Completing a task is now guaranteed to carry a completed_date — either
+    # the caller's own value, or the today-stamp forced above — so it's
+    # already in `patch` and picked up by the loop above; only reopening
+    # (status moves away from completed) needs a side-effect here, clearing
+    # the stale stamp unless the caller is explicitly setting one themselves.
+    if patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
     # Completing forward-fills the completion bar unless the caller set one.
     # Deliberately one-directional: progress=100 never forces status (the
@@ -654,15 +663,37 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # must be enforced on writes exactly as it already is on reads.
         await _assert_scope_visible(c, task_id, user)
         if noop:
+            # _assert_scope_visible no-ops for an org-wide caller (dept_scope
+            # is None) — it never confirms the row exists in that case. Without
+            # this, an empty-body PATCH to a nonexistent id returned 200
+            # "noop" for org-wide callers while a non-empty PATCH to the same
+            # id correctly 404's below (via UPDATE ... RETURNING NULL) —
+            # inconsistent, and it turned "does this task exist" into a
+            # response-shape oracle. A dept-scoped caller already gets this
+            # for free (their visibility EXISTS query requires the row to
+            # exist), so this is a no-op there.
+            if not await c.fetchval("SELECT 1 FROM tasks WHERE id=$1 AND is_deleted=false", task_id):
+                raise HTTPException(404, "Task not found or not permitted")
             return {"ok": True, "noop": True}
         # A dept-scoped manager can't move a task into another department (or
         # unassign it into the no-department pool their scoped list can't
         # see) — EXCEPT re-targeting a subtask whose parent is in their own
         # department (or personally theirs): that's the delegation move that
         # makes a task multi-departmental.
+        # Lock the row before reading anything from it that a permission
+        # check or the recurrence-idempotency guard below depends on: the
+        # department-move check reads department_id/user_id, and prev_status
+        # reads status — both must see the row FOR UPDATE actually locks, not
+        # a pre-lock snapshot a second, concurrent PATCH on this same task
+        # could still change before this transaction commits (that earlier,
+        # separate read was the audit-flagged race — narrow, since it only
+        # matters when a department-move patch races another write to the
+        # same row, but real).
+        cur_t = await c.fetchrow(
+            "SELECT department_id, user_id, status FROM tasks WHERE id=$1 AND is_deleted=false FOR UPDATE",
+            task_id)
+        prev_status = cur_t["status"] if cur_t else None
         if scope and "department_id" in patch:
-            cur_t = await c.fetchrow(
-                "SELECT department_id, user_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
             cur_dept = str(cur_t["department_id"]) if cur_t and cur_t["department_id"] else None
             if cur_t is not None and str(patch["department_id"] or "") != (cur_dept or ""):
                 fam = await c.fetchrow(
@@ -699,16 +730,14 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
             # reason: the FK alone would accept another org's real batch id.
             if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", patch["batch_id"]):
                 raise HTTPException(422, "Unknown batch")
-        # Capture the pre-update status so a repeated/retried PATCH that sets
-        # status='completed' on an ALREADY-completed recurring task doesn't
-        # re-materialize a duplicate next instance (recurrence isn't cleared
-        # on completion, so this check is the only idempotency guard).
-        # FOR UPDATE: two concurrent completion PATCHes otherwise both read the
-        # pre-completion status and each materializes a "next" recurring
-        # instance (the read is the only idempotency guard, so it must hold
-        # the row lock until this transaction commits).
-        prev_status = await c.fetchval(
-            "SELECT status FROM tasks WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
+        # prev_status was captured above under the same FOR UPDATE lock: a
+        # repeated/retried PATCH that sets status='completed' on an ALREADY-
+        # completed recurring task must not re-materialize a duplicate next
+        # instance (recurrence isn't cleared on completion, so this check is
+        # the only idempotency guard), and two concurrent completion PATCHes
+        # must not both read a pre-completion status — the lock held since
+        # the read above ensures the second transaction blocks until the
+        # first commits, then sees the already-applied status.
         try:
             row = await c.fetchrow(
                 f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
@@ -967,13 +996,19 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
 
 @router.delete("/tasks/{task_id}/dependencies/{dep_id}")
 async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(require_password_set)):
+    """Both sides of the edge get the SAME scope check add_dependency applies
+    when creating one. Checking only task_id let an out-of-scope dep_id's
+    existence be inferred from whether the delete succeeded (edge existed,
+    dep_id in scope) vs 404'd (edge missing, OR dep_id out of scope) — an
+    existence oracle for a task the caller otherwise can't see."""
     _uuid_or_422(task_id, "task_id")
     _uuid_or_422(dep_id, "dep_id")
     async with rls(user) as c:
-        t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
-        if t is None:
-            raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        for tid in (task_id, dep_id):
+            t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
+            if t is None:
+                raise HTTPException(404, "Task not found or not permitted")
+            await _assert_scope_visible(c, tid, user)
         res = await c.execute(
             "DELETE FROM task_dependencies WHERE task_id=$1 AND depends_on_task_id=$2", task_id, dep_id)
     if res.split()[-1] == "0":

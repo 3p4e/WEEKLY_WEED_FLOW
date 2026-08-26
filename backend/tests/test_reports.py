@@ -234,6 +234,48 @@ async def test_department_filter_scopes_hours_by_person(client, admin_headers, o
     assert sum(p["total"] for p in r.json()["hours_by_person"]) == 8.0
 
 
+async def test_weekly_label_uses_iso_week_most_window_days_fall_in(client, admin_headers):
+    """Regression: the label used fri.isocalendar()[1] — the ISO (Mon->Sun)
+    week Friday itself belongs to. But of the window's 5 business days
+    (Fri + the following Mon-Thu), the 4 weekdays Mon-Thu fall in the NEXT
+    ISO week, not Friday's — so the label was off by one for most of the
+    window it names. 2026-06-19 (Fri) .. 2026-06-25 (Thu): Friday is ISO week
+    25, but Mon 2026-06-22 through Thu 2026-06-25 are ISO week 26."""
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-06-24"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    period = r.json()["period"]
+    assert period["start"] == "2026-06-19" and period["end"] == "2026-06-25"  # sanity: same window as above
+    assert period["label"].startswith("W26 2026"), period["label"]
+
+
+async def test_overdue_department_filter_computes_param_index(client, admin_headers, org):
+    """Regression (fragility, not a live bug): the overdue query's
+    department_id parameter index was hardcoded as `$2` instead of computed
+    via len(over_args) like the structurally-identical dept_clause pattern
+    elsewhere in this file — fragile against a future param reorder. Pins
+    that department-filtered overdue counts are (still) correct."""
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'),($1,'qc','QC')"
+        " RETURNING id, code", org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    overdue_date = (facility_today() - timedelta(days=1)).isoformat()
+
+    r = await client.post("/tasks", json={"title": "Cult overdue", "status": "pending",
+        "department_id": dept["cult"], "due_date": overdue_date}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    cult_id = r.json()["id"]
+    r = await client.post("/tasks", json={"title": "QC overdue", "status": "pending",
+        "department_id": dept["qc"], "due_date": overdue_date}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    qc_id = r.json()["id"]
+
+    r = await client.get("/reports/weekly", params={"department_id": dept["cult"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    overdue_ids = {t["id"] for t in r.json()["overdue"]}
+    assert cult_id in overdue_ids
+    assert qc_id not in overdue_ids
+
+
 async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):
     """Effort capture flows through to the report: hours entered on tasks sum
     into summary.estimated_hours / actual_hours (drives the Hours stat card)."""
