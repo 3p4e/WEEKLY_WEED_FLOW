@@ -200,7 +200,7 @@
     const STAT = [
       { st: 'working', en: 'Working', mk: 'Работи', c: 'var(--mw-stat-mid)' },
       { st: 'review', en: 'Review', mk: 'Преглед', c: 'var(--mw-cyan)' },
-      { st: 'done', en: 'Done', mk: 'Готово', c: '#2BE8A0' },
+      { st: 'done', en: 'Done', mk: 'Готово', c: 'var(--mw-stat-hi)' },
     ];
     const STAT2 = [
       { st: 'stuck', en: 'Stuck', mk: 'Блокирано', c: 'var(--mw-stat-lo)' },

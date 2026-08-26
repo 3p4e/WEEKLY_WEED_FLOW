@@ -29,6 +29,15 @@ const PRE = `
   window.GF.render = { card: function () { return ''; }, panels: function () {}, all: function () {} };
   window.GF.PEOPLE = {};
   window.GF.state = window.GF.state || {};
+  // chooser.js is not loaded here — stub GF.selectField the way the real one's
+  // contract works (a hidden input + trigger), and stash the cfg (options
+  // list included) so a test can inspect exactly what candidates renderDeps
+  // built without needing the popup machinery itself.
+  window.GF.__selectFieldCfgs = {};
+  window.GF.selectField = function (id, cfg) {
+    window.GF.__selectFieldCfgs[id] = cfg;
+    return '<input type="hidden" id="' + id + '" value="' + (cfg.value || '') + '">';
+  };
 `;
 
 function load(files) {
@@ -57,6 +66,42 @@ test('a dependency renders met only when the blocking task is done', () => {
   assert.match(chunk('No status at all'), /mw-dep unmet/,
     'unknown status must read as still-blocking: the permissive direction is the wrong default');
   assert.match(html, /class="dot"/);
+  h.close();
+});
+
+test('the "add blocker" candidate list excludes tasks that already depend on this one (avoids an obvious 409 cycle)', () => {
+  const h = load(['collab.js', 'task-extras.js']);
+  const { GF } = h;
+  const t = { id: 'T-1', title: 'Dry room C183' };
+  GF.state.tasks = [
+    t,
+    { id: 'B-1', title: 'Harvest C183' },         // already blocks T-1 (blockedBy)
+    { id: 'D-1', title: 'Package C183' },         // already depends on T-1 (blocks) — cycle risk
+    { id: 'X-1', title: 'Clean room 9' },         // unrelated, safe candidate
+  ];
+  const html = GF.WWF.renderDeps(t, {
+    blockedBy: [{ id: 'B-1', title: 'Harvest C183', status: 'working' }],
+    blocks: [{ id: 'D-1', title: 'Package C183', status: 'working' }],
+  });
+  assert.ok(html.includes('dep-add-T-1'), 'the add-blocker select field rendered');
+  const cfg = GF.__selectFieldCfgs['dep-add-T-1'];
+  assert.ok(cfg, 'GF.selectField was called for the add-blocker row');
+  const ids = cfg.options.map(o => o.v);
+  assert.deepEqual(ids, ['X-1'],
+    'candidates must exclude T-1 itself, its existing blocker (B-1), AND anything that already depends on T-1 (D-1) — picking D-1 would create an immediate cycle the backend 409s on');
+  h.close();
+});
+
+test('the "add blocker" row is omitted entirely once every other task is excluded', () => {
+  const h = load(['collab.js', 'task-extras.js']);
+  const { GF } = h;
+  const t = { id: 'T-1', title: 'Dry room C183' };
+  GF.state.tasks = [t, { id: 'D-1', title: 'Package C183' }];
+  const html = GF.WWF.renderDeps(t, {
+    blockedBy: [],
+    blocks: [{ id: 'D-1', title: 'Package C183', status: 'working' }],
+  });
+  assert.equal(html.includes('dep-add-T-1'), false, 'no add-blocker control when there are no valid candidates left');
   h.close();
 });
 

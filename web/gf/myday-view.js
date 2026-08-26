@@ -18,8 +18,17 @@
   };
   const isToday = (t) =>
     (t.days || []).includes(GF.todayDay) || (t.due && t.due === GF.todayISO());
-  const doneToday = (t) => t.status === 'done' &&
-    (t.completed_date ? t.completed_date === GF.todayISO() : true);
+  // A done task only belongs in the "completed today" group if it genuinely
+  // completed today. The old fallback (`completed_date ? … : true`) treated a
+  // MISSING completed_date as an automatic match for today, so a task that
+  // finished days ago but never got a completed_date recorded (or was
+  // imported without one) would keep surfacing under "today" forever. Tasks
+  // carry no updated_at client-side (integrate.js's transform() never maps
+  // one — see GF.WWF.transform in integrate.js) to fall back to, so an absent
+  // completed_date now excludes the task from today's done bucket entirely,
+  // the same "no date → not today" convention isToday() above already uses
+  // for `t.due`.
+  const doneToday = (t) => t.status === 'done' && t.completed_date === GF.todayISO();
 
   const prPill = (t) => (t.pr === 'critical' || t.pr === 'high')
     ? `<span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>` : '';

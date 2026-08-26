@@ -118,7 +118,15 @@ GF.WWF.renderDeps = (t, x) => {
     // this one) — remove it there: task_id=other, depends_on=this task.
     ? x.blocks.map(o => chip(o, `GF.WWF.removeDependency('${o.id}','${t.id}')`)).join('')
     : `<span style="font-size:12px;color:var(--ink-3)">${AL('Nothing.', 'Ништо.')}</span>`;
-  const already = new Set([t.id, ...x.blockedBy.map(o => o.id)]);
+  // Exclude the task itself, anything already a direct blocker, AND anything
+  // already in x.blocks — a task that already depends on `t`. Picking one of
+  // those as a NEW blocker for `t` would create an immediate 2-node cycle
+  // (candidate depends_on t, t depends_on candidate); the backend already
+  // 409s that, this just avoids the obvious round-trip by not offering it in
+  // the first place. Not a full transitive-closure check — only the direct
+  // dependency data already loaded into x (blockedBy/blocks) is available
+  // client-side — but it catches the case a manager would actually hit.
+  const already = new Set([t.id, ...x.blockedBy.map(o => o.id), ...x.blocks.map(o => o.id)]);
   const candidates = (GF.state.tasks || []).filter(o => !already.has(o.id));
   const addRow = candidates.length ? `
     <div class="note-input">

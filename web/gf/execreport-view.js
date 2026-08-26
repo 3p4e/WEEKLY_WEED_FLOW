@@ -16,10 +16,15 @@ GF.views = GF.views || {};
 GF.WWF._xr = { kind: 'report', refDate: '', status: null, docs: {}, open: {},
                loading: false, error: null, seq: 0 };
 
+// Theme-aware tokens, not hardcoded hex — same fix, same reasoning, as
+// report-view.js's SC/SC_BG maps (that file's identical class of
+// hex-hardcoding). bg/bd both resolve to the status color's `-soft` token so
+// the chip repaints correctly in the light theme instead of staying pinned to
+// the dark palette's literal rgba values.
 const XR_STATUS_STYLE = {
-  missing: { bg: 'rgba(255,77,94,.12)', fg: 'var(--red-fg,#FF8090)', bd: 'rgba(255,77,94,.3)' },
-  draft:   { bg: 'rgba(224,167,62,.12)', fg: 'var(--amber-fg,#E0C074)', bd: 'rgba(224,167,62,.3)' },
-  locked:  { bg: 'rgba(43,232,160,.12)', fg: 'var(--primary,#2BE8A0)', bd: 'rgba(43,232,160,.3)' },
+  missing: { bg: 'var(--red-soft)', fg: 'var(--red-fg)', bd: 'var(--red-soft)' },
+  draft:   { bg: 'var(--amber-soft)', fg: 'var(--amber-fg)', bd: 'var(--amber-soft)' },
+  locked:  { bg: 'var(--primary-soft)', fg: 'var(--primary)', bd: 'var(--primary-soft)' },
 };
 const xrStatusLbl = (s) => s === 'locked' ? AL('Submitted', 'Поднесен')
   : s === 'draft' ? AL('Draft', 'Нацрт') : AL('Missing', 'Недостасува');

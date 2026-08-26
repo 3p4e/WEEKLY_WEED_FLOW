@@ -217,7 +217,7 @@ GF.views = {
     const alerts = notif ? (notif.items || []).slice(0, 5) : [];
     const alertRows = alerts.map(a => {
       const tone = alertTone(a);
-      return `<div class="dash-alert${tone ? ' dash-alert--' + tone : ''}"${a.task_id ? ` style="cursor:pointer" onclick="GF.WWF.openNotif&&GF.WWF.openNotif('${a.id}','${a.task_id}')"` : ''}>
+      return `<div class="dash-alert${tone ? ' dash-alert--' + tone : ''}"${a.task_id ? ` style="cursor:pointer" onclick="GF.WWF.openNotif&&GF.WWF.openNotif('${GF.esc(a.id)}','${GF.esc(a.task_id)}')"` : ''}>
         <span class="dash-alert-dot"></span>
         <span class="dash-alert-tx">${GF.esc(alertText(a))}</span>
         <span class="dash-alert-age">${GF.esc(ago(a.created_at))}</span></div>`;
@@ -326,6 +326,14 @@ GF.views = {
     const todayStr = GF.localDateStr(new Date());
     // Exec KPIs / matrix / pipeline / attention are live-work aggregates —
     // archived tasks (visible only with "Show archived" on) stay out.
+    // NOTE: this is deliberately NOT `GF.execTasks(GF.state.selWeek)` (core.js)
+    // even though the two look interchangeable (both are "weekTasks filtered
+    // to the visible departments"). GF.execTasks omits the `!t.archived` step
+    // — its own test (task-filters.test.js) pins that it "ignores the sidebar
+    // filters and honours only the hidden-department set", archived included.
+    // Calling it here would let an archived task leak back into this screen's
+    // KPI totals and risk/blocked lists the moment "Show archived" is off,
+    // which is exactly the leak this filter exists to prevent. Keep both.
     const allWeek = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);  // every department
     const shown = allWeek.filter(t => GF.execDeptShown(t.dept)); // visible only → KPIs
     const isDone = t => t.status === 'done';

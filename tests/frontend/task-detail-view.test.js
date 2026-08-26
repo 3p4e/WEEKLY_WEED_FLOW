@@ -105,3 +105,21 @@ test('an unknown task id is a no-op, not a crash', () => {
   assert.ok(!modal || !modal.querySelector('.td-wrap'), 'no detail body built for a missing task');
   h.close();
 });
+
+test('the Log Progress "Done" status button uses the design system\'s done-status token, not a hardcoded hex', () => {
+  // views.css/app.css tokenize "done" consistently as --mw-stat-hi (e.g.
+  // .mw-tcard--done, .mw-st--done, .mw-dep.met .dot, and this same file's own
+  // .td-stepper .mw-step.done all key off it) — logProgressHTML's status
+  // buttons must match that, not a one-off literal that never repaints with
+  // a Mass Weed skin change.
+  const h = boot(baseTask());
+  h.GF.WWF.openTaskDetail('t1');
+  const doc = h.window.document;
+  const btn = doc.querySelector('[data-td-st="done"]');
+  assert.ok(btn, 'the Done status button renders');
+  assert.equal(btn.getAttribute('style'), '--st:var(--mw-stat-hi)',
+    'the done button\'s --st custom property must reference the shared --mw-stat-hi token');
+  assert.equal(/#[0-9a-fA-F]{3,6}/.test(btn.getAttribute('style')), false,
+    'no hardcoded hex literal in the done button style');
+  h.close();
+});
