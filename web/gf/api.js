@@ -345,8 +345,6 @@ GF.API = {
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
   facilityAddRoom(b)       { return this._req('POST', '/facility/rooms', b); },
   facilityPatchRoom(id,b)  { return this._req('PATCH', '/facility/rooms/' + id, b); },
-  facilityAddBatch(b)      { return this._req('POST', '/facility/batches', b); },
-  facilityPatchBatch(id,b) { return this._req('PATCH', '/facility/batches/' + id, b); },
   activity(q)          { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/activity' + (u?'?'+u:'')); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
   listDeletedUsers() { return this._req('GET', '/auth/users/deleted'); },
