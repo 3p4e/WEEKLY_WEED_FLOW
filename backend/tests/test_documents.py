@@ -160,6 +160,63 @@ async def test_section_approve_endpoint(client, admin_headers, org):
     assert r.status_code == 409
 
 
+async def test_oversized_section_and_patch_content_rejected(client, admin_headers, org):
+    """SectionReq's text fields and PatchReq.content used to carry no size
+    bound at all — an elevated caller could PATCH an arbitrarily large
+    JSONB blob/string into weekly_documents.content. Every oversized variant
+    below must be a clean 422 (Pydantic validation), never accepted."""
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    doc_id = doc["id"]
+    ai_key = doc["content"]["ai_sections"][0]["key"]
+    template_key = doc["content"]["template_sections"][0]["key"]
+    field_key = doc["content"]["template_sections"][0]["fields"][0]["key"]
+
+    # AI section: oversized body_en / body_mk / legacy body alias.
+    huge = "x" * 20_001
+    for payload in ({"body_en": huge}, {"body_mk": huge}, {"body": huge}):
+        r = await client.patch(f"/reports/documents/{doc_id}/sections/{ai_key}",
+                               json=payload, headers=admin_headers)
+        assert r.status_code == 422, (payload.keys(), r.status_code, r.text)
+
+    # Template section: oversized narrative_en / narrative_mk.
+    for payload in ({"narrative_en": huge}, {"narrative_mk": huge}):
+        r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                               json=payload, headers=admin_headers)
+        assert r.status_code == 422, (payload.keys(), r.status_code, r.text)
+
+    # Template section: oversized single field VALUE (dict max_length alone
+    # only bounds item count, not each string's length — needs its own check).
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                           json={"fields": {field_key: "y" * 5_001}}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # Template section: too many field entries (dict item-count bound).
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                           json={"fields": {f"k{i}": "v" for i in range(65)}},
+                           headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # A within-bounds edit still works — the caps aren't accidentally
+    # rejecting legitimate reviewer content.
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{ai_key}",
+                           json={"body_en": "a real, reasonably long narrative"},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+    # PatchReq.content: a whole-document dict blob well over the size cap.
+    r = await client.patch(f"/reports/documents/{doc_id}",
+                           json={"content": {"bloat": "z" * 5_000_001}}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # A normal-sized content PATCH still works.
+    small_content = {**doc["content"], "note": "small edit"}
+    r = await client.patch(f"/reports/documents/{doc_id}", json={"content": small_content},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+
 async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
     """A locked document must be immutable at the DB layer, not just via the
     app's WHERE status='draft' guard: a raw UPDATE/DELETE through an app_user

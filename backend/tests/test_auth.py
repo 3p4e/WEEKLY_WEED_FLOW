@@ -592,3 +592,64 @@ async def test_login_rate_limit_keys_on_resolved_account_not_typed_string(client
     # still return 401 instead of 429.
     r = await client.post("/auth/login", json={"email": email, "password": "wrong-password"})
     assert r.status_code == 429
+
+
+async def test_username_case_collision_is_rejected(client, admin_headers):
+    """profiles.username used to carry only a case-SENSITIVE UNIQUE
+    constraint, so "Alice.Q" and "alice.q" could coexist as two distinct
+    accounts — a real cross-account leak via collab.py's @mention resolution
+    (which already folds case: `lower(username) = ANY(...)`) could then
+    notify the WRONG one of the two. create_user now normalizes username to
+    lowercase at validation time, so a second account whose username only
+    differs in case from an existing one collides on the very same (now
+    identical) stored value and is rejected — never silently creates a second,
+    case-distinct account."""
+    r = await client.post("/auth/users", json={
+        "username": "Case.Collide", "full_name": "First", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    # Normalized at creation: the stored/returned username is lowercase even
+    # though "Case.Collide" was typed.
+    assert r.json()["user"]["username"] == "case.collide"
+
+    r = await client.post("/auth/users", json={
+        "username": "case.collide", "full_name": "Second", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 409, r.text
+
+    # Any other case variant collides too — not just the exact original casing.
+    r = await client.post("/auth/users", json={
+        "username": "CASE.COLLIDE", "full_name": "Third", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 409, r.text
+
+
+async def test_login_is_case_insensitive_on_username(client, admin_headers):
+    """A username handed out (or typed by an admin) in mixed case is now
+    always stored lowercase (see test_username_case_collision_is_rejected),
+    so login must match case-insensitively too — otherwise normalizing
+    storage would silently break login for anyone who types the username in
+    the case they were originally given, a regression this test guards
+    against. Confirms both the originally-typed case and an unrelated case
+    variant work."""
+    r = await client.post("/auth/users", json={
+        "username": "MixedCase.Login", "full_name": "Mixed Case", "role": "USER",
+    }, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    otp = r.json()["otp"]
+    stored_username = r.json()["user"]["username"]
+    assert stored_username == "mixedcase.login"
+
+    # Set a real password via the normal first-login flow (uses the stored
+    # lowercase username, proving that path still works).
+    password = "NewPassword123456"
+    await login_and_set_password(client, stored_username, otp, password)
+
+    # Now log in typing the ORIGINALLY-GIVEN mixed case.
+    r = await client.post("/auth/login", json={"email": "MixedCase.Login", "password": password})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["username"] == "mixedcase.login"
+
+    # And a completely different case variant also works.
+    r = await client.post("/auth/login", json={"email": "MIXEDCASE.LOGIN", "password": password})
+    assert r.status_code == 200, r.text

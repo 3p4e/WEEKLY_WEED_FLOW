@@ -23,7 +23,7 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.ai import _letta_message
 from app.api.ai import normalize_ai_reply as _normalize_ai_reply
@@ -796,8 +796,34 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
             "org_wide": org_wide, "departments": departments}
 
 
+# Size bounds for reviewer-editable document content — matching every other
+# write surface in the app (collab.py's CommentReq caps content at 10,000
+# chars; its task-progress note caps at 2,000). Unlike those, these fields
+# hold real document prose (a section narrative can legitimately run to a
+# full page), so the bound is generous rather than tight — it exists to stop
+# an elevated caller from PATCHing an arbitrarily large JSONB blob/string
+# into weekly_documents.content (bloating storage and slowing the PDF
+# export), not to constrain normal reviewer editing.
+_SECTION_TEXT_MAX = 20_000        # body / body_en / body_mk / narrative_en / narrative_mk
+_FIELD_VALUE_MAX = 5_000          # one template-section field's value
+_PATCH_CONTENT_MAX_CHARS = 5_000_000  # whole-document content dict, serialized
+
+
 class PatchReq(BaseModel):
     content: dict
+
+    @field_validator("content")
+    @classmethod
+    def _bound_content_size(cls, v: dict) -> dict:
+        # `content: dict` can't carry a plain Field(max_length=...) — that
+        # constrains a dict's ITEM COUNT, not the size of what's inside it —
+        # so the whole-document blob needs its own size check, matching the
+        # spirit of the per-field caps below.
+        size = len(json.dumps(v))
+        if size > _PATCH_CONTENT_MAX_CHARS:
+            raise ValueError(
+                f"content too large ({size} chars, max {_PATCH_CONTENT_MAX_CHARS})")
+        return v
 
 
 @router.patch("/{doc_id}")
@@ -831,13 +857,27 @@ async def patch_document(doc_id: str, body: PatchReq,
 
 class SectionReq(BaseModel):
     approved: bool | None = None
-    body: str | None = None            # legacy alias: sets body_en (+ mirrored body)
-    body_en: str | None = None
-    body_mk: str | None = None
+    body: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)  # legacy alias: sets body_en (+ mirrored body)
+    body_en: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+    body_mk: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
     # template sections only:
-    fields: dict[str, str] | None = None   # {field_key: value}
-    narrative_en: str | None = None
-    narrative_mk: str | None = None
+    fields: dict[str, str] | None = Field(default=None, max_length=64)   # {field_key: value}
+    narrative_en: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+    narrative_mk: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+
+    @field_validator("fields")
+    @classmethod
+    def _bound_field_values(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        # Field(max_length=...) on a dict constrains its ITEM COUNT (handled
+        # above), not the length of each value string — that needs its own
+        # check, same reasoning as PatchReq.content's validator above.
+        if v is None:
+            return v
+        oversized = sorted(k for k, val in v.items() if len(val) > _FIELD_VALUE_MAX)
+        if oversized:
+            raise ValueError(
+                f"field value(s) too long (max {_FIELD_VALUE_MAX} chars): {', '.join(oversized)}")
+        return v
 
 
 @router.patch("/{doc_id}/sections/{key}")

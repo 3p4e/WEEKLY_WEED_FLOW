@@ -249,6 +249,13 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: profiles_username_lower_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX profiles_username_lower_uniq ON public.profiles USING btree (lower(username));
+
+
+--
 -- Name: organizations audit_organizations; Type: TRIGGER; Schema: public; Owner: -
 --
 

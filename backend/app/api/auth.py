@@ -8,7 +8,7 @@ from collections import defaultdict
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.db import rls_users, tasks_admin_pool, users_admin_pool
@@ -123,6 +123,21 @@ class CreateUserReq(BaseModel):
     department_id: str | None = Field(default=None, max_length=64)
     function_role: str | None = Field(default=None, max_length=80)
 
+    @field_validator("username")
+    @classmethod
+    def _lowercase_username(cls, v: str) -> str:
+        # profiles.username carries a case-insensitive-unique index
+        # (migration 0011, on lower(username)) — normalize here, at the ONLY
+        # place a username is ever written (create_user; it is immutable
+        # thereafter — see UpdateUserReq), so the stored value always matches
+        # what the index (and login()'s lookup, and collab.py's @mention
+        # resolution) expect. Without this, two accounts differing only by
+        # case (e.g. "Alice.Q" / "alice.q") could coexist, and collab.py's
+        # `lower(username) = ANY(...)` mention match could then resolve to
+        # the WRONG one of the two — leaking a task title + comment preview
+        # to an unintended person.
+        return v.lower()
+
 
 class UpdateUserReq(BaseModel):
     # username is intentionally NOT editable — it's the login identity.
@@ -151,8 +166,16 @@ async def login(body: LoginReq, request: Request):
     # crafted to equal someone's login email) made authentication
     # nondeterministic: the "wrong" row could win the plan and the real
     # password would fail apparently at random.
+    #
+    # lower(username): usernames are normalized to lowercase at creation
+    # (CreateUserReq) and enforced case-insensitive-unique at the DB level
+    # (migration 0011's index on lower(username)) — matching case-
+    # insensitively here means an admin can still type/hand out a username
+    # in mixed case and the account holder can log in with whatever case
+    # they type, while the DB guarantees there is never more than one
+    # account it could resolve to.
     row = await users_admin_pool().fetchrow(
-        "SELECT * FROM profiles WHERE username=$1 AND is_deleted=false", body.email)
+        "SELECT * FROM profiles WHERE lower(username)=$1 AND is_deleted=false", identifier)
     if row is None:
         row = await users_admin_pool().fetchrow(
             "SELECT * FROM profiles WHERE email=$1 AND is_deleted=false"
