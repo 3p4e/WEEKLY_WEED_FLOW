@@ -163,7 +163,7 @@
     if (!rqs) return GF.toast(AL('A registered sampling request is required (QCSOP 011 §6.1.1)', 'Потребно е регистрирано барање за мостри (QCSOP 011 §6.1.1)'), 'error');
     const body = { sampling_location, destination_facility, rqs_id: rqs };
     const coords = mk('qcu-coords'); if (coords) body.sampling_coordinates = coords;
-    const nc = mk('qcu-nc'); if (nc) body.num_containers = parseInt(nc, 10) || null;
+    const nc = mk('qcu-nc'); if (nc) { const n = parseInt(nc, 10); body.num_containers = Number.isNaN(n) ? null : n; }
     const barrels = mk('qcu-barrels'); if (barrels) body.barrel_numbers = barrels.split(',').map(s => s.trim()).filter(Boolean);
     const equip = mk('qcu-equip'); if (equip) body.sampling_equipment = equip;
     try { const r = await GF.API.qcCreateSfr(body); GF.toast(r.sfr_number + ' ' + AL('created', 'создадено')); await GF.WWF.loadQcCustody(); GF.WWF.qcCusPick(r.id); }

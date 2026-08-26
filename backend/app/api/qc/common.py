@@ -1,3 +1,4 @@
+from app.deps import uuid_or_404
 from app.roles import ADMIN, EXECUTIVE_ROLES
 from fastapi import APIRouter, HTTPException
 import uuid
@@ -18,10 +19,7 @@ _COQ_ROLES = (ADMIN, "QC_MGR")
 def _uuid_or_404(value, what: str = "Resource") -> None:
     """A malformed {id} path segment must be a clean 404, not a 500 from asyncpg
     trying to cast it to a uuid inside the lookup query (mirrors auth._require_uuid)."""
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        raise HTTPException(404, f"{what} not found")
+    uuid_or_404(value, f"{what} not found")
 
 
 def _uuid_or_422(value, field: str) -> None:

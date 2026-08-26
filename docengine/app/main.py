@@ -187,7 +187,7 @@ async def list_documents():
     return {"documents": await db.documents_list()}
 
 
-async def _doc_or_404(did: str) -> dict:
+async def _doc_meta_or_404(did: str) -> dict:
     if not _valid_uuid(did):
         raise HTTPException(404, "no such document")
     if not db.ready():
@@ -195,6 +195,11 @@ async def _doc_or_404(did: str) -> dict:
     d = await db.document_get(did)
     if not d:
         raise HTTPException(404, "no such document")
+    return d
+
+
+async def _doc_or_404(did: str) -> dict:
+    d = await _doc_meta_or_404(did)
     if not Path(d["path"]).exists():
         raise HTTPException(410, "document artifact missing")
     return d
@@ -202,14 +207,7 @@ async def _doc_or_404(did: str) -> dict:
 
 @app.get("/documents/{did}", dependencies=[Depends(require_api_key)])
 async def get_document(did: str):
-    if not _valid_uuid(did):
-        raise HTTPException(404, "no such document")
-    if not db.ready():
-        raise HTTPException(503, "DocEngine storage unavailable")
-    d = await db.document_get(did)
-    if not d:
-        raise HTTPException(404, "no such document")
-    return d
+    return await _doc_meta_or_404(did)
 
 
 @app.get("/documents/{did}/download", dependencies=[Depends(require_api_key)])

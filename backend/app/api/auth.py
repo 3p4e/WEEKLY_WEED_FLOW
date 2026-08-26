@@ -4,7 +4,6 @@ import logging
 import re
 import secrets
 import time
-import uuid
 from collections import defaultdict
 
 import asyncpg
@@ -13,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db import rls_users, tasks_admin_pool, users_admin_pool
-from app.deps import get_current_user, require_password_set, require_role
+from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
 from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
 
@@ -262,10 +261,7 @@ def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
 def _require_uuid(value) -> None:
     """A malformed (non-uuid) {user_id} path param must be a clean 404, not a
     500 from asyncpg trying to cast it to uuid inside the lookup query."""
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        raise HTTPException(404, "User not found")
+    uuid_or_404(value, "User not found")
 
 
 async def _validate_department(org_id, department_id) -> None:

@@ -5,6 +5,7 @@ recurrence / outcome / archive on tasks, plus two child resources —
 work_sessions (every sitting of real work; the overtime engine's source of
 truth) and task_links (external Drive/SOP references)."""
 import json
+import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -21,6 +22,8 @@ from app.deps import dept_scope, require_password_set, require_role
 from app.notify import participants, safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import facility_today, classify, session_hours
+
+_log = logging.getLogger("app.tasks")
 
 router = APIRouter(tags=["tasks"])
 
@@ -694,7 +697,12 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
                            department_id=row["department_id"],
                            params={"title": row["title"], "old": prev_status, "new": row["status"]})
             except Exception:
-                pass
+                # safe_emit() itself never raises (it logs and swallows
+                # internally) — anything caught here came from participants()
+                # or canned_recipients() before it. Must not fail the status
+                # update, but must not vanish silently either (H4 idiom).
+                _log.warning("status-change notification setup failed for task %s",
+                             task_id, exc_info=True)
     return out
 
 
@@ -1034,7 +1042,11 @@ async def workflow_transition(task_id: str, body: WorkflowIn,
                        params={"title": t["title"], "from": cur, "to": new,
                                **({"remark": remark} if remark else {})})
         except Exception:
-            pass
+            # safe_emit() itself never raises — anything caught here came from
+            # participants() before it. Must not fail the workflow transition,
+            # but must not vanish silently either (H4 idiom).
+            _log.warning("workflow-transition notification setup failed for task %s",
+                         task_id, exc_info=True)
     out = _wf_event_out(dict(row))
     out["workflow_state"] = new
     return out
