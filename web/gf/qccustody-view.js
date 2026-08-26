@@ -130,6 +130,11 @@
      'priority_justification', 'storage_location', 'spec_reference'].forEach(k => { const v = mk('qcu-' + k); if (v) body[k] = v; });
     const ns = mk('qcu-num_samples'); if (ns) body.num_samples = parseInt(ns, 10);
     const pri = mk('qcu-priority'); if (pri) body.priority = pri;
+    // §6.1.4 — URGENT priority must carry a stated justification (defense-in-
+    // depth mirror of the backend check in custody.py).
+    if (pri === 'URGENT' && !body.priority_justification) {
+      return GF.toast(AL('Urgency justification is required for URGENT priority', 'Оправдување за итност е задолжително за приоритет ИТНО'), 'error');
+    }
     const mst = mk('qcu-material_status'); if (mst) body.material_status = mst;
     const relEl = document.getElementById('qcu-release_related'); if (relEl && relEl.checked) body.release_related = true;
     const tsel = document.getElementById('qcu-required_tests');
@@ -146,6 +151,16 @@
     const mst = mk('qcu-e-material_status'); if (mst) body.material_status = mst;
     const pri = mk('qcu-e-priority'); if (pri) body.priority = pri;
     const pj = mk('qcu-e-priority_justification'); if (pj) body.priority_justification = pj;
+    // §6.1.4 — URGENT priority must carry a stated justification. This edit
+    // may only be touching one of the two fields, so fall back to the
+    // currently-loaded record's stored value for whichever one isn't being
+    // changed here (the effective post-save state is what must be validated).
+    const cur = GF.WWF._qccus.detail || {};
+    const effPriority = pri || cur.priority;
+    const effJustification = pj || cur.priority_justification;
+    if (effPriority === 'URGENT' && !effJustification) {
+      return GF.toast(AL('Urgency justification is required for URGENT priority', 'Оправдување за итност е задолжително за приоритет ИТНО'), 'error');
+    }
     const tsel = document.getElementById('qcu-e-required_tests');
     if (tsel) { const t = Array.from(tsel.selectedOptions).map(o => o.value); if (t.length) body.required_tests = t; }
     if (!Object.keys(body).length) return GF.toast(AL('Nothing to save', 'Ништо за зачувување'));
@@ -187,14 +202,16 @@
   // ── Sample linking (shared by SFR + RQS details) ──
   // Linking a sample to an SFR is what unlocks the chain-of-custody panel;
   // on an RQS it records which registered sample the request produced.
+  // Opening the picker is a deliberate, infrequent click (not a re-render hot
+  // path) — always refetch so a sample registered earlier this session (after
+  // the list was first cached) shows up without a full page reload.
   GF.WWF.qcCusPickerOpen = async (kind, id) => {
     const st = GF.WWF._qccus;
     st.pick = { kind, id };
-    if (!st.samples) {
-      GF.render.all();
-      try { st.samples = await GF.API.qcSamples({}); }
-      catch (e) { st.samples = null; st.pick = null; GF.toast(e.message, 'error'); }
-    }
+    st.samples = null;
+    GF.render.all();
+    try { st.samples = await GF.API.qcSamples({}); }
+    catch (e) { st.samples = null; st.pick = null; GF.toast(e.message, 'error'); }
     if (GF.state.view === 'qccustody') GF.render.all();
   };
   GF.WWF.qcCusPickerClose = () => { GF.WWF._qccus.pick = null; GF.render.all(); };

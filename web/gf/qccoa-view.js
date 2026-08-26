@@ -315,7 +315,28 @@
   // Annex 11 electronic-signature panel: the immutable list of signatures on
   // this certificate + a re-authenticated signing form (writer only).
   const SIG_MEANINGS = ['AUTHORED', 'REVIEWED', 'APPROVED', 'RELEASED', 'VERIFIED', 'COQ_ISSUED'];
+  // Which SIG_MEANINGS make sense for the current role + this certificate's
+  // lifecycle position — a UI-side mirror of the Advance button's QP_TARGETS /
+  // canCoq()/canQP() gating above (roughly lines 495-500), so the signing form
+  // never invites a signature the backend would 403/409. AUTHORED/REVIEWED
+  // belong to the DRAFT authoring stage; APPROVED/RELEASED are the same
+  // cert-type-aware QP-or-HoQC decision as the Advance button; VERIFIED is the
+  // §6.7 translation check (only meaningful while unverified on an EN-MK
+  // issue); COQ_ISSUED is QC Manager / ADMIN only, once RELEASED (QP is
+  // deliberately excluded — same segregation as generateCoq).
+  const availableMeanings = (c) => {
+    const approveTarget = c.cert_type === 'ICOA' ? canCoq() : canQP();
+    return SIG_MEANINGS.filter(m => {
+      if (m === 'AUTHORED' || m === 'REVIEWED') return c.status === 'DRAFT';
+      if (m === 'APPROVED') return c.status === 'REVIEWED' && approveTarget;
+      if (m === 'RELEASED') return c.status === 'APPROVED' && approveTarget;
+      if (m === 'VERIFIED') return c.issue_language === 'EN-MK' && !c.translation_verified_at;
+      if (m === 'COQ_ISSUED') return c.status === 'RELEASED' && canCoq();
+      return true;
+    });
+  };
   const signaturesPanel = (d) => {
+    const c = d.coa || {};
     const sigs = (d.signatures || []).map(s => `
       <div class="qms-dgrid" style="margin:2px 0">
         <span class="chip-opt" style="border-color:var(--accent);color:var(--accent)">${GF.esc(s.meaning)}</span>
@@ -323,12 +344,16 @@
         <span class="ana-note mono">${GF.esc((s.signed_at || '').replace('T', ' ').slice(0, 16))}</span>
         ${s.statement ? `<span class="ana-note">“${GF.esc(s.statement)}”</span>` : '<span></span>'}
       </div>`).join('');
-    const form = canWrite() ? `
+    // A VOIDED/SUPERSEDED certificate is a closed record — no further
+    // signature belongs on it (matches coqMetaPanel's exact gate).
+    const gated = c.status !== 'VOIDED' && c.status !== 'SUPERSEDED';
+    const meanings = gated ? availableMeanings(c) : [];
+    const form = (canWrite() && gated && meanings.length) ? `
       <div class="qms-dl" style="margin-top:6px;align-items:center;gap:6px;flex-wrap:wrap">
-        <select id="qcsig-meaning">${SIG_MEANINGS.map(m => `<option value="${m}">${m}</option>`).join('')}</select>
+        <select id="qcsig-meaning">${meanings.map(m => `<option value="${m}">${m}</option>`).join('')}</select>
         <input id="qcsig-stmt" placeholder="${AL('meaning / note (optional)', 'значење / белешка (опц.)')}" style="min-width:150px">
         <input id="qcsig-pw" type="password" placeholder="${AL('your password', 'вашата лозинка')}" style="width:130px">
-        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaSign('${d.coa.id}')">${AL('Sign', 'Потпиши')}</button>
+        <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoaSign('${c.id}')">${AL('Sign', 'Потпиши')}</button>
         <span class="ana-note">${AL('Re-authenticate to sign (Annex 11).', 'Повторна автентикација за потпис (Анекс 11).')}</span>
       </div>` : '';
     return `<div style="margin-top:12px" class="ana-pt">${AL('Electronic signatures', 'Електронски потписи')}</div>

@@ -378,6 +378,21 @@
   // ({document, extractions, originals}) plus the in-memory verify/checklist
   // state — no new handlers, no fabricated hashes / deadlines / stages. All
   // property access is guarded so it is demo/empty-state safe.
+  // Promotion gate inputs (§6.3.1/§6.3.2) — every unmapped placeholder must be
+  // resolved, at least one field mapped, and the QCT-018 checklist ACCEPTED.
+  // Computed once here so workbench()'s gate-note block and canPromote below
+  // can never disagree about what the button/adjacent message say.
+  const promotionGates = (d) => {
+    const st = GF.WWF._qcecoa;
+    const doc = (d && d.document) || {};
+    const exs = (d && d.extractions) || [];
+    const unmapped = exs.filter(e => e && e.grade_status === 'unmapped').length;
+    const mappedCount = exs.filter(e => e && e.parameter_id).length;
+    const cl = doc.id ? st.checklist[doc.id] : null;
+    const clOutcome = cl && cl.outcome;
+    return { unmapped, mappedCount, clOutcome };
+  };
+
   const workbench = (d) => {
     const st = GF.WWF._qcecoa;
     const doc = (d && d.document) || {};
@@ -438,10 +453,7 @@
 
     // Gate-note blocks — reflect the real promotion gate (spec + mapped fields +
     // ACCEPTED §6.3.2 checklist) and post-promote verify state.
-    const unmapped = exs.filter(e => e && e.grade_status === 'unmapped').length;
-    const mappedCount = exs.filter(e => e && e.parameter_id).length;
-    const cl = doc.id ? st.checklist[doc.id] : null;
-    const clOutcome = cl && cl.outcome;
+    const { unmapped, mappedCount, clOutcome } = promotionGates(d);
     const gIcon = { block: 'flag', ok: 'check', info: 'info' };
     const gate = (kind, html) => `<div class="mwe-gate ${kind}">${GF.icon(gIcon[kind], 'mwe-ic')}<div>${html}</div></div>`;
     let gates;
@@ -498,7 +510,12 @@
       </div></td></tr>`;
     }).join('');
     const canExtract = doc.status !== 'PROMOTED' && doc.status !== 'REJECTED';
-    const canPromote = (doc.status === 'EXTRACTED' || doc.status === 'REVIEWED') && !!doc.specification_id;
+    // Mirror workbench()'s gate-note block exactly (same promotionGates()
+    // inputs) — a writer must never be able to click Promote while the
+    // adjacent panel is showing a red "gates not cleared" block.
+    const { unmapped: _unmapped, mappedCount: _mappedCount, clOutcome: _clOutcome } = promotionGates(d);
+    const canPromote = (doc.status === 'EXTRACTED' || doc.status === 'REVIEWED') && !!doc.specification_id
+      && _unmapped === 0 && _mappedCount > 0 && _clOutcome === 'ACCEPTED';
     return `<div class="qms-detail">
       ${workbench(d)}
       <div class="qms-dgrid">

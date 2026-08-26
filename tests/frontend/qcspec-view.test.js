@@ -124,3 +124,65 @@ test('test name is still required, and that check runs before the range guard', 
   assert.match(w.__toasts[0][0], /test name required/i);
   h.close();
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   web/gf/qcspec-view.js — GF.WWF.qcSpecCreate's `version` parsing.
+
+   `parseInt(mk('qcs-ver'), 10) || 1` silently substitutes 1 for a real
+   version 0 (0 is falsy). Contrast the correct '' === '' ? null : parseFloat
+   pattern used 14 lines later for spec-parameter limits (see the tests
+   above) — version must apply the same "only default on a truly blank
+   field" rule.
+   ════════════════════════════════════════════════════════════════════ */
+
+function setupCreate(h, fields) {
+  const w = h.window;
+  w.document.getElementById = (id) => (id in fields ? { value: fields[id] } : null);
+  w.__created = null;
+  w.GF.API.qcCreateSpec = async (body) => { w.__created = body; return { id: 'sp1', spec_id: 'PP-QC-SPEC-0001' }; };
+  w.GF.API.qcSpecs = async () => [];
+  w.GF.API.qcSpec = async () => ({ spec: { id: 'sp1', status: 'INITIATED' }, parameters: [] });
+  w.__toasts = [];
+  w.GF.toast = (m, k) => { w.__toasts.push([m, k]); };
+  return w;
+}
+
+const CREATE_FIELDS = (ver, over = {}) => ({
+  'qcs-mat': 'MAT-1', 'qcs-en': 'Test Material', 'qcs-mkn': '', 'qcs-ver': ver, 'qcs-grade': '', ...over,
+});
+
+test('a cleared version field ("0") is preserved as 0, not silently defaulted to 1', async () => {
+  const h = load();
+  const w = setupCreate(h, CREATE_FIELDS('0'));
+  await w.GF.WWF.qcSpecCreate();
+  assert.ok(w.__created, 'qcCreateSpec must be called');
+  assert.equal(w.__created.version, 0, 'a legitimately typed 0 must survive, not become 1');
+  h.close();
+});
+
+test('a genuinely blank version field defaults to 1', async () => {
+  const h = load();
+  const w = setupCreate(h, CREATE_FIELDS(''));
+  await w.GF.WWF.qcSpecCreate();
+  assert.ok(w.__created);
+  assert.equal(w.__created.version, 1);
+  h.close();
+});
+
+test('a whitespace-only version field also defaults to 1', async () => {
+  const h = load();
+  const w = setupCreate(h, CREATE_FIELDS('   '));
+  await w.GF.WWF.qcSpecCreate();
+  assert.ok(w.__created);
+  assert.equal(w.__created.version, 1);
+  h.close();
+});
+
+test('a normal positive version is still parsed correctly', async () => {
+  const h = load();
+  const w = setupCreate(h, CREATE_FIELDS('3'));
+  await w.GF.WWF.qcSpecCreate();
+  assert.ok(w.__created);
+  assert.equal(w.__created.version, 3);
+  h.close();
+});

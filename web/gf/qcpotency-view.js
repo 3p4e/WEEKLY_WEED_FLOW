@@ -13,7 +13,7 @@
    Same full-page-view + qms-zone pattern as qcspec-view; QMS Studio zone. */
 
 (function () {
-  GF.WWF._qcpot = { specs: null, sel: null, detail: null, q: '', status: '',
+  GF.WWF._qcpot = { specs: null, sel: null, detail: null, detailError: null, q: '', status: '',
                     loading: false, error: null, importing: false };
 
   const _HOQC = ['ADMIN', 'QC_MGR', 'QP'];
@@ -50,11 +50,18 @@
 
   GF.WWF.qcPotPick = async (id) => {
     const st = GF.WWF._qcpot;
-    if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
-    st.sel = id; st.detail = null; GF.render.all();
+    if (st.sel === id) { st.sel = null; st.detail = null; st.detailError = null; GF.render.all(); return; }
+    st.sel = id; st.detail = null; st.detailError = null; GF.render.all();
     try { const d = await GF.API.qcPotencySpec(id); if (st.sel === id) st.detail = d; }
-    catch (e) { if (st.sel === id) GF.toast(e.message, 'error'); }
+    catch (e) { if (st.sel === id) { st.detailError = e.message; GF.toast(e.message, 'error'); } }
     if (st.sel === id && GF.state.view === 'qcpotency') GF.render.all();
+  };
+  // Retry after a failed detail fetch: clearing sel first lets pick() take the
+  // select path again, so one click re-fetches the same row.
+  GF.WWF.qcPotRetry = (id) => {
+    const st = GF.WWF._qcpot;
+    st.sel = null; st.detail = null; st.detailError = null;
+    GF.WWF.qcPotPick(id);
   };
   GF.WWF.qcPotFilter = (v) => { GF.WWF._qcpot.q = v; GF.render.all(); GF.refocus('qcp-search'); };
   GF.WWF.qcPotStatus = (v) => { GF.WWF._qcpot.status = v; GF.WWF.loadQcPotency(); };
@@ -148,7 +155,11 @@
           ${s.data_supported ? '' : `<span class="ana-note">· ${AL('provisional', 'привремено')}</span>`}</span>
         ${stChip(s.status)}
       </div>
-      ${st.sel === s.id ? (st.detail ? detail(st.detail) : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`) : ''}`).join('')
+      ${st.sel === s.id ? (st.detail ? detail(st.detail) : (st.detailError
+        ? `<div class="qms-detail" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <span style="color:var(--red-fg,var(--red))">${GF.esc(st.detailError)}</span>
+             <button class="btn btn-sm" onclick="GF.WWF.qcPotRetry('${s.id}')">${AL('Failed — retry', 'Неуспешно — обиди се повторно')}</button></div>`
+        : `<div class="qms-detail"><div class="mw-skel" style="height:60px"></div></div>`)) : ''}`).join('')
       : `<div class="ana-note">${AL('No potency ladders yet — import the owner catalogue below.', 'Сè уште нема скали — внесете го каталогот подолу.')}</div>`;
     const importer = canApprove() ? `
       <div class="panel ana-panel" style="margin-bottom:12px">

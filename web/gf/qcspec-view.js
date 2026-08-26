@@ -96,7 +96,7 @@
     }
     const body = { material_code, material_name_en,
                    material_name_mk: mk('qcs-mkn').trim() || null,
-                   version: parseInt(mk('qcs-ver'), 10) || 1 };
+                   version: mk('qcs-ver').trim() === '' ? 1 : parseInt(mk('qcs-ver'), 10) };
     const g = mk('qcs-grade'); if (g) body.thc_grade = g;
     try {
       const spec = await GF.API.qcCreateSpec(body);

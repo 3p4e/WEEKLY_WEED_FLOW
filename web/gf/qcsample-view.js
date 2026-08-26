@@ -237,6 +237,11 @@
     const formula = mk('qsp-formula').trim(); if (formula) body.sample_size_formula = formula;
     const min = mk('qsp-min').trim(); if (min !== '') body.min_sample_size = parseInt(min, 10);
     const max = mk('qsp-max').trim(); if (max !== '') body.max_sample_size = parseInt(max, 10);
+    // A transposed range (min > max) is nonsensical once this plan drives real
+    // sample-size decisions — refuse it here, before it ever reaches the API.
+    if (body.min_sample_size != null && body.max_sample_size != null && body.min_sample_size > body.max_sample_size) {
+      return GF.toast(AL('Min sample size cannot exceed max sample size', 'Минималната големина не смее да биде поголема од максималната'), 'error');
+    }
     try {
       const p = await GF.API.qcCreateSamplingPlan(body);
       GF.toast(p.plan_id + ' ' + AL('created', 'креирано'));

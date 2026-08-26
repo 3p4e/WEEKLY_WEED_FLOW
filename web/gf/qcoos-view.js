@@ -161,8 +161,16 @@
         ${o.disposition ? `<span>${AL('Disposition', 'Диспозиција')}</span><b>${chip(o.disposition, DISP[o.disposition] || 'var(--ink-3)')}</b>` : ''}
       </div>
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
-        ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosAdvance('${o.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>` : ''}
-        ${canClose && canQP() && nxt !== 'CLOSED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcOosAdvance('${o.id}','CLOSED')">${AL('Close (QP)', 'Затвори (КЛ)')}</button>` : ''}
+        ${nxt && (!QP_TARGETS[nxt] || canQP())
+          ? (QP_TARGETS[nxt] && !o.disposition
+              ? `<button class="btn btn-sm" disabled title="${AL('Set a disposition before closing — closing attests the QP decision', 'Поставете диспозиција пред затворање — затворањето ја потврдува одлуката на КЛ')}">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>`
+              : `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosAdvance('${o.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>`)
+          : ''}
+        ${canClose && canQP() && nxt !== 'CLOSED'
+          ? (!o.disposition
+              ? `<button class="btn btn-sm" disabled title="${AL('Set a disposition before closing — closing attests the QP decision', 'Поставете диспозиција пред затворање — затворањето ја потврдува одлуката на КЛ')}">${AL('Close (QP)', 'Затвори (КЛ)')}</button>`
+              : `<button class="btn btn-sm" onclick="GF.WWF.qcOosAdvance('${o.id}','CLOSED')">${AL('Close (QP)', 'Затвори (КЛ)')}</button>`)
+          : ''}
       </div>` : ''}
       ${canWrite() && o.status !== 'CLOSED' ? `
       <div class="ana-panel" style="margin-top:10px;padding:10px">

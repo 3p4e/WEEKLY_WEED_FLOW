@@ -83,3 +83,63 @@ test('empty registry points at the catalogue import', () => {
   const html = h.window.GF.views.qcpotency();
   assert.match(html, /No potency ladders yet|Сè уште нема скали/);
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   GF.WWF.qcPotPick / qcPotRetry — a failed detail fetch must surface an
+   error + retry affordance, matching every sibling QC view (qcsample,
+   qccustody, qclab, qcspec), instead of leaving the row selected with
+   st.detail permanently null (an endless loading skeleton).
+   ════════════════════════════════════════════════════════════════════ */
+
+test('_qcpot initializes detailError alongside detail (mirrors sibling QC views)', () => {
+  const h = load();
+  assert.ok('detailError' in h.window.GF.WWF._qcpot, 'detailError present in initial state');
+  assert.equal(h.window.GF.WWF._qcpot.detailError, null);
+});
+
+test('a failed detail fetch shows an error + retry row, not an endless skeleton', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcpot = {
+    specs: [SPEC], sel: SPEC.id, detail: null, detailError: 'network down',
+    q: '', status: '', loading: false, error: null, importing: false,
+  };
+  const html = w.GF.views.qcpotency();
+  assert.ok(html.includes('network down'), 'error message rendered');
+  assert.ok(html.includes(`qcPotRetry('${SPEC.id}')`), 'retry button targets this row');
+  assert.match(html, /Failed|Неуспешно/);
+});
+
+test('qcPotPick records detailError and toasts on a failed fetch', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcpot.specs = [SPEC];
+  w.GF.API.qcPotencySpec = async () => { throw new Error('network down'); };
+  let toastMsg = null, toastKind = null;
+  w.GF.toast = (m, k) => { toastMsg = m; toastKind = k; };
+  await w.GF.WWF.qcPotPick(SPEC.id);
+  assert.equal(w.GF.WWF._qcpot.detail, null, 'no detail on a failed fetch');
+  assert.equal(w.GF.WWF._qcpot.detailError, 'network down');
+  assert.equal(toastMsg, 'network down');
+  assert.equal(toastKind, 'error');
+});
+
+test('qcPotRetry clears the error and re-fetches the same row', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcpot.specs = [SPEC];
+  w.GF.API.qcPotencySpec = async () => { throw new Error('network down'); };
+  w.GF.toast = () => {};
+  await w.GF.WWF.qcPotPick(SPEC.id);
+  assert.equal(w.GF.WWF._qcpot.detailError, 'network down');
+
+  w.GF.API.qcPotencySpec = async () => ({ spec: SPEC, ranges: RANGES });
+  // qcPotRetry (like its qcSampleRetry sibling) fires qcPotPick without
+  // awaiting it — flush the microtask queue via a macrotask so the retried
+  // fetch has resolved before asserting on it.
+  w.GF.WWF.qcPotRetry(SPEC.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(w.GF.WWF._qcpot.detailError, null, 'error cleared after a successful retry');
+  assert.ok(w.GF.WWF._qcpot.detail, 'detail populated after the retry succeeds');
+  assert.equal(w.GF.WWF._qcpot.detail.spec.id, SPEC.id);
+});
