@@ -46,14 +46,20 @@ GF.WWF.compileDocument = async () => {
   if (ds.data && ds.data.id && ds.data.status === 'draft'
       && !confirm(AL('Recompiling rebuilds this draft and discards your saved manual edits. Continue?',
                      'Повторното составување го обновува овој нацрт и ги отфрла вашите зачувани рачни измени. Продолжи?'))) return;
+  const seq = ++ds._seq;   // only the newest write may apply its response (mirrors loadDocument)
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const data = await GF.API.compileDocument({ kind: st.mode, ref_date: st.refDate || undefined,
                                                 department_id: GF.WWF._docDeptParam() });
-    ds._seq++; ds.data = data; ds.error = null;   // authoritative new state; bail any in-flight load
+    // The compile itself really happened server-side — say so even if a newer
+    // action has since superseded this response, so a real outcome is never
+    // silently dropped.
     GF.toast(AL('Document compiled', 'Документот е составен'), 'success');
+    if (seq !== ds._seq) return;   // superseded by a newer load/compile/preview/save/lock — its state already reflects reality
+    ds.data = data; ds.error = null;
   } catch (e) {
     GF.toast(AL('Compile failed: ', 'Неуспешно составување: ') + e.message, 'error');
+    if (seq !== ds._seq) return;   // a newer op owns ds.loading / the panel now
   }
   ds.loading = false;
   GF.WWF._renderDocPanel();
@@ -68,14 +74,17 @@ GF.WWF.previewDocument = async () => {
   const start = (ds.rangeStart || '').trim(), end = (ds.rangeEnd || '').trim();
   if (!start || !end) { GF.toast(AL('Pick a start and end date', 'Изберете почетен и краен датум'), 'error'); return; }
   if (end < start) { GF.toast(AL('End date is before start date', 'Крајниот датум е пред почетниот'), 'error'); return; }
+  const seq = ++ds._seq;   // only the newest write may apply its response (mirrors loadDocument)
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const data = await GF.API.previewDocument({ kind: st.mode, start, end,
                                                 department_id: GF.WWF._docDeptParam() });
-    ds._seq++; ds.data = data; ds.error = null;   // authoritative; bail any in-flight load
     GF.toast(AL('Preview generated', 'Прегледот е генериран'), 'success');
+    if (seq !== ds._seq) return;   // superseded by a newer load/compile/preview/save/lock — its state already reflects reality
+    ds.data = data; ds.error = null;
   } catch (e) {
     GF.toast(AL('Preview failed: ', 'Неуспешен преглед: ') + e.message, 'error');
+    if (seq !== ds._seq) return;   // a newer op owns ds.loading / the panel now
   }
   ds.loading = false;
   GF.WWF._renderDocPanel();
@@ -95,8 +104,13 @@ GF.WWF._collectDocInputs = () => {
   if (!root) return out;
   root.querySelectorAll('[data-sec]').forEach(el => {
     const key = el.dataset.sec, p = out[key] = out[key] || {};
-    if (el.dataset.field) { (p.fields = p.fields || {})[el.dataset.field] = el.value; }
-    else if (el.dataset.f) { p[el.dataset.f] = el.value; }
+    // The approve checkbox (data-f="approved") carries its state in .checked,
+    // not .value — read it like any other tracked input so an in-flight
+    // approval survives a re-render triggered by another section's save
+    // (see _applyDocInputs below).
+    const v = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.dataset.field) { (p.fields = p.fields || {})[el.dataset.field] = v; }
+    else if (el.dataset.f) { p[el.dataset.f] = v; }
   });
   return out;
 };
@@ -110,6 +124,13 @@ GF.WWF._applyDocInputs = (content, inputs, skipKey) => {
       if (p.narrative_en !== undefined) sec.narrative.en = p.narrative_en;
       if (p.narrative_mk !== undefined) sec.narrative.mk = p.narrative_mk;
     }
+    // An approval click saves immediately (onchange calls saveDocSection
+    // directly) but the request can still be in flight when ANOTHER section's
+    // save resolves and re-renders the whole panel from its own server copy —
+    // which does not yet know about this pending approval. Reapply it here,
+    // the same way an unsaved body/narrative edit is reapplied above, so the
+    // checkbox does not visibly (though never durably) revert.
+    if (p.approved !== undefined) sec.approved = p.approved;
     if (p.fields) (sec.fields || []).forEach(f => {
       if (p.fields[f.key] !== undefined) f.value = p.fields[f.key];
     });
@@ -195,14 +216,28 @@ GF.WWF.saveDocSection = async (key, approved) => {
   if (!ds.data || ds.data.status !== 'draft') return;
   const inputs = GF.WWF._collectDocInputs();
   const patch = Object.assign({}, inputs[key] || {});
+  // `inputs[key].approved` (if present) merely mirrors the checkbox's current
+  // .checked, collected for the client-side _applyDocInputs reapplication
+  // below — it must NOT silently ride along on an unrelated text save (e.g. a
+  // plain "Save section" click). Only an explicit caller-supplied `approved`
+  // may set it here.
+  delete patch.approved;
   if (approved !== undefined) patch.approved = approved;
+  const seq = ++ds._seq;   // only the newest write may apply its response (mirrors loadDocument) —
+                            // otherwise a slower save for one section can land after a faster save
+                            // for another and clobber its already-adopted state.
   try {
     const data = await GF.API.patchDocumentSection(ds.data.id, key, patch);
-    ds._seq++; ds.data = data;                       // adopt the server's canonical copy
-    GF.WWF._applyDocInputs(ds.data.content || {}, inputs, key);  // keep other sections' unsaved edits
+    // The PATCH really landed server-side — say so even if a newer save/compile/
+    // lock has since superseded this response, so a real save is never silently
+    // unreported.
     if (approved === undefined) GF.toast(AL('Section saved', 'Секцијата е зачувана'), 'success');
+    if (seq !== ds._seq) return;   // superseded — a newer op's state is already current; don't clobber it
+    ds.data = data;                       // adopt the server's canonical copy
+    GF.WWF._applyDocInputs(ds.data.content || {}, inputs, key);  // keep other sections' unsaved edits
   } catch (e) {
     GF.toast(AL('Not saved: ', 'Не се зачува: ') + e.message, 'error');
+    if (seq !== ds._seq) return;   // a newer op owns the panel now
   }
   GF.WWF._renderDocPanel();
 };
@@ -213,11 +248,18 @@ GF.WWF.lockDocument = async () => {
   if (!confirm(AL(
     'Lock this document as the submitted record for the week? It becomes immutable.',
     'Да се заклучи документот како поднесен запис за неделата? Станува непроменлив.'))) return;
+  const seq = ++ds._seq;   // only the newest write may apply its response (mirrors loadDocument)
   try {
     const data = await GF.API.lockDocument(ds.data.id);
-    ds._seq++; ds.data = data;
+    // The lock really happened server-side (and is irreversible) — say so even
+    // if a newer action has since superseded this response.
     GF.toast(AL('Document locked', 'Документот е заклучен'), 'success');
-  } catch (e) { GF.toast(AL('Lock failed: ', 'Неуспешно заклучување: ') + e.message, 'error'); }
+    if (seq !== ds._seq) return;   // superseded — a newer op's state is already current; don't clobber it
+    ds.data = data;
+  } catch (e) {
+    GF.toast(AL('Lock failed: ', 'Неуспешно заклучување: ') + e.message, 'error');
+    if (seq !== ds._seq) return;   // a newer op owns the panel now
+  }
   GF.WWF._renderDocPanel();
 };
 
@@ -415,7 +457,7 @@ GF.WWF._renderDocPanel = () => {
     const langLbl = (t) => `<div style="font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--ink-3);margin-top:7px">${t}</div>`;
     const approveCtl = (key, ok, label) => editable
       ? `<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
-          <input type="checkbox" ${ok ? 'checked' : ''} onchange="GF.WWF.saveDocSection('${GF.esc(key)}', this.checked)">
+          <input type="checkbox" data-sec="${GF.esc(key)}" data-f="approved" ${ok ? 'checked' : ''} onchange="GF.WWF.saveDocSection('${GF.esc(key)}', this.checked)">
           ${label || AL('Approve for document', 'Одобри за документот')}</label>`
       : (isPreview ? ''
         : (ok ? `<span style="font-size:11px;color:#2BE8A0;font-weight:700">${AL('Approved', 'Одобрено')}</span>`
