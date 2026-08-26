@@ -71,12 +71,14 @@
       ${tile(AL('Overall readiness', 'Вкупна подготвеност'), readiness === null ? '—' : readiness + '%',
              `${doneAll}/${totalAll} ${AL('tasks done', 'задачи завршени')}`)}
       ${tile(AL('Audit-prep tasks', 'Задачи за подготовка'), totalAll,
-             overdueAll ? `<span style="color:var(--red-fg,var(--red))">${overdueAll} ${GF.t('overdue').toLowerCase()}</span>` : '')}
+             overdueAll ? `${overdueAll} ${GF.t('overdue').toLowerCase()}` : '',
+             undefined, overdueAll ? 'bad' : '')}
       ${tile(AL('Busiest day', 'Најоптоварен ден'), d.busiest_day ? dow(d.busiest_day.day) : '—',
              d.busiest_day ? `${d.busiest_day.count} ${AL('scheduled', 'закажани')}` : '')}
       ${tile(AL('Outcome traceability', 'Следливост на исход'), tr.completed ? Math.round(100 * tr.rate) + '%' : '—',
-             tr.without_outcome ? `<span style="color:var(--orange)">${tr.without_outcome} ${AL('missing outcome', 'без исход')}</span>`
-                                : AL('all completed logged', 'сите завршени запишани'))}
+             tr.without_outcome ? `${tr.without_outcome} ${AL('missing outcome', 'без исход')}`
+                                : AL('all completed logged', 'сите завршени запишани'),
+             undefined, tr.without_outcome ? 'warn' : '')}
     </div>`;
 
     // Per-programme readiness rows.

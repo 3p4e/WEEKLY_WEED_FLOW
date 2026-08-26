@@ -110,10 +110,20 @@
     const mk = (i) => (document.getElementById(i) || {}).value || '';
     const test_name_en = mk('qcp-en').trim();
     if (!test_name_en) return GF.toast(AL('Test name required', 'Потребно е име на тест'), 'error');
+    // Explicit '' check (not `parseFloat(...) || fallback`) so a legitimate 0
+    // boundary — e.g. a lower_limit of 0 — is parsed and kept, not discarded.
     const num = (i) => { const v = mk(i).trim(); return v === '' ? null : parseFloat(v); };
+    const lower_limit = num('qcp-lo'), upper_limit = num('qcp-hi');
+    // A transposed range (lower > upper) is a real compliance defect once this
+    // parameter judges batch CoAs against the ACTIVE spec — refuse it here,
+    // before it ever reaches the API. Number.isFinite so a blank field (null)
+    // or an unparseable one (NaN) never trips the comparison.
+    if (Number.isFinite(lower_limit) && Number.isFinite(upper_limit) && lower_limit > upper_limit) {
+      return GF.toast(AL('Lower limit cannot exceed upper limit', 'Долната граница не смее да биде поголема од горната'), 'error');
+    }
     const body = { test_name_en, test_name_mk: mk('qcp-mk').trim() || null,
                    test_method: mk('qcp-method').trim() || null, unit: mk('qcp-unit').trim() || null,
-                   lower_limit: num('qcp-lo'), upper_limit: num('qcp-hi'),
+                   lower_limit, upper_limit,
                    pharmacopoeia_ref: mk('qcp-ref').trim() || null };
     // Ph. Eur. 3028 derived total: computed from two measured components
     // (a = neutral form, b = acid form) — the engine derives a + 0.877·b at

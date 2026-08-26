@@ -171,7 +171,12 @@
   };
   GF.WWF.qcCusLogTransfer = async (sampleId) => {
     const mk = (i) => ((document.getElementById(i) || {}).value || '').trim();
-    const body = { transfer_type: mk('qcu-xtype') || null, to_location: mk('qcu-xto') || null, transfer_reason: mk('qcu-xreason') || null };
+    const transfer_type = mk('qcu-xtype'), to_location = mk('qcu-xto');
+    // §6.3 — a custody entry must record at minimum the transfer type and
+    // destination; a blank submit would PATCH a fully-null entry onto the
+    // chain-of-custody record for this sample.
+    if (!transfer_type || !to_location) return GF.toast(AL('Transfer type and destination are required', 'Потребни се тип на трансфер и локација'), 'error');
+    const body = { transfer_type, to_location, transfer_reason: mk('qcu-xreason') || null };
     // §6.3.1 — the condition confirmed at the handoff.
     const cond = mk('qcu-xcond'); if (cond) body.sample_condition = cond;
     const okv = mk('qcu-xok'); if (okv) body.condition_ok = okv === 'yes';

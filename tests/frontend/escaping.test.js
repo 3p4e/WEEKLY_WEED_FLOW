@@ -100,6 +100,36 @@ test('GF.kpiTile omits the sub-line element entirely when no sub is given', () =
   h.close();
 });
 
+test('GF.kpiTile colors the sub-line via subTone (5th arg) instead of a raw <span> from the caller', () => {
+  const h = loadGF();
+  // Regression test: three call sites (analytics-view.js, auditprep-view.js)
+  // used to build `<span style="color:...">N overdue</span>` themselves and
+  // pass that whole string as `sub`. Since GF.esc runs on `sub`, that markup
+  // came out as literal, visible tag text instead of a badge. The fix moves
+  // the coloring inside this function, driven by a whitelisted `subTone`
+  // keyword, so `sub` itself only ever needs to be plain text.
+  const bad = h.GF.kpiTile('Open tasks now', 5, '3 overdue', undefined, 'bad');
+  assert.equal(bad.includes('3 overdue'), true, 'count is visible plain text');
+  assert.equal(bad.includes('ana-ts--bad'), true, 'tone class applied to the sub-line');
+  assert.equal(bad.includes('<span'), false, 'no raw span leaks in from the caller');
+  assert.equal(bad.includes('&lt;span'), false, 'sub is not itself escaped markup');
+
+  const warn = h.GF.kpiTile('Outcome traceability', '80%', '2 missing outcome', undefined, 'warn');
+  assert.equal(warn.includes('ana-ts--warn'), true);
+  assert.equal(warn.includes('&lt;span'), false);
+
+  // A caller that still tried to pass raw markup in `sub` gets it neutralised
+  // (this is the escaping discipline GF.kpiTile already guarantees on label
+  // and value) — subTone is the ONLY sanctioned way to color the sub-line.
+  const raw = h.GF.kpiTile('X', 1, '<span style="color:red">1 overdue</span>');
+  assert.equal(raw.includes('&lt;span'), true);
+  assert.equal(raw.includes('<span style'), false);
+
+  // subTone is whitelisted exactly like tone: an unrecognised value injects no class.
+  assert.equal(h.GF.kpiTile('X', 1, 'sub', undefined, 'evil"><script>').includes('ana-ts--'), false);
+  h.close();
+});
+
 test('GF.avatar escapes the person name and initials it interpolates', () => {
   const h = loadGF({ files: ['data.js', 'core.js', 'render.js'] });
   // name lands in a title="…" attribute and init in element content; both come

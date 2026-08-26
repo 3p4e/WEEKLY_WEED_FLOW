@@ -199,11 +199,17 @@ GF.taskTypeLabel = (t) => { const l = GF.TASK_TYPE_LABELS && GF.TASK_TYPE_LABELS
 // cockpit's KPI band uses it to flag on-time vs overdue at a glance. It's a
 // fixed keyword from calling code (never user data), but whitelisted anyway so
 // it can never inject a class, matching this helper's escaping discipline.
-GF.kpiTile = (label, value, sub, tone) => {
+// Optional `subTone` does the same for the sub-line: callers that need a
+// colored badge there (e.g. "3 overdue") pass plain text in `sub` plus a
+// `subTone` keyword — the color is applied HERE, inside the function that
+// already escapes `sub`, instead of a call site building a raw `<span
+// style=...>` string that GF.esc would then neuter into visible tag text.
+GF.kpiTile = (label, value, sub, tone, subTone) => {
   const t = (tone === 'good' || tone === 'bad' || tone === 'warn') ? ' ana-tv--' + tone : '';
+  const st = (subTone === 'good' || subTone === 'bad' || subTone === 'warn') ? ' ana-ts--' + subTone : '';
   return `<div class="ana-tile">
   <div class="ana-tl">${GF.esc(label)}</div><div class="ana-tv${t}">${GF.esc(value)}</div>
-  ${sub ? `<div class="ana-ts">${GF.esc(sub)}</div>` : ''}</div>`;
+  ${sub ? `<div class="ana-ts${st}">${GF.esc(sub)}</div>` : ''}</div>`;
 };
 
 // ── Calendar ──

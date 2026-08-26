@@ -375,7 +375,8 @@
 
     const kpis = `<div class="ana-tiles">
       ${tile(AL('Open tasks now', 'Отворени задачи сега'), openNow,
-             overdueNow ? `<span style="color:var(--red-fg,var(--red))">${overdueNow} ${GF.t('overdue').toLowerCase()}</span>` : '')}
+             overdueNow ? `${overdueNow} ${GF.t('overdue').toLowerCase()}` : '',
+             undefined, overdueNow ? 'bad' : '')}
       ${tile(AL('Completed', 'Завршени') + ` · ${d.range.weeks}${AL('w', 'н')}`, doneRange, '')}
       ${tile(AL('On time', 'Навреме'), pct === null ? '—' : pct + '%',
              AL('of completed tasks', 'од завршените задачи'))}

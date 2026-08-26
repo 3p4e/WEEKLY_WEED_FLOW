@@ -495,6 +495,14 @@
 .ana-tv--good { color:var(--primary); }
 .ana-tv--bad  { color:var(--red-fg,var(--red)); }
 .ana-tv--warn { color:var(--amber-fg,var(--amber,var(--orange))); }
+/* Sub-line tones (GF.kpiTile's 5th arg, subTone) — same palette as the value
+   tones above, for a badge on the tile's second line (e.g. "3 overdue").
+   Kept as real CSS classes rather than a passed-in inline <span style=...>
+   string so the color is applied inside GF.kpiTile, after GF.esc has already
+   run on `sub`. */
+.ana-ts--good { color:var(--primary); }
+.ana-ts--bad  { color:var(--red-fg,var(--red)); }
+.ana-ts--warn { color:var(--amber-fg,var(--amber,var(--orange))); }
 .ana-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
 .ana-panel { padding:14px 16px; }
 .ana-pt { font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
