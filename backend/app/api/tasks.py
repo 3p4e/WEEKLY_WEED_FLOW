@@ -396,31 +396,52 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
         if not body.department_id:
             body.department_id = scope
     async with rls(user) as c:
-        if scope and body.parent_id:
+        if body.parent_id is not None:
+            # Org-scoped existence check (RLS-filtered SELECT under this same
+            # connection — same idiom as batch_id below). Postgres validates a
+            # foreign key against the referenced TABLE, not through this
+            # session's RLS, so a bare FK check would accept a real parent
+            # task id belonging to ANOTHER org. This used to run ONLY inside
+            # `if scope and body.parent_id`, so every org-wide caller
+            # (ADMIN/OWNER/CEO/COO/QP, a department-less manager) *and* every
+            # plain USER (not in DEPT_SCOPED_ROLES, so dept_scope() is None
+            # for them too) skipped it entirely — any authenticated caller who
+            # knew a foreign org's real parent-task uuid could silently attach
+            # a new task to it. Runs unconditionally now, for every caller.
             parent = await c.fetchrow(
                 "SELECT department_id, user_id FROM tasks WHERE id=$1 AND is_deleted=false",
                 body.parent_id)
             if parent is None:
-                raise HTTPException(422, "Unknown department, week, or parent task")
-            mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
-                or str(parent["user_id"]) == str(user["id"])
-            if not mine:
-                # A foreign parent is attachable ONLY if it is ALREADY visible
-                # to this manager (existing multi-departmental family / own or
-                # assigned task). Without this, attaching a child in their own
-                # department to ANY org task uuid would grant them the family
-                # visibility clause on that task — a self-served scope
-                # escalation (_assert_scope_visible counts existing children,
-                # so the check runs before the new child exists).
-                await _assert_scope_visible(c, str(body.parent_id), user)
-            if not mine and body.department_id and str(body.department_id) != scope:
-                raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
-            if not body.department_id:
-                # Inherit the parent's department ONLY when the parent is the
-                # manager's own — otherwise an omitted department_id under a
-                # FOREIGN parent would silently plant the child in that other
-                # department. Default to the manager's own scope in that case.
-                body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
+                raise HTTPException(422, "Unknown parent task")
+            if scope:
+                mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
+                    or str(parent["user_id"]) == str(user["id"])
+                if not mine:
+                    # A foreign parent is attachable ONLY if it is ALREADY visible
+                    # to this manager (existing multi-departmental family / own or
+                    # assigned task). Without this, attaching a child in their own
+                    # department to ANY org task uuid would grant them the family
+                    # visibility clause on that task — a self-served scope
+                    # escalation (_assert_scope_visible counts existing children,
+                    # so the check runs before the new child exists).
+                    await _assert_scope_visible(c, str(body.parent_id), user)
+                if not mine and body.department_id and str(body.department_id) != scope:
+                    raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
+                if not body.department_id:
+                    # Inherit the parent's department ONLY when the parent is the
+                    # manager's own — otherwise an omitted department_id under a
+                    # FOREIGN parent would silently plant the child in that other
+                    # department. Default to the manager's own scope in that case.
+                    body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
+        if body.department_id is not None:
+            # Same org-scoped existence check as parent_id/batch_id, same
+            # reason: a bare FK on department_id accepts any org's real
+            # department id, not just the caller's own.
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1", body.department_id):
+                raise HTTPException(422, "Unknown department")
+        if body.week_id is not None:
+            if not await c.fetchval("SELECT 1 FROM calendar_weeks WHERE id=$1", body.week_id):
+                raise HTTPException(422, "Unknown week")
         if body.batch_id is not None:
             # Migration 0054: the FK alone is not enough — Postgres validates a
             # foreign key against the referenced TABLE, not through the
@@ -429,11 +450,11 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             # rls(user) connection as everything else in this function, so
             # plant_batches' org_isolation policy (migration 0045) filters it —
             # a cross-org id reads back as "no such row" here, the same way
-            # _batch_or_422 already does it in cultivation.py/harvest.py. (This
-            # check does not yet exist for department_id/week_id/parent_id —
-            # a pre-existing gap, out of scope for this change, not one to
-            # silently paper over by pretending batch_id is the only exposed
-            # field.)
+            # _batch_or_422 already does it in cultivation.py/harvest.py. The
+            # same check now runs unconditionally for parent_id/department_id/
+            # week_id above too — that used to be a gap, gated behind
+            # `if scope and ...` and so skipped for every org-wide caller and
+            # every plain USER; it isn't anymore.
             if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", body.batch_id):
                 raise HTTPException(422, "Unknown batch")
         try:
@@ -646,6 +667,19 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
                 dst_ok = str(patch["department_id"] or "") == scope or delegable
                 if not (src_ok and dst_ok):
                     raise HTTPException(403, "Managers may not move tasks outside their own department")
+        if patch.get("department_id") is not None:
+            # Org-scoped existence check (RLS-filtered), same idiom as
+            # batch_id below and create_task's equivalent checks. This used to
+            # be missing entirely — a bare FK would accept another org's real
+            # department id for EVERY caller, dept-scoped or not (the dept-move
+            # authorization block above only fires `if scope`, and even then
+            # only restricts department_id to the manager's own scope/family —
+            # it never confirmed the id actually resolves within the org).
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1", patch["department_id"]):
+                raise HTTPException(422, "Unknown department")
+        if patch.get("week_id") is not None:
+            if not await c.fetchval("SELECT 1 FROM calendar_weeks WHERE id=$1", patch["week_id"]):
+                raise HTTPException(422, "Unknown week")
         if patch.get("batch_id") is not None:
             # Same org-scoped existence check as create_task, and for the same
             # reason: the FK alone would accept another org's real batch id.

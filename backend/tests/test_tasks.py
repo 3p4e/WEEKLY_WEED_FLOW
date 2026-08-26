@@ -513,6 +513,104 @@ async def test_task_tree_returns_hierarchy(client, admin_headers):
     assert all(n["id"] != "tree" for n in tree)
 
 
+async def test_parent_department_week_cross_org_rejected_on_create_and_patch(client, admin_headers, org):
+    """Companion to test_cultivation.py's
+    test_task_batch_id_cross_org_rejected_on_create_and_patch: parent_id,
+    department_id and week_id need the exact same RLS-scoped existence check
+    batch_id already had. That check used to run ONLY inside
+    `if scope and body.parent_id` in create_task (and not at all, for any
+    caller, for department_id/week_id in either create_task or update_task) —
+    so a bare FK check was all that stood between a caller and another org's
+    real parent-task/department/calendar-week id. dept_scope() returns None
+    for every org-wide role (ADMIN/OWNER/CEO/COO/QP, a department-less
+    manager) *and* for plain USER (not in DEPT_SCOPED_ROLES), so ALL of those
+    callers skipped validation entirely — this pins both an org-wide caller
+    (ADMIN) and a dept-scoped manager (QC_MGR)."""
+    import uuid
+    from app.security import hash_password
+    from app.db import users_admin_pool
+    from tests.conftest import create_user, login_and_set_password, purge_org
+
+    other_org_id = uuid.uuid4()
+    other_admin_id = uuid.uuid4()
+    other_password = "OtherOrgPassword123456"
+    other_username = f"other_admin_{other_org_id.hex[:8]}"
+    upool = users_admin_pool()
+    await upool.execute("INSERT INTO organizations(id, name, slug) VALUES ($1,$2,$3)",
+                        other_org_id, "Other Org", f"other-{other_org_id.hex[:8]}")
+    await upool.execute(
+        "INSERT INTO profiles(id, org_id, username, password_hash, full_name, role, must_change_password)"
+        " VALUES ($1,$2,$3,$4,$5,'ADMIN',false)",
+        other_admin_id, other_org_id, other_username, hash_password(other_password), "Other Admin")
+    try:
+        r = await client.post("/auth/login", json={"email": other_username, "password": other_password})
+        assert r.status_code == 200, r.text
+        other_h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        # A real parent task, department and calendar week — all in the OTHER org.
+        other_parent = await client.post("/tasks", json={"title": "Other org parent"}, headers=other_h)
+        assert other_parent.status_code == 201, other_parent.text
+        other_parent_id = other_parent.json()["id"]
+
+        other_dept = await tasks_admin_pool().fetchrow(
+            "INSERT INTO departments(org_id, code, name) VALUES ($1,'qc','QC') RETURNING id", other_org_id)
+        other_dept_id = str(other_dept["id"])
+
+        other_week = await tasks_admin_pool().fetchrow(
+            "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on) VALUES"
+            " ($1,2026,30,'2026-07-20','2026-07-26') RETURNING id", other_org_id)
+        other_week_id = str(other_week["id"])
+
+        # ── org-wide caller (ADMIN): scope is None, so the old `if scope and
+        # ...` gate used to skip validation entirely for parent_id, and
+        # department_id/week_id were never checked for anyone. ──────────────
+        for field, val in (("parent_id", other_parent_id), ("department_id", other_dept_id),
+                           ("week_id", other_week_id)):
+            r = await client.post("/tasks", json={"title": f"cross-org {field}", field: val},
+                                  headers=admin_headers)
+            assert r.status_code == 422, f"{field}: {r.status_code} {r.text}"
+
+        mine = await client.post("/tasks", json={"title": "patch target admin"}, headers=admin_headers)
+        assert mine.status_code == 201, mine.text
+        tid = mine.json()["id"]
+        for field, val in (("department_id", other_dept_id), ("week_id", other_week_id)):
+            r = await client.patch(f"/tasks/{tid}", json={field: val}, headers=admin_headers)
+            assert r.status_code == 422, f"{field}: {r.status_code} {r.text}"
+
+        # ── dept-scoped caller (QC_MGR): same cross-org ids must still be
+        # refused — either by the department-scoping rule (403) or, once past
+        # it, by the same org-scoped existence check (422). Either way, never
+        # a 201/200 that plants a cross-tenant reference. ──────────────────
+        my_dept = await tasks_admin_pool().fetchrow(
+            "INSERT INTO departments(org_id, code, name) VALUES ($1,'pr','Production') RETURNING id",
+            org["org_id"])
+        prof, otp = await create_user(client, admin_headers, role="QC_MGR",
+                                      department_id=str(my_dept["id"]))
+        token = await login_and_set_password(client, prof["username"], otp)
+        mgr_h = {"Authorization": f"Bearer {token}"}
+
+        for field, val in (("parent_id", other_parent_id), ("department_id", other_dept_id),
+                           ("week_id", other_week_id)):
+            r = await client.post("/tasks", json={"title": f"cross-org mgr {field}", field: val},
+                                  headers=mgr_h)
+            assert r.status_code in (403, 422), f"{field}: {r.status_code} {r.text}"
+
+        mine2 = await client.post("/tasks", json={"title": "patch target mgr"}, headers=mgr_h)
+        assert mine2.status_code == 201, mine2.text
+        tid2 = mine2.json()["id"]
+        for field, val in (("department_id", other_dept_id), ("week_id", other_week_id)):
+            r = await client.patch(f"/tasks/{tid2}", json={field: val}, headers=mgr_h)
+            assert r.status_code in (403, 422), f"{field}: {r.status_code} {r.text}"
+
+        # Sanity: a SAME-org parent/department/week still work fine for both —
+        # the fix must not break legitimate same-org references.
+        same_org_child = await client.post("/tasks", json={
+            "title": "same-org parent ok", "parent_id": tid}, headers=admin_headers)
+        assert same_org_child.status_code == 201, same_org_child.text
+    finally:
+        await purge_org(other_org_id)
+
+
 async def test_external_ref_duplicate_is_409_not_500(client, admin_headers):
     """M5: a repeated external_ref (an at-least-once integration retry) must map to
     409, not an uncaught 500 — the unique index is what signals idempotency."""
