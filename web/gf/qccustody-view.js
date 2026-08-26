@@ -12,8 +12,9 @@
                     samples: null, pick: null, rqsAll: null,
                     q: '', status: '', tab: 'rqs', loading: false, error: null };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gate (core.js GF.QC_WRITERS) — see that file's
+  // comment; was a local copy-pasted array here.
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
 
   const RQS_ST = {
     OPEN:        { en: 'Open', mk: 'Отворено', c: 'var(--orange)' },

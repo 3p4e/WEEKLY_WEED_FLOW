@@ -124,6 +124,34 @@ test('qcPotPick records detailError and toasts on a failed fetch', async () => {
   assert.equal(toastKind, 'error');
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   The status-filter <select> — id + keyboard-refocus behavior, matching
+   every sibling filter control (e.g. qcsample-view's #qsm-status /
+   qcSampleStatus, qccustody-view's #qcu-status / qcCusStatus). Before the
+   fix the select had no id and qcPotStatus() never called GF.refocus, so a
+   keyboard user's focus was silently dropped back to <body> on every filter
+   change — the one status control among its siblings without this.
+   ════════════════════════════════════════════════════════════════════ */
+
+test('the status filter <select> carries id="qcp-status" (matches the sibling QC views)', () => {
+  const h = load();
+  const html = render(h, SPEC, RANGES);
+  assert.ok(html.includes('<select id="qcp-status" onchange="GF.WWF.qcPotStatus(this.value)">'),
+    'status select must have the same id + onchange wiring as its siblings');
+});
+
+test('qcPotStatus reloads then refocuses #qcp-status, like every sibling status filter', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcpot.specs = [SPEC];
+  w.GF.API.qcPotencySpecs = async () => [SPEC];
+  let refocused = null;
+  w.GF.refocus = (id) => { refocused = id; };
+  await w.GF.WWF.qcPotStatus('APPROVED');
+  assert.equal(w.GF.WWF._qcpot.status, 'APPROVED', 'status filter state updated');
+  assert.equal(refocused, 'qcp-status', 'focus is restored to the status select after the reload');
+});
+
 test('qcPotRetry clears the error and re-fetches the same row', async () => {
   const h = load();
   const w = h.window;

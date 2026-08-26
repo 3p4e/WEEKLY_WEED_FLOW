@@ -18,10 +18,10 @@
   GF.WWF._qcoos = { rows: null, sel: null, detail: null, capa: null,
                     q: '', status: '', tab: 'oos', loading: false, error: null };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
-  const canQP = () => _QP.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gates (core.js GF.QC_WRITERS / GF.QC_QP) — see that
+  // file's comment; were local copy-pasted arrays here.
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
+  const canQP = () => GF.QC_QP.includes((GF.API.user || {}).role);
 
   const ST = {
     OPEN:     { en: 'Open', mk: 'Отворено', c: 'var(--orange)' },

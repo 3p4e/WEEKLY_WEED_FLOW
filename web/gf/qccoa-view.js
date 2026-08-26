@@ -23,11 +23,13 @@
                     specs: null, samples: null, labs: null, q: '', status: '',
                     loading: false, error: null, preview: null };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'QP'];
+  // Shared QC/LIMS role gates (core.js GF.QC_WRITERS / GF.QC_QP) — see that
+  // file's comment; were local copy-pasted arrays here. _COQ stays local: it
+  // is unique to this file (mirrors the backend's _COQ_ROLES exactly), not
+  // duplicated elsewhere.
   const _COQ = ['ADMIN', 'QC_MGR'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
-  const canQP = () => _QP.includes((GF.API.user || {}).role);
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
+  const canQP = () => GF.QC_QP.includes((GF.API.user || {}).role);
   const canCoq = () => _COQ.includes((GF.API.user || {}).role);
 
   const ST = {
@@ -171,7 +173,9 @@
   };
 
   // Certificate of Quality — render a released cert to a house-style .docx via
-  // the DocEngine (PASS-gated); QP-only (mirrors the backend gate).
+  // the DocEngine (PASS-gated); QC Manager / ADMIN only via canCoq() below —
+  // QP is deliberately excluded (mirrors the backend's _COQ_ROLES gate; see
+  // the file header doc and the "Generate COQ" button's canCoq() guard).
   GF.WWF.qcCoaGenerateCoq = async (id) => {
     try {
       await GF.API.qcGenerateCoq(id);

@@ -34,10 +34,10 @@
     return _setView(v);
   };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
-  const canQP = () => _QP.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gates (core.js GF.QC_WRITERS / GF.QC_QP) — see that
+  // file's comment; was a local copy-pasted array here.
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
+  const canQP = () => GF.QC_QP.includes((GF.API.user || {}).role);
 
   const ST = {
     COLLECTED: { en: 'Collected', mk: 'Земено', c: 'var(--ink-3)' },
@@ -221,9 +221,11 @@
       ? st.detail.sample : (st.samples || []).find(x => x.id === id);
     if (!s) return;
     st.parent = { id: s.id, sample_id: s.sample_id, batch_id: s.batch_id, material_code: s.material_code };
-    // Seed the controlled draft with the parent's prefill so the create form
-    // shows (and submits) the genealogy-consistent batch/material.
-    st.draft = { ...(st.draft || {}), batch: s.batch_id || '', mat: s.material_code || '' };
+    // Seed the controlled draft with ONLY the parent's prefill — a RESET, not a
+    // merge. An abandoned "Collect sample" draft (type/loc/qty/unit/kind/notes/
+    // retention…) must never carry over into this sub-sample form; it always
+    // starts clean, with just the genealogy-consistent batch/material.
+    st.draft = { batch: s.batch_id || '', mat: s.material_code || '' };
     st.tab = 'samples';
     GF.render.all();
   };

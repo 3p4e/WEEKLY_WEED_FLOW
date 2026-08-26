@@ -16,10 +16,10 @@
   GF.WWF._qcpot = { specs: null, sel: null, detail: null, detailError: null, q: '', status: '',
                     loading: false, error: null, importing: false };
 
-  const _HOQC = ['ADMIN', 'QC_MGR', 'QP'];
-  const canApprove = () => _HOQC.includes((GF.API.user || {}).role);
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gates (core.js GF.QC_HOQC / GF.QC_WRITERS) — see that
+  // file's comment; were local copy-pasted arrays here.
+  const canApprove = () => GF.QC_HOQC.includes((GF.API.user || {}).role);
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
 
   const ST = {
     DRAFT: { en: 'Draft', mk: 'Нацрт', c: 'var(--orange)' },
@@ -64,7 +64,7 @@
     GF.WWF.qcPotPick(id);
   };
   GF.WWF.qcPotFilter = (v) => { GF.WWF._qcpot.q = v; GF.render.all(); GF.refocus('qcp-search'); };
-  GF.WWF.qcPotStatus = (v) => { GF.WWF._qcpot.status = v; GF.WWF.loadQcPotency(); };
+  GF.WWF.qcPotStatus = async (v) => { GF.WWF._qcpot.status = v; await GF.WWF.loadQcPotency(); GF.refocus('qcp-status'); };
 
   const _reload = async (id) => {
     await GF.WWF.loadQcPotency();
@@ -178,7 +178,7 @@
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Potency ladders', 'Скали на јачина')}</div>
           <input id="qcp-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcPotFilter(this.value)">
-          <select onchange="GF.WWF.qcPotStatus(this.value)">
+          <select id="qcp-status" onchange="GF.WWF.qcPotStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

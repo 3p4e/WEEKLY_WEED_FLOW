@@ -8,8 +8,9 @@
 (function () {
   GF.WWF._qcl = { water: null, stab: null, trn: null, q: '', tab: 'water', loading: false, error: null };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gate (core.js GF.QC_WRITERS) — see that file's
+  // comment; was a local copy-pasted array here.
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
   const chip = (t, c) => `<span class="chip-opt" style="border-color:${c};color:${c}">${GF.esc(t)}</span>`;
   const GRADES = ['TW', 'BW', 'TR', 'RO'];
   const STAB_TYPES = ['LT', 'ACC', 'INT'];
@@ -49,6 +50,9 @@
     const passed = mk('qcl-passed') !== 'fail';
     const ooe = mk('qcl-ooe');
     if (!passed && !ooe) return GF.toast(AL('OOE reason required for a failing result', 'Потребна е причина за OOE'), 'error');
+    // `grade || 'RO'` is defensive only: #qcl-grade (GRADES, below) has no
+    // blank option, so the select always yields a non-empty value and this
+    // fallback cannot fire through the UI. Left in place as a safety net.
     const body = { location, grade: grade || 'RO', passed };
     if (!passed) body.ooe = ooe;
     const rd = mk('qcl-wdate'); if (rd) body.result_date = rd;

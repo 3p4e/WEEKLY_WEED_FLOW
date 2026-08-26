@@ -19,11 +19,10 @@
                      checklist: {},                 // QCT 018 review checklist per doc id
                      q: '', status: '', tab: 'docs',
                      loading: false, error: null };
-  const _HOQC = ['ADMIN', 'QC_MGR', 'QP'];
-  const canHoqc = () => _HOQC.includes((GF.API.user || {}).role);
-
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gates (core.js GF.QC_HOQC / GF.QC_WRITERS) — see that
+  // file's comment; were local copy-pasted arrays here.
+  const canHoqc = () => GF.QC_HOQC.includes((GF.API.user || {}).role);
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
 
   const DST = {
     UPLOADED:  { en: 'Uploaded', mk: 'Прикачено', c: 'var(--ink-3)' },

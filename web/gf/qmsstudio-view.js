@@ -283,8 +283,8 @@
         <pre class="mono" style="white-space:pre-wrap;font-size:11px;margin:8px 0">${GF.esc(r.verify || '')}</pre>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${did ? `<a class="btn btn-primary btn-sm" href="#"
-                     onclick="return GF.WWF.qstuDl('${did}','docx')">${AL('Download DOCX', 'Преземи DOCX')}</a>
-                  <a class="btn btn-sm" href="#" onclick="return GF.WWF.qstuDl('${did}','pdf')">${AL('Download PDF', 'Преземи PDF')}</a>` : ''}
+                     onclick="return GF.WWF.qstuDl('${GF.esc(did)}','docx')">${AL('Download DOCX', 'Преземи DOCX')}</a>
+                  <a class="btn btn-sm" href="#" onclick="return GF.WWF.qstuDl('${GF.esc(did)}','pdf')">${AL('Download PDF', 'Преземи PDF')}</a>` : ''}
           <button class="btn btn-sm" onclick="GF.WWF.qstuReset()">${AL('New document', 'Нов документ')}</button>
         </div>
       </div>

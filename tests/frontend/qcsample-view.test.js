@@ -89,3 +89,46 @@ test('material code is still required, and that check runs before the range guar
   assert.equal(w.__created, null);
   assert.match(w.__toasts[0][0], /material code is required/i);
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   GF.WWF.qcSampleSubOf — opening "Add sub-sample" must start the create
+   form CLEAN. Before the fix, the seed line spread the existing st.draft
+   (`{ ...(st.draft || {}), batch, mat }`), so any field left behind by an
+   earlier, abandoned "Collect sample" draft (type/loc/qty/unit/kind/notes/
+   retention/plan) silently rode along into the sub-sample submission.
+   ════════════════════════════════════════════════════════════════════ */
+
+const PARENT = { id: 's1', sample_id: 'PP-SMP-0001', batch_id: 'B-1', material_code: 'MAT-1' };
+// Round-trips a jsdom-realm object/array into this realm's plain Object/Array
+// prototypes — deepStrictEqual (assert/strict) compares prototypes too, and a
+// cross-realm value fails that even with identical own properties (same idiom
+// as dept-attrs.test.js's local `plain` helper).
+const plain = (o) => JSON.parse(JSON.stringify(o));
+
+test('qcSampleSubOf resets the draft to just the parent prefill — no stale fields survive', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcsm.samples = [PARENT];
+  // Simulate an abandoned "Collect sample" draft: unrelated fields typed and
+  // never submitted, still sitting in st.draft when "Add sub-sample" is clicked.
+  w.GF.WWF._qcsm.draft = {
+    batch: 'STALE-BATCH', mat: 'STALE-MAT', type: 'PC', loc: 'Room 3',
+    qty: '5', unit: 'g', kind: 'RET', retexp: '2027-01-01',
+    notes: 'leftover note', ret: true, plan: 'some-plan-id',
+  };
+  w.GF.WWF.qcSampleSubOf('s1');
+  assert.deepEqual(plain(w.GF.WWF._qcsm.draft), { batch: 'B-1', mat: 'MAT-1' },
+    'draft must contain ONLY the genealogy prefill — every stale field dropped');
+  assert.deepEqual(plain(w.GF.WWF._qcsm.parent), {
+    id: 's1', sample_id: 'PP-SMP-0001', batch_id: 'B-1', material_code: 'MAT-1',
+  });
+});
+
+test('qcSampleSubOf starts clean even with no prior draft at all', () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qcsm.samples = [PARENT];
+  w.GF.WWF._qcsm.draft = null;
+  w.GF.WWF.qcSampleSubOf('s1');
+  assert.deepEqual(plain(w.GF.WWF._qcsm.draft), { batch: 'B-1', mat: 'MAT-1' });
+});
