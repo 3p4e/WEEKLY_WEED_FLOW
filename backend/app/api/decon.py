@@ -374,6 +374,27 @@ async def record_swab_result(swab_id: str, body: SwabResultIn,
     if body.result not in _RESULTS or body.result == "pending":
         raise HTTPException(422, "result must be one of: negative, positive, inconclusive")
     async with rls(user) as c:
+        # Wave 3 audit (Low): once a swab's associated cycle has been RELEASED
+        # — "no room is released on a pending result", release_room already
+        # requires every swab negative at that moment — the room batch record
+        # is the QA Manager's terminal, in-writing sign-off (see the module
+        # docstring). Nothing domain-level stopped a swab result from being
+        # edited after that; only the DB audit trigger caught the change,
+        # after the fact. Same terminal-state-freeze shape as record_step's
+        # and fail_cycle's own cycle-status checks above, and as samples.py's
+        # post-RELEASED field freeze (_assert_leaf_open). A swab with no
+        # cycle_id (never tied to a specific cycle) has nothing to freeze
+        # against and is unaffected.
+        cur = await c.fetchrow("SELECT cycle_id FROM decon_swabs WHERE id=$1", swab_id)
+        if cur is None:
+            raise HTTPException(404, "Swab not found")
+        if cur["cycle_id"] is not None:
+            cyc_status = await c.fetchval(
+                "SELECT status FROM decon_room_cycles WHERE id=$1", cur["cycle_id"])
+            if cyc_status == "released":
+                raise HTTPException(
+                    409, "cycle is released — the room batch record is frozen;"
+                    " its swab results may no longer be edited")
         row = await c.fetchrow(
             "UPDATE decon_swabs SET result=$1, ct_value=$2, action_taken=$3,"
             " result_at=now(), updated_at=now() WHERE id=$4 RETURNING *",

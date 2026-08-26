@@ -1,4 +1,5 @@
 """P0 — does the app come up and can anyone log in at all."""
+import logging
 
 
 async def test_health(client):
@@ -89,6 +90,48 @@ async def test_chunked_oversized_request_body_is_rejected(client, monkeypatch):
     assert "content-length" not in req2.headers
     r2 = await client.send(req2)
     assert r2.status_code == 401
+
+
+async def test_rejected_oversized_body_is_still_logged(client, monkeypatch, caplog):
+    """Wave 3 audit (Low): limit_body_size's early-rejection responses (the
+    plain Content-Length-declared-too-large 413 here — the path with NO log
+    call of its own inside limit_body_size) must still produce a log line.
+    They do: log_requests is registered AFTER limit_body_size, and Starlette's
+    add_middleware inserts each new middleware at position 0 of the stack, so
+    the LAST-registered middleware ends up OUTERMOST — log_requests wraps
+    limit_body_size and logs whatever Response comes back from it, rejection
+    or not. See the comments on limit_body_size/log_requests in app/main.py."""
+    import app.main as _main
+    monkeypatch.setattr(_main, "_MAX_REQUEST_BYTES", 100)
+    caplog.set_level(logging.INFO, logger="app.request")
+    r = await client.post("/auth/login", content="x" * 200,
+                          headers={"content-type": "application/json"})
+    assert r.status_code == 413
+    matches = [rec for rec in caplog.records
+              if rec.name == "app.request" and rec.message == "request"
+              and getattr(rec, "fields", {}).get("status_code") == 413]
+    assert matches, "the 413 rejection from limit_body_size must be logged by log_requests"
+    assert matches[0].fields["path"] == "/auth/login"
+    assert matches[0].fields["method"] == "POST"
+
+
+async def test_token_missing_sub_claim_is_clean_401(client):
+    """Wave 3 audit (Low, deps.py:25): a structurally-valid, correctly-signed
+    JWT with no `sub` claim used to hit `payload["sub"]` and raise an uncaught
+    KeyError, which FastAPI turns into a 500 rather than a 401. Not reachable
+    via any current token-minting path (create_access_token always sets sub),
+    but a latent trap for a hand-crafted or future-buggy token."""
+    import jwt
+    from app.config import settings
+    no_sub = jwt.encode({"role": "ADMIN", "org_id": "x", "pwv": None},
+                        settings.secret_key, algorithm=settings.algorithm)
+    r = await client.get("/auth/me", headers={"Authorization": f"Bearer {no_sub}"})
+    assert r.status_code == 401
+    # A blank/falsy sub must be treated the same as a missing one.
+    blank_sub = jwt.encode({"sub": "", "role": "ADMIN", "org_id": "x", "pwv": None},
+                           settings.secret_key, algorithm=settings.algorithm)
+    r = await client.get("/auth/me", headers={"Authorization": f"Bearer {blank_sub}"})
+    assert r.status_code == 401
 
 
 async def test_health_ready_round_trips_both_databases(client):

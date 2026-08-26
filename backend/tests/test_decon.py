@@ -169,6 +169,31 @@ async def test_release_requires_complete_cycle_and_all_negative_swabs(client, ad
     again = await client.post(f"/decon/cycles/{cid}/release", json={}, headers=qa_h)
     assert again.status_code == 409
 
+    # Wave 3 audit (Low): the room batch record is now the QA Manager's
+    # terminal, in-writing sign-off — a swab result tied to this released
+    # cycle must no longer be editable, even though only the DB audit trigger
+    # used to catch such a change (after the fact).
+    reedit = await client.patch(f"/decon/swabs/{sid}/result",
+                                json={"result": "inconclusive"}, headers=qa_h)
+    assert reedit.status_code == 409
+    assert "released" in reedit.json()["detail"]
+    # the swab must still show its last real result — the rejected PATCH did
+    # not silently apply.
+    still_negative = await client.get("/decon/swabs", params={"room_id": room["id"]},
+                                      headers=qa_h)
+    matched = next(s for s in still_negative.json()["swabs"] if s["id"] == sid)
+    assert matched["result"] == "negative"
+
+    # A swab never tied to any cycle has nothing to freeze against — editing
+    # it stays allowed regardless of any OTHER cycle (even this released one)
+    # in the org.
+    untied = await client.post("/decon/swabs", json={
+        "room_id": room["id"], "swab_code": "RR-01-101"}, headers=qa_h)
+    assert untied.status_code == 201
+    untied_edit = await client.patch(f"/decon/swabs/{untied.json()['id']}/result",
+                                     json={"result": "negative"}, headers=qa_h)
+    assert untied_edit.status_code == 200
+
 
 async def test_positive_swab_on_awaiting_verification_cycle_can_be_failed_and_reopened(
         client, admin_headers):

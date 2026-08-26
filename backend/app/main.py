@@ -48,6 +48,27 @@ app.add_middleware(
 _MAX_REQUEST_BYTES = 32 * 1024 * 1024
 
 
+# VERIFIED (Wave 3, audit Low finding "a rejected body never gets a log
+# line"): it already does — there is no gap here, and nothing below needed a
+# fix. `@app.middleware("http")` is sugar for `add_middleware(BaseHTTPMiddleware,
+# dispatch=...)` (fastapi/applications.py), and Starlette's add_middleware
+# INSERTS AT POSITION 0 of `user_middleware` (starlette/applications.py) rather
+# than appending. Registration order in this file is CORS, then
+# limit_body_size, then log_requests, so after all three inserts
+# user_middleware = [log_requests, limit_body_size, CORS]. build_middleware_stack
+# wraps outward-in over that list (`for cls,... in reversed(middleware): app =
+# cls(app, ...)`), which makes the FIRST entry the OUTERMOST layer — so
+# log_requests wraps limit_body_size, which wraps CORS, which wraps the router.
+# Concretely: log_requests's `response = await call_next(request)` calls
+# straight into limit_body_size and receives back whatever it returns —
+# including its early-return 400 (bad Content-Length), 413 (declared too
+# large), and 413 (streamed-over-cap) responses — and logs every one of them
+# via the "request" event below with the real status code. There is no
+# early-return path here that raises instead of returning a Response, so
+# nothing bypasses log_requests's try/except either. Confirmed against the
+# installed starlette==1.3.1 source, not just read here. A redundant log call
+# was deliberately NOT added — see log_requests below for the "request" event
+# that already covers this.
 @app.middleware("http")
 async def limit_body_size(request: Request, call_next):
     cl = request.headers.get("content-length")
@@ -100,6 +121,10 @@ async def limit_body_size(request: Request, call_next):
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Registered AFTER limit_body_size above, which (see the comment there)
+    # makes this the OUTER layer — call_next() below invokes limit_body_size
+    # directly, so its early-rejection responses (400/413) flow back through
+    # here and are logged by the "request" event same as any other response.
     start = time.monotonic()
     try:
         response = await call_next(request)
