@@ -495,3 +495,55 @@ def test_tool_error_never_names_a_dataset_the_caller_was_not_granted(monkeypatch
     assert out["ok"] is False
     assert out["unknown_datasets"] == ["DB1_REGULATORY", "DB3_PP_CURRENT_unified"]
     assert "available" not in out
+
+
+# ── The tool is a shared server object, and nothing ever revisited it ───────
+
+
+class _ToolClient:
+    """Records what ensure_tool does to an already-registered tool."""
+
+    def __init__(self, registered: dict | None):
+        self.registered = registered
+        self.updates: list[tuple] = []
+        self.creates: list[tuple] = []
+
+    async def list_tools(self):
+        return [self.registered] if self.registered else []
+
+    async def update_tool(self, tool_id, source_code, description=""):
+        self.updates.append((tool_id, source_code, description))
+        return {"id": tool_id}
+
+    async def create_tool(self, source_code, description=""):
+        self.creates.append((source_code, description))
+        return {"id": "tool-new"}
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_rewrites_a_registered_tool_whose_source_has_drifted():
+    """The tool is where dataset scoping is ENFORCED — it is what refuses an
+    unscoped search and decides what an error discloses. Adopting it by name
+    without checking its source meant a hardening edit could reach the repo,
+    the tests and the image, and never the server."""
+    client = _ToolClient({"id": "tool-1", "name": TOOL_NAME, "source_code": "def old(): pass"})
+    assert await fleet.ensure_tool(client) == "tool-1"
+    assert len(client.updates) == 1
+    assert client.updates[0][1] == load_tool_source()
+    assert not client.creates
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_leaves_an_up_to_date_tool_alone():
+    """ensure_fleet runs on every document job; rewriting an unchanged tool on
+    each one is pointless server churn."""
+    client = _ToolClient({"id": "tool-1", "name": TOOL_NAME, "source_code": load_tool_source()})
+    assert await fleet.ensure_tool(client) == "tool-1"
+    assert client.updates == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_still_registers_when_nothing_is_there():
+    client = _ToolClient(None)
+    assert await fleet.ensure_tool(client) == "tool-new"
+    assert client.creates[0][0] == load_tool_source()

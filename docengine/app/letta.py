@@ -120,6 +120,19 @@ class LettaClient:
             body["description"] = description
         return await self._req("POST", "/tools/", json=body)
 
+    async def update_tool(self, tool_id: str, source_code: str, description: str = "") -> dict:
+        """Replace a registered tool's source in place.
+
+        The tool is a shared server object, not per-agent state, so nothing in
+        the create-if-missing path ever revisits it: once registered, an edit to
+        the committed source could not reach the server at all. That is exactly
+        wrong for this one, because the tool is where the dataset scoping is
+        actually enforced."""
+        body: dict[str, Any] = {"source_code": source_code}
+        if description:
+            body["description"] = description
+        return await self._req("PATCH", f"/tools/{tool_id}", json=body)
+
     async def attach_tool(self, agent_id: str, tool_id: str) -> None:
         await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
 

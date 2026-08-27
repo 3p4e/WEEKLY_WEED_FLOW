@@ -114,14 +114,35 @@ def _scope_block(datasets: list[str], pending: list[str]) -> str:
 
 
 async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | None:
-    """Register ragflow_search once, or adopt the existing one. Returns its id."""
-    for t in await client.list_tools():
-        if t.get("name") == TOOL_NAME:
-            return t.get("id")
+    """Register ragflow_search, or bring the already-registered one up to date.
+
+    "Adopt the existing one" alone was not enough. The tool is a shared server
+    object, so once it existed nothing ever looked at it again — and the tool is
+    where the dataset scoping is actually ENFORCED (it is the thing that refuses
+    an unscoped search and decides what an error message discloses). An edit to
+    the committed source that never reaches the server is a guardrail that
+    exists only in the repository.
+
+    Comparing source before writing keeps this idempotent: ensure_fleet runs on
+    every document job, and rewriting an unchanged tool on each one would be
+    pointless server churn."""
     spec = spec or load_fleet()
     description = (spec.get("ragflow") or {}).get("tool_description", "")
+    source = load_tool_source()
+    for t in await client.list_tools():
+        if t.get("name") != TOOL_NAME:
+            continue
+        tool_id = t.get("id")
+        if (t.get("source_code") or "").strip() == source.strip():
+            return tool_id
+        try:
+            await client.update_tool(tool_id, source, description)
+            log.info("updated tool %s (%s) to the committed source", TOOL_NAME, tool_id)
+        except LettaError as e:  # non-fatal: the old tool still retrieves
+            log.warning("could not update %s: %s", TOOL_NAME, e)
+        return tool_id
     try:
-        created = await client.create_tool(load_tool_source(), description)
+        created = await client.create_tool(source, description)
         log.info("registered tool %s -> %s", TOOL_NAME, created.get("id"))
         return created.get("id")
     except LettaError as e:  # non-fatal: agents still exist, retrieval degraded
