@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --navy:#1B3A5C; --navy-deep:#0F2540; --navy-mid:#2C5282; --navy-soft:#3B6BA5;
+    --gold:#A67C2E; --gold-bright:#C9A227; --gold-deep:#7A5C1E; --gold-tint:#FBF6E9;
+    --zebra:#F4F7FB; --zebra-head:#EEF3F9;
+    --paper:#FFFFFF; --surface:#F8FAFC;
+    --ink:#0F172A; --text:#1E293B; --text-sec:#475569; --text-ter:#8C9BB0;
+    --border:#C9D4E3; --border-light:#E3EAF3;
+    --green:#15803D;
+    --MARGIN-H: 0.4in;  /* horizontal text-safe boundary */
+    --PAD-V:    0.4in;  /* vertical pad inside edge bands */
+  }
+  body { font-family:'Montserrat','Helvetica Neue',Arial,sans-serif; background:#64748B; color:var(--text); display:flex; justify-content:center; padding:20px; }
+  .page { width:210mm; min-height:297mm; background:var(--paper); overflow:hidden; box-shadow:0 8px 60px rgba(15,37,64,.25); display:flex; flex-direction:column; }
+
+  .header-bar { background:#F3E8CE; padding:var(--PAD-V) var(--MARGIN-H) 4mm; display:flex; justify-content:space-between; align-items:center; border-bottom:2.5px solid var(--gold); }
+  .hb-logo { height:62px; width:auto; display:block; flex-shrink:0; }
+  .hb-brand { font-size:21px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:#FFF; }
+  .hb-brand span { font-weight:300; color:var(--gold-bright); }
+  .hb-center { text-align:center; }
+  .hb-title { font-size:18px; font-weight:800; letter-spacing:4px; text-transform:uppercase; color:#1B3A5C; }
+  .hb-sub { font-size:8.5px; font-weight:400; letter-spacing:2px; color:#5A7391; text-transform:uppercase; margin-top:2px; }
+  .hb-right { text-align:right; }
+  .hb-code { font-size:12px; font-weight:700; color:var(--gold-deep); font-family:'Roboto Mono',monospace; }
+  .hb-meta { font-size:8.5px; color:#5A7391; margin-top:2px; }
+  .hb-mk-title { font-size:8.5px; font-weight:500; letter-spacing:2px; text-transform:uppercase; color:#8C9BB0; font-style:italic; margin-top:3px; }
+  .hb-mk-sub { font-size:7.5px; font-weight:400; letter-spacing:1px; color:#8C9BB0; font-style:italic; margin-top:1px; }
+
+  .product-banner { display:flex; align-items:stretch; border-bottom:2px solid var(--gold-deep); }
+  .pb-main { flex:1; min-width:0; background:var(--surface); padding:6px var(--MARGIN-H); display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:14px; }
+  .pb-name { font-size:19px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; color:var(--navy); line-height:1.03; display:flex; flex-direction:column; align-items:flex-start; min-width:0; white-space:normal; overflow-wrap:anywhere; max-width:52%; padding-bottom:0; }
+  .pb-name .pb-latin { font-weight:600; font-style:italic; text-transform:none; color:var(--navy-soft); letter-spacing:0; }
+  .pb-name .pb-cultivar-lbl { display:block; font-size:11px; font-weight:700; font-style:italic; letter-spacing:.3px; text-transform:none; color:var(--navy-soft); margin:0 0 4px; padding-bottom:4px; position:relative; }
+  .pb-name .pb-cultivar-lbl::after { content:""; position:absolute; left:0; bottom:0; width:60px; height:3px; background:linear-gradient(90deg,var(--gold-bright),var(--gold)); border-radius:2px; }
+  .pb-name::after { content:none; }
+  .pb-desc { font-size:8.5px; color:var(--text-sec); margin-top:3px; line-height:1.3; }
+  .pb-desc .pb-cultivar { font-size:13.5px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; color:var(--navy); white-space:nowrap; }
+  .pb-desc .pb-cultivar-lbl { font-weight:600; font-style:italic; letter-spacing:0; text-transform:none; color:var(--navy-soft); }
+  .pb-desc .mk { color:#8C9BB0; font-style:italic; }
+  .pb-desc:empty { display:none; }
+  .pb-types { display:flex; flex-direction:column; align-items:flex-start; gap:3px; flex-wrap:nowrap; flex-shrink:0; }
+  .pb-type-pill { font-size:7.5px; font-weight:700; letter-spacing:0; text-transform:uppercase; padding:2px 7px; border-radius:10px; line-height:1; white-space:nowrap; display:inline-flex; align-items:center; }
+  .pb-type-pill.botanical { background:#FBF6E9; color:var(--gold-deep); border:1px solid var(--gold); padding-left:8px; gap:4px; }
+  .pb-type-pill.chemo { background:var(--gold-tint); color:var(--gold-deep); border:1px solid var(--gold); padding-left:8px; gap:4px; }
+  .pb-type-pill.processing { background:#FBF6E9; color:var(--gold-deep); border:1px solid var(--gold); padding-left:8px; gap:4px; }
+  .pb-type-pill.botanical .var-opt,
+  .pb-type-pill.chemo .var-opt,
+  .pb-type-pill.processing .var-opt { color:#A9A08A; font-weight:700; margin:0 1px; }
+  .pb-type-pill.botanical .var-opt.sel,
+  .pb-type-pill.chemo .var-opt.sel,
+  .pb-type-pill.processing .var-opt.sel { background:var(--navy); color:#fff; border-radius:8px; padding:1px 6px; font-weight:800; letter-spacing:.3px; box-shadow:0 1px 2px rgba(27,58,92,.28); }
+  .pb-type-pill.botanical .var-sep,
+  .pb-type-pill.chemo .var-sep,
+  .pb-type-pill.processing .var-sep { color:#D3C39A; margin:0 5px; }
+  .pb-ref { background:#F3E8CE; color:#1B3A5C; padding:5px var(--MARGIN-H) 5px 14px; text-align:center; display:flex; flex-direction:column; justify-content:center; flex-shrink:0; border-left:3px solid var(--gold-deep); min-width:180px; box-sizing:border-box; }
+  .pb-ref-label { font-size:8.5px; color:var(--gold-deep); letter-spacing:1.5px; text-transform:uppercase; }
+  .pb-ref-val { font-size:12px; font-weight:700; letter-spacing:.3px; margin-top:1px; font-family:'Roboto Mono',monospace; white-space:nowrap; }
+
+  .info-grid { display:grid; grid-template-columns:1.11fr 1.11fr 1.11fr 0.67fr; column-gap:16px; margin:10px var(--MARGIN-H) 8px; }
+  .ig-cell { padding:0; display:flex; flex-direction:column; justify-content:center; text-align:left; }
+  .ig-label { font-size:8px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--gold-deep); margin-bottom:2px; padding-left:9px; position:relative; }
+  .ig-label::before { content:""; position:absolute; left:0; top:2px; width:4px; height:4px; background:var(--gold-bright); border-radius:1px; }
+  .ig-val { font-size:9.5px; font-weight:600; color:var(--ink); line-height:1.25; margin-top:2px; padding-left:9px; }
+  .ig-val .mk { display:block; color:#8C9BB0; font-style:italic; font-weight:500; font-size:7.5px; line-height:1.15; margin-top:1px; }
+  .ig-val.sm { font-size:9.5px; }
+
+  .sec-label { font-size:8.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#1B3A5C; background:#F3E8CE; padding:3px var(--MARGIN-H); border-top:1.5px solid var(--gold-deep); border-bottom:1.5px solid var(--gold-deep); display:flex; align-items:baseline; gap:10px; white-space:nowrap; overflow:hidden; }
+  .sec-label .sec-no { font-family:'Roboto Mono',monospace; color:var(--gold-deep); font-size:11px; }
+  .sec-label span.note { font-weight:400; color:#5A7391; letter-spacing:.5px; font-size:8.5px; text-transform:none; }
+
+  .tbl-wrap { padding:0 var(--MARGIN-H); }
+  table.potency { width:100%; border-collapse:collapse; margin-bottom:2px; }
+  table.potency thead th { background:var(--zebra-head); font-size:8.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--navy); padding:4px 6px; text-align:center; border-bottom:2px solid var(--navy); }
+  table.potency thead th:first-child { text-align:left; }
+  table.potency tbody td { padding:3px 6px; border-bottom:1px solid var(--border-light); font-size:11.5px; text-align:center; color:var(--ink); font-family:'Roboto Mono',monospace; font-weight:500; }
+  table.potency tbody td:first-child { text-align:left; font-family:'Montserrat',sans-serif; font-weight:700; color:var(--navy); }
+  table.potency tbody tr:nth-child(even) td { background:var(--zebra); }
+  table.potency tbody tr.highlight td { background:#EAF0F6; font-weight:700; color:var(--navy); border-top:1px solid var(--navy); border-bottom:1px solid var(--navy); }
+table.potency tbody tr.highlight td:nth-child(4) { font-size:12.5px; }
+  table.potency tbody tr.highlight td:first-child { box-shadow:inset 4px 0 0 var(--navy); position:relative; }
+  table.potency tbody tr.highlight td:last-child { position:relative; }
+  table.potency tbody tr.highlight td { padding-top:3px; padding-bottom:3px; vertical-align:middle; line-height:1; }
+  table.potency tbody tr.highlight td:nth-child(3) { font-size:12.5px; font-weight:800; color:var(--navy); line-height:1; }
+  .pot-note { font-size:8.5px; color:var(--text-sec); padding:2px var(--MARGIN-H) 3px; line-height:1.4; }
+  .pot-note strong { color:var(--navy); }
+
+  table.params { width:100%; border-collapse:collapse; }
+  table.params thead th { background:var(--zebra-head); font-size:8.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--navy); padding:3px 6px; text-align:left; border-bottom:2px solid var(--navy); }
+  table.params thead th:first-child { width:22px; text-align:center; }
+  table.params tbody td { padding:2px 6px; border-bottom:1px solid var(--border-light); font-size:9px; line-height:1.25; vertical-align:middle; }
+  table.params tbody tr:nth-child(even) td:not(.row-group-cell) { background:var(--zebra); }
+  table.params tbody td:first-child { text-align:center; font-family:'Roboto Mono',monospace; font-weight:700; color:var(--navy-soft); }
+  .p-name { font-weight:700; color:var(--ink); }
+  .p-sub { font-size:8.5px; color:var(--text-sec); display:block; }
+  .p-method { font-size:8.5px; color:var(--text-sec); font-family:'Roboto Mono',monospace; }
+  .p-meth-eq { display:block; }
+  .p-spec { font-size:9px; color:var(--text); font-family:'Roboto Mono',monospace; }
+  .row-group td { padding-top:1.5px; padding-bottom:1.5px; background:var(--gold-tint); }
+table.params tr.row-group .p-name .mk{display:inline !important;margin-left:5px}
+  .row-group .row-group-cell { background:var(--gold-tint) !important; color:var(--gold-deep); }
+  .sub-row td { padding-left:14px; }
+  .sub-row td:first-child { border-bottom-color:transparent; color:var(--text-ter); }
+
+  .approval-grid { display:grid; grid-template-columns:1fr 1fr; gap:30px; padding:3px var(--MARGIN-H) 2px; margin-top:2px; }
+  .ap-block { text-align:center; position:relative; }
+  .ap-role { font-family:'Orbitron',sans-serif; font-size:10.5px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; color:var(--navy); margin-bottom:3px; }
+  .ap-sign { position:relative; height:34px; margin-bottom:2px; }
+  .ap-sign .ap-line { position:absolute; left:0; right:0; bottom:0; border-bottom:1px solid var(--navy); }
+  .ap-img { position:absolute; left:50%; max-width:94%; transform:translateX(-50%); pointer-events:none; }
+  .ap-img.calligraphy { bottom:1px; max-height:42px; opacity:.85; z-index:5; }
+  .ap-img.handwritten { bottom:3px; max-height:44px; max-width:75%; transform:translateX(-50%) rotate(-3deg); mix-blend-mode:multiply; z-index:6; }
+  .ap-title { font-family:'Orbitron',sans-serif; font-size:8.5px; font-weight:800; color:var(--navy); text-transform:uppercase; }
+  .ap-title .mk{display:inline !important}
+  .ap-title .mk::before{content:" | "; font-style:normal !important; color:var(--navy-soft)}
+  .ap-name { font-size:12.5px; font-weight:700; color:var(--navy); margin-top:6px; }
+  .ap-date-row { margin-top:3px; display:flex; justify-content:center; align-items:center; gap:6px; }
+  .ap-date-label { font-size:8.5px; font-weight:600; color:var(--text-ter); text-transform:uppercase; }
+  .ap-date-val { font-size:10px; font-weight:700; color:var(--ink); font-family:'Roboto Mono',monospace; padding-right:14px; }
+
+  .footer { margin-top:auto; padding:3mm var(--MARGIN-H) var(--PAD-V); background:#F3E8CE; color:#1B3A5C; border-top:2.5px solid var(--gold); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .foot-left { font-size:9px; color:#5A7391; line-height:1.25; flex:1; }
+  .foot-center { text-align:center; flex:0 0 auto; }
+  .foot-brand { font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:#FFF; line-height:1; }
+  .foot-brand span { font-weight:300; color:var(--gold-bright); }
+  .foot-motto { font-size:8px; letter-spacing:2px; text-transform:uppercase; color:var(--gold-bright); line-height:1; margin-top:1px; }
+  .foot-right { font-size:9px; color:#5A7391; line-height:1.4; text-align:right; flex:1; font-family:'Roboto Mono',monospace; }
+  .foot-center-num { text-align:center; flex:0 0 auto; font-family:'Roboto Mono',monospace; font-weight:600; font-size:11px; letter-spacing:1px; color:#5A7391; }
+  .mk { color:#8C9BB0; font-style:italic; font-weight:500; }
+  .ig-label .mk, .hb-title .mk, .hb-sub .mk, table.params thead th .mk, table.potency thead th .mk, .ap-role .mk, .ap-title .mk { display:block; text-transform:none; letter-spacing:.1px; line-height:1.05; margin-top:.5px; font-weight:400; font-size:7.5px; }
+  .hb-title .mk { font-size:8px; letter-spacing:1.5px; color:#5A7391; margin-top:2px; }
+  .hb-sub .mk { font-size:7.5px; color:#5A7391; }
+  .ap-role .mk, .ap-title .mk { color:var(--navy-soft); font-family:'Orbitron',sans-serif; font-style:normal !important; text-transform:uppercase !important; font-weight:700 !important; font-size:8.5px !important; }
+  .ap-title .mk { font-size:7.5px !important; }
+  .sec-label .mk { display:inline; font-weight:400; text-transform:none; letter-spacing:.4px; color:#5A7391; font-style:italic; font-size:8px; }
+  .sec-label .mk::before { content:" | "; font-style:normal; color:#8C9BB0; }
+  .approval-grid { padding-top:5px; margin-top:8px; }
+  @media print { body { background:white; padding:0; } .page { box-shadow:none; } }
+</style>
+<style>/* potency top space */ table.potency tbody tr:first-child td{padding-top:3px}</style>
+<style>/* params first row space */ table.params tbody tr:first-child td{padding-top:7px}</style>
+<style>.p-tag { font-weight:600; color:var(--text-ter); font-size:8.5px; letter-spacing:.2px; }</style>
+<style>/* sec02 compaction */ table.params tbody td{padding-top:0;padding-bottom:0;line-height:1.12} table.params .p-name .mk{font-size:7px;line-height:1;letter-spacing:.1px;margin-top:0} table.params .p-sub{line-height:1.05}</style>
+<style>/* params colwidths */ table.params{table-layout:fixed} table.params th:nth-child(1){width:22px} table.params th:nth-child(2){width:30%} table.params th:nth-child(3){width:24%} table.params th:nth-child(4){width:auto}
+table.params td:nth-child(2),table.params td:nth-child(3),table.params td:nth-child(4){white-space:normal !important;overflow-wrap:break-word !important;vertical-align:middle !important}
+table.params td:nth-child(3) .p-method,table.params td:nth-child(3) .p-meth-eq,table.params td:nth-child(4) .p-spec,table.params td:nth-child(4) .p-spec-bi{white-space:normal !important}
+table.params .p-spec-bi{font-size:9.5px;font-weight:700;color:#16324F}
+table.params .p-spec-bi .mk{display:block;font-size:8px;font-weight:500;font-style:italic;color:#7C8FA6}</style>
+<style>/* pesticide method wrap */ table.params .p-method{white-space:normal;overflow-wrap:anywhere;line-height:1.15} table.params .p-meth-eq{margin-top:1px}</style>
+<style id="__gmp-tickbox">/* GMP tick-box attribute block */
+.pb-types{display:flex;flex-direction:column;align-items:flex-start;gap:3.5px !important}
+.pb-type-pill{background:transparent !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;padding:0 !important;gap:0 !important;display:flex;align-items:center;line-height:1.1;white-space:nowrap;font-size:8px}
+.pb-type-pill .ptk-lbl{width:66px;flex-shrink:0;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gold-deep)}
+.pb-type-pill .var-opt{display:inline-flex;align-items:center;gap:3px;color:var(--text-sec) !important;font-weight:700 !important;text-transform:uppercase;letter-spacing:.2px;font-size:7.5px;background:none !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;padding:0 !important;margin:0 9px 0 0 !important}
+.pb-type-pill .var-opt::before{content:"\2610";font-family:'Roboto Mono',monospace;font-size:11px;line-height:1;color:var(--border);font-weight:400}
+.pb-type-pill .var-opt.sel{color:var(--navy) !important;font-weight:800 !important;font-size:8.5px !important}
+.pb-type-pill .var-opt.sel::before{content:"\2612";color:var(--green,#15803D)}
+.pb-type-pill .var-sep{display:none !important}
+.pb-type-pill .var-ratio{margin:0 0 0 1px !important;padding-left:0 !important;border-left:0 !important;font-family:'Roboto Mono',monospace;font-size:7.5px;font-weight:700;color:var(--gold-deep) !important;text-transform:none}
+</style>
+<style>/* pb-ref label emphasis */ .pb-ref .pb-ref-label{font-size:10px;font-weight:800;letter-spacing:.6px;color:#5E3A14;text-transform:uppercase;line-height:1.2}</style>
+<style>/* pb-ref typographic balance */
+.pb-ref{gap:0}
+.pb-ref .pb-ref-label{font-size:9px;font-weight:700;letter-spacing:.9px;line-height:1.25;color:#6B4A1C;text-transform:uppercase;padding-bottom:3px;margin-bottom:3px;border-bottom:1px solid rgba(122,92,30,.32)}
+.pb-ref .pb-ref-val{font-size:12.5px;font-weight:700;letter-spacing:.4px;color:#1B3A5C;line-height:1.1}
+</style>
+<style>/* header title block — hierarchy */
+.header-bar .hb-title{font-size:26px;font-weight:800;letter-spacing:5px;color:#16324F;line-height:1.06}
+.header-bar .hb-sub{font-size:9.5px;font-weight:600;letter-spacing:2px;color:#46617F;margin-top:4px}
+.header-bar .hb-mk-title{font-size:11px;font-weight:600;letter-spacing:2.4px;color:#7A5C1E;font-style:italic;margin-top:5px;padding-top:4px;border-top:1px solid rgba(122,92,30,.28);display:inline-block}
+.header-bar .hb-mk-sub{font-size:8.5px;font-weight:500;letter-spacing:.8px;color:#6B7F94;font-style:italic;margin-top:2px}
+</style>
+<style>/* header EN/MK grouping v2 */
+.header-bar .hb-title{font-size:23px;font-weight:800;letter-spacing:4.4px;color:#16324F;line-height:1.05}
+.header-bar .hb-sub{font-size:9px;font-weight:600;letter-spacing:1.9px;color:#46617F;margin-top:3px;padding-bottom:4px;border-bottom:1px solid rgba(122,92,30,.26);display:inline-block}
+.header-bar .hb-mk-title{font-size:10px;font-weight:600;letter-spacing:2.2px;color:#7A5C1E;font-style:italic;margin-top:4px;padding-top:0;border-top:none;display:block}
+.header-bar .hb-mk-sub{font-size:8px;font-weight:500;letter-spacing:.7px;color:#6B7F94;font-style:italic;margin-top:1px}
+</style>
+<style>/* header EN|MK pairing v3 */
+.header-bar .hb-center{display:flex;flex-direction:column;align-items:center}
+.header-bar .hb-title{order:1;font-size:22px;letter-spacing:4px;color:#16324F;line-height:1.05}
+.header-bar .hb-mk-title{order:2;font-size:13px;font-weight:700;letter-spacing:2.6px;color:#7A5C1E;font-style:italic;margin-top:1px;padding-top:0;padding-bottom:4px;border-top:none;border-bottom:1px solid rgba(122,92,30,.26)}
+.header-bar .hb-sub{order:3;font-size:9px;font-weight:600;letter-spacing:1.8px;color:#46617F;margin-top:4px;padding-bottom:0;border-bottom:none;display:block}
+.header-bar .hb-mk-sub{order:4;font-size:8.5px;font-weight:500;letter-spacing:.8px;color:#6B7F94;font-style:italic;margin-top:1px}
+.header-bar .hb-title::after{content:" |";color:#7A5C1E;font-weight:600}
+.header-bar .hb-sub::after{content:" |";color:#6B7F94;font-weight:500}
+</style>
+<style>/* pb-ref: doc code moved into box */
+.pb-ref .pb-ref-code{font-family:'Roboto Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.2px;color:#6B4A1C;line-height:1.1;padding-bottom:2px;margin-bottom:2px;border-bottom:1px solid rgba(122,92,30,.28)}
+.pb-ref .pb-ref-label{font-size:8.5px;letter-spacing:.7px;line-height:1.2;padding-bottom:2px;margin-bottom:2px}
+.pb-ref .pb-ref-val{font-size:10px;letter-spacing:.2px;line-height:1.1}
+.header-bar .hb-right .hb-code{display:none}
+</style>
+<style>/* pb-ref hierarchy v2 — code prominent, species smaller */
+.pb-ref .pb-ref-code{font-size:13px;font-weight:800;letter-spacing:.3px;color:#5E3A14;line-height:1.12;padding-bottom:3px;margin-bottom:3px}
+.pb-ref .pb-ref-label{font-size:8.5px;font-weight:700;letter-spacing:.6px;line-height:1.18}
+.pb-ref .pb-ref-label .sp-latin{font-size:7.5px;letter-spacing:.3px;opacity:.9}
+.pb-ref .pb-ref-val{font-size:8.5px;font-weight:700;letter-spacing:.15px;line-height:1.1}
+</style>
+<style>/* pill labels bilingual EN | MK */
+.pb-type-pill .ptk-lbl{line-height:1.05;text-align:left}
+.pb-type-pill .ptk-lbl .mk{display:block;font-size:7px;font-weight:600;font-style:italic;color:#8C9BB0;letter-spacing:.2px;text-transform:none}
+</style>
+<style>/* section 02 parameter hierarchy polish */
+table.params .p-name{font-size:10.5px;font-weight:700;color:#16324F;letter-spacing:.1px;line-height:1.12}
+table.params .p-name .mk{display:block;font-size:7.5px;font-weight:500;font-style:italic;color:#7C8FA6;letter-spacing:.1px;line-height:1.1;margin-top:0}
+table.params .p-sub{display:block;font-size:8.5px;font-weight:600;color:#3B4E60;font-family:'Roboto Mono',monospace;letter-spacing:0;line-height:1.12}
+table.params .p-sub .mk{font-size:7px;font-weight:500;font-style:italic;color:#8C9BB0;letter-spacing:0;font-family:'Montserrat',sans-serif}
+table.params .row-group-cell{font-weight:700;color:#16324F}
+</style>
+<style>/* section 02 sub-tier visibility fix */
+table.params .p-sub .mk{font-size:7.5px;color:#7C8FA6}
+</style>
+<style>/* group-level pharmacopoeial category citation */
+table.params .p-grp-ref{display:inline;font-size:7.5px;font-weight:600;font-style:normal;color:#7A5C1E;letter-spacing:.2px;margin-left:5px;white-space:nowrap}
+</style>
+<style>/* group headers inline MK + left-aligned indented sub-rows */
+table.params .p-name .mk{display:inline;margin-left:5px}
+table.params tr.row-group .p-name .mk{display:inline;margin-left:5px}
+table.params .p-name{font-size:9.5px !important}
+table.params .p-name .mk{display:block !important;font-size:8px !important;margin-left:0 !important}
+table.params .p-sub{font-size:8px !important;color:#3B4E60}
+table.params .p-sub .mk{display:inline !important;font-size:7.5px !important;color:#8C9BB0}
+table.params tr.sub-row td:first-child{text-align:left;padding-left:26px}
+table.params tr.sub-row .p-sub{display:block;text-align:left}
+</style>
+<style>/* phenotype determined-value chip */
+.pb-type-pill .ptk-ratio{margin-left:7px;padding:1px 6px;border-radius:8px;background:#1B3A5C;color:#F4EFE3;font-size:7px;font-weight:800;letter-spacing:.3px;white-space:nowrap;text-transform:none}
+.pb-type-pill .ptk-ratio.tbd{background:#E4E9EE;color:#78899B;font-weight:700;font-style:italic;letter-spacing:.1px}
+</style>
+<style>/* header centering v6 */
+.header-bar{display:grid !important;grid-template-columns:1fr auto 1fr;align-items:center}
+.header-bar .hb-logo{justify-self:start}
+.header-bar .hb-center{justify-self:center;text-align:center;position:relative}
+.header-bar .hb-title,.header-bar .hb-sub{position:relative;display:inline-block}
+.header-bar .hb-title::after{content:"|";position:absolute;right:-16px;top:0;color:#7A5C1E;font-weight:600}
+.header-bar .hb-sub::after{content:"|";position:absolute;right:-11px;top:0;color:#6B7F94;font-weight:500}
+.header-bar .hb-mk-title{border-bottom:none}
+.header-bar .hb-sub{margin-top:3px;padding-top:3px;border-top:1px solid rgba(122,92,30,.26)}
+</style>
+<style>/* banner pill v8 — sheet1 labels, wider name */
+.pb-main{display:grid !important;grid-template-columns:250px 1fr !important;align-items:center;gap:10px !important;padding-right:8px !important;padding-top:1px !important;padding-bottom:1px !important}
+.pb-name{white-space:nowrap !important;font-size:20px !important;max-width:100% !important}
+.pb-types{display:flex !important;flex-direction:column;align-items:flex-start !important;gap:1.5px !important}
+.pb-type-pill{display:grid !important;grid-template-columns:68px 88px 76px 62px !important;align-items:start;width:auto !important;row-gap:1px}
+.pb-type-pill .var-opt{font-size:8px !important;letter-spacing:0 !important}
+.pb-type-pill .ptk-lbl{width:auto !important;padding-top:1px}
+.pb-type-pill .ptk-ratio{grid-column:2 / -1 !important;grid-row:2 !important;display:block !important;margin:0 !important;padding:0 !important;background:none !important;color:#1B3A5C !important;font-size:7.5px !important;font-weight:800;letter-spacing:.2px;box-shadow:none !important;border-radius:0 !important;white-space:nowrap;text-transform:none}
+.pb-type-pill .ptk-ratio.tbd{color:#7C8FA6 !important;font-style:italic;font-weight:700}
+</style>
+<style>/* phenotype two-cell layout v9 */
+.pb-type-pill.botanical{display:grid !important;grid-template-columns:68px 66px 1fr !important;align-items:start !important}
+.pb-type-pill.botanical .ptk-cell{display:flex;flex-direction:column;gap:0;align-items:flex-start;line-height:1}
+.pb-type-pill.botanical .ptk-ratio{grid-column:auto !important;grid-row:auto !important;margin-top:1px !important}
+</style>
+<style>/* processing two-cell layout v10 */
+.pb-type-pill.processing{display:grid !important;grid-template-columns:68px 1fr !important;align-items:start !important}
+.pb-type-pill.processing .ptk-cell{display:flex;flex-direction:column;gap:0;align-items:flex-start;line-height:1;font-size:6.5px}
+</style>
+<style>/* chemotype row fix — own 2-col grid, tight gap, left-aligned */
+.pb-type-pill.chemo{grid-template-columns:68px 1fr !important}
+.pb-type-pill.chemo .ptk-cell{display:flex;align-items:center;flex-wrap:nowrap}
+.pb-type-pill.chemo .var-sep{margin:0 4px !important}
+.pb-type-pill .ptk-lbl,.pb-type-pill .ptk-cell,.pb-type-pill .var-opt{text-align:left}
+</style>
+<style>/* dominant phenotype — generic label, not a hybrid ratio */
+.pb-type-pill .ptk-ratio.generic{background:none !important;box-shadow:none !important;padding:0 !important;color:#93A2B5 !important;font-weight:600 !important;font-style:italic;letter-spacing:.1px}
+</style>
+<style id="__opt3-redesign">
+.pb-type-pill .ptk-lbl{border-right:1.5px solid var(--gold) !important;padding-right:9px !important;margin-right:9px !important}
+.pb-type-pill .var-opt::before{content:none !important}
+.pb-type-pill .var-opt{background:none !important;border:0 !important;box-shadow:none !important;border-radius:0 !important;padding:0 !important;margin:0 10px 0 0 !important;color:#AEA484 !important;font-weight:700 !important;text-transform:uppercase !important;letter-spacing:.3px !important}
+.pb-type-pill .var-opt.sel{background:var(--navy) !important;color:#F4EFE3 !important;padding:1.5px 7px !important;border-radius:2px !important;font-weight:800 !important;box-shadow:none !important;margin-right:10px !important}
+.pb-type-pill .ptk-ratio{background:none !important;box-shadow:none !important;padding:0 !important;color:var(--navy) !important;font-weight:800 !important;font-style:normal !important;text-transform:uppercase !important}
+.pb-type-pill .ptk-ratio.tbd,.pb-type-pill .ptk-ratio.generic{color:#93A2B5 !important;font-style:italic !important;font-weight:600 !important}
+</style>
+<style id="__opt3-redesign-v4">
+.pb-types{gap:6px !important;justify-content:flex-start !important;min-height:0 !important}
+.pb-main{grid-template-columns:300px 1fr !important;padding-top:9px !important;padding-bottom:9px !important}
+.pb-types{justify-self:end !important}
+.pb-name{font-family:'Orbitron',sans-serif !important;font-weight:700 !important;font-size:20px !important;letter-spacing:.3px !important;line-height:1.3 !important;white-space:nowrap !important;max-width:285px !important;overflow-wrap:normal !important}
+.pb-name .pb-cultivar-lbl{font-family:'Montserrat',sans-serif !important;margin-bottom:6px !important}
+.hb-code,.pb-ref-code,.foot-right,.foot-center-num{font-family:'Orbitron',monospace !important;font-weight:700 !important;letter-spacing:.3px !important}
+.pb-ref{min-width:148px !important;padding-left:10px !important}
+.pb-ref-code{font-size:11px !important;letter-spacing:.15px !important;white-space:nowrap !important}
+</style>
+<style id="__opt3-redesign-v5">
+.pb-main{grid-template-columns:310px 1fr !important}
+.pb-name{font-size:26px !important;max-width:290px !important;min-width:0 !important;white-space:nowrap !important;overflow:hidden !important;line-height:1.15 !important}
+.pb-name .pb-cultivar-lbl{display:block !important;margin-top:0 !important;margin-bottom:3px !important}
+.header-bar .hb-title{font-family:'Orbitron',sans-serif !important;font-weight:800 !important}
+.sec-label{font-size:10px !important;font-weight:800 !important;font-family:'Orbitron',sans-serif !important;letter-spacing:.15px !important;padding-top:2.5px !important;padding-bottom:2.5px !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:clip !important;gap:7px !important;border-top-width:1px !important;border-bottom-width:1px !important}
+.sec-label .sec-no{font-size:12.5px !important;font-family:'Orbitron',monospace !important}
+.sec-label .mk{font-family:'Montserrat',sans-serif !important;font-weight:500 !important;font-size:7.6px !important}
+.pb-main{column-gap:14px !important}
+.pb-name{overflow:hidden !important;max-width:290px !important}
+</style>
+<style id="__opt3-redesign-v6">
+.pb-main{grid-template-columns:250px 1fr !important}
+.pb-name{font-size:30px !important;max-width:230px !important;white-space:nowrap !important;overflow:visible !important;padding-top:2px !important}
+.pb-name .pb-cultivar-lbl{overflow:visible !important}
+.pb-types{margin-left:0 !important;justify-self:end !important;max-width:100% !important}
+.pb-type-pill{grid-template-columns:64px 80px 66px 1fr !important}
+.pb-type-pill.botanical{grid-template-columns:68px auto auto !important;column-gap:6px !important}
+</style>
+<style id="__opt3-redesign-v11">
+.pb-main{grid-template-columns:300px 1fr !important;padding-top:4px !important}
+.pb-cultivar-lbl{margin-top:0 !important;margin-bottom:2px !important}
+.pb-name{font-size:27px !important;max-width:290px !important;overflow:visible !important;white-space:nowrap !important}
+
+  .draft-wm { position:absolute; top:45%; left:50%; transform:translate(-50%,-50%) rotate(-28deg); font:800 64px 'Montserrat',sans-serif; color:rgba(178,34,52,.16); letter-spacing:6px; z-index:9; pointer-events:none; text-transform:uppercase; white-space:nowrap; }
+</style>
+</head>
+<body>
+__DRAFT_WM__
+<div class="page">
+  <div class="header-bar">
+    <img class="hb-logo" src="data:image/svg+xml;utf8,%3C%3Fxml%20version%3D%221.0%22%3F%3E%0A%0A%0A%3Csvg%20version%3D%221.1%22%20id%3D%22svg1%22%20width%3D%22572.57996%22%20height%3D%22323.43759%22%20viewBox%3D%220%200%20572.57995%20323.43759%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Asvg%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Cdefs%20id%3D%22defs1%22%3E%0A%20%20%20%20%3ClinearGradient%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%220%22%20gradientUnits%3D%22userSpaceOnUse%22%20gradientTransform%3D%22matrix(-183.95601%2C107.87197%2C-95.649907%2C-110.38452%2C633.58961%2C149.70492)%22%20spreadMethod%3D%22pad%22%20id%3D%22linearGradient5%22%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%23e8e000%22%20offset%3D%220%22%20id%3D%22stop1%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.26904232%22%20id%3D%22stop2%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.71%22%20id%3D%22stop3%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%220.99579594%22%20id%3D%22stop4%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%221%22%20id%3D%22stop5%22%3E%3C%2Fstop%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3ClinearGradient%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%220%22%20gradientUnits%3D%22userSpaceOnUse%22%20gradientTransform%3D%22matrix(171.79105%2C-63.559178%2C63.559178%2C171.79105%2C482.69446%2C328.63086)%22%20spreadMethod%3D%22pad%22%20id%3D%22linearGradient10%22%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%23beba0b%22%20offset%3D%220%22%20id%3D%22stop6%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.26985219%22%20id%3D%22stop7%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.71%22%20id%3D%22stop8%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%220.99579594%22%20id%3D%22stop9%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%221%22%20id%3D%22stop10%22%3E%3C%2Fstop%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3ClinearGradient%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%220%22%20gradientUnits%3D%22userSpaceOnUse%22%20gradientTransform%3D%22matrix(162.67931%2C-42.82475%2C42.82475%2C162.67931%2C556.49453%2C287.00683)%22%20spreadMethod%3D%22pad%22%20id%3D%22linearGradient15%22%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%23beba0b%22%20offset%3D%220%22%20id%3D%22stop11%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.26985219%22%20id%3D%22stop12%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%2359b031%22%20offset%3D%220.71%22%20id%3D%22stop13%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%220.99579594%22%20id%3D%22stop14%22%3E%3C%2Fstop%3E%0A%20%20%20%20%20%20%3Cstop%20style%3D%22stop-opacity%3A1%3Bstop-color%3A%235eb351%22%20offset%3D%221%22%20id%3D%22stop15%22%3E%3C%2Fstop%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3Ccolor-profile%20name%3D%22Coated%20FOGRA39%20(ISO%2012647-2%3A2004)%22%20id%3D%22color-profile2%22%3E%3C%2Fcolor-profile%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22layer-MC0%22%20transform%3D%22translate(-277.16532%2C-115.8124)%22%3E%0A%20%20%20%20%3Cpath%20id%3D%22path5%22%20d%3D%22m%20556.89374%2C121.64643%20c%20-13.22693%2C22.49499%20-15.88587%2C49.11047%20-10.90861%2C78.69249%20v%200%20c%200.0817%2C0.47965%200.16162%2C0.95409%200.24677%2C1.43548%20v%200%20l%200.003%2C0.0313%20c%200.65691%2C3.70167%201.43027%2C7.45025%202.3131%2C11.23881%20v%200%20c%200.16684%2C0.43794%200.27633%2C0.8446%200.33541%2C1.21303%20v%200%20c%200.44837%2C2.32527%20-1.06879%2C3.24808%20-3.5748%2C0.59783%20v%200%20c%20-15.97228%2C-20.34353%20-34.9811%2C-35.98262%20-58.31895%2C-44.91701%20v%200%20c%20-6.07212%2C-1.80043%20-10.50369%2C-1.82302%20-9.4992%2C4.00927%20v%200%20c%200.13555%2C0.72295%200.35279%2C1.53975%200.65692%2C2.44866%20v%200%20c%208.6459%2C30.45095%2031.10439%2C46.63747%2051.19764%2C62.01762%20v%200%20c%201.72397%2C1.34859%202.54424%2C2.39826%202.64678%2C3.20985%20v%200%20c%200.34757%2C1.49978%20-1.64055%2C2.22447%20-4.88342%2C2.53207%20v%200%20c%20-17.78709%2C-1.7118%20-34.36116%2C0.91934%20-49.47194%2C8.81448%20v%200%20c%20-2.10456%2C1.49631%20-3.74511%2C2.98392%20-3.54004%2C4.46111%20v%200%20c%200.21897%2C0.98364%201.27038%2C1.96032%203.5609%2C2.92831%20v%200%20c%2016.89209%2C6.07386%2034.21344%2C11.21448%2057.41574%2C3.60261%20v%200%20c%201.93946%2C0.15988%202.76148%2C0.73512%202.86054%2C1.57624%20v%200%20c%200.1564%2C0.66908%20-0.19812%2C1.52933%20-0.84113%2C2.5008%20v%200%20l%2044.69627%2C-52.01792%20c%20-1.9273%2C1.91687%20-4.28211%2C2.22621%20-5.61853%2C0.716%20v%200%20c%20-1.4546%2C0.4588%20-1.86126%2C-1.35554%20-0.74207%2C-6.4753%20v%200%20c%205.46386%2C-18.63171%208.47733%2C-37.44589%205.17364%2C-56.74841%20v%200%20c%20-1.86995%2C-10.8026%20-5.71933%2C-21.75986%20-12.23635%2C-32.92047%20v%200%20c%20-1.72918%2C-3.32975%20-3.44793%2C-4.78088%20-5.16147%2C-4.78088%20v%200%20c%20-2.11325%2C-0.002%20-4.21607%2C2.21231%20-6.3102%2C5.83403%22%20style%3D%22fill%3Aurl(%23linearGradient5)%3Bstroke%3Anone%3Bstroke-width%3A1.73787%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path10%22%20d%3D%22M%20633.79969%2C170.94285%20C%20542.04016%2C217.72978%20471.7833%2C383.75023%20555.88577%2C287.73292%20v%200%20c%202.0559%2C-3.04475%203.10384%2C-2.61028%203.59739%2C-0.27458%20v%200%20c%20-0.48313%2C13.41288%20-0.73859%2C27.19766%201.83172%2C40.38114%20v%200%20c%200.34236%2C6.01477%202.11325%2C7.49543%205.28138%2C4.52889%20v%200%20c%201.70138%2C-2.10282%203.40623%2C-4.20564%205.10934%2C-6.30847%20v%200%20c%203.63562%2C-2.54076%202.94395%2C-9.1325%201.37118%2C-16.55147%20v%200%20c%20-12.74206%2C-39.7642%202.82925%2C-72.86715%2047.67151%2C-105.17067%20v%200%20c%20-1.85778%2C10.65835%20-6.5118%2C23.18492%20-21.74423%2C42.76898%20v%200%20c%2014.89876%2C-1.40246%2030.47702%2C-17.79927%2045.24544%2C-67.00184%20v%200%20c%202.73889%2C-8.04981%201.60406%2C-11.95481%20-2.45908%2C-11.95481%20v%200%20c%20-1.99508%2C0%20-4.69573%2C0.94019%20-7.99073%2C2.79276%22%20style%3D%22fill%3Aurl(%23linearGradient10)%3Bstroke%3Anone%3Bstroke-width%3A1.73787%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path15%22%20d%3D%22m%20598.92412%2C253.80622%20c%20-13.40419%2C2.2575%20-22.84083%2C19.96813%20-17.13887%2C33.04386%20v%200%20c%205.09543%2C9.91107%2014.60679%2C19.08877%2027.14205%2C24.51613%20v%200%20c%205.80796%2C2.45909%208.45473%2C0.27459%207.70571%2C-6.88718%20v%200%20c%20-2.83273%2C-13.6249%20-9.79289%2C-22.28991%20-19.18608%2C-28.04226%20v%200%20c%20-3.6895%2C-2.09414%20-2.62766%2C-5.17364%201.63881%2C-4.263%20v%200%20c%2019.22606%2C3.53657%2038.06109%2C2.36872%2056.41126%2C-4.58971%20v%200%20c%206.69253%2C-3.12991%208.1732%2C-5.12498%203.44446%2C-7.5441%20v%200%20c%20-12.56307%2C-5.47602%20-25.64749%2C-8.43909%20-39.34364%2C-8.43909%20v%200%20c%20-6.73946%2C0%20-13.62838%2C0.71774%20-20.6737%2C2.20535%22%20style%3D%22fill%3Aurl(%23linearGradient15)%3Bstroke%3Anone%3Bstroke-width%3A1.73787%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path16%22%20d%3D%22m%200%2C0%20v%2042.522%20h%2013.769%20c%205.216%2C0%208.61%2C-0.207%2010.194%2C-0.633%202.435%2C-0.644%204.474%2C-2.029%206.118%2C-4.168%201.643%2C-2.139%202.464%2C-4.899%202.464%2C-8.285%200%2C-2.614%20-0.475%2C-4.799%20-1.416%2C-6.582%20-0.95%2C-1.782%20-2.147%2C-3.176%20-3.602%2C-4.196%20-1.455%2C-1.01%20-2.94%2C-1.683%20-4.444%2C-2.01%20-2.049%2C-0.406%20-5.009%2C-0.613%20-8.889%2C-0.613%20H%208.612%20V%200%20Z%20M%208.612%2C35.336%20V%2023.221%20h%204.681%20c%203.375%2C0%205.623%2C0.226%206.761%2C0.674%201.138%2C0.443%202.029%2C1.136%202.672%2C2.097%200.644%2C0.949%200.97%2C2.049%200.97%2C3.315%200%2C1.554%20-0.455%2C2.832%20-1.356%2C3.841%20-0.91%2C1.01%20-2.049%2C1.643%20-3.444%2C1.901%20-1.02%2C0.187%20-3.069%2C0.287%20-6.157%2C0.287%20z%20m%2031%2C7.186%20h%208.612%20V%2019.479%20c%200%2C-3.663%200.109%2C-6.028%200.316%2C-7.108%200.366%2C-1.742%201.228%2C-3.146%202.594%2C-4.195%201.376%2C-1.061%203.246%2C-1.584%205.622%2C-1.584%202.405%2C0%204.226%2C0.494%205.454%2C1.494%201.227%2C1%201.96%2C2.217%202.207%2C3.672%200.247%2C1.455%200.376%2C3.861%200.376%2C7.226%20v%2023.538%20h%208.612%20v%20-22.36%20c%200%2C-5.107%20-0.229%2C-8.721%20-0.694%2C-10.828%20-0.464%2C-2.109%20-1.316%2C-3.891%20-2.562%2C-5.346%20-1.238%2C-1.455%20-2.9%2C-2.603%20-4.981%2C-3.465%20-2.087%2C-0.861%20-4.799%2C-1.294%20-8.155%2C-1.294%20-4.048%2C0%20-7.117%2C0.464%20-9.205%2C1.404%20-2.089%2C0.939%20-3.742%2C2.158%20-4.959%2C3.662%20-1.218%2C1.504%20-2.01%2C3.068%20-2.396%2C4.721%20-0.563%2C2.435%20-0.841%2C6.039%20-0.841%2C10.798%20z%20M%2082.5%2C0%20v%2042.522%20h%2018.084%20c%204.543%2C0%207.85%2C-0.386%209.909%2C-1.148%202.068%2C-0.762%203.711%2C-2.119%204.949%2C-4.069%201.236%2C-1.959%201.861%2C-4.186%201.861%2C-6.701%200%2C-3.196%20-0.931%2C-5.831%20-2.801%2C-7.909%20-1.871%2C-2.078%20-4.662%2C-3.384%20-8.384%2C-3.929%201.851%2C-1.079%203.375%2C-2.266%204.572%2C-3.563%201.209%2C-1.297%202.832%2C-3.603%204.871%2C-6.91%20L%20120.747%2C0%20h%20-10.264%20l%20-6.156%2C9.283%20c%20-2.207%2C3.297%20-3.723%2C5.375%20-4.543%2C6.237%20-0.813%2C0.851%20-1.674%2C1.445%20-2.584%2C1.761%20-0.92%2C0.317%20-2.366%2C0.475%20-4.346%2C0.475%20H%2091.112%20V%200%20Z%20m%208.612%2C24.527%20h%206.355%20c%204.117%2C0%206.68%2C0.178%207.711%2C0.524%201.018%2C0.347%201.83%2C0.951%202.405%2C1.803%200.584%2C0.851%200.871%2C1.919%200.871%2C3.195%200%2C1.435%20-0.387%2C2.584%20-1.149%2C3.474%20-0.762%2C0.883%20-1.842%2C1.436%20-3.226%2C1.665%20-0.704%2C0.097%20-2.791%2C0.148%20-6.266%2C0.148%20H%2091.112%20Z%20M%20125.389%2C0%20v%2042.522%20h%2031.478%20V%2035.336%20H%20134%20v%20-9.443%20h%2021.262%20V%2018.707%20H%20134%20V%207.186%20h%2023.697%20V%200%20Z%20m%2039.851%2C0%20v%2042.166%20h%208.611%20V%207.186%20h%2021.32%20V%200%20Z%20m%2041.75%2C0%20V%2017.895%20L%20191.4%2C42.522%20h%2010.066%20l%2010.057%2C-16.836%209.789%2C16.836%20h%209.879%20L%20215.601%2C17.836%20V%200%20Z%22%20style%3D%22fill%3A%23000000%3Bfill-opacity%3A1%3Bfill-rule%3Anonzero%3Bstroke%3Anone%22%20transform%3D%22matrix(1.3333333%2C0%2C0%2C-1.3333333%2C278.98893%2C402.91373)%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path17%22%20d%3D%22m%200%2C0%208.908%2C42.522%20h%2017.748%20c%203.078%2C0%205.385%2C-0.356%206.918%2C-1.059%201.545%2C-0.703%202.811%2C-1.91%203.821%2C-3.623%201%2C-1.713%201.505%2C-3.623%201.505%2C-5.75%200%2C-1.764%20-0.357%2C-3.545%20-1.08%2C-5.365%20-0.713%2C-1.811%20-1.613%2C-3.307%20-2.711%2C-4.485%20-1.089%2C-1.178%20-2.197%2C-2.068%20-3.326%2C-2.672%20-1.119%2C-0.593%20-2.316%2C-1.039%20-3.594%2C-1.326%20-2.73%2C-0.644%20-5.494%2C-0.961%20-8.273%2C-0.961%20H%209.264%20L%205.643%2C0%20Z%20m%2010.264%2C22.092%20h%209.423%20c%203.653%2C0%206.334%2C0.396%208.038%2C1.178%201.712%2C0.781%203.087%2C1.97%204.107%2C3.574%201.029%2C1.593%201.545%2C3.295%201.545%2C5.088%200%2C1.384%20-0.268%2C2.523%20-0.813%2C3.394%20-0.544%2C0.881%20-1.316%2C1.524%20-2.306%2C1.94%20-0.988%2C0.416%20-2.899%2C0.623%20-5.721%2C0.623%20H%2013.57%20Z%20M%2039.611%2C0%2048.52%2C42.522%20h%205.642%20L%2046.264%2C4.811%20H%2068.179%20L%2067.169%2C0%20Z%20m%2029.251%2C0%2024.053%2C42.522%20h%206.791%20L%20106.714%2C0%20H%20101.2%20L%2099.21%2C12.234%20H%2081.938%20L%2075.138%2C0%20Z%20m%2015.59%2C16.629%20h%2014.055%20l%20-1.643%2C10.67%20c%20-0.683%2C4.236%20-1.099%2C7.769%20-1.267%2C10.59%20-0.979%2C-2.434%20-2.395%2C-5.315%20-4.276%2C-8.66%20z%20M%20112.255%2C0%20l%208.908%2C42.522%20h%205.99%20l%207.008%2C-15.965%20c%202.137%2C-4.871%203.83%2C-8.979%205.076%2C-12.305%200.723%2C-1.939%201.555%2C-4.553%202.506%2C-7.838%200.553%2C3.611%201.236%2C7.315%202.039%2C11.125%20l%205.176%2C24.983%20h%205.543%20L%20145.632%2C0%20h%20-5.721%20l%20-10.254%2C24.586%20c%20-1.842%2C4.346%20-3.365%2C8.404%20-4.594%2C12.164%20-0.384%2C-3.215%20-1.009%2C-6.828%20-1.839%2C-10.848%20L%20117.798%2C0%20Z%20m%2054.115%2C0%207.908%2C37.711%20h%20-14.293%20l%201.02%2C4.811%20h%2033.762%20l%20-1.02%2C-4.811%20H%20179.919%20L%20172.011%2C0%20Z%22%20style%3D%22fill%3A%23000000%3Bfill-opacity%3A1%3Bfill-rule%3Anonzero%3Bstroke%3Anone%22%20transform%3D%22matrix(1.3333333%2C0%2C0%2C-1.3333333%2C590.056%2C402.91373)%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path18%22%20d%3D%22M%206.5049062%2C-7.8117278e-4%20H%208.9189687%20V%20-16.085092%20h%205.9765623%20v%20-2.108072%20H%200.55178125%20v%202.108072%20H%206.5049062%20Z%20M%2029.901391%2C-18.193164%20v%207.953179%20h%20-9.703125%20v%20-7.953179%20H%2017.784203%20V%20-7.8117278e-4%20h%202.414063%20V%20-8.1319137%20h%209.703125%20v%208.13113252722%20h%202.390625%20V%20-18.193164%20Z%20m%2018.726562%2C0%20H%2037.026391%20V%20-7.8117278e-4%20H%2048.627953%20V%20-2.1909852%20h%20-9.1875%20v%20-6.0230612%20h%208.085938%20v%20-2.1354486%20h%20-8.085938%20v%20-5.735597%20h%209.1875%20z%20M%2059.828148%2C-7.8117278e-4%20h%202.414063%20V%20-7.6391178%20h%207.207031%20v%20-2.1080714%20h%20-7.207031%20v%20-6.3379028%20h%208.25%20v%20-2.108072%20H%2059.828148%20Z%20M%2080.579125%2C0.34143821%20c%203.691406%2C0%206.960937%2C-1.90273981%206.960937%2C-6.91283161%20V%20-18.193164%20H%2085.126%20v%2011.7175921%20c%200%2C2.860954%20-1.640625%2C4.5309846%20-4.546875%2C4.5309846%20-2.917969%2C0%20-4.558594%2C-1.6700306%20-4.558594%2C-4.5309846%20V%20-18.193164%20h%20-2.414062%20v%2011.6217706%20c%200%2C5.0100918%203.28125%2C6.91283161%206.972656%2C6.91283161%20z%20M%2096.411156%2C-7.8117278e-4%20h%202.414063%20V%20-16.085092%20h%205.976561%20v%20-2.108072%20H%2090.458031%20v%202.108072%20h%205.953125%20z%20M%20114.66604%2C0.34143821%20c%203.69141%2C0%206.96094%2C-1.90273981%206.96094%2C-6.91283161%20V%20-18.193164%20h%20-2.41407%20v%2011.7175921%20c%200%2C2.860954%20-1.64062%2C4.5309846%20-4.54687%2C4.5309846%20-2.91797%2C0%20-4.55859%2C-1.6700306%20-4.55859%2C-4.5309846%20V%20-18.193164%20h%20-2.41407%20v%2011.6217706%20c%200%2C5.0100918%203.28125%2C6.91283161%206.97266%2C6.91283161%20z%20M%20139.9551%2C-7.8117278e-4%20135.40823%2C-7.3379648%20c%202.44922%2C-0.8213265%203.71484%2C-2.8472652%203.71484%2C-5.5302652%200%2C-2.956776%20-1.66406%2C-5.324934%20-6.52734%2C-5.324934%20h%20-6.23438%20V%20-7.8117278e-4%20h%202.41406%20V%20-6.9136127%20h%204.26563%20l%204.18359%2C6.91283152722%20z%20M%20128.77541%2C-9.0216841%20v%20-7.0634079%20h%203.5625%20c%203.09375%2C0%204.24219%2C1.218301%204.24219%2C3.449571%200%2C2.053316%20-1.30078%2C3.6138369%20-3.71484%2C3.6138369%20z%20m%2025.82813%2C-9.1714799%20H%20143.00198%20V%20-7.8117278e-4%20h%2011.60156%20V%20-2.1909852%20h%20-9.1875%20v%20-6.0230612%20h%208.08594%20v%20-2.1354486%20h%20-8.08594%20v%20-5.735597%20h%209.1875%20z%20m%2019.00488%2C-0.342219%20c%20-4.34765%2C0%20-8.76562%2C2.806199%20-8.76562%2C9.3904999%200%2C6.5706122%204.41797%2C9.48632131%208.76562%2C9.48632131%204.3125%2C0%208.70703%2C-2.91570911%208.70703%2C-9.48632131%200%2C-6.5843009%20-4.39453%2C-9.3904999%20-8.70703%2C-9.3904999%20z%20m%20-0.0586%2C2.203893%20c%203.38672%2C0%206.24609%2C2.34078%206.24609%2C7.1592293%200%2C4.9142704%20-2.96484%2C7.2961173%20-6.26953%2C7.2961173%20-3.43359%2C0%20-6.14062%2C-2.5461122%20-6.14062%2C-7.2961173%200%2C-4.8595153%202.8125%2C-7.1592293%206.16406%2C-7.1592293%20z%20m%2012.5332%2C16.33070882722%20h%202.41406%20V%20-7.6391178%20h%207.20703%20v%20-2.1080714%20h%20-7.20703%20v%20-6.3379028%20h%208.25%20v%20-2.108072%20H%20186.08303%20Z%20M%20215.02834%2C-18.535383%20c%20-4.8164%2C0%20-8.66015%2C3.038908%20-8.63672%2C9.5136989%200.0469%2C6.4474132%203.79688%2C9.36312231%208.4961%2C9.36312231%202.68359%2C0%204.86328%2C-0.86239285%206.375%2C-2.19020401%20l%20-1.27735%2C-1.7658521%20c%20-1.39453%2C1.1498572%20-2.92968%2C1.711097%20-4.93359%2C1.7384745%20-3.38672%2C0.027378%20-6.14062%2C-2.0806939%20-6.14062%2C-7.1455407%200%2C-5.0922249%202.83593%2C-7.3098059%206.08203%2C-7.3098059%201.74609%2C0%203.36328%2C0.451729%204.66406%2C1.300433%20l%201.19531%2C-1.861673%20c%20-1.35937%2C-1.012969%20-3.43359%2C-1.642653%20-5.82422%2C-1.642653%20z%20m%2021.34571%2C18.53460182722%20h%202.67187%20L%20232.17873%2C-18.193164%20h%20-2.77734%20l%20-6.78516%2C18.19238282722%20h%202.56641%20L%20226.75295%2C-4.340123%20h%208.05078%20z%20M%20227.44436%2C-6.3660617%20l%203.32812%2C-9.3083673%203.32813%2C9.3083673%20z%20M%20254.44143%2C-18.193164%20V%20-4.2443015%20L%20244.22268%2C-18.193164%20H%20242.1133%20V%20-7.8117278e-4%20h%202.41407%20V%20-13.908577%20l%2010.27734%2C13.90779582722%20h%202.07422%20V%20-18.193164%20Z%20m%2019.47363%2C0%20V%20-4.2443015%20L%20263.69631%2C-18.193164%20h%20-2.10937%20V%20-7.8117278e-4%20H%20264.001%20V%20-13.908577%20l%2010.27734%2C13.90779582722%20h%202.07422%20V%20-18.193164%20Z%20m%2019.21582%2C18.19238282722%20h%202.67188%20L%20288.93557%2C-18.193164%20h%20-2.77734%20l%20-6.78516%2C18.19238282722%20h%202.56641%20L%20283.50979%2C-4.340123%20h%208.05078%20z%20M%20284.2012%2C-6.3660617%20l%203.32812%2C-9.3083673%203.32813%2C9.3083673%20z%20m%2023.71582%2C-3.2579286%20c%201.61718%2C-0.7802597%202.68359%2C-2.3407807%202.68359%2C-4.1476987%200%2C-2.765133%20-1.98047%2C-4.421475%20-5.92969%2C-4.421475%20h%20-5.80078%20V%20-7.8117278e-4%20h%206.46875%20c%203.70313%2C0%206.39844%2C-1.58789792722%206.39844%2C-5.03746932722%200%2C-2.5734898%20-1.73438%2C-4.1066326%20-3.82031%2C-4.5857398%20z%20m%20-6.59766%2C-6.5158567%20h%202.98828%20c%202.17969%2C0%203.84375%2C0.698127%203.84375%2C2.833576%200%2C1.916429%20-1.42969%2C3.121041%20-3.77344%2C3.121041%20h%20-3.05859%20z%20m%203.76172%2C14.0857495%20h%20-3.76172%20v%20-6.214704%20h%203.86719%20c%202.64843%2C0%204.00781%2C1.0403469%204.00781%2C3.1484183%200%2C1.8206072%20-1.25391%2C3.0662857%20-4.11328%2C3.0662857%20z%20m%2012.63574%2C-16.1390665%20h%20-2.41406%20V%20-7.8117278e-4%20h%202.41406%20z%20m%2010.19531%2C-0.342219%20c%20-3.84375%2C0%20-6.26953%2C2.025939%20-6.26953%2C4.859515%200%2C3.381128%203%2C4.4762298%205.67188%2C5.4618216%202.15625%2C0.8350153%204.11328%2C1.5605204%204.11328%2C3.4085051%200%2C1.6289642%20-1.17188%2C2.9020204%20-4.03125%2C2.9020204%20-1.79297%2C0%20-3.85547%2C-0.5886174%20-5.41406%2C-1.4783878%20l%20-0.85547%2C1.9711837%20c%201.74609%2C1.06772444%204.16015%2C1.72478566%206.3164%2C1.72478566%204.05469%2C0%206.52735%2C-2.13544896%206.52735%2C-5.31124486%200%2C-3.107352%20-2.96485%2C-4.202454%20-5.58985%2C-5.2701788%20-2.13281%2C-0.862393%20-4.20703%2C-1.642653%20-4.20703%2C-3.435882%200%2C-1.765852%201.45313%2C-2.806199%203.76172%2C-2.806199%201.55859%2C0%203.23438%2C0.574928%204.55859%2C1.505765%20l%201.06641%2C-1.847985%20c%20-1.19531%2C-0.78026%20-2.96484%2C-1.683719%20-5.64844%2C-1.683719%20z%20m%200%2C0%22%20style%3D%22fill%3A%231d1d1b%3Bfill-opacity%3A1%3Bfill-rule%3Anonzero%3Bstroke%3Anone%22%20aria-label%3D%22THE%20FUTURE%20OF%20CANNABIS%22%20transform%3D%22matrix(1.3333333%2C0%2C0%2C1.1414462%2C386.49867%2C438.86027)%22%3E%3C%2Fpath%3E%0A%20%20%20%20%3Cpath%20id%3D%22path19%22%20d%3D%22M%200%2C0%20H%2073.999%22%20style%3D%22fill%3Anone%3Bstroke%3A%231d1d1b%3Bstroke-width%3A3%3Bstroke-linecap%3Abutt%3Bstroke-linejoin%3Amiter%3Bstroke-miterlimit%3A10%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1%22%20transform%3D%22matrix(1.3333333%2C0%2C0%2C-1.3333333%2C277.16533%2C426.18453)%22%3E%3C%2Fpath%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Purely Plant — The Future of Cannabis">
+    <div class="hb-center"><div class="hb-title">Product Specification</div><div class="hb-sub">Intermediate Bulk — Dry Cannabis Flower for Medical Use</div><div class="hb-mk-title">Спецификација на производ</div><div class="hb-mk-sub">Интермедиер балк — сув цвет од канабис за медицинска употреба</div></div>
+    <div class="hb-right"><div class="hb-code">__DOC_CODE__</div></div>
+  </div>
+
+  <div class="product-banner">
+    <div class="pb-main">
+      <div class="pb-name"><span class="pb-cultivar-lbl">Cultivar:</span> __STRAIN_NAME__</div>
+      <div class="pb-desc"></div>
+      <div class="pb-types">
+        <span class="pb-type-pill botanical"><span class="ptk-lbl">Phenotype <span class="mk">Фенотип</span></span>__PHENOTYPE_CELLS__</span>
+        <span class="pb-type-pill chemo"><span class="ptk-lbl">Chemotype <span class="mk">Хемотип</span></span><span class="ptk-cell"><span class="var-opt sel">THC</span><span class="var-sep">·</span><span class="var-opt">CBD</span></span></span>
+        <span class="pb-type-pill processing"><span class="ptk-lbl">Processing <span class="mk">Обработка</span></span><span class="ptk-cell"><span class="var-opt sel">Machine Trimmed</span><span class="var-opt">Hand Trimmed</span></span></span>
+      </div>
+    </div>
+    <div class="pb-ref"><div class="pb-ref-code">__DOC_CODE__</div><div class="pb-ref-label">Dry Cannabis flos. —<br><span class="sp-latin">Cannabis Sativa L.</span></div><div class="pb-ref-val">Ph. Eur. 11.5 / 3028</div></div>
+  </div>
+
+  <div class="info-grid">
+    <div class="ig-cell"><div class="ig-label">Primary Packaging | <span class="mk">Примарно пакување</span></div><div class="ig-val sm" style="white-space:nowrap">Triplex Alu Bag | Триплекс Aлу Kеса,<br>PET 12 · ALU 7 · PE 80,<br>300 × 500 mm, net. 400.0 g ±3%</div></div>
+    <div class="ig-cell"><div class="ig-label">Product Form &amp; TYPE | <span class="mk">Дозажна форма и Тип на производ</span></div><div class="ig-val sm">Dry Cannabis Flower ·<br>Intermediate Bulk (InB) | <span class="mk">Сув Цвет од Канабис ·<br>Интермедиер балк</span></div></div>
+    <div class="ig-cell"><div class="ig-label">Storage | <span class="mk">Чување</span></div><div class="ig-val sm">15.0 – 25.0 °C, 30–60.0 %rH ·<br>protected from sunlight |<br><span class="mk">Заштитено од светлина</span></div></div>
+    <div class="ig-cell" style="align-items:flex-start"><div class="ig-label">Shelf Life <span class="mk">Рок на употреба</span></div><div class="ig-val sm" style="background:var(--gold-tint);border:1px solid var(--gold);border-radius:3px;padding:3px 10px;margin-left:9px;font-weight:800;letter-spacing:.3px;color:var(--gold-deep);white-space:nowrap;width:fit-content">EXP. TBD</div></div>
+  </div>
+
+  <div class="sec-label" style="margin-top:4px"><span class="sec-no">01</span> Potency Classification <span class="mk">Класификација по јачина</span></div>
+  <div class="tbl-wrap">
+    <table class="potency">
+      <thead><tr><th>Grade <span class="mk">Класа</span></th><th>Product Code <span class="mk">Код на производ</span></th><th>Nominal <span class="mk">Номинал</span></th><th>Range <span class="mk">Опсег</span></th><th>CBD <span class="mk">ЦБД</span></th></tr></thead>
+      <tbody>
+        <tr class="highlight"><td>__GRADE_EN__</td><td>__PRODUCT_CODE__</td><td>__NOMINAL__</td><td>__RANGE__</td><td>≤ 1.0%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sec-label" style="margin-top:8px"><span class="sec-no">02</span> Analytical Parameters &amp; Acceptance Criteria <span class="mk">Аналитички параметри и критериуми за прифатливост</span></div>
+  <div class="tbl-wrap">
+    <table class="params">
+      <thead><tr><th>№</th><th>Parameter <span class="mk">Параметар</span></th><th><span style="white-space:nowrap">Method / Reference</span> <span class="mk" style="display:block">Метода / Референца</span></th><th>Acceptance Criteria <span class="mk">Критериум за прифатливост</span></th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><span class="p-name">Identification A,<br>Appearance · Macroscopic | <span class="mk" style="display:block">Идентификација A, Изглед, Макроскопски</span></span></td><td><span class="p-method">Ph. Eur. mon. 3028</span></td><td><span class="p-spec p-spec-bi">Conforms to monograph | <span class="mk" style="display:block">Соодветствува со монографијата</span></span></td></tr>
+        <tr><td>2</td><td><span class="p-name">Identification B <span class="p-tag">· Microscopic</span> | <span class="mk" style="display:block">Идентификација Б · Микроскопски</span></span></td><td><span class="p-method">Ph. Eur. 2.8.23 (microscopy)</span></td><td><span class="p-spec p-spec-bi">Conforms to monograph | <span class="mk" style="display:block">Соодветствува со монографијата</span></span></td></tr>
+        <tr><td>3</td><td><span class="p-name">Identification C <span class="p-tag">· HPLC/HPTLC</span> | <span class="mk" style="display:block">Идентификација Ц · HPLC/HPTLC</span></span></td><td><span class="p-method">Ph. Eur. 2.2.29 (3028)</span></td><td><span class="p-spec p-spec-bi">Conforms to monograph | <span class="mk" style="display:block">Соодветствува со монографијата</span></span></td></tr>
+        <tr><td>4</td><td><span class="p-name">Assay — Total Δ<sup>9</sup>-THC | <span class="mk" style="display:block">Анализа — вкупен Δ⁹-THC</span></span></td><td><span class="p-method">Ph. Eur. 2.2.29 (HPLC)<span class="p-meth-eq">Δ9-THC + Δ9-THCA x 0.877</span></span></td><td><span class="p-spec">__NOMINAL__ (__RANGE__), w/w<span style="display:block;margin-top:2px">__GRADE_EN__ | <span class="mk">__GRADE_MK__</span></span></span></td></tr>
+        <tr><td>5</td><td><span class="p-name">Assay — Total CBD | <span class="mk" style="display:block">Анализа — вкупен CBD</span></span></td><td><span class="p-method">Ph. Eur. 2.2.29 (HPLC)<span class="p-meth-eq">CBD + CBDA x 0.877</span></span></td><td><span class="p-spec">≤ 1.0%, w/w</span></td></tr>
+        <tr><td>6</td><td><span class="p-name">Total CBN | <span class="mk" style="display:block">Вкупен CBN</span></span></td><td><span class="p-method">Ph. Eur. 2.2.29 (HPLC)<span class="p-meth-eq">CBN + CBNA x 0.876</span></span></td><td><span class="p-spec">≤ 1.0%, w/w</span></td></tr>
+        <tr><td>7</td><td><span class="p-name">Foreign Matter | <span class="mk" style="display:block">Страни материи</span></span></td><td><span class="p-method">Ph. Eur. 2.8.2<span class="p-meth-eq">In-house · интерна</span></span></td><td><span class="p-spec">≤ 2.0% / 25–50 g<span style="display:block;margin-top:2px">&lt; 1 cm leaves | <span class="mk">листови</span>, no seeds | <span class="mk">без семки</span></span></td></tr>
+        <tr><td>8</td><td><span class="p-name">Loss on Drying | <span class="mk" style="display:block">Губиток при сушење</span></span></td><td><span class="p-method">Ph. Eur. 2.2.32 (3028)<span class="p-meth-eq">at 40 °C, 24 h, 15–25 mbar</span></span></td><td><span class="p-spec">≤ 12.0% </span></td></tr>
+        <tr class="row-group"><td rowspan="8" class="row-group-cell">9</td><td colspan="3"><span class="p-name">Microbiological Purity | <span class="mk" style="display:block">Микробиолошка Чистота</span></span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">TAMC | <span class="mk">Вкупен аеробен микробен број</span></span></td><td><span class="p-method">Ph. Eur. 2.6.12 cat. C</span></td><td><span class="p-spec">≤ 10<sup>5</sup> CFU/g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">TYMC | <span class="mk">Вкупен број квасци/мувли</span></span></td><td><span class="p-method">Ph. Eur. 2.6.12 cat. C</span></td><td><span class="p-spec">≤ 10<sup>4</sup> CFU/g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Bile-tolerant gram-neg. | <span class="mk">Жолчно-толерантни грам-нег.</span></span></td><td><span class="p-method">Ph. Eur. 2.6.31 cat. C</span></td><td><span class="p-spec">≤ 10<sup>4</sup> CFU/g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Salmonella | <span class="mk">Салмонела</span></span></td><td><span class="p-method">Ph. Eur. 2.6.31 cat. C</span></td><td><span class="p-spec">Absence | <span class="mk">Отсуство</span> / 25 g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Escherichia coli | <span class="mk">Ешерихија коли</span></span></td><td><span class="p-method">Ph. Eur. 2.6.13 cat. C</span></td><td><span class="p-spec">Absence | <span class="mk">Отсуство</span> / 1 g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Pseudomonas aeruginosa<span style="display:block;font-size:7.5px;font-style:italic;color:#8C9BB0;margin-top:1px">Upon request <span class="mk" style="font-style:italic">| По барање</span></span></span></td><td><span class="p-method">Ph. Eur. 2.6.13 cat. C</span></td><td><span class="p-spec">Absence | <span class="mk">Отсуство</span> / 1 g</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Staphylococcus aureus<span style="display:block;font-size:7.5px;font-style:italic;color:#8C9BB0;margin-top:1px">Upon request <span class="mk" style="font-style:italic">| По барање</span></span></span></td><td><span class="p-method">Ph. Eur. 2.6.13 cat. C</span></td><td><span class="p-spec">Absence | <span class="mk">Отсуство</span> / 1 g</span></td></tr>
+        <tr class="row-group"><td rowspan="4" class="row-group-cell">10</td><td colspan="3"><span class="p-name">Mycotoxins | <span class="mk" style="display:block">Микотоксини</span></span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Aflatoxin B<sub>1</sub> | <span class="mk">афлатоксин B<sub>1</sub></span></span></td><td><span class="p-method">Ph. Eur. 2.8.18 (HPLC-FLD)</span></td><td><span class="p-spec">≤ 2 µg/kg</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Aflatoxins ∑ | <span class="mk">Афлатоксини ∑</span> (B<sub>1</sub>+B<sub>2</sub>+G<sub>1</sub>+G<sub>2</sub>)</span></td><td><span class="p-method">Ph. Eur. 2.8.18 (HPLC-FLD)</span></td><td><span class="p-spec">≤ 4 µg/kg</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Ochratoxin A | <span class="mk">Охратоксин A</span></span></td><td><span class="p-method">Ph. Eur. 2.8.22 (HPLC-FLD)</span></td><td><span class="p-spec">≤ 20 µg/kg</span></td></tr>
+        <tr class="row-group"><td rowspan="5" class="row-group-cell">11</td><td colspan="3"><span class="p-name">Heavy Metals | <span class="mk" style="display:block">Тешки метали</span></span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Lead (Pb) | <span class="mk">Олово (Pb)</span></span></td><td><span class="p-method">Ph. Eur. 2.4.27 (ICP-MS)</span></td><td><span class="p-spec">≤ 0.5 mg/kg</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Cadmium (Cd) | <span class="mk">Кадмиум (Cd)</span></span></td><td><span class="p-method">Ph. Eur. 2.4.27 (ICP-MS)</span></td><td><span class="p-spec">≤ 0.3 mg/kg</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Arsenic (As) | <span class="mk">Арсен (As)</span></span></td><td><span class="p-method">Ph. Eur. 2.4.27 (ICP-MS)</span></td><td><span class="p-spec">≤ 0.2 mg/kg</span></td></tr>
+        <tr class="sub-row"><td><span class="p-sub">Mercury (Hg) | <span class="mk">Жива (Hg)</span></span></td><td><span class="p-method">Ph. Eur. 2.4.27 (ICP-MS)</span></td><td><span class="p-spec">≤ 0.1 mg/kg</span></td></tr>
+        <tr><td>12</td><td><span class="p-name">Pesticide Residues | <span class="mk" style="display:block">Остатоци од пестициди</span></span></td><td><span class="p-method">Ph. Eur. 2.8.13 (LC-MS/MS)<span class="p-meth-eq">CUMCS Equivalency</span></span></td><td><span class="p-spec">≤ LOQ as per Ph. Eur. 2.8.13<span style="display:block;margin-top:2px">≤ LOQ as per CUMCS Equivalency</span></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="approval-grid">
+    <div class="ap-block"><div class="ap-role">Prepared &amp; Approved by <span class="mk">Изготвил и одобрил</span></div><div class="ap-sign"><div class="ap-line"></div></div><div class="ap-title">QC Manager <span class="mk">Менаџер за КК</span></div><div class="ap-name">Blagoj Nikolov</div><div class="ap-date-row"><span class="ap-date-label">Date · Датум</span><span class="ap-date-val">__QC_DATE__</span></div></div>
+    <div class="ap-block"><div class="ap-role">Reviewed by <span class="mk">Прегледал</span></div><div class="ap-sign"><div class="ap-line"></div></div><div class="ap-title">QA Manager <span class="mk">Менаџер за ОК</span></div><div class="ap-name">Jovana Romevska Cvetkovski</div><div class="ap-date-row"><span class="ap-date-label">Date · Датум</span><span class="ap-date-val">__QA_DATE__</span></div></div>
+  </div>
+
+  <div class="footer">
+    <div class="foot-left">Purely Plant DOOEL · Industriska ulica 9, br. 9,<br>s. Kojlija 1043 · Petrovec-Skopje, North Macedonia</div>
+    <div class="foot-center-num">1 | 1</div>
+    <div class="foot-right">QCSP 001 v.03</div>
+  </div>
+</div>
+</body>
+</html>

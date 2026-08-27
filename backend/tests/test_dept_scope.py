@@ -130,12 +130,14 @@ async def test_manager_create_guard_and_delegation(client, admin_headers, org):
     # subtask under their own task, delegated to another department → allowed
     sub = await _mk_task(client, mgr, "delegated subtask", d2, parent_id=t["id"])
     assert str(sub["department_id"]) == d2
-    # subtask under a foreign parent, targeting a foreign department → 403
+    # subtask under a foreign parent: the parent is invisible to a d1-scoped
+    # manager, so the create is refused as 404 (existence hidden, same as
+    # GET /tasks/{id}) — it never reaches the department check
     foreign = await _mk_task(client, admin_headers, "foreign parent", d2)
     r = await client.post("/tasks", json={
         "title": "illegal delegation", "department_id": d2, "parent_id": foreign["id"],
     }, headers=mgr)
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -316,3 +318,96 @@ async def test_manager_weekly_report_forced_to_own_department(client, admin_head
     titles = {t["title"] for t in body["tasks"]}
     assert "report mine" in titles
     assert "report other" not in titles
+
+
+@pytest.mark.asyncio
+async def test_get_task_hides_out_of_scope_dependency_titles(client, admin_headers, org):
+    """Regression: blocked_by/blocks used to join task_dependencies straight
+    to tasks with NO department-scope filter, unlike every other cross-task
+    exposure point in this file — a dept-scoped manager viewing an in-scope
+    task could read the title/status of any task it depends on/blocks, even
+    one in a completely different department they can't otherwise see."""
+    d1, d2 = await _two_departments(org)
+    mine = await _mk_task(client, admin_headers, "dep: mine (in-scope)", d1)
+    foreign = await _mk_task(client, admin_headers, "dep: foreign (out-of-scope)", d2)
+    _, mgr = await _manager(client, admin_headers, d1)
+
+    # admin wires "mine" as blocked_by "foreign" (both sides of the edge)
+    r = await client.post(f"/tasks/{mine['id']}/dependencies",
+                          json={"depends_on_task_id": foreign["id"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+    # admin (org-wide) sees the real title/status on both sides of the edge
+    r = await client.get(f"/tasks/{mine['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert [d["id"] for d in r.json()["blocked_by"]] == [foreign["id"]]
+    assert r.json()["blocked_by"][0]["title"] == "dep: foreign (out-of-scope)"
+    r = await client.get(f"/tasks/{foreign['id']}", headers=admin_headers)
+    assert [d["id"] for d in r.json()["blocks"]] == [mine["id"]]
+
+    # the dept-scoped manager can see "mine" (their own department) but the
+    # foreign task's title/status must not leak through the dependency edge
+    r = await client.get(f"/tasks/{mine['id']}", headers=mgr)
+    assert r.status_code == 200, r.text
+    assert r.json()["blocked_by"] == [], \
+        "an out-of-scope dependency must be omitted, not exposed with title/status"
+
+    # sanity: a dependency on an IN-SCOPE task is still shown in full
+    other_mine = await _mk_task(client, admin_headers, "dep: also mine (in-scope)", d1)
+    r = await client.post(f"/tasks/{mine['id']}/dependencies",
+                          json={"depends_on_task_id": other_mine["id"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    r = await client.get(f"/tasks/{mine['id']}", headers=mgr)
+    ids = {d["id"] for d in r.json()["blocked_by"]}
+    assert other_mine["id"] in ids
+    assert foreign["id"] not in ids
+
+
+@pytest.mark.asyncio
+async def test_audit_prep_includes_managers_own_task_in_another_department(client, admin_headers, org):
+    """Regression: /reports/audit-prep's own docstring claims dept-scoped
+    managers are "pinned to their own department exactly like
+    /reports/analytics", but its queries used a plain `t.department_id = $N`
+    equality instead of the shared _scope_clause family-visibility predicate
+    /reports/weekly and /reports/analytics both use. A dept-scoped manager's
+    personally-owned audit-prep task living in ANOTHER department silently
+    disappeared from their readiness %, milestone timeline, and traceability
+    check. This pins the exact bug scenario: a task owned by the manager,
+    tagged for audit-prep, but with department_id set to a foreign department."""
+    d1, d2 = await _two_departments(org)
+    prof, mgr = await _manager(client, admin_headers, d1)
+
+    # mgr creates+owns a completed, audit-prep-tagged task (defaults into
+    # their own department, d1) with an outcome and a due_date...
+    t = await _mk_task(client, mgr, "audit prep: owned but relocated",
+                       tags=["MK-GMP"], status="completed", due_date="2026-09-01")
+    # ...then it's relocated into a FOREIGN department (d2) — e.g. an admin
+    # reassigning it — while the manager still personally owns it (user_id
+    # unchanged, asserted below). outcome is set in the same call (TaskIn has
+    # no outcome field; TaskPatch does).
+    r = await client.patch(f"/tasks/{t['id']}",
+                           json={"department_id": d2, "outcome": "prepared and verified"},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert str(r.json()["department_id"]) == d2
+    assert str(r.json()["user_id"]) == prof["id"], "ownership must be unchanged for this scenario"
+
+    r = await client.get("/reports/audit-prep", headers=mgr)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # forced to the manager's own department in the response, same as weekly/analytics
+    assert body["department_id"] == d1
+
+    prog = next(p for p in body["programs"] if p["program"] == "MK-GMP")
+    assert prog["total"] == 1, "the relocated task must still count toward readiness"
+    assert prog["completed"] == 1
+    assert prog["completion_rate"] == 1.0
+
+    assert any(item["id"] == t["id"] for item in body["timeline"]), \
+        "the relocated task must still appear in the milestone timeline"
+
+    assert body["traceability"]["completed"] == 1
+    assert body["traceability"]["with_outcome"] == 1
+    assert body["traceability"]["rate"] == 1.0
+
+    assert body["status_distribution"].get("completed") == 1

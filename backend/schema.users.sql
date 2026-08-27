@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
+\restrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -73,18 +73,21 @@ CREATE FUNCTION app.current_user_id() RETURNS uuid
 CREATE FUNCTION app.fn_audit_row() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'app', 'public'
+    SET "TimeZone" TO 'UTC'
     AS $$
 DECLARE
   v_actor text := COALESCE(current_setting('app.user_id', true), 'system');
   v_prev  text;
   v_new   jsonb := CASE WHEN TG_OP='DELETE' THEN NULL ELSE to_jsonb(NEW) END;
   v_old   jsonb := CASE WHEN TG_OP='INSERT' THEN NULL ELSE to_jsonb(OLD) END;
-  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END).id::text, '');
+  v_rec   text  := COALESCE((CASE WHEN TG_OP='DELETE' THEN v_old ELSE v_new END)->>'id', '');
   v_payload text;
 BEGIN
   PERFORM pg_advisory_xact_lock(4019283746);  -- H1: serialize tail read; prevents concurrent hash-chain forks
   SELECT entry_hash INTO v_prev FROM audit_log ORDER BY id DESC LIMIT 1;
   -- IMPORTANT: convert_to(text,'UTF8'), never text::bytea (escape-format bug).
+  -- H2: the function pins TimeZone=UTC, so now()::text here is zone-stable and
+  -- /audit/verify can reproduce it from created_at without knowing who wrote it.
   v_payload := COALESCE(v_prev,'') || v_actor || TG_OP || TG_TABLE_NAME || v_rec
                || now()::text || COALESCE(v_new::text,'') || COALESCE(v_old::text,'');
   INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,old_values,new_values,prev_hash,entry_hash)
@@ -163,22 +166,6 @@ ALTER TABLE ONLY public.organizations FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: password_reset_codes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.password_reset_codes (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    code_hash text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    used_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-ALTER TABLE ONLY public.password_reset_codes FORCE ROW LEVEL SECURITY;
-
-
---
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -232,14 +219,6 @@ ALTER TABLE ONLY public.organizations
 
 
 --
--- Name: password_reset_codes password_reset_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_pkey PRIMARY KEY (id);
-
-
---
 -- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -256,6 +235,13 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: audit_log_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
+
+
+--
 -- Name: audit_log_table_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -263,18 +249,24 @@ CREATE INDEX audit_log_table_idx ON public.audit_log USING btree (table_name, re
 
 
 --
+-- Name: profiles_username_lower_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX profiles_username_lower_uniq ON public.profiles USING btree (lower(username));
+
+
+--
+-- Name: organizations audit_organizations; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_organizations AFTER INSERT OR DELETE OR UPDATE ON public.organizations FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: profiles audit_profiles; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER audit_profiles AFTER INSERT OR DELETE OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
-
-
---
--- Name: password_reset_codes password_reset_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.password_reset_codes
-    ADD CONSTRAINT password_reset_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -327,12 +319,6 @@ CREATE POLICY org_self ON public.organizations USING ((id = app.current_org_id()
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: password_reset_codes; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.password_reset_codes ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -360,15 +346,8 @@ CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.curre
 
 
 --
--- Name: password_reset_codes reset_self; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY reset_self ON public.password_reset_codes USING (((user_id = app.current_user_id()) OR app.is_elevated())) WITH CHECK (((user_id = app.current_user_id()) OR app.is_elevated()));
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 0VGIPTzhYxWEl0HXN6g8ReVbeVcotBLsKyhycQHgaxPLdbJGxTTIDVB1SybAwtQ
+\unrestrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
 

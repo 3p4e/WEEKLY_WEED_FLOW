@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — eCoA Intake</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone C · QC LIMS — eCoA intake workbench (qcecoa).
+  Ingest external CoA → extract rows → auto-map to spec parameters →
+  placeholder discovery (MAP/IGNORE) → QCT-018 review checklist gate →
+  promote to DRAFT cert (provenance-carrying) → verify vs source (VERIFIED/
+  DISCREPANCY). 5-working-day clock (§6.3.1). PDF custody + SHA-256.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1120px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);}
+  .crumb .sp{flex:1;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:8px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:#c0aef2;background:rgba(155,123,232,.14);box-shadow:inset 0 0 0 1px rgba(155,123,232,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero__no{font-family:var(--mw-mono);font-weight:700;font-size:22px;color:var(--mw-cyan-bright);letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.35);}
+  .hero__ttl{font-family:var(--mw-font-cond);font-size:16px;font-weight:600;color:var(--mw-ink);margin-top:3px;line-height:1.25;}
+  .hero__sub{font-size:11.5px;color:var(--mw-text-faint);margin-top:3px;}
+  .hero__sp{flex:1;}
+  .clock{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+  .clockchip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mw-font-cond);font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;padding:6px 13px;color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1.5px rgba(236,236,74,.5);background:rgba(236,236,74,.08);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .shabar{display:flex;gap:9px;align-items:center;padding:8px 13px;margin:16px 0 4px;font-family:var(--mw-mono);font-size:10.5px;color:var(--mw-text-dim);background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .shabar .ic{color:var(--mw-cyan-bright);flex:none;} .shabar b{color:var(--mw-ink);}
+  /* pipeline stepper */
+  .pipe{display:flex;align-items:center;gap:0;margin:20px 0;flex-wrap:wrap;}
+  .pipe .st{display:flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mw-text-faint);padding:6px 10px;}
+  .pipe .st .n{width:19px;height:19px;flex:none;display:grid;place-items:center;font-size:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;}
+  .pipe .st.done{color:var(--mw-stat-hi);} .pipe .st.done .n{background:var(--mw-stat-hi);color:var(--mw-void);box-shadow:none;}
+  .pipe .st.cur{color:var(--mw-cyan-bright);} .pipe .st.cur .n{box-shadow:inset 0 0 0 2px var(--mw-cyan-bright),0 0 10px var(--mw-cyan);background:rgba(94,200,240,.12);}
+  .pipe .arw{color:var(--mw-text-faint);font-size:11px;}
+  .sec{margin:22px 0;}
+  .sec__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-header);margin:0 0 12px;display:flex;align-items:center;gap:10px;}
+  .sec__t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(94,200,240,.28),transparent);}
+  .sec__t .side{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mw-text-faint);font-family:var(--mw-font);font-size:11px;}
+  /* extraction table */
+  table.ex{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.ex thead th{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;font-weight:700;color:var(--mw-text-dim);text-align:left;padding:9px 11px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.2);white-space:nowrap;}
+  table.ex td{padding:10px 11px;vertical-align:middle;box-shadow:inset 0 -1px 0 rgba(94,200,240,.07);}
+  .rawlbl{font-family:var(--mw-mono);font-size:11.5px;color:var(--mw-ink);} .rawval{font-family:var(--mw-mono);font-weight:700;font-size:12px;color:var(--mw-cyan-bright);}
+  .maparrow{color:var(--mw-text-faint);}
+  .mapped{font-size:11.5px;color:var(--mw-ink);} .mapped .mk{color:var(--mw-text-faint);font-size:10.5px;}
+  .cbadge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;white-space:nowrap;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .cbadge.yes{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.5);} .cbadge.auto{color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 1px rgba(94,200,240,.4);}
+  .placeholder td{background:rgba(236,236,74,.05);}
+  .phrow{display:flex;align-items:center;gap:8px;}
+  .phq{font-family:var(--mw-mono);font-size:11px;color:var(--mw-stat-mid);}
+  .phact{display:flex;gap:6px;}
+  .minibtn{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;font-weight:700;cursor:pointer;padding:4px 10px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);}
+  .minibtn.ghost{color:var(--mw-text-dim);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.3);}
+  .minibtn:hover{filter:brightness(1.15);}
+  .resolved{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .resolved.map{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);} .resolved.ign{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(127,109,156,.4);}
+  .vv{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .vv.ok{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);} .vv.disc{color:#fff;background:var(--mw-stat-lo);}
+  /* checklist */
+  .chk{display:flex;flex-direction:column;gap:8px;}
+  .chkrow{display:flex;align-items:center;gap:12px;padding:10px 13px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .chkbox{width:20px;height:20px;flex:none;cursor:pointer;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--mw-text-faint);display:grid;place-items:center;color:transparent;transition:all .12s ease;}
+  .chkbox.on{box-shadow:inset 0 0 0 1.5px var(--mw-stat-hi);background:var(--mw-stat-hi);color:var(--mw-void);}
+  .chkbox.rej{box-shadow:inset 0 0 0 1.5px var(--mw-stat-lo);background:var(--mw-stat-lo);color:#fff;}
+  .chktx{flex:1;font-size:12px;color:var(--mw-text);} .chkref{font-family:var(--mw-mono);font-size:10px;color:var(--mw-text-faint);}
+  .chktoggle{display:flex;gap:5px;}
+  .ctbtn{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;padding:4px 9px;border:none;background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.24);color:var(--mw-text-dim);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .ctbtn.acc.on{color:var(--mw-void);background:var(--mw-stat-hi);box-shadow:none;} .ctbtn.rej.on{color:#fff;background:var(--mw-stat-lo);box-shadow:none;}
+  /* gate + actions */
+  .gate-note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;font-size:11.5px;line-height:1.5;color:var(--mw-text);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .gate-note.block{background:rgba(239,77,77,.08);box-shadow:inset 0 0 0 1px rgba(239,77,77,.32);} .gate-note.ok{background:rgba(108,240,90,.07);box-shadow:inset 0 0 0 1px rgba(108,240,90,.3);} .gate-note.info{background:rgba(94,200,240,.07);box-shadow:inset 0 0 0 1px rgba(94,200,240,.28);}
+  .gate-note .ic{flex:none;margin-top:1px;} .gate-note.block .ic{color:var(--mw-stat-lo);} .gate-note.ok .ic{color:var(--mw-stat-hi);} .gate-note.info .ic{color:var(--mw-cyan-bright);}
+  .rail-a{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:12px;}
+  .rail-a .hint{font-size:11px;color:var(--mw-text-faint);}
+  .btn-lg{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.08em;font-size:13px;font-weight:700;cursor:pointer;padding:11px 20px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);transition:filter .12s ease;}
+  .btn-lg:hover{filter:brightness(1.18);} .btn-lg.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);} .btn-lg[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+  /* RAG box */
+  .rag{padding:14px 16px;background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .ragq{display:flex;gap:9px;align-items:center;} .ragq input{flex:1;background:rgba(4,14,28,.7);border:none;outline:none;color:var(--mw-ink);font-family:var(--mw-font);font-size:12.5px;padding:9px 12px;box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);}
+  .ragans{margin-top:11px;font-size:12px;line-height:1.55;color:var(--mw-text);} .ragans .cite{font-family:var(--mw-mono);font-size:10px;color:var(--mw-cyan-bright);background:rgba(94,200,240,.1);padding:1px 5px;border-radius:2px;}
+  @media(max-width:760px){table.ex .hidem{display:none;}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="eCoA intake">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="qc-lab.html">QC LIMS</a><span>›</span><a href="#">eCoA intake</a><span>›</span><span>PP-ECOA-2026-0031</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 15l2 2 4-4"/></svg></div>
+    <div>
+      <div class="hero__no">PP-ECOA-2026-0031</div>
+      <div class="hero__ttl"><span class="en">External CoA Intake — Eurofins MK · heavy metals &amp; mycotoxins</span><span class="mk">Внес на надворешен CoA — Eurofins MK · тешки метали и микотоксини</span></div>
+      <div class="hero__sub"><span class="en">Supplier lot PP-RM-2026-0077 · against spec QCSP 004 v1 · QCT-018 · QCSOP 012 §6.3</span><span class="mk">Добавувач PP-RM-2026-0077 · спец. QCSP 004 v1 · QCT-018 · QCSOP 012 §6.3</span></div>
+    </div>
+    <div class="hero__sp"></div>
+    <div class="clock">
+      <span class="clockchip" id="clock"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="en">3 of 5 working days left</span><span class="mk">3 од 5 работни дена</span></span>
+    </div>
+  </div>
+
+  <div class="shabar"><span class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span><span class="en">Original PDF retained in custody</span><span class="mk">Оригинал PDF задржан</span> · Eurofins_CoA_2025-10-14.pdf · SHA-256 <b>a91f4e…d7c02</b></span></div>
+
+  <div class="pipe" id="pipe"></div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Extraction workbench</span><span class="mk">Работна површина за екстракција</span><span class="side"><span class="en">raw rows auto-mapped to QCSP 004 parameters</span><span class="mk">суровите редови мапирани на QCSP 004</span></span></p>
+    <div class="mw-panel" style="padding:6px 8px 4px;"><div class="mw-well" style="padding:2px 8px;overflow-x:auto;">
+      <table class="ex"><thead><tr>
+        <th><span class="en">Extracted label</span><span class="mk">Извлечена ознака</span></th>
+        <th><span class="en">Value</span><span class="mk">Вредност</span></th>
+        <th></th>
+        <th><span class="en">Mapped parameter</span><span class="mk">Мапиран параметар</span></th>
+        <th><span class="en">Map</span><span class="mk">Мапа</span></th>
+        <th><span class="en">Complies</span><span class="mk">Усог.</span></th>
+      </tr></thead><tbody id="exRows"></tbody></table>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">QCT-018 review checklist</span><span class="mk">QCT-018 листа за преглед</span><span class="side"><span class="en">must be accepted before promote (§6.3.1)</span><span class="mk">мора да се прифати пред промоција</span></span></p>
+    <div class="chk" id="chk"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Actions</span><span class="mk">Дејства</span></p>
+    <div id="gateNote"></div>
+    <div class="rail-a" id="railA" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">CoA Q&amp;A — grounded</span><span class="mk">CoA Q&amp;A — заземјено</span><span class="side"><span class="en">cited passages only, never invented</span><span class="mk">само цитирани пасуси</span></span></p>
+    <div class="rag">
+      <div class="ragq"><input id="ragInput" type="text" placeholder="Ask about this certificate…" value="What was the lead result and its method?"><button class="btn-lg" onclick="askRag()"><span class="en">Ask</span><span class="mk">Прашај</span></button></div>
+      <div class="ragans" id="ragAns"><span class="en">Lead (Pb) was reported as <b>0.12 mg/kg</b> by ICP-MS. <span class="cite">[doc#3]</span> The method reference on the source certificate is EN 13805 / ICP-MS. <span class="cite">[doc#3]</span></span><span class="mk">Олово (Pb) <b>0.12 mg/kg</b> со ICP-MS. <span class="cite">[doc#3]</span> Метод: EN 13805. <span class="cite">[doc#3]</span></span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var PIPE=[['UPLOADED','Uploaded','Прикачен'],['EXTRACTED','Extracted','Извлечен'],['REVIEWED','Reviewed','Прегледан'],['PROMOTED','Promoted','Промовиран'],['VERIFIED','Verified','Верифициран']];
+var S={ stage:'EXTRACTED',
+  rows:[
+    {raw:'Pb (lead)',val:'0.12 mg/kg',map:['Lead (Pb)','Олово (Pb)'],auto:true,comply:true},
+    {raw:'Cadmium',val:'0.08 mg/kg',map:['Cadmium (Cd)','Кадмиум (Cd)'],auto:true,comply:true},
+    {raw:'Aflatox. B1',val:'0.4 µg/kg',map:['Aflatoxin B1','Афлатоксин B1'],auto:true,comply:true},
+    {raw:'Σ Aflatoxins',val:'1.1 µg/kg',map:['Sum aflatoxins','Збир афлатоксини'],auto:true,comply:true},
+    {raw:'Hg (mercury)',val:'0.05 mg/kg',map:null,ph:true,resolved:null}
+  ],
+  checklist:[
+    {en:'Issuing laboratory is accredited (ISO/IEC 17025) and within scope',mk:'Лабораторијата е акредитирана (17025) и во опсег',ref:'QCT-018 §1',v:null},
+    {en:'Certificate identifies the correct supplier lot & material',mk:'Сертификатот го идентификува вистинскиот лот и материјал',ref:'QCT-018 §2',v:null},
+    {en:'All specified parameters are present on the source',mk:'Сите барани параметри се присутни во изворот',ref:'QCT-018 §3',v:null},
+    {en:'Methods & units match the specification',mk:'Методите и единиците се совпаѓаат',ref:'QCT-018 §4',v:null}
+  ]
+};
+function idx(st){ if(st==='PROMOTED'&&S.stage==='VERIFIED')return 3; return PIPE.findIndex(function(p){return p[0]===S.stage;}); }
+function paintPipe(){ var ci=PIPE.findIndex(function(p){return p[0]===S.stage;});
+  document.getElementById('pipe').innerHTML=PIPE.map(function(p,i){ var cls=i<ci?'done':i===ci?'cur':'';
+    return (i?'<span class="arw">→</span>':'')+'<span class="st '+cls+'"><span class="n">'+(i<ci?'✓':(i+1))+'</span>'+bil(p[1],p[2])+'</span>';}).join('');
+}
+function paintRows(){
+  document.getElementById('exRows').innerHTML=S.rows.map(function(r,i){
+    if(r.ph){
+      var resolved = r.resolved==='map'?'<span class="resolved map">✓ '+ (document.documentElement.getAttribute('data-lang')==='mk'?'Мапиран':'Mapped')+'</span>'
+        : r.resolved==='ign'?'<span class="resolved ign">'+ (document.documentElement.getAttribute('data-lang')==='mk'?'Игнориран':'Ignored')+'</span>'
+        : '<div class="phact"><button class="minibtn" onclick="resolve('+i+',\'map\')">MAP</button><button class="minibtn ghost" onclick="resolve('+i+',\'ign\')">IGNORE</button></div>';
+      var mapCell = r.resolved==='map'?'<span class="mapped">'+bil('Mercury (Hg)','Жива (Hg)')+'</span>':'<span class="phq">'+bil('unknown label','непозната ознака')+'</span>';
+      return '<tr class="placeholder"><td class="rawlbl">'+r.raw+'</td><td class="rawval">'+r.val+'</td><td class="maparrow">→</td><td>'+mapCell+'</td><td>'+resolved+'</td><td>'+(r.resolved==='map'?'<span class="cbadge yes">✓</span>':'—')+'</td></tr>';
+    }
+    return '<tr><td class="rawlbl">'+r.raw+'</td><td class="rawval">'+r.val+'</td><td class="maparrow">→</td>'+
+      '<td><span class="mapped"><span class="en">'+r.map[0]+'</span><span class="mk">'+r.map[1]+'</span></span></td>'+
+      '<td>'+(r.auto?'<span class="cbadge auto">auto</span>':'')+'</td>'+
+      '<td>'+(S.stage==='VERIFIED'?'<span class="vv ok">✓ verified</span>':(r.comply?'<span class="cbadge yes">✓</span>':'—'))+'</td></tr>';
+  }).join('');
+}
+function resolve(i,how){ S.rows[i].resolved=how; toast('ok',how==='map'?'Placeholder mapped — future CoAs auto-map':'Placeholder ignored', how==='map'?'Мапиран — идни CoA авто':'Игнориран'); paintRows(); paintActions(); }
+
+function paintChk(){
+  document.getElementById('chk').innerHTML=S.checklist.map(function(c,i){
+    var box=c.v==='acc'?'<div class="chkbox on">✓</div>':c.v==='rej'?'<div class="chkbox rej">✕</div>':'<div class="chkbox"></div>';
+    return '<div class="chkrow">'+box+'<div class="chktx"><span class="en">'+c.en+'</span><span class="mk">'+c.mk+'</span> <span class="chkref">'+c.ref+'</span></div>'+
+      '<div class="chktoggle"><button class="ctbtn acc'+(c.v==='acc'?' on':'')+'" onclick="setChk('+i+',\'acc\')">'+bil('Accept','Прифати')+'</button><button class="ctbtn rej'+(c.v==='rej'?' on':'')+'" onclick="setChk('+i+',\'rej\')">'+bil('Reject','Одбиј')+'</button></div></div>';
+  }).join('');
+}
+function setChk(i,v){ S.checklist[i].v=v; paintChk(); paintActions(); }
+
+function placeholdersResolved(){ return S.rows.filter(function(r){return r.ph;}).every(function(r){return r.resolved;}); }
+function checklistDone(){ return S.checklist.every(function(c){return c.v;}); }
+function anyRejected(){ return S.checklist.some(function(c){return c.v==='rej';}); }
+
+function paintActions(){
+  var gn=document.getElementById('gateNote'), rail=document.getElementById('railA');
+  var ic={block:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',ok:'<path d="M20 6L9 17l-5-5"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'};
+  function note(k,en,mk){return '<div class="gate-note '+k+'"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic[k]+'</svg></span><div>'+bil(en,mk)+'</div></div>';}
+  gn.innerHTML=''; rail.innerHTML='';
+
+  if(S.stage==='VERIFIED'){ gn.innerHTML=note('ok','<b>Promoted &amp; verified.</b> A DRAFT certificate was created with one result per mapped parameter, each carrying provenance back to this source. The verify loop reconciled every value: <b>VERIFIED</b>, no discrepancy — a mismatch would be reported, never silently corrected.','<b>Промовиран и верифициран.</b> Креиран DRAFT сертификат со потекло. Циклусот: <b>ВЕРИФИЦИРАНО</b>.');
+    rail.innerHTML='<button class="btn-lg ghost" onclick="location.href=\'coa-detail.html\'"><span class="en">Open draft certificate ↗</span><span class="mk">Отвори нацрт сертификат ↗</span></button><button class="btn-lg ghost" onclick="reset()"><span class="en">Reset demo</span><span class="mk">Ресетирај</span></button>'; return; }
+  if(S.stage==='PROMOTED'){ gn.innerHTML=note('info','Promoted to a DRAFT certificate. Run the verify loop to reconcile each promoted value against the source document.','Промовиран во нацрт. Изврши верификација според изворот.');
+    rail.innerHTML='<button class="btn-lg" onclick="S.stage=\'VERIFIED\';paintAll();toast(\'ok\',\'Verified against source\',\'Верифициран\')"><span class="en">Verify vs source</span><span class="mk">Верифицирај според извор</span></button>'; return; }
+
+  if(!placeholdersResolved()){ gn.innerHTML=note('block','<b>Unresolved placeholders.</b> An unknown extracted label (<b>Hg / mercury</b>) must be mapped to a spec parameter or explicitly ignored before promotion. Unmapped values are never fabricated — they wait for a human.','<b>Нерешени placeholder-и.</b> Непозната ознака (<b>Hg</b>) мора да се мапира или игнорира пред промоција.');
+    rail.innerHTML='<button class="btn-lg" disabled><span class="en">Promote to certificate</span><span class="mk">Промовирај</span></button>'; return; }
+  if(anyRejected()){ gn.innerHTML=note('block','<b>Checklist item rejected.</b> A rejected QCT-018 item sends this document to <b>REJECTED</b> — it cannot be promoted. Resolve the finding with the issuing lab.','<b>Одбиена ставка.</b> Одбиена QCT-018 ставка го праќа документот во <b>ОДБИЕН</b>.');
+    rail.innerHTML='<button class="btn-lg" disabled><span class="en">Promote to certificate</span><span class="mk">Промовирај</span></button><button class="btn-lg ghost"><span class="en">Mark rejected</span><span class="mk">Означи одбиен</span></button>'; return; }
+  if(!checklistDone()){ gn.innerHTML=note('info','Placeholders resolved. Complete the <b>QCT-018 review checklist</b> — every item must be Accepted before the document can be promoted (§6.3.1).','Placeholder-ите решени. Заврши ја QCT-018 листата — секоја ставка мора да е прифатена.');
+    rail.innerHTML='<button class="btn-lg" disabled><span class="en">Promote to certificate</span><span class="mk">Промовирај</span></button>'; return; }
+  gn.innerHTML=note('ok','All placeholders resolved and the QCT-018 checklist is fully accepted. This external CoA may now be promoted into a provenance-carrying DRAFT certificate.','Сите решени и QCT-018 прифатена. Може да се промовира.');
+  rail.innerHTML='<button class="btn-lg" onclick="S.stage=\'PROMOTED\';paintAll();toast(\'ok\',\'Promoted to draft certificate\',\'Промовиран во нацрт\')"><span class="en">Promote to certificate</span><span class="mk">Промовирај во сертификат</span></button>';
+}
+function reset(){ S.stage='EXTRACTED'; S.rows.forEach(function(r){if(r.ph)r.resolved=null;}); S.checklist.forEach(function(c){c.v=null;}); paintAll(); }
+function askRag(){ toast('ok','Grounded answer — cited','Заземјен одговор'); }
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+function paintAll(){ paintPipe(); paintRows(); paintChk(); paintActions(); if(window.mwSync)window.mwSync(); }
+paintAll();
+new MutationObserver(paintAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

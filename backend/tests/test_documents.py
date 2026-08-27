@@ -1,5 +1,6 @@
 """Weekly Plan & Report documents — compile → review → lock → PDF export."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from app.worktime import TZ, facility_today
 
 from tests.conftest import create_user, login_and_set_password
 
@@ -17,8 +18,15 @@ async def _seed_task_with_session(client, admin_headers, org, title="Ribbon task
                           json={"day_label": "Mon", "note": "Column equilibrated."},
                           headers=admin_headers)
     assert r.status_code in (200, 201), r.text
-    # a real work session today 09:00-11:30 facility time -> ribbon segment
-    start = datetime.now(timezone.utc).replace(hour=7, minute=0, second=0, microsecond=0)
+    # a real work session today 09:00-11:30 facility time -> ribbon segment.
+    # "Today" MUST be the facility's date, built at the facility zone — the
+    # previous version pinned it via datetime.now(timezone.utc).replace(hour=7),
+    # which is the same wall-clock only while UTC and the facility agree on
+    # the DATE. Between facility-midnight and UTC-midnight they do not: the
+    # session landed on the facility's YESTERDAY (the closed Fri->Thu week),
+    # the compile window had moved on, and the ribbon assert failed — CI run
+    # 356, nightly window, exactly like the date.today() sites.
+    start = datetime.combine(facility_today(), time(9, 0), tzinfo=TZ)
     r = await client.post(f"/tasks/{task['id']}/sessions", json={
         "started_at": start.isoformat(),
         "ended_at": (start + timedelta(hours=2, minutes=30)).isoformat(),
@@ -152,6 +160,63 @@ async def test_section_approve_endpoint(client, admin_headers, org):
     assert r.status_code == 409
 
 
+async def test_oversized_section_and_patch_content_rejected(client, admin_headers, org):
+    """SectionReq's text fields and PatchReq.content used to carry no size
+    bound at all — an elevated caller could PATCH an arbitrarily large
+    JSONB blob/string into weekly_documents.content. Every oversized variant
+    below must be a clean 422 (Pydantic validation), never accepted."""
+    r = await client.post("/reports/documents/compile", json={"kind": "report"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    doc_id = doc["id"]
+    ai_key = doc["content"]["ai_sections"][0]["key"]
+    template_key = doc["content"]["template_sections"][0]["key"]
+    field_key = doc["content"]["template_sections"][0]["fields"][0]["key"]
+
+    # AI section: oversized body_en / body_mk / legacy body alias.
+    huge = "x" * 20_001
+    for payload in ({"body_en": huge}, {"body_mk": huge}, {"body": huge}):
+        r = await client.patch(f"/reports/documents/{doc_id}/sections/{ai_key}",
+                               json=payload, headers=admin_headers)
+        assert r.status_code == 422, (payload.keys(), r.status_code, r.text)
+
+    # Template section: oversized narrative_en / narrative_mk.
+    for payload in ({"narrative_en": huge}, {"narrative_mk": huge}):
+        r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                               json=payload, headers=admin_headers)
+        assert r.status_code == 422, (payload.keys(), r.status_code, r.text)
+
+    # Template section: oversized single field VALUE (dict max_length alone
+    # only bounds item count, not each string's length — needs its own check).
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                           json={"fields": {field_key: "y" * 5_001}}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # Template section: too many field entries (dict item-count bound).
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{template_key}",
+                           json={"fields": {f"k{i}": "v" for i in range(65)}},
+                           headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # A within-bounds edit still works — the caps aren't accidentally
+    # rejecting legitimate reviewer content.
+    r = await client.patch(f"/reports/documents/{doc_id}/sections/{ai_key}",
+                           json={"body_en": "a real, reasonably long narrative"},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+    # PatchReq.content: a whole-document dict blob well over the size cap.
+    r = await client.patch(f"/reports/documents/{doc_id}",
+                           json={"content": {"bloat": "z" * 5_000_001}}, headers=admin_headers)
+    assert r.status_code == 422, r.text
+
+    # A normal-sized content PATCH still works.
+    small_content = {**doc["content"], "note": "small edit"}
+    r = await client.patch(f"/reports/documents/{doc_id}", json={"content": small_content},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+
 async def test_locked_document_immutable_at_db_layer(client, admin_headers, org):
     """A locked document must be immutable at the DB layer, not just via the
     app's WHERE status='draft' guard: a raw UPDATE/DELETE through an app_user
@@ -209,7 +274,7 @@ async def test_preview_custom_range_not_persisted(client, admin_headers, org):
     the stored/lockable record stays the scheduled Fri→Thu week only. The
     period carries the day-span the ribbon renderers use."""
     task = await _seed_task_with_session(client, admin_headers, org)
-    today = datetime.now(timezone.utc).date()
+    today = facility_today()
     start = (today - timedelta(days=1)).isoformat()
     end = (today + timedelta(days=1)).isoformat()
     r = await client.post("/reports/documents/preview",
@@ -241,7 +306,7 @@ async def test_preview_validation_errors(client, admin_headers, org):
 async def test_export_range_pdf(client, admin_headers, org):
     """The non-persisted preview exports to PDF by posting its content back."""
     await _seed_task_with_session(client, admin_headers, org)
-    today = datetime.now(timezone.utc).date()
+    today = facility_today()
     r = await client.post("/reports/documents/preview", json={
         "kind": "report", "start": (today - timedelta(days=1)).isoformat(),
         "end": (today + timedelta(days=1)).isoformat()}, headers=admin_headers)
@@ -252,6 +317,19 @@ async def test_export_range_pdf(client, admin_headers, org):
     assert r.headers["content-type"] == "application/pdf"
     assert r.content[:5] == b"%PDF-"
     assert "PREVIEW" in r.headers.get("content-disposition", "")
+
+
+async def test_export_range_pdf_validation_errors(client, admin_headers, org):
+    """content is entirely client-supplied on this endpoint (there's no stored
+    row to read) — a malformed kind or period.start must be a clean 422, not
+    an unhandled crash inside the ribbon renderer's date.fromisoformat()."""
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "invoice", "content": {}}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.post("/reports/documents/export-range.pdf",
+                          json={"kind": "report", "content": {"period": {"start": "not-a-date"}}},
+                          headers=admin_headers)
+    assert r.status_code == 422
 
 
 async def test_preview_and_range_export_operator_denied(client, admin_headers, org):

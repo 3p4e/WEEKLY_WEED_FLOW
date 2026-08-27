@@ -13,20 +13,22 @@
 #   GET  /documents/{id}/download         the .docx (only ever PASS docs)
 #   GET  /documents/{id}/pdf              Gotenberg-rendered PDF
 import asyncio
+import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import builder, db
 from .config import settings
 from .letta import LettaClient
 from .pipeline import run_workflow
-from .questionnaires import QUESTIONNAIRES, questionnaire_index
+from .questionnaires import QUESTIONNAIRES, InvalidAnswer, questionnaire_index, validate_answers
 from .security import require_api_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -36,11 +38,45 @@ log = logging.getLogger("docengine")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
+    # Sweep jobs abandoned by a previously-killed worker. Startup is exactly
+    # when those rows appear (a redeploy kills the worker mid-run), and without
+    # this they sit at 'running' forever with a poller waiting on them.
+    try:
+        reaped = await db.reap_stale_jobs()
+        if reaped:
+            log.warning("reaped %d stale job(s) left mid-flight by a killed worker", reaped)
+    except Exception:
+        # Never block startup on the sweep — the service must come up.
+        log.warning("stale-job sweep failed at startup", exc_info=True)
     yield
     await db.close()
 
 
 app = FastAPI(title="GrowFlow DocEngine", version="1.0.0", lifespan=lifespan)
+
+# asyncio.create_task() only holds a WEAK reference to the task it returns —
+# without also keeping a strong reference somewhere, the task can be silently
+# garbage-collected mid-run before it completes (a documented asyncio footgun,
+# not hypothetical: see "Important" note under
+# https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task).
+# A job that vanished mid-generation would sit "running" forever with no
+# error recorded — worse than any exception run_workflow itself might raise.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
+def _valid_uuid(s: str) -> bool:
+    try:
+        uuid.UUID(s)
+        return True
+    except ValueError:
+        return False
 
 
 # ---------- health (unauthenticated: compose healthcheck) ----------
@@ -69,11 +105,33 @@ async def get_questionnaire(key: str):
 
 
 # ---------- workflows ----------
+# Unlike BuildIn's markdown/out_name below (Field(max_length=...)), a bare
+# `dict` field can't carry a length bound directly — so this is a validator
+# instead of a Field kwarg. Every value in answers/meta flows verbatim into
+# every agent prompt for the job (see _brief() / assemble_markdown() in
+# pipeline.py), so an unbounded payload is the same class of risk BuildIn's
+# bounds already guard against, just on a dict-shaped field instead of a str
+# one. The cap is generous (comfortably above any real questionnaire's
+# answers or a normal meta block) while staying well below "clearly abusive".
+_MAX_DICT_JSON_CHARS = 80_000
+
+
 class WorkflowIn(BaseModel):
     questionnaire: str
     answers: dict = Field(default_factory=dict)
     meta: dict  # {title_mk, title_en, code, version?, orient?}
     requested_by: str = ""
+
+    @field_validator("answers", "meta")
+    @classmethod
+    def _bound_json_size(cls, v: dict, info) -> dict:
+        size = len(json.dumps(v, ensure_ascii=False))
+        if size > _MAX_DICT_JSON_CHARS:
+            raise ValueError(
+                f"{info.field_name} is too large ({size} chars serialized JSON; "
+                f"max {_MAX_DICT_JSON_CHARS})"
+            )
+        return v
 
 
 @app.post("/workflows", dependencies=[Depends(require_api_key)])
@@ -83,17 +141,38 @@ async def start_workflow(body: WorkflowIn):
     for k in ("title_mk", "title_en", "code"):
         if not body.meta.get(k):
             raise HTTPException(400, f"meta.{k} required")
+    # Pre-populated-answers gate (DOCENGINE-CANON §5): every value the caller
+    # supplied must be a defined option for that question — never free text,
+    # never an invented option. Unchecked answers flow verbatim into every
+    # authoring/repair prompt sent to the Letta agents for this job, so this
+    # must run BEFORE the job is created, not after.
+    #
+    # Residual, accepted gap (audit LOW companion to H8, not addressed here):
+    # this closes off `answers` (closed option lists only), but `body.meta`
+    # (title_mk, title_en, code, version, orient) stays free text — checked
+    # only for HEADERDATA-breaking characters (see
+    # _reject_headerdata_breakers in pipeline.py), not for general malformed
+    # content — and flows into every downstream prompt just the same.
+    # Malformed (non-injection) free text there can still degrade document
+    # quality even absent malicious intent; that's inherent to accepting
+    # free-text fields at all, not something this validator can close.
+    try:
+        validate_answers(body.questionnaire, body.answers)
+    except InvalidAnswer as e:
+        raise HTTPException(422, f"invalid answer for '{e.qkey}': not a defined option") from e
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     if not LettaClient().configured:
         raise HTTPException(503, "Letta unavailable")
     jid = await db.job_create("workflow", body.model_dump(), body.requested_by)
-    asyncio.create_task(run_workflow(jid))
+    _fire_and_forget(run_workflow(jid))
     return {"job_id": jid, "status": "queued"}
 
 
 @app.get("/workflows/{jid}", dependencies=[Depends(require_api_key)])
 async def get_workflow(jid: str):
+    if not _valid_uuid(jid):
+        raise HTTPException(404, "no such job")
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     job = await db.job_get(jid)
@@ -105,7 +184,11 @@ async def get_workflow(jid: str):
 # ---------- direct build (Mode B/C: caller supplies the Markdown) ----------
 class BuildIn(BaseModel):
     markdown: str = Field(min_length=20, max_length=400_000)
-    out_name: str = "document"
+    # Bounded: this becomes part of a filename via builder.safe_name(). That
+    # helper truncates to 120 chars, but only AFTER the value has been accepted
+    # — and every other field on this model already carries a bound, so the
+    # omission was the odd one out rather than a decision.
+    out_name: str = Field(default="document", min_length=1, max_length=80)
     meta: dict = Field(default_factory=dict)
 
 
@@ -146,12 +229,19 @@ async def list_documents():
     return {"documents": await db.documents_list()}
 
 
-async def _doc_or_404(did: str) -> dict:
+async def _doc_meta_or_404(did: str) -> dict:
+    if not _valid_uuid(did):
+        raise HTTPException(404, "no such document")
     if not db.ready():
         raise HTTPException(503, "DocEngine storage unavailable")
     d = await db.document_get(did)
     if not d:
         raise HTTPException(404, "no such document")
+    return d
+
+
+async def _doc_or_404(did: str) -> dict:
+    d = await _doc_meta_or_404(did)
     if not Path(d["path"]).exists():
         raise HTTPException(410, "document artifact missing")
     return d
@@ -159,12 +249,7 @@ async def _doc_or_404(did: str) -> dict:
 
 @app.get("/documents/{did}", dependencies=[Depends(require_api_key)])
 async def get_document(did: str):
-    if not db.ready():
-        raise HTTPException(503, "DocEngine storage unavailable")
-    d = await db.document_get(did)
-    if not d:
-        raise HTTPException(404, "no such document")
-    return d
+    return await _doc_meta_or_404(did)
 
 
 @app.get("/documents/{did}/download", dependencies=[Depends(require_api_key)])
@@ -182,13 +267,26 @@ async def document_pdf(did: str):
     d = await _doc_or_404(did)
     if not settings.gotenberg_url:
         raise HTTPException(503, "PDF renderer unavailable")
-    async with httpx.AsyncClient(timeout=120) as c:
-        with open(d["path"], "rb") as f:
+    # Read off the event loop. Passing the open file handle to httpx made it
+    # do blocking disk reads while streaming the upload, stalling every other
+    # request this worker was serving for the duration of a multi-megabyte
+    # .docx — the same defect H14 fixed for builder.build, on a path that is
+    # hit far more often.
+    try:
+        blob = await asyncio.to_thread(Path(d["path"]).read_bytes)
+    except OSError as e:
+        log.warning("PDF conversion: cannot read document %s: %s", did, e)
+        raise HTTPException(404, "Document file missing") from e
+    try:
+        async with httpx.AsyncClient(timeout=120) as c:
             r = await c.post(
                 settings.gotenberg_url + "/forms/libreoffice/convert",
-                files={"files": (Path(d["path"]).name, f,
+                files={"files": (Path(d["path"]).name, blob,
                                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
             )
+    except httpx.HTTPError as e:
+        log.warning("Gotenberg PDF conversion failed for document %s: %s", did, e)
+        raise HTTPException(502, "PDF conversion failed") from e
     if r.status_code != 200:
         raise HTTPException(502, "PDF conversion failed")
     return Response(

@@ -10,13 +10,13 @@ import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set, uuid_or_404
 from app.roles import ELEVATED_ROLES
-from app.notify import emit, participants
+from app.notify import participants, safe_emit
 from app.roster import display_name, roster
 
 # @username mentions in comments — usernames are the login handles
@@ -26,6 +26,29 @@ _MENTION_RE = re.compile(r"(?<![\w@])@([a-z0-9][a-z0-9_.\-]{1,63})", re.IGNORECA
 
 router = APIRouter(tags=["collab"])
 
+# LOW (reviewed, Wave 3 item 2) — accepted-for-now, not overlooked: none of
+# this module's write endpoints (add_comment, assign/unassign, acknowledge,
+# propose_handoff/resolve_handoff) carry a per-actor rate limit. A malicious
+# or malfunctioning authenticated client could still hammer any of them —
+# spamming comments, thrashing assignments, flooding handoff proposals — no
+# faster than auth.py's own mutation endpoints are throttled, but with no
+# throttle of its own here.
+#
+# This is a real gap, but implementing a limiter is deliberately OUT of
+# scope for this LOW-severity pass — it is genuine design work (choosing
+# per-actor vs. per-task keys, windows, and whether a shared in-process
+# limiter like auth.py's `_throttle_action` is even the right shape for
+# comment-volume abuse specifically), not a small fix. It may be acceptable
+# as-is under this app's threat model: every caller here is an authenticated,
+# already-provisioned member of a single facility's staff (no self-signup —
+# see auth.py's module docstring), so the realistic abuse case is an
+# already-trusted account being careless or compromised, not an anonymous
+# attacker. Whether that trust model is sufficient, or this surface needs
+# the same throttle treatment auth.py's mutations got, is a security-policy
+# decision for a human to make deliberately — not something to bolt on here
+# as an incidental side effect of a LOW-severity documentation pass.
+# Revisit if/when that policy decision is made.
+
 # Roles allowed to (un)assign others, in addition to a task's own owner —
 # app.roles.ELEVATED_ROLES is the single source of truth (mirrors the DB's
 # app.is_elevated()).
@@ -33,20 +56,21 @@ _ELEVATED = ELEVATED_ROLES
 
 
 class CommentReq(BaseModel):
-    content: str
+    content: str = Field(max_length=10_000)
 
 
 class AssignReq(BaseModel):
     user_id: UUID
-    role: str = "assignee"
+    role: str = Field(default="assignee", max_length=64)
 
 
 class AckReq(BaseModel):
     accepted: bool
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 async def _task_or_404(conn, task_id: str) -> dict:
+    uuid_or_404(task_id, "Task not found")
     t = await conn.fetchrow("SELECT id, user_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
     if t is None:
         raise HTTPException(404, "Task not found")
@@ -95,15 +119,27 @@ async def add_comment(task_id: str, body: CommentReq, user: dict = Depends(requi
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             mentioned = []
             handles = {h.lower() for h in _MENTION_RE.findall(content)}
+            who = await participants(c, task_id)
             if handles:
                 async with rls_users(user) as uc:
                     rows = await uc.fetch(
-                        "SELECT id FROM profiles WHERE org_id=$1 AND is_deleted=false"
+                        "SELECT id, role, department_id FROM profiles"
+                        " WHERE org_id=$1 AND is_deleted=false"
                         " AND lower(username) = ANY($2::text[])",
                         user["org_id"], sorted(handles)[:16])
-                mentioned = [str(r["id"]) for r in rows]
-            who = await participants(c, task_id)
-            await emit(c, user, verb="commented", object_type="task", object_id=task_id,
+                # A mention notification carries the task title + a comment
+                # preview — deliver it only to people who can actually see the
+                # task (elevated roles, same-department staff, or existing
+                # participants). Otherwise "@operator see <detail>" on an
+                # elevated-only task leaks its title+content into the inbox of
+                # someone who gets 404 on the task itself.
+                task_dept = str(t["department_id"]) if t and t["department_id"] else None
+                who_set = {str(w) for w in who}
+                mentioned = [str(r["id"]) for r in rows
+                             if r["role"] != "USER"
+                             or (task_dept and str(r["department_id"] or "") == task_dept)
+                             or str(r["id"]) in who_set]
+            await safe_emit(c, user, verb="commented", object_type="task", object_id=task_id,
                        recipients=[(u, "mentioned") for u in mentioned]
                                   + [(u, "comment") for u in who],
                        task_id=task_id,
@@ -151,20 +187,23 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
                 body.user_id, user["org_id"])
         if target is None:
             raise HTTPException(404, "User not found in this organization")
-        try:
-            await c.execute(
-                "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
-                "VALUES ($1,$2,$3,$4,$5) "
-                "ON CONFLICT (task_id, user_id) DO UPDATE SET "
-                "role=EXCLUDED.role, accepted=NULL, accepted_at=NULL",
-                task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
-        except Exception as e:  # unique violation etc.
-            raise HTTPException(400, f"Could not assign: {type(e).__name__}")
+        # The ON CONFLICT already absorbs the only unique constraint on this
+        # table (task_id, user_id) — there is no legitimate business error left
+        # to translate into a 400 here. A broad except that did so used to mask
+        # real failures (a dropped connection, a serialization conflict) behind
+        # a misleading "Could not assign: <ExceptionClassName>" instead of
+        # letting them surface as the 500s they actually are.
+        await c.execute(
+            "INSERT INTO task_assignees(task_id, user_id, org_id, role, assigned_by) "
+            "VALUES ($1,$2,$3,$4,$5) "
+            "ON CONFLICT (task_id, user_id) DO UPDATE SET "
+            "role=EXCLUDED.role, accepted=NULL, accepted_at=NULL",
+            task_id, body.user_id, user["org_id"], body.role or "assignee", user["id"])
         # Awareness (best-effort): the assignee gets an inbox notification;
         # the event also feeds the shared activity stream.
         try:
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
-            await emit(c, user, verb="assigned", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="assigned", object_type="task", object_id=task_id,
                        recipients=[(body.user_id, "assigned")], task_id=task_id,
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else "")})
@@ -175,6 +214,7 @@ async def assign(task_id: str, body: AssignReq, user: dict = Depends(require_pas
 
 @router.delete("/tasks/{task_id}/assignees/{assignee_id}")
 async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_password_set)):
+    uuid_or_404(assignee_id, "Assignee not found")
     async with rls(user) as c:
         task = await _task_or_404(c, task_id)
         if not _can_manage_task(user, task):
@@ -185,7 +225,7 @@ async def unassign(task_id: str, assignee_id: str, user: dict = Depends(require_
         if res.split()[-1] != "0":
             try:
                 t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
-                await emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
+                await safe_emit(c, user, verb="unassigned", object_type="task", object_id=task_id,
                            recipients=[(assignee_id, "assigned")], task_id=task_id,
                            department_id=t["department_id"] if t else None,
                            params={"title": (t["title"] if t else "")})
@@ -216,7 +256,7 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
         try:
             t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", task_id)
             who = await participants(c, task_id)
-            await emit(c, user, verb="ack", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="ack", object_type="task", object_id=task_id,
                        recipients=[(u, "status") for u in who], task_id=task_id,
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "accepted": body.accepted})
@@ -231,8 +271,8 @@ async def acknowledge(task_id: str, body: AckReq, user: dict = Depends(require_p
 # receiving side actually learns about it; accepting it re-homes the task into
 # that department (which also makes it visible to that department's board).
 class HandoffIn(BaseModel):
-    to_dept_id: str
-    note: str | None = None
+    to_dept_id: UUID
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class HandoffResolve(BaseModel):
@@ -241,6 +281,7 @@ class HandoffResolve(BaseModel):
 
 @router.post("/tasks/{task_id}/handoffs", status_code=201)
 async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(require_password_set)):
+    uuid_or_404(task_id, "Task not found")
     async with rls(user) as c:
         t = await c.fetchrow(
             "SELECT id, title, department_id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
@@ -265,7 +306,7 @@ async def propose_handoff(task_id: str, body: HandoffIn, user: dict = Depends(re
             recips = [(u, "status") for u in await participants(c, task_id)]
             if dst["head_user_id"]:
                 recips.append((dst["head_user_id"], "status"))
-            await emit(c, user, verb="handoff", object_type="task", object_id=task_id,
+            await safe_emit(c, user, verb="handoff", object_type="task", object_id=task_id,
                        recipients=recips, task_id=task_id, department_id=body.to_dept_id,
                        params={"title": t["title"], "to_dept": dst["name"]})
         except Exception:
@@ -289,36 +330,82 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
     head, or (for cancel) the original requester may resolve."""
     if body.status not in ("accepted", "rejected", "cancelled"):
         raise HTTPException(422, "status must be accepted, rejected, or cancelled")
+    uuid_or_404(handoff_id, "Handoff not found")
+    # Phase 1 — caller-scoped READS only. No FOR UPDATE and no writes here: a
+    # write on this connection fires the audit trigger, whose hash-chain
+    # advisory lock is held until this transaction ends — and the write phase
+    # below runs on a DIFFERENT connection, which would wait on that lock
+    # forever (observed as a live hang the first time a target-side manager
+    # accepted a handoff).
     async with rls(user) as c:
         h = await c.fetchrow("SELECT * FROM handoffs WHERE id=$1", handoff_id)
         if h is None:
             raise HTTPException(404, "Handoff not found")
         if h["status"] != "proposed":
             raise HTTPException(409, f"Handoff already {h['status']}")
-        await _assert_scope_visible(c, str(h["task_id"]), user)
         dst = await c.fetchrow("SELECT head_user_id FROM departments WHERE id=$1", h["to_dept_id"])
         is_head = dst is not None and str(dst["head_user_id"] or "") == str(user["id"])
         is_requester = str(h["requested_by"]) == str(user["id"])
-        allowed = user["role"] in _ELEVATED or is_head or (body.status == "cancelled" and is_requester)
+        # Receiving-side authority: the target department's head, or a manager
+        # whose department IS the target. The old scope-visibility check ran
+        # first, which 404'd the exact person the proposal pings (the target
+        # dept's scoped manager — the task still sits in the SOURCE dept), so
+        # the handoff's primary actor could never resolve it.
+        target_side = is_head or (
+            user["role"] in _ELEVATED
+            and str(user.get("department_id") or "") == str(h["to_dept_id"]))
+        # Org-wide elevated roles (ADMIN/executives/QP — not dept-scoped) may
+        # arbitrate, but the PROPOSER may not accept their own handoff into a
+        # department that never consented (second-person rule). They may still
+        # reject/cancel it (withdrawing an own proposal is harmless).
+        org_wide = user["role"] in _ELEVATED and dept_scope(user) is None
+        if body.status == "accepted":
+            allowed = target_side or (org_wide and not is_requester)
+        elif body.status == "cancelled":
+            # Cancel = the proposer withdraws their own request — the
+            # requester alone (with no other authority) may do this.
+            allowed = target_side or org_wide or is_requester
+        else:
+            # Reject = the receiving side declines — a requester with no
+            # other authority withdraws via "cancelled", not this branch.
+            allowed = target_side or org_wide
         if not allowed:
             raise HTTPException(403, "Not permitted to resolve this handoff")
-        await c.execute(
-            "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now() WHERE id=$3",
-            body.status, user["id"], handoff_id)
+        # Non-target resolvers still need ordinary visibility of the task.
+        if not target_side:
+            await _assert_scope_visible(c, str(h["task_id"]), user)
+    # Phase 2 — ALL writes in one admin transaction (rls admin=True stamps the
+    # actor GUCs so the audit trigger attributes correctly; BYPASSRLS because
+    # the resolver legitimately writes a task still homed in the SOURCE dept —
+    # caller-scoped RLS would silently filter the move to 0 rows). The
+    # status='proposed' predicate replaces the old FOR UPDATE: of two racing
+    # resolvers, exactly one flips the row, the other sees 0 rows → 409.
+    async with rls(user, admin=True) as ac:
+        tag = await ac.execute(
+            "UPDATE handoffs SET status=$1, resolved_by=$2, resolved_at=now()"
+            " WHERE id=$3 AND org_id=$4 AND status='proposed'",
+            body.status, user["id"], handoff_id, user["org_id"])
+        if tag == "UPDATE 0":
+            raise HTTPException(409, "Handoff already resolved")
         if body.status == "accepted":
-            await c.execute(
-                "UPDATE tasks SET department_id=$1, updated_at=now() WHERE id=$2",
-                h["to_dept_id"], h["task_id"])
-        t = await c.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1", h["task_id"])
+            tag = await ac.execute(
+                "UPDATE tasks SET department_id=$1, updated_at=now()"
+                " WHERE id=$2 AND org_id=$3",
+                h["to_dept_id"], h["task_id"], user["org_id"])
+            if tag == "UPDATE 0":
+                # rolls back the handoff flip too — never accepted-but-unmoved
+                raise HTTPException(409, "Task no longer exists — handoff not applied")
+        t = await ac.fetchrow("SELECT title, department_id FROM tasks WHERE id=$1 AND org_id=$2",
+                              h["task_id"], user["org_id"])
         verb_txt = {"accepted": "✓ Handoff accepted", "rejected": "✗ Handoff rejected",
                     "cancelled": "⊘ Handoff cancelled"}[body.status]
-        await c.execute(
+        await ac.execute(
             "INSERT INTO task_comments(org_id, task_id, user_id, content) VALUES ($1,$2,$3,$4)",
             user["org_id"], h["task_id"], user["id"], verb_txt)
         try:
-            recips = [(u, "status") for u in await participants(c, str(h["task_id"]))]
+            recips = [(u, "status") for u in await participants(ac, str(h["task_id"]))]
             recips.append((h["requested_by"], "status"))
-            await emit(c, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
+            await safe_emit(ac, user, verb="handoff_resolved", object_type="task", object_id=str(h["task_id"]),
                        recipients=recips, task_id=h["task_id"],
                        department_id=t["department_id"] if t else None,
                        params={"title": (t["title"] if t else ""), "status": body.status})

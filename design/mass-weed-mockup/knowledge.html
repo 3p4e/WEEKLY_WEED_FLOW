@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Knowledge</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone B · QMS Studio — Knowledge search (qmsknow).
+  Grounded search over real regulatory + document sources: cited passages only,
+  never invented. Honest empty state on no match (§8.10 grounded AI only).
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:900px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:18px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:var(--mw-cyan-bright);background:rgba(94,200,240,.12);box-shadow:inset 0 0 0 1px rgba(94,200,240,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero h1{font-family:var(--mw-font-cond);font-size:27px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.3);}
+  .hero .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:560px;}
+  .hero__sp{flex:1;}
+  .searchbig{display:flex;align-items:center;gap:11px;padding:13px 16px;margin-bottom:12px;background:rgba(4,14,28,.7);box-shadow:inset 0 0 0 1px rgba(94,200,240,.28);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .searchbig svg{color:var(--mw-cyan-bright);flex:none;} .searchbig input{flex:1;background:none;border:none;outline:none;color:var(--mw-ink);font-family:var(--mw-font);font-size:15px;} .searchbig input::placeholder{color:var(--mw-text-faint);}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px;}
+  .exch{font-size:11px;letter-spacing:.02em;color:var(--mw-cyan-dim);cursor:pointer;padding:5px 11px;background:rgba(58,159,212,.08);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);transition:all .12s ease;}
+  .exch:hover{color:var(--mw-cyan-bright);box-shadow:inset 0 0 0 1px rgba(94,200,240,.4);}
+  .groundbar{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;margin-bottom:18px;font-size:11px;line-height:1.5;color:var(--mw-text-dim);background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .groundbar .ic{color:var(--mw-cyan-bright);flex:none;margin-top:1px;} .groundbar b{color:var(--mw-ink);}
+  .result{padding:15px 17px;margin-bottom:11px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .result__h{display:flex;align-items:center;gap:9px;margin-bottom:8px;flex-wrap:wrap;}
+  .src{font-family:var(--mw-mono);font-size:10px;font-weight:700;color:var(--mw-cyan-bright);background:rgba(94,200,240,.1);padding:2px 8px;border-radius:2px;letter-spacing:.02em;}
+  .srctype{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;color:var(--tc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tc) 45%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .score{margin-left:auto;font-family:var(--mw-mono);font-size:10px;color:var(--mw-text-faint);}
+  .result__q{font-size:13px;line-height:1.6;color:var(--mw-text);border-left:2px solid rgba(94,200,240,.4);padding-left:12px;}
+  .result__q .hl{color:var(--mw-cyan-bright);background:rgba(94,200,240,.1);padding:0 3px;}
+  .result__loc{font-size:10.5px;color:var(--mw-text-faint);margin-top:8px;font-family:var(--mw-mono);}
+  .empty{padding:36px 20px;text-align:center;}
+  .empty__ic{color:var(--mw-stat-mid);margin-bottom:12px;} .empty__t{font-family:var(--mw-font-cond);font-size:16px;font-weight:700;color:var(--mw-ink);text-transform:uppercase;letter-spacing:.04em;}
+  .empty__d{font-size:12px;color:var(--mw-text-dim);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;line-height:1.5;}
+  .loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:30px;color:var(--mw-text-dim);font-size:12.5px;}
+  .spindot{width:9px;height:9px;border-radius:50%;background:var(--mw-cyan-bright);animation:pulse 1s ease-in-out infinite;} @keyframes pulse{0%,100%{opacity:.3;}50%{opacity:1;}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Knowledge">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="#">QMS Studio</a><span>›</span><span>Knowledge</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/><path d="M11 8v6M8 11h6"/></svg></div>
+    <div>
+      <h1><span class="en">Knowledge</span><span class="mk">Знаење</span></h1>
+      <div class="sub"><span class="en">Grounded search across the controlled documents and regulatory sources. Answers are cited passages from real sources — never a fabricated synthesis.</span><span class="mk">Заземјено пребарување низ контролирани документи и регулаторни извори. Одговорите се цитирани пасуси — никогаш измислен синтез.</span></div>
+    </div>
+    <div class="hero__sp"></div>
+  </div>
+
+  <div class="searchbig"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+    <input id="q" type="text" placeholder="Ask the quality knowledge base…" onkeydown="if(event.key==='Enter')run()"></div>
+  <div class="chips">
+    <span class="exch" onclick="ask('What is the OOS registration window?')"><span class="en">OOS registration window</span><span class="mk">OOS прозорец</span></span>
+    <span class="exch" onclick="ask('Who may release a batch?')"><span class="en">Who may release a batch?</span><span class="mk">Кој издава серија?</span></span>
+    <span class="exch" onclick="ask('Total THC acceptance limit for flower')"><span class="en">Total THC limit for flower</span><span class="mk">THC граница за цвет</span></span>
+    <span class="exch" onclick="ask('unicorn calibration procedure')"><span class="en">unicorn calibration (no match demo)</span><span class="mk">демо без наод</span></span>
+  </div>
+
+  <div class="groundbar"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+    <div><span class="en"><b>Grounded only.</b> Every result is a verbatim passage with its source code &amp; location. If nothing matches, the system says so — it will not invent an answer.</span><span class="mk"><b>Само заземјено.</b> Секој резултат е дословен пасус со извор и локација. Ако нема наод, системот го кажува тоа.</span></div>
+  </div>
+
+  <div id="results"></div>
+</div>
+</div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var TC={SOP:'#5ec8f0',REG:'#c89bf0',SPEC:'#6cf05a'};
+var CORPUS=[
+  {keys:['oos','registration','window','24','out of spec','investigation'],src:'QCSOP 019 v2',type:'SOP',loc:'§6.2.1 · p.7',
+   en:'An out-of-specification result must be registered within <span class="hl">24 hours</span> of detection and a Phase&nbsp;I laboratory investigation opened before any batch conclusion is drawn.',
+   mk:'Резултат надвор од спецификација мора да се регистрира во рок од <span class="hl">24 часа</span> и да се отвори Фаза I лабораториска истрага.'},
+  {keys:['release','batch','qp','qualified person','certify','annex 16'],src:'QCSOP 012 v3',type:'SOP',loc:'§6.11 · p.14',
+   en:'Only the <span class="hl">Qualified Person</span> may certify and release a batch. Release is blocked where any result does not comply; a CoQ cannot be issued over a failing result.',
+   mk:'Само <span class="hl">Квалификуваното лице</span> може да потврди и издаде серија. Издавањето е блокирано ако некој резултат не е усогласен.'},
+  {keys:['release','batch','qp','annex'],src:'EU-GMP Annex 16',type:'REG',loc:'§1.7',
+   en:'The <span class="hl">Qualified Person</span> is personally responsible for certifying that each batch has been manufactured and checked in compliance with the marketing authorisation and GMP.',
+   mk:'Квалификуваното лице е лично одговорно за потврдување дека секоја серија е произведена согласно GMP.'},
+  {keys:['thc','total thc','limit','flower','potency','acceptance','cannabinoid'],src:'QCSP 001 v2',type:'SPEC',loc:'param §1 · Total THC',
+   en:'Total THC acceptance limit for dried cannabis flower (medical) is <span class="hl">18.0 – 24.0 %</span>, computed as THC + (THCA × 0.877).',
+   mk:'Границата за вкупен THC за сув медицински цвет е <span class="hl">18.0 – 24.0 %</span>, пресметана како THC + (THCA × 0.877).'},
+  {keys:['thc','signature','sign','e-signature','password','annex 11'],src:'EU-GMP Annex 11',type:'REG',loc:'§14',
+   en:'Electronic signatures must be permanently linked to their record and include the <span class="hl">time and date</span> and the meaning of the signature (e.g. review, approval, release).',
+   mk:'Електронските потписи мора да се трајно поврзани со записот и да вклучуваат <span class="hl">време и датум</span> и значење на потписот.'}
+];
+function score(item,q){ var t=q.toLowerCase(); var s=0; item.keys.forEach(function(k){ if(t.indexOf(k)>=0)s+=k.split(' ').length; }); return s; }
+function ask(q){ document.getElementById('q').value=q; run(); }
+function run(){
+  var q=document.getElementById('q').value.trim(); if(!q){document.getElementById('results').innerHTML='';return;}
+  document.getElementById('results').innerHTML='<div class="loading"><span class="spindot"></span>'+bil('searching grounded sources…','пребарување…')+'</div>';
+  setTimeout(function(){
+    var hits=CORPUS.map(function(c){return {c:c,s:score(c,q)};}).filter(function(x){return x.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,4);
+    var r=document.getElementById('results');
+    if(!hits.length){ r.innerHTML='<div class="result"><div class="empty"><div class="empty__ic"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/><path d="M8 11h6"/></svg></div>'+
+      '<div class="empty__t">'+bil('No grounded match','Нема заземјен наод')+'</div>'+
+      '<div class="empty__d">'+bil('No passage in the controlled documents or regulatory sources matches this query. Rather than invent an answer, the system reports the gap — try different terms, or author the missing content in Document Studio.','Ниту еден пасус не одговара на прашањето. Наместо да измисли одговор, системот го пријавува недостатокот.')+'</div></div></div>'; return; }
+    r.innerHTML=hits.map(function(h,i){ var c=h.c;
+      return '<div class="result"><div class="result__h"><span class="src">'+c.src+'</span><span class="srctype" style="--tc:'+TC[c.type]+'">'+c.type+'</span><span class="score">'+bil('relevance','релевантност')+' '+(Math.min(99,60+h.s*12))+'%</span></div>'+
+        '<div class="result__q"><span class="en">'+c.en+'</span><span class="mk">'+c.mk+'</span></div>'+
+        '<div class="result__loc">'+bil('source','извор')+': '+c.src+' · '+c.loc+' <span style="color:var(--mw-cyan-dim)">[doc#'+(i+1)+']</span></div></div>';
+    }).join('');
+    if(window.mwSync)window.mwSync();
+  },380);
+}
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

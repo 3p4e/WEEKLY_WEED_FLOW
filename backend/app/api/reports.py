@@ -16,13 +16,14 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.tasks import _scope_clause
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls
-from app.deps import dept_scope, require_password_set
+from app.deps import dept_scope, require_password_set, uuid_or_422
 from app.roles import ELEVATED_ROLES
 from app.roster import roster
-from app.worktime import TZ, classify, session_hours
+from app.worktime import facility_today, TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -48,13 +49,20 @@ async def weekly_report(
     department_id: str | None = None,
     user: dict = Depends(require_password_set),
 ):
+    # A caller-supplied department_id is bound straight into raw SQL against a
+    # uuid column, so a non-uuid value would otherwise surface as an asyncpg
+    # cast error -> 500. Validate up front (before the dept_scope override,
+    # which only ever assigns a known-good uuid). None is a legitimate value
+    # (org-wide) so it is skipped — uuid_or_422 would reject str(None).
+    if department_id is not None:
+        uuid_or_422(department_id, "department_id must be a uuid")
     if ref_date:
         try:
             ref = date.fromisoformat(ref_date)
         except ValueError:
             raise HTTPException(status_code=422, detail="ref_date must be ISO format YYYY-MM-DD")
     else:
-        ref = date.today()
+        ref = facility_today()
     fri, thu = _fri_thu(ref)
 
     if mode == "plan":
@@ -86,10 +94,20 @@ async def weekly_report(
             # wrong day/week. completed_date is already a plain `date` column
             # (no timezone involved), so it's compared as-is.
             args: list = [fri, thu, TZ.key]
-            dept_clause = ""
-            if department_id:
+            # A dept-scoped manager's report must include the SAME task family
+            # their board shows (own dept + personally owned/assigned + either
+            # side of a cross-department delegation) — plain department_id
+            # equality undercounts them relative to what /tasks already lets
+            # them see. An org-wide caller's own explicit department_id choice
+            # stays a plain filter (they're choosing to view one department,
+            # not restricted to it).
+            if scope:
+                dept_clause = _scope_clause(user, args)
+            elif department_id:
                 args.append(department_id)
                 dept_clause = f" AND t.department_id=${len(args)}"
+            else:
+                dept_clause = ""
             rows = await c.fetch(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false{dept_clause} "
@@ -118,10 +136,13 @@ async def weekly_report(
             who = ""
             if not elevated:
                 band_args.append(user["id"]); who = f" AND user_id = ${len(band_args)}"
-            dept_sub = ""
-            if department_id:
+            if scope:
+                dept_sub = f" AND task_id IN (SELECT t.id FROM tasks t WHERE true{_scope_clause(user, band_args)})"
+            elif department_id:
                 band_args.append(department_id)
                 dept_sub = f" AND task_id IN (SELECT id FROM tasks WHERE department_id=${len(band_args)})"
+            else:
+                dept_sub = ""
 
             events = await c.fetch(
                 "SELECT created_at AS at FROM task_progress "
@@ -148,11 +169,19 @@ async def weekly_report(
                 b[classify(s["started_at"])] += h
                 b["total"] += h
 
-            over_args: list = [thu + timedelta(days=1)]
-            over_clause = ""
-            if department_id:
+            # A task due later THIS SAME week isn't overdue yet — clamp the
+            # cutoff to real "today" when the report covers a week still in
+            # progress (thu+1 is in the future), matching the per-op overdue
+            # semantics used elsewhere in this file (due_date < today).
+            # Viewing a past week's report is unaffected (thu+1 <= today there).
+            over_args: list = [min(facility_today(), thu + timedelta(days=1))]
+            if scope:
+                over_clause = _scope_clause(user, over_args)
+            elif department_id:
                 over_args.append(department_id)
-                over_clause = " AND t.department_id=$2"
+                over_clause = f" AND t.department_id=${len(over_args)}"
+            else:
+                over_clause = ""
             over_rows = await c.fetch(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false AND t.is_archived=false{over_clause} "
@@ -186,10 +215,13 @@ async def weekly_report(
                 })
         else:
             args = []
-            dept_clause = ""
-            if department_id:
+            if scope:
+                dept_clause = _scope_clause(user, args)
+            elif department_id:
                 args.append(department_id)
                 dept_clause = f" AND t.department_id=${len(args)}"
+            else:
+                dept_clause = ""
             rows = await c.fetch(
                 f"SELECT {_COLS} FROM tasks t "
                 f"WHERE t.is_deleted=false AND t.is_archived=false{dept_clause} "
@@ -231,13 +263,22 @@ async def weekly_report(
         if t["status"] == "completed":
             dept_map[dn]["completed"] += 1
 
-    iso_week = fri.isocalendar()[1]
+    # Label the window from the Monday it contains, not its leading Friday.
+    # Of the window's 5 business days (Fri + Mon-Thu), the 4 weekdays Mon-Thu
+    # fall in the ISO (Mon->Sun) week that Monday belongs to; only the single
+    # leading Friday belongs to the earlier ISO week. fri.isocalendar()
+    # labeled the whole window with that earlier week — wrong for most of it.
+    # iso_year is taken from the SAME reference (not fri.year) so the label
+    # stays internally self-consistent across a Dec/Jan-crossing window, the
+    # same (year, week) pairing convention weekwindow.ensure_week uses.
+    label_ref = fri + timedelta(days=3)  # the window's Monday
+    iso_year, iso_week, _ = label_ref.isocalendar()
     return {
         "period": {
             "start": fri.isoformat(),
             "end": thu.isoformat(),
             "label": (
-                f"W{iso_week} {fri.year} "
+                f"W{iso_week} {iso_year} "
                 f"({fri.strftime('%a %b %d')} → {thu.strftime('%a %b %d')})"
             ),
         },
@@ -279,39 +320,49 @@ async def analytics(
     if user["role"] == "USER":
         raise HTTPException(status_code=403, detail="Managers and executives only")
     tz = str(TZ)
-    today = date.today()
+    today = facility_today()
     fri0, _ = _fri_thu(today)
     start = fri0 - timedelta(days=7 * (weeks - 1))
-    scope = dept_scope(user)
-    dept_sql = " AND t.department_id = $4::uuid" if scope else ""
+    # _scope_clause no-ops (returns "", appends nothing) for an org-wide caller
+    # — same full membership clause as /reports/weekly, so a dept-scoped
+    # manager's trends count the same task family their board and weekly
+    # report do, not just tasks whose department_id happens to match theirs.
 
     async with rls(user) as c:
+        created_args = [start, tz, weeks * 7]
+        created_dept = _scope_clause(user, created_args)
         created = await c.fetch(
             "SELECT ((t.created_at AT TIME ZONE $2)::date - $1::date) / 7 AS wk, count(*) AS n"
             " FROM tasks t WHERE t.is_deleted=false"
             " AND (t.created_at AT TIME ZONE $2)::date >= $1"
-            " AND (t.created_at AT TIME ZONE $2)::date < $1::date + $3::int" + dept_sql +
+            " AND (t.created_at AT TIME ZONE $2)::date < $1::date + $3::int" + created_dept +
             " GROUP BY 1",
-            start, tz, weeks * 7, *([scope] if scope else []))
+            *created_args)
+        completed_args = [start, weeks * 7]
+        completed_dept = _scope_clause(user, completed_args)
         completed = await c.fetch(
             "SELECT (t.completed_date - $1::date) / 7 AS wk, count(*) AS n,"
             " count(*) FILTER (WHERE t.due_date IS NULL OR t.completed_date <= t.due_date) AS on_time"
             " FROM tasks t WHERE t.is_deleted=false"
             " AND t.completed_date >= $1 AND t.completed_date < $1::date + $2::int"
-            + (" AND t.department_id = $3::uuid" if scope else "") +
+            + completed_dept +
             " GROUP BY 1",
-            start, weeks * 7, *([scope] if scope else []))
+            *completed_args)
         # Join through tasks so task-visibility RLS bounds what sessions are
         # counted (work_sessions RLS alone is org-wide — see /weekly's note).
+        sessions_args = [start, tz, weeks * 7]
+        sessions_dept = _scope_clause(user, sessions_args)
         sessions = await c.fetch(
             "SELECT ((ws.started_at AT TIME ZONE $2)::date - $1::date) / 7 AS wk,"
             " count(*) AS n, count(DISTINCT ws.user_id) AS people"
             " FROM work_sessions ws JOIN tasks t ON t.id = ws.task_id"
             " WHERE t.is_deleted=false"
             " AND (ws.started_at AT TIME ZONE $2)::date >= $1"
-            " AND (ws.started_at AT TIME ZONE $2)::date < $1::date + $3::int" + dept_sql +
+            " AND (ws.started_at AT TIME ZONE $2)::date < $1::date + $3::int" + sessions_dept +
             " GROUP BY 1",
-            start, tz, weeks * 7, *([scope] if scope else []))
+            *sessions_args)
+        dept_rows_args = [today, start]
+        dept_rows_dept = _scope_clause(user, dept_rows_args)
         dept_rows = await c.fetch(
             "SELECT t.department_id,"
             " count(*) FILTER (WHERE t.status <> 'completed') AS open,"
@@ -319,15 +370,17 @@ async def analytics(
             " count(*) FILTER (WHERE t.status <> 'completed' AND t.due_date < $1) AS overdue,"
             " count(*) FILTER (WHERE t.status = 'completed' AND t.completed_date >= $2) AS completed"
             " FROM tasks t WHERE t.is_deleted=false AND t.is_archived=false"
-            + (" AND t.department_id = $3::uuid" if scope else "") +
+            + dept_rows_dept +
             " GROUP BY 1",
-            today, start, *([scope] if scope else []))
+            *dept_rows_args)
+        types_args: list = []
+        types_dept = _scope_clause(user, types_args)
         types = await c.fetch(
             "SELECT t.task_type, count(*) AS n FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false AND t.status <> 'completed'"
-            + (" AND t.department_id = $1::uuid" if scope else "") +
+            + types_dept +
             " GROUP BY 1 ORDER BY 2 DESC",
-            *([scope] if scope else []))
+            *types_args)
         dept_names = {str(r["id"]): {"code": r["code"], "name": r["name"], "name_mk": r["name_mk"]}
                       for r in await c.fetch("SELECT id, code, name, name_mk FROM departments")}
 
@@ -396,6 +449,10 @@ async def audit_prep(
     """
     if user["role"] == "USER":
         raise HTTPException(status_code=403, detail="Managers and executives only")
+    # Same guard as /reports/weekly: a non-uuid department_id is bound into raw
+    # SQL as ::uuid below and would 500 without this. None (org-wide) is fine.
+    if department_id is not None:
+        uuid_or_422(department_id, "department_id must be a uuid")
     if programs:
         progs = [p.strip() for p in programs.split(",") if p.strip()]
         if len(progs) > 12:
@@ -407,18 +464,40 @@ async def audit_prep(
     if not progs:
         progs = list(_AUDIT_PROGRAMS)
 
-    today = date.today()
+    today = facility_today()
     # Dept-scoped managers are forced to their department; execs/QP/ADMIN keep
     # free choice — same rule as /reports/weekly and /reports/analytics.
     scope = dept_scope(user)
     if scope:
         department_id = scope
-    dept = department_id  # local alias for the per-query clauses below
+
+    def _dept_filter(args: list) -> str:
+        """Same clause selection /reports/weekly makes for its own queries: a
+        dept-scoped manager gets the full _scope_clause family-visibility
+        predicate (own dept OR personally owned/assigned OR either side of a
+        cross-department delegation) — a plain `department_id =` equality
+        silently dropped their own audit-prep tasks living in another
+        department, and subtasks delegated to them cross-department, from
+        every readiness number below, contradicting this endpoint's own
+        docstring ("pinned to their own department exactly like
+        /reports/analytics"). An org-wide caller's own explicit
+        ?department_id= choice stays a plain filter — same as weekly/
+        analytics, they're choosing to view one department, not restricted
+        to it. Appends its own bind params to `args`, same calling
+        convention as _scope_clause itself."""
+        if scope:
+            return _scope_clause(user, args)
+        if department_id:
+            args.append(department_id)
+            return f" AND t.department_id=${len(args)}::uuid"
+        return ""
 
     async with rls(user) as c:
         # Per-program readiness. unnest($1) LEFT JOIN tasks so a program with
         # zero matching tasks still returns a row (total 0) rather than
-        # silently vanishing from the tracker. $2=today (overdue), $3=dept.
+        # silently vanishing from the tracker. $2=today (overdue).
+        prog_args = [progs, today]
+        prog_dept = _dept_filter(prog_args)
         prog_rows = await c.fetch(
             "SELECT p.prog,"
             " count(t.id) AS total,"
@@ -433,48 +512,56 @@ async def audit_prep(
             " FROM unnest($1::text[]) AS p(prog)"
             " LEFT JOIN tasks t ON p.prog = ANY(t.tags)"
             "   AND t.is_deleted=false AND t.is_archived=false"
-            + (" AND t.department_id = $3::uuid" if dept else "") +
+            + prog_dept +
             " GROUP BY p.prog",
-            progs, today, *([dept] if dept else []))
+            *prog_args)
 
         # Milestone timeline — every program-tagged task carrying a due_date,
-        # soonest first. $1=programs, $2=dept. overdue computed in Python.
+        # soonest first. $1=programs. overdue computed in Python.
+        tl_args = [progs]
+        tl_dept = _dept_filter(tl_args)
         tl_rows = await c.fetch(
             "SELECT t.id, t.title, t.status, t.due_date, t.tags, t.department_id"
             " FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false"
             "   AND t.due_date IS NOT NULL AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + tl_dept +
             " ORDER BY t.due_date, t.created_at LIMIT 200",
-            progs, *([dept] if dept else []))
+            *tl_args)
 
         # Status distribution across the whole audit-prep task set.
+        status_args = [progs]
+        status_dept = _dept_filter(status_args)
         status_rows = await c.fetch(
             "SELECT t.status, count(*) AS n FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + status_dept +
             " GROUP BY t.status",
-            progs, *([dept] if dept else []))
+            *status_args)
 
         # Busiest scheduled day — unnest the days[] tags over the audit-prep set.
+        day_args = [progs]
+        day_dept = _dept_filter(day_args)
         day_rows = await c.fetch(
             "SELECT d AS day, count(*) AS n FROM tasks t, unnest(t.days) AS d"
             " WHERE t.is_deleted=false AND t.is_archived=false AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else "") +
+            + day_dept +
             " GROUP BY d",
-            progs, *([dept] if dept else []))
+            *day_args)
 
         # Outcome-traceability sanity check — completed audit-prep tasks that
         # carry an outcome vs those left blank. A PLANNING nudge (SUMA's
         # "Outcome Traceability" / detectAnomalies), explicitly not a GMP gate.
+        trace_args = [progs]
+        trace_dept = _dept_filter(trace_args)
         trace = await c.fetchrow(
             "SELECT count(*) AS completed,"
             " count(*) FILTER (WHERE t.outcome IS NOT NULL AND btrim(t.outcome) <> '') AS with_outcome"
             " FROM tasks t"
             " WHERE t.is_deleted=false AND t.is_archived=false"
             "   AND t.status='completed' AND t.tags && $1::text[]"
-            + (" AND t.department_id = $2::uuid" if dept else ""),
-            progs, *([dept] if dept else []))
+            + trace_dept,
+            *trace_args)
 
     by_prog = {r["prog"]: r for r in prog_rows}
     programs_out = []

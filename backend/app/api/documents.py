@@ -23,17 +23,17 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.ai import _letta_message
 from app.api.ai import normalize_ai_reply as _normalize_ai_reply
 from app.api.weekwindow import TASK_COLS as _COLS
 from app.api.weekwindow import activity_window_sql, fri_thu as _fri_thu, task_row as _task_row
 from app.db import rls, rls_users
-from app.deps import dept_scope, is_dept_scoped_role, require_role
-from app.roles import ELEVATED_ROLES
+from app.deps import dept_scope, is_dept_scoped_role, require_role, uuid_or_404
+from app.roles import DEPT_SCOPED_ROLES, ELEVATED_ROLES, EXECUTIVE_ROLES, MANAGER_ROLES
 from app.roster import roster
-from app.notify import emit
+from app.notify import safe_emit
 from app.worktime import TZ, classify, session_hours
 
 router = APIRouter(prefix="/reports/documents", tags=["documents"])
@@ -44,15 +44,6 @@ def _today() -> date:
     resolves to the previous day (and thus the previous Fri→Thu week) for the
     hour or two after local midnight."""
     return datetime.now(TZ).date()
-
-
-def _require_uuid(value) -> None:
-    """A malformed (non-uuid) doc_id path param must be a clean 404, not a 500
-    from asyncpg trying to cast it to uuid inside the lookup query."""
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        raise HTTPException(404, "Document not found")
 
 
 def _effective_dept_id(user: dict, requested: str | None) -> str | None:
@@ -805,14 +796,40 @@ async def documents_status(kind: str = "report", ref_date: str | None = None,
             "org_wide": org_wide, "departments": departments}
 
 
+# Size bounds for reviewer-editable document content — matching every other
+# write surface in the app (collab.py's CommentReq caps content at 10,000
+# chars; its task-progress note caps at 2,000). Unlike those, these fields
+# hold real document prose (a section narrative can legitimately run to a
+# full page), so the bound is generous rather than tight — it exists to stop
+# an elevated caller from PATCHing an arbitrarily large JSONB blob/string
+# into weekly_documents.content (bloating storage and slowing the PDF
+# export), not to constrain normal reviewer editing.
+_SECTION_TEXT_MAX = 20_000        # body / body_en / body_mk / narrative_en / narrative_mk
+_FIELD_VALUE_MAX = 5_000          # one template-section field's value
+_PATCH_CONTENT_MAX_CHARS = 5_000_000  # whole-document content dict, serialized
+
+
 class PatchReq(BaseModel):
     content: dict
+
+    @field_validator("content")
+    @classmethod
+    def _bound_content_size(cls, v: dict) -> dict:
+        # `content: dict` can't carry a plain Field(max_length=...) — that
+        # constrains a dict's ITEM COUNT, not the size of what's inside it —
+        # so the whole-document blob needs its own size check, matching the
+        # spirit of the per-field caps below.
+        size = len(json.dumps(v))
+        if size > _PATCH_CONTENT_MAX_CHARS:
+            raise ValueError(
+                f"content too large ({size} chars, max {_PATCH_CONTENT_MAX_CHARS})")
+        return v
 
 
 @router.patch("/{doc_id}")
 async def patch_document(doc_id: str, body: PatchReq,
                          user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT id, status, department_id FROM weekly_documents WHERE id=$1", doc_id)
         if cur is None:
@@ -820,6 +837,16 @@ async def patch_document(doc_id: str, body: PatchReq,
         _scope_guard(user, cur)
         if cur["status"] == "locked":
             raise HTTPException(409, "Locked documents are immutable")
+        # FOR UPDATE: this replaces the WHOLE content jsonb, so the row must
+        # stay locked until commit — same reasoning as patch_section's own row
+        # lock (right below): without it, a concurrent patch_section's own
+        # read-modify-write on this row could land between this handler's
+        # checks and its UPDATE, and this wholesale overwrite would silently
+        # discard that concurrent edit.
+        locked = await c.fetchrow(
+            "SELECT status FROM weekly_documents WHERE id=$1 AND status='draft' FOR UPDATE", doc_id)
+        if locked is None:
+            raise HTTPException(409, "Document is no longer editable")
         row = await c.fetchrow(
             "UPDATE weekly_documents SET content=$2, updated_at=now()"
             " WHERE id=$1 AND status='draft' RETURNING *", doc_id, body.content)
@@ -830,13 +857,27 @@ async def patch_document(doc_id: str, body: PatchReq,
 
 class SectionReq(BaseModel):
     approved: bool | None = None
-    body: str | None = None            # legacy alias: sets body_en (+ mirrored body)
-    body_en: str | None = None
-    body_mk: str | None = None
+    body: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)  # legacy alias: sets body_en (+ mirrored body)
+    body_en: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+    body_mk: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
     # template sections only:
-    fields: dict[str, str] | None = None   # {field_key: value}
-    narrative_en: str | None = None
-    narrative_mk: str | None = None
+    fields: dict[str, str] | None = Field(default=None, max_length=64)   # {field_key: value}
+    narrative_en: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+    narrative_mk: str | None = Field(default=None, max_length=_SECTION_TEXT_MAX)
+
+    @field_validator("fields")
+    @classmethod
+    def _bound_field_values(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        # Field(max_length=...) on a dict constrains its ITEM COUNT (handled
+        # above), not the length of each value string — that needs its own
+        # check, same reasoning as PatchReq.content's validator above.
+        if v is None:
+            return v
+        oversized = sorted(k for k, val in v.items() if len(val) > _FIELD_VALUE_MAX)
+        if oversized:
+            raise ValueError(
+                f"field value(s) too long (max {_FIELD_VALUE_MAX} chars): {', '.join(oversized)}")
+        return v
 
 
 @router.patch("/{doc_id}/sections/{key}")
@@ -847,16 +888,31 @@ async def patch_section(doc_id: str, key: str, body: SectionReq,
     (tasks + ribbon + metrics + every AI body) — and the server mutates the
     CURRENT stored content, so a concurrent edit can't be clobbered by a stale
     full-document upload."""
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
-        row = await c.fetchrow(
-            "SELECT * FROM weekly_documents WHERE id=$1 AND status='draft'", doc_id)
-        if row is None:
-            exists = await c.fetchval("SELECT status FROM weekly_documents WHERE id=$1", doc_id)
-            if exists == "locked":
+        # Plain read first to establish existence + scope + status. A locked row is
+        # deliberately NOT FOR-UPDATE-lockable (mig 0008's immutability policy
+        # forbids updating it), so we must not FOR UPDATE it here or it would read
+        # as "missing" and hide the real 409. Scope-guard BEFORE distinguishing
+        # locked-vs-missing, so a locked document is not an existence oracle to a
+        # caller outside its department.
+        meta = await c.fetchrow(
+            "SELECT status, department_id FROM weekly_documents WHERE id=$1", doc_id)
+        if meta is None:
+            raise HTTPException(404, "Document not found")
+        _scope_guard(user, meta)
+        if meta["status"] != "draft":
+            if meta["status"] == "locked":
                 raise HTTPException(409, "Locked documents are immutable")
             raise HTTPException(404, "Document not found")
-        _scope_guard(user, row)
+        # FOR UPDATE the draft row (now lockable): this is a read-modify-write of
+        # the whole content jsonb, so the row must stay locked until commit or two
+        # concurrent section approvals each read the same content and the second
+        # write clobbers the first (lost update).
+        row = await c.fetchrow(
+            "SELECT * FROM weekly_documents WHERE id=$1 AND status='draft' FOR UPDATE", doc_id)
+        if row is None:
+            raise HTTPException(409, "Document is no longer editable")
         content = row["content"]
         if isinstance(content, str):
             content = json.loads(content)
@@ -899,7 +955,7 @@ async def patch_section(doc_id: str, key: str, body: SectionReq,
 
 @router.post("/{doc_id}/lock")
 async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT id, status, department_id FROM weekly_documents WHERE id=$1", doc_id)
         if cur is None:
@@ -919,12 +975,14 @@ async def lock_document(doc_id: str, user: dict = Depends(require_role(*ELEVATED
                 profs = await uc.fetch(
                     "SELECT id, role, department_id FROM profiles"
                     " WHERE org_id=$1 AND is_deleted=false AND is_active=true", user["org_id"])
-            execs = {"OWNER", "CEO", "COO", "QP"}
+            # QP is manager rank but org-wide (see roles.py) — MANAGER_ROLES
+            # minus DEPT_SCOPED_ROLES is exactly {QP}.
+            execs = set(EXECUTIVE_ROLES) | (set(MANAGER_ROLES) - set(DEPT_SCOPED_ROLES))
             rcpts = [(str(pr["id"]), "report") for pr in profs
                      if pr["role"] in execs
                      or (row["department_id"] and pr["department_id"] == row["department_id"]
-                         and pr["role"].endswith("_MGR"))]
-            await emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
+                         and pr["role"] in DEPT_SCOPED_ROLES)]
+            await safe_emit(c, user, verb="report_locked", object_type="document", object_id=doc_id,
                        recipients=rcpts, department_id=row["department_id"],
                        params={"kind": row["kind"], "week_start": str(row["week_start"])})
         except Exception:
@@ -1277,7 +1335,7 @@ def _pdf_html(doc: dict, people: dict) -> str:
 
 @router.get("/{doc_id}/export.pdf")
 async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
     if row is None:
@@ -1291,7 +1349,10 @@ async def export_pdf(doc_id: str, user: dict = Depends(require_role(*ELEVATED_RO
         from weasyprint import HTML
     except Exception:
         raise HTTPException(501, "PDF engine not available on this server")
-    pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
+    # write_pdf() is CPU-bound (WeasyPrint lays out the whole document) and
+    # blocks the event loop — run it in a worker thread so other requests aren't
+    # stalled behind a PDF render.
+    pdf = await asyncio.to_thread(lambda: HTML(string=_pdf_html(doc, people)).write_pdf())
     name = f"wwf-{doc['kind']}-{doc['week_start']}{'' if doc['status'] == 'locked' else '-DRAFT'}.pdf"
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
@@ -1482,7 +1543,7 @@ def _html_export(doc: dict, people: dict) -> str:
 @router.get("/{doc_id}/export.html")
 async def export_html(doc_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """The interactive offline snapshot — same guard stack as export.pdf."""
-    _require_uuid(doc_id)
+    uuid_or_404(doc_id, "Document not found")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT * FROM weekly_documents WHERE id=$1", doc_id)
     if row is None:
@@ -1508,19 +1569,49 @@ async def export_range_pdf(body: RangeExportReq, user: dict = Depends(require_ro
     posted back (there is no stored row to read) and rendered through the same
     _pdf_html — every field is HTML-escaped there, so client-supplied content
     cannot inject markup or a server-side fetch. Always a DRAFT (a preview is
-    never a locked submitted record)."""
+    never a locked submitted record).
+
+    LOW (reviewed, Wave 3 item 6) — accepted as-is, not overlooked: `content`
+    here is entirely client-authored JSON (this range was never compiled or
+    persisted server-side — see the docstring above), rendered with no
+    cross-check against what the document's own compile/preview pipeline
+    (_compile_content et al.) would have produced for the same period. That
+    is intentional, not a data-integrity gap: this route is a rendering
+    convenience for a caller who already has (and, being ELEVATED-role-gated,
+    is trusted with) that exact content in front of them in the UI — it is
+    not a boundary between two different levels of trust, and it writes
+    nothing to the database (no persisted row, no downstream reader, no
+    audit-trail entry). Any mismatch between what was posted and what the
+    real compiled data would say is visible to, and self-correcting by, the
+    same person who is about to download the PDF — the same person who
+    supplied the content in the first place. Do not add a server-side
+    recompute-and-compare here without a concrete case where that mismatch
+    actually misleads someone other than the requester."""
+    if body.kind not in ("report", "plan"):
+        raise HTTPException(422, "kind must be 'report' or 'plan'")
     content = body.content or {}
-    kind = content.get("kind") or body.kind or "report"
     period = content.get("period") or {}
+    start_s = period.get("start")
+    if start_s is not None:
+        # content.ribbon (when present) feeds this straight into
+        # _ribbon_svg's date.fromisoformat() with no validation upstream of
+        # here — a malformed value crashed that into a raw 500 instead of a
+        # clean 422 on this entirely client-supplied preview payload.
+        try:
+            date.fromisoformat(start_s)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "content.period.start must be ISO format YYYY-MM-DD")
+    kind = content.get("kind") if content.get("kind") in ("report", "plan") else body.kind
     doc = {"content": content, "status": "preview", "kind": kind,
-           "week_start": period.get("start") or _today().isoformat(),
+           "week_start": start_s or _today().isoformat(),
            "locked_by": None, "locked_at": None}
     people = await roster(user)
     try:
         from weasyprint import HTML
     except Exception:
         raise HTTPException(501, "PDF engine not available on this server")
-    pdf = HTML(string=_pdf_html(doc, people)).write_pdf()
+    # CPU-bound render — off the event loop (see the export handler above).
+    pdf = await asyncio.to_thread(lambda: HTML(string=_pdf_html(doc, people)).write_pdf())
     name = f"wwf-{kind}-{doc['week_start']}-PREVIEW.pdf"
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})

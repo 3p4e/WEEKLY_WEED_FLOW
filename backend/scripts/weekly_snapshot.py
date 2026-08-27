@@ -41,7 +41,7 @@ import httpx
 import planner_prompts
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from app.worktime import classify, session_hours  # noqa: E402  (pure helpers, no config import)
+from app.worktime import TZ, classify, session_hours  # noqa: E402  (pure helpers, no config import)
 
 
 # ── Config from env (no app.config dependency) ──────────────────────────────
@@ -327,6 +327,14 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
     are merged app-side (no cross-database SQL join exists)."""
     r_fri, r_thu = report_win
     p_fri, p_thu = plan_win
+    # M4: window membership is facility-local (Europe/Skopje), NOT UTC. Every
+    # timestamptz column is converted `AT TIME ZONE $4` before the ::date compare,
+    # exactly like app.api.reports / weekwindow.activity_window_sql — otherwise the
+    # archived/AI report and the live /reports/weekly screen would list different
+    # task sets for the same week (a Friday 00:30 local task falls on the wrong
+    # side of a UTC boundary). date columns (completed_date/due_date) carry no
+    # offset and need no conversion.
+    tz = TZ.key
 
     report_tasks = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.department, t.week_start,"
@@ -334,16 +342,16 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
         " t.user_id, t.task_type, t.due_date, t.blocker_reason"
         " FROM tasks t"
         " WHERE t.org_id=$1 AND t.is_deleted=false AND ("
-        "   (t.created_at >= $2::date AND t.created_at < ($3::date + 1))"
-        "   OR (t.updated_at >= $2::date AND t.updated_at < ($3::date + 1))"
+        "   ((t.created_at AT TIME ZONE $4) >= $2::date AND (t.created_at AT TIME ZONE $4) < ($3::date + 1))"
+        "   OR ((t.updated_at AT TIME ZONE $4) >= $2::date AND (t.updated_at AT TIME ZONE $4) < ($3::date + 1))"
         "   OR (t.completed_date >= $2 AND t.completed_date <= $3)"
         "   OR EXISTS (SELECT 1 FROM task_progress tp WHERE tp.task_id=t.id"
-        "              AND tp.created_at >= $2::date AND tp.created_at < ($3::date + 1))"
+        "              AND (tp.created_at AT TIME ZONE $4) >= $2::date AND (tp.created_at AT TIME ZONE $4) < ($3::date + 1))"
         "   OR EXISTS (SELECT 1 FROM work_sessions ws WHERE ws.task_id=t.id"
-        "              AND ws.started_at >= $2::date AND ws.started_at < ($3::date + 1)))"
+        "              AND (ws.started_at AT TIME ZONE $4) >= $2::date AND (ws.started_at AT TIME ZONE $4) < ($3::date + 1)))"
         " ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END,"
         " t.priority DESC, t.created_at",
-        org_id, r_fri, r_thu)
+        org_id, r_fri, r_thu, tz)
 
     plan_rows = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.department, t.created_at,"
@@ -356,18 +364,21 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
 
     created_count = await conn.fetchval(
         "SELECT count(*) FROM tasks WHERE org_id=$1 AND is_deleted=false"
-        " AND created_at >= $2::date AND created_at < ($3::date + 1)", org_id, r_fri, r_thu)
+        " AND (created_at AT TIME ZONE $4) >= $2::date AND (created_at AT TIME ZONE $4) < ($3::date + 1)",
+        org_id, r_fri, r_thu, tz)
     completed_count = await conn.fetchval(
         "SELECT count(*) FROM tasks WHERE org_id=$1 AND is_deleted=false"
         " AND completed_date >= $2 AND completed_date <= $3", org_id, r_fri, r_thu)
     notes_count = await conn.fetchval(
         "SELECT count(*) FROM task_progress tp JOIN tasks t ON t.id=tp.task_id"
-        " WHERE t.org_id=$1 AND tp.created_at >= $2::date AND tp.created_at < ($3::date + 1)",
-        org_id, r_fri, r_thu)
+        " WHERE t.org_id=$1 AND (tp.created_at AT TIME ZONE $4) >= $2::date"
+        " AND (tp.created_at AT TIME ZONE $4) < ($3::date + 1)",
+        org_id, r_fri, r_thu, tz)
     comments_count = await conn.fetchval(
         "SELECT count(*) FROM task_comments cm JOIN tasks t ON t.id=cm.task_id"
-        " WHERE t.org_id=$1 AND cm.created_at >= $2::date AND cm.created_at < ($3::date + 1)",
-        org_id, r_fri, r_thu)
+        " WHERE t.org_id=$1 AND (cm.created_at AT TIME ZONE $4) >= $2::date"
+        " AND (cm.created_at AT TIME ZONE $4) < ($3::date + 1)",
+        org_id, r_fri, r_thu, tz)
 
     declined = await conn.fetch(
         "SELECT a.task_id, t.title, a.user_id FROM task_assignees a"
@@ -377,8 +388,9 @@ async def gather(conn, uconn, org_id, org_name, report_win, plan_win) -> dict:
     # Work sessions in the report window — the overtime evidence.
     sessions = await conn.fetch(
         "SELECT user_id, started_at, ended_at, hours FROM work_sessions"
-        " WHERE org_id=$1 AND started_at >= $2::date AND started_at < ($3::date + 1)",
-        org_id, r_fri, r_thu)
+        " WHERE org_id=$1 AND (started_at AT TIME ZONE $4) >= $2::date"
+        " AND (started_at AT TIME ZONE $4) < ($3::date + 1)",
+        org_id, r_fri, r_thu, tz)
 
     overdue_rows = await conn.fetch(
         "SELECT t.id, t.title, t.status, t.priority, t.due_date, t.user_id FROM tasks t"
@@ -622,8 +634,10 @@ async def run_all(ref: date, only_org=None, skip_letta: bool = False) -> None:
         raise
     client = None if skip_letta else httpx.AsyncClient(timeout=60)
     try:
-        orgs = await uconn.fetch("SELECT id, name FROM organizations"
-                                 + (" WHERE id=$1" if only_org else ""),
+        # slug 'demo' = the live demo org (app/demo_org.py) — wiped on every
+        # demo start; its throwaway data must never reach the Letta RAG digest.
+        orgs = await uconn.fetch("SELECT id, name FROM organizations WHERE slug <> 'demo'"
+                                 + (" AND id=$1" if only_org else ""),
                                  *([only_org] if only_org else []))
         log(f"processing {len(orgs)} org(s) for ref={ref.isoformat()} skip_letta={skip_letta}")
         for o in orgs:
@@ -643,6 +657,14 @@ async def attach_source_once() -> None:
     future AI calls can retrieve historical digests."""
     if not COORDINATOR_AGENT_ID:
         log("LETTA_COORDINATOR_AGENT_ID not set — skipping attach")
+        return
+    # The scheduled path guards the digest upload on SNAPSHOT_SOURCE_ID, which
+    # is deliberately empty whenever digests are not being pushed to a Letta
+    # source (as after the 2026-08-22 move to letta-code, where retrieval lives
+    # in RAGflow instead). This one-time command needs the same guard, or it
+    # attaches the empty string as a source id.
+    if not SNAPSHOT_SOURCE_ID:
+        log("LETTA_SNAPSHOT_SOURCE_ID not set — skipping attach")
         return
     async with httpx.AsyncClient(timeout=30) as client:
         await letta_attach_source(client, COORDINATOR_AGENT_ID, SNAPSHOT_SOURCE_ID)

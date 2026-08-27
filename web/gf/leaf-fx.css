@@ -10,7 +10,7 @@
 }
 .leaf-3d{
   position:relative;width:100%;height:100%;transform-style:preserve-3d;
-  transition:transform .15s cubic-bezier(.22,1,.36,1);
+  transition:transform .15s var(--ease-out);
   will-change:transform;
 }
 .leaf-float{
@@ -80,7 +80,7 @@
 @keyframes lf-spin{0%{transform:rotateY(0deg)}100%{transform:rotateY(360deg)}}
 
 /* ── MODE bounce: squash & stretch ── */
-.leaf-stage[data-mode="bounce"] .leaf-float{animation:lf-bounce .9s cubic-bezier(.28,.84,.42,1) infinite}
+.leaf-stage[data-mode="bounce"] .leaf-float{animation:lf-bounce .9s var(--ease-out) infinite}
 @keyframes lf-bounce{
   0%,100%{transform:translateY(0) scale(1,1)}
   25%{transform:translateY(-20px) scale(.89,1.13)}
@@ -111,7 +111,7 @@
 .leaf-spark{
   position:absolute;left:50%;top:46%;border-radius:50%;pointer-events:none;z-index:3;
   transform:translate(-50%,-50%);background:radial-gradient(circle,#7CF5C4,#2BE8A0);
-  animation:lf-spark .72s cubic-bezier(.22,.7,.3,1) forwards;
+  animation:lf-spark .72s var(--ease-out) forwards;
 }
 @keyframes lf-spark{
   0%{opacity:1;transform:translate(-50%,-50%) translate(0,0) scale(.28)}
@@ -135,7 +135,7 @@
   padding:3px 8px;white-space:nowrap;pointer-events:none;opacity:0;z-index:200;
   box-shadow:0 4px 14px rgba(43,232,160,.18);cursor:default;
 }
-.leaf-mode-tag.show{animation:lf-tag 1.5s ease forwards}
+.leaf-mode-tag.show{animation:lf-tag 1.5s var(--ease-out) forwards}
 @keyframes lf-tag{
   0%{opacity:0;transform:translateX(-50%) translateY(4px)}
   16%{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -164,7 +164,7 @@
 
 /* "Grow" word span — periodic bloom triggered by JS */
 .gf-grow-word{display:inline-block;user-select:none}
-.gf-grow-word.blooming{animation:gf-bloom .65s cubic-bezier(.22,1,.36,1) both}
+.gf-grow-word.blooming{animation:gf-bloom .65s var(--ease-out) both}
 @keyframes gf-bloom{
   0%{transform:scale(.84) translateY(4px);opacity:.6}
   58%{transform:scale(1.08) translateY(-2px)}
@@ -173,6 +173,6 @@
 
 @media (prefers-reduced-motion:reduce){
   .leaf-float,.leaf-stage .pp-leaf-anim,
-  .gf-name b,.gf-grow-word{animation:none!important}
+  .gf-name b,.gf-grow-word,.leaf-mode-tag.show{animation:none!important}
   .leaf-3d{transition:none}
 }

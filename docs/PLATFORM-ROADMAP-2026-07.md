@@ -46,7 +46,24 @@ prod promotion (§8) — plus a few deferred low-priority QC leaves.
 
 ---
 
-## 2. Current state (verified live 2026-07-16)
+## 2. Current state
+
+> **⚠️ The table below is a 2026-07-16 SNAPSHOT and its version numbers are all
+> superseded. `docs/DEPLOY.md` is the authoritative record of live image tags and
+> migration heads** — it is updated on every deploy, this table was not, and two
+> copies of a version number will always drift. Kept for the environment shape
+> and the standing rules underneath it, not for the numbers.
+>
+> Two things in it are wrong in kind rather than degree, verified against the
+> host on 2026-07-30:
+>
+> - **There is no `wwf_mass` test stack any more.** No running container, no
+>   stopped container. Three `wwf_mass_*` *volumes* survive the name — and one of
+>   them, `wwf_mass_letta_pgdata`, is the **live production Letta data volume**
+>   despite what it is called, while `wwf_mass_qms_output` holds 238 generated QMS
+>   documents. Do not reason from those names to "leftover test data", and do not
+>   remove them.
+> - The DocEngine column says `v3`; it is running `v8`.
 
 | Environment | Backend | Frontend | tasks-DB | Extra services | Notes |
 |---|---|---|---|---|---|
@@ -290,26 +307,45 @@ remark block (a migration-bearing, GxP-scope-sensitive increment). See
 
 ---
 
-## 8. Immediate next actions (updated 2026-07-16)
+## 8. Immediate next actions (updated 2026-07-30)
 
-Phases 0–3 are **complete on wwf_mass** and the QC LIMS module is now
-feature-complete (U1–U6 + the full certificate pipeline U1–U4). The remaining
-work is **owner-gated** or hardening, not net-new features:
+Two of the three items this section carried on 2026-07-16 have since been
+overtaken by events, and are corrected here rather than left to mislead.
 
-1. **Owner acceptance on wwf_mass → prod promotion.** The single biggest
-   outstanding decision. Everything built this cycle (DocEngine, TMS, QC LIMS
-   U1–U6, the certificate pipeline U1–U4) sits on wwf_mass only; prod is at
-   alembic `0016`. `docs/DEPLOY.md` carries the exact promotion recipe + verified
-   image tags (backend `v52`+, frontend `v73`+, migrations 0018–0027).
-2. **Phase 4 hardening** — the next engineering increment (nav-zone unify, retire
-   the `qms-api` shell once the registry read-path fully moves to the DocEngine,
-   a security/correctness pass over the QC + certificate surface, doc
-   consolidation, Letta ops backlog).
-3. **Infra:** GitHub Actions CI has been failing at the workflow-startup level
-   (all jobs die in seconds, no logs; a quota/billing or runner issue, not a
-   code failure) — needs an owner-side re-run / Actions-minutes check. Merges
-   this cycle relied on the local gate (up to 360 backend tests) + live smokes.
-4. Keep this document current as each phase lands.
+1. **Owner acceptance on prod promotion — still the single biggest outstanding
+   decision, but no longer the same decision.** The 2026-07-16 text said prod was
+   at alembic `0016` with everything owner-gated and test-only. Several modules
+   have since been promoted. **Version numbers are deliberately not repeated here
+   any more** — `docs/DEPLOY.md` is the only place live image tags and migration
+   heads are recorded, because a number duplicated across two documents is a
+   number that will disagree with itself again. What remains true and unchanged:
+   **production promotion requires explicit owner approval, every time.**
+2. **The cultivation department** is the current development priority (owner
+   direction, 2026-07-30) and has its own design record in
+   `docs/CULTIVATION-DESIGN-2026-07.md` — identity/lifecycle, the HLVd
+   decontamination campaign, the destruction/waste register, and now the
+   harvest/yield record with the plant-protection intervals that gate a cut
+   (§5f), with a requirement-by-requirement adherence table in §5c that lists
+   what is **not** built as prominently as what is. Harvest is the piece that
+   joined cultivation to the certificate chain: `qc_batch_genealogy` had carried
+   a `relation='CULTIVATION'` slot since 2026-07-21 with nothing upstream
+   producing the identifier for it. **The remaining Phase 2 record is
+   irrigation/feeding**; Phase 3 (phase transitions generating per-phase task
+   sets) has not been started.
+3. **Phase 4 hardening** — nav-zone unify, retire the `qms-api` shell once the
+   registry read-path fully moves to the DocEngine, a security/correctness pass
+   over the QC + certificate surface, doc consolidation, the Letta ops backlog.
+4. **Infra: CI is working; the 2026-07-16 note is obsolete.** That note said all
+   jobs were dying in seconds at the workflow-startup level and needed an
+   owner-side Actions-minutes check. The workflow now runs on a **self-hosted**
+   runner (9 jobs) and completes normally — run 341 on this branch finished
+   `success` on 2026-07-30. Two things worth knowing about it: the concurrency
+   group is `cancel-in-progress`, so **pushing again cancels the run you were
+   waiting on** (runs 338-340 are cancellations, not failures), and
+   `deploy.yml` gates on CI being green and **fails closed** — no checks at all
+   counts as failure, not as skippable.
+5. Keep this document current as each phase lands — and prefer a pointer to the
+   authoritative file over a copied value.
 
 ---
 

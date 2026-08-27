@@ -18,11 +18,34 @@ import uuid
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("SECRET_KEY", "pytest-test-secret-not-for-production")
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.security import hash_password
+
+
+def pytest_configure(config):
+    """Fail loudly if pytest's logging plugin has been disabled.
+
+    `-p no:logging` is a tempting way to quieten this suite (it is very chatty:
+    every request is logged as JSON). But that plugin is what provides the
+    `caplog` fixture, and test_notifications.py uses `caplog` to prove a failed
+    notification recipient is LOGGED rather than silently swallowed. With the
+    plugin off, that test does not fail — it ERRORS with "fixture 'caplog' not
+    found", which in a 600-test run reads exactly like a real regression and
+    sends you hunting through unrelated code.
+
+    That misdiagnosis has happened twice. Use `-q`, `--tb=short`, or
+    `--log-cli-level=CRITICAL` to reduce noise; never `-p no:logging`."""
+    if not config.pluginmanager.hasplugin("logging"):
+        raise pytest.UsageError(
+            "pytest's logging plugin is disabled (-p no:logging), which removes the "
+            "`caplog` fixture and makes test_notifications.py ERROR in a way that "
+            "looks like a code regression. Drop the flag; use -q or "
+            "--log-cli-level=CRITICAL to reduce output instead."
+        )
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -67,14 +90,65 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
-    for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs", "task_comments",
-                  "task_assignees", "task_links", "work_sessions", "task_progress",
+    for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
+                  "notifications", "events", "task_comments",
+                  "task_workflow_events", "task_assignees", "task_links", "work_sessions",
+                  "task_progress",
                   # QC LIMS — children before parents; the cert→spec FK is
                   # RESTRICT, so certificates (and their CASCADE results) must
-                  # go before specifications.
-                  "qc_results", "qc_certificates", "qc_spec_parameters", "qc_samples",
+                  # go before specifications. The CoQ aggregation cites certs
+                  # (RESTRICT) and specs (RESTRICT), so it goes before both.
+                  "qc_coq_lines", "qc_coq_sources", "qc_coq",
+                  "qc_batch_genealogy", "qc_document_files", "qc_signatures",
+                  # eCoA/CoA ingestion cluster — everything citing
+                  # qc_coa_documents (CASCADE/SET NULL) goes before it.
+                  "qc_field_placeholders", "qc_ecoa_checklist", "qc_coa_chunks",
+                  "qc_coa_verifications", "qc_coa_extractions", "qc_coa_documents",
+                  # OOS/CAPA cluster — cites qc_results (SET NULL) and
+                  # qc_oos_records (CASCADE), so it goes before both.
+                  "qc_oos_notifications", "qc_oos_register", "qc_oos_records",
+                  "qc_results",
+                  # custody cluster — chain cites samples (CASCADE) and SFRs
+                  # (SET NULL); SFRs cite RQS (SET NULL) and samples (SET NULL).
+                  "qc_chain_of_custody", "qc_sample_field_records", "qc_sampling_requests",
+                  "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
+                  "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
                   "qc_sampling_plans", "qc_specifications",
-                  "task_dependencies", "tasks", "calendar_weeks", "departments"):
+                  # potency ladders (migration 0057): ranges CASCADE from the
+                  # parent, and the parent cites cultivars (RESTRICT) — so both
+                  # must go before `cultivars` is purged below.
+                  "qc_potency_spec_ranges", "qc_potency_specs",
+                  # commercial identities (0059): standalone, keyed by batch-code
+                  # string — no FK, position uncritical but grouped with QC.
+                  "batch_commercial_identities",
+                  # tasks.batch_id cites plant_batches (RESTRICT, migration
+                  # 0054), so every task must be gone before plant_batches is
+                  # purged below — moved here from its old spot after
+                  # calendar_weeks/departments for exactly that reason.
+                  # task_dependencies cites tasks (CASCADE either way, but
+                  # explicit) so it precedes it.
+                  "task_dependencies", "tasks",
+                  # cultivation — plants + phase events cite batches (RESTRICT),
+                  # batches cite cultivars (RESTRICT) and rooms (RESTRICT), so the
+                  # order is: leaves -> batches -> cultivars/rooms.
+                  "decon_tool_log", "decon_positive_controls",
+                  "decon_swabs", "decon_bleach_log", "decon_step_signoffs",
+                  "decon_room_cycles",
+                  # waste lines cite batches AND rooms (both RESTRICT), so they
+                  # come before either. The lines->manifest edge is CASCADE, but
+                  # both are listed: this is a per-org DELETE, not a DROP, and
+                  # relying on the cascade would leave the intent implicit.
+                  # corridor_cleanings cites rooms AND waste_manifests (both
+                  # RESTRICT), so it precedes the manifests as well as the rooms.
+                  "corridor_cleanings",
+                  "waste_manifest_lines", "waste_manifests",
+                  # harvests, ipm_applications and irrigation_events all cite
+                  # batches AND rooms (RESTRICT), so they precede both — same
+                  # reason as the waste lines above.
+                  "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
+                  "plant_phase_events", "plants", "plant_batches", "cultivars",
+                  "rooms",
+                  "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)
 

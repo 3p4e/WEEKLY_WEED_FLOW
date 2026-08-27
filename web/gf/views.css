@@ -34,7 +34,10 @@
 .kcol-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:13px 15px;align-items:start}
 .kcard{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px;cursor:pointer;
   box-shadow:var(--sh-1);transition:transform .12s,box-shadow .12s}
-.kcard:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+@media (hover: hover) and (pointer: fine){
+  .kcard:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+}
+.kcard:active{transform:translateY(-2px) scale(.97)}
 /* Empty day → header bar only, no wasted grid padding. */
 .kcol.empty .kcol-head{color:var(--ink-3)}
 .kcol.empty .kcol-head .dot{opacity:.6}
@@ -59,7 +62,9 @@
 .tlcol-body{display:flex;flex-direction:column;gap:8px}
 .tlcard{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--ink-3);border-radius:10px;
   padding:10px;cursor:pointer;box-shadow:var(--sh-1);transition:transform .12s}
-.tlcard:hover{transform:translateY(-2px)}
+@media (hover: hover) and (pointer: fine){
+  .tlcard:hover{transform:translateY(-2px)}
+}
 .tlcard-title{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:8px}
 .tlcard-meta{display:flex;align-items:center;gap:6px}
 
@@ -77,6 +82,16 @@
 .coord-tag.ok .icon{stroke:var(--text-on-primary)}
 .coord-tag.wait{background:var(--amber-soft);color:var(--amber);border:1px solid rgba(199,154,84,.35)}
 .coord-tag.prog{background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* ── Facility resource strip — site-wide totals (total + per-phase) as a
+   single flowing row, distinct from the .dash-kpis tile grid used elsewhere. ── */
+.fac-resbar{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;
+  padding:14px 8px;margin-bottom:14px}
+.fac-res{display:flex;align-items:center;gap:9px}
+.fac-res-ic{width:30px;height:30px;flex:none;border-radius:50%;background:var(--surface-2);
+  box-shadow:inset 0 0 0 1px var(--line)}
+.fac-res-v{font-size:20px;font-weight:800;min-width:22px;text-align:center}
+.fac-res-l{font-size:11.5px;color:var(--ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
 /* ── Dashboard ── */
 .dash-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
@@ -127,7 +142,7 @@
 .assistant-drawer{position:fixed;top:0;right:0;height:100vh;width:400px;max-width:92vw;
   background:var(--glass-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
   border-left:1px solid var(--glass-border);box-shadow:-12px 0 40px rgba(0,0,0,.5);z-index:130;
-  transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+  transform:translateX(100%);transition:transform .28s var(--ease-out);display:flex;flex-direction:column}
 .assistant-drawer.open{transform:translateX(0)}
 .asst-head{display:flex;align-items:center;gap:11px;padding:18px 18px 14px;border-bottom:1px solid var(--line)}
 .asst-head .pp-leaf{width:26px;height:30px;flex-shrink:0}
@@ -207,7 +222,7 @@
 /* ── Facility floor-plan map ── */
 .fac-chips{display:flex;gap:7px;flex-wrap:wrap}
 .fac-chip{display:inline-flex;align-items:center;gap:7px;font:700 12px/1 'Saira',system-ui,sans-serif;
-  color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;transition:all .15s}
+  color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;transition:border-color .15s,background .15s,opacity .15s}
 .fac-chip.on{border-color:var(--zc);background:rgba(0,0,0,0);outline:1px solid var(--zc)}
 .fac-chip:not(.on){opacity:.5}
 .fac-sw{width:11px;height:11px;border-radius:3px}
@@ -219,7 +234,9 @@
   var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-1);overflow:hidden}
 .fac-room{position:absolute;border:1.5px solid;border-radius:8px;padding:7px 9px;cursor:pointer;overflow:hidden;
   transition:transform .12s,box-shadow .12s,opacity .2s;display:flex;flex-direction:column;gap:3px}
-.fac-room:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.4);z-index:5}
+@media (hover: hover) and (pointer: fine){
+  .fac-room:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.4);z-index:5}
+}
 .fac-room.sel{box-shadow:0 0 0 2px var(--primary),0 8px 20px rgba(0,0,0,.5),0 0 18px rgba(var(--accent-rgb),.2);z-index:6}
 .fac-code{font:800 11px/1 ui-monospace,monospace;display:flex;align-items:center;gap:5px}
 .fac-name{font-size:10.5px;font-weight:600;color:var(--ink-2);line-height:1.2}
@@ -292,8 +309,8 @@
 .sp-lock{display:flex;justify-content:center}
 .sp-switch{position:relative;display:inline-block;width:34px;height:20px;cursor:pointer}
 .sp-switch input{opacity:0;width:0;height:0}
-.sp-switch span{position:absolute;inset:0;background:var(--surface-3);border:1px solid var(--line);border-radius:999px;transition:.2s}
-.sp-switch span:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--ink-3);border-radius:50%;transition:.2s}
+.sp-switch span{position:absolute;inset:0;background:var(--surface-3);border:1px solid var(--line);border-radius:999px;transition:background .2s,border-color .2s}
+.sp-switch span:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--ink-3);border-radius:50%;transition:transform .2s,background .2s}
 .sp-switch input:checked+span{background:var(--primary);border-color:var(--primary)}
 .sp-switch input:checked+span:before{transform:translateX(14px);background:var(--text-on-primary)}
 .sp-mass-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;font-size:12.5px;font-weight:700;color:var(--ink-2)}
@@ -335,6 +352,18 @@
   box-shadow:0 0 0 1.5px rgba(0,0,0,.25)}
 .theme-nm{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .theme-ck{stroke:var(--primary);width:15px;height:15px;flex-shrink:0}
+
+/* ── Module picker (GF.openModulePicker) ── */
+.module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.module-chip{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px 14px 12px;
+  cursor:pointer;border:1px solid var(--glass-border);border-radius:12px;background:var(--surface-2);
+  color:var(--ink);font-family:inherit;text-align:left;transition:border-color .14s,background .14s;width:100%}
+.module-chip:hover{border-color:var(--primary);background:var(--surface-3)}
+.module-chip.on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset}
+.module-chip-ic{width:22px;height:22px;stroke:var(--primary);margin-bottom:2px}
+.module-chip-nm{font-size:13px;font-weight:700;line-height:1.2}
+.module-chip-desc{font-size:11.5px;color:var(--ink-2);line-height:1.4;flex:1}
+.module-chip-ck{stroke:var(--primary);width:15px;height:15px;align-self:flex-end}
 
 /* ── Department home (depthome-view.js) ── */
 .dh-head{align-items:center;gap:12px}
@@ -404,7 +433,7 @@
 .xr-note{font-size:12px;color:var(--ink-2);padding:3px 0 3px 10px;border-left:2px solid var(--line);margin:4px 0}
 .xr-note b{color:var(--ink)} .xr-note .by{font-style:italic;color:var(--ink-3)}
 .xr-task-actions{display:flex;gap:8px;margin-top:8px}
-@media (max-width:760px){.xr-frow .k{flex-basis:52%}.xr-kpi .v{font-size:20px}}
+@media (max-width:760px){.xr-frow .k{flex-basis:52%}.xr-kpi .v{font-size:20px}.ana-tv{font-size:20px}}
 
 /* ── Calendar (month grid) ── */
 .cal-bar{display:flex;align-items:center;gap:10px;margin:6px 0 12px}
@@ -434,15 +463,23 @@
 .wl-name{min-width:0}.wl-name b{display:block;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wl-name span{font-size:11px;color:var(--ink-3)}
 .wl-bar{position:relative;height:18px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.wl-fill{height:100%;border-radius:9px;transition:width .3s ease}
+.wl-fill{width:100%;height:100%;border-radius:9px;transform-origin:left center;transition:transform .3s ease}
 .wl-fill.wl-ok{background:linear-gradient(90deg,var(--green-soft),var(--green))}
 .wl-fill.wl-warm{background:linear-gradient(90deg,var(--orange-soft),var(--orange))}
 .wl-fill.wl-hot{background:linear-gradient(90deg,var(--red-soft),var(--red))}
 .wl-pts{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10.5px;color:var(--ink)}
 .wl-chips{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
-.wl-chip{font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
+.wl-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);
   border-radius:6px;padding:3px 8px;cursor:grab;white-space:nowrap}
 .wl-chip:hover{color:var(--ink);border-color:var(--primary)}
+/* priority dot on each load chip (Mass Weed workload mockup) — same palette as .prtag */
+.wl-dot{width:6px;height:6px;border-radius:999px;flex:none;background:var(--ink-4)}
+.wl-dot.critical{background:var(--red)}
+.wl-dot.high{background:var(--orange)}
+.wl-dot.medium{background:var(--blue)}
+.wl-dot.low{background:var(--ink-4)}
+/* the 4-KPI band above the crew list reuses the shared .ana-tiles grid */
+.wl-kpis{margin-bottom:14px}
 .wl-none{font-size:11.5px;color:var(--ink-4)}
 @media (max-width:880px){.wl-row{grid-template-columns:1fr;gap:8px}}
 
@@ -453,6 +490,19 @@
 .ana-tl { font-size:12px; color:var(--ink-3); margin-bottom:4px; }
 .ana-tv { font-size:26px; font-weight:600; color:var(--ink); }
 .ana-ts { font-size:12px; color:var(--ink-2); margin-top:2px; }
+/* Value tones for the exec cockpit KPI band (GF.kpiTile's 4th arg) — on-time
+   reads green, overdue red, over-budget effort amber. */
+.ana-tv--good { color:var(--primary); }
+.ana-tv--bad  { color:var(--red-fg,var(--red)); }
+.ana-tv--warn { color:var(--amber-fg,var(--amber,var(--orange))); }
+/* Sub-line tones (GF.kpiTile's 5th arg, subTone) — same palette as the value
+   tones above, for a badge on the tile's second line (e.g. "3 overdue").
+   Kept as real CSS classes rather than a passed-in inline <span style=...>
+   string so the color is applied inside GF.kpiTile, after GF.esc has already
+   run on `sub`. */
+.ana-ts--good { color:var(--primary); }
+.ana-ts--bad  { color:var(--red-fg,var(--red)); }
+.ana-ts--warn { color:var(--amber-fg,var(--amber,var(--orange))); }
 .ana-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
 .ana-panel { padding:14px 16px; }
 .ana-pt { font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:10px; }
@@ -491,3 +541,998 @@
 .qms-hit { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
 .qms-hit-h { display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
 .qms-hit-b { font-size:13px; color:var(--ink-2); line-height:1.5; }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce){
+  .kcard:hover{transform:none}
+  .tlcard:hover{transform:none}
+  .fac-room:hover{transform:none}
+  .asst-typing span{animation-duration:2.4s}
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS — audit / calendar / intake page styling
+   merged in from the per-page staging sheets. Cross-skin generic tokens
+   only, so every rule inherits light / dark / skin theming.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── AUDIT view ──────────────────────────────────────────────────────── */
+
+/* Integrity strip container — the mockup's "verify bar": chain glyph + meta on
+   the left, verdict(s) + Verify action on the right; wraps on narrow widths. */
+.audit-verifybar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 4px 14px;
+  padding: 11px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 11px);
+}
+
+/* Chain glyph well at the strip's left edge. */
+.audit-vb-ic {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: var(--r-md, 8px);
+}
+.audit-vb-ic .icon { width: 18px; height: 18px; }
+
+/* Title + SHA-256 meta line block; takes the remaining row width. */
+.audit-vb-body { flex: 1; min-width: 160px; }
+.audit-vb-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink);
+  letter-spacing: .02em;
+}
+.audit-vb-meta {
+  margin-top: 2px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Verdict pills sit as a group so both chain verdicts stay together and wrap
+   as one unit before the button. */
+.audit-vb-verdicts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Verdict pill — base + ok / bad / idle states. */
+.audit-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.audit-verdict .icon { width: 14px; height: 14px; }
+.audit-verdict.ok {
+  color: var(--green, #2BE8A0);
+  background: var(--green-soft, rgba(43, 232, 160, .12));
+  border: 1px solid var(--green-soft, rgba(43, 232, 160, .25));
+}
+.audit-verdict.bad {
+  color: var(--red, #FF4D5E);
+  background: var(--red-soft, rgba(255, 77, 94, .12));
+  border: 1px solid var(--red-soft, rgba(255, 77, 94, .25));
+}
+.audit-verdict.idle {
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+/* Filter row — chain chips, action chips, table popup and search box, all on
+   one wrapping line. */
+.audit-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 4px 12px;
+}
+
+/* A tight group of related filter chips (chain, or action). */
+.audit-fseg {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Filter chip toggle — the mockup's .fbtn: compact, uppercase, on/off. */
+.audit-fchip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 6px 11px;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 7px);
+  transition: color .12s ease, background .12s ease, border-color .12s ease;
+}
+.audit-fchip:hover { color: var(--ink); border-color: var(--primary); }
+.audit-fchip.on {
+  color: var(--text-on-primary, #041018);
+  background: var(--primary);
+  border-color: transparent;
+}
+
+/* Keeps the table popup trigger from collapsing too narrow beside the chips. */
+.audit-tablesel { min-width: 150px; }
+
+/* Free-text search box — grows to fill leftover width, magnifier + input. */
+.audit-search {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 8px);
+}
+.audit-search .icon { color: var(--ink-3); width: 16px; height: 16px; flex: none; }
+.audit-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.audit-search input::placeholder { color: var(--ink-3); }
+
+/* "Showing N of M" count shown above the list only while a search is active. */
+.audit-count {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin: 0 2px 8px;
+  letter-spacing: .02em;
+}
+
+/* ── CALENDAR view ───────────────────────────────────────────────────── */
+
+/* ── Toolbar legend ──────────────────────────────────────────────────────
+   Decodes the department colours the grid chips are tinted with (each chip's
+   border-left-color = GF.dep(t.dept).color). Only departments present in the
+   month on screen are listed, so it stays small and contextual. */
+.cal-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin-left:auto; }
+.cal-lg{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-3);
+  text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+.cal-lg-dot{ width:10px; height:10px; border-radius:2px; flex:none; }
+
+/* ── "Upcoming" horizontal strip ─────────────────────────────────────────
+   The next several not-done task due-dates from the tasks this view already
+   holds (GF.state.tasks + tree children) — no new data source. Scrolls
+   horizontally; each card deep-links to the task via the same xrJump the chips
+   use. */
+.cal-up-wrap{ margin:2px 0 14px; }
+.cal-up-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--ink-3); margin-bottom:8px; }
+.cal-upstrip{ display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;
+  scrollbar-width:thin; scrollbar-color:var(--glass-border) transparent; }
+.cal-upstrip::-webkit-scrollbar{ height:6px; }
+.cal-upstrip::-webkit-scrollbar-thumb{ background:var(--glass-border); border-radius:3px; }
+.cal-upcard{ flex:none; min-width:170px; max-width:230px; display:flex; gap:10px; align-items:flex-start;
+  text-align:left; padding:10px 13px; cursor:pointer; background:var(--glass-bg);
+  border:1px solid var(--glass-border); border-left:3px solid var(--primary);
+  border-radius:var(--r-md,10px); transition:background .13s ease, box-shadow .13s ease, transform .13s ease; }
+.cal-upcard:hover{ background:var(--primary-soft); box-shadow:0 0 0 1px var(--primary); transform:translateY(-1px); }
+.cal-upcard:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
+.cal-up-dot{ width:9px; height:9px; border-radius:2px; flex:none; margin-top:3px; }
+.cal-up-body{ display:flex; flex-direction:column; min-width:0; }
+.cal-up-title{ font-size:12.5px; font-weight:600; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cal-up-date{ font-size:10.5px; color:var(--ink-4); margin-top:3px;
+  text-transform:uppercase; letter-spacing:.04em; }
+.cal-up-empty{ font-size:12px; color:var(--ink-4); padding:8px 2px; }
+
+/* ── Mass Weed HUD polish: angled corners echoing the mockup's clip-path cards ── */
+:root[data-theme^="mass-weed"] .cal-upcard{ border-radius:0;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%); }
+:root[data-theme^="mass-weed"] .cal-lg-dot,
+:root[data-theme^="mass-weed"] .cal-up-dot{ border-radius:1px; }
+
+/* ── Narrow screens: the base cal- rules already hide grid chips < 880px and
+   fall back to the "+N" pill, so drop the colour legend too (its chips are the
+   thing being decoded). The Upcoming strip keeps its own horizontal scroll. ── */
+@media (max-width:880px){ .cal-legend{ display:none; } }
+
+/* ── AI INTAKE view ──────────────────────────────────────────────────── */
+
+/* Two-column intake layout: source text (left) beside the extracted candidate
+   cards (right). Collapses to a single stacked column on narrow screens. */
+.mwtmp-intake-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 840px) {
+  .mwtmp-intake-layout { grid-template-columns: 1fr; }
+}
+/* Let each grid track shrink below its content width instead of forcing the
+   page to scroll horizontally (long unbroken pasted lines, wide cards). */
+.mwtmp-intake-col { min-width: 0; }
+
+/* Column heading — the small uppercased label above each column. */
+.mwtmp-col-t {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-3);
+  margin: 0 2px 10px;
+}
+
+/* Live character-counter row under the source textarea. */
+.mwtmp-cap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+/* Over the 4000-char advisory cap — the counter turns red (advisory only, the
+   Analyze action is never disabled; the backend imposes no hard limit). */
+.mwtmp-cap.over { color: var(--red-fg, var(--red)); }
+
+/* Idle placeholder shown in the candidates column before any extraction runs. */
+.mwtmp-intake-idle {
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 10px 2px;
+  line-height: 1.5;
+}
+
+/* Source-quote attribution on a candidate card — the source snippet the AI
+   drew the task from. Rendered by the view only when the extraction payload
+   carries the quote; that field is DEFERRED backend data as of this pass (see
+   the note in intake-view.js), so today this rule is defined ahead of the data
+   and simply lies dormant until a quote arrives. */
+.mwtmp-cand-src {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS (batch 2) — dashboard / facility / analytics
+   / my-day page styling, merged from the per-page staging sheets. Cross-skin
+   generic tokens only; theme-aware in light / dark / every skin.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── DASHBOARD view ──────────────────────────────────────────────────── */
+
+/* ── KPI week-over-week delta line (appended under .kpi-l) ── */
+.kpi-delta{font-size:11px;font-weight:800;letter-spacing:.02em;margin-top:6px;
+  display:inline-flex;align-items:center;gap:3px;line-height:1}
+.kpi-delta--good{color:var(--green)}
+.kpi-delta--bad{color:var(--red)}
+.kpi-delta--flat{color:var(--ink-3)}
+
+/* ── Alerts feed (real notifications from GF.WWF._notif.items) ── */
+.dash-card--wide{grid-column:1 / -1}
+.dash-alert{display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-top:1px solid var(--line-2)}
+.dash-alert:first-of-type{border-top:none}
+.dash-alert-dot{width:8px;height:8px;border-radius:50%;flex:none;
+  background:var(--primary);box-shadow:0 0 7px var(--primary)}
+.dash-alert--crit .dash-alert-dot{background:var(--red);box-shadow:0 0 7px var(--red)}
+.dash-alert--warn .dash-alert-dot{background:var(--amber);box-shadow:0 0 7px var(--amber)}
+.dash-alert-tx{font-size:13px;color:var(--ink-2);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-alert--crit .dash-alert-tx{color:var(--ink);font-weight:600}
+.dash-alert-age{font-size:11px;font-weight:700;color:var(--ink-3);
+  letter-spacing:.04em;flex:none}
+.dash-alert-empty{font-size:12.5px;color:var(--ink-3);padding:6px 0}
+
+/* ── Pipeline lifecycle strip (departments as flow-ordered lifecycle pills) ── */
+.dash-strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:14px 0;padding:11px 14px;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-1)}
+.dash-strip-h{font-size:11px;font-weight:800;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--ink-3);flex:none}
+.dash-mods{display:flex;gap:7px;flex-wrap:wrap;flex:1}
+.dash-mod{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  font:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;
+  color:var(--ink-2);padding:4px 9px;border-radius:8px;
+  background:var(--surface-2);border:1px solid var(--line);transition:border-color .12s}
+.dash-mod:hover{border-color:var(--mc)}
+.dash-mod.on{border-color:var(--mc);box-shadow:inset 0 0 0 1px var(--mc)}
+.dash-mod-dot{width:7px;height:7px;border-radius:50%;flex:none;
+  background:var(--mc);box-shadow:0 0 6px var(--mc)}
+.dash-mod--idle{opacity:.6}
+.dash-mod--idle .dash-mod-dot{box-shadow:none}
+.dash-mod-n{font-size:10px;font-weight:800;color:var(--ink-3);
+  background:var(--surface-3);border-radius:5px;padding:0 5px}
+
+/* ── ANALYTICS view (yield-domain band) ──────────────────────────────── */
+
+/* Section divider introducing the yield-domain band beneath the task-domain
+   analytics grid — one labelled rule, reused for each such section. */
+.ana-sec { display:flex; align-items:center; gap:9px; margin:24px 0 12px; padding-top:16px; border-top:1px solid var(--line); }
+.ana-sec .ana-sec-ic { width:18px; height:18px; flex:0 0 auto; stroke:var(--primary); }
+.ana-sec h3 { margin:0; font-size:14px; font-weight:600; color:var(--ink); }
+.ana-sec .ana-sec-note { margin-left:auto; font-size:11.5px; color:var(--ink-3); }
+
+@media (max-width:520px) { .ana-sec .ana-sec-note { display:none; } }
+
+/* ── MY-DAY view ─────────────────────────────────────────────────────── */
+
+/* ── Greeting hero (evolves the plain .view-head for the personal My Day) ── */
+.md-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;padding:4px 2px 16px}
+.md-hero__hi{font-family:var(--font-display);font-size:26px;font-weight:700;
+  letter-spacing:.02em;color:var(--ink);line-height:1.1}
+.md-hero__sub{font-size:13px;color:var(--ink-3);font-weight:500;margin-top:5px;
+  letter-spacing:.02em}
+
+/* Visible ⌘K affordance — a real <button> wired to GF.cmdk.open() */
+.md-hero__cmd{display:inline-flex;align-items:center;gap:9px;cursor:pointer;
+  padding:9px 13px;background:var(--surface-2);color:var(--ink-3);
+  border:1px solid var(--line);border-radius:var(--r-md);font:inherit;
+  transition:border-color .12s ease,color .12s ease}
+.md-hero__cmd:hover{border-color:var(--primary);color:var(--ink-2)}
+.md-hero__cmd .icon{width:15px;height:15px;color:var(--primary)}
+.md-hero__cmd span{font-size:12.5px;letter-spacing:.03em;white-space:nowrap}
+.md-hero__cmd kbd{font-family:var(--font-display);font-size:10px;letter-spacing:.06em;
+  color:var(--ink-3);border:1px solid var(--line);border-radius:4px;padding:2px 6px;
+  background:rgba(var(--accent-rgb),.06)}
+
+/* ── 7-day strip: this week's per-day load of MY tasks (informational) ── */
+.md-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px}
+.md-day{text-align:center;padding:9px 0 8px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--sh-1)}
+.md-day.is-today{border-color:var(--primary);background:var(--primary-soft)}
+.md-day__dn{font-size:10px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--ink-3);font-weight:600}
+.md-day__dd{font-family:var(--font-display);font-size:19px;font-weight:700;
+  color:var(--ink);margin-top:2px;line-height:1}
+.md-day__dots{margin-top:6px;min-height:6px;display:flex;gap:3px;justify-content:center}
+.md-day__dots i{width:5px;height:5px;border-radius:50%;background:var(--ink-3);opacity:.55}
+.md-day.is-today .md-day__dots i{background:var(--primary);opacity:.9}
+
+@media (max-width:640px){
+  .md-hero__cmd span{display:none}
+  .md-day__dd{font-size:17px}
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS (batch 3) — approvals / eCoA intake /
+   leaves-stability page styling, merged from the per-page staging sheets.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── APPROVALS view (unified sign-off queue) ─────────────────────────── */
+
+/* ── Container ─────────────────────────────────────────────────────────── */
+.mwq {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.mwq-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px 0;
+}
+.mwq-ttl {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+.mwq-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.mwq-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: .03em;
+  color: var(--ink-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color .12s, box-shadow .12s, background .12s;
+}
+.mwq-tab:hover { color: var(--ink); }
+.mwq-tab.on {
+  color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
+  background: rgba(var(--accent-rgb), .08);
+}
+.mwq-c {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  padding: 1px 6px;
+  text-align: center;
+  border-radius: 999px;
+  color: var(--ink-3);
+  background: var(--surface-3);
+}
+.mwq-tab.on .mwq-c { color: var(--primary); background: rgba(var(--accent-rgb), .16); }
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+.mwq-list { padding: 6px 8px 8px; }
+.mwq-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.mwq-row:last-child { border-bottom: none; }
+.mwq-ic {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(var(--accent-rgb), .1);
+}
+.mwq-ic .icon { width: 17px; height: 17px; }
+.mwq-ic--warn { color: var(--orange); background: rgba(230, 160, 40, .14); }
+.mwq-ic--good { color: var(--green);  background: rgba(80, 200, 120, .14); }
+.mwq-ic--bad  { color: var(--red);    background: rgba(230, 80, 80, .14); }
+.mwq-ic--info { color: var(--blue);   background: rgba(70, 150, 230, .14); }
+
+.mwq-body { min-width: 0; }
+.mwq-t {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mwq-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+
+.mwq-kind {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--ink-3);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+/* ── Empty + deferred states ───────────────────────────────────────────── */
+.mwq-empty {
+  text-align: center;
+  color: var(--ink-3);
+  padding: 26px 0;
+  font-size: 12.5px;
+}
+.mwq-defer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 4px 2px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  background: rgba(var(--accent-rgb), .06);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.mwq-defer .icon { width: 15px; height: 15px; flex: none; color: var(--blue); margin-top: 1px; }
+
+/* ── Mass-Weed-only: angular clip + accent glow (matches the mockup HUD) ── */
+:root[data-theme^="mass-weed"] .mwq {
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .22);
+}
+:root[data-theme^="mass-weed"] .mwq-ic {
+  clip-path: polygon(5px 0, 100% 0, 100% 100%, 0 100%, 0 5px);
+  border-radius: 0;
+}
+:root[data-theme^="mass-weed"] .mwq-kind {
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  border-radius: 0;
+}
+:root[data-theme^="mass-weed"] .mwq-tab.on {
+  text-shadow: 0 0 10px rgba(var(--accent-rgb), .5);
+}
+:root[data-theme^="mass-weed"] .mwq-ttl {
+  text-shadow: 0 0 12px rgba(var(--accent-rgb), .3);
+}
+
+/* ── eCoA INTAKE view (document workbench) ───────────────────────────── */
+
+.mwe-wb { margin: 4px 0 14px; }
+.mwe-wb__top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.mwe-ic { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; }
+.mwe-n-ic { width: 11px; height: 11px; stroke: currentColor; fill: none; }
+
+/* pipeline stepper */
+.mwe-pipe { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+.mwe-st {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mw-font-cond); font-size: 11px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--mw-text-faint); padding: 6px 10px;
+}
+.mwe-st .n {
+  width: 19px; height: 19px; flex: none; display: grid; place-items: center;
+  font-size: 9px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.mwe-st.done { color: var(--mw-stat-hi); }
+.mwe-st.done .n { background: var(--mw-stat-hi); color: var(--mw-void); box-shadow: none; }
+.mwe-st.cur { color: var(--mw-cyan-bright); }
+.mwe-st.cur .n {
+  box-shadow: inset 0 0 0 2px var(--mw-cyan-bright), 0 0 10px var(--mw-cyan);
+  background: rgba(94, 200, 240, .12);
+}
+.mwe-st.rej { color: var(--mw-stat-lo); }
+.mwe-st.rej .n { background: var(--mw-stat-lo); color: #fff; box-shadow: none; }
+.mwe-arw { color: var(--mw-text-faint); font-size: 11px; padding: 0 2px; }
+
+/* §6.3.1 countdown chip */
+.mwe-clock {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mw-font-cond); font-weight: 700; font-size: 12px;
+  letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  padding: 6px 12px;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.mwe-clock--ok   { color: var(--mw-stat-hi);  box-shadow: inset 0 0 0 1.5px rgba(108, 240, 90, .5); background: rgba(108, 240, 90, .08); }
+.mwe-clock--warn { color: var(--mw-stat-mid); box-shadow: inset 0 0 0 1.5px rgba(236, 236, 74, .5); background: rgba(236, 236, 74, .08); }
+.mwe-clock--bad  { color: var(--mw-stat-lo);  box-shadow: inset 0 0 0 1.5px rgba(239, 77, 77, .55);  background: rgba(239, 77, 77, .09); }
+
+/* SHA-256 custody bar */
+.mwe-shabar {
+  display: flex; gap: 9px; align-items: center;
+  padding: 8px 13px; margin: 10px 0 0;
+  font-family: var(--mw-mono); font-size: 10.5px; line-height: 1.5;
+  color: var(--mw-text-dim);
+  background: rgba(94, 200, 240, .05);
+  box-shadow: inset 0 0 0 1px rgba(94, 200, 240, .18);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.mwe-shabar .mwe-ic { color: var(--mw-cyan-bright); }
+.mwe-shabar b { color: var(--mw-ink); font-weight: 700; }
+.mwe-shabar .mwe-sha { color: var(--mw-cyan-bright); }
+.mwe-shabar--empty { color: var(--mw-text-faint); }
+.mwe-shabar--empty .mwe-ic { color: var(--mw-text-faint); }
+
+/* gate-note blocks */
+.mwe-gates { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.mwe-gate {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 10px 13px; font-size: 11.5px; line-height: 1.5;
+  color: var(--mw-text);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.mwe-gate .mwe-ic { margin-top: 1px; }
+.mwe-gate b { color: var(--mw-ink); }
+.mwe-gate.block { background: rgba(239, 77, 77, .08);  box-shadow: inset 0 0 0 1px rgba(239, 77, 77, .32); }
+.mwe-gate.ok    { background: rgba(108, 240, 90, .07);  box-shadow: inset 0 0 0 1px rgba(108, 240, 90, .3); }
+.mwe-gate.info  { background: rgba(94, 200, 240, .07);  box-shadow: inset 0 0 0 1px rgba(94, 200, 240, .28); }
+.mwe-gate.block .mwe-ic { color: var(--mw-stat-lo); }
+.mwe-gate.ok    .mwe-ic { color: var(--mw-stat-hi); }
+.mwe-gate.info  .mwe-ic { color: var(--mw-cyan-bright); }
+
+@media (max-width: 640px) {
+  .mwe-wb__top { flex-direction: column; }
+  .mwe-shabar { flex-wrap: wrap; }
+}
+
+/* ── LEAVES / stability view (pull-schedule drawer) ──────────────────── */
+
+/* ── Scrim + right-side drawer ─────────────────────────────────────────── */
+.mwl-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(4, 10, 20, .68);
+  backdrop-filter: blur(2px);
+}
+.mwl-drawer {
+  position: fixed; top: 0; right: 0; height: 100%;
+  width: min(480px, 94vw); z-index: 61;
+  background: linear-gradient(160deg, var(--mw-panel), var(--mw-panel-2));
+  box-shadow: -8px 0 40px rgba(0, 0, 0, .6), inset 1px 0 0 rgba(94, 200, 240, .3);
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform .22s cubic-bezier(.2, .7, .3, 1);
+}
+.mwl-drawer.on { transform: translateX(0); }
+
+.mwl-dr-hd {
+  position: sticky; top: 0; z-index: 2;
+  padding: 18px 20px 14px;
+  background: linear-gradient(160deg, var(--mw-panel), var(--mw-panel-2));
+  box-shadow: inset 0 -1px 0 rgba(94, 200, 240, .16);
+}
+.mwl-dr-cls {
+  position: absolute; top: 16px; right: 16px;
+  cursor: pointer; color: var(--mw-text-dim);
+  background: none; border: none; padding: 0; line-height: 0;
+}
+.mwl-dr-cls:hover { color: var(--mw-cyan-bright); }
+.mwl-dr-cls svg { width: 20px; height: 20px; }
+.mwl-dr-code { font-weight: 700; font-size: 14px; color: var(--mw-cyan-bright); }
+.mwl-dr-title {
+  font-family: var(--mw-font-cond), sans-serif;
+  font-size: 17px; font-weight: 600; color: var(--mw-ink); margin-top: 5px;
+}
+.mwl-dr-bd { padding: 16px 20px 30px; }
+.mwl-dr-sec {
+  font-family: var(--mw-font-cond), sans-serif;
+  text-transform: uppercase; letter-spacing: .12em;
+  font-size: 11px; font-weight: 700; color: var(--mw-header); margin: 18px 0 10px;
+}
+.mwl-dr-bd .mwl-dr-sec:first-child { margin-top: 0; }
+
+/* Grade / study-type badge, mirrors the mockup's .gd chip */
+.mwl-gd {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 7px; color: #7fdfe0;
+  box-shadow: inset 0 0 0 1px rgba(47, 217, 217, .4);
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+}
+
+/* ── Study meta grid ───────────────────────────────────────────────────── */
+.mwl-meta {
+  display: grid; grid-template-columns: max-content 1fr;
+  gap: 6px 14px; align-items: baseline; margin-bottom: 4px;
+}
+.mwl-meta-k {
+  font-family: var(--mw-font-cond), sans-serif;
+  text-transform: uppercase; letter-spacing: .06em;
+  font-size: 10px; font-weight: 700; color: var(--mw-text-dim); white-space: nowrap;
+}
+.mwl-meta-v { font-size: 12.5px; color: var(--mw-text); }
+
+/* ── Timepoint pull-schedule timeline ──────────────────────────────────── */
+.mwl-tp {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 0; position: relative;
+}
+.mwl-tp:not(:last-child)::before {
+  content: ""; position: absolute; left: 8px; top: 24px; bottom: -4px;
+  width: 1px; background: rgba(94, 200, 240, .2);
+}
+.mwl-tp-dot {
+  width: 17px; height: 17px; flex: none; border-radius: 50%;
+  background: var(--mw-void);
+  box-shadow: inset 0 0 0 2px var(--mw-text-faint);
+  position: relative; z-index: 2;
+}
+.mwl-tp.done .mwl-tp-dot {
+  box-shadow: inset 0 0 0 2px var(--mw-stat-hi); background: var(--mw-stat-hi);
+}
+.mwl-tp.due .mwl-tp-dot {
+  box-shadow: inset 0 0 0 2px var(--mw-stat-mid), 0 0 8px var(--mw-stat-mid);
+  background: var(--mw-stat-mid);
+}
+.mwl-tp-m {
+  font-family: var(--mw-font-cond), sans-serif;
+  font-weight: 700; font-size: 13px; color: var(--mw-ink);
+  width: 72px; flex: none;
+}
+.mwl-tp-r { flex: 1; font-size: 11px; color: var(--mw-text-dim); }
+.mwl-tp-r.mwl-blank, .mwl-blank { color: var(--mw-stat-mid); }
+.mwl-tp-s {
+  font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 7px; white-space: nowrap;
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+}
+.mwl-tp-s.done { color: var(--mw-stat-hi); box-shadow: inset 0 0 0 1px rgba(108, 240, 90, .45); }
+.mwl-tp-s.due { color: var(--mw-stat-mid); box-shadow: inset 0 0 0 1px rgba(236, 236, 74, .45); }
+.mwl-tp-s.pend { color: var(--mw-text-faint); box-shadow: inset 0 0 0 1px rgba(127, 141, 164, .4); }
+
+/* Deferred-data note: per-timepoint results have no backing field yet */
+.mwl-defer { margin-top: 16px; opacity: .85; }
+
+/* Row action that opens the drawer (reuses the app .btn look) */
+.mwl-sched-btn { display: inline-flex; align-items: center; gap: 5px; }
+.mwl-sched-btn svg { width: 13px; height: 13px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MASS WEED MW-1 COVERAGE PASS (batch 4) — team crew-roster + CoQ A4 preview
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── TEAM view (crew roster: hex avatars + stat bars) ────────────────── */
+
+/* ── Hexagonal crew avatar ──────────────────────────────────────────────
+   Wraps the shared GF.avatar so its initials / roster colour / name-title all
+   still come from the real person record; ONLY the hexagon shape + accent glow
+   are added. Accent-aware (cyan under Mass Weed, app accent elsewhere) via the
+   app-wide --accent-rgb the rest of the roster already uses. */
+.mwtm-hex{ display:inline-flex; flex:none; }
+.mwtm-hex .avatar{
+  border-radius:0;
+  clip-path:polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  filter:drop-shadow(0 0 5px rgba(var(--accent-rgb), .55));
+}
+
+/* ── Per-person stat block ──────────────────────────────────────────────
+   Sits between the department row and the action row of each team card. */
+.mwtm-stats{ display:flex; flex-direction:column; gap:9px; margin-bottom:11px; }
+.mwtm-stat{ margin:0; }
+.mwtm-stat__head{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:8px; margin-bottom:4px;
+}
+.mwtm-stat__name{
+  font-size:10.5px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--ink-3);
+}
+.mwtm-stat__val{
+  font-size:12.5px; font-weight:800; color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+
+/* Neutral "active load" fill — load is a magnitude, NOT a good/bad signal, so
+   it must not borrow the green/amber/red semantic .mw-stat__fill hues. It
+   tracks the live theme accent instead (cyan under Mass Weed). Sits inside the
+   shared .mw-stat__track and is driven by an inline transform:scaleX(fraction),
+   the same mechanism the app's .mw-stat__fill already uses. */
+.mwtm-fill{
+  width:100%; height:100%; border-radius:3px;
+  transform-origin:left center; transition:transform .4s ease;
+  background:linear-gradient(90deg, var(--mw-cyan-deep, var(--primary)), var(--primary));
+  box-shadow:0 0 8px rgba(var(--accent-rgb), .5);
+}
+
+/* Honest empty state for a crew member with no owned tasks this week — never a
+   misleading 0% completion bar. */
+.mwtm-quiet{ font-size:11.5px; color:var(--ink-3); font-style:italic; padding:1px 0; }
+
+/* Deferred-metrics note: efficiency / shift / zone need worklog-derived data
+   that is not yet an app data source (a part-owner decision). Rendered as an
+   explicit, low-key placeholder rather than fabricated numbers. */
+.mwtm-defer{
+  font-size:10px; color:var(--ink-3); opacity:.72;
+  letter-spacing:.03em; line-height:1.35;
+}
+
+/* ── CoQ PRINT view (A4 paper preview) ───────────────────────────────── */
+
+/* scroll frame + desk backdrop around the sheet */
+.mwcoq-wrap{
+  margin-top:12px;
+  padding:18px;
+  overflow-x:auto;
+  background:var(--mw-void, #0a0f16);
+  border-radius:8px;
+  display:flex;
+  justify-content:center;
+}
+
+/* the A4 sheet (fixed paper regardless of app theme — it is a document proof) */
+.mwcoq-sheet{
+  width:210mm;
+  max-width:100%;
+  min-height:220mm;
+  box-sizing:border-box;
+  padding:16mm 16mm 14mm;
+  position:relative;
+  background:#f4f8fc;
+  color:#0d2036;
+  box-shadow:0 18px 50px rgba(0,0,0,.45);
+  font-family:'Titillium Web', system-ui, sans-serif;
+}
+.mwcoq-sheet .mono{ font-family:'Geist Mono', ui-monospace, monospace; }
+
+/* watermark (status-driven text supplied inline by the view) */
+.mwcoq-wm{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none; opacity:.05; overflow:hidden;
+}
+.mwcoq-wm span{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:150px; letter-spacing:6px;
+  color:#0a4a6e; transform:rotate(-24deg); white-space:nowrap;
+}
+
+/* header */
+.mwcoq-hd{
+  display:flex; align-items:flex-start; gap:14px;
+  border-bottom:3px solid #0a4a6e; padding-bottom:12px;
+  position:relative;
+}
+.mwcoq-hd__badge{
+  width:46px; height:46px; flex:none;
+  display:grid; place-items:center;
+  background:#0a4a6e; color:#fff; border-radius:6px;
+}
+.mwcoq-hd__badge .icon{ width:26px; height:26px; stroke:#fff; fill:none; }
+.mwcoq-hd__t{ flex:1; }
+.mwcoq-hd__ttl{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:23px; letter-spacing:.02em;
+  text-transform:uppercase; color:#0d2036; line-height:1.05;
+}
+.mwcoq-hd__sub{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:700; font-size:12px; letter-spacing:.06em;
+  text-transform:uppercase; color:#0a4a6e; margin-top:2px;
+}
+.mwcoq-hd__no{ text-align:right; }
+.mwcoq-hd__no .l{
+  font-size:8px; text-transform:uppercase; letter-spacing:.12em; color:#5a7690;
+}
+.mwcoq-hd__no .v{ font-weight:700; font-size:14px; color:#0a4a6e; }
+
+.mwcoq-verdict{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:800; font-size:16px; letter-spacing:.06em;
+  text-transform:uppercase; padding:5px 15px; margin-top:8px;
+  background:#eaf2f9;
+}
+.mwcoq-verdict.pass{ background:#c9f0d6; }
+.mwcoq-verdict.fail{ background:#f7d3d6; }
+.mwcoq-verdict.pending{ background:#e6ecf2; }
+
+/* section label */
+.mwcoq-sec{
+  font-family:'Saira Condensed', sans-serif;
+  font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.1em;
+  color:#0a4a6e; margin:16px 0 7px; padding-bottom:3px;
+  border-bottom:1.5px solid #0a4a6e;
+}
+
+/* product identity key/value grid */
+.mwcoq-kvgrid{
+  display:grid; grid-template-columns:1fr 1fr; gap:0 26px; margin:2px 0 4px;
+}
+.mwcoq-kv{
+  display:flex; gap:10px; padding:5px 0;
+  border-bottom:1px solid #dbe6f0; font-size:11.5px;
+}
+.mwcoq-kv dt{
+  width:44%; color:#5a7690; text-transform:uppercase; letter-spacing:.04em;
+  font-size:9.5px; padding-top:2px; margin:0;
+}
+.mwcoq-kv dd{
+  margin:0; flex:1; font-size:11px; color:#0d2036; font-weight:600;
+}
+.mwcoq-kv dd.mono{ font-family:'Geist Mono', ui-monospace, monospace; }
+
+/* analytical results table */
+.mwcoq-res{ width:100%; border-collapse:collapse; font-size:10.5px; }
+.mwcoq-res th{
+  text-align:left; background:#0a4a6e; color:#fff;
+  font-family:'Saira Condensed', sans-serif; font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em; font-size:8.5px; padding:5px 8px;
+}
+.mwcoq-res td{
+  padding:5px 8px; border-bottom:1px solid #dbe6f0;
+  font-family:'Geist Mono', ui-monospace, monospace; color:#0d2036;
+}
+.mwcoq-res td.mwcoq-p{ font-family:'Titillium Web', sans-serif; color:#0d2036; }
+.mwcoq-res th.mwcoq-num, .mwcoq-res td.mwcoq-num{ text-align:right; }
+.mwcoq-cmp{ font-weight:700; text-align:center; }
+.mwcoq-prov{ font-size:8.5px; color:#5a7690; }
+
+/* signatures */
+.mwcoq-sigrow{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:6px;
+}
+.mwcoq-sig{ font-size:10px; }
+.mwcoq-sig__l{
+  font-size:8px; text-transform:uppercase; letter-spacing:.08em; color:#5a7690;
+}
+.mwcoq-sig__nm{
+  font-family:'Geist Mono', ui-monospace, monospace; font-weight:700; color:#0d2036;
+  border-top:1px solid #0d2036; margin-top:20px; padding-top:4px; font-size:10.5px;
+}
+.mwcoq-sig__meta{ font-size:8.5px; color:#5a7690; margin-top:2px; }
+
+/* certification note / draft notice */
+.mwcoq-qp{
+  margin-top:14px; padding:11px 14px;
+  background:#eaf2f9; border-left:4px solid #0a4a6e;
+  font-size:10px; line-height:1.5; color:#0d2036;
+}
+.mwcoq-draft-note{
+  margin-top:14px; padding:9px 12px;
+  background:#fff4e0; border-left:4px solid #d08a1a;
+  font-size:10px; line-height:1.4; color:#0d2036;
+}
+
+/* footer */
+.mwcoq-foot{
+  margin-top:16px; display:flex; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; font-size:8px; color:#5a7690;
+  border-top:1px solid #dbe6f0; padding-top:5px;
+}
+
+@media (max-width:640px){
+  .mwcoq-kvgrid{ grid-template-columns:1fr; }
+  .mwcoq-sigrow{ grid-template-columns:1fr; }
+  .mwcoq-sheet{ padding:10mm 8mm 9mm; }
+}
+
+
+/* ── SEARCH page (search-view.js — full-page grouped search) ──────────────
+   A rail-reachable companion to the ⌘K palette; same in-memory sources,
+   grouped. Generic tokens only, so it inherits every skin. */
+.sr-box{display:flex;align-items:center;gap:10px;margin:4px 0 8px;padding:12px 16px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-lg,12px)}
+.sr-box-ic{color:var(--ink-3);flex:none}
+.sr-box-ic .icon{width:20px;height:20px}
+.sr-input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--ink);
+  font:inherit;font-size:17px}
+.sr-input::placeholder{color:var(--ink-3)}
+.sr-hint{font-size:12px;color:var(--ink-3);margin:0 4px 14px;line-height:1.5}
+.sr-results{display:flex;flex-direction:column;gap:16px}
+.sr-group{display:flex;flex-direction:column;gap:2px}
+.sr-group-h{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 2px 6px}
+.sr-count{background:var(--surface-3);border-radius:999px;font-size:10px;font-weight:800;
+  color:var(--ink-3);padding:1px 7px}
+.sr-row{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
+  padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  color:var(--ink);font:inherit;transition:background .12s ease,border-color .12s ease,transform .12s ease}
+.sr-row:hover{background:var(--primary-soft);border-color:var(--primary);transform:translateX(2px)}
+.sr-row:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.sr-ic{flex:none;color:var(--ink-3);display:grid;place-items:center}
+.sr-ic .icon{width:16px;height:16px}
+.sr-label{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-sub{flex:none;font-size:11.5px;color:var(--ink-3)}
+.sr-empty{padding:22px 6px;text-align:center;color:var(--ink-3);font-size:13px;line-height:1.55}
+/* Mass Weed HUD: angular row corners echoing the mockup's clip-path cards. */
+:root[data-theme^="mass-weed"] .sr-row{border-radius:0;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%)}

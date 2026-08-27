@@ -89,9 +89,41 @@ async def job_update(jid: str, **fields: Any) -> None:
         vals.append(v)
         sets.append(f"{k} = ${len(vals)}")
     vals.append(jid)
+    # B608 suppressed below: `sets` interpolates only CODE-controlled column
+    # names (the **fields kwargs at this module's own call sites: status/
+    # stage/error/result/payload). Every VALUE is a real asyncpg bind
+    # parameter in *vals, never interpolated. Same parametrized-with-
+    # code-controlled-columns pattern the backend documents in app/demo_org.py.
     await pool().execute(
-        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)}", *vals
+        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)}", *vals  # nosec B608
     )
+
+
+# A job is only ever advanced by the worker that owns it, so a worker killed
+# mid-run (OOM, redeploy) leaves its row at 'running'/'queued' forever: the
+# poller waits on it indefinitely and nothing ever cleans it up. There is no
+# lease to renew, so age is the only signal available — and a real build is
+# bounded by the /build timeout, so anything far past that is dead.
+STALE_JOB_MINUTES = 60
+
+
+async def reap_stale_jobs(older_than_minutes: int = STALE_JOB_MINUTES) -> int:
+    """Fail jobs left mid-flight by a killed worker. Returns how many.
+
+    Runs at startup: a redeploy is exactly when the previous worker was killed,
+    so it is both the moment stale rows appear and the moment something is
+    running to notice. Uses updated_at, which every job_update() touches, so a
+    job still making progress is never reaped."""
+    if _pool is None:
+        return 0
+    rows = await pool().fetch(
+        "UPDATE docengine.jobs SET status='failed', updated_at=now(),"
+        "   error = COALESCE(NULLIF(error,''), 'abandoned: no progress for '"
+        "                    || $1::text || ' minutes (worker killed mid-run)')"
+        " WHERE status IN ('queued','running')"
+        "   AND updated_at < now() - ($1::text || ' minutes')::interval"
+        " RETURNING id", str(older_than_minutes))
+    return len(rows)
 
 
 async def job_get(jid: str) -> dict | None:

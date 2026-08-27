@@ -12,13 +12,50 @@ Rules (facility wall-clock, Europe/Skopje):
 Precedence weekend > night > overtime matches how the facility talks about
 these hours; a Saturday 02:00 session is "weekend work", not "night work".
 """
-import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-TZ = ZoneInfo(os.environ.get("SNAPSHOT_TZ", "Europe/Skopje"))
+from app.config import settings
+
+# Through Settings, not a bare os.environ read — scripts/scheduler.py resolved
+# the same SNAPSHOT_TZ independently, so the two could disagree about which
+# wall-clock the week boundary sits on with nothing to flag it.
+TZ = ZoneInfo(settings.snapshot_tz)
 
 BUCKETS = ("regular", "overtime", "night", "weekend")
+
+
+# The SAME rule for SQL. `CURRENT_DATE` (and `x::date` on a timestamptz)
+# render under the DATABASE's zone — UTC everywhere this app runs — so a query
+# defaulting a column to CURRENT_DATE has the identical nightly off-by-one as
+# naive Python. These fragments carry the facility zone as a SQL literal; the
+# zone is a config constant (settings.snapshot_tz), never user input, and the
+# quote-doubling below keeps even a misconfigured value from breaking out of
+# the literal. tests/test_facility_clock.py bans CURRENT_DATE app-wide.
+SITE_TZ_SQL = "'" + settings.snapshot_tz.replace("'", "''") + "'"
+SITE_TODAY_SQL = f"(now() AT TIME ZONE {SITE_TZ_SQL})::date"
+# The year for document numbers (CoQ-PP-YYYY-NNNN, PP-SPEC-YYYY-NNNN, ...) —
+# the FACILITY's year, not the database's UTC year. A certificate issued
+# between facility-midnight and UTC-midnight on 31 Dec would otherwise carry
+# the previous year in its number (same nightly off-by-one as SITE_TODAY_SQL).
+SITE_YEAR_SQL = f"to_char(now() AT TIME ZONE {SITE_TZ_SQL},'YYYY')"
+
+
+def facility_today():
+    """Today as the FACILITY sees it — never `date.today()`.
+
+    `date.today()` renders under the process's zone (UTC in every container
+    and in CI), while the SQL side of this codebase converts timestamps at
+    settings.snapshot_tz (see harvest._site_today and the audit views). The
+    two disagree every night between facility-midnight and UTC-midnight —
+    for Europe/Skopje that is a standing 1–2 h window in which "today" is
+    Friday to the database and still Thursday to naive Python, weekly
+    windows point at the wrong week, and the CI suite fails if it happens
+    to run then (it did, 2026-07-30 22:30 UTC). Every "what day is it"
+    question in this codebase must go through here or through SQL at
+    snapshot_tz; tests/test_facility_clock.py enforces the app side."""
+    from datetime import datetime
+    return datetime.now(TZ).date()
 
 
 def classify(started_at: datetime) -> str:

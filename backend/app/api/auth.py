@@ -1,20 +1,20 @@
 """Auth + provisioning (SUMA methodology: no self-signup, OTP, forced change)."""
+import asyncio
 import logging
 import re
 import secrets
 import time
-import uuid
 from collections import defaultdict
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.db import rls_users, tasks_admin_pool, users_admin_pool
-from app.deps import get_current_user, require_password_set, require_role
+from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
 from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
-from app.security import create_access_token, hash_password, verify_password
+from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -28,6 +28,24 @@ _OTP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
 
 
 def generate_otp() -> str:
+    # LOW (reviewed, Wave 3 item 1) — accepted design, not a bug: this OTP
+    # carries no TTL/expiry. It stays valid until the recipient's first login
+    # (create_user) or next-forced login (reset_password) changes it, at
+    # which point change_password's "new password must differ from the OTP"
+    # check (see there) forces it out of use for good — there is no window
+    # where BOTH the OTP and a real password are simultaneously valid long-
+    # term. The OTP is never transmitted over this app's own channels: it is
+    # shown once on the creating admin/manager's screen and handed to the
+    # recipient out-of-band (in person, a call, etc — see create_user's
+    # docstring, "email delivery is best-effort, added later"), so there is
+    # no email/SMS log or transit hop for a TTL to defend against; the
+    # exposure this credential actually has is bounded by how the org
+    # chooses to deliver it, not by anything this function could enforce.
+    # Adding a TTL would only turn a legitimately slow first login (a new
+    # hire's IT onboarding, a manager resetting an account while the
+    # recipient is away) into a support ticket, for no real security gain
+    # over the existing single-use-in-practice + forced-rotation behavior.
+    # Do not "fix" this into an expiring code without a real threat driving it.
     g = lambda: "".join(secrets.choice(_OTP_ALPHABET) for _ in range(4))
     return f"{g()}-{g()}-{g()}"
 
@@ -114,12 +132,29 @@ class ChangePwReq(BaseModel):
 
 
 class CreateUserReq(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
+    # No '@': an email-shaped username could shadow another account's login
+    # email in the login lookup (see login()'s precedence comment).
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[^@\s]+$")
     full_name: str = Field(min_length=1, max_length=120)
     email: str | None = Field(default=None, max_length=254)
     role: str = Field(default="USER", max_length=32)
     department_id: str | None = Field(default=None, max_length=64)
     function_role: str | None = Field(default=None, max_length=80)
+
+    @field_validator("username")
+    @classmethod
+    def _lowercase_username(cls, v: str) -> str:
+        # profiles.username carries a case-insensitive-unique index
+        # (migration 0011, on lower(username)) — normalize here, at the ONLY
+        # place a username is ever written (create_user; it is immutable
+        # thereafter — see UpdateUserReq), so the stored value always matches
+        # what the index (and login()'s lookup, and collab.py's @mention
+        # resolution) expect. Without this, two accounts differing only by
+        # case (e.g. "Alice.Q" / "alice.q") could coexist, and collab.py's
+        # `lower(username) = ANY(...)` mention match could then resolve to
+        # the WRONG one of the two — leaking a task title + comment preview
+        # to an unintended person.
+        return v.lower()
 
 
 class UpdateUserReq(BaseModel):
@@ -142,20 +177,46 @@ def _public(row) -> dict:
 async def login(body: LoginReq, request: Request):
     ip = request.client.host if request.client else "unknown"
     identifier = body.email.lower()
-    _rate_limit_check(f"id:{identifier}", f"ip:{ip}")
 
+    # Username match takes strict precedence over email match. The combined
+    # (username=$1 OR email=$1) fetchrow had no ORDER BY, and email carries no
+    # uniqueness constraint — two accounts sharing an email (or a username
+    # crafted to equal someone's login email) made authentication
+    # nondeterministic: the "wrong" row could win the plan and the real
+    # password would fail apparently at random.
+    #
+    # lower(username): usernames are normalized to lowercase at creation
+    # (CreateUserReq) and enforced case-insensitive-unique at the DB level
+    # (migration 0011's index on lower(username)) — matching case-
+    # insensitively here means an admin can still type/hand out a username
+    # in mixed case and the account holder can log in with whatever case
+    # they type, while the DB guarantees there is never more than one
+    # account it could resolve to.
     row = await users_admin_pool().fetchrow(
-        "SELECT * FROM profiles WHERE (username=$1 OR email=$1) AND is_deleted=false",
-        body.email,
-    )
+        "SELECT * FROM profiles WHERE lower(username)=$1 AND is_deleted=false", identifier)
+    if row is None:
+        row = await users_admin_pool().fetchrow(
+            "SELECT * FROM profiles WHERE email=$1 AND is_deleted=false"
+            " ORDER BY created_at LIMIT 1", body.email)
+    # Rate-limit on the RESOLVED account id when one exists, not the raw typed
+    # string — otherwise the same account is reachable through two separate
+    # buckets (its username vs. its email, or case variants), doubling an
+    # attacker's effective attempt budget against one profile. An identifier
+    # that resolves to no account falls back to the typed string, which is the
+    # only key available for a nonexistent login.
+    id_key = f"id:{row['id']}" if row is not None else f"id:{identifier}"
+    _rate_limit_check(id_key, f"ip:{ip}")
+
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     # Always pay the bcrypt cost, even on a miss (unknown/inactive user) —
     # short-circuiting before it is a timing side-channel that lets an
     # attacker enumerate valid usernames by response latency.
     active = row is not None and row["is_active"]
-    ok = verify_password(body.password, row["password_hash"] if active else None)
+    # bcrypt is CPU-bound and blocks the event loop for tens of ms — run it off
+    # the loop so concurrent requests aren't stalled behind each login's hash.
+    ok = await asyncio.to_thread(verify_password, body.password, row["password_hash"] if active else None)
     if not active or not ok:
-        _rate_limit_record_failure(f"ip:{ip}", f"id:{identifier}")
+        _rate_limit_record_failure(f"ip:{ip}", id_key)
         # Forensic trail — audit_log is trigger-driven and never sees a failed
         # login. Identifier is what the client TYPED (may or may not exist);
         # never log the password.
@@ -163,7 +224,7 @@ async def login(body: LoginReq, request: Request):
             "event": "login_failed", "identifier": identifier, "ip": ip,
             "reason": "inactive_or_unknown" if not active else "bad_password"}})
         raise invalid
-    _rate_limit_clear(f"ip:{ip}", f"id:{identifier}")
+    _rate_limit_clear(f"ip:{ip}", id_key)
     days = settings.remember_device_expire_days if body.remember_device else None
     pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
     token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)
@@ -180,16 +241,38 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
     _throttle_action(f"pwch:{user['id']}")
     if len(body.new_password) < settings.password_min_length:
         raise HTTPException(422, f"Password must be at least {settings.password_min_length} characters")
+    # bcrypt hashes at most the first 72 BYTES and silently drops the rest, so
+    # without this the field's own max_length=256 lets a user set a passphrase
+    # of which only the first 72 bytes are ever checked. Rejected here rather
+    # than left to hash_password's exception so the caller gets a 422 they can
+    # act on instead of a 500. Bytes, not characters — Cyrillic costs two each,
+    # so a 40-character Macedonian passphrase already trips it.
+    if len(body.new_password.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        raise HTTPException(
+            422, f"Password must be at most {BCRYPT_MAX_BYTES} bytes"
+                 " (accented and Cyrillic characters count as more than one)")
+    row = await users_admin_pool().fetchrow(
+        "SELECT password_hash FROM profiles WHERE id=$1", user["id"])
     # Voluntary change (flag already cleared) must prove the current password.
     if not user["must_change_password"]:
-        row = await users_admin_pool().fetchrow("SELECT password_hash FROM profiles WHERE id=$1", user["id"])
-        if row is None or not body.current_password or not verify_password(body.current_password, row["password_hash"]):
+        if row is None or not body.current_password or not await asyncio.to_thread(
+                verify_password, body.current_password, row["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password incorrect")
+    # The new password must not be the one being replaced. Only length was
+    # checked before, so on the FORCED (first-login / post-reset) path a user
+    # could "change" their password to the one-time password itself — leaving
+    # the account on a credential that was transmitted out-of-band, printed on
+    # an admin's screen, and is treated everywhere else as single-use.
+    if row is not None and await asyncio.to_thread(verify_password, body.new_password, row["password_hash"]):
+        raise HTTPException(
+            422, "The new password must differ from the current one"
+                 " (a one-time password cannot be kept as the permanent password)")
+    new_hash = await asyncio.to_thread(hash_password, body.new_password)
     async with rls_users(user, admin=True) as conn:
         new_pwv = await conn.fetchval(
             "UPDATE profiles SET password_hash=$1, must_change_password=false,"
             " password_set_at=now(), updated_at=now() WHERE id=$2 RETURNING password_set_at",
-            hash_password(body.new_password), user["id"],
+            new_hash, user["id"],
         )
     # The token that authenticated this request is now stale (its pwv claim
     # no longer matches the password_set_at we just wrote) — mint a fresh
@@ -219,10 +302,7 @@ def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
 def _require_uuid(value) -> None:
     """A malformed (non-uuid) {user_id} path param must be a clean 404, not a
     500 from asyncpg trying to cast it to uuid inside the lookup query."""
-    try:
-        uuid.UUID(str(value))
-    except (ValueError, AttributeError, TypeError):
-        raise HTTPException(404, "User not found")
+    uuid_or_404(value, "User not found")
 
 
 async def _validate_department(org_id, department_id) -> None:
@@ -253,19 +333,23 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     await _validate_department(actor["org_id"], body.department_id)
     otp = generate_otp()
+    otp_hash = await asyncio.to_thread(hash_password, otp)
     async with rls_users(actor, admin=True) as conn:
         try:
             row = await conn.fetchrow(
                 "INSERT INTO profiles(org_id,username,email,password_hash,full_name,role,"
                 " department_id,function_role,must_change_password,created_by)"
                 " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) RETURNING *",
-                actor["org_id"], body.username, body.email, hash_password(otp), body.full_name,
+                actor["org_id"], body.username, body.email, otp_hash, body.full_name,
                 body.role, body.department_id, body.function_role, actor["id"],
             )
         except asyncpg.UniqueViolationError:
             raise HTTPException(409, f"Username '{body.username}' is already taken")
-        except Exception as e:
-            raise HTTPException(409, f"Could not create account: {type(e).__name__}")
+        # Deliberately NO blanket `except Exception -> 409`: it reported every
+        # unexpected DB error to the caller as a name conflict, so a real bug
+        # looked to the operator (and to the logs) like "pick another
+        # username". Anything not a genuine conflict now surfaces as a 500 and
+        # is logged by the request middleware, which is how it gets found.
     # OTP is shown on the creator's screen (email delivery is best-effort, added later).
     return {"user": _public(row), "otp": otp}
 
@@ -324,6 +408,9 @@ async def purge_user(user_id: str, actor: dict = Depends(require_role(ADMIN))):
     since audit_log rows are never deleted). Only ever targets a row that
     is ALREADY soft-deleted, so this can't be used to skip the normal
     delete flow (and its _can_manage authorisation) in one step."""
+    # The most consequential of the three: this DELETE is irreversible and
+    # takes the roster name that historical tasks and reports resolve through.
+    _throttle_action(f"userpurge:{actor['id']}")
     _require_uuid(user_id)
     async with rls_users(actor, admin=True) as conn:
         row = await conn.fetchrow(
@@ -351,6 +438,10 @@ async def list_users(actor: dict = Depends(require_role(*ELEVATED_ROLES))):
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *MANAGER_ROLES))):
+    # Same throttle the other account mutations carry. Soft delete is
+    # recoverable, but a scripted sweep still de-activates a whole department
+    # faster than anyone notices, and every call writes an audit row.
+    _throttle_action(f"userdel:{actor['id']}")
     _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
         raise HTTPException(400, "Cannot delete your own account")
@@ -385,9 +476,16 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
     """Admin/manager resets an existing account's password to a fresh one-time
     password (shown once to the caller). The user must set their own on next
     login — same flow as account creation, so an admin never learns or sets the
-    real password. Same authorisation gate as create/delete: a manager may only
-    reset a USER in their own department; nobody may reset an ADMIN through the
-    app."""
+    real password. Same authorisation gate as create/delete (`_can_manage`): a
+    manager may only reset a USER in their own department.
+
+    An ADMIN, however, CAN reset another ADMIN — `_can_manage` returns True for
+    any target when the actor is ADMIN, deliberately (see its comment: the
+    CREATABLE_ROLES check at each call site is what prevents promotion TO admin,
+    so this only lets a real admin operate on an existing one). This docstring
+    previously claimed the opposite; the code is the intended behaviour and the
+    sentence was wrong, so the sentence is what changed. Admin-to-admin resets
+    are throttled and audited like any other."""
     _throttle_action(f"pwreset:{actor['id']}")
     _require_uuid(user_id)
     if str(user_id) == str(actor["id"]):
@@ -395,6 +493,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
         # proves the current password); the admin reset path is for OTHER users.
         raise HTTPException(400, "Use change-password for your own account")
     otp = generate_otp()
+    otp_hash = await asyncio.to_thread(hash_password, otp)
     async with rls_users(actor, admin=True) as conn:
         target = await conn.fetchrow(
             "SELECT id, username, full_name, role, department_id, function_role, must_change_password"
@@ -406,7 +505,7 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
         row = await conn.fetchrow(
             "UPDATE profiles SET password_hash=$1, must_change_password=true,"
             " password_set_at=now(), updated_at=now() WHERE id=$2 AND org_id=$3 RETURNING *",
-            hash_password(otp), user_id, actor["org_id"])
+            otp_hash, user_id, actor["org_id"])
     return {"user": _public(row), "otp": otp}
 
 
@@ -421,6 +520,12 @@ async def update_user(user_id: str, body: UpdateUserReq,
     fields = body.model_dump(exclude_unset=True)
     if not fields:
         return {"ok": True, "noop": True}
+    # Throttle AFTER the no-op return, not before it. A PATCH with no changed
+    # fields writes nothing — no row, no audit entry — so there is nothing to
+    # rate-limit, and counting it meant an operator who pressed Save on the
+    # edit-person modal without editing anything burned real budget and could
+    # 429 themselves out of an action they had not yet performed.
+    _throttle_action(f"userupd:{actor['id']}")
     if "role" in fields and fields["role"] not in CREATABLE_ROLES:
         raise HTTPException(422, f"Role '{fields['role']}' cannot be assigned")
     # No self-demotion: an ADMIN passes _can_manage for any target now (incl.

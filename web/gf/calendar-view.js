@@ -5,15 +5,30 @@
 window.GF = window.GF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.state.calOffset = 0;   // months relative to the current month
 
   GF.calNav = (d) => { GF.state.calOffset += d; GF.render.all(); };
   GF.calToday = () => { GF.state.calOffset = 0; GF.render.all(); };
 
+  // Days with more than 3 due tasks only show the first 3 by default (the
+  // grid cell has no room for more) — the "+N" pill was previously inert,
+  // silently hiding the rest with no way to reach them. It now toggles this
+  // day into its cell showing every task.
+  GF.state.calExpandedDays = GF.state.calExpandedDays || new Set();
+  GF.calToggleDay = (iso) => {
+    const s = GF.state.calExpandedDays;
+    if (s.has(iso)) s.delete(iso); else s.add(iso);
+    GF.render.all();
+  };
+
   const MONTHS = {
     en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
     mk: ['Јануари','Февруари','Март','Април','Мај','Јуни','Јули','Август','Септември','Октомври','Ноември','Декември'],
+  };
+  // Short month names for the Upcoming strip's date line (bilingual).
+  const MONTHS_ABBR = {
+    en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    mk: ['Јан','Феб','Мар','Апр','Мај','Јун','Јул','Авг','Сеп','Окт','Ное','Дек'],
   };
 
   GF.views.calendar = () => {
@@ -40,24 +55,85 @@ window.GF = window.GF || {};
     for (let d = 1; d <= daysIn; d++) {
       const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const ts = byDay[iso] || [];
-      const chips = ts.slice(0, 3).map(t => {
+      const expanded = GF.state.calExpandedDays.has(iso);
+      const shown = expanded ? ts : ts.slice(0, 3);
+      const chips = shown.map(t => {
         const dep = GF.dep(t.dept) || {};
         return `<div class="cal-chip ${t.status === 'done' ? 'done' : ''}" title="${GF.esc(t.title)}"
           style="border-left-color:${dep.color || 'var(--primary)'}"
           onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')">${GF.esc(t.title)}</div>`;
       }).join('');
-      const more = ts.length > 3 ? `<div class="cal-more">+${ts.length - 3}</div>` : '';
+      const more = ts.length > 3
+        ? `<div class="cal-more" role="button" tabindex="0" onclick="GF.calToggleDay('${iso}')"
+             onkeydown="if(event.key==='Enter')GF.calToggleDay('${iso}')">${expanded ? AL('less', 'помалку') : `+${ts.length - 3}`}</div>`
+        : '';
       cells += `<div class="cal-cell ${iso === todayISO ? 'cal-today' : ''}">
         <div class="cal-num">${d}</div>${chips}${more}</div>`;
     }
 
-    return `${GF.viewHead('calendar', 'calendar')}
+    // ── Legend: departments present in the month on screen ──────────────
+    // The grid chips are tinted by department (border-left-color = dep.color);
+    // the legend decodes exactly those colours. Only departments that appear
+    // in the displayed month are listed, ordered by GF.DEPTS' canonical order,
+    // so it stays small and matches what is on screen. Derived purely from the
+    // task data already bucketed above — no new fetch.
+    const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const deptRank = GF.DEPTS.map(dp => dp.id);
+    const monthDepts = [...new Set(
+      Object.keys(byDay).filter(k => k.startsWith(monthPrefix))
+        .flatMap(k => byDay[k].map(t => t.dept))
+    )].filter(Boolean).sort((a, b) => deptRank.indexOf(a) - deptRank.indexOf(b));
+    const legend = monthDepts.length ? `<div class="cal-legend" role="list"
+        aria-label="${AL('Departments shown this month', 'Прикажани оддели за месецот')}">
+        ${monthDepts.map(id => { const dp = GF.dep(id) || {};
+          return `<span class="cal-lg" role="listitem"><i class="cal-lg-dot"
+            style="background:${dp.color || 'var(--primary)'}"></i>${GF.esc(GF.depName(id))}</span>`;
+        }).join('')}</div>` : '';
+
+    // ── Upcoming strip: next few not-done task due-dates ────────────────
+    // From the same task data (top-level + tree children), independent of which
+    // month is being viewed: the next 6 due-on-or-after-today tasks, soonest
+    // first. Date-only ISO strings (YYYY-MM-DD) sort lexicographically. Each
+    // card deep-links to the task via the same xrJump the grid chips use.
+    const abbr = MONTHS_ABBR[GF.state.lang] || MONTHS_ABBR.en;
+    const upDate = (iso) => {
+      const [uy, um, ud] = iso.split('-').map(Number);
+      const wd = dow[(new Date(uy, um - 1, ud).getDay() + 6) % 7];
+      return `${wd}, ${abbr[um - 1]} ${ud}`;
+    };
+    const upcoming = (GF.state.tasks || []).concat(kids)
+      .filter(t => t.due && t.status !== 'done' && t.due.slice(0, 10) >= todayISO)
+      .sort((a, b) => (a.due.slice(0, 10) < b.due.slice(0, 10) ? -1
+                     : a.due.slice(0, 10) > b.due.slice(0, 10) ? 1 : 0))
+      .slice(0, 6);
+    const upCards = upcoming.map(t => {
+      const dp = GF.dep(t.dept) || {};
+      const color = dp.color || 'var(--primary)';
+      return `<div class="cal-upcard" role="button" tabindex="0"
+        style="border-left-color:${color}" title="${GF.esc(t.title)}"
+        onclick="GF.WWF&&GF.WWF.xrJump&&GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')"
+        onkeydown="if((event.key==='Enter'||event.key===' ')&&GF.WWF&&GF.WWF.xrJump){event.preventDefault();GF.WWF.xrJump('${GF.esc(t.id)}','${GF.esc(t.week_start || '')}')}">
+        <span class="cal-up-dot" style="background:${color}"></span>
+        <span class="cal-up-body">
+          <span class="cal-up-title">${GF.esc(t.title)}</span>
+          <span class="cal-up-date">${upDate(t.due.slice(0, 10))}</span>
+        </span></div>`;
+    }).join('');
+    const upStrip = `<div class="cal-up-wrap">
+        <div class="cal-up-label">${AL('Upcoming', 'Претстојни')}</div>
+        <div class="cal-upstrip">${upCards ||
+          `<div class="cal-up-empty">${AL('Nothing upcoming', 'Нема претстојни задачи')}</div>`}</div>
+      </div>`;
+
+    return `${GF.viewHead('calendar', 'calendar_sub')}
       <div class="cal-bar">
         <button class="btn btn-sm" onclick="GF.calNav(-1)">${GF.icon('chevL', 'icon')}</button>
         <div class="cal-title">${MONTHS[GF.state.lang][m] || MONTHS.en[m]} ${y}</div>
         <button class="btn btn-sm" onclick="GF.calNav(1)">${GF.icon('chevR', 'icon')}</button>
         <button class="btn btn-sm" onclick="GF.calToday()">${AL('Today', 'Денес')}</button>
+        ${legend}
       </div>
+      ${upStrip}
       <div class="cal-grid">
         ${dow.map(d => `<div class="cal-dow">${d}</div>`).join('')}
         ${cells}

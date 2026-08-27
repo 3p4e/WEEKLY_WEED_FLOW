@@ -111,3 +111,54 @@ def apply_defaults(key: str, answers: dict) -> dict:
             if defaults:
                 out[qq["key"]] = defaults if qq["multi"] else defaults[0]
     return out
+
+
+class InvalidAnswer(ValueError):
+    """Raised by validate_answers when a supplied value is not one of the
+    question's defined options. Carries the offending question key and value
+    so callers can build a precise error message."""
+
+    def __init__(self, qkey: str, value):
+        self.qkey = qkey
+        self.value = value
+        super().__init__(f"invalid answer for {qkey!r}: {value!r} is not a defined option")
+
+
+def _option_values(qq: dict) -> list:
+    """Extract the valid option VALUES for a question, regardless of whether
+    an option is a bare string or a {"v": ..., "default": ...} dict."""
+    return [(o["v"] if isinstance(o, dict) else o) for o in qq["options"]]
+
+
+def validate_answers(key: str, answers: dict) -> None:
+    """Enforce the pre-populated-answers principle end to end: every value the
+    caller supplied for a question this questionnaire actually defines must be
+    one of that question's real options — never free text, never an invented
+    option. Unlike apply_defaults (which only fills in what's MISSING), this
+    checks every key the caller DID supply. Silently ignores answer keys that
+    don't correspond to any question in this questionnaire (unknown keys carry
+    no risk of masquerading as a verified option and are not the concern this
+    guards against).
+
+    Raises InvalidAnswer on the first offending key/value.
+    """
+    q = QUESTIONNAIRES[key]
+    answers = answers or {}
+    for rnd in q["rounds"]:
+        for qq in rnd["questions"]:
+            qkey = qq["key"]
+            if qkey not in answers:
+                continue
+            value = answers[qkey]
+            if value in (None, "", []):
+                continue
+            valid = _option_values(qq)
+            values = value if qq["multi"] else [value]
+            if not isinstance(values, list):
+                # A non-multi question that somehow got a list, or a multi
+                # question that got a scalar where a list was expected -
+                # either way it can't match a scalar option value.
+                raise InvalidAnswer(qkey, value)
+            for v in values:
+                if v not in valid:
+                    raise InvalidAnswer(qkey, v)

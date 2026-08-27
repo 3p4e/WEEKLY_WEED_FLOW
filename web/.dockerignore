@@ -4,3 +4,11 @@
 e2e/
 **/node_modules
 *.cjs
+
+# Belt-and-braces: the frontend unit suite lives at repo-root tests/frontend/ and
+# so is already outside this build context. This line exists because the
+# Dockerfile ships the web root with `COPY . /usr/share/nginx/html` and then
+# DELETES the few strays it knows about — an allowlist-by-deletion, which fails
+# silently for anything new. A suite added back under web/tests/ would otherwise
+# be served publicly at /tests/.
+tests/

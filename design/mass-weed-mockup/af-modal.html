@@ -124,13 +124,16 @@
         <div class="af-row2">
           <div class="mw-field">
             <label><span class="en">Department</span><span class="mk">Оддел</span></label>
-            <div class="mw-select"><select id="fDept"></select></div>
+            <div class="mw-chips" id="fDept"></div>
           </div>
           <div class="mw-field">
             <label><span class="en">Type</span><span class="mk">Тип</span></label>
-            <div class="mw-select"><select id="fType">
-              <option>Routine</option><option>Inspection</option><option>Handoff</option><option>Corrective</option>
-            </select></div>
+            <div class="mw-chips" id="fType">
+              <button class="mw-chip on" type="button" data-val="Routine" style="--cc:var(--mw-cyan)"><span class="d"></span>Routine</button>
+              <button class="mw-chip" type="button" data-val="Inspection" style="--cc:var(--mw-cyan)"><span class="d"></span>Inspection</button>
+              <button class="mw-chip" type="button" data-val="Handoff" style="--cc:var(--mw-cyan)"><span class="d"></span>Handoff</button>
+              <button class="mw-chip" type="button" data-val="Corrective" style="--cc:var(--mw-stat-lo)"><span class="d"></span>Corrective</button>
+            </div>
           </div>
         </div>
 
@@ -144,13 +147,31 @@
         <div class="af-row2">
           <div class="mw-field">
             <label><span class="en">Priority</span><span class="mk">Приоритет</span></label>
-            <div class="mw-select"><select id="fPrio">
-              <option>Normal</option><option>Low</option><option>High</option><option>Critical</option>
-            </select></div>
+            <div class="mw-chips" id="fPrio">
+              <button class="mw-chip" type="button" data-val="Low" style="--cc:var(--mw-text-dim)">Low</button>
+              <button class="mw-chip on" type="button" data-val="Normal" style="--cc:var(--mw-cyan)">Normal</button>
+              <button class="mw-chip" type="button" data-val="High" style="--cc:var(--mw-stat-mid)">High</button>
+              <button class="mw-chip" type="button" data-val="Critical" style="--cc:var(--mw-stat-lo)">Critical</button>
+            </div>
           </div>
           <div class="mw-field">
             <label><span class="en">Due</span><span class="mk">Рок</span></label>
             <input class="mw-input" id="fDue" value="Jul 12" />
+          </div>
+        </div>
+
+        <div class="af-row2">
+          <div class="mw-field">
+            <label><span class="en">Estimated effort (h)</span><span class="mk">Проценет напор (ч)</span></label>
+            <input class="mw-input" id="fEst" value="3" />
+          </div>
+          <div class="mw-field">
+            <label><span class="en">Recurrence</span><span class="mk">Повторување</span></label>
+            <div class="mw-chips" id="fRec">
+              <button class="mw-chip on" type="button" data-val="Once" data-mk="Еднаш" style="--cc:var(--mw-text-dim)">Once</button>
+              <button class="mw-chip" type="button" data-val="Daily" data-mk="Дневно" style="--cc:var(--mw-cyan)">Daily</button>
+              <button class="mw-chip" type="button" data-val="Weekly" data-mk="Неделно" style="--cc:var(--mw-cyan)">Weekly</button>
+            </div>
           </div>
         </div>
 
@@ -235,40 +256,67 @@ let dept = DEPTS[0];
 
 function bil(en,mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
 
-/* dept <select> */
-document.getElementById('fDept').innerHTML = DEPTS.map(d=>
-  '<option value="'+d.c+'" data-en="'+d.en+'" data-mk="'+d.mk+'">'+d.en+' · '+d.mk+'</option>').join('');
+/* dept chips (replaces native <select> — locked decision: no native dropdowns) */
+document.getElementById('fDept').innerHTML = DEPTS.map((d,i)=>
+  '<button class="mw-chip'+(i===0?' on':'')+'" type="button" data-dept="'+d.c+'" style="--cc:'+d.col+'"><span class="d"></span>'+d.ab+' · '+bil(d.en,d.mk)+'</button>').join('');
+document.getElementById('fDept').addEventListener('click', e=>{
+  const b = e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#fDept .mw-chip').forEach(x=>x.classList.toggle('on', x===b));
+  dept = DEPTS.find(d=>d.c===b.dataset.dept); renderFields();
+});
+['fType','fPrio','fRec'].forEach(id=>{
+  document.getElementById(id).addEventListener('click', e=>{
+    const b = e.target.closest('.mw-chip'); if(!b) return;
+    document.querySelectorAll('#'+id+' .mw-chip').forEach(x=>x.classList.toggle('on', x===b));
+    renderPreview();
+  });
+});
+
+function readFieldVal(el){
+  if(el.matches('input')) return (el.value||'').trim();
+  const on = el.querySelector('.mw-chip.on'); return on ? on.dataset.val : '';
+}
 
 function renderFields(){
   const wrap = document.getElementById('deptFields');
   document.getElementById('modal').style.setProperty('--mw-acc', dept.col);
   document.getElementById('deptBlockTtl').innerHTML = bil(dept.en+' fields', 'Полиња — '+dept.mk);
-  wrap.innerHTML = FIELDS[dept.c].map((f,i)=>{
+  wrap.innerHTML = FIELDS[dept.c].map((f)=>{
     let input;
     if(f.type==='select'){
-      input = '<div class="mw-select"><select data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'">'+
-        f.options.map(o=>'<option'+(o===f.val?' selected':'')+'>'+o+'</option>').join('')+'</select></div>';
+      input = '<div class="mw-chips" data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'">'+
+        f.options.map(o=>'<button class="mw-chip mw-chip--sm'+(o===f.val?' on':'')+'" type="button" data-val="'+o+'" style="--cc:var(--mw-cyan)">'+o+'</button>').join('')+'</div>';
     } else {
-      input = '<input class="mw-input" data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'" type="'+(f.type==='number'?'text':'text')+'" value="'+f.val+'" />';
+      input = '<input class="mw-input" data-fk="'+f.k+'" data-unit="'+(f.unit||'')+'" type="text" value="'+f.val+'" />';
     }
     return '<div class="af-field"><label>'+bil(f.en,f.mk)+(f.unit?' <span style="color:var(--mw-text-faint)">('+f.unit+')</span>':'')+'</label>'+input+'</div>';
   }).join('');
-  wrap.querySelectorAll('[data-fk]').forEach(el=> el.addEventListener('input', renderPreview));
+  wrap.querySelectorAll('input[data-fk]').forEach(el=> el.addEventListener('input', renderPreview));
+  wrap.querySelectorAll('.mw-chips[data-fk]').forEach(grp=> grp.addEventListener('click', e=>{
+    const b = e.target.closest('.mw-chip'); if(!b) return;
+    grp.querySelectorAll('.mw-chip').forEach(x=>x.classList.toggle('on', x===b));
+    renderPreview();
+  }));
   renderPreview();
 }
 
 function renderPreview(){
   const title = document.getElementById('fTitle').value || '—';
   const due = document.getElementById('fDue').value.trim();
-  const prio = document.getElementById('fPrio').value;
+  const prio = document.querySelector('#fPrio .on').dataset.val;
   const tags = document.getElementById('fTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const est = document.getElementById('fEst').value.trim();
+  const recBtn = document.querySelector('#fRec .on');
+  const rec = recBtn ? recBtn.dataset.val : 'Once';
   const attrs = [];
   document.querySelectorAll('#deptFields [data-fk]').forEach(el=>{
-    const v = (el.value||'').trim(); if(!v) return;
+    const v = readFieldVal(el); if(!v) return;
     const unit = el.getAttribute('data-unit');
     attrs.push([el.getAttribute('data-fk'), unit ? v+' '+unit : v]);
   });
   let meta = '<span class="mw-tcard__dept">'+dept.ab+'</span><span class="mw-tcard__id">CU-104_</span>';
+  if(est) meta += '<span class="mw-attr">Est <b>'+est+'h</b></span>';
+  if(rec && rec!=='Once') meta += '<span class="mw-attr">↺ <b>'+rec+'</b></span>';
   attrs.forEach(a=> meta += '<span class="mw-attr">'+a[0]+' <b>'+a[1]+'</b></span>');
   tags.forEach(t=> meta += '<span class="mw-htag">#'+t+'</span>');
   if(due) meta += '<span class="mw-due">'+due+'</span>';
@@ -282,10 +330,7 @@ function renderPreview(){
     '</div>';
 }
 
-document.getElementById('fDept').addEventListener('change', e=>{
-  dept = DEPTS.find(d=>d.c===e.target.value); renderFields();
-});
-['fTitle','fDue','fPrio','fTags'].forEach(id=> document.getElementById(id).addEventListener('input', renderPreview));
+['fTitle','fDue','fTags','fEst'].forEach(id=> document.getElementById(id).addEventListener('input', renderPreview));
 
 renderFields();
 </script>

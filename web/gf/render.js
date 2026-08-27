@@ -29,9 +29,31 @@ GF.pickStatus = (id) => {
   GF.choose({
     title: GF.t('change_status'), value: t.status,
     options: GF.STATUS_ORDER.map(s => ({ v: s, label: GF.statusLabel(s), color: GF.STATUS_COLORS[s] })),
-    onPick: (v) => { if (v !== t.status && GF.setStatus(id, v)) { GF.render.panels(); GF.render.telemetry(); } },
+    onPick: (v) => { if (v !== t.status && GF.setStatus(id, v)) { GF.render.panels(); GF.render.telemetry(); if (v === 'done') GF.flashCompleted(id); } },
   });
 };
+
+// One-shot "just completed" feedback, deliberately decoupled from render.panels()'s
+// full innerHTML replace: that replace destroys the task's old card node and
+// creates a new one already in its final (done) state, so a CSS transition on the
+// outgoing node never gets an old/new pair to interpolate (see .card's
+// border-left-color transition, app.css:395 — set up for exactly this and never
+// fires). Call this AFTER render.panels() has already run for the same toggle. It
+// waits one frame (so the freshly-rendered node is guaranteed to be attached),
+// finds it by data-task-id, and toggles the .card--just-completed animation class
+// (app.css). The 400 below must stay in sync with that class's animation-duration.
+GF.flashCompleted = (id) => {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`[data-task-id="${id}"]`);
+    if (!el) return;
+    el.classList.add('card--just-completed');
+    setTimeout(() => el.classList.remove('card--just-completed'), 400);
+  });
+};
+
+// Task ids that have already played their entrance animation once in this
+// browser tab's session. See card()/panels() below.
+const _animatedIds = new Set();
 
 GF.render = {
   all() {
@@ -41,6 +63,11 @@ GF.render = {
     // department home when the user has no department (execs, QP, ADMIN).
     if (GF.state.view === 'exec' && !(GF.isExec && GF.isExec())) GF.state.view = 'mywork';
     if (GF.state.view === 'depthome' && !(GF.hasDeptHome && GF.hasDeptHome())) GF.state.view = 'mywork';
+    // Bounce stale views that belong to a different module than the active one.
+    if (GF.keyVisibleNow && !GF.keyVisibleNow(GF.state.view)) {
+      const activeMod = GF.moduleById && GF.moduleById(GF.state.module || 'tasks');
+      GF.state.view = (activeMod && activeMod.defaultView) ? activeMod.defaultView() : 'mywork';
+    }
     const v = GF.state.view;
     const show = (id, on) => { const el = GF.$(id); if (el) el.style.display = on ? '' : 'none'; };
     const weekViews = v === 'mywork' || v === 'board' || v === 'timeline';
@@ -64,6 +91,7 @@ GF.render = {
     GF.$('search-input').placeholder = GF.t('search');
     GF.$('voice-btn-label').textContent = GF.t('voice_task');
     const nl = GF.$('newtask-label'); if (nl) nl.textContent = GF.t('new_task_btn');
+    const tb = GF.$('today-btn'); if (tb) tb.textContent = GF.t('today');
     // Gate the header New-task button on the real create permission. (Was
     // guarded by a never-defined `window.APP`, so it never ran — inert dead code.)
     const nb = GF.$('newtask-btn'); if (nb) nb.style.display = GF.can('create') ? '' : 'none';
@@ -83,8 +111,10 @@ GF.render = {
     // (_registerFullPageView) insert themselves into the right group.
     // Coordination badge = pending cross-department handoffs (handoff tasks
     // not yet ready) in the selected week. 0 → no badge renders.
+    // Archived rows (visible only with "Show archived" on) are history, not
+    // live work — keep them out of every aggregate count in this renderer.
     const coordPending = GF.scopedTasks(GF.state.selWeek)
-      .filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
+      .filter(t => !t.archived && GF.HANDOFF[t.dept] && t.status !== 'done').length;
     const unreadN = (GF.WWF && GF.WWF._notif && GF.WWF._notif.unread) || 0;
     const ops = [];
     if (GF.hasDeptHome && GF.hasDeptHome()) ops.push(['depthome', 'dept_home', 'home']);
@@ -108,18 +138,20 @@ GF.render = {
     // rendered for roles above base USER — same gate as the views themselves —
     // so operators never see an empty group label.
     const role = (GF.API && GF.API.user || {}).role;
-    const qmsGroup = role && role !== 'USER'
+    const activeModule = (GF.state && GF.state.module) || 'tasks';
+    const qmsGroup = activeModule === 'qc' && role && role !== 'USER'
       ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
          <div data-nav="qms-end" style="display:none"></div>` : '';
     GF.$('nav').innerHTML =
-      group(AL('Operations', 'Операции'), ops)
-      + group(AL('Management', 'Менаџмент'), mgr)
+      (activeModule === 'tasks' ? group(AL('Operations', 'Операции'), ops) : '')
+      + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
+    GF.syncModuleBtn && GF.syncModuleBtn();
 
     GF.$('side-label').textContent = GF.t('departments');
     const counts = {};
-    GF.weekTasks(GF.state.selWeek).forEach(t => { counts[t.dept] = (counts[t.dept] || 0) + 1; });
+    GF.weekTasks(GF.state.selWeek).forEach(t => { if (t.archived) return; counts[t.dept] = (counts[t.dept] || 0) + 1; });
     // A dept-scoped manager's sidebar shows only departments they can actually
     // have tasks in this week: their own, plus any department that appears via
     // a multi-departmental family (delegated subtask both sides see in full).
@@ -129,7 +161,12 @@ GF.render = {
       <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
-      </div>`).join('');
+      </div>`).join('')
+      + (GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin()
+        ? `<div class="dept-row" style="opacity:.7" onclick="GF.WWF.openDeptForm()">
+            <span class="dept-dot" style="background:transparent;border:1px dashed currentColor"></span>${
+            GF.state.lang === 'mk' ? '+ Додади оддел' : '+ Add department'}</div>`
+        : '');
 
     const u = GF.PEOPLE[GF.state.user] || { name: '—', roleLabel: '' };
     GF.$('user-card').innerHTML = `${GF.avatar(GF.state.user, 34)}
@@ -157,7 +194,9 @@ GF.render = {
   },
 
   dayPills() {
-    const wt = GF.weekTasks(GF.state.selWeek);
+    // Counts are live-work telemetry: archived cards still render in the
+    // lists below, but never inflate the pill numbers.
+    const wt = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);
     const counts = { All: wt.length };
     GF.DAYS.forEach(d => counts[d] = wt.filter(t => (t.days || []).includes(d)).length);
     const days = ['All', ...GF.DAYS.slice(0, 5)];
@@ -168,7 +207,9 @@ GF.render = {
   },
 
   telemetry() {
-    const all = GF.weekTasks(GF.state.selWeek);
+    // Aggregates exclude archived rows — with "Show archived" on they still
+    // render (muted) in the lists but must not skew completion/status counts.
+    const all = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);
     const n = all.length;
     const by = (s) => all.filter(t => t.status === s).length;
     const done = by('done'), rate = n ? Math.round(done / n * 100) : 0;
@@ -186,6 +227,7 @@ GF.render = {
         ${GF.icon('chevD', 'icon tele-chev')}
       </div>
       <div class="tele-detail">
+        <div class="tele-detail-inner">
         <div class="track" style="height:9px"><span style="width:${rate}%;background:var(--green)"></span></div>
         <div class="tele-grid">
           <div class="tele-card"><div class="v" style="color:var(--green)">${done}</div><div class="l">${GF.statusLabel('done')}</div></div>
@@ -193,6 +235,7 @@ GF.render = {
           <div class="tele-card"><div class="v" style="color:var(--blue)">${by('review')}</div><div class="l">${GF.statusLabel('review')}</div></div>
           <div class="tele-card"><div class="v" style="color:var(--red)">${by('stuck')}</div><div class="l">${GF.statusLabel('stuck')}</div></div>
           <div class="tele-card"><div class="v" style="color:var(--violet)">${busiest ? GF.dayLabel(busiest[0]) : '—'}</div><div class="l">${GF.t('busiest')}</div></div>
+        </div>
         </div>
       </div>`;
   },
@@ -208,6 +251,10 @@ GF.render = {
       options: [{ v: '', label: GF.t('all_tags') }].concat(allTags.map(tg => ({ v: tg, label: '#' + tg }))),
       onPick: (v) => GF.setTagFilter(v),
     }) : '';
+    const curCards = cur.map(t => this.card(t)).join('');
+    const nxtCards = nxt.map(t => this.card(t)).join('');
+    cur.forEach(t => _animatedIds.add(t.id));
+    nxt.forEach(t => _animatedIds.add(t.id));
     GF.$('panels').innerHTML = `
       <div class="panel">
         <div class="panel-head">
@@ -215,11 +262,12 @@ GF.render = {
           <span class="cnt">${cur.length}</span>
           <div class="spacer"></div>
           ${tagFilter}
+          <button class="btn btn-sm${GF.state.showArchived ? ' btn-primary' : ''}" onclick="GF.WWF&&GF.WWF.toggleArchived&&GF.WWF.toggleArchived()">${GF.icon('box','icon')}${GF.t('show_archived')}</button>
           <button class="btn btn-sm" onclick="GF.ai.summary('report')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_summary')}</button>
           <button class="btn btn-sm" onclick="GF.rollover()">${GF.icon('forward','icon')}${GF.t('rollover')}</button>
         </div>
         <div class="panel-body">
-          ${cur.length ? cur.map(t => this.card(t)).join('') : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
+          ${cur.length ? curCards : `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}
         </div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus')}<span>${GF.t('add_task')}</span>
           <div class="spacer"></div><span title="${GF.t('voice_task')}" style="cursor:pointer;display:inline-flex" onclick="event.stopPropagation();GF.voice.openCapture(${GF.state.selWeek})">${GF.icon('mic','icon','var(--orange)')}</span></div>` : ''}
@@ -231,7 +279,7 @@ GF.render = {
           <div class="spacer"></div>
           <button class="btn btn-sm" onclick="event.stopPropagation();GF.ai.summary('plan')">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('ai_brief')}</button>
         </div>
-        <div class="panel-body">${nxt.map(t => this.card(t)).join('') || `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}</div>
+        <div class="panel-body">${nxtCards || `<div class="add-row" style="justify-content:center;cursor:default">${GF.t('no_tasks')}</div>`}</div>
         ${GF.can('create') ? `<div class="add-row" onclick="GF.openAdd(${nextId})">${GF.icon('plus')}<span>${GF.t('add_task')}</span></div>` : ''}
       </div>`;
   },
@@ -240,6 +288,7 @@ GF.render = {
     const d = GF.dep(t.dept);
     const exp = GF.state.expanded.has(t.id);
     const prog = GF.progress(t);
+    const enterCls = _animatedIds.has(t.id) ? '' : ' card-enter';
     const daytags = (t.days || []).map(x => `<span class="daytag">${GF.dayLabel(x)}</span>`).join('');
     const meta = [t.id].filter(Boolean);
     // v2 badges: due date (danger when overdue + not done), type chip,
@@ -248,6 +297,9 @@ GF.render = {
     const dueBadge = t.due ? `<span class="due-badge ${overdue ? 'overdue' : ''}" title="${GF.t('due_date')}">
       ${GF.icon('calendar', 'icon')}${GF.esc(t.due)}${overdue ? ' · ' + GF.t('overdue') : ''}</span>` : '';
     const typeChip = (t.type && t.type !== 'other') ? `<span class="type-chip t-${GF.esc(t.type)}">${GF.esc(GF.taskTypeLabel(t.type))}</span>` : '';
+    // Archived rows only appear when the "Show archived" filter is on — mark
+    // them so a muted card is never mistaken for live work.
+    const archChip = t.archived ? `<span class="type-chip" title="${GF.t('archived')}">${GF.t('archived')}</span>` : '';
     const refCode = t.ref ? `<span class="ref-code">${GF.esc(t.ref)}</span>` : '';
     // The subtask counter is the tree toggle: themes expand into their
     // documents (and documents into versions) as indented rows below the card.
@@ -273,7 +325,7 @@ GF.render = {
           <div class="card-title">${GF.esc(t.title)}</div>
           <div class="card-meta"><span class="dn" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
             ${meta.map(m => `<span>·</span><span>${GF.esc(m)}</span>`).join('')}
-            ${refCode}${typeChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
+            ${refCode}${typeChip}${archChip}${dueBadge}${subProg}${subHint}${attrChips}${tagChips}</div>
         </div>
         <div class="card-side">
           <div class="daytags">${daytags}</div>
@@ -284,7 +336,9 @@ GF.render = {
         ${GF.icon('chevD', 'icon chev-card')}
       </div>`;
     const tree = treeOpen ? this.treeRows(t.id, 1) : '';
-    if (!exp) return `<div class="card s-${t.status}">${head}${tree}</div>`;
+    // Archived cards render muted (inline — archived is a filter state, not a skin token).
+    const archMute = t.archived ? ' style="opacity:.55"' : '';
+    if (!exp) return `<div class="card s-${t.status}${enterCls}" data-task-id="${t.id}"${archMute}>${head}${tree}</div>`;
 
     const noteId = 'note-' + t.id;
     // Executive input stands out: notes written by the OWNER get the strongest
@@ -310,7 +364,10 @@ GF.render = {
 
     const body = `
       <div class="card-body">
+        <div class="card-body-inner">
         ${t.status === 'stuck' && t.blocker ? `<div class="blocker">${GF.icon('flag')}<div><div class="bt">${GF.t('blocker')}: ${GF.esc(t.blocker)}</div></div></div>` : ''}
+        ${t.status === 'done' && t.outcome ? `<div class="sec-label">${GF.icon('check','icon')}${GF.t('outcome')}</div>
+        <div class="card-desc">${GF.esc(t.outcome)}</div>` : ''}
         ${t.desc ? `<div class="card-desc">${GF.esc(t.desc)}</div>` : ''}
         <div class="sec-label">${GF.icon('chat','icon')}${GF.t('notes')}</div>
         <div class="notes">${notes || ''}</div>
@@ -322,6 +379,7 @@ GF.render = {
         </div>
         ${handoff}
         <div class="card-actions">
+          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openTaskDetail&&GF.WWF.openTaskDetail('${t.id}')">${GF.icon('eye','icon','var(--blue)')}${GF.t('open_detail')}</button>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">${GF.icon('clock','icon','var(--blue)')}${GF.t('log_work')}</button>
           <button class="btn btn-sm" onclick="GF.openAdd(${JSON.stringify(t.weekId)},'${t.id}')">${GF.icon('plus','icon')}${GF.t('add_subtask')}</button>
           <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${t.id}')">${GF.icon('settings','icon')}${GF.t('edit')}</button>
@@ -329,10 +387,13 @@ GF.render = {
           <div class="track" style="max-width:160px;margin:0 6px"><span style="width:${prog}%;background:${d.color}"></span></div>
           <span class="mono" style="font-size:12px;color:var(--ink-2);font-weight:600">${prog}%</span>
           <div class="spacer"></div>
-          <button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>
+          ${t.archived
+            ? `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.unarchiveTask&&GF.WWF.unarchiveTask('${t.id}')">${GF.icon('forward','icon')}${GF.t('unarchive')}</button>`
+            : `<button class="btn btn-sm" onclick="GF.WWF&&GF.WWF.archiveTask&&GF.WWF.archiveTask('${t.id}')">${GF.icon('box','icon')}${GF.t('archive')}</button>`}
+        </div>
         </div>
       </div>`;
-    return `<div class="card s-${t.status} expanded">${head}${body}${tree}</div>`;
+    return `<div class="card s-${t.status} expanded${enterCls}" data-task-id="${t.id}"${archMute}>${head}${body}${tree}</div>`;
   },
 
   /* ── Tree rows: a parent's children as indented compact rows (theme →
@@ -359,13 +420,14 @@ GF.render = {
         <span class="tree-title" title="${GF.esc(c.title)}">${GF.esc(c.title)}</span>
         ${range ? `<span class="tree-range">${GF.esc(range)}</span>` : ''}
         ${(() => { const p = GF.progress(c); return p > 0 ? `<span class="tree-prog" title="${GF.t('completion')}: ${p}%">
-          <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="width:${p}%"></span></span>
+          <span class="tp-track"><span class="tp-fill ${p >= 75 ? 'hi' : p >= 34 ? 'mid' : 'lo'}" style="transform:scaleX(${p / 100})"></span></span>
           <span class="tp-val">${p}%</span></span>` : ''; })()}
         <span class="pill s-${c.status}" title="${GF.t('change_status') || 'Change status'}"
           onclick="event.stopPropagation();GF.pickStatus('${c.id}')"><span class="dot" style="background:currentColor;opacity:.7"></span>${GF.statusLabel(c.status)}</span>
+        <button class="mini-btn tree-add" title="${GF.t('add_subtask')}" onclick="event.stopPropagation();GF.openAdd(${JSON.stringify(c.weekId)},'${c.id}')">${GF.icon('plus')}</button>
         <button class="mini-btn tree-edit" title="${GF.t('edit')}" onclick="event.stopPropagation();GF.WWF&&GF.WWF.openEdit&&GF.WWF.openEdit('${c.id}')">${GF.icon('settings')}</button>
       </div>${open ? this.treeRows(c.id, depth + 1) : ''}`;
     }).join('');
-    return `<div class="tree-rows tree-d${depth}">${rows}</div>`;
+    return `<div class="tree-rows tree-d${depth}${depth > 0 ? ' mw-subbranch' : ''}">${rows}</div>`;
   },
 };

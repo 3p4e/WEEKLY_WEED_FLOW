@@ -4,10 +4,16 @@ can never see or touch another org's data through the API, regardless of
 role.
 
 Covers every table with a real API read path: tasks, profiles (via
-directory), departments, calendar_weeks. handoffs / ai_pins /
-ai_agent_bindings / password_reset_codes have RLS policies but no API
-routes at all today, so their isolation is unreachable via HTTP and out of
-scope here."""
+directory), departments, calendar_weeks, handoffs (collab.py) and
+ai_agent_bindings (ai.py).
+
+The previous version of this docstring claimed handoffs / ai_pins /
+ai_agent_bindings / password_reset_codes had "no API routes at all" and were
+out of scope. That went stale: handoffs gained POST/GET /tasks/{id}/handoffs
+and POST /handoffs/{id}/resolve, ai_agent_bindings gained GET/PUT/DELETE
+/ai/bindings, and ai_pins gained GET /ai/pins — all reachable over HTTP, all
+relying on RLS with nothing pinning it. password_reset_codes was dead schema
+and has been dropped (users migration 0008)."""
 import uuid
 
 from app.db import tasks_admin_pool, users_admin_pool
@@ -110,6 +116,78 @@ async def test_calendar_weeks_scoped_to_own_org(client):
         r = await client.get("/weeks", headers={"Authorization": f"Bearer {token_b}"})
         assert r.status_code == 200
         assert r.json() == []
+    finally:
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])
+
+
+async def test_handoffs_not_visible_across_orgs(client):
+    """handoffs has live routes (collab.py) and org-scoped RLS, but nothing
+    pinned the isolation — the docstring above used to assert it had no routes
+    at all. Org B must not read, nor resolve, org A's handoff.
+
+    The department + handoff rows are seeded through the admin pool rather than
+    POST /departments: that route provisions AI agents and needs outbound
+    network, which is unrelated to the RLS property under test here."""
+    org_a = await _make_org_admin("hoa")
+    org_b = await _make_org_admin("hob")
+    try:
+        r = await client.post("/auth/login", json={"email": org_a["username"], "password": "TestPassword123456"})
+        headers_a = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        r = await client.post("/auth/login", json={"email": org_b["username"], "password": "TestPassword123456"})
+        headers_b = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        pool = tasks_admin_pool()
+        dept_id = uuid.uuid4()
+        await pool.execute(
+            "INSERT INTO departments(id, org_id, code, name) VALUES ($1,$2,'qc','QC')",
+            dept_id, org_a["org_id"])
+        task = (await client.post("/tasks", json={"title": "Org A handoff task", "status": "pending"},
+                                  headers=headers_a)).json()
+        handoff_id = await pool.fetchval(
+            "INSERT INTO handoffs(org_id, task_id, to_dept_id, requested_by, note)"
+            " VALUES ($1,$2,$3,$4,'please take this') RETURNING id",
+            org_a["org_id"], uuid.UUID(task["id"]), dept_id, org_a["admin_id"])
+
+        # Org A sees its own handoff …
+        r = await client.get(f"/tasks/{task['id']}/handoffs", headers=headers_a)
+        assert r.status_code == 200 and len(r.json()) == 1, r.text
+        # … org B cannot list it (the parent task is itself invisible) …
+        assert (await client.get(f"/tasks/{task['id']}/handoffs", headers=headers_b)).status_code == 404
+        # … and cannot resolve it, even as an ADMIN of their own org.
+        r = await client.post(f"/handoffs/{handoff_id}/resolve",
+                              json={"decision": "accepted"}, headers=headers_b)
+        assert r.status_code in (403, 404, 422), r.text
+    finally:
+        await purge_org(org_a["org_id"])
+        await purge_org(org_b["org_id"])
+
+
+async def test_ai_bindings_not_visible_across_orgs(client):
+    """ai_agent_bindings has live routes (ai.py GET/PUT/DELETE /ai/bindings)
+    and org-scoped RLS. A binding written by org A must never appear in, or be
+    deleted by, org B."""
+    org_a = await _make_org_admin("aia")
+    org_b = await _make_org_admin("aib")
+    try:
+        r = await client.post("/auth/login", json={"email": org_a["username"], "password": "TestPassword123456"})
+        headers_a = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        r = await client.post("/auth/login", json={"email": org_b["username"], "password": "TestPassword123456"})
+        headers_b = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+        r = await client.put("/ai/bindings/weekly_summary",
+                             json={"letta_agent_id": "agent-org-a"}, headers=headers_a)
+        assert r.status_code == 200, r.text
+
+        def _bound(rows):
+            rows = rows if isinstance(rows, list) else rows.get("bindings", [])
+            return any(x.get("letta_agent_id") == "agent-org-a" for x in rows)
+
+        # Org B's list must not contain org A's binding …
+        assert not _bound((await client.get("/ai/bindings", headers=headers_b)).json())
+        # … and deleting "the same" function key must not touch org A's row.
+        await client.delete("/ai/bindings/weekly_summary", headers=headers_b)
+        assert _bound((await client.get("/ai/bindings", headers=headers_a)).json())
     finally:
         await purge_org(org_a["org_id"])
         await purge_org(org_b["org_id"])

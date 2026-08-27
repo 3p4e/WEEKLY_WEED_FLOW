@@ -37,8 +37,8 @@
      Hardcoded plasma-green values remain as fallbacks. */
   background:
     radial-gradient(120% 80% at 20% 0%,
-      var(--surface-2, #17402f) 0%, var(--bg, #0e2519) 50%, #0a1b13 100%);
-  font-family: 'Poppins', 'Saira', system-ui, sans-serif;
+      var(--surface-2, #17402f) 0%, var(--bg, #0e2519) 50%, var(--mw-void, #0a1b13) 100%);
+  font-family: var(--font, system-ui, sans-serif);
   -webkit-tap-highlight-color: transparent;
 }
 /* Set by ensureCardInView() only when the group overflows the viewport: top-
@@ -78,8 +78,8 @@
   pointer-events: none;
   background:
     radial-gradient(38% 30% at 50% 40%, rgba(var(--accent-rgb, 43,232,160),.18), transparent 70%),
-    radial-gradient(46% 40% at 78% 84%, rgba(47,217,217,.10), transparent 72%),
-    radial-gradient(40% 34% at 16% 88%, rgba(224,167,62,.06), transparent 72%);
+    radial-gradient(46% 40% at 78% 84%, rgba(var(--accent-rgb,47,217,217),.10), transparent 72%),
+    radial-gradient(40% 34% at 16% 88%, rgba(var(--accent-rgb,224,167,62),.05), transparent 72%);
   animation: gf-atmos-drift 14s ease-in-out infinite;
 }
 @keyframes gf-atmos-drift {
@@ -93,7 +93,7 @@
   position: relative;
   z-index: 2;
   transform-origin: center top;
-  transition: transform .7s cubic-bezier(.2, .8, .2, 1), margin .7s cubic-bezier(.2, .8, .2, 1);
+  transition: transform .5s var(--ease-out), margin .5s var(--ease-out);
   will-change: transform;
 }
 /* Entered: shrink the leaf AND reclaim the layout space it frees (scale is only
@@ -120,7 +120,7 @@
   background: radial-gradient(ellipse, rgba(var(--accent-rgb, 43,232,160),.32), transparent 70%);
   filter: blur(6px);
   pointer-events: none;
-  transition: opacity .5s ease;
+  transition: opacity .5s var(--ease-out);
 }
 .gf-entry.entered .gf-shadow { opacity: 0; height: 0 !important; margin: 0 !important; }
 
@@ -132,7 +132,7 @@
   text-align: center;
   max-height: 260px;
   overflow: hidden;
-  transition: opacity .4s ease, max-height .5s ease, margin .5s ease, transform .5s ease;
+  transition: opacity .4s var(--ease-out), max-height .5s var(--ease-out), margin .5s var(--ease-out), transform .5s var(--ease-out);
 }
 .gf-entry.entered .gf-lockup {
   opacity: 0;
@@ -142,11 +142,11 @@
   pointer-events: none;
 }
 .gf-name {
-  font-family: 'Poppins', system-ui, sans-serif;
+  font-family: var(--font, system-ui, sans-serif);
   font-weight: 800;
   font-size: 34px;
   letter-spacing: -.01em;
-  color: #DDF3E9;
+  color: var(--ink, #DDF3E9);
   line-height: 1;
 }
 .gf-name .gf-flow {
@@ -168,12 +168,12 @@
   font-weight: 600;
   letter-spacing: .28em;
   text-transform: uppercase;
-  color: #8FB6A6;
+  color: var(--ink-2, #8FB6A6);
 }
 .gf-enter {
   margin-top: 18px;
   font-size: 12.5px;
-  color: #8FB6A6;
+  color: var(--ink-2, #8FB6A6);
   opacity: .9;
   animation: gf-enter-pulse 2.6s ease-in-out infinite;
 }
@@ -198,7 +198,7 @@
   max-height: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: opacity .5s ease, max-height .55s ease;
+  transition: opacity .5s var(--ease-out), max-height .5s var(--ease-out);
 }
 .gf-lw.show {
   opacity: 1;
@@ -217,18 +217,18 @@
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   transform: translateY(22px);
-  transition: transform .55s cubic-bezier(.2, .8, .2, 1);
+  transition: transform .5s var(--ease-out);
 }
 .gf-lw.show .gf-card { transform: none; }
 
 .gf-card-title {
   font-size: 17px;
   font-weight: 700;
-  color: #DDF3E9;
+  color: var(--ink, #DDF3E9);
 }
 .gf-card-sub {
   font-size: 12.5px;
-  color: #8FB6A6;
+  color: var(--ink-2, #8FB6A6);
   margin: 4px 0 16px;
 }
 .gf-in {
@@ -277,15 +277,15 @@
   z-index: 4;
   margin-top: 14px;
   font-size: 12.5px;
-  color: #8FB6A6;
+  color: var(--ink-2, #8FB6A6);
   cursor: pointer;
   opacity: 0;
   max-height: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: opacity .4s ease, max-height .4s ease;
+  transition: opacity .4s var(--ease-out), max-height .4s var(--ease-out);
 }
-.gf-back:hover { color: #DDF3E9; }
+.gf-back:hover { color: var(--ink, #DDF3E9); }
 .gf-entry.entered .gf-back {
   opacity: .75;
   max-height: 36px;
@@ -328,4 +328,83 @@
 @media (max-width: 480px) {
   .gf-demo-float { padding: 8px 10px; font-size: 15px; gap: 0; }
   .gf-demo-float span { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SECURE ACCESS login (design/mass-weed-mockup/login.html), rendered by
+   entry.js's loginCardHTML/changePwCardHTML. The reveal machinery above
+   (gf-lw / gf-card show/hide, the shrunk 3D leaf, back-to-leaf) is reused
+   untouched; only the CONTENT of the revealed card changed — so when that
+   content is the two-column Secure Access, the green glass card frame is
+   neutralised and the panel provides its own HUD frame.
+   ══════════════════════════════════════════════════════════════════════ */
+.gf-card:has(.mw-secacc) {
+  width: min(880px, 94vw);
+  max-width: 94vw;
+  padding: 0; border: none; border-radius: 0;
+  background: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+/* The two-column Secure Access is taller than the old card — give the reveal
+   container room, and let it scroll if the viewport is short. */
+.gf-lw:has(.mw-secacc).show { max-height: 82vh; overflow-y: auto; }
+
+.mw-secacc {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 26px;
+  align-items: stretch;
+  text-align: left;
+}
+.mw-secacc--single { grid-template-columns: 1fr; max-width: 380px; margin: 0 auto; }
+
+/* left column — boot-log terminal */
+.mw-secacc__log {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 8px 24px 8px 6px;
+  border-right: 1px solid rgba(58,159,212,.15);
+}
+.mw-secacc__brand { margin-bottom: 26px; }
+.mw-secacc__name {
+  font-family: 'Saira Condensed', var(--mw-font-cond, sans-serif);
+  font-weight: 700; text-transform: uppercase; letter-spacing: .2em;
+  font-size: 34px; line-height: 1;
+  color: var(--mw-cyan-bright, #8fe3ff);
+  text-shadow: 0 0 22px rgba(94,200,240,.55);
+}
+.mw-secacc__node {
+  font-size: 11px; letter-spacing: .28em; text-transform: uppercase;
+  color: var(--mw-text-dim, #7fa3bd); margin-top: 9px;
+}
+.mw-secacc__boot {
+  font-family: 'Saira Condensed', ui-monospace, monospace;
+  font-size: 12.5px; line-height: 1.95; letter-spacing: .02em;
+  color: var(--mw-text-dim, #7fa3bd);
+}
+.mw-secacc__boot .hd { color: var(--mw-cyan-bright, #8fe3ff); }
+.mw-secacc__boot .ok { color: var(--mw-digit, #6cf05a); }
+.mw-secacc__boot > div { opacity: 0; transform: translateX(-8px); }
+.mw-secacc__boot > div.in { opacity: 1; transform: none; transition: opacity .3s var(--ease-out), transform .3s var(--ease-out); }
+.mw-secacc__boot .cursor::after {
+  content: "▌"; color: var(--mw-cyan, #5ec8f0);
+  animation: mw-cursor-blink 1.1s steps(1) infinite;
+}
+@keyframes mw-cursor-blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+
+/* right column — the access panel (already .mw-panel) */
+.mw-secacc__panel { padding: 22px 24px 24px; align-self: center; width: 100%; box-sizing: border-box; }
+.mw-secacc__panel .mw-field { margin-bottom: 14px; }
+.mw-secacc__panel .mw-field > label {
+  display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--mw-text-faint, #4d6d87); margin-bottom: 6px;
+}
+.mw-secacc__hint { font-size: 12px; color: var(--mw-text-dim, #7fa3bd); margin: -2px 0 14px; line-height: 1.5; }
+.mw-secacc__panel .gf-msg { text-align: center; }
+
+/* stack to one column on narrow screens — boot-log above the panel */
+@media (max-width: 640px) {
+  .mw-secacc { grid-template-columns: 1fr; gap: 18px; }
+  .mw-secacc__log { border-right: none; border-bottom: 1px solid rgba(58,159,212,.15); padding: 0 0 16px; }
+  .mw-secacc__name { font-size: 27px; }
+  .gf-card:has(.mw-secacc) { width: min(420px, 94vw); }
 }

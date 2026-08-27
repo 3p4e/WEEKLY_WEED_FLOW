@@ -6,13 +6,51 @@ repeated identical events, recipient-scoped RLS on the inbox, creation as a
 feed-only event (no recipients), and the read/done lifecycle driving the
 server-computed unread count.
 """
+import logging
+from app.worktime import facility_today
+import uuid
+
 from tests.conftest import create_user, login_and_set_password
+from app.db import rls, tasks_admin_pool
+from app.notify import safe_emit
 
 
 async def _actor(client, admin_headers, role="USER"):
     u, otp = await create_user(client, admin_headers, role=role)
     token = await login_and_set_password(client, u["username"], otp)
     return u, {"Authorization": f"Bearer {token}"}
+
+
+async def test_one_bad_recipient_is_logged_and_skipped_not_fatal(org, caplog):
+    """A failing recipient must cost exactly that recipient.
+
+    emit() used to catch only UniqueViolation, so any OTHER per-recipient error
+    (here a malformed uuid) propagated out and — through safe_emit's outer
+    savepoint — rolled back the EVENT itself along with every recipient already
+    inserted. Migration 0032's own comment documents the opposite intention.
+    The per-recipient savepoint has already undone just the bad INSERT, so the
+    transaction is healthy and the fan-out continues.
+
+    Pins all three properties: the event survives, the good recipient still
+    gets their notification, and the failure is logged rather than swallowed."""
+    actor = {"id": org["admin_id"], "org_id": org["org_id"], "role": "ADMIN"}
+    good = str(uuid.uuid4())
+    caplog.set_level(logging.WARNING, logger="app.notify")
+    async with rls(actor) as c:
+        ev_id = await safe_emit(
+            c, actor, verb="assigned", object_type="task",
+            object_id="00000000-0000-0000-0000-000000000000",
+            # bad one FIRST: if it aborted the fan-out, `good` would never be
+            # reached and the row count below would be 0.
+            recipients=[("not-a-uuid", "assigned"), (good, "assigned")],
+        )
+    assert ev_id is not None, "one bad recipient must not roll back the event"
+    delivered = await tasks_admin_pool().fetchval(
+        "SELECT count(*) FROM notifications WHERE event_id=$1 AND recipient_id=$2",
+        ev_id, good)
+    assert delivered == 1, "the good recipient must still be notified"
+    assert any("fan-out failed for recipient not-a-uuid" in r.message
+               for r in caplog.records), "the skipped recipient must be logged"
 
 
 async def test_assign_notifies_assignee_not_actor(client, admin_headers):
@@ -110,16 +148,30 @@ async def test_unassign_notifies_the_ex_assignee(client, admin_headers):
 
 
 async def test_mention_in_comment_notifies_with_mentioned_reason(client, admin_headers):
-    bystander, bh = await _actor(client, admin_headers)
-    r = await client.post("/tasks", json={"title": "Mention target"}, headers=admin_headers)
+    """A mention notifies a no-stake bystander only when they can actually see
+    the task (same department). A USER in another department must NOT receive
+    the notification — its title+preview would leak a task that 404s for them."""
+    dept = (await client.post("/departments", json={"code": "mn_home", "name": "Mention Home"},
+                              headers=admin_headers)).json()
+    other = (await client.post("/departments", json={"code": "mn_away", "name": "Mention Away"},
+                               headers=admin_headers)).json()
+    bu, botp = await create_user(client, admin_headers, department_id=dept["id"])
+    bh = {"Authorization": f"Bearer {await login_and_set_password(client, bu['username'], botp)}"}
+    ou, ootp = await create_user(client, admin_headers, department_id=other["id"])
+    oh = {"Authorization": f"Bearer {await login_and_set_password(client, ou['username'], ootp)}"}
+    r = await client.post("/tasks", json={"title": "Mention target", "department_id": dept["id"]},
+                          headers=admin_headers)
     tid = r.json()["id"]
-    # the bystander has NO participation stake — only the @mention reaches them
+    # neither has a participation stake — only the @mention reaches them
     assert (await client.post(f"/tasks/{tid}/comments",
-                              json={"content": f"ping @{bystander['username']} please look"},
+                              json={"content": f"ping @{bu['username']} and @{ou['username']}"},
                               headers=admin_headers)).status_code == 201
     inbox = (await client.get("/notifications", headers=bh)).json()
     row = next(n for n in inbox if n["task_id"] == tid)
     assert row["reason"] == "mentioned"
+    # the cross-department USER gets nothing — the leak is closed
+    out_inbox = (await client.get("/notifications", headers=oh)).json()
+    assert not any(n["task_id"] == tid for n in out_inbox)
 
 
 async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
@@ -139,7 +191,7 @@ async def test_due_scan_notifies_assignee_and_manager(client, admin_headers):
     mgr, mh = await _actor(client, admin_headers, role="QC_MGR")
     await client.patch(f"/auth/users/{mgr['id']}", json={"department_id": dept["id"]},
                        headers=admin_headers)
-    today = date.today()
+    today = facility_today()
     r1 = await client.post("/tasks", json={"title": "Due today", "department_id": dept["id"],
                                            "due_date": today.isoformat()}, headers=admin_headers)
     r2 = await client.post("/tasks", json={"title": "Late", "department_id": dept["id"],

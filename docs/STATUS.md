@@ -5,11 +5,16 @@
 > QC LIMS module, and a certificate pipeline). For current, authoritative
 > completion status see **[`PLATFORM-ROADMAP-2026-07.md`](PLATFORM-ROADMAP-2026-07.md)**
 > (the single source of truth for sequencing) and **[`DEPLOY.md`](DEPLOY.md)**
-> (live image tags + migrations + smoke records). Quick snapshot (2026-07-16):
-> **wwf_mass** (test) runs backend `v51` / frontend `v72` / tasks-DB alembic
-> `0025` — DocEngine + TMS T1–T4 + QC LIMS U1–U5 + certificate pipeline
-> (Phase 3 U1–U3), all live-smoked. **Production** is unchanged at frontend
-> `v63` / alembic `0016` — every new module is owner-gated and test-only.
+> (live image tags + migrations + smoke records).
+>
+> The quick snapshot that used to sit here (2026-07-16: production "frontend
+> `v63` / alembic `0016`, every new module owner-gated and test-only") went
+> stale and is removed rather than updated — a version number duplicated across
+> two files is a number that will disagree with itself again. **`DEPLOY.md` is
+> the only place live tags and migration heads are recorded.** Production
+> promotion is still owner-gated; what has changed since is that several modules
+> have now been promoted, so "test-only" is no longer true as a blanket
+> statement.
 
 A **deployed, working task-tracker**: the GrowFlow UI wired to a real FastAPI
 backend over Postgres (RLS), running on KVM4 behind Traefik at

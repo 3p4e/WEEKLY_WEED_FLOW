@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Change Control</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone B/QA — Change Control (chg). Module MOD-CHG.
+  Controlled change request → impact assessment (per affected area) →
+  cross-module approval routing (each approver signs) → implementation →
+  closure. All approvals required before implementation.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 70px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .modbar{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:9px 14px;flex-wrap:wrap;background:rgba(159,176,200,.07);box-shadow:inset 0 0 0 1px rgba(159,176,200,.28);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .modbar .dot{width:8px;height:8px;border-radius:50%;background:#9fb0c8;box-shadow:0 0 8px #9fb0c8;flex:none;}
+  .modbar .t{font-size:11.5px;color:var(--mw-text);} .modbar .t b{color:#9fb0c8;} .modbar a{margin-left:auto;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mw-cyan-bright);text-decoration:none;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:8px;flex-wrap:wrap;}
+  .hero__ic{width:46px;height:46px;flex:none;display:grid;place-items:center;color:#c0ccdd;background:rgba(159,176,200,.14);box-shadow:inset 0 0 0 1px rgba(159,176,200,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero__no{font-family:var(--mw-mono);font-weight:700;font-size:20px;color:var(--mw-cyan-bright);}
+  .hero__t{font-family:var(--mw-font-cond);font-size:15px;font-weight:600;color:var(--mw-ink);margin-top:2px;line-height:1.25;}
+  .hero__s{font-size:11px;color:var(--mw-text-faint);margin-top:3px;} .hero__sp{flex:1;}
+  .statebig{display:inline-flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;padding:6px 14px;color:var(--sc);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--sc) 60%,transparent);background:color-mix(in srgb,var(--sc) 12%,transparent);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:18px 0 4px;background:rgba(94,200,240,.14);box-shadow:inset 0 0 0 1px rgba(94,200,240,.14);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);overflow:hidden;}
+  .meta__c{background:var(--mw-panel-in);padding:11px 14px;} .meta__l{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);} .meta__v{font-family:var(--mw-mono);font-size:12px;color:var(--mw-ink);margin-top:4px;}
+  .sec{margin:22px 0;}
+  .sec__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-header);margin:0 0 12px;display:flex;align-items:center;gap:10px;}
+  .sec__t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(94,200,240,.28),transparent);}
+  .sec__t .side{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mw-text-faint);font-family:var(--mw-font);font-size:11px;}
+  .flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;}
+  .fst{display:flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mw-text-faint);padding:6px 11px;}
+  .fst .n{width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;}
+  .fst.done{color:var(--mw-stat-hi);} .fst.done .n{background:var(--mw-stat-hi);color:var(--mw-void);box-shadow:none;}
+  .fst.cur{color:var(--mw-cyan-bright);} .fst.cur .n{box-shadow:inset 0 0 0 2px var(--mw-cyan-bright),0 0 10px var(--mw-cyan);background:rgba(94,200,240,.12);}
+  .arw{color:var(--mw-text-faint);font-size:11px;}
+  /* impact grid */
+  .impact{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  @media(max-width:640px){.impact{grid-template-columns:1fr;}.meta{grid-template-columns:repeat(2,1fr);}}
+  .imp{padding:12px 14px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .imp__h{display:flex;align-items:center;gap:8px;margin-bottom:6px;} .imp__area{font-family:var(--mw-font-cond);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mw-ink);}
+  .imp__lvl{margin-left:auto;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .imp__lvl.high{color:#fff;background:var(--mw-stat-lo);} .imp__lvl.med{color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1px rgba(236,236,74,.45);} .imp__lvl.low{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);} .imp__lvl.none{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(127,141,164,.4);}
+  .imp__d{font-size:11px;color:var(--mw-text-dim);line-height:1.45;}
+  /* approval routing */
+  .route{display:flex;flex-direction:column;gap:9px;}
+  .appr{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .appr__av{width:30px;height:30px;flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--mw-font-cond);font-weight:700;font-size:11px;color:var(--mw-void);background:linear-gradient(135deg,var(--mw-cyan-dim),rgba(16,48,80,.8));}
+  .appr__b{flex:1;} .appr__role{font-size:12.5px;color:var(--mw-ink);font-weight:600;} .appr__who{font-size:10.5px;color:var(--mw-text-faint);margin-top:2px;}
+  .appr__st{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .appr__st.pend{color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(127,141,164,.4);}
+  .appr__st.ok{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.45);background:rgba(108,240,90,.08);}
+  .appr__btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.06em;font-size:10px;font-weight:700;cursor:pointer;padding:6px 12px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);}
+  .appr__btn:hover{filter:brightness(1.15);}
+  .gate-note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;margin-top:14px;font-size:11.5px;line-height:1.5;color:var(--mw-text);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .gate-note.block{background:rgba(239,77,77,.08);box-shadow:inset 0 0 0 1px rgba(239,77,77,.32);} .gate-note.ok{background:rgba(108,240,90,.07);box-shadow:inset 0 0 0 1px rgba(108,240,90,.3);} .gate-note.info{background:rgba(94,200,240,.07);box-shadow:inset 0 0 0 1px rgba(94,200,240,.28);}
+  .gate-note .ic{flex:none;margin-top:1px;} .gate-note.block .ic{color:var(--mw-stat-lo);} .gate-note.ok .ic{color:var(--mw-stat-hi);} .gate-note.info .ic{color:var(--mw-cyan-bright);}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.07em;font-size:12.5px;font-weight:700;cursor:pointer;padding:10px 18px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);transition:filter .12s ease;margin-top:12px;}
+  .btn:hover{filter:brightness(1.16);} .btn[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Change Control">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="#">Change Control</a><span>›</span><span>PP-CC-2026-0006</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="modbar">
+    <span class="dot"></span>
+    <span class="t"><b>MOD-CHG</b> · <span class="en">Change Control — Draft (v0.1) · read-only until approved for use</span><span class="mk">Контрола на промени — Нацрт (v0.1) · само читање до одобрување</span></span>
+    <a href="modules.html"><span class="en">Module registry ↗</span><span class="mk">Регистар ↗</span></a>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
+    <div>
+      <div class="hero__no">PP-CC-2026-0006</div>
+      <div class="hero__t"><span class="en">Change request — Switch RO membrane supplier (Chorus → Elga)</span><span class="mk">Барање за промена — RO мембрана (Chorus → Elga)</span></div>
+      <div class="hero__s"><span class="en">Requested by Engineering · planned change · affects water system PP-EQ-009</span><span class="mk">Побарано од Инженерство · планирана промена · PP-EQ-009</span></div>
+    </div>
+    <div class="hero__sp"></div>
+    <span class="statebig" id="stateBig" style="--sc:#5ec8f0"><span id="stateTx">IMPACT</span></span>
+  </div>
+
+  <div class="meta">
+    <div class="meta__c"><div class="meta__l"><span class="en">Type</span><span class="mk">Тип</span></div><div class="meta__v">PLANNED</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Requested by</span><span class="mk">Побарал</span></div><div class="meta__v">Engineering</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Raised</span><span class="mk">Покрено</span></div><div class="meta__v">28.07.2026</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Target date</span><span class="mk">Целен датум</span></div><div class="meta__v">20.08.2026</div></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Lifecycle</span><span class="mk">Животен циклус</span></p>
+    <div class="mw-panel" style="padding:12px 14px;"><div class="flow" id="flow"></div></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Impact assessment</span><span class="mk">Проценка на влијание</span><span class="side"><span class="en">per affected area — drives who must approve</span><span class="mk">по област — одредува кој одобрува</span></span></p>
+    <div class="impact" id="impact"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Approval routing</span><span class="mk">Насочување за одобрување</span><span class="side"><span class="en">every affected-area owner must sign before implementation</span><span class="mk">секој засегнат мора да потпише пред имплементација</span></span></p>
+    <div class="route" id="route"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Disposition</span><span class="mk">Дејство</span></p>
+    <div id="gateNote"></div>
+    <div id="rail"></div>
+  </div>
+</div>
+</div>
+
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var FLOW=[['DRAFT','Draft','Нацрт'],['IMPACT','Impact','Влијание'],['APPROVAL','Approvals','Одобрувања'],['IMPLEMENT','Implement','Имплементација'],['CLOSED','Closed','Затворена']];
+var COL={DRAFT:'#7fa3bd',IMPACT:'#5ec8f0',APPROVAL:'#f0b95e',IMPLEMENT:'#c89bf0',CLOSED:'#6cf05a'};
+var IMPACT=[
+  {area:['Equipment / Qualification','Опрема'],lvl:'high',d:['New membrane → re-qualify RO system (IQ partial + OQ + PQ).','Нова мембрана → реквалификација на RO (IQ/OQ/PQ).']},
+  {area:['Specifications','Спецификации'],lvl:'low',d:['Water spec QCSP 009 unchanged; verify conductivity limit still met.','QCSP 009 непроменета; провери спроводливост.']},
+  {area:['Documents','Документи'],lvl:'med',d:['Update QCWI operating instruction + maintenance schedule.','Ажурирај QCWI + распоред за одржување.']},
+  {area:['Supplier qualification','Квалификација на добавувач'],lvl:'med',d:['Qualify Elga as approved supplier before first order.','Квалификувај Elga пред нарачка.']}
+];
+var APPROVERS=[
+  {role:['QA Manager','QA Менаџер'],who:'M. Solus',av:'MS',ok:true},
+  {role:['Engineering','Инженерство'],who:'T. Krios',av:'TK',ok:true},
+  {role:['QC Manager','КК Менаџер'],who:'L. T\u2019Soni',av:'LT',ok:false},
+  {role:['QP','QP'],who:'A. Shepard',av:'AS',ok:false}
+];
+var S={ state:'IMPACT' };
+function stamp(){var d=new Date();function p(n){return(''+n).padStart(2,'0');}return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear();}
+function allApproved(){ return APPROVERS.every(function(a){return a.ok;}); }
+
+function paintFlow(){ var ci=FLOW.findIndex(function(x){return x[0]===S.state;});
+  document.getElementById('flow').innerHTML=FLOW.map(function(x,i){ var cls=i<ci?'done':i===ci?'cur':'';
+    return (i?'<span class="arw">→</span>':'')+'<div class="fst '+cls+'" style="color:'+(cls?COL[x[0]]:'')+'"><span class="n">'+(i<ci?'✓':(i+1))+'</span>'+bil(x[1],x[2])+'</div>';}).join('');
+  var sb=document.getElementById('stateBig'); sb.style.setProperty('--sc',COL[S.state]); document.getElementById('stateTx').textContent=S.state+(S.state==='CLOSED'?' 🔒':'');
+}
+function paintImpact(){
+  document.getElementById('impact').innerHTML=IMPACT.map(function(m){ var ll={high:['High','Висок'],med:['Medium','Среден'],low:['Low','Низок'],none:['None','Нема']}[m.lvl];
+    return '<div class="imp"><div class="imp__h"><span class="imp__area">'+bil(m.area[0],m.area[1])+'</span><span class="imp__lvl '+m.lvl+'">'+bil(ll[0],ll[1])+'</span></div><div class="imp__d">'+bil(m.d[0],m.d[1])+'</div></div>';
+  }).join('');
+}
+function paintRoute(){
+  document.getElementById('route').innerHTML=APPROVERS.map(function(a,i){
+    var right = a.ok?'<span class="appr__st ok">✓ '+bil('signed','потпишано')+'</span>'
+      : (S.state==='APPROVAL'?'<button class="appr__btn" onclick="sign('+i+')">'+bil('Approve','Одобри')+'</button>':'<span class="appr__st pend">'+bil('pending','чека')+'</span>');
+    return '<div class="appr"><span class="appr__av">'+a.av+'</span><div class="appr__b"><div class="appr__role">'+bil(a.role[0],a.role[1])+'</div><div class="appr__who">'+a.who+(a.ok?' · '+stamp():'')+'</div></div>'+right+'</div>';
+  }).join('');
+}
+function paintGate(){
+  var gn=document.getElementById('gateNote'), rail=document.getElementById('rail');
+  var ic={block:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',ok:'<path d="M20 6L9 17l-5-5"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'};
+  function note(k,en,mk){return '<div class="gate-note '+k+'"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic[k]+'</svg></span><div>'+bil(en,mk)+'</div></div>';}
+  gn.innerHTML=''; rail.innerHTML='';
+  if(S.state==='IMPACT'){ gn.innerHTML=note('info','Impact assessed across four areas — high impact on equipment qualification routes this to four approvers. Send for approval to begin sign-off routing.','Влијанието е проценето. Прати на одобрување за да почне потпишување.');
+    rail.innerHTML='<button class="btn" onclick="S.state=\'APPROVAL\';paintAll();">'+bil('Send for approval','Прати на одобрување')+'</button>'; return; }
+  if(S.state==='APPROVAL'){
+    var n=APPROVERS.filter(function(a){return a.ok;}).length;
+    if(!allApproved()){ gn.innerHTML=note('block','<b>'+n+' of '+APPROVERS.length+' approvals.</b> Every affected-area owner must sign before the change can be implemented — no partial go-ahead.','<b>'+n+' од '+APPROVERS.length+' одобрувања.</b> Секој засегнат мора да потпише пред имплементација.');
+      rail.innerHTML='<button class="btn" disabled>'+bil('Implement change','Имплементирај')+'</button>'; return; }
+    gn.innerHTML=note('ok','All affected-area owners have signed. The change is authorised for implementation.','Сите потпишаа. Промената е одобрена за имплементација.');
+    rail.innerHTML='<button class="btn" onclick="S.state=\'IMPLEMENT\';paintAll();">'+bil('Implement change','Имплементирај')+'</button>'; return;
+  }
+  if(S.state==='IMPLEMENT'){ gn.innerHTML=note('info','Change in implementation. Once the linked re-qualification (PP-EQ-009) and document updates are verified complete, close the change.','Промената е во имплементација. По завршена реквалификација и документи, затвори.');
+    rail.innerHTML='<button class="btn" onclick="S.state=\'CLOSED\';paintAll();toast(\'ok\',\'Change closed\',\'Промената затворена\')">'+bil('Verify &amp; close','Потврди и затвори')+'</button>'; return; }
+  if(S.state==='CLOSED'){ gn.innerHTML=note('ok','<b>Closed.</b> The change was implemented with all approvals recorded and the RO system re-qualified. The record is frozen and traceable.','<b>Затворена.</b> Промената е имплементирана со сите одобрувања и реквалификуван RO систем.'); return; }
+}
+function sign(i){ APPROVERS[i].ok=true; toast('ok',APPROVERS[i].role[0]+' approved',APPROVERS[i].role[1]+' одобри'); paintRoute(); paintGate(); }
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+function paintAll(){ paintFlow(); paintImpact(); paintRoute(); paintGate(); if(window.mwSync)window.mwSync(); }
+paintAll();
+new MutationObserver(paintAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

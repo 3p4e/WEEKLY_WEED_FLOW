@@ -1,7 +1,24 @@
 """/reports/weekly — Fri->Thu window math, ref_date validation, plan mode,
 department filtering, and the 'postponed' summary-bucket regression."""
+import uuid
+from datetime import date, timedelta
+from app.worktime import facility_today
+
+from app.api.weekwindow import fri_thu
 from app.db import tasks_admin_pool
 from tests.conftest import create_user, login_and_set_password
+
+
+async def test_report_endpoints_reject_non_uuid_department_id(client, admin_headers):
+    """department_id is a query param bound straight into raw SQL against a uuid
+    column, so a non-uuid value would surface as an asyncpg cast error -> 500.
+    Both report endpoints that accept it (/reports/weekly and /reports/audit-prep)
+    must return a clean 422 instead. A well-formed (if unmatched) uuid is fine."""
+    for path in ("/reports/weekly", "/reports/audit-prep"):
+        r = await client.get(path, params={"department_id": "not-a-uuid"}, headers=admin_headers)
+        assert r.status_code == 422, f"{path}: {r.status_code} {r.text}"
+        r = await client.get(path, params={"department_id": str(uuid.uuid4())}, headers=admin_headers)
+        assert r.status_code == 200, f"{path}: {r.status_code} {r.text}"
 
 
 async def test_weekly_report_summary_counts_postponed_tasks(client, admin_headers):
@@ -24,6 +41,39 @@ async def test_weekly_report_summary_counts_postponed_tasks(client, admin_header
         + summary["pending"] + summary["review"] + summary["postponed"]
     )
     assert accounted == summary["total"]
+
+
+async def test_report_overdue_excludes_tasks_due_later_this_same_week(client, admin_headers):
+    """A task due LATER in a still-in-progress week is not overdue yet — the
+    cutoff is real 'today', not the week's Thursday end boundary (a report
+    viewed mid-week used to wrongly count it as already overdue). Uses a
+    ref_date whose Fri->Thu window ends well after real 'today' so the
+    assertion doesn't depend on which day of the week the suite happens to
+    run on; the overdue query itself isn't week-bounded, so a genuinely
+    past-due task is unaffected by which ref_date is passed."""
+    today = facility_today()
+    future_ref = today + timedelta(days=10)
+    _fri, thu = fri_thu(future_ref)
+    assert thu > today  # sanity: the window's end must actually be in the future
+
+    r = await client.post("/tasks", json={
+        "title": "Due later this week", "status": "pending", "due_date": thu.isoformat()},
+        headers=admin_headers)
+    assert r.status_code == 201, r.text
+    not_yet_due_id = r.json()["id"]
+
+    r = await client.post("/tasks", json={
+        "title": "Actually overdue", "status": "pending",
+        "due_date": (today - timedelta(days=1)).isoformat()}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    overdue_id = r.json()["id"]
+
+    r = await client.get("/reports/weekly", params={"ref_date": future_ref.isoformat()}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    overdue_ids = {t["id"] for t in r.json()["overdue"]}
+    assert overdue_id in overdue_ids
+    assert not_yet_due_id not in overdue_ids, \
+        "a task due later THIS SAME week must not be counted overdue before its due date arrives"
 
 
 async def test_invalid_ref_date_returns_422(client, admin_headers):
@@ -182,6 +232,48 @@ async def test_department_filter_scopes_hours_by_person(client, admin_headers, o
     # Unfiltered → both sessions (8h).
     r = await client.get("/reports/weekly", params={"ref_date": "2026-07-04"}, headers=admin_headers)
     assert sum(p["total"] for p in r.json()["hours_by_person"]) == 8.0
+
+
+async def test_weekly_label_uses_iso_week_most_window_days_fall_in(client, admin_headers):
+    """Regression: the label used fri.isocalendar()[1] — the ISO (Mon->Sun)
+    week Friday itself belongs to. But of the window's 5 business days
+    (Fri + the following Mon-Thu), the 4 weekdays Mon-Thu fall in the NEXT
+    ISO week, not Friday's — so the label was off by one for most of the
+    window it names. 2026-06-19 (Fri) .. 2026-06-25 (Thu): Friday is ISO week
+    25, but Mon 2026-06-22 through Thu 2026-06-25 are ISO week 26."""
+    r = await client.get("/reports/weekly", params={"ref_date": "2026-06-24"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    period = r.json()["period"]
+    assert period["start"] == "2026-06-19" and period["end"] == "2026-06-25"  # sanity: same window as above
+    assert period["label"].startswith("W26 2026"), period["label"]
+
+
+async def test_overdue_department_filter_computes_param_index(client, admin_headers, org):
+    """Regression (fragility, not a live bug): the overdue query's
+    department_id parameter index was hardcoded as `$2` instead of computed
+    via len(over_args) like the structurally-identical dept_clause pattern
+    elsewhere in this file — fragile against a future param reorder. Pins
+    that department-filtered overdue counts are (still) correct."""
+    rows = await tasks_admin_pool().fetch(
+        "INSERT INTO departments(org_id, code, name) VALUES ($1,'cult','Cultivation'),($1,'qc','QC')"
+        " RETURNING id, code", org["org_id"])
+    dept = {r["code"]: str(r["id"]) for r in rows}
+    overdue_date = (facility_today() - timedelta(days=1)).isoformat()
+
+    r = await client.post("/tasks", json={"title": "Cult overdue", "status": "pending",
+        "department_id": dept["cult"], "due_date": overdue_date}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    cult_id = r.json()["id"]
+    r = await client.post("/tasks", json={"title": "QC overdue", "status": "pending",
+        "department_id": dept["qc"], "due_date": overdue_date}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    qc_id = r.json()["id"]
+
+    r = await client.get("/reports/weekly", params={"department_id": dept["cult"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    overdue_ids = {t["id"] for t in r.json()["overdue"]}
+    assert cult_id in overdue_ids
+    assert qc_id not in overdue_ids
 
 
 async def test_summary_sums_estimated_and_actual_hours(client, admin_headers):

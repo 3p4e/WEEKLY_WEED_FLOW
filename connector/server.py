@@ -36,7 +36,11 @@ mcp = FastMCP(
         allowed_origins=[f"https://{PUBLIC_HOST}"],
     ),
 )
-mcp.settings.host = "0.0.0.0"
+# B104 suppressed below: binding all interfaces is correct and required
+# INSIDE a container — the process must accept traffic on the container's own
+# network namespace, and real exposure is controlled by compose/Traefik, not
+# by this bind.
+mcp.settings.host = "0.0.0.0"  # nosec B104
 mcp.settings.port = int(os.environ.get("PORT", "8000"))
 mcp.settings.streamable_http_path = MCP_PATH
 

@@ -13,21 +13,32 @@ GF.views = GF.views || {};
 (() => {
   const L = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
 
-  // Compact card, same pattern as the Board view's kcard: click deep-links to
-  // the expanded card in My Week (card actions all live there).
+  // Compact card — the design system's .mw-tcard (depthome-*.html), carrying
+  // the SAME information the old kcard did: nothing the operator could see
+  // before may quietly disappear in a restyle. Click still deep-links to the
+  // expanded card in My Week (card actions all live there). Department
+  // identity is ONE variable: --mw-acc tints the edge, box and chips, exactly
+  // the design's domain-tint pattern.
   const card = (t) => {
     const d = GF.dep(t.dept);
-    return `<div class="kcard" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
-      <div class="kcard-top">
-        <span class="kcard-dept" style="color:${d.color}">${GF.esc(GF.depAbbr(t.dept))}</span>
-        <span class="kstatus pill s-${t.status}"><span class="dot" style="background:currentColor;opacity:.75"></span>${GF.statusLabel(t.status)}</span>
+    const attrs = GF.attrChipData ? GF.attrChipData(t) : [];
+    const meta = [
+      `<span class="mw-tcard__dept">${GF.esc(GF.depAbbr(t.dept))}</span>`,
+      ...attrs.map(a => `<span class="mw-attr">${GF.esc(a.label)} <b>${GF.esc(a.val)}</b></span>`),
+      ...(t.tags || []).slice(0, 3).map(tag => `<span class="mw-htag">#${GF.esc(tag)}</span>`),
+      t.sessionHours ? `<span class="mw-sub">${GF.esc(t.sessionHours)}h</span>` : '',
+      t.due ? `<span class="mw-due${(t.status !== 'done' && t.due < GF.todayISO()) ? ' mw-due--over' : ''}">${GF.esc(t.due.slice(5))}</span>` : '',
+      `<span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>`,
+    ].filter(Boolean).join('');
+    return `<div class="mw-tcard${t.status === 'done' ? ' mw-tcard--done' : ''}" style="--mw-acc:${d.color}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+      <span class="mw-tcard__box"></span>
+      <div class="mw-tcard__main">
+        <div class="mw-tcard__title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
+        <div class="mw-tcard__meta">${meta}</div>
       </div>
-      <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
-      <div class="kcard-foot">
-        ${GF.avatars([t.owner, ...(t.helpers || [])], 22)}
-        ${GF.attrChips ? GF.attrChips(t) : ''}
-        <div class="spacer"></div>
-        <span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>
+      <div class="mw-tcard__right">
+        <span class="mw-st mw-st--${t.status}">${GF.statusLabel(t.status)}</span>
+        ${GF.avatars([t.owner, ...(t.helpers || [])], 20)}
       </div></div>`;
   };
 
@@ -120,7 +131,7 @@ GF.views = GF.views || {};
           <div class="view-sub">${L('Department home — this week', 'Почетна на одделот — оваа недела')}
             · ${tasks.length} ${L('tasks', 'задачи')} · ${done} ${L('done', 'завршени')}</div></div>
         <div class="spacer"></div>
-        ${GF.can('create') ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus', 'icon', '#fff')}${GF.t('new_task_btn')}</button>` : ''}
+        ${GF.can('create') ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus', 'icon', 'currentColor')}${GF.t('new_task_btn')}</button>` : ''}
       </div>`;
 
     const empty = !tasks.length ? `
@@ -130,6 +141,10 @@ GF.views = GF.views || {};
       </div>` : '';
 
     const panels = (tpl && tpl.home ? tpl.home : GENERIC).map(p => renderPanel(p, tasks)).join('');
-    return head + presets + empty + `<div class="dh-panels">${panels}</div>`;
+    // --mw-acc on the container: the design's ONE-variable dept tint. Every
+    // panel edge and chip below inherits it; cards also set their own (same
+    // value here, but a card rendered outside this view must not depend on
+    // an ancestor happening to provide it).
+    return head + presets + empty + `<div class="dh-panels" style="--mw-acc:${d.color}">${panels}</div>`;
   };
 })();

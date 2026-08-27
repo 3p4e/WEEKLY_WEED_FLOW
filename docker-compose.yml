@@ -17,6 +17,19 @@
 #  stack and is reached over host.docker.internal — it is intentionally NOT
 #  defined or managed here.
 #
+#  RESOURCE LIMITS — every service now carries mem_limit + cpus. They had
+#  none, so any one container could take the whole host down with it: the
+#  single-host stack has no scheduler to arbitrate, and an OOM there kills
+#  whatever the kernel picks, not whatever misbehaved.
+#
+#  These are BLAST-RADIUS CAPS, not measured working sets — nothing here was
+#  profiled under production load, and they are deliberately set well above
+#  expected usage so they bite only on runaway behaviour. db-tasks gets the
+#  most (all work data, the QC LIMS tables and both audit chains live there);
+#  frontend the least (nginx serving static files). If a service is being
+#  OOM-killed, the limit is wrong for the real workload — raise it rather than
+#  assuming the service is at fault.
+#
 #  NOTE — this file faithfully describes the architecture (images, names,
 #  labels, networks) but is not a turnkey `up`: the app_user / app_admin login
 #  roles (the latter BYPASSRLS) and their table GRANTs are a one-time bootstrap
@@ -29,6 +42,8 @@ name: weekly_weed_flow
 services:
   db-users:
     image: postgres:17-alpine
+    mem_limit: 1g
+    cpus: '1.0'
     container_name: wwf-db-users
     environment:
       - POSTGRES_DB=wwf_users
@@ -42,6 +57,8 @@ services:
 
   db-tasks:
     image: postgres:17-alpine
+    mem_limit: 2g
+    cpus: '2.0'
     container_name: wwf-db-tasks
     environment:
       - POSTGRES_DB=wwf_tasks
@@ -55,6 +72,8 @@ services:
 
   backend:
     build: ./backend
+    mem_limit: 1g
+    cpus: '2.0'
     image: weekly_weed_flow-backend:latest
     container_name: weekly_weed_flow-backend-1
     depends_on: [db-users, db-tasks]
@@ -68,11 +87,25 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
     expose: ["8000"]
+    # H12 — this service has no Traefik labels (only `frontend` does), so the
+    # "Traefik won't route unhealthy containers" rationale never applied here:
+    # nothing detected a wedged-but-alive backend. /health/ready round-trips
+    # BOTH databases, which is the difference between "process is up" and
+    # "can actually serve". Python rather than curl: the slim image has no curl.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks: [internal]
     restart: unless-stopped
 
   scheduler:
     build: ./backend
+    mem_limit: 768m
+    cpus: '1.0'
     image: weekly_weed_flow-backend:latest
     container_name: wwf-scheduler
     depends_on: [db-users, db-tasks]
@@ -80,11 +113,25 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"   # reach the Letta stack on the host
     command: ["python", "scripts/scheduler.py"]
+    # H12 — the scheduler has no HTTP surface, and "the process is running"
+    # says nothing about whether its loop still turns; a wedged loop silently
+    # stops firing the weekly snapshot. scheduler.py touches the heartbeat on
+    # every wake and the sleep is capped at 30 min, so >35 min without a
+    # heartbeat means the loop has stopped.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import os,sys,time; p='/tmp/wwf-scheduler-heartbeat'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 2100 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     networks: [internal]
     restart: unless-stopped
 
   frontend:
     build: ./web
+    mem_limit: 256m
+    cpus: '0.5'
     image: wwf-growflow:latest
     container_name: wwf-gf-frontend
     depends_on: [backend]
@@ -108,6 +155,8 @@ services:
   # across the two dumps, and the restore procedure.
   db-backup:
     image: postgres:17-alpine
+    mem_limit: 512m
+    cpus: '1.0'
     container_name: wwf-db-backup
     depends_on: [db-users, db-tasks]
     environment:
@@ -133,6 +182,8 @@ services:
   # crypt-key custody: docs/BACKUP.md "Offsite copy".
   backup-offsite:
     image: rclone/rclone:1
+    mem_limit: 512m
+    cpus: '1.0'
     container_name: wwf-backup-offsite
     depends_on: [db-backup]
     environment:
@@ -152,6 +203,8 @@ services:
   # this public-but-secret-path service was explicitly user-approved.
   capture-mcp:
     build: ./connector
+    mem_limit: 512m
+    cpus: '1.0'
     image: wwf-capture-mcp:latest
     container_name: wwf-capture-mcp
     depends_on: [backend]

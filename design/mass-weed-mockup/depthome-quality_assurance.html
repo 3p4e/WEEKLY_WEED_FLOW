@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Quality Assurance · Department Home</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  ════════════════════════════════════════════════════════════════════
+  DESIGN NOTES · Department Home  (surface 3.1, brief §3.1)  — .dh-* scope
+  ────────────────────────────────────────────────────────────────────
+  WHAT THIS IS: the week-scoped landing an operator/manager sees first,
+  branded to their department. One file demonstrates all 7 department
+  templates (switchable via the dept picker) + the generic fallback +
+  the empty-week state.
+
+  EXTENDED FROM THE SYSTEM (added to mass-weed.css as shared atoms):
+    .mw-tcard (compact task card), .mw-attr (filled mono attribute chip),
+    .mw-htag (#hash outline chip), .mw-due(+--over), .mw-sub, .mw-st--*
+    (status pills: done/working/review/stuck/postponed). Dept identity is
+    carried by --mw-acc (set inline) — reuses the existing domain-tint
+    pattern (--mw-screen-acc / --mw-col-acc), so a card, panel edge, chip
+    and preset all glow in the department color with ONE variable.
+
+  NEW TOKENS PROPOSED: none required — dept color is passed inline as
+    --mw-acc. (If folded into the app, add --dept-cu … --dept-mu to the
+    token layer mirroring the 7 brief hexes.)
+
+  BILINGUAL: every label carries <span class="en"> + <span class="mk">;
+    html[data-lang] toggles. Cyrillic strings run ~25% longer — panels
+    and chips wrap, never truncate (min-width:0 on grid children).
+
+  STATES COVERED: hover (card lift, preset glow), active (dept picker),
+    empty (friendly bilingual state + presets as the CTA), and the
+    per-template layouts (by-room / by-batch / due+review / in-out /
+    CAPA+queue / patrols+incidents / by-equipment+blocked / generic).
+    Dark + light both via data-theme.
+  ════════════════════════════════════════════════════════════════════
+-->
+<style>
+  html,body{ margin:0; background:var(--mw-void); }
+  .wrap{ max-width:1200px; margin:0 auto; padding:18px 24px 70px; }
+
+  /* top bar: brand-ish title left, controls right */
+  .dh-top{ display:flex; align-items:center; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
+  .dh-top__ttl{ font-family:var(--mw-font-cond); text-transform:uppercase; letter-spacing:.16em; font-size:13px; color:var(--mw-text-dim); }
+  .dh-top__sp{ flex:1; }
+
+  /* department picker */
+  .dh-picker{ display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; margin-bottom:16px; scrollbar-width:thin; }
+  .dh-pick{ flex:none; display:flex; align-items:center; gap:8px; padding:8px 13px; cursor:pointer;
+    background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+    font-family:var(--mw-font); font-size:12.5px; font-weight:600; color:var(--mw-text-dim); transition:all .12s ease; white-space:nowrap; }
+  .dh-pick__dot{ width:9px; height:9px; border-radius:50%; background:var(--dc); box-shadow:0 0 7px var(--dc); flex:none; }
+  .dh-pick:hover{ color:var(--mw-cyan-bright); }
+  .dh-pick.is-active{ color:var(--mw-ink); background:color-mix(in srgb, var(--dc) 20%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dc) 55%, transparent); }
+
+  /* dept hero header (tinted wash) */
+  .dh-hero{ display:flex; align-items:center; gap:16px; padding:18px 22px; margin-bottom:16px;
+    background:linear-gradient(120deg, color-mix(in srgb, var(--mw-acc) 22%, transparent) 0%, var(--mw-panel) 55%);
+    clip-path:polygon(var(--mw-chamfer) 0,100% 0,100% calc(100% - var(--mw-chamfer)),calc(100% - var(--mw-chamfer)) 100%,0 100%,0 var(--mw-chamfer));
+    box-shadow:var(--mw-inner-glow); position:relative; }
+  .dh-hero::before{ content:""; position:absolute; inset:0; clip-path:inherit; padding:1.5px;
+    background:linear-gradient(150deg, var(--mw-acc), transparent 60%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+  .dh-hero__ic{ width:52px; height:52px; flex:none; display:grid; place-items:center; color:var(--mw-acc);
+    background:color-mix(in srgb, var(--mw-acc) 14%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-acc) 45%, transparent);
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
+  .dh-hero__ic svg{ width:28px; height:28px; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .dh-hero__name{ font-family:var(--mw-font-cond); font-size:26px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--mw-ink); text-shadow:0 0 18px color-mix(in srgb,var(--mw-acc) 40%, transparent); line-height:1; }
+  .dh-hero__sub{ font-size:12px; color:var(--mw-text-dim); margin-top:5px; letter-spacing:.04em; }
+  .dh-hero__stat{ margin-left:auto; text-align:right; }
+  .dh-hero__num{ font-family:var(--mw-font-cond); font-size:34px; font-weight:700; color:var(--mw-acc); line-height:1; text-shadow:0 0 16px color-mix(in srgb,var(--mw-acc) 45%, transparent); }
+  .dh-hero__numl{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--mw-text-dim); margin-top:4px; }
+
+  /* week strip */
+  .dh-week{ display:flex; align-items:center; gap:14px; padding:10px 16px; margin-bottom:16px;
+    background:var(--mw-panel-in); box-shadow:inset 0 0 0 1px rgba(94,200,240,.14);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+  .dh-week__nav{ width:30px; height:30px; display:grid; place-items:center; cursor:pointer; color:var(--mw-cyan); background:rgba(58,159,212,.12); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .dh-week__nav:hover{ color:var(--mw-cyan-bright); background:rgba(58,159,212,.22); }
+  .dh-week__nav svg{ width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+  .dh-week__lbl{ font-family:var(--mw-font-cond); font-size:18px; font-weight:700; letter-spacing:.05em; color:var(--mw-ink); }
+  .dh-week__range{ font-family:'Saira Condensed',monospace; font-size:13px; color:var(--mw-text-dim); }
+  .dh-week__sp{ flex:1; }
+
+  /* preset chips */
+  .dh-presets{ display:flex; flex-wrap:wrap; gap:9px; margin-bottom:20px; }
+  .dh-preset{ display:inline-flex; align-items:center; gap:8px; padding:9px 14px; cursor:pointer;
+    font-family:var(--mw-font); font-size:13px; font-weight:600; color:var(--mw-text);
+    background:color-mix(in srgb, var(--mw-acc) 10%, var(--mw-panel-in));
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-acc) 30%, transparent);
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); transition:all .13s ease; }
+  .dh-preset .plus{ color:var(--mw-acc); font-weight:700; font-size:15px; line-height:1; }
+  .dh-preset:hover{ color:var(--mw-ink); background:color-mix(in srgb, var(--mw-acc) 22%, transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-acc) 60%, transparent), 0 0 16px color-mix(in srgb,var(--mw-acc) 25%, transparent); transform:translateY(-1px); }
+
+  /* layout grids */
+  .dh-grid{ display:grid; gap:14px; }
+  .dh-grid.g-groups{ grid-template-columns:1fr 1fr; }
+  .dh-grid.g-split{ grid-template-columns:1fr 300px; }
+  .dh-grid.g-cols2{ grid-template-columns:1fr 1fr; }
+  .dh-grid > *{ min-width:0; }
+
+  .dh-group{ display:flex; flex-direction:column; }
+  .dh-group__hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }
+  .dh-group__ttl{ display:flex; align-items:center; gap:9px; font-family:var(--mw-font-cond); font-size:14px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mw-acc); }
+  .dh-group__ttl .gdot{ width:8px; height:8px; border-radius:50%; background:currentColor; box-shadow:0 0 7px currentColor; }
+  .dh-group__ct{ font-family:'Saira Condensed',monospace; font-size:13px; font-weight:700; color:var(--mw-acc); background:color-mix(in srgb,var(--mw-acc) 16%, transparent); padding:1px 9px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+
+  /* handoff / blocked rail */
+  .dh-rail__hd{ display:flex; align-items:center; gap:8px; font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--mw-cyan-bright); margin-bottom:12px; }
+  .dh-rail__hd svg{ width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .dh-handoff{ display:flex; align-items:center; gap:7px; margin-top:8px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mw-text-dim); }
+  .dh-handoff__b{ padding:2px 8px; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px); }
+  .dh-handoff__ar{ color:var(--mw-cyan); }
+
+  .dh-empty__presets{ display:flex; flex-wrap:wrap; gap:9px; justify-content:center; margin-top:18px; }
+
+  @media (max-width:900px){
+    .dh-grid.g-groups,.dh-grid.g-split,.dh-grid.g-cols2{ grid-template-columns:1fr; }
+    .wrap{ padding:16px 14px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Department Home">
+
+  <!-- top bar -->
+  <div class="dh-top">
+    <span class="dh-top__ttl"><span class="en">Department Home</span><span class="mk">Оддел — Почетна</span></span>
+    <span class="dh-top__sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg" role="group" aria-label="Language">
+        <button data-set-lang="en" type="button">EN</button>
+        <button data-set-lang="mk" type="button">МК</button>
+      </div>
+      <div class="mw-seg" role="group" aria-label="Theme">
+        <button data-set-theme="dark" type="button">◗</button>
+        <button data-set-theme="light" type="button">◔</button>
+      </div>
+      <button class="mw-btn mw-btn--accent" id="emptyToggle" type="button" style="padding:9px 16px;font-size:12px;">
+        <span class="en">Demo: empty week</span><span class="mk">Демо: празна недела</span>
+      </button>
+      <a class="mw-btn mw-btn--primary" href="task-create-quality_assurance.html" style="padding:9px 16px;font-size:12px;text-decoration:none;">
+        <span class="en">+ New task</span><span class="mk">+ Нова задача</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- department picker -->
+  <div class="dh-picker" id="picker"></div>
+
+  <!-- dept hero -->
+  <div class="dh-hero" id="hero"></div>
+
+  <!-- week strip -->
+  <div class="dh-week">
+    <div class="dh-week__nav" title="Previous week"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></div>
+    <span class="dh-week__lbl"><span class="en">Week 28</span><span class="mk">Недела 28</span></span>
+    <span class="dh-week__range">Jul 7 – Jul 13</span>
+    <span class="mw-badge mw-badge--ok"><span class="en">This week</span><span class="mk">Оваа недела</span></span>
+    <div class="dh-week__sp"></div>
+    <div class="mw-avstack">
+      <span class="mw-avatar mw-avatar--sm" style="--x:0">ГП</span>
+      <span class="mw-avatar mw-avatar--sm">АС</span>
+      <span class="mw-avatar mw-avatar--sm">ДТ</span>
+      <span class="mw-avatar mw-avatar--sm">МК</span>
+    </div>
+    <div class="dh-week__nav" title="Next week"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <!-- presets -->
+  <div class="dh-presets" id="presets"></div>
+
+  <!-- template body -->
+  <div id="body"></div>
+
+</div>
+</div>
+
+<script>
+/* ── icons ── */
+const IC = {
+  leaf:'<path d="M4 20c8-1 14-7 14-16C10 4 4 10 4 20zM4 20c1-6 5-10 10-12"/>',
+  box:'<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+  flask:'<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7 15h10"/>',
+  shield:'<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/>',
+  wrench:'<path d="M14 6a4 4 0 0 0-5 5L3 17v4h4l6-6a4 4 0 0 0 5-5l-3 3-2-2z"/>',
+  handoff:'<path d="M4 12h13M13 6l6 6-6 6"/>',
+  alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  review:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'
+};
+/* ── departments (brief §1) — [code, EN, МК, color, abbr, icon] ── */
+const DEPTS = [
+  { c:'cultivation', en:'Cultivation', mk:'Одгледување', col:'#2BE8A0', ab:'CU', ic:'leaf',   tmpl:'rooms' },
+  { c:'production',  en:'Production',  mk:'Производство', col:'#2FD9D9', ab:'PR', ic:'box',    tmpl:'batches' },
+  { c:'qc',          en:'Quality Control', mk:'Контрола на квалитет', col:'#9B7BE8', ab:'QC', ic:'flask', tmpl:'qc' },
+  { c:'quality_assurance', en:'Quality Assurance', mk:'Обезбедување квалитет', col:'#E0743A', ab:'QA', ic:'shield', tmpl:'qa' },
+  { c:'logistics',   en:'Warehouse',   mk:'Магацин',      col:'#22B8D8', ab:'WH', ic:'box',    tmpl:'inout' },
+  { c:'security',    en:'Security',    mk:'Обезбедување', col:'#7C90AE', ab:'SE', ic:'shield', tmpl:'security' },
+  { c:'tooling',     en:'Maintenance', mk:'Одржување',    col:'#8496B2', ab:'MU', ic:'wrench',  tmpl:'equipment' }
+];
+
+/* ── preset suggestions per dept ── */
+const PRESETS = {
+  cultivation:[['Watering — GR-2','Полевање — GR-2'],['Defoliation','Дефолијација'],['IPM check','ИПМ проверка'],['Transplant','Пресадување'],['EC / pH log','EC / pH запис']],
+  production:[['Trim batch','Тримање серија'],['Weigh & log','Мерење и запис'],['Extraction run','Екстракција'],['Label batch','Означи серија']],
+  qc:[['Sample intake','Прием на мостра'],['Potency test','Тест на потентност'],['Micro screen','Микро скрининг'],['Moisture check','Проверка на влага']],
+  quality_assurance:[['Open CAPA','Отвори КАПА'],['SOP review','Преглед на СОП'],['Deviation log','Запис на отстапување'],['Doc approval','Одобрување документ']],
+  logistics:[['Receive delivery','Прием на испорака'],['Pick order','Подготви нарачка'],['Cycle count','Инвентарен попис'],['Dispatch','Испраќање']],
+  security:[['Perimeter patrol','Патрола периметар'],['Access audit','Ревизија на пристап','Log incident','Пријави инцидент'],['CCTV review','Преглед на камери']],
+  tooling:[['PM — HVAC','ПО — ХВАК'],['Fix leak','Поправи протекување'],['Calibrate scale','Калибрирај вага'],['Spare parts','Резервни делови']]
+};
+
+/* ── task cards per dept, grouped ── */
+const DATA = {
+  cultivation:{ groups:[
+    { en:'Flower Room A', mk:'Соба за цветање А', cards:[
+      {t_en:'Defoliate canopy row 3–5',t_mk:'Дефолијација ред 3–5',id:'CU-1042',st:'working',sub:[2,5],hrs:3.5,attrs:[['Room','GR-A'],['Strain','Wedding Cake'],['Day','42']],tags:['flower']},
+      {t_en:'Nutrient feed — bloom mix',t_mk:'Прихрана — цут микс',id:'CU-1048',st:'done',attrs:[['Room','GR-A'],['EC','1.8']],tags:['feed']} ]},
+    { en:'Veg Hall', mk:'Вегетативна сала', cards:[
+      {t_en:'Top & train mothers',t_mk:'Врвење на мајки',id:'CU-1051',st:'review',attrs:[['Room','VEG'],['Strain','Gelato'],['Plants','24 pl']],tags:['mothers']},
+      {t_en:'Transplant clones GR-2',t_mk:'Пресади клонови GR-2',id:'CU-1055',st:'postponed',due:'Jul 14',attrs:[['Room','GR-2'],['Plants','120 pl']],tags:['clones']} ]}
+  ], rail:{ en:'Ready for handoff → Production', mk:'Спремно за предавање → Производство', ic:'handoff', cards:[
+      {t_en:'Harvest Flower B — Sour Diesel',t_mk:'Берба Соба Б — Sour Diesel',id:'CU-1039',st:'done',from:'CU',to:'PR',attrs:[['Room','GR-B'],['Wet','18.4 kg']]} ]} },
+
+  production:{ groups:[
+    { en:'Batch WC-2405', mk:'Серија WC-2405', cards:[
+      {t_en:'Trim & sort — Wedding Cake',t_mk:'Тримање — Wedding Cake',id:'PR-882',st:'working',sub:[4,8],hrs:11,attrs:[['Batch','WC-2405'],['Dry','4.2 kg']],tags:['trim']},
+      {t_en:'QC sample pull',t_mk:'Земање мостра за КК',id:'PR-885',st:'review',from:'PR',to:'QC',attrs:[['Batch','WC-2405'],['Sample','WC-S1']]} ]},
+    { en:'Batch SD-2404', mk:'Серија SD-2404', cards:[
+      {t_en:'Extraction run — live resin',t_mk:'Екстракција — live resin',id:'PR-877',st:'working',hrs:6,attrs:[['Batch','SD-2404'],['Yield','780 g']],tags:['extract']},
+      {t_en:'Weigh & log output',t_mk:'Мерење и запис',id:'PR-879',st:'stuck',attrs:[['Batch','SD-2404']],tags:['blocked']} ]}
+  ] },
+
+  qc:{ cols:[
+    { en:'Due this week', mk:'Рокови оваа недела', ic:'clock', cards:[
+      {t_en:'Potency — WC-S1',t_mk:'Потентност — WC-S1',id:'QC-311',st:'working',due:'Jul 11',attrs:[['Sample','WC-S1'],['THC','—']],tags:['potency']},
+      {t_en:'Moisture — SD batch',t_mk:'Влага — SD серија',id:'QC-314',st:'postponed',due:'Jul 9',over:true,attrs:[['Sample','SD-S2']],tags:['moisture']} ]},
+    { en:'In review', mk:'Во преглед', ic:'review', cards:[
+      {t_en:'Micro screen — GR-A lot',t_mk:'Микро — GR-A лот',id:'QC-308',st:'review',attrs:[['Sample','GRA-9']],tags:['micro']},
+      {t_en:'Pesticide panel sign-off',t_mk:'Потпис — пестициди',id:'QC-305',st:'done',from:'QC',to:'QA',attrs:[['Sample','WC-S1']]} ]}
+  ] },
+
+  quality_assurance:{ groups:[
+    { en:'CAPA', mk:'КАПА', cards:[
+      {t_en:'CAPA-14 — humidity excursion',t_mk:'КАПА-14 — отстапување влага',id:'QA-77',st:'working',attrs:[['Ref','CAPA-14'],['Area','GR-B']],tags:['capa']} ]},
+    { en:'SOP', mk:'СОП', cards:[
+      {t_en:'Revise SOP-CU-03 (watering)',t_mk:'Ревизија СОП-CU-03',id:'QA-71',st:'review',attrs:[['Doc','SOP-CU-03'],['Rev','4']],tags:['sop']} ]},
+    { en:'Documents', mk:'Документи', cards:[
+      {t_en:'Approve weekly Plan — Cultivation',t_mk:'Одобри неделен План — Одгледување',id:'QA-80',st:'postponed',due:'Jul 13',attrs:[['Doc','PLAN-W28']],tags:['plan']} ]}
+  ], rail:{ en:'Review queue', mk:'Редица за преглед', ic:'review', cards:[
+      {t_en:'Sign off — Production Overview',t_mk:'Потпиши — Преглед производство',id:'QA-82',st:'review',attrs:[['Doc','REP-W28']]} ]} },
+
+  logistics:{ cols:[
+    { en:'Inbound', mk:'Влез', ic:'box', cards:[
+      {t_en:'Receive nutrient delivery',t_mk:'Прием на прихрана',id:'WH-201',st:'working',attrs:[['PO','PO-5521'],['Pallets','3']],tags:['inbound']},
+      {t_en:'Put-away — packaging film',t_mk:'Складирање — фолија',id:'WH-204',st:'done',attrs:[['SKU','PKG-films'],['Loc','A-12']]} ]},
+    { en:'Outbound', mk:'Излез', ic:'handoff', cards:[
+      {t_en:'Pick order — Skopje Dispensary',t_mk:'Подготви — Диспанзер Скопје',id:'WH-208',st:'working',due:'Jul 11',attrs:[['Order','SO-118'],['Units','240']],tags:['pick']},
+      {t_en:'Dispatch — cold chain van',t_mk:'Испраќање — ладен ланец',id:'WH-210',st:'postponed',due:'Jul 12',attrs:[['Order','SO-118']],tags:['dispatch']} ]}
+  ] },
+
+  security:{ groups:[
+    { en:'Patrols', mk:'Патроли', cards:[
+      {t_en:'Perimeter sweep — night shift',t_mk:'Периметар — ноќна смена',id:'SE-90',st:'done',attrs:[['Zone','PERIM'],['Shift','N']],tags:['patrol']},
+      {t_en:'Vault access audit',t_mk:'Ревизија на трезор',id:'SE-92',st:'working',attrs:[['Zone','VAULT']],tags:['access']} ]},
+    { en:'Incidents', mk:'Инциденти', cards:[
+      {t_en:'Door sensor fault — GR-2',t_mk:'Дефект сензор — GR-2',id:'SE-95',st:'stuck',attrs:[['Zone','GR-2'],['Sev','Low']],tags:['incident']} ]}
+  ] },
+
+  tooling:{ groups:[
+    { en:'HVAC-01 (Flower A)', mk:'ХВАК-01 (Соба А)', cards:[
+      {t_en:'Preventive maintenance — filters',t_mk:'Превентива — филтри',id:'MU-40',st:'working',due:'Jul 11',attrs:[['Equip','HVAC-01'],['PM','Q3']],tags:['pm']} ]},
+    { en:'Dryer DR-2', mk:'Сушара DR-2', cards:[
+      {t_en:'Calibrate humidity probe',t_mk:'Калибрирај сонда за влага',id:'MU-43',st:'review',attrs:[['Equip','DR-2']],tags:['calibrate']} ]}
+  ], rail:{ en:'Stuck / blocked', mk:'Заглавено / блокирано', ic:'alert', cards:[
+      {t_en:'Chiller CH-1 — refrigerant leak',t_mk:'Ладилник CH-1 — протекување',id:'MU-46',st:'stuck',attrs:[['Equip','CH-1'],['Sev','High']],tags:['urgent']} ]} }
+};
+
+/* ── render helpers ── */
+function bilingual(en, mk){ return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>'; }
+
+function card(c, acc){
+  const done = c.st==='done';
+  let meta = '';
+  meta += '<span class="mw-tcard__dept">'+ (c.dab||'') +'</span>';
+  meta += '<span class="mw-tcard__id">'+c.id+'</span>';
+  (c.attrs||[]).forEach(a=> meta += '<span class="mw-attr">'+a[0]+' <b>'+a[1]+'</b></span>');
+  (c.tags||[]).forEach(t=> meta += '<span class="mw-htag">#'+t+'</span>');
+  if(c.sub) meta += '<span class="mw-sub"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'+c.sub[0]+'/'+c.sub[1]+'</span>';
+  if(c.hrs) meta += '<span class="mw-sub">'+c.hrs+'h</span>';
+  if(c.due) meta += '<span class="mw-due'+(c.over?' mw-due--over':'')+'">'+c.due+'</span>';
+  if(c.from) meta += '<span class="dh-handoff"><span class="dh-handoff__b mw-attr">'+c.from+'</span><span class="dh-handoff__ar">→</span><span class="dh-handoff__b mw-attr">'+c.to+'</span></span>';
+  const st = c.st ? '<span class="mw-st mw-st--'+c.st+'">'+c.st+'</span>' : '';
+  return '<div class="mw-tcard'+(done?' mw-tcard--done':'')+'" style="--mw-acc:'+acc+';cursor:pointer" onclick="location.href=\'task-detail-'+current+'.html\'">'+
+    '<span class="mw-tcard__box"></span>'+
+    '<div class="mw-tcard__main"><div class="mw-tcard__title">'+bilingual(c.t_en,c.t_mk)+'</div>'+
+      '<div class="mw-tcard__meta">'+meta+'</div></div>'+
+    '<div class="mw-tcard__right">'+st+'</div></div>';
+}
+
+function group(g, acc, dab){
+  const cards = g.cards.map(c=>card(Object.assign({dab},c),acc)).join('');
+  return '<div class="mw-panel mw-panel--quiet dh-group" style="--mw-acc:'+acc+'">'+
+    '<div class="dh-group__hd"><span class="dh-group__ttl"><span class="gdot"></span>'+bilingual(g.en,g.mk)+'</span>'+
+    '<span class="dh-group__ct">'+g.cards.length+'</span></div>'+
+    cards +'</div>';
+}
+function colPanel(g, acc, dab){
+  const cards = g.cards.map(c=>card(Object.assign({dab},c),acc)).join('');
+  return '<div class="mw-panel dh-group" style="--mw-acc:'+acc+'">'+
+    '<div class="dh-group__hd"><span class="dh-group__ttl"><svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;">'+(IC[g.ic]||'')+'</svg>'+bilingual(g.en,g.mk)+'</span>'+
+    '<span class="dh-group__ct">'+g.cards.length+'</span></div>'+
+    cards +'</div>';
+}
+function rail(r, acc, dab){
+  const cards = r.cards.map(c=>card(Object.assign({dab},c),acc)).join('');
+  return '<div class="mw-panel dh-rail" style="--mw-acc:'+acc+'"><div class="dh-rail__hd"><svg viewBox="0 0 24 24">'+(IC[r.ic]||'')+'</svg>'+bilingual(r.en,r.mk)+'</div>'+cards+'</div>';
+}
+
+let current = 'quality_assurance';
+let empty = false;
+
+function renderPicker(){
+  document.getElementById('picker').innerHTML = DEPTS.map(d=>
+    '<div class="dh-pick'+(d.c===current?' is-active':'')+'" data-dept="'+d.c+'" style="--dc:'+d.col+'">'+
+    '<span class="dh-pick__dot"></span><b style="font-family:\'Saira Condensed\';letter-spacing:.06em;">'+d.ab+'</b>'+bilingual(d.en,d.mk)+'</div>'
+  ).join('');
+}
+function renderHero(d, count){
+  document.getElementById('hero').style.setProperty('--mw-acc', d.col);
+  document.getElementById('hero').innerHTML =
+    '<div class="dh-hero__ic"><svg viewBox="0 0 24 24">'+IC[d.ic]+'</svg></div>'+
+    '<div><div class="dh-hero__name">'+bilingual(d.en,d.mk)+'</div>'+
+    '<div class="dh-hero__sub">'+bilingual('Week 28 · Purely Plant — [TEST] site','Недела 28 · Purely Plant — [TEST] локација')+'</div></div>'+
+    '<div class="dh-hero__stat"><div class="dh-hero__num">'+count+'</div><div class="dh-hero__numl">'+bilingual('tasks this week','задачи оваа недела')+'</div></div>';
+}
+function renderPresets(d){
+  const list = PRESETS[d.c]||[];
+  document.getElementById('presets').style.setProperty('--mw-acc', d.col);
+  document.getElementById('presets').innerHTML = list.map(p=>
+    '<button class="dh-preset" type="button"><span class="plus">+</span>'+bilingual(p[0],p[1])+'</button>'
+  ).join('');
+}
+
+function renderBody(d){
+  const data = DATA[d.c]; const acc = d.col; const dab = d.ab;
+  const body = document.getElementById('body');
+  document.getElementById('presets').style.display = '';
+
+  if(empty){
+    document.getElementById('presets').style.display = 'none';
+    body.innerHTML = '<div class="mw-panel mw-empty" style="--mw-acc:'+acc+'">'+
+      '<div class="mw-empty__ic" style="color:'+acc+';border-color:'+acc+'55"><svg viewBox="0 0 24 24" style="width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.5;">'+IC[d.ic]+'</svg></div>'+
+      '<div class="mw-empty__tt">'+bilingual('A fresh week — nothing planned yet','Нова недела — сè уште ништо')+'</div>'+
+      '<div class="mw-empty__ds">'+bilingual('Tap a preset below to drop in this department\u2019s routine work, or create a task from scratch.','Допри пресет подолу за рутинска работа на овој оддел, или создади нова задача.')+'</div>'+
+      '<div class="dh-empty__presets" style="--mw-acc:'+acc+'">'+
+        (PRESETS[d.c]||[]).map(p=>'<button class="dh-preset" type="button"><span class="plus">+</span>'+bilingual(p[0],p[1])+'</button>').join('')+
+      '</div></div>';
+    return;
+  }
+
+  let html = '';
+  if(data.groups){
+    const groups = data.groups.map(g=>group(g,acc,dab)).join('');
+    if(data.rail){
+      html = '<div class="dh-grid g-split"><div class="dh-grid g-groups" style="align-content:start">'+groups+'</div>'+rail(data.rail,acc,dab)+'</div>';
+    } else {
+      html = '<div class="dh-grid g-groups">'+groups+'</div>';
+    }
+  } else if(data.cols){
+    html = '<div class="dh-grid g-cols2">'+data.cols.map(g=>colPanel(g,acc,dab)).join('')+'</div>';
+  }
+  body.innerHTML = html;
+}
+
+function countTasks(d){
+  const data = DATA[d.c]; let n = 0;
+  (data.groups||[]).forEach(g=>n+=g.cards.length);
+  (data.cols||[]).forEach(g=>n+=g.cards.length);
+  if(data.rail) n += data.rail.cards.length;
+  return n;
+}
+
+function render(){
+  const d = DEPTS.find(x=>x.c===current);
+  renderPicker(); renderHero(d, empty?0:countTasks(d)); renderPresets(d); renderBody(d);
+}
+
+/* dedicated per-department page — picker navigates to sibling depthome-*.html */
+document.getElementById('picker').addEventListener('click', e=>{
+  const el = e.target.closest('[data-dept]'); if(!el) return;
+  if(el.getAttribute('data-dept')===current){ empty=false; render(); return; }
+  location.href = 'depthome-'+el.getAttribute('data-dept')+'.html';
+});
+document.getElementById('emptyToggle').addEventListener('click', ()=>{ empty = !empty; render(); });
+
+render();
+</script>
+<script src="mw-i18n.js"></script>
+<script src="nav.js"></script>
+</body>
+</html>

@@ -35,35 +35,91 @@ GF.WWF = GF.WWF || {};
     return entrySkin;
   }
 
+  // The design system's "Secure Access" screen (design/mass-weed-mockup/
+  // login.html): a boot-log terminal on the left, an .mw-panel access panel on
+  // the right. This replaces ONLY the presentation — every real-auth hook is
+  // unchanged: the field ids (#wwf-u / #wwf-p / #wwf-login-msg), the doLogin
+  // wiring, the Enter-to-submit handler. The design's own authenticate() was a
+  // mock that redirected to a static page; the real flow stays wired to
+  // GF.WWF.doLogin. The boot-log lines reveal in sequence via bootReveal().
   function loginCardHTML() {
     return `
-      <div class="gf-card-title">Weekly Weed Flow</div>
-      <div class="gf-card-sub">Sign in to continue</div>
-      <input id="wwf-u" class="gf-in" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
-      <input id="wwf-p" class="gf-in" type="password" placeholder="Password" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')GF.WWF.doLogin()">
-      <button class="gf-btn" onclick="GF.WWF.doLogin()">Sign in</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>`;
+      <div class="mw-secacc">
+        <div class="mw-secacc__log">
+          <div class="mw-secacc__brand">
+            <div class="mw-secacc__name">Mass&nbsp;Weed</div>
+            <div class="mw-secacc__node">${AL('Cultivation Command · Node 7', 'Команда за одгледување · Јазол 7')}</div>
+          </div>
+          <div class="mw-secacc__boot" id="mw-boot">
+            <div><span class="hd">▸ BIOS</span> ${AL('hydroponic control mesh', 'хидропонска контролна мрежа')} … <span class="ok">${AL('ONLINE', 'ОНЛАЈН')}</span></div>
+            <div><span class="hd">▸ ENV</span> ${AL('climate array 12/12 zones', 'климатски низ 12/12 зони')} … <span class="ok">${AL('NOMINAL', 'НОМИНАЛНО')}</span></div>
+            <div><span class="hd">▸ SEC</span> ${AL('vault seals · chain-of-custody', 'печати · синџир на чување')} … <span class="ok">${AL('LOCKED', 'ЗАКЛУЧЕНО')}</span></div>
+            <div><span class="hd">▸ INV</span> ${AL('strains · batches indexed', 'сорти · серии индексирани')} … <span class="ok">${AL('SYNCED', 'СИНХ.')}</span></div>
+            <div class="cursor"><span class="hd">▸ AUTH</span> ${AL('awaiting operator', 'се чека оператор')}&nbsp;</div>
+          </div>
+        </div>
+        <div class="mw-secacc__panel mw-panel">
+          <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">${AL('Secure Access', 'Безбеден пристап')}</h2><span class="mw-rule"></span></div>
+          <div class="mw-field"><label>${AL('Operator ID', 'ID на оператор')}</label>
+            <input id="wwf-u" class="mw-input" placeholder="${AL('e.g. qcm_bn', 'на пр. qcm_bn')}" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+          <div class="mw-field"><label>${AL('Passphrase', 'Лозинка')}</label>
+            <input id="wwf-p" class="mw-input" type="password" placeholder="••••••••••" autocomplete="current-password"
+                   onkeydown="if(event.key==='Enter')GF.WWF.doLogin()"></div>
+          <button class="mw-btn mw-btn--wide" style="margin-top:8px" onclick="GF.WWF.doLogin()">${AL('Authenticate', 'Автентицирај')}</button>
+          <div id="wwf-login-msg" class="gf-msg"></div>
+        </div>
+      </div>`;
   }
 
   function changePwCardHTML() {
     return `
-      <div class="gf-card-title">Set a new password</div>
-      <div class="gf-card-sub">First login — choose a password (min 8 characters).</div>
-      <input id="wwf-np" class="gf-in" type="password" placeholder="New password" autocomplete="new-password">
-      <input id="wwf-np2" class="gf-in" type="password" placeholder="Confirm password" autocomplete="new-password"
-             onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()">
-      <button class="gf-btn" onclick="GF.WWF.doChangePw()">Set password &amp; continue</button>
-      <div id="wwf-login-msg" class="gf-msg"></div>`;
+      <div class="mw-secacc mw-secacc--single">
+        <div class="mw-secacc__panel mw-panel">
+          <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">${AL('Set Passphrase', 'Постави лозинка')}</h2><span class="mw-rule"></span></div>
+          <div class="mw-secacc__hint">${AL('First login — choose a passphrase (min 8 characters).',
+                                             'Прва пријава — изберете лозинка (мин. 8 карактери).')}</div>
+          <div class="mw-field"><label>${AL('New passphrase', 'Нова лозинка')}</label>
+            <input id="wwf-np" class="mw-input" type="password" placeholder="••••••••••" autocomplete="new-password"></div>
+          <div class="mw-field"><label>${AL('Confirm passphrase', 'Потврди лозинка')}</label>
+            <input id="wwf-np2" class="mw-input" type="password" placeholder="••••••••••" autocomplete="new-password"
+                   onkeydown="if(event.key==='Enter')GF.WWF.doChangePw()"></div>
+          <button class="mw-btn mw-btn--wide" style="margin-top:8px" onclick="GF.WWF.doChangePw()">${AL('Set passphrase &amp; continue', 'Постави лозинка и продолжи')}</button>
+          <div id="wwf-login-msg" class="gf-msg"></div>
+        </div>
+      </div>`;
+  }
+
+  // Boot-log staggered reveal (design login.html): each line fades in on a
+  // 260ms cadence once the Secure Access screen is shown. Cheap, decorative,
+  // and skipped entirely if the boot block isn't present (change-pw screen).
+  function bootReveal() {
+    const lines = document.querySelectorAll('#mw-boot > div');
+    lines.forEach((el, i) => setTimeout(() => el.classList.add('in'), 160 * i + 120));
+  }
+
+  // The demo button is gated on the backend: it only appears where the server
+  // reports demo_enabled (test stacks), and stays hidden in production until a
+  // time-matched demo is switched on there. Rendered hidden, then revealed once
+  // /health confirms — inline display:none beats the stylesheet without any
+  // !important, so there is never a flash of the button on prod.
+  let _demoOk = null;   // null = not probed yet; true/false once /health answers
+  function revealDemoIfEnabled(el) {
+    const show = () => { const b = el.querySelector('.gf-demo-float'); if (b && _demoOk) b.style.display = ''; };
+    if (_demoOk !== null) return show();
+    fetch('/health', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { _demoOk = !!j.demo_enabled; })
+      .catch(() => { _demoOk = false; })
+      .then(show);
   }
 
   function buildEntry(el, cardHTML, withDemo) {
     el.className = 'gf-entry-root';
     // The demo entry lives OUTSIDE the sign-in card — a fixed pill pinned to the
-    // top-right corner, always visible from the very first splash frame and
-    // never affected by the card/leaf layout (which is what buried it before).
+    // top-right corner, never affected by the card/leaf layout (which is what
+    // buried it before). Hidden until the backend confirms demo is enabled.
     const demoBtn = withDemo ? `
-        <button class="gf-demo-float" onclick="GF.DEMO.enter()"
+        <button class="gf-demo-float" style="display:none" onclick="GF.DEMO.enter()"
                 title="Sample data — separate from the real system · Примерни податоци"
                 aria-label="Try the demo">🌿 <span>Try the demo · Демо</span></button>` : '';
     el.innerHTML = `
@@ -87,6 +143,7 @@ GF.WWF = GF.WWF || {};
     if (back) { back.onclick = backToLeaf; back.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); backToLeaf(); } }; }
     const stage = $('gf-leaf-stage');
     if (stage) stage.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); reveal(); } });
+    if (withDemo) revealDemoIfEnabled(el);
   }
 
   function mountLeaf() {
@@ -152,6 +209,7 @@ GF.WWF = GF.WWF || {};
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     setTimeout(() => {
       const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+      bootReveal();
       const u = $('wwf-u') || $('wwf-np'); if (u) setTimeout(() => { try { u.focus(); } catch (e) {} }, 260);
       // Card animates in over ~.55s; run the guard after it settles.
       setTimeout(ensureCardInView, 620);
@@ -170,6 +228,7 @@ GF.WWF = GF.WWF || {};
     opened = true;
     const entry = $('gf-entry'); if (entry) entry.classList.add('entered');
     const lw = $('gf-lw'); if (lw) lw.classList.add('show');
+    bootReveal();
     setTimeout(ensureCardInView, 60);
   }
 
@@ -220,8 +279,14 @@ GF.WWF = GF.WWF || {};
       // random one.
       try {
         const saved = localStorage.getItem('gf_theme') || 'mass-weed';
-        if (GF.setTheme && document.documentElement.dataset.theme !== saved) {
-          GF.setTheme(saved, { silent: true, noPersist: true });
+        // A valid saved skin is re-applied without touching storage. An invalid
+        // one (retired/corrupt/legacy id the pre-paint boot applied verbatim,
+        // matching no CSS) is HEALED: setTheme falls back to mass-weed and — by
+        // dropping noPersist — rewrites gf_theme, so the unstyled-flash can't
+        // recur on every load.
+        const valid = GF.themeById && GF.themeById(saved);
+        if (GF.setTheme && (!valid || document.documentElement.dataset.theme !== saved)) {
+          GF.setTheme(saved, { silent: true, noPersist: !!valid });
         }
       } catch (e) {}
       return _origLoadAndRender.apply(this, arguments);

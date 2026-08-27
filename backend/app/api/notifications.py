@@ -19,6 +19,8 @@ app-layer, mirroring list_tasks' scoping approach.
 """
 from datetime import datetime, timedelta, timezone
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import rls
@@ -30,7 +32,7 @@ router = APIRouter(tags=["notifications"])
 # (migration 0016 widened it for the canned automation rules; this regex
 # had gone stale, 422-ing a filter on the very reasons the CI-visible
 # feature added — every valid reason value must appear here).
-_REASONS = "assigned|mentioned|comment|status|due|report|capa_stuck|validation_stuck"
+_REASONS = "assigned|mentioned|comment|status|due|report|capa_stuck|validation_stuck|workflow"
 
 _ITEM = ("SELECT n.id, n.reason, n.read_at, n.done_at, n.created_at,"
          " e.actor_id, e.verb, e.object_type, e.object_id, e.task_id,"
@@ -93,8 +95,13 @@ async def read_all(user: dict = Depends(require_password_set)):
     return {"ok": True, "marked": int(res.split()[-1])}
 
 
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
 @router.post("/notifications/{nid}/read")
 async def mark_read(nid: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(nid)):
+        raise HTTPException(404, "Not found")
     async with rls(user) as c:
         res = await c.execute(
             "UPDATE notifications SET read_at=COALESCE(read_at, now()) WHERE id=$1", nid)
@@ -105,6 +112,8 @@ async def mark_read(nid: str, user: dict = Depends(require_password_set)):
 
 @router.post("/notifications/{nid}/done")
 async def mark_done(nid: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(nid)):
+        raise HTTPException(404, "Not found")
     async with rls(user) as c:
         res = await c.execute(
             "UPDATE notifications SET done_at=now(), read_at=COALESCE(read_at, now()) WHERE id=$1", nid)
@@ -125,7 +134,12 @@ async def activity(
     clauses, args = ["true"], []
     dept = dept_scope(user) if is_dept_scoped_role(user) else (
         str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    org_wide = user["role"] != "USER" and not is_dept_scoped_role(user)
+    # A dept-scoped manager with no department assigned yet must fall back to
+    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
+    # documents) — checking only the ROLE here, without also checking whether
+    # dept_scope() actually resolved a department, narrowed such a manager to
+    # "my own actions only" instead.
+    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
     if not org_wide:
         args.append(dept)
         args.append(str(user["id"]))
@@ -167,7 +181,12 @@ async def digest(
     clauses, args = ["created_at >= $1"], [since]
     dept = dept_scope(user) if is_dept_scoped_role(user) else (
         str(user["department_id"]) if user["role"] == "USER" and user["department_id"] else None)
-    org_wide = user["role"] != "USER" and not is_dept_scoped_role(user)
+    # A dept-scoped manager with no department assigned yet must fall back to
+    # org-wide (same anti-"OWNER-sees-nothing" rule dept_scope() itself
+    # documents) — checking only the ROLE here, without also checking whether
+    # dept_scope() actually resolved a department, narrowed such a manager to
+    # "my own actions only" instead.
+    org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
     if not org_wide:
         args.append(dept); args.append(str(user["id"]))
         clauses.append(f"(department_id=${len(args)-1}::uuid OR actor_id=${len(args)}::uuid)")

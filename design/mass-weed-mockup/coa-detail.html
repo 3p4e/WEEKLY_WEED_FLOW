@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Certificate of Analysis</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone C · QC LIMS — Certificate / CoA detail (qccoa).
+  The GxP chrome showcase: results grid with server-evaluated `complies`,
+  blank-not-zero cells, provenance lines, second-person review (reviewer ≠ analyst),
+  QP-gated release blocked on any non-comply, Annex-11 e-signature modal + signature
+  block, verify verdict (VERIFIED/DISCREPANCY), immutable-once-released + revision.
+  Grounded in QCSOP 012 v3 (CoA/CoQ) & QCSP 001 (dried cannabis flower spec).
+  Role switcher demonstrates the segregation-of-duties gates.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);}
+  .crumb .sp{flex:1;}
+  /* role switcher */
+  .rolebar{display:flex;align-items:center;gap:9px;margin-bottom:20px;padding:9px 13px;background:rgba(155,123,232,.07);
+    box-shadow:inset 0 0 0 1px rgba(155,123,232,.28);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);flex-wrap:wrap;}
+  .rolebar .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--mw-text-faint);}
+  /* hero */
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:8px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:#c0aef2;background:rgba(155,123,232,.14);
+    box-shadow:inset 0 0 0 1px rgba(155,123,232,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero__no{font-family:var(--mw-mono),monospace;font-weight:700;font-size:22px;color:var(--mw-cyan-bright);letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.35);}
+  .hero__ttl{font-family:var(--mw-font-cond);font-size:16px;font-weight:600;color:var(--mw-ink);margin-top:3px;line-height:1.25;}
+  .hero__sub{font-size:11.5px;color:var(--mw-text-faint);margin-top:3px;}
+  .hero__sp{flex:1;}
+  .decision{display:flex;flex-direction:column;align-items:flex-end;gap:7px;}
+  .verdict{display:inline-flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-weight:700;font-size:20px;letter-spacing:.08em;padding:7px 16px;
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);}
+  .verdict.pass{color:var(--mw-void);background:linear-gradient(180deg,#8ff07a,var(--mw-stat-hi));box-shadow:0 0 20px -4px var(--mw-stat-hi);}
+  .verdict.fail{color:#fff;background:linear-gradient(180deg,#ff6b6b,var(--mw-stat-lo));box-shadow:0 0 20px -4px var(--mw-stat-lo);}
+  .lockchip{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sc,var(--mw-text-dim));
+    padding:3px 10px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc,var(--mw-text-dim)) 50%,transparent);background:color-mix(in srgb,var(--sc,var(--mw-text-dim)) 12%,transparent);
+    clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);}
+  /* meta strip */
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:18px 0 4px;background:rgba(94,200,240,.14);
+    box-shadow:inset 0 0 0 1px rgba(94,200,240,.14);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);overflow:hidden;}
+  .meta__c{background:var(--mw-panel-in);padding:11px 14px;}
+  .meta__l{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);}
+  .meta__v{font-family:var(--mw-mono),monospace;font-size:12.5px;color:var(--mw-ink);margin-top:4px;}
+  .meta__v.link{color:var(--mw-cyan-bright);cursor:pointer;}
+  /* lifecycle stepper */
+  .life{display:flex;align-items:center;gap:0;margin:20px 0 6px;flex-wrap:wrap;}
+  .life .st{display:flex;align-items:center;gap:9px;font-family:var(--mw-font-cond);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mw-text-faint);padding:7px 14px 7px 12px;position:relative;}
+  .life .st .n{width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:10px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;}
+  .life .st.done{color:var(--sc,var(--mw-stat-hi));} .life .st.done .n{background:var(--sc,var(--mw-stat-hi));color:var(--mw-void);box-shadow:none;}
+  .life .st.cur{color:var(--mw-cyan-bright);} .life .st.cur .n{box-shadow:inset 0 0 0 2px var(--mw-cyan-bright),0 0 10px var(--mw-cyan);}
+  .life .arw{color:var(--mw-text-faint);font-size:13px;}
+  /* section */
+  .sec{margin:24px 0;}
+  .sec__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-header);margin:0 0 12px;display:flex;align-items:center;gap:10px;}
+  .sec__t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(94,200,240,.28),transparent);}
+  .sec__t .side{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mw-text-faint);font-family:var(--mw-font);font-size:11px;}
+  /* results grid */
+  table.res{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.res thead th{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;font-weight:700;color:var(--mw-text-dim);text-align:left;padding:9px 11px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.2);white-space:nowrap;}
+  table.res thead th.num{text-align:right;}
+  table.res td{padding:10px 11px;vertical-align:middle;box-shadow:inset 0 -1px 0 rgba(94,200,240,.07);}
+  .pname{color:var(--mw-ink);line-height:1.3;} .pname .mk{color:var(--mw-text-faint);font-size:11px;}
+  .pmethod{font-family:var(--mw-mono),monospace;font-size:10.5px;color:var(--mw-text-faint);}
+  .limit{font-family:var(--mw-mono),monospace;color:var(--mw-text-dim);text-align:right;white-space:nowrap;}
+  .result{font-family:var(--mw-mono),monospace;font-weight:700;font-size:13px;text-align:right;color:var(--mw-ink);white-space:nowrap;}
+  .result.blank{color:var(--mw-stat-mid);font-weight:400;}
+  .cbadge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;white-space:nowrap;
+    clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .cbadge.yes{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.5);background:rgba(108,240,90,.1);}
+  .cbadge.no{color:#fff;background:rgba(239,77,77,.85);}
+  .cbadge.pend{color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1px rgba(236,236,74,.45);background:rgba(236,236,74,.08);}
+  .prov{font-size:10px;color:var(--mw-text-faint);line-height:1.35;}
+  .prov b{color:var(--mw-text-dim);font-family:var(--mw-mono),monospace;font-weight:400;}
+  .vv{display:inline-flex;align-items:center;gap:4px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;margin-top:3px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .vv.ok{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1px rgba(108,240,90,.4);}
+  .vv.disc{color:var(--mw-stat-lo);box-shadow:inset 0 0 0 1px rgba(239,77,77,.5);}
+  tr.fail-row td{background:rgba(239,77,77,.06);}
+  tr.blank-row td{background:rgba(236,236,74,.04);}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-size:10.5px;color:var(--mw-text-faint);}
+  .legend b{color:var(--mw-text-dim);font-weight:600;}
+  /* signature blocks */
+  .sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .sig{padding:13px 15px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .sig__role{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);}
+  .sig__who{display:flex;align-items:center;gap:9px;margin-top:9px;}
+  .sig__av{width:30px;height:30px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mw-font-cond);font-weight:700;font-size:11px;color:var(--mw-void);background:linear-gradient(135deg,var(--mw-cyan-dim),rgba(16,48,80,.8));}
+  .sig__nm{font-size:12.5px;color:var(--mw-ink);font-weight:600;} .sig__mn{font-size:10px;color:var(--mw-text-faint);margin-top:2px;line-height:1.3;}
+  .sig__ts{font-family:var(--mw-mono),monospace;font-size:9.5px;color:var(--mw-cyan-dim);margin-top:8px;display:flex;align-items:center;gap:5px;}
+  .sig.empty{opacity:.6;} .sig.empty .sig__who{color:var(--mw-text-faint);}
+  .sig__wait{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:11.5px;color:var(--mw-text-faint);font-style:italic;}
+  .sig__dash{width:30px;height:30px;flex:none;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(94,200,240,.24);display:grid;place-items:center;color:var(--mw-text-faint);}
+  /* action rail */
+  .rail{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:6px;}
+  .rail .hint{font-size:11px;color:var(--mw-text-faint);line-height:1.4;flex:1;min-width:180px;}
+  .gate-note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;font-size:11.5px;line-height:1.5;color:var(--mw-text);
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .gate-note.block{background:rgba(239,77,77,.08);box-shadow:inset 0 0 0 1px rgba(239,77,77,.32);}
+  .gate-note.ok{background:rgba(108,240,90,.07);box-shadow:inset 0 0 0 1px rgba(108,240,90,.3);}
+  .gate-note.info{background:rgba(94,200,240,.07);box-shadow:inset 0 0 0 1px rgba(94,200,240,.28);}
+  .gate-note .ic{flex:none;margin-top:1px;}
+  .gate-note.block .ic{color:var(--mw-stat-lo);} .gate-note.ok .ic{color:var(--mw-stat-hi);} .gate-note.info .ic{color:var(--mw-cyan-bright);}
+  .btn-lg{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.08em;font-size:13px;font-weight:700;cursor:pointer;padding:11px 20px;border:none;color:var(--mw-void);
+    background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);transition:filter .12s ease;}
+  .btn-lg:hover{filter:brightness(1.18);} .btn-lg.qp{background:linear-gradient(180deg,#c0aef2,#9B7BE8);}
+  .btn-lg.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);}
+  .btn-lg[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+  /* provenance banner */
+  .provbar{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;background:rgba(94,200,240,.06);box-shadow:inset 0 0 0 1px rgba(94,200,240,.22);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);font-size:11.5px;line-height:1.5;color:var(--mw-text-dim);}
+  .provbar .ic{color:var(--mw-cyan-bright);flex:none;margin-top:1px;}
+  .provbar b{color:var(--mw-ink);font-family:var(--mw-mono),monospace;font-weight:400;}
+  /* e-sign modal */
+  .scrim{position:fixed;inset:0;background:rgba(4,10,20,.72);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:70;display:grid;place-items:center;padding:20px;}
+  .scrim.on{opacity:1;pointer-events:auto;}
+  .modal{width:min(440px,96vw);background:linear-gradient(160deg,var(--mw-panel),var(--mw-panel-2));box-shadow:0 20px 60px rgba(0,0,0,.6),inset 0 0 0 1px rgba(94,200,240,.34);
+    clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px);transform:scale(.94);transition:transform .18s ease;}
+  .scrim.on .modal{transform:scale(1);}
+  .modal__hd{padding:18px 22px 14px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.16);display:flex;align-items:center;gap:11px;}
+  .modal__hd .lk{color:#c0aef2;}
+  .modal__ttl{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.08em;font-size:16px;font-weight:700;color:var(--mw-ink);}
+  .modal__bd{padding:18px 22px 22px;display:flex;flex-direction:column;gap:15px;}
+  .meaning{padding:12px 14px;background:rgba(155,123,232,.08);box-shadow:inset 0 0 0 1px rgba(155,123,232,.3);
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);font-size:12.5px;line-height:1.5;color:var(--mw-ink);}
+  .modal__lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-dim);margin-bottom:7px;display:block;}
+  .wholine{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--mw-text-dim);}
+  .modal__ft{display:flex;gap:10px;justify-content:flex-end;margin-top:2px;}
+  @media(max-width:760px){.meta{grid-template-columns:repeat(2,1fr);}.sigs{grid-template-columns:1fr;}table.res .hidem{display:none;}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Certificate detail">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="#">QC LIMS</a><span>›</span><a href="#">Certificates</a><span>›</span><span>iCoA-PP-2026-0042</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="rolebar">
+    <span class="lbl"><span class="en">Signed in as</span><span class="mk">Најавен како</span></span>
+    <div class="mw-chips" id="roleSw">
+      <button class="mw-chip on" type="button" data-role="analyst" style="--cc:var(--mw-cyan)"><span class="d"></span><span class="en">Analyst · Kaidan A.</span><span class="mk">Аналитичар · Кајдан А.</span></button>
+      <button class="mw-chip" type="button" data-role="qcmgr" style="--cc:#2BE8A0"><span class="d"></span><span class="en">QC Manager · Liara V.</span><span class="mk">КК Менаџер · Лиара В.</span></button>
+      <button class="mw-chip" type="button" data-role="qp" style="--cc:#9B7BE8"><span class="d"></span><span class="en">QP · D. Anderson</span><span class="mk">QP · Д. Андерсон</span></button>
+    </div>
+    <span style="flex:1"></span>
+    <span style="font-size:10.5px;color:var(--mw-text-faint);letter-spacing:.03em;"><span class="en">segregation of duties · demo</span><span class="mk">поделба на должности · демо</span></span>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7 15h10"/></svg></div>
+    <div>
+      <div class="hero__no">iCoA-PP-2026-0042</div>
+      <div class="hero__ttl"><span class="en">Certificate of Analysis — Dried Cannabis Flower (medical)</span><span class="mk">Сертификат од анализа — сув цвет од канабис (медицински)</span></div>
+      <div class="hero__sub"><span class="en">Batch PP-B-2026-0311 · against spec QCSP 001 v2 · QCSOP 012 v3</span><span class="mk">Серија PP-B-2026-0311 · според спец. QCSP 001 v2 · QCSOP 012 v3</span></div>
+    </div>
+    <div class="hero__sp"></div>
+    <div class="decision">
+      <span class="verdict pass" id="verdict"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg><span id="verdictTx">PASS</span></span>
+      <span class="lockchip" id="statusChip" style="--sc:#7fa3bd"><span id="statusTx">DRAFT</span></span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <div class="meta__c"><div class="meta__l"><span class="en">Batch</span><span class="mk">Серија</span></div><div class="meta__v link">PP-B-2026-0311</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Specification</span><span class="mk">Спецификација</span></div><div class="meta__v link">QCSP 001 v2</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Sample №</span><span class="mk">Мостра №</span></div><div class="meta__v">PP-SMP-2026-0188</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Issued</span><span class="mk">Издаден</span></div><div class="meta__v" id="issuedDt">—</div></div>
+  </div>
+
+  <div class="life" id="life"></div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Results</span><span class="mk">Резултати</span><span class="side"><span class="en">evaluated against QCSP 001 v2 acceptance limits</span><span class="mk">оценето според границите на QCSP 001 v2</span></span></p>
+    <div class="mw-panel" style="padding:6px 8px 4px;">
+      <div class="mw-well" style="padding:2px 8px;overflow-x:auto;">
+        <table class="res">
+          <thead><tr>
+            <th><span class="en">Parameter</span><span class="mk">Параметар</span></th>
+            <th class="hidem"><span class="en">Method</span><span class="mk">Метод</span></th>
+            <th class="num"><span class="en">Limit</span><span class="mk">Граница</span></th>
+            <th class="num"><span class="en">Result</span><span class="mk">Резултат</span></th>
+            <th><span class="en">Complies</span><span class="mk">Усогласено</span></th>
+            <th class="hidem"><span class="en">Provenance</span><span class="mk">Потекло</span></th>
+          </tr></thead>
+          <tbody id="resRows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="legend">
+      <span><b class="cbadge yes" style="padding:1px 6px">✓</b> <span class="en">complies</span><span class="mk">усогласено</span></span>
+      <span><b class="cbadge no" style="padding:1px 6px">✕</b> <span class="en">out of specification</span><span class="mk">надвор од спецификација</span></span>
+      <span><b style="color:var(--mw-stat-mid)">—</b> <span class="en">not measured (blank ≠ zero)</span><span class="mk">не е измерено (празно ≠ нула)</span></span>
+      <span style="margin-left:auto;display:flex;gap:16px"><span style="cursor:pointer;color:var(--mw-cyan-dim);" id="pestToggle">✎ <span class="en">demo: enter pesticide result</span><span class="mk">демо: внеси резултат за пестициди</span></span><span style="cursor:pointer;color:var(--mw-cyan-dim);" id="failToggle">⚡ <span class="en">demo: flip THC out-of-spec</span><span class="mk">демо: THC надвор од спец.</span></span></span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="provbar"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4"/></svg></span>
+      <div><span class="en">Two parameters carry <b>external provenance</b> — ingested from eCoA-PP-2026-0031 (Eurofins MK). The verify loop reconciled each against its source: <b>VERIFIED</b>, no discrepancy. Original PDF retained · SHA-256 <b>a91f…7c02</b>.</span><span class="mk">Два параметри имаат <b>надворешно потекло</b> — од eCoA-PP-2026-0031 (Eurofins MK). Циклусот за верификација ги согласи со изворот: <b>ВЕРИФИЦИРАНО</b>. Оригинал PDF задржан · SHA-256 <b>a91f…7c02</b>.</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Signatures</span><span class="mk">Потписи</span><span class="side"><span class="en">Annex 11 · second-person review · QP release</span><span class="mk">Анекс 11 · преглед од второ лице · QP</span></span></p>
+    <div class="sigs" id="sigs"></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Actions</span><span class="mk">Дејства</span></p>
+    <div id="gateNote"></div>
+    <div class="rail" id="rail" style="margin-top:12px;"></div>
+  </div>
+</div>
+</div>
+
+<!-- e-signature modal -->
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal__hd"><span class="lk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="modal__ttl"><span class="en">Electronic signature</span><span class="mk">Електронски потпис</span></span></div>
+    <div class="modal__bd">
+      <div class="meaning" id="signMeaning"></div>
+      <div class="wholine"><span class="sig__av" id="signAv">DA</span><span><span class="en">Signing as</span><span class="mk">Потпишува</span> <b id="signWho" style="color:var(--mw-ink)">—</b></span></div>
+      <div>
+        <label class="modal__lbl"><span class="en">Re-enter your password to sign</span><span class="mk">Внесете лозинка за потпис</span></label>
+        <input class="mw-input" id="signPw" type="password" placeholder="••••••••" style="padding:10px 13px;">
+        <div style="font-size:10px;color:var(--mw-text-faint);margin-top:6px;"><span class="en">Your signature (who · when · meaning) binds to this record and enters the audit trail.</span><span class="mk">Потписот (кој · кога · значење) се врзува за записот и влегува во ревизорската трага.</span></div>
+      </div>
+      <div class="modal__ft">
+        <button class="btn-lg ghost" onclick="closeSign()"><span class="en">Cancel</span><span class="mk">Откажи</span></button>
+        <button class="btn-lg" id="signConfirm"><span class="en">Sign</span><span class="mk">Потпиши</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var USERS={ analyst:{nm:'Kaidan A.',nmk:'Кајдан А.',av:'КА',role:'Analyst',rmk:'Аналитичар'},
+  qcmgr:{nm:'Liara V.',nmk:'Лиара В.',av:'ЛВ',role:'QC Manager',rmk:'КК Менаџер'},
+  qp:{nm:'D. Anderson',nmk:'Д. Андерсон',av:'ДА',role:'Qualified Person',rmk:'Квалификувано лице'} };
+
+/* ---- state ---- */
+var S = {
+  user:'analyst',
+  status:'DRAFT',              // DRAFT → REVIEWED → APPROVED → RELEASED
+  analyst:'analyst',           // who entered results
+  reviewer:null, approver:null, releaser:null,
+  reviewTs:null, approveTs:null, releaseTs:null,
+  failTHC:false, pestMeasured:false
+};
+var LIFE=[['DRAFT','Draft','Нацрт'],['REVIEWED','Reviewed','Прегледан'],['APPROVED','Approved','Одобрен'],['RELEASED','Released','Издаден']];
+
+/* ---- results (against QCSP 001 v2) ---- */
+function results(){ return [
+  {en:'Total THC',mk:'Вкупен THC',method:'HPLC · QCSOP 016',lim:'18.0–24.0 %',lo:18,hi:24,val:S.failTHC?25.8:21.4,unit:'%'},
+  {en:'Total CBD',mk:'Вкупен CBD',method:'HPLC · QCSOP 016',lim:'≤ 1.0 %',hi:1.0,val:0.8,unit:'%'},
+  {en:'Water content (loss on drying)',mk:'Содржина на вода',method:'KF · QCSOP 016',lim:'≤ 10.0 %',hi:10,val:8.2,unit:'%'},
+  {en:'Total aerobic microbial count',mk:'Вкупен аеробен број',method:'QCSOP 024',lim:'≤ 1×10⁴ CFU/g',hi:10000,val:1200,unit:'CFU/g',fmt:'1.2×10³'},
+  {en:'Bile-tolerant gram-negative',mk:'Жолчно-толерантни грам-негативни',method:'QCSOP 024',lim:'≤ 1×10² CFU/g',hi:100,val:0,unit:'CFU/g',fmt:'< 10',zeroNote:true},
+  {en:'Lead (Pb)',mk:'Олово (Pb)',method:'ICP-MS',lim:'≤ 0.50 mg/kg',hi:0.5,val:0.12,unit:'mg/kg',prov:'eCoA-PP-2026-0031 · Eurofins MK · 14.10.2025',verify:'ok'},
+  {en:'Aflatoxin B1',mk:'Афлатоксин B1',method:'LC-MS/MS',lim:'≤ 2.0 µg/kg',hi:2.0,val:0.4,unit:'µg/kg',prov:'eCoA-PP-2026-0031 · Eurofins MK · 14.10.2025',verify:'ok'},
+  {en:'Pesticide screen (multi-residue)',mk:'Пестициди (мулти-резидуа)',method:'LC-MS/MS · QCSOP 017',lim:'≤ MRL (Ph.Eur.)',val:S.pestMeasured?0:null,unit:'',fmt:S.pestMeasured?'not detected':undefined,blank:!S.pestMeasured,zeroNote:S.pestMeasured}
+]; }
+function complies(r){ if(r.blank||r.val===null) return null; if(r.lo!=null && r.val<r.lo) return false; if(r.hi!=null && r.val>r.hi) return false; return true; }
+function overall(){ var rs=results(); var anyFail=rs.some(function(r){return complies(r)===false;}); var anyBlank=rs.some(function(r){return complies(r)===null;}); return {fail:anyFail, blank:anyBlank, ready:!anyFail&&!anyBlank}; }
+
+function paintVerdict(){
+  var o=overall(), v=document.getElementById('verdict'), t=document.getElementById('verdictTx');
+  if(o.fail){ v.className='verdict fail'; v.querySelector('svg').innerHTML='<path d="M18 6L6 18M6 6l12 12"/>'; t.textContent='FAIL'; }
+  else { v.className='verdict pass'; v.querySelector('svg').innerHTML='<path d="M20 6L9 17l-5-5"/>'; t.textContent='PASS'; }
+  var sc=document.getElementById('statusChip'), col={DRAFT:'#7fa3bd',REVIEWED:'#5ec8f0',APPROVED:'#f0b95e',RELEASED:'#6cf05a',VOIDED:'#ef4d4d'}[S.status];
+  sc.style.setProperty('--sc',col); document.getElementById('statusTx').textContent=S.status + (S.status==='RELEASED'?' 🔒':'');
+  document.getElementById('issuedDt').textContent = S.releaseTs || '—';
+}
+function paintLife(){
+  var ci=LIFE.findIndex(function(x){return x[0]===S.status;});
+  document.getElementById('life').innerHTML=LIFE.map(function(x,i){
+    var cls=i<ci?'done':i===ci?'cur':''; var col={REVIEWED:'#5ec8f0',APPROVED:'#f0b95e',RELEASED:'#6cf05a'}[x[0]]||'#6cf05a';
+    return (i?'<span class="arw">→</span>':'')+'<span class="st '+cls+'" style="--sc:'+col+'"><span class="n">'+(i<ci?'✓':(i+1))+'</span>'+bil(x[1],x[2])+'</span>';
+  }).join('');
+}
+function paintResults(){
+  document.getElementById('resRows').innerHTML=results().map(function(r){
+    var c=complies(r), disp=r.fmt||(r.val!=null?r.val+(r.unit&&!/CFU|µg|mg/.test(r.unit)?' '+r.unit:(r.unit?' '+r.unit:'')):'—');
+    var badge = c===true?'<span class="cbadge yes">✓ '+ (document.documentElement.getAttribute('data-lang')==='mk'?'Да':'Yes')+'</span>'
+      : c===false?'<span class="cbadge no">✕ OOS</span>'
+      : '<span class="cbadge pend">'+ (document.documentElement.getAttribute('data-lang')==='mk'?'Не измерено':'Not measured')+'</span>';
+    var rowcls=c===false?'fail-row':(c===null?'blank-row':'');
+    var prov = r.prov ? '<div class="prov"><b>'+r.prov+'</b>'+(r.verify==='ok'?'<br><span class="vv ok">✓ verified</span>':'')+'</div>'
+      : '<div class="prov" style="color:var(--mw-text-faint)"><span class="en">internal · QC lab</span><span class="mk">интерно · КК лаб</span></div>';
+    var zn = r.zeroNote?'<div style="font-size:9px;color:var(--mw-text-faint);margin-top:2px"><span class="en">below detection limit</span><span class="mk">под граница на детекција</span></div>':'';
+    return '<tr class="'+rowcls+'">'+
+      '<td><div class="pname"><span class="en">'+r.en+'</span><span class="mk">'+r.mk+'</span></div>'+zn+'</td>'+
+      '<td class="hidem"><span class="pmethod">'+r.method+'</span></td>'+
+      '<td class="limit">'+r.lim+'</td>'+
+      '<td class="result'+(c===null?' blank':'')+'">'+disp+'</td>'+
+      '<td>'+badge+'</td>'+
+      '<td class="hidem">'+prov+'</td>'+
+    '</tr>';
+  }).join('');
+}
+function sigCard(role,who,ts,meaningEn,meaningMk){
+  var u=USERS[role]||null;
+  if(!who){ return '<div class="sig empty"><div class="sig__role">'+bil((role==='reviewer'?'Reviewed by':role==='approver'?'Approved by':'Released by'),(role==='reviewer'?'Прегледал':role==='approver'?'Одобрил':'Издал'))+'</div>'+
+    '<div class="sig__wait"><span class="sig__dash">·</span><span>'+bil('Awaiting signature','Чека потпис')+'</span></div></div>'; }
+  var wu=USERS[who];
+  return '<div class="sig"><div class="sig__role">'+bil((role==='reviewer'?'Reviewed by':role==='approver'?'Approved by':'Released by'),(role==='reviewer'?'Прегледал':role==='approver'?'Одобрил':'Издал'))+'</div>'+
+    '<div class="sig__who"><span class="sig__av">'+wu.av+'</span><div><div class="sig__nm"><span class="en">'+wu.nm+'</span><span class="mk">'+wu.nmk+'</span></div><div class="sig__mn">'+bil(meaningEn,meaningMk)+'</div></div></div>'+
+    '<div class="sig__ts"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'+ts+'</div></div>';
+}
+function paintSigs(){
+  var an=USERS[S.analyst];
+  var analystCard='<div class="sig"><div class="sig__role">'+bil('Analysed by','Анализирал')+'</div>'+
+    '<div class="sig__who"><span class="sig__av">'+an.av+'</span><div><div class="sig__nm"><span class="en">'+an.nm+'</span><span class="mk">'+an.nmk+'</span></div><div class="sig__mn">'+bil('Results entered','Внел резултати')+'</div></div></div>'+
+    '<div class="sig__ts"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>23.07.2026 09:14</div></div>';
+  document.getElementById('sigs').innerHTML=
+    analystCard+
+    sigCard('reviewer',S.reviewer,S.reviewTs,'I have reviewed these results','Ги прегледав резултатите')+
+    sigCard('releaser',S.releaser||S.approver,S.releaseTs||S.approveTs,S.releaser?'I certify & release this batch':'I approve this certificate',S.releaser?'Ја потврдувам и издавам серијата':'Го одобрувам сертификатот');
+}
+
+/* ---- gates ---- */
+function paintActions(){
+  var gn=document.getElementById('gateNote'), rail=document.getElementById('rail'), o=overall(), u=S.user;
+  var ic={block:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',ok:'<path d="M20 6L9 17l-5-5"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'};
+  function note(kind,en,mk){ return '<div class="gate-note '+kind+'"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic[kind]+'</svg></span><div>'+bil(en,mk)+'</div></div>'; }
+  gn.innerHTML=''; rail.innerHTML='';
+
+  if(S.status==='RELEASED'){
+    gn.innerHTML=note('ok','<b>Released &amp; locked.</b> This certificate is an immutable GMP record. To change any content, create a new revision — this one becomes superseded. The controlled CoQ can now be generated.','<b>Издаден и заклучен.</b> Овој сертификат е непроменлив GMP запис. За измена, креирај нова ревизија — овој станува заменет. Контролираниот CoQ сега може да се генерира.');
+    rail.innerHTML='<button class="btn-lg qp" onclick="location.href=\'coq-print.html\'"><span class="en">Generate CoQ (.docx)</span><span class="mk">Генерирај CoQ (.docx)</span></button>'+
+      '<button class="btn-lg ghost" onclick="location.href=\'coq-print.html\'"><span class="en">View / export PDF</span><span class="mk">Преглед / извоз PDF</span></button>'+
+      '<button class="btn-lg ghost" onclick="doRevise()"><span class="en">Create revision</span><span class="mk">Креирај ревизија</span></button>';
+    return;
+  }
+  if(S.status==='DRAFT'){
+    if(o.fail) gn.innerHTML=note('block','A result is <b>out of specification</b>. The certificate can still be reviewed, but release will be blocked until the OOS is resolved through an investigation (QCSOP 019).','Резултат е <b>надвор од спецификација</b>. Сертификатот може да се прегледа, но издавањето е блокирано додека OOS не се реши преку истрага (QCSOP 019).');
+    else if(o.blank) gn.innerHTML=note('info','One parameter is <b>not yet measured</b> (blank, not zero). A blank value is preserved for a human — it is never fabricated. Release requires every parameter to be measured and comply.','Еден параметар <b>сè уште не е измерен</b> (празно, не нула). Празната вредност се задржува за човек — никогаш не се измислува. Издавањето бара сите параметри да се измерени и усогласени.');
+    // review gate — second person
+    if(u==='analyst') rail.innerHTML=note('block','<b>Review requires a second person.</b> You entered these results, so you cannot review them (segregation of duties, Annex 11). Switch to the QC Manager to review.','<b>Прегледот бара второ лице.</b> Ти ги внесе резултатите, па не можеш да ги прегледаш (поделба на должности, Анекс 11). Префрли се на КК Менаџер.');
+    else rail.innerHTML='<button class="btn-lg" onclick="openSign(\'review\')"><span class="en">Sign — Review results</span><span class="mk">Потпиши — Преглед</span></button><span class="hint"><span class="en">Second-person review by '+USERS[u].role+'.</span><span class="mk">Преглед од второ лице.</span></span>';
+    return;
+  }
+  if(S.status==='REVIEWED'){
+    // QP-gated release
+    if(u!=='qp'){ gn.innerHTML=note('block','<b>Release is QP-only (Annex 16).</b> Only the Qualified Person may certify &amp; release a batch. Switch to the QP to continue.','<b>Издавањето е само за QP (Анекс 16).</b> Само Квалификуваното лице може да ја потврди и издаде серијата. Префрли се на QP.');
+      rail.innerHTML='<button class="btn-lg" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="en">QP release</span><span class="mk">Издавање од QP</span></button>'; return; }
+    if(o.fail){ gn.innerHTML=note('block','<b>Release blocked — a result is out of specification.</b> A CoQ cannot be fabricated over a FAIL. Resolve the OOS investigation first (QCSOP 019); the certificate can then be revised.','<b>Издавањето е блокирано — резултат надвор од спецификација.</b> CoQ не може да се направи врз FAIL. Прво реши ја OOS истрагата (QCSOP 019).');
+      rail.innerHTML='<button class="btn-lg" disabled><span class="en">Certify &amp; release</span><span class="mk">Потврди и издади</span></button><button class="btn-lg ghost"><span class="en">Open OOS investigation</span><span class="mk">Отвори OOS истрага</span></button>'; return; }
+    if(o.blank){ gn.innerHTML=note('block','<b>Release blocked — a parameter is unmeasured.</b> Every result must be present and comply before a QP may release.','<b>Издавањето е блокирано — параметар не е измерен.</b> Сите резултати мора да постојат и да се усогласени пред QP да издаде.');
+      rail.innerHTML='<button class="btn-lg" disabled><span class="en">Certify &amp; release</span><span class="mk">Потврди и издади</span></button>'; return; }
+    gn.innerHTML=note('ok','All parameters measured and comply. Reviewed by a second person. The <b>Qualified Person</b> may now certify &amp; release the batch (Annex 16).','Сите параметри измерени и усогласени. Прегледано од второ лице. <b>Квалификуваното лице</b> сега може да ја потврди и издаде серијата.');
+    rail.innerHTML='<button class="btn-lg qp" onclick="openSign(\'release\')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg><span class="en">Certify &amp; release batch</span><span class="mk">Потврди и издади серија</span></button>';
+  }
+}
+
+/* ---- e-sign flow ---- */
+var pendingAction=null;
+function openSign(kind){
+  pendingAction=kind; var u=USERS[S.user];
+  document.getElementById('signMeaning').innerHTML = kind==='review'
+    ? bil('“I have reviewed these results against the specification and confirm they are complete and accurate.”','„Ги прегледав резултатите според спецификацијата и потврдувам дека се целосни и точни.“')
+    : bil('“I certify that this batch conforms to its specification and I release it for its intended use.”','„Потврдувам дека серијата е усогласена со спецификацијата и ја издавам за нејзината намена.“');
+  document.getElementById('signWho').textContent=u.nm+' · '+u.role;
+  document.getElementById('signAv').textContent=u.av;
+  document.getElementById('signPw').value='';
+  document.getElementById('scrim').classList.add('on');
+  setTimeout(function(){document.getElementById('signPw').focus();},180);
+  if(window.mwSync)window.mwSync();
+}
+function closeSign(){ document.getElementById('scrim').classList.remove('on'); pendingAction=null; }
+function stamp(){ var d=new Date(); function p(n){return(''+n).padStart(2,'0');} return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+document.getElementById('signConfirm').onclick=function(){
+  if(!document.getElementById('signPw').value){ toast('err','Password required','Внесете лозинка'); return; }
+  var ts=stamp();
+  if(pendingAction==='review'){ S.reviewer=S.user; S.reviewTs=ts; S.status='REVIEWED'; toast('ok','Signed — reviewed','Потпишано — прегледано'); }
+  else if(pendingAction==='release'){ S.approver=S.user; S.releaser=S.user; S.releaseTs=ts; S.approveTs=ts; S.status='RELEASED'; toast('ok','Signed — batch released','Потпишано — серијата издадена'); }
+  closeSign(); paintAll();
+};
+function doRevise(){ S.status='DRAFT'; S.reviewer=null; S.releaser=null; S.approver=null; S.reviewTs=S.releaseTs=S.approveTs=null; toast('ok','New revision opened','Отворена нова ревизија'); paintAll(); }
+
+/* ---- role switch ---- */
+document.getElementById('roleSw').addEventListener('click',function(e){
+  var b=e.target.closest('.mw-chip'); if(!b) return;
+  document.querySelectorAll('#roleSw .mw-chip').forEach(function(x){x.classList.toggle('on',x===b);});
+  S.user=b.dataset.role; paintActions();
+});
+document.getElementById('pestToggle').onclick=function(){ S.pestMeasured=!S.pestMeasured;
+  if(S.status!=='DRAFT'){ S.status='DRAFT'; S.reviewer=S.releaser=S.approver=null; S.reviewTs=S.releaseTs=S.approveTs=null; }
+  paintAll(); };
+document.getElementById('failToggle').onclick=function(){ S.failTHC=!S.failTHC;
+  if(S.status!=='DRAFT'){ S.status='DRAFT'; S.reviewer=S.releaser=S.approver=null; S.reviewTs=S.releaseTs=S.approveTs=null; }
+  paintAll(); };
+
+function toast(kind,tt,ds){
+  var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+function paintAll(){ paintVerdict(); paintLife(); paintResults(); paintSigs(); paintActions(); if(window.mwSync)window.mwSync(); }
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSign();});
+paintAll();
+/* re-render labels on language flip so JS-built Yes/No follow language */
+new MutationObserver(paintAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

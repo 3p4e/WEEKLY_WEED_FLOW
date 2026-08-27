@@ -167,9 +167,9 @@
       tasks:[['Top plants rows 3–5','low'],['Defoliate block B','low']] },
     { id:'vault',  area:'vault',  nm:'Vault',       st:'ok',   plants:0,   temp:18.0, rh:55, co2:600,  vpd:0.70, veg:0,   flower:0,  ready:0,  crew:[], storeKg:42, storeLbl:'Cured Stock',
       tasks:[['Reconcile 2 METRC tags','high']] },
-    { id:'flowa',  area:'flowa',  nm:'Flower A',    st:'warn', plants:96,  temp:27.1, rh:58, co2:1350, vpd:1.28, veg:0,   flower:84, ready:12, crew:['GA'],
+    { id:'flowa',  area:'flowa',  nm:'Flower A',    st:'warn', plants:96,  temp:27.1, rh:58, co2:1350, vpd:1.28, veg:0,   flower:84, ready:12, crew:['GA'], batch:'PP-B-2026-0311', strain:'Nebula OG',
       tasks:[['Inspect Zone 4 dehumidifier','high'],['Trim & manicure canopy','med']] },
-    { id:'flowb',  area:'flowb',  nm:'Flower B',    st:'crit', plants:96,  temp:28.4, rh:68, co2:1200, vpd:1.02, veg:0,   flower:96, ready:0,  crew:['GA','TA'], alert:'Mildew Risk',
+    { id:'flowb',  area:'flowb',  nm:'Flower B',    st:'crit', plants:96,  temp:28.4, rh:68, co2:1200, vpd:1.02, veg:0,   flower:96, ready:0,  crew:['GA','TA'], alert:'Mildew Risk', batch:'PP-B-2026-0312', strain:'Reaper Haze',
       tasks:[['Humidity 68% — mildew risk','high'],['Lower RH setpoint to 55%','high']] },
     { id:'cure',   area:'cure',   nm:'Dry / Cure',  st:'ok',   plants:0,   temp:18.5, rh:60, co2:600,  vpd:0.71, veg:0,   flower:0,  ready:0,  crew:['TA'], storeKg:28, storeLbl:'Curing',
       tasks:[['Batch F-24 cure window closes 36h','med']] },
@@ -246,6 +246,14 @@
     } else {
       mid = `<p class="sec">Population</p><div class="empty">No live plants — processing zone.</div>`;
     }
+    const geneal = z.batch
+      ? `<p class="sec">QC Batch Genealogy</p>
+         <div class="stor" style="cursor:pointer;align-items:center" onclick="location.href='sample-detail.html'">
+           <span style="font-family:var(--mw-mono);font-weight:700;font-size:14px;color:var(--mw-cyan-bright)">${z.batch}</span>
+           <span class="u" style="flex:1">${z.strain}</span>
+           <span class="u" style="color:var(--mw-cyan-bright)">QC ↗</span>
+         </div>`
+      : '';
     const tasks = z.tasks.length
       ? z.tasks.map(t=>`<div class="tk" onclick="location.href='task-detail.html'">
           <span class="tk__d" style="background:${t[1]==='high'?'var(--mw-stat-lo)':t[1]==='med'?'var(--mw-stat-mid)':'var(--mw-cyan)'};box-shadow:0 0 8px currentColor;color:${t[1]==='high'?'var(--mw-stat-lo)':t[1]==='med'?'var(--mw-stat-mid)':'var(--mw-cyan)'}"></span>
@@ -263,6 +271,7 @@
       <div class="dt__sub">Level 1 · Sector ${String.fromCharCode(65+active)}</div>
       ${envBlock(z)}
       ${mid}
+      ${geneal}
       <p class="sec">Open Tasks · ${z.tasks.length}</p>
       ${tasks}
       <div class="crew">${crew}</div>

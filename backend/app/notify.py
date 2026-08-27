@@ -13,11 +13,20 @@ Rules enforced HERE (not left to callers):
   - params carries STRUCTURED values only — the client renders the EN/МК
     sentence at display time (AS2 language-map / FCM key+params pattern).
 
-Every call site wraps emit() in try/except: a notification failure must
-never break the work operation it rides on. An event with NO recipients is
-valid and common — it feeds the shared activity stream without pinging
-anyone (e.g. task creation: feed-only by design, per Slack/Linear defaults).
+Call sites use safe_emit(): a notification failure must never break the work
+operation it rides on, but it must NOT be silently swallowed either — the bare
+`try: emit() except: pass` idiom once hid a whole dropped feature (an unknown
+notification reason rejected by the CHECK constraint, H4). safe_emit() runs
+emit() in a savepoint (so a failure rolls back only the notification writes,
+never the caller's transaction) and LOGS the failure with context. An event with
+NO recipients is valid and common — it feeds the shared activity stream without
+pinging anyone (e.g. task creation: feed-only by design, per Slack/Linear).
 """
+import logging
+
+import asyncpg
+
+_log = logging.getLogger("app.notify")
 
 
 async def participants(c, task_id: str) -> set:
@@ -62,6 +71,35 @@ async def emit(c, user: dict, *, verb: str, object_type: str, object_id,
                     "INSERT INTO notifications(org_id, recipient_id, event_id, reason, coalesce_key)"
                     " VALUES ($1,$2,$3,$4,$5)",
                     user["org_id"], uid, ev_id, reason, f"{verb}:{object_type}:{object_id}")
-        except Exception:  # unique_violation → already an open identical row
+        except asyncpg.UniqueViolationError:  # already an open identical row
             pass
+        except Exception:
+            # One bad recipient must never sink the whole fan-out. Only
+            # UniqueViolation was caught before, so ANY other per-recipient
+            # error (a stale user id, a policy rejection) propagated out of
+            # emit() and — via safe_emit's outer savepoint — rolled back the
+            # EVENT itself plus every recipient already inserted. That is the
+            # opposite of what migration 0032's comment documents. The
+            # savepoint has already undone just this recipient's INSERT, so
+            # the transaction is healthy: log with context and carry on.
+            _log.warning(
+                "notification fan-out failed for recipient %s (verb=%s object=%s) — skipped",
+                uid, verb, object_type, exc_info=True)
     return ev_id
+
+
+async def safe_emit(c, user: dict, **kwargs):
+    """emit() that never propagates to the caller — a notification failure must
+    not break the work write it rides on — but LOGS the failure with context
+    instead of silently swallowing it (the silent `except: pass` idiom at call
+    sites hid H4: an unknown notification reason rejected by the CHECK constraint,
+    dropping the SUMA v2 approval alerts entirely). Runs in a savepoint so only the
+    notification writes roll back, leaving the caller's transaction healthy.
+    Returns the event id, or None on failure."""
+    try:
+        async with c.transaction():
+            return await emit(c, user, **kwargs)
+    except Exception:
+        _log.warning("notification emit failed (verb=%s object=%s) — dropped",
+                     kwargs.get("verb"), kwargs.get("object_type"), exc_info=True)
+        return None

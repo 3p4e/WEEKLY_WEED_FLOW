@@ -31,12 +31,26 @@ class Settings(BaseSettings):
     # the placeholder key during first-time setup.
     environment: str = "production"
 
+    # Live demo mode (app/api/demo.py + app/demo_org.py): OFF by default
+    # everywhere — /demo/* 404s unless DEMO_ENABLED=true is set on the stack
+    # (currently the wwf_mass test stack only; production stays off).
+    demo_enabled: bool = False
+
     # Auth
     secret_key: str = _INSECURE_DEFAULT_SECRET
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     remember_device_expire_days: int = 7
     password_min_length: int = 12
+
+    # Business timezone for week windows, work-session classification and the
+    # weekly snapshot's fire time. Read through Settings like everything else
+    # rather than via a bare os.environ at import time in two separate modules
+    # (app/worktime.py and scripts/scheduler.py), which is how they could
+    # silently disagree — and a snapshot that fires on a different week
+    # boundary than the report it summarises is not obviously wrong from
+    # either side.
+    snapshot_tz: str = "Europe/Skopje"
 
     # AI / Letta (always-on layer)
     letta_base_url: str = "http://host.docker.internal:8283"
@@ -56,21 +70,44 @@ class Settings(BaseSettings):
     docengine_url: str = "http://docengine:8000"
     docengine_api_key: str = ""
 
-    # CORS / host
+    # CORS. (APP_HOST also exists as a bare env var — read directly by
+    # docker-compose.yml's Traefik routing rule, not by this app, so it has
+    # no corresponding Settings field here.)
     cors_origins: str = "*"
-    app_host: str = "wwf.srv1231216.hstgr.cloud"
 
 
 settings = Settings()
+
+
+def is_development(env: str) -> bool:
+    """Fail-safe, not fail-open: True only for the exact string 'development'.
+    Anything else — 'prod', 'Production ', a typo, an unset/mistyped
+    platform-injected value — is treated as production-like. A guard that
+    instead allow-listed the literal string 'production' would silently
+    fall through to a warning for any other value, leaving a shipped
+    placeholder SECRET_KEY active on a real deployment. Shared by the
+    SECRET_KEY guard below and main.py's /docs gate so the two can never
+    drift apart."""
+    return env.strip().lower() == "development"
+
+
+def docs_kwargs(env: str) -> dict:
+    """FastAPI docs/redoc/openapi kwargs — enabled only in development. A
+    regulated QC LIMS's complete route/schema map must not be browsable
+    unauthenticated on a real deployment."""
+    dev = is_development(env)
+    return {
+        "docs_url": "/docs" if dev else None,
+        "redoc_url": "/redoc" if dev else None,
+        "openapi_url": "/openapi.json" if dev else None,
+    }
+
 
 _secret_is_weak = (
     settings.secret_key in _INSECURE_SECRETS or len(settings.secret_key) < _MIN_SECRET_LENGTH
 )
 if _secret_is_weak:
-    # Case-insensitive: ENVIRONMENT=Production/PRODUCTION must trip the
-    # guard exactly like the lowercase default, not silently fall through
-    # to a log-only warning.
-    if settings.environment.strip().lower() == "production":
+    if not is_development(settings.environment):
         raise RuntimeError(
             f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters. "
             "Set a real SECRET_KEY (e.g. `openssl rand -hex 32`) before running with "

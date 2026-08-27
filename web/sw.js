@@ -5,7 +5,7 @@
      if a response happened to be cached, which for API paths it never is);
    - everything else same-origin GET → network, best-effort cache fallback.
    Bump VERSION whenever any shell file changes. */
-const VERSION = 'wwf-shell-v3.40.0';
+const VERSION = 'wwf-shell-v3.99.0';
 
 const SHELL = [
   '/',
@@ -14,9 +14,9 @@ const SHELL = [
   '/gf/app.css', '/gf/skins.css', '/gf/brand.css', '/gf/mobile.css', '/gf/views.css', '/gf/leaf-fx.css', '/gf/entry.css', '/gf/mass-weed.css',
   '/gf/boot-guard.js', '/gf/data.js', '/gf/core.js', '/gf/render.js', '/gf/voice.js',
   '/gf/export.js', '/gf/views.js', '/gf/cmdk.js', '/gf/calendar-view.js', '/gf/workload-view.js', '/gf/leaf-fx.js', '/gf/assistant.js', '/gf/main.js',
-  '/gf/api.js', '/gf/demo.js', '/gf/integrate.js', '/gf/audit-view.js', '/gf/collab.js', '/gf/worklog.js',
-  '/gf/report-view.js', '/gf/document-view.js', '/gf/execreport-view.js', '/gf/import-view.js', '/gf/intake-view.js',
-  '/gf/dept-templates.js', '/gf/depthome-view.js', '/gf/notifications-view.js', '/gf/facility-view.js', '/gf/approvals-view.js', '/gf/myday-view.js', '/gf/analytics-view.js', '/gf/auditprep-view.js', '/gf/qmsregistry-view.js', '/gf/qmsknow-view.js', '/gf/qmsstudio-view.js', '/gf/qcspec-view.js', '/gf/qcsample-view.js', '/gf/qccoa-view.js', '/gf/qcoos-view.js', '/gf/qcecoa-view.js', '/gf/qccustody-view.js', '/gf/qcleaves-view.js', '/gf/chooser.js', '/gf/tweaks-vanilla.js',
+  '/gf/api.js', '/gf/demo.js', '/gf/integrate.js', '/gf/audit-view.js', '/gf/collab.js', '/gf/task-extras.js', '/gf/worklog.js', '/gf/task-detail-view.js',
+  '/gf/report-view.js', '/gf/document-view.js', '/gf/execreport-view.js', '/gf/import-view.js', '/gf/intake-view.js', '/gf/search-view.js',
+  '/gf/modules.js', '/gf/dept-templates.js', '/gf/depthome-view.js', '/gf/notifications-view.js', '/gf/facility-view.js', '/gf/cultivation-view.js', '/gf/harvest-view.js', '/gf/decon-view.js', '/gf/waste-view.js', '/gf/approvals-view.js', '/gf/myday-view.js', '/gf/analytics-view.js', '/gf/auditprep-view.js', '/gf/qmsregistry-view.js', '/gf/qmsknow-view.js', '/gf/qmsstudio-view.js', '/gf/qcspec-view.js', '/gf/qcpotency-view.js', '/gf/qclab-view.js', '/gf/qcregister-view.js', '/gf/qcgenealogy-view.js', '/gf/qcsample-view.js', '/gf/qccoa-view.js', '/gf/qcoos-view.js', '/gf/qcecoa-view.js', '/gf/qccustody-view.js', '/gf/qcleaves-view.js', '/gf/chooser.js', '/gf/tweaks-vanilla.js',
   // 3D-leaf splash/login entry (self-hosted three.js + mesh)
   '/gf/vendor/three.min.js', '/gf/leaf3d.js', '/gf/entry.js', '/assets/pp-leaf-3d.obj',
   '/assets/pp-leaf.png', '/assets/pp-logo.png', '/assets/pp-logo-white.png', '/assets/pp-wordmark.png',
@@ -24,7 +24,14 @@ const SHELL = [
 ];
 
 // Paths nginx proxies to the backend — never cache-first, data must be live.
-const API_RE = /^\/(auth|departments|weeks|tasks|sessions|capture|intake|ai|audit|reports|notifications|activity|facility|approvals|qms|qc|health)(\/|$|\?)/;
+//
+// This list MUST cover every prefix in nginx.conf's proxy location blocks. A
+// missing prefix does NOT 404 — it falls through to the cache-first branch
+// below, so API responses get stored under VERSION and replayed stale until the
+// next deploy. `decon` was missing here while live in production for exactly
+// that reason, so tests/frontend/sw-api-routes.test.js now compares the two
+// lists and fails on any drift.
+const API_RE = /^\/(auth|departments|weeks|tasks|sessions|capture|intake|ai|audit|reports|notifications|activity|handoffs|facility|cultivation|decon|waste|approvals|qms|qc|demo|health)(\/|$|\?)/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -32,9 +39,18 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      // A prior wwf-shell-v* cache key means this activate is REPLACING an
+      // older worker (a real deploy) — claim clients so the new shell takes
+      // over instantly (index.html's controllerchange listener then reloads
+      // the one open tab, deliberately, per its own comment). On the very
+      // first-ever install there is no prior key: there is nothing to
+      // "update" from, so skip claim() — otherwise a brand-new visitor's tab
+      // reloads itself once for no reason the instant it finishes loading.
+      const isUpdate = keys.some((k) => k !== VERSION);
+      return Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
+        .then(() => { if (isUpdate) return self.clients.claim(); });
+    })
   );
 });
 

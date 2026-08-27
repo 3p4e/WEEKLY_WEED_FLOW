@@ -3,12 +3,27 @@ window.GF = window.GF || {};
 
 GF.voice = {
   _rec: null,
+  _recFor: null,   // which inputId `_rec` is actually recording for
 
   /* Inline dictation into an input field (mic toggle) */
   dictate(inputId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { GF.toast(AL('Speech recognition not supported in this browser', 'Препознавањето говор не е поддржано во овој прелистувач'), 'error'); return; }
-    if (this._rec) { this._rec.stop(); this._rec = null; this._setMicUI(inputId, false); return; }
+    if (this._rec) {
+      // Stop the recognizer that is ACTUALLY running, and reset the UI of
+      // the field it was ACTUALLY recording (_recFor) — not the field that
+      // was just clicked. Without tracking _recFor, clicking mic B while mic
+      // A was recording stopped A's recognizer but flipped B's UI to "off"
+      // (a no-op — B was never on), leaving A's button stuck showing
+      // "recording" forever and eating this click.
+      const wasFor = this._recFor;
+      this._rec.stop(); this._rec = null; this._recFor = null;
+      this._setMicUI(wasFor, false);
+      // Clicking the SAME field's mic again is "stop" and nothing else. A
+      // DIFFERENT field's mic falls through to start recording it right in
+      // this same click, instead of requiring the user to click it twice.
+      if (wasFor === inputId) return;
+    }
 
     const lang = GF.state.lang === 'mk' ? 'mk-MK' : 'en-US';
     const rec = new SR();
@@ -23,11 +38,12 @@ GF.voice = {
       const el = GF.$(inputId); if (el) el.value = (final + interim).trim();
     };
     rec.onerror = (e) => { if (e.error !== 'aborted') GF.toast(AL('Mic error: ', 'Грешка со микрофон: ') + e.error, 'error'); };
-    // Only clear _rec if it still points at THIS recognizer — a fast
-    // stop-then-start-elsewhere can leave a newer recognizer's reference
-    // wiped by this (older) instance's late-firing 'end' event otherwise.
-    rec.onend = () => { if (this._rec === rec) this._rec = null; this._setMicUI(inputId, false); };
-    rec.start(); this._rec = rec;
+    // Only clear _rec (and _recFor) if it still points at THIS recognizer —
+    // a fast stop-then-start-elsewhere can leave a newer recognizer's
+    // reference wiped by this (older) instance's late-firing 'end' event
+    // otherwise.
+    rec.onend = () => { if (this._rec === rec) { this._rec = null; this._recFor = null; } this._setMicUI(inputId, false); };
+    rec.start(); this._rec = rec; this._recFor = inputId;
     this._setMicUI(inputId, true);
     GF.toast(GF.t('listening'), 'info');
   },
@@ -50,6 +66,7 @@ GF.voice = {
   _renderCapture() {
     const t = this._transcript, p = this._parsed, live = !!this._modalRec;
     const wave = [10, 22, 38, 26, 48, 64, 40, 72, 30, 54, 84, 46, 68, 34, 58, 24, 44, 30, 18, 40, 60, 36, 50, 26, 14];
+    const waveMax = 84; // must equal the array's max value so the tallest bar renders at scaleY(1)
     const sheet = p ? `
       <div class="sec-label" style="color:var(--ink-3)">${GF.icon('sparkle','icon','var(--orange)')}${GF.t('auto_detected')}</div>
       <div class="parsed-grid">
@@ -60,11 +77,11 @@ GF.voice = {
       </div>
       <div class="row" style="gap:10px">
         <button class="btn" style="flex:1;justify-content:center" onclick="GF.voice._parsed=null;GF.voice._renderCapture()">${GF.t('edit')}</button>
-        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.createFromVoice()">${GF.icon('check','icon','#fff')}${GF.t('create_task')}</button>
+        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.createFromVoice()">${GF.icon('check','icon','currentColor')}${GF.t('create_task')}</button>
       </div>` : `
       <div class="row" style="gap:10px">
         <button class="btn" style="flex:1;justify-content:center" onclick="GF.voice.closeCapture()">${GF.t('cancel')}</button>
-        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','#fff')}${AL('Analyze', 'Анализирај')}</button>
+        <button class="btn btn-orange" style="flex:2;justify-content:center" onclick="GF.voice.parseCapture()" ${!t ? 'disabled' : ''}>${GF.icon('sparkle','icon','currentColor')}${AL('Analyze', 'Анализирај')}</button>
       </div>`;
 
     GF.$('voice-content').innerHTML = `
@@ -78,7 +95,7 @@ GF.voice = {
           <div class="ring r1"></div><div class="ring r2"></div>
           <button class="mic-core ${live ? 'live' : ''}" onclick="GF.voice.toggleCaptureMic()">${GF.icon('mic','icon','#fff')}</button>
         </div>
-        <div class="wave">${wave.map((h, i) => `<span style="height:${live ? h : 8}px;${!live ? 'opacity:.3' : i > 16 ? 'opacity:.35' : ''}"></span>`).join('')}</div>
+        <div class="wave">${wave.map((h, i) => `<span style="transform:scaleY(${((live ? h : 8) / waveMax).toFixed(3)});${!live ? 'opacity:.3' : i > 16 ? 'opacity:.35' : ''}"></span>`).join('')}</div>
       </div>
       <div class="transcript-sheet">
         <div class="transcript">${t ? GF.esc(t) : `<span class="ph">${GF.t('voice_hint')}</span>`}</div>

@@ -13,9 +13,16 @@ Design notes:
   runs immediately for that date; otherwise it waits for the next fire.
 - Startup also applies the versioned planner prompts and attaches the RAG
   source (both idempotent + failure-tolerant), so a fresh deploy self-heals.
+- Liveness: every wake touches HEARTBEAT_PATH. The container healthcheck
+  reads its mtime, which is what actually distinguishes "alive" from
+  "wedged" — the process staying up proves nothing about the loop, and this
+  loop is the only thing that fires the weekly snapshot. The sleep is capped
+  at 30 min, so a heartbeat older than ~35 min means the loop has stopped
+  turning (H12).
 """
 import asyncio
 import os
+import pathlib
 import sys
 from datetime import date, datetime, time, timedelta
 
@@ -28,6 +35,7 @@ import planner_prompts  # noqa: E402
 import weekly_snapshot as snap  # noqa: E402
 
 from app import duescan  # noqa: E402  (app pools; init_pools() runs in main)
+from app.config import settings  # noqa: E402
 from app.db import init_pools  # noqa: E402
 
 try:
@@ -35,7 +43,10 @@ try:
 except Exception:  # pragma: no cover
     ZoneInfo = None
 
-TZ_NAME = os.environ.get("SNAPSHOT_TZ", "Europe/Skopje")
+# Same source as app/worktime.py's TZ (both read settings.snapshot_tz) so the
+# snapshot cannot fire against a different week boundary than the reports it
+# summarises — they used to resolve SNAPSHOT_TZ independently.
+TZ_NAME = settings.snapshot_tz
 GRACE_HOURS = float(os.environ.get("SNAPSHOT_GRACE_HOURS", "24"))
 FIRE_WEEKDAY = 3   # Thursday (Mon=0)
 FIRE_TIME = time(14, 0)
@@ -97,7 +108,8 @@ async def _orgs_needing_recovery(since: datetime) -> list:
         return []
     uconn = await asyncpg.connect(dsn)
     try:
-        orgs = await uconn.fetch("SELECT id, name FROM organizations")
+        # Exclude the live demo org (slug 'demo') — same rule as run_all.
+        orgs = await uconn.fetch("SELECT id, name FROM organizations WHERE slug <> 'demo'")
     except Exception as e:
         snap.log(f"org list fetch failed: {type(e).__name__} — skipping recovery")
         return []
@@ -120,6 +132,19 @@ async def _startup_selfheal():
         await snap.attach_source_once()
     except Exception as e:
         snap.log(f"source attach skipped: {type(e).__name__}")
+
+
+HEARTBEAT_PATH = pathlib.Path(os.environ.get("SCHEDULER_HEARTBEAT",
+                                             "/tmp/wwf-scheduler-heartbeat"))  # nosec B108
+
+
+def _beat() -> None:
+    """Stamp liveness for the container healthcheck. Never raises: a scheduler
+    that cannot write its heartbeat must still fire the weekly snapshot."""
+    try:
+        HEARTBEAT_PATH.touch()
+    except OSError as e:
+        snap.log(f"heartbeat touch failed: {type(e).__name__}: {e}")
 
 
 async def main():
@@ -160,6 +185,7 @@ async def main():
                 snap.log(f"due scan failed: {type(e).__name__}: {e}")
 
     await due_tick()
+    _beat()
 
     while True:
         # Pick the fire target ONCE, then sleep toward it in chunks. The
@@ -171,6 +197,7 @@ async def main():
         while (remaining := (fire - datetime.now(timezone.utc)).total_seconds()) > 0:
             await asyncio.sleep(min(1800, remaining))
             await due_tick()
+            _beat()
         snap.log(f"firing weekly snapshot for {fire.astimezone(tz).date().isoformat()}")
         try:
             await snap.run_all(fire.astimezone(tz).date())

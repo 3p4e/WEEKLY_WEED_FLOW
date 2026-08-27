@@ -4,6 +4,16 @@
 # House rules: body text JUSTIFIED; table text CENTERED (h+v); every table FITS the page;
 # per-step two-role sign-off (Operator + QC Department Manager) for protocol record steps.
 # Canonical tokens (pp_theme.py): one house navy #2B547E; 6 pt font floor.
+#
+# NOTE (audit ITEM 7, checked by grep — NOT entirely dead, unlike the audit's premise):
+# build_from_md.py (DocEngine's real SOP/Annex/Form request path) imports this module and
+# DOES call a real subset of it at request time: shade/borders/rin/sp/note/body/bullet/
+# cellfmt/status_grid/_apply_widths, plus fixed/PAGE_W re-exported from pp_format. The
+# REPORT/computational-record-specific half — native OMML equations (eqn*/mathcell/
+# calc_step), cover_page/toc_page/chapter/subsec/titleblock, step_signoff/entry_table/
+# execution_signoff, figure(), databox, hmerge — is NOT reached from build_from_md.py or
+# anywhere else in docengine/app/, so THAT portion is currently unused within DocEngine's
+# own request path (presumably live for a separate, related document-authoring skill).
 from docx import Document
 from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH

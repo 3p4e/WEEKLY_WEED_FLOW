@@ -3,7 +3,7 @@
 // My Day surfaces the pending acknowledgment and accepting clears it; the
 // admin's Approvals view tracks the team pending list either side of the ack.
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, gotoModule } = require('../seed');
 
 /** @type {{username: string, password: string, operator_username: string, operator_id: string}} */
 let creds;
@@ -23,6 +23,7 @@ test('assignment flows through Approvals and My Day acknowledgment', async ({ pa
       return task.id;
     }, { t: title, uid: creds.operator_id });
     expect(tid).toBeTruthy();
+    await gotoModule(page, 'audit');   // Approvals lives in the audit module
     await page.locator('.nav-item', { hasText: 'Approvals' }).click();
     await expect(page.locator('.view-title', { hasText: 'Approvals' })).toBeVisible({ timeout: 10_000 });
     const team = page.locator('.apv-row', { hasText: title });

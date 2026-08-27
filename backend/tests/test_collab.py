@@ -60,6 +60,24 @@ async def test_assign_malformed_uuid_returns_422_not_500(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_reassigning_the_same_pair_upserts_cleanly(client, admin_headers):
+    """assign() relies on ON CONFLICT (task_id, user_id) DO UPDATE for a
+    repeat assignment — no exception path should be reachable there, so
+    posting the same pair twice (e.g. to change role) must succeed both
+    times, not surface a masked/misleading error."""
+    r = await client.post("/tasks", json={"title": "Reassign me", "status": "pending"}, headers=admin_headers)
+    task_id = r.json()["id"]
+    user, otp = await create_user(client, admin_headers)
+    r = await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"], "role": "assignee"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    r = await client.post(f"/tasks/{task_id}/assignees", json={"user_id": user["id"], "role": "reviewer"},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    lst = (await client.get(f"/tasks/{task_id}/assignees", headers=admin_headers)).json()
+    assert next(a for a in lst if a["user_id"] == user["id"])["role"] == "reviewer"
+
+
 async def test_assignee_can_write_task_they_are_assigned_to(client, admin_headers):
     """The core RLS regression test: a plain USER who is assigned to a task
     (but doesn't own it and has no elevated role) must be able to persist a
@@ -219,9 +237,18 @@ async def test_handoff_propose_and_accept_moves_department(client, admin_headers
     # it shows up in the task's handoff list
     lst = (await client.get(f"/tasks/{tid}/handoffs", headers=admin_headers)).json()
     assert len(lst) == 1 and lst[0]["id"] == handoff["id"]
-    # accepting it re-homes the task into the target department
+    # the PROPOSER may not accept their own handoff — the target department
+    # never consented (second-person rule); org-wide authority doesn't waive it
     r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "accepted"},
                           headers=admin_headers)
+    assert r.status_code == 403, r.text
+    # the target department's manager accepts → the task re-homes there
+    to_mgr_user, to_otp = await create_user(client, admin_headers, role="PR_MGR",
+                                            department_id=d_to["id"])
+    to_mgr_token = await login_and_set_password(client, to_mgr_user["username"], to_otp)
+    to_mgr = {"Authorization": f"Bearer {to_mgr_token}"}
+    r = await client.post(f"/handoffs/{handoff['id']}/resolve", json={"status": "accepted"},
+                          headers=to_mgr)
     assert r.status_code == 200, r.text
     moved = (await client.get(f"/tasks/{tid}", headers=admin_headers)).json()["task"]
     assert str(moved["department_id"]) == d_to["id"]
@@ -239,3 +266,25 @@ async def test_handoff_to_same_department_rejected(client, admin_headers):
     r = await client.post(f"/tasks/{task['id']}/handoffs", json={"to_dept_id": d["id"]},
                           headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_malformed_ids_return_404_not_500(client, admin_headers):
+    """H11: a garbage (non-uuid) task_id/handoff_id/assignee_id used to reach
+    asyncpg raw and 500 instead of the clean 'not found' every sibling
+    genuinely-missing-row path already returns."""
+    garbage = "not-a-uuid"
+    task = (await client.post("/tasks", json={"title": "id-guard subject"}, headers=admin_headers)).json()
+    tid = task["id"]
+
+    assert (await client.get(f"/tasks/{garbage}/comments", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/comments", json={"content": "hi"},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.get(f"/tasks/{garbage}/assignees", headers=admin_headers)).status_code == 404
+    assert (await client.delete(f"/tasks/{tid}/assignees/{garbage}", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/ack", json={"accepted": True},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/tasks/{garbage}/handoffs", json={"to_dept_id": str(uuid.uuid4())},
+                              headers=admin_headers)).status_code == 404
+    assert (await client.get(f"/tasks/{garbage}/handoffs", headers=admin_headers)).status_code == 404
+    assert (await client.post(f"/handoffs/{garbage}/resolve", json={"status": "accepted"},
+                              headers=admin_headers)).status_code == 404

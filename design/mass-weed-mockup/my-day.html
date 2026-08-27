@@ -45,6 +45,8 @@
   .pill--dept{ color:var(--mw-cyan); box-shadow:inset 0 0 0 1px rgba(94,200,240,.3); }
   .pill--hi{ color:var(--mw-stat-lo); box-shadow:inset 0 0 0 1px rgba(240,90,90,.4); }
   .pill--mid{ color:var(--mw-stat-mid); box-shadow:inset 0 0 0 1px rgba(236,236,74,.35); }
+  .pill--type{ color:var(--mw-text-dim); box-shadow:inset 0 0 0 1px rgba(94,200,240,.18); }
+  .task__sub{ font-size:10px; color:var(--mw-text-faint); letter-spacing:.04em; font-family:var(--mw-font-cond),sans-serif; }
   .task__time{ font-size:11px; color:var(--mw-text-faint); letter-spacing:.06em; font-family:var(--mw-font-cond),sans-serif; }
 
   .alert{ display:flex; align-items:center; gap:11px; padding:10px 12px; margin-bottom:9px; background:rgba(6,20,40,.5); clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); border-left:3px solid var(--mw-stat-mid); }
@@ -145,13 +147,13 @@
 
   // agenda
   const tasks=[
-    ['08:00','Inspect Zone 4 dehumidifier','Climate','hi',false],
-    ['09:30','Trim & manicure — Flower A','Cultivation','mid',false],
-    ['11:00','Sign COA for Batch F-24','Compliance','hi',false],
-    ['12:30','Approve nutrient order — Res B','Nutrients','hi',false],
-    ['14:00','Pack order #MW-3182','Packaging','mid',false],
-    ['15:30','Weekly crew stand-up','Team','',false],
-    ['16:30','Reconcile 2 METRC tags','Compliance','',false],
+    ['08:00','Inspect Zone 4 dehumidifier','Cultivation','hi',false,'Routine','0/3','cultivation'],
+    ['09:30','Trim & manicure — Flower A','Cultivation','mid',false,'Routine','1/4','cultivation'],
+    ['11:00','Sign CoA for Batch F-24','Compliance','hi',false,'Routine','2/4',''],
+    ['12:30','Approve nutrient order — Res B','Warehouse','hi',false,'Routine','0/2','logistics'],
+    ['14:00','Pack order #MW-3182','Warehouse','mid',false,'Routine','1/3','logistics'],
+    ['15:30','Weekly crew stand-up','Team','',false,'Project','0/1',''],
+    ['16:30','Reconcile 2 METRC tags','Compliance','',false,'Routine','0/2',''],
   ];
   const done=[
     ['07:15','Log morning climate readings','Climate',''],
@@ -159,11 +161,14 @@
   ];
   function pill(p){ return p==='hi'?'<span class="pill pill--hi">High</span>':p==='mid'?'<span class="pill pill--mid">Med</span>':''; }
   function row(t,isDone){
+    const href = t[7] ? 'task-detail-'+t[7]+'.html' : 'task-detail.html';
+    const type = t[5] ? `<span class="pill pill--type">${t[5]}</span>` : '';
+    const sub = t[6] ? `<span class="task__sub">✓ ${t[6]}</span>` : '';
     return `<div class="task${isDone?' is-done':''}">
       <div class="chk${isDone?' done':''}"></div>
-      <div class="task__b" onclick="location.href='task-detail.html'">
+      <div class="task__b" onclick="location.href='${href}'">
         <div class="task__t">${t[1]}</div>
-        <div class="task__m"><span class="task__time">${t[0]}</span><span class="pill pill--dept">${t[2]}</span>${pill(t[3])}</div>
+        <div class="task__m"><span class="task__time">${t[0]}</span><span class="pill pill--dept">${t[2]}</span>${pill(t[3])}${type}${sub}</div>
       </div></div>`;
   }
   document.getElementById('tasks').innerHTML =

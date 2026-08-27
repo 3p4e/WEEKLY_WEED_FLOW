@@ -10,6 +10,15 @@
    <script> tags share one lexical scope in document order.
    ════════════════════════════════════════════════════════════════════ */
 
+/* Work-session classification (backend/app/worktime.py::classify) — the raw
+   value doubles as the CSS class (.sess-class.overtime etc. colour-codes it),
+   so only the rendered label goes through AL(), never the class attribute. */
+GF.WWF._SESS_CLASS = {
+  regular: ['Regular', 'Редовно'], overtime: ['Overtime', 'Прекувремено'],
+  night: ['Night', 'Ноќна'], weekend: ['Weekend', 'Викенд'],
+};
+GF.WWF.sessClassLabel = (c) => { const l = GF.WWF._SESS_CLASS[c]; return l ? AL(l[0], l[1]) : c; };
+
 /* ── Speech-to-text affordance ──────────────────────────────────────────
    Web Speech API is Chromium/WebKit-only; where it's missing (Firefox, iOS
    WebViews) render an explanatory muted button instead of a dead mic. */
@@ -41,14 +50,46 @@ GF.WWF.openWorklog = (taskId) => {
   GF.$('worklog-modal-title').textContent = GF.t('log_work') + ' — ' + t.title.slice(0, 40);
   GF.WWF._renderWorklog();
   GF.openModal('worklog-modal');
+  // Stale-write guard: if the user swaps to a different task's worklog before
+  // this fetch resolves, _worklog.taskId no longer matches `taskId` — the
+  // late response must not overwrite the newer modal's session list.
   GF.API.sessions(taskId)
-    .then(s => { GF.WWF._worklog.sessions = s || []; GF.WWF._renderWorklog(); })
-    .catch(() => { GF.WWF._worklog.sessions = []; GF.WWF._renderWorklog(); });
+    .then(s => { if (GF.WWF._worklog.taskId === taskId) { GF.WWF._worklog.sessions = s || []; GF.WWF._renderWorklog(); } })
+    .catch(() => { if (GF.WWF._worklog.taskId === taskId) { GF.WWF._worklog.sessions = []; GF.WWF._renderWorklog(); } });
 };
 
-GF.WWF._renderWorklog = () => {
+/* The form inputs, in the order they appear. Named once because
+   _renderWorklog has to both snapshot and restore them. */
+GF.WWF._WL_FIELDS = ['wl-date', 'wl-start', 'wl-end', 'wl-hours', 'wl-note'];
+
+/* Re-render the modal body.
+ *
+ * `resetForm: true` clears the entry fields back to their defaults — correct
+ * ONLY after a session has actually been logged. Every other caller must leave
+ * them alone, because this function rebuilds the whole body via innerHTML and
+ * would otherwise throw away whatever the user has typed:
+ *
+ *   • the sessions GET in openWorklog resolves and re-renders. On a fast
+ *     machine that lands before a human can type; under load the window is
+ *     wide open, and the entry silently reverts to today/09:00/no-hours. That
+ *     is how the e2e run on 2026-07-30 failed three times in a row — it filled
+ *     a Saturday date, the list arrived mid-form, and the submit posted
+ *     nothing.
+ *   • setProgress / progressMarkDone re-render after a quick-set click. Not a
+ *     race at all: fill in a date and hours, click 75%, and both are gone.
+ *   • deleteSession re-renders after removing a row.
+ *
+ * Preserving here rather than at each call site is deliberate — a new caller
+ * gets the safe behaviour by default, and only the one place that genuinely
+ * means "clear the form" has to say so. */
+GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   const body = GF.$('worklog-modal-body'); if (!body) return;
   const st = GF.WWF._worklog;
+  // Snapshot BEFORE innerHTML replaces the elements. On the first render the
+  // fields do not exist yet, so this is empty and the template defaults stand.
+  const keep = resetForm ? null : GF.WWF._WL_FIELDS
+    .map((id) => [id, (GF.$(id) || {}).value])
+    .filter(([, v]) => v !== undefined);
   const today = GF.todayISO();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
@@ -75,8 +116,8 @@ GF.WWF._renderWorklog = () => {
         ? `<button class="mini-btn" style="color:var(--red)" title="${GF.t('delete')}" onclick="GF.WWF.deleteSession('${s.id}')">${GF.icon('trash')}</button>` : '';
       return `<div class="sess-row">
         <span style="font-family:var(--mono);white-space:nowrap">${GF.esc(when)}</span>
-        <span style="font-weight:700;white-space:nowrap">${s.hours}h</span>
-        <span class="sess-class ${GF.esc(s.classification)}">${GF.esc(s.classification)}</span>
+        <span style="font-weight:700;white-space:nowrap">${GF.esc(s.hours)}h</span>
+        <span class="sess-class ${GF.esc(s.classification)}">${GF.esc(GF.WWF.sessClassLabel(s.classification))}</span>
         <span style="flex:1;min-width:0;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${GF.esc(s.note || who)}</span>
         ${del}
       </div>`;
@@ -103,6 +144,8 @@ GF.WWF._renderWorklog = () => {
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="GF.WWF.submitWorklog()">${GF.t('log_work')}</button>
     <div class="sec-label" style="margin-top:16px">${GF.icon('clock','icon')}${AL('Logged sessions', 'Внесени сесии')}</div>
     <div id="wl-list">${list}</div>`;
+
+  if (keep) for (const [id, v] of keep) { const el = GF.$(id); if (el) el.value = v; }
 };
 
 /* ── Completion % (tasks.progress) — the mockup's log-progress control:
@@ -187,7 +230,8 @@ GF.WWF.submitWorklog = async () => {
   } else body.hours = hoursRaw;
   try {
     const s = await GF.API.addSession(st.taskId, body);
-    GF.toast(AL(`Logged ${s.hours}h — ${s.classification}`, `Внесени ${s.hours}ч — ${s.classification}`), 'success');
+    const cls = GF.WWF.sessClassLabel(s.classification);
+    GF.toast(AL(`Logged ${s.hours}h — ${cls}`, `Внесени ${s.hours}ч — ${cls}`), 'success');
     st.sessions = (st.sessions || []).concat([s]);
     const t = GF.task(st.taskId);
     if (t) {
@@ -198,7 +242,9 @@ GF.WWF.submitWorklog = async () => {
       if (t.status === 'pending' && GF.setStatus) GF.setStatus(st.taskId, 'working');
       GF.render.panels();
     }
-    GF.WWF._renderWorklog();
+    // The one caller that MEANS to clear the form: the session is saved, so
+    // leaving the old date/hours in place would invite logging them twice.
+    GF.WWF._renderWorklog({ resetForm: true });
   } catch (e) { GF.toast(AL('Log failed: ', 'Неуспешен внес: ') + e.message, 'error'); }
 };
 
@@ -224,7 +270,7 @@ GF.WWF.promptOutcome = (taskId) => {
   GF.$('outcome-modal-body').innerHTML = `
     <div style="font-size:13px;color:var(--ink-2);margin-bottom:12px">${AL('Task completed — add an optional outcome note?', 'Задачата е завршена — додадете белешка за резултатот?')}</div>
     <div class="field"><div class="row" style="gap:8px">
-      <input id="outcome-note" placeholder="${AL('e.g. Deviation closed, report filed', 'пр. Отстапувањето е затворено')}" style="flex:1"
+      <input id="outcome-note" value="${GF.esc(t.outcome || '')}" placeholder="${AL('e.g. Deviation closed, report filed', 'пр. Отстапувањето е затворено')}" style="flex:1"
         onkeydown="if(event.key==='Enter')GF.WWF.saveOutcome('${t.id}')">
       ${GF.WWF.micBtn('outcome-note')}</div></div>
     <div class="row" style="gap:10px">
@@ -241,7 +287,8 @@ GF.WWF.saveOutcome = async (taskId) => {
   if (!v) return;
   try {
     await GF.API.updateTask(taskId, { outcome: v });
-    const t = GF.task(taskId); if (t) t.outcome = v;
+    // Re-render so the done card's Outcome block picks the note up right away.
+    const t = GF.task(taskId); if (t) { t.outcome = v; GF.render.panels(); }
     GF.toast(GF.t('outcome') + ' ✓', 'success');
   } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
@@ -283,11 +330,28 @@ GF.WWF.archiveTask = async (taskId) => {
                   'Архивирај „' + t.title + '"? Ќе исчезне од неделните прегледи, но останува во извештаите.'))) return;
   try {
     await GF.API.updateTask(taskId, { is_archived: true });
-    GF.state.tasks = GF.state.tasks.filter(x => x.id !== taskId);
-    GF.state.expanded.delete(taskId);
+    if (GF.state.showArchived) {
+      t.archived = true;             // "Show archived" is on: keep the card, muted, with Unarchive
+    } else {
+      GF.state.tasks = GF.state.tasks.filter(x => x.id !== taskId);
+      GF.state.expanded.delete(taskId);
+    }
     GF.render.all();
     GF.toast(GF.t('archive') + ' ✓', 'success');
   } catch (e) { GF.toast(AL('Archive failed: ', 'Неуспешно архивирање: ') + e.message, 'error'); }
+};
+
+/* ── Unarchive (PATCH is_archived:false) — the way back out of the archive.
+   Only reachable from an archived card, which only renders while the Board /
+   My Week "Show archived" filter is on (GF.WWF.toggleArchived, integrate.js). */
+GF.WWF.unarchiveTask = async (taskId) => {
+  const t = GF.task(taskId); if (!t) return;
+  try {
+    await GF.API.updateTask(taskId, { is_archived: false });
+    t.archived = false;
+    GF.render.all();
+    GF.toast(GF.t('unarchive') + ' ✓', 'success');
+  } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
 };
 
 /* ── Edit task — reuses the add modal, submitAdd PATCHes when _editTask set ── */
@@ -298,6 +362,7 @@ GF.WWF.openEdit = (taskId) => {
   GF.openAdd(t.weekId);            // builds the form (resets _editTask/_addParent)
   GF._editTask = taskId;
   GF.$('add-title').value = t.title;
+  if (GF.$('add-desc')) GF.$('add-desc').value = t.desc || '';
   GF.$('add-dept').value = t.dept;
   // Re-render the department template fields for the task's real department,
   // prefilled from its attributes (openAdd rendered them for the default
@@ -308,6 +373,11 @@ GF.WWF.openEdit = (taskId) => {
   if (GF.$('add-due')) GF.$('add-due').value = t.due || '';
   if (GF.$('add-ref')) GF.$('add-ref').value = t.ref || '';
   if (GF.$('add-rec')) GF.$('add-rec').value = (t.recurrence && t.recurrence.freq) || '';
+  // Recurrence detail (interval + until) prefills from the stored object and
+  // the row only shows when a frequency is actually set.
+  if (GF.$('add-rec-n')) GF.$('add-rec-n').value = (t.recurrence && t.recurrence.interval) || 1;
+  if (GF.$('add-rec-until')) GF.$('add-rec-until').value = (t.recurrence && t.recurrence.until) || '';
+  if (GF.syncRecFields) GF.syncRecFields((t.recurrence && t.recurrence.freq) || '');
   if (GF.$('add-tags')) GF.$('add-tags').value = (t.tags || []).join(', ');
   // The dept/priority/type/recurrence fields are popup choosers (hidden input
   // + trigger button) — setting .value above needs a label sync + re-tint.

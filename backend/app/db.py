@@ -1,7 +1,7 @@
 """
 asyncpg connection pools + RLS context — over TWO databases.
 
-Identity data (organizations, profiles, password_reset_codes + their audit
+Identity data (organizations, profiles + their audit
 chain) lives in the users database; all work data (tasks, sessions, pins,
 their audit chain, ...) lives in the tasks database. They run as separate
 Postgres containers; nothing joins across them at the SQL level — app-side
@@ -37,14 +37,22 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
 
 
 async def init_pools() -> None:
-    _pools["users_user"] = await asyncpg.create_pool(
-        settings.users_database_url, min_size=1, max_size=5, init=_init_connection)
-    _pools["users_admin"] = await asyncpg.create_pool(
-        settings.users_admin_database_url, min_size=1, max_size=5, init=_init_connection)
-    _pools["tasks_user"] = await asyncpg.create_pool(
-        settings.tasks_database_url, min_size=2, max_size=10, init=_init_connection)
-    _pools["tasks_admin"] = await asyncpg.create_pool(
-        settings.tasks_admin_database_url, min_size=1, max_size=5, init=_init_connection)
+    # If a later pool fails to connect (DB unreachable mid-startup-retry), the
+    # earlier ones already created must be closed before re-raising — leaving
+    # them in `_pools` with nothing referencing them once a caller retries
+    # (each key gets silently overwritten) leaks their live connections.
+    try:
+        _pools["users_user"] = await asyncpg.create_pool(
+            settings.users_database_url, min_size=1, max_size=5, init=_init_connection)
+        _pools["users_admin"] = await asyncpg.create_pool(
+            settings.users_admin_database_url, min_size=1, max_size=5, init=_init_connection)
+        _pools["tasks_user"] = await asyncpg.create_pool(
+            settings.tasks_database_url, min_size=2, max_size=10, init=_init_connection)
+        _pools["tasks_admin"] = await asyncpg.create_pool(
+            settings.tasks_admin_database_url, min_size=1, max_size=5, init=_init_connection)
+    except Exception:
+        await close_pools()
+        raise
 
 
 async def close_pools() -> None:

@@ -18,8 +18,17 @@
   };
   const isToday = (t) =>
     (t.days || []).includes(GF.todayDay) || (t.due && t.due === GF.todayISO());
-  const doneToday = (t) => t.status === 'done' &&
-    (t.completed_date ? t.completed_date === GF.todayISO() : true);
+  // A done task only belongs in the "completed today" group if it genuinely
+  // completed today. The old fallback (`completed_date ? … : true`) treated a
+  // MISSING completed_date as an automatic match for today, so a task that
+  // finished days ago but never got a completed_date recorded (or was
+  // imported without one) would keep surfacing under "today" forever. Tasks
+  // carry no updated_at client-side (integrate.js's transform() never maps
+  // one — see GF.WWF.transform in integrate.js) to fall back to, so an absent
+  // completed_date now excludes the task from today's done bucket entirely,
+  // the same "no date → not today" convention isToday() above already uses
+  // for `t.due`.
+  const doneToday = (t) => t.status === 'done' && t.completed_date === GF.todayISO();
 
   const prPill = (t) => (t.pr === 'critical' || t.pr === 'high')
     ? `<span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>` : '';
@@ -29,7 +38,7 @@
     return `
     <div class="md-task${t.status === 'done' ? ' is-done' : ''}">
       <button class="check ${t.status === 'done' ? 'done' : ''}"
-        onclick="event.stopPropagation();GF.toggleDone('${t.id}')">${t.status === 'done' ? GF.icon('check', 'icon', '#03130C') : ''}</button>
+        onclick="event.stopPropagation();GF.toggleDone('${t.id}')">${t.status === 'done' ? GF.icon('check', 'icon', 'var(--text-on-primary)') : ''}</button>
       <div class="md-b" onclick="GF.WWF.openWorklog&&GF.WWF.openWorklog('${t.id}')">
         <div class="md-t">${GF.esc(t.title)}</div>
         <div class="md-m">
@@ -62,7 +71,63 @@
     const done = mine.filter(t => isToday(t) && doneToday(t));
     const acks = Array.isArray(st.acks) ? st.acks : [];
     const kpi = (v, l, c) => `<div class="kpi"><div class="kpi-v" style="color:${c}">${v}</div><div class="kpi-l">${l}</div></div>`;
-    const head = GF.viewHead ? GF.viewHead('my_day', 'my_day_sub') : `<h2>${AL('My Day', 'Мојот ден')}</h2>`;
+
+    // ── Greeting hero (evolves the plain view-head for this personal screen,
+    //    mirroring mockup my-day.html): time-of-day greeting + the current
+    //    user's first name, today's date, and how many tasks are still open.
+    //    The name/role come straight from the signed-in user already in state;
+    //    no invented data. Hour is a plain local read — this view isn't part of
+    //    any date-sensitive test contract, so there's no Date determinism trap. */
+    const hr = new Date().getHours();
+    const greet = hr < 12 ? AL('Good morning', 'Добро утро')
+      : hr < 18 ? AL('Good afternoon', 'Добар ден')
+        : AL('Good evening', 'Добра вечер');
+    const meP = GF.PEOPLE[meId()] || {};
+    const fullName = meP.name || (GF.API.user || {}).full_name || (GF.API.user || {}).username || '';
+    const first = GF.esc(String(fullName).trim().split(/\s+/)[0] || '');
+    const hello = first ? `${greet}, ${first}` : greet;
+    const dstr = new Date().toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
+      { weekday: 'long', month: 'long', day: 'numeric' });
+    const deck = open.length === 1
+      ? AL('1 task on deck', '1 задача на ред')
+      : `${open.length} ${AL('tasks on deck', 'задачи на ред')}`;
+    // ⌘K affordance → the EXISTING command palette (GF.cmdk.open in cmdk.js),
+    // guarded the same way sibling inline handlers guard optional globals.
+    const hero = `
+      <div class="md-hero">
+        <div>
+          <div class="md-hero__hi">${hello}</div>
+          <div class="md-hero__sub">${GF.esc(dstr)} · ${GF.esc(deck)}</div>
+        </div>
+        <button type="button" class="md-hero__cmd" onclick="GF.cmdk&&GF.cmdk.open()"
+          title="${AL('Open command palette', 'Отвори командна палета')}">
+          ${GF.icon('search')}<span>${AL('Jump to anything', 'Скокни до било што')}</span><kbd>⌘K</kbd>
+        </button>
+      </div>`;
+
+    // ── 7-day strip: this week (the same week `mine` is scoped to), one cell
+    //    per weekday with the count of MY tasks landing on it — via t.days
+    //    membership or a due date on that day — rendered as capped dots. Today
+    //    is highlighted. Derived entirely from tasks already in state. */
+    const wk = (GF.calendar.weeks || [])[GF.calendar.todayId];
+    let strip = '';
+    if (wk && wk.start) {
+      const todayIso = GF.todayISO();
+      const cells = GF.DAYS.map((d, i) => {
+        const dt = new Date(wk.start); dt.setDate(wk.start.getDate() + i);
+        const iso = GF.localDateStr(dt);
+        const cnt = mine.filter(t => (t.days || []).includes(d) || (t.due && t.due === iso)).length;
+        const dots = Array.from({ length: Math.min(cnt, 6) }, () => '<i></i>').join('');
+        const on = iso === todayIso;
+        const lbl = cnt === 1 ? AL('1 task', '1 задача') : `${cnt} ${AL('tasks', 'задачи')}`;
+        return `<div class="md-day${on ? ' is-today' : ''}" title="${GF.esc(GF.dayLabel(d))} · ${GF.esc(lbl)}">
+          <div class="md-day__dn">${GF.esc(GF.dayLabel(d))}</div>
+          <div class="md-day__dd">${dt.getDate()}</div>
+          <div class="md-day__dots">${dots}</div>
+        </div>`;
+      }).join('');
+      strip = `<div class="md-strip">${cells}</div>`;
+    }
     const ackBlock = acks.length ? `
       <div class="panel" style="margin-bottom:12px">
         <div class="panel-head"><span class="ttl">${AL('Awaiting your acknowledgment', 'Чека ваша потврда')}</span><span class="cnt">${acks.length}</span></div>
@@ -75,7 +140,7 @@
             <button class="btn btn-sm" onclick="GF.WWF.mdAck('${x.task_id}',false)">${AL('Decline', 'Одбиј')}</button>
           </div>`).join('')}</div>
       </div>` : '';
-    return head + `
+    return hero + strip + `
       <div class="dash-kpis">
         ${kpi(open.length, AL('Open today', 'Отворени денес'), open.length ? 'var(--orange)' : 'var(--green)')}
         ${kpi(done.length, GF.t('done_count'), 'var(--green)')}

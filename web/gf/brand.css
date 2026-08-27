@@ -102,6 +102,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .pp-leaf-anim, .pp-leaf-anim::before, .pp-leaf-anim::after { animation: none; }
+  .pp-brand-hero .pp-leaf { animation: none !important; }
+  .pp-brand-text { animation: none !important; }
 }
 
 /* ── Full lockup ─────────────────────────────────────────────────── */

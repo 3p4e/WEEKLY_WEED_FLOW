@@ -295,7 +295,7 @@ function card(c, acc){
   if(c.due) meta += '<span class="mw-due'+(c.over?' mw-due--over':'')+'">'+c.due+'</span>';
   if(c.from) meta += '<span class="dh-handoff"><span class="dh-handoff__b mw-attr">'+c.from+'</span><span class="dh-handoff__ar">→</span><span class="dh-handoff__b mw-attr">'+c.to+'</span></span>';
   const st = c.st ? '<span class="mw-st mw-st--'+c.st+'">'+c.st+'</span>' : '';
-  return '<div class="mw-tcard'+(done?' mw-tcard--done':'')+'" style="--mw-acc:'+acc+'">'+
+  return '<div class="mw-tcard'+(done?' mw-tcard--done':'')+'" style="--mw-acc:'+acc+';cursor:pointer" onclick="location.href=\'task-detail-'+current+'.html\'">'+
     '<span class="mw-tcard__box"></span>'+
     '<div class="mw-tcard__main"><div class="mw-tcard__title">'+bilingual(c.t_en,c.t_mk)+'</div>'+
       '<div class="mw-tcard__meta">'+meta+'</div></div>'+

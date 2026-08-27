@@ -1,9 +1,16 @@
 # GrowFlow DocEngine agent fleet — declarative, ADDITIVE, namespaced gf_*.
 # Personas are derived from docs/DOCENGINE-CANON-2026-07.md (the binding
 # instruction set: SKILL v1.7.0 text + §6D + house rules). fleet.py ensures
-# each agent exists by name (create-if-missing), attaches sources, and seeds
-# the shared house-rules memory block. EXISTING (non-gf_) agents are never
-# modified.
+# each agent exists by name (create-if-missing), attaches the ragflow_search
+# tool, and seeds the shared house-rules memory block. EXISTING (non-gf_)
+# agents are never modified.
+#
+# RETRIEVAL LIVES IN RAGFLOW, NOT IN LETTA. Agents get no attached Letta
+# sources; each carries `datasets:` naming the RAGflow datasets it may search
+# through the ragflow_search tool, and a `ragflow_scope` memory block stating
+# the same so the model knows its own limits. Dataset scoping is the
+# guardrail: an agent that may only name release datasets cannot surface
+# stability results, because they are not in those datasets.
 #
 # house_rules is injected into every agent as a core memory block — it is the
 # pp_house_rules equivalent, restated from the canon.
@@ -26,10 +33,112 @@ house_rules: |
   - SOP revisions are REGENERATED whole (never patched); from samples take
     structure, not style.
 
+# RAGflow datasets. Names are resolved at ensure time by the ragflow_search
+# tool against the RAGflow API; a name that does not exist yet is reported by
+# the tool as unknown_datasets rather than failing the call.
+#
+# Ingested and queryable today:
+#   eCOA_INGEST          release certificates (source of truth)
+#   eCOA_INGEST_SUMMA    derived per-batch summaries
+#   STABILITY_PROGRAMME  stability study records — deliberately NOT granted to
+#                        any document agent below
+#
+# NOT YET IN RAGFLOW — the QMS/regulatory corpora the document agents need.
+# They were Letta sources on the old server and still have to be ingested.
+# Until then ragflow_search returns unknown_datasets for these names and the
+# affected agents draft without corpus grounding:
+#   DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots
+ragflow:
+  pending_ingest: [DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots]
+  # Registered with the tool on the Letta server; this is what the model reads
+  # when deciding whether to call it. The source is agents/ragflow_search.py.
+  tool_description: >
+    Search the Purely Plant document corpora held in RAGflow (release
+    certificates, per-batch summaries, QMS and regulatory documents) and return
+    matching passages with the source document name. Scope the search with the
+    dataset names your ragflow_scope memory block allows.
+
+# These handles are used as declared whenever letta-6ou3 serves them; only an
+# unserved handle falls back to adopting one from a live agent (see
+# fleet.py:_resolve_model). A handle being LISTED is not the same as being
+# billable — as of 2026-08-17 letta-6ou3's own Anthropic key reports "credit
+# balance is too low" and its OpenAI key "You have no credits remaining", which
+# is why neither is named here.
+#
+#   model      Moonshot Kimi K2.6, reached through the LiteLLM gateway on
+#              ai-net (owner directive, 2026-08-24 — switched from DeepSeek
+#              v4-flash; see docs/LETTA-MOONSHOT-CUTOVER-2026-08-24.md).
+#              Verified live through an actual Letta agent (not just a raw
+#              completion): asked a real retrieval question, it reasoned,
+#              called ragflow_search itself scoped to only its permitted
+#              datasets, and quoted a real value with its exact source
+#              document — same bar the DeepSeek verification set.
+#
+#              Two Moonshot-specific gotchas, both checked before switching:
+#                * moonshot-v1-* (the whole classic series) is being retired
+#                  by Moonshot on 2026-08-31 — never point anything at it.
+#                * Kimi K3 (the flagship) has reasoning ALWAYS on with no way
+#                  to disable it, and Moonshot's own docs require echoing
+#                  reasoning_content back on every follow-up turn — the exact
+#                  failure mode that broke DeepSeek v4's direct-to-provider
+#                  route (see below). K2.6 defaults to thinking on but CAN
+#                  disable it (extra_body: {"thinking":{"type":"disabled"}}),
+#                  though in practice Letta's own agent loop handles the
+#                  reasoning/tool-call turns cleanly on its own without that
+#                  flag being set anywhere in this fleet's config — the
+#                  verification above ran with thinking fully engaged and
+#                  still completed the tool-call round trip correctly.
+#
+#              NOTE for whoever edits this file next: changing `model` here
+#              only affects agents CREATED from now on. `fleet.py`'s
+#              ensure_fleet() deliberately never edits an existing agent's
+#              model (the server used to reject that write path outright for
+#              the old llm_config object). The current server DOES support it
+#              via PATCH /v1/agents/{id} {"model": "..."} — that's how the
+#              already-existing 11 agents were actually moved to Moonshot;
+#              this file being updated does not retroactively move them.
+#
+#              DeepSeek v4-flash is still funded and still works (previously
+#              verified the same way); it remains a documented fallback. It
+#              MUST go through LiteLLM, not straight at api.deepseek.com — two
+#              Letta-side problems make the direct route unusable, both
+#              confirmed live and written up in
+#              docs/LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md:
+#                * provider_type "deepseek" drops every current model, because
+#                  its hardcoded context-window map knows only deepseek-chat /
+#                  -reasoner and returns None (= "skip") for v4-*;
+#                * v4 models default to thinking mode and then reject any
+#                  follow-up turn that does not echo `reasoning_content` back,
+#                  which Letta never does, so every tool call died on its second
+#                  hop. LiteLLM disables thinking via extra_body.
+#
+#   embedding  Local Ollama. Letta only embeds its own archival/recall memory now
+#              that retrieval lives in RAGflow, so this needs to be free and
+#              always-available rather than good — and pointing it at either
+#              out-of-credit cloud key would leave a latent failure.
+#
+# Do NOT point the model at the local ollama/* or openai-proxy/local-* handles.
+# Verified live: phi4-mini, asked a retrieval question, never called
+# ragflow_search and invented both a source filename and an out-of-range
+# analytical finding. Fabricating pharmaceutical data is the one thing the house
+# rules forbid outright, and a 4B local model does it readily. They stay
+# available for cheap non-document work; they are not fit for this fleet.
+#   context_window  Letta sizes an unknown model from LLM_MAX_CONTEXT_WINDOW
+#                   ["DEFAULT"] = 30000, and deepseek-v4-flash is not in its
+#                   table. That is far below what the model takes (LiteLLM
+#                   reports 1,000,000 input tokens) and it broke a real run: the
+#                   repair prompt for a 9-section SOP — the document plus the
+#                   auditor's issues — left too little room for the reply, which
+#                   truncated mid-section and was rejected as unusable. 128k is
+#                   ample headroom while staying well inside what the model
+#                   serves. Passed as context_window_limit at agent creation.
+#   max_tokens      output ceiling per turn; a full SOP section plus its
+#                   surrounding markers needs more than the old 4096.
 defaults:
-  model: openai/gpt-4o-mini        # placeholder — fleet.py overrides with the
-  embedding: letta/letta-free      # server's actual accepted handles at ensure time
-  max_tokens: 4096
+  model: openai-proxy/moonshot/kimi-k2.6
+  embedding: ollama-local/nomic-embed-text:latest
+  context_window: 128000
+  max_tokens: 16384
 
 agents:
   - name: gf_doc_orchestrator
@@ -49,7 +158,7 @@ agents:
       number; produce ONLY that section, complete and GMP-correct. Procedure
       content goes in 6.x subsections; training & deviation handling are the
       final 6.x. Leave unknown facility specifics as blank fields, never invent.
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_annex_author
     description: Drafts annex/form/log/checklist content as bilingual Markdown with [[FORM]]/[[TABLE]] blocks.
     persona: >
@@ -58,7 +167,7 @@ agents:
       blocks (short fields pack, long values span, write-ins stay blank),
       [[TABLE]] with a header row for data grids, single-select option lists
       for checkbox grids. Structure from any sample, style NEVER (§6D D6).
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_translator_mk_en
     description: Ensures MK⇄EN parity of drafted content.
     persona: >
@@ -70,19 +179,19 @@ agents:
     description: Verifies drafted sections against the regulatory corpus; cites real passages.
     persona: >
       You are the regulatory compliance checker. For each drafted section,
-      search your attached sources (EU GMP, Ph. Eur., ICH, MALMED, facility
-      QMS) and return findings as a list: {section, verdict OK|GAP|CONFLICT,
+      search the corpora available to you via ragflow_search (EU GMP,
+      Ph. Eur., ICH, MALMED, facility QMS) and return findings as a list: {section, verdict OK|GAP|CONFLICT,
       citation (document + clause), note}. Only cite passages you actually
       retrieved. If nothing relevant is found say NO-FINDING — never invent
       a clause.
-    sources: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
+    datasets: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
   - name: gf_raci_specialist
     description: Builds §3 responsibilities / RACI content.
     persona: >
       You produce §3 ОДГОВОРНОСТИ/RESPONSIBILITIES content — role-by-role
       bilingual tables (RACI where asked). Roles come from the questionnaire
       answers and facility role model; personnel NAMES are never hardcoded.
-    sources: [DB3_PP_CURRENT_unified]
+    datasets: [DB3_PP_CURRENT_unified]
   - name: gf_qa_auditor
     description: Runs the §6A post-generation review on assembled Markdown before formatting.
     persona: >
@@ -97,4 +206,9 @@ agents:
       You are the GrowFlow assistant for Purely Plant staff — bilingual
       MK/EN, concise, practical. You help with task drafting, summaries and
       app questions. You have no authority over controlled documents.
-    sources: [DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]
+    # eCOA_INGEST_SUMMA is the per-batch release summary set and is ingested
+    # today, so this is the one agent with live grounding until the QMS corpora
+    # land. It is the right agent for it: staff ask batch-QC questions, and the
+    # summaries answer them from the release certificates. STABILITY_PROGRAMME
+    # is deliberately withheld here as everywhere else.
+    datasets: [eCOA_INGEST_SUMMA, DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]

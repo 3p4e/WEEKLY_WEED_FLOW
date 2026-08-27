@@ -1,14 +1,12 @@
 """P2 — the audit trail's tamper-evidence claim, precisely.
 
-/audit/verify walks the hash chain checking that each row's prev_hash
-matches the entry_hash of the row before it (the baselines' app.fn_audit_row
-trigger writes both at insert time). That's a real, useful guarantee: it
-catches a row being deleted or reordered. It is a *narrower* guarantee than
-"tamper-evident" might suggest, though — entry_hash is never recomputed
-from a row's own current content, so editing old_values/new_values in place
-without touching the hash columns is invisible to /verify. Both properties
-are pinned below so the distinction stays visible in the test suite, not
-just in a docstring.
+/audit/verify (as of M6) RECOMPUTES each row's entry_hash from its stored
+columns and compares it to the recorded hash, AND checks that each row's
+prev_hash matches the entry_hash of the row before it, AND anchors the head
+row. So it catches: a row deleted or reordered (linkage), an in-place edit
+of old_values/new_values that left the hash columns intact (recompute), and
+head truncation (anchor). The tests below pin all three, plus the clean-chain
+baseline.
 """
 from app.db import tasks_admin_pool, users_admin_pool
 from tests.conftest import create_user
@@ -52,9 +50,10 @@ async def test_non_elevated_cannot_read_audit(client, admin_headers):
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
-async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin_headers):
-    """QC_MGR is elevated enough for /audit and /audit/tables, but /verify
-    is explicitly ADMIN-only (require_role("ADMIN"), not the _ELEVATED tuple)."""
+async def test_verify_restricted_to_admin_and_qa_auditor_roles(client, admin_headers):
+    """QC_MGR is elevated enough for /audit and /audit/tables, but /verify is
+    limited to ADMIN plus the QA auditor roles (QA_MGR, QP). A QC_MGR is
+    elevated yet not among them, so it is still refused."""
     user, otp = await create_user(client, admin_headers, role="QC_MGR")
     from tests.conftest import login_and_set_password
     token = await login_and_set_password(client, user["username"], otp)
@@ -63,12 +62,31 @@ async def test_verify_only_allows_admin_not_just_any_elevated_role(client, admin
     assert (await client.get("/audit/verify", headers=headers)).status_code == 403
 
 
-async def test_executives_and_qp_are_elevated(client, admin_headers):
-    """OWNER, CEO, COO and QP all sit above USER in the reshaped role model —
-    each is recognized by app.is_elevated(), so each may read the audit trail
-    and its table list, but /verify stays ADMIN-only for all of them."""
+async def test_verify_open_to_qa_manager_and_qp_auditors(client, admin_headers):
+    """Read-only chain verification is an audit function, so QA_MGR and QP (the
+    Qualified Person) may run /audit/verify and get a verdict — not just ADMIN.
+    A plain USER is still refused."""
     from tests.conftest import login_and_set_password
-    for role in ("OWNER", "CEO", "COO", "QP"):
+    for role in ("QA_MGR", "QP"):
+        user, otp = await create_user(client, admin_headers, role=role)
+        token = await login_and_set_password(client, user["username"], otp)
+        headers = {"Authorization": f"Bearer {token}"}
+        r = await client.get("/audit/verify", headers=headers)
+        assert r.status_code == 200, f"{role}: {r.text}"
+        assert "ok" in r.json(), role
+    user, otp = await create_user(client, admin_headers, role="USER")
+    token = await login_and_set_password(client, user["username"], otp)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/audit/verify", headers=headers)).status_code == 403
+
+
+async def test_executives_are_elevated_but_cannot_verify(client, admin_headers):
+    """OWNER, CEO, COO all sit above USER in the reshaped role model — each is
+    recognized by app.is_elevated(), so each may read the audit trail and its
+    table list. But /verify is not an executive function: it is limited to ADMIN
+    and the QA auditor roles (QA_MGR, QP), so the executives are refused it."""
+    from tests.conftest import login_and_set_password
+    for role in ("OWNER", "CEO", "COO"):
         user, otp = await create_user(client, admin_headers, role=role)
         token = await login_and_set_password(client, user["username"], otp)
         headers = {"Authorization": f"Bearer {token}"}
@@ -175,29 +193,190 @@ async def test_verify_reports_ok_when_chain_intact(client, admin_headers):
     assert body["tasks"]["first_break_id"] is None
 
 
-async def test_verify_does_not_detect_in_place_content_tampering(client, admin_headers):
-    """Documents the real gap: /verify never recomputes entry_hash from a
-    row's own content, so editing old_values/new_values without touching
-    entry_hash/prev_hash passes verification. Safe to run anywhere — it
-    never touches the hash columns, so it can't break chain linkage for
-    any other test."""
+async def test_verify_detects_in_place_content_tampering(client, admin_headers):
+    """M6: /verify now recomputes entry_hash from the row's own content, so a
+    direct edit of new_values that leaves the hash columns intact is DETECTED —
+    the precise BYPASSRLS/DBA tamper a hash chain exists to catch. The original
+    content is restored at the end so the chain is left clean for later tests (the
+    linkage never changed, so nothing downstream is affected either way)."""
     r = await client.post("/tasks", json={"title": "Tamper target", "status": "pending"}, headers=admin_headers)
     task_id = r.json()["id"]
     row = await tasks_admin_pool().fetchrow(
-        "SELECT id FROM audit_log WHERE table_name='tasks' AND record_id=$1 AND action='INSERT'", task_id)
+        "SELECT id, new_values FROM audit_log WHERE table_name='tasks' AND record_id=$1 AND action='INSERT'",
+        task_id)
     assert row is not None
+    original = row["new_values"]
     tampered = {"title": "SOMEONE EDITED THIS ROW DIRECTLY", "status": "pending"}
     await tasks_admin_pool().execute("UPDATE audit_log SET new_values=$1 WHERE id=$2", tampered, row["id"])
+    try:
+        r = await client.get("/audit/verify", headers=admin_headers)
+        assert r.status_code == 200
+        body = r.json()
+        # the recompute no longer matches the recorded hash → the chain is flagged
+        assert body["ok"] is False
+        assert body["tasks"]["ok"] is False
+        assert body["tasks"]["hash_breaks"] >= 1
+        assert body["tasks"]["first_break_id"] is not None
+    finally:
+        # restore the row's content so the recompute matches again
+        await tasks_admin_pool().execute(
+            "UPDATE audit_log SET new_values=$1 WHERE id=$2", original, row["id"])
+    # the chain verifies clean again once the content is restored
+    assert (await client.get("/audit/verify", headers=admin_headers)).json()["ok"] is True
 
-    r = await client.get("/audit/verify", headers=admin_headers)
-    assert r.status_code == 200
-    # This is the gap, asserted explicitly rather than implied: content was
-    # altered but the chain still reports intact.
-    assert r.json()["ok"] is True
 
-    r = await client.get(f"/audit?table_name=tasks&record_id={task_id}", headers=admin_headers)
-    tampered_entry = next(e for e in r.json() if e["id"] == row["id"] and e["source"] == "tasks")
-    assert tampered_entry["new_values"]["title"] == "SOMEONE EDITED THIS ROW DIRECTLY"
+async def test_verify_tolerates_a_row_written_under_a_NON_UTC_timezone(client, admin_headers):
+    """H2 REGRESSION — the exact production defect, reproduced.
+
+    The trigger hashes now()::text and /verify recomputes created_at::text. Both
+    render a timestamptz under the SESSION TimeZone, so a row written by a
+    connection at UTC+2 could not be recomputed under UTC: same instant, different
+    text, different digest. Production carried 377 such rows that verified 377/377
+    under Europe/Skopje and 0/377 under UTC, and /verify called them tamper.
+
+    This writes a row through a connection pinned to Europe/Skopje, exactly as that
+    session did, and asserts /verify does NOT report a break — and counts it as
+    `hash_legacy_tz` so the history is explained rather than hidden.
+
+    NOTE the deliberate `SET TimeZone` on the connection: tasks-0050 pins the
+    FUNCTION's TimeZone to UTC, which is what stops this recurring. To reproduce
+    the legacy row this test must defeat that pin, so it writes the audit row by
+    hand with the pre-0050 payload rather than through the trigger."""
+    r = await client.post("/tasks", json={"title": "TZ probe", "status": "pending"},
+                          headers=admin_headers)
+    task_id = r.json()["id"]
+
+    # Forge a LEGACY-style row: hashed from created_at rendered at UTC+2, which is
+    # what a pre-0050 writer at that zone produced. Appended at the chain tail so
+    # linkage stays intact and only the hash rendering is at issue.
+    async with tasks_admin_pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('TimeZone','Europe/Skopje',true)")
+            legacy_id = await conn.fetchval(
+                """
+                WITH tail AS (SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1),
+                ins AS (
+                  SELECT (SELECT entry_hash FROM tail) AS prev,
+                         now() AS ts,
+                         'UPDATE'::text AS act,
+                         'tasks'::text AS tbl,
+                         $1::text AS rec,
+                         '{"title": "written at UTC+2"}'::jsonb AS nv
+                )
+                INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,
+                                      old_values,new_values,prev_hash,entry_hash,created_at)
+                SELECT NULL, NULL, act, tbl, rec, NULL, nv, prev,
+                       encode(digest(convert_to(
+                         COALESCE(prev,'') || 'system' || act || tbl || rec
+                         || ts::text || nv::text, 'UTF8'), 'sha256'), 'hex'),
+                       ts
+                FROM ins RETURNING id
+                """, task_id)
+    try:
+        body = (await client.get("/audit/verify", headers=admin_headers)).json()
+        assert body["tasks"]["ok"] is True, (
+            "a row written under a non-UTC session must not be reported as tampered: "
+            f"{body['tasks']}")
+        assert body["tasks"]["breaks"] == 0
+        assert body["tasks"]["hash_breaks"] == 0
+        assert body["tasks"]["hash_legacy_tz"] >= 1, \
+            "the non-UTC row must still be REPORTED, as explained history"
+        assert "Europe/Skopje" in body["tasks"]["zones_tried"]
+    finally:
+        await tasks_admin_pool().execute("DELETE FROM audit_log WHERE id=$1", legacy_id)
+
+
+async def test_verify_still_catches_tampering_in_a_row_that_needs_the_legacy_zone(
+        client, admin_headers):
+    """The zone tolerance must not become a hole. A legacy-rendered row whose
+    CONTENT is then edited matches under neither zone, so it is still a break."""
+    r = await client.post("/tasks", json={"title": "TZ tamper probe", "status": "pending"},
+                          headers=admin_headers)
+    task_id = r.json()["id"]
+    async with tasks_admin_pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('TimeZone','Europe/Skopje',true)")
+            legacy_id = await conn.fetchval(
+                """
+                WITH tail AS (SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1),
+                ins AS (SELECT (SELECT entry_hash FROM tail) AS prev, now() AS ts,
+                               $1::text AS rec, '{"title": "honest"}'::jsonb AS nv)
+                INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,
+                                      old_values,new_values,prev_hash,entry_hash,created_at)
+                SELECT NULL, NULL, 'UPDATE', 'tasks', rec, NULL, nv, prev,
+                       encode(digest(convert_to(COALESCE(prev,'')||'system'||'UPDATE'||'tasks'
+                         ||rec||ts::text||nv::text,'UTF8'),'sha256'),'hex'), ts
+                FROM ins RETURNING id
+                """, task_id)
+    try:
+        assert (await client.get("/audit/verify", headers=admin_headers)).json()["tasks"]["ok"] is True
+        # now edit its content in place, the DBA tamper the chain exists to catch
+        await tasks_admin_pool().execute(
+            "UPDATE audit_log SET new_values=$1 WHERE id=$2",
+            {"title": "SOMEONE EDITED THIS"}, legacy_id)
+        body = (await client.get("/audit/verify", headers=admin_headers)).json()
+        assert body["tasks"]["ok"] is False, "zone tolerance must not excuse edited content"
+        assert body["tasks"]["hash_breaks"] >= 1
+    finally:
+        await tasks_admin_pool().execute("DELETE FROM audit_log WHERE id=$1", legacy_id)
+    assert (await client.get("/audit/verify", headers=admin_headers)).json()["tasks"]["ok"] is True
+
+
+async def test_verify_classifies_a_chain_FORK_separately_from_a_deletion(client, admin_headers):
+    """A fork (two rows claiming the same predecessor) is the pre-advisory-lock
+    concurrency bug tasks-0012 fixed; an orphan (prev_hash pointing at nothing) is
+    a deletion. Production has 38 of the former, dated three days before the lock
+    landed, and 0 of the latter. Lumping them together is what made /verify report
+    an intact chain as broken, so the distinction is pinned here."""
+    await client.post("/tasks", json={"title": "Fork probe", "status": "pending"},
+                      headers=admin_headers)
+    # Append a row that links to the SECOND-to-last entry_hash: a real earlier row,
+    # which is precisely what two concurrent tail-reads produce.
+    fork_id = await tasks_admin_pool().fetchval(
+        """
+        WITH prior AS (SELECT entry_hash FROM audit_log ORDER BY id DESC OFFSET 1 LIMIT 1),
+        ins AS (SELECT (SELECT entry_hash FROM prior) AS prev, now() AS ts)
+        INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,
+                              old_values,new_values,prev_hash,entry_hash,created_at)
+        SELECT NULL, NULL, 'UPDATE', 'tasks', 'fork', NULL, NULL, prev,
+               encode(digest(convert_to(COALESCE(prev,'')||'system'||'UPDATE'||'tasks'
+                 ||'fork'||ts::text,'UTF8'),'sha256'),'hex'), ts
+        FROM ins RETURNING id
+        """)
+    try:
+        body = (await client.get("/audit/verify", headers=admin_headers)).json()["tasks"]
+        assert body["link_forks"] >= 1, "a fork must be reported as a fork"
+        assert body["link_orphans"] == 0, "a fork is not an orphan"
+        assert body["ok"] is True, (
+            "an explained pre-hardening fork must not fail the chain — that is the "
+            f"false alarm this fix removes: {body}")
+        assert body["fork_id_range"][1] == fork_id
+    finally:
+        await tasks_admin_pool().execute("DELETE FROM audit_log WHERE id=$1", fork_id)
+
+
+async def test_verify_flags_an_ORPHAN_link_as_a_real_break(client, admin_headers):
+    """The other half: prev_hash pointing at no row at all is what a deleted or
+    rewritten predecessor looks like, and it must fail."""
+    await client.post("/tasks", json={"title": "Orphan probe", "status": "pending"},
+                      headers=admin_headers)
+    orphan_id = await tasks_admin_pool().fetchval(
+        """
+        INSERT INTO audit_log(org_id,user_id,action,table_name,record_id,
+                              old_values,new_values,prev_hash,entry_hash,created_at)
+        SELECT NULL, NULL, 'UPDATE', 'tasks', 'orphan', NULL, NULL,
+               repeat('f', 64),
+               encode(digest(convert_to(repeat('f',64)||'system'||'UPDATE'||'tasks'
+                 ||'orphan'||now()::text,'UTF8'),'sha256'),'hex'), now()
+        RETURNING id
+        """)
+    try:
+        body = (await client.get("/audit/verify", headers=admin_headers)).json()["tasks"]
+        assert body["link_orphans"] >= 1, "a prev_hash pointing nowhere must be an orphan"
+        assert body["ok"] is False, "an orphan link is a genuine integrity failure"
+        assert body["first_break_id"] is not None
+    finally:
+        await tasks_admin_pool().execute("DELETE FROM audit_log WHERE id=$1", orphan_id)
 
 
 async def test_verify_detects_a_deleted_row(client, admin_headers):

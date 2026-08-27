@@ -13,16 +13,18 @@ The actor is the org's system ADMIN profile (events.actor_id is NOT NULL;
 self-notify guard is a no-op for it).
 """
 from datetime import date
+from app.worktime import SITE_TZ_SQL
 
 from app.db import rls, rls_users, users_admin_pool
-from app.notify import emit
+from app.notify import safe_emit
+from app.roles import DEPT_SCOPED_ROLES
 
 
 async def _admin_users() -> list[dict]:
     """One system-ADMIN identity per organization (seeded at bootstrap)."""
     rows = await users_admin_pool().fetch(
         "SELECT DISTINCT ON (org_id) id, org_id, role FROM profiles"
-        " WHERE role='ADMIN' AND is_deleted=false ORDER BY org_id, created_at")
+        " WHERE role='ADMIN' AND is_deleted=false AND is_active ORDER BY org_id, created_at")
     return [{"id": r["id"], "org_id": r["org_id"], "role": r["role"]} for r in rows]
 
 
@@ -32,8 +34,8 @@ async def _dept_managers(admin: dict, department_id) -> list[str]:
     async with rls_users(admin) as uc:
         rows = await uc.fetch(
             "SELECT id FROM profiles WHERE org_id=$1 AND department_id=$2"
-            " AND is_deleted=false AND is_active AND role LIKE '%\\_MGR' ESCAPE '\\'",
-            admin["org_id"], department_id)
+            " AND is_deleted=false AND is_active AND role=ANY($3::text[])",
+            admin["org_id"], department_id, DEPT_SCOPED_ROLES)
     return [str(r["id"]) for r in rows]
 
 
@@ -42,7 +44,8 @@ async def run_for_org(admin: dict, today: date) -> dict:
     async with rls(admin) as c:
         already = {(r["verb"], r["object_id"]) for r in await c.fetch(
             "SELECT verb, object_id FROM events"
-            " WHERE verb IN ('due_soon','overdue') AND created_at::date=$1", today)}
+            f" WHERE verb IN ('due_soon','overdue')"
+            f" AND (created_at AT TIME ZONE {SITE_TZ_SQL})::date=$1", today)}
         rows = await c.fetch(
             "SELECT t.id, t.title, t.user_id, t.department_id, t.due_date,"
             " COALESCE(array_agg(ta.user_id) FILTER (WHERE ta.user_id IS NOT NULL), '{}') AS assignees"
@@ -57,7 +60,7 @@ async def run_for_org(admin: dict, today: date) -> dict:
             recipients = [(str(u), "due") for u in [t["user_id"], *t["assignees"]] if u]
             if verb == "overdue":
                 recipients += [(m, "due") for m in await _dept_managers(admin, t["department_id"])]
-            await emit(c, admin, verb=verb, object_type="task", object_id=t["id"],
+            await safe_emit(c, admin, verb=verb, object_type="task", object_id=t["id"],
                        recipients=recipients, task_id=t["id"],
                        department_id=t["department_id"],
                        params={"title": t["title"], "due": t["due_date"].isoformat()})

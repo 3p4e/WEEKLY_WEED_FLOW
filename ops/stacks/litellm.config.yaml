@@ -1,0 +1,85 @@
+# PROVENANCE COPY — the live file is /opt/stacks/litellm/config.yaml on kvm4.
+# This is a redacted snapshot (2026-08-17) kept in the repo because the gateway
+# is now load-bearing for the gf_* Letta fleet: docengine/agents/fleet.yaml
+# points at DeepSeek through it, and the extra_body below is the only reason
+# DeepSeek tool calls survive their second hop. It is NOT deployed from here.
+#
+# api_key values are `os.environ/<NAME>` references in the real file; the actual
+# secrets live in /opt/stacks/litellm/.env (0600). Editing the live file requires
+# `docker restart litellm`.
+#
+# Rationale and live verification: docs/LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md
+model_list:
+  # ---- cloud passthrough (keys from .env; empty key = provider inactive) ----
+  - model_name: "openai/*"
+    litellm_params:
+      model: "openai/*"
+      api_key: os.environ/<PROVIDER>_API_KEY
+  - model_name: "anthropic/*"
+    litellm_params:
+      model: "anthropic/*"
+      api_key: os.environ/<PROVIDER>_API_KEY
+  # ---- DeepSeek, explicit models only (2026-08-17) ----
+  # There is deliberately NO "deepseek/*" wildcard. Two reasons:
+  #   1. A wildcard cannot carry per-model params, and these models need one.
+  #      deepseek-v4-* default to thinking mode, and DeepSeek then REJECTS any
+  #      follow-up turn whose assistant message does not echo `reasoning_content`
+  #      back ("The `reasoning_content` in the thinking mode must be passed back
+  #      to the API"). Letta never echoes it, so every tool call died on its
+  #      second hop. extra_body turns thinking off, which makes the round-trip
+  #      legal -- verified against the API both with and without it.
+  #   2. The wildcard advertised models DeepSeek no longer serves (deepseek-coder
+  #      / -r1 / -v3 / -v3.2); upstream /models returns only v4-flash and v4-pro.
+  # Keeping only these entries means every DeepSeek route offered here is fixed.
+  # model_name intentionally matches the "deepseek/..." handle Letta already has
+  # registered. See docs/LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md in WEEKLY_WEED_FLOW.
+  - model_name: "deepseek/deepseek-v4-flash"
+    litellm_params:
+      model: "deepseek/deepseek-v4-flash"
+      api_key: os.environ/<PROVIDER>_API_KEY
+      extra_body:
+        thinking:
+          type: "disabled"
+  - model_name: "deepseek/deepseek-v4-pro"
+    litellm_params:
+      model: "deepseek/deepseek-v4-pro"
+      api_key: os.environ/<PROVIDER>_API_KEY
+      extra_body:
+        thinking:
+          type: "disabled"
+  - model_name: "moonshot/*"
+    litellm_params:
+      model: "moonshot/*"
+      api_key: os.environ/<PROVIDER>_API_KEY
+  # ---- voyage embeddings + rerank ----
+  - model_name: "voyage/*"
+    litellm_params:
+      model: "voyage/*"
+      api_key: os.environ/<PROVIDER>_API_KEY
+  # ---- local ollama (ai-net) — roster as of 2026-08-16 ----
+  - model_name: "local-uncensored"      # Qwen3.5-4B uncensored: chat+tools+code+vision
+    litellm_params:
+      model: "ollama_chat/vaultbox/qwen3.5-uncensored:4b"
+      api_base: "http://ollama-bm3e-ollama-1:11434"
+  - model_name: "local-coder"           # uncensored coding/tools agent
+    litellm_params:
+      model: "ollama_chat/hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M"
+      api_base: "http://ollama-bm3e-ollama-1:11434"
+  - model_name: "local-vision"          # local OCR / vision
+    litellm_params:
+      model: "ollama_chat/qwen2.5vl:3b"
+      api_base: "http://ollama-bm3e-ollama-1:11434"
+  - model_name: "local-general"         # fast general
+    litellm_params:
+      model: "ollama_chat/phi4-mini:latest"
+      api_base: "http://ollama-bm3e-ollama-1:11434"
+  - model_name: "local-small"           # fast general (alias)
+    litellm_params:
+      model: "ollama_chat/phi4-mini:latest"
+      api_base: "http://ollama-bm3e-ollama-1:11434"
+
+litellm_settings:
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

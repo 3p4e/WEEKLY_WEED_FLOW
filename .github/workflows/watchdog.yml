@@ -1,0 +1,107 @@
+name: Watchdog (production liveness)
+
+# PARTIAL COVERAGE BY DESIGN — read this before treating a green tick here as
+# "monitoring is handled".
+#
+# WHAT THIS WORKFLOW DETECTS
+#   Production is not serving: /health/ready not returning 200 with users:ok AND
+#   tasks:ok, or either database container not accepting connections. It runs
+#   ops/watchdog.sh --only prod, so the probe logic lives in exactly one place
+#   and is the same code the host cron runs.
+#
+# WHAT THIS WORKFLOW CANNOT DETECT, EVER
+#   1. Its own runner being down. There is ONE self-hosted runner (kvm4-wwf). If
+#      it is gone, this workflow is never assigned to anything: it does not run,
+#      it does not fail, it alerts nobody. The absence of an alert is
+#      indistinguishable from health. That is not a hypothetical — CI was dead
+#      for five days exactly that way, after an interrupted runner self-update
+#      mass-deleted bin/ (`Runner.Listener: No such file or directory`), while
+#      ci.yml's `cancel-in-progress: true` made the orphaned runs read as
+#      merely superseded.
+#   2. GitHub not firing the schedule. `schedule:` is best-effort: it is delayed
+#      or dropped under load, and GitHub disables scheduled workflows outright
+#      in a repository that sees no activity for ~60 days. A silent watchdog is
+#      this workflow's NORMAL failure mode, not an edge case.
+#
+# THEREFORE: ops/watchdog.sh on the KVM4 host's cron is the authoritative half —
+# it runs outside GitHub Actions and outside the runner, so it shares no
+# component with the things it watches, and it is the only half that checks the
+# runner itself. Do not delete or deprioritise the host cron because this
+# workflow is green. Green here means the check ran. It never means the check
+# would have run. Install instructions: ops/README.md.
+
+on:
+  schedule:
+    # Every 15 minutes. This job occupies the ONE self-hosted runner while it
+    # runs, delaying any CI job queued behind it, which is why it is kept cheap:
+    # a checkout and a single script, no dependency installs, no containers.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+# NOT in ci.yml's `ci-${{ github.ref }}` group, deliberately, and
+# cancel-in-progress is deliberately false:
+#   * Host-port collisions are impossible here rather than merely avoided: this
+#     job starts NO service containers and binds NO host ports, so it cannot
+#     fight ci.yml over 5432 / 8000 / 8091. It needs no Postgres at all — it
+#     probes the live production databases through their own containers. That is
+#     why it does not need ci.yml's serialising group (the other way to avoid a
+#     port fight), which would only add contention for the shared runner.
+#   * cancel-in-progress: true is precisely what disguised the five-day outage,
+#     so it is false here. Be exact about what that buys, though: GitHub keeps
+#     only ONE pending run per group and cancels any previously pending one, so
+#     with the runner down this schedule still produces a column of cancelled
+#     runs plus a single queued one. It is strictly better than
+#     cancel-in-progress: true, and it is NOT a reliable outage signal on its
+#     own — detecting a dead runner is ops/watchdog.sh's job, from the host,
+#     precisely because this workflow cannot report on the runner it needs.
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  liveness:
+    name: Production liveness (/health/ready + both databases)
+    # GitHub-hosted minutes are unavailable on this account (no billing), so
+    # `ubuntu-latest` here would queue forever and never alert. deploy.yml was
+    # dead this exact way until it was moved to self-hosted in the same change
+    # that added this file — stated in the past tense on purpose, because a
+    # comment that describes a fixed bug as current teaches the next reader to
+    # distrust the rest of the file.
+    runs-on: self-hosted
+    # The runner is shared and single. A hung probe must never hold it for
+    # GitHub's 6-hour default; every probe inside the script is individually
+    # bounded too, so 5 minutes is already generous.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe production
+        env:
+          # Optional, and absent by default: with no webhook configured the
+          # alerting channel is this job failing, which is visible in the Actions
+          # UI and emails whoever last touched the cron line above. Referenced as
+          # a secret so no endpoint is ever hardcoded — a webhook URL is itself a
+          # credential. An unset secret expands to empty and the script skips the
+          # webhook rather than failing.
+          WWF_WATCHDOG_WEBHOOK: ${{ secrets.WWF_WATCHDOG_WEBHOOK }}
+        # --only prod on purpose. The runner-side checks are excluded because a
+        # runner asking whether itself is up can only ever answer yes: the job
+        # would not be executing otherwise. Those checks are the host cron's job.
+        #
+        # `set -o pipefail` is load-bearing: the default shell here is `bash -e`
+        # WITHOUT pipefail, so the pipeline's status would be tee's and a FAILING
+        # watchdog would report success — turning this into one more thing that
+        # cannot alert. `|| status=$?` is load-bearing for the opposite reason:
+        # under `-e` a bare failing pipeline aborts the step immediately, leaving
+        # the summary's code fence unclosed; putting it in a `||` list suppresses
+        # errexit for that one command so the status is still propagated by hand.
+        run: |
+          set -o pipefail
+          status=0
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          bash ops/watchdog.sh --only prod 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $status

@@ -9,7 +9,7 @@
    just add a GF.syncSelect(id) call so the button label follows.
 
    Global: GF.selectField(id, cfg) → markup string
-           GF.openChooser(id) / GF.pickSel(id, v) / GF.syncSelect(id)
+           GF.openChooser(id, ev) / GF.pickSel(id, v) / GF.syncSelect(id)
    cfg: { value, options:[{v,label,color?,sub?}], onPick?(v), searchable?,
           disabled?, placeholder? }                                        */
 window.GF = window.GF || {};
@@ -29,14 +29,48 @@ window.GF = window.GF || {};
     const v = cfg.value != null ? String(cfg.value) : '';
     return `<input type="hidden" id="${id}" value="${GF.esc(v)}">`
       + `<button type="button" class="sel-btn${cfg.inline ? ' sel-inline' : ''}" id="${id}-btn"${cfg.disabled ? ' disabled' : ''}`
-      + ` onclick="GF.openChooser('${id}')" aria-haspopup="listbox">`
+      + ` onclick="GF.openChooser('${id}', event)" aria-haspopup="listbox">`
       + `<span class="sel-cur">${GF.esc(label(cfg, v))}</span>${GF.icon('chevD', 'icon sel-caret')}</button>`;
   };
 
-  // Re-read the hidden input (a writer set .value directly) → refresh the label.
+  // ── Inline chip group (design task-create-*.html): every option VISIBLE,
+  // one tap to pick — the design shows the whole small option set rather than
+  // hiding it behind a popup. Same hidden-input contract as selectField, so
+  // collectDeptAttrs / applyPreset / openEdit keep reading and writing
+  // GF.$(id).value with no idea which control renders it.
+  GF.chipField = (id, cfg) => {
+    REG[id] = Object.assign({ chips: true }, cfg);
+    const v = cfg.value != null ? String(cfg.value) : '';
+    const chips = (cfg.options || []).map((o) => `
+      <button type="button" class="mw-chip mw-chip--sm${String(o.v) === v ? ' on' : ''}"
+        ${o.color ? `style="--cc:${GF.esc(o.color)}"` : ''} data-v="${GF.esc(String(o.v))}"
+        onclick="GF.pickChip('${id}', this.dataset.v)"><span class="d"></span>${GF.esc(o.label)}</button>`).join('');
+    return `<input type="hidden" id="${id}" value="${GF.esc(v)}">`
+      + `<div class="mw-chips" id="${id}-chips" role="radiogroup" aria-label="${GF.esc(cfg.title || '')}">${chips}</div>`;
+  };
+  GF.pickChip = (id, v) => {
+    const cfg = REG[id], inp = GF.$(id);
+    if (!cfg || !inp) return;
+    // Same-chip tap CLEARS an optional field (the design's None chip pattern
+    // without needing an explicit None everywhere).
+    inp.value = (inp.value === v && cfg.clearable !== false) ? '' : v;
+    GF.syncSelect(id);
+    if (cfg.onPick) cfg.onPick(inp.value);
+  };
+
+  // Re-read the hidden input (a writer set .value directly) → refresh the
+  // control: the popup button's label, or every chip's .on state.
   GF.syncSelect = (id) => {
-    const cfg = REG[id], inp = GF.$(id), btn = GF.$(id + '-btn');
-    if (!cfg || !inp || !btn) return;
+    const cfg = REG[id], inp = GF.$(id);
+    if (!cfg || !inp) return;
+    if (cfg.chips) {
+      const host = GF.$(id + '-chips');
+      if (host) host.querySelectorAll('.mw-chip').forEach((c) =>
+        c.classList.toggle('on', c.dataset.v === inp.value));
+      return;
+    }
+    const btn = GF.$(id + '-btn');
+    if (!btn) return;
     btn.querySelector('.sel-cur').textContent = label(cfg, inp.value);
   };
 
@@ -56,12 +90,33 @@ window.GF = window.GF || {};
 
   // Imperative popup — same chooser, no form field. For pickers that act
   // immediately (subtask status pill, quick actions): cfg.value is the
-  // current selection, cfg.onPick receives the choice.
-  GF.choose = (cfg) => { REG.__choose = cfg; GF.openChooser('__choose'); };
+  // current selection, cfg.onPick receives the choice. `ev` is the triggering
+  // click event — thread it through from the caller so GF.openChooser (below)
+  // never has to read the deprecated window.event global itself.
+  //
+  // GF.choose()'s only current caller (GF.pickStatus, the status-pill picker
+  // in render.js — outside this pass's file scope) still calls this with one
+  // argument, so `ev` here falls back to reading window.event itself, exactly
+  // as the old code did — this is the one narrow, explicit compatibility
+  // shim left, isolated to this single line, rather than left buried inside
+  // GF.openChooser's own animation-origin logic. render.js's GF.pickStatus
+  // should thread its click event through here (`GF.choose(cfg, event)`)
+  // the next time that file is touched, which removes this fallback too.
+  GF.choose = (cfg, ev) => { REG.__choose = cfg; GF.openChooser('__choose', ev || window.event); };
 
-  GF.openChooser = (id) => {
+  GF.openChooser = (id, ev) => {
     const cfg = REG[id]; if (!cfg) return;
     openId = id; hi = -1;
+    // Anchor the entrance scale on whatever the user actually clicked to get
+    // here — the field's .sel-btn button (its onclick passes `event`
+    // directly, above), or, for the imperative GF.choose() path, whatever
+    // event GF.choose() resolved and passed in. `ev` is a REAL event object
+    // threaded in by the caller — this function itself never reads the
+    // deprecated window.event global, so it no longer depends on being
+    // invoked synchronously with no async gap the way a window.event read
+    // silently would.
+    const trigger = ev ? (ev.currentTarget || ev.target) : null;
+    const triggerRect = trigger ? trigger.getBoundingClientRect() : null;
     let el = GF.$('gf-chooser');
     if (!el) { el = document.createElement('div'); el.id = 'gf-chooser'; el.className = 'overlay'; document.body.appendChild(el); }
     const cur = GF.$(id) ? GF.$(id).value : (cfg.value != null ? String(cfg.value) : '');
@@ -77,6 +132,20 @@ window.GF = window.GF || {};
         </div>
       </div>`;
     GF.openModal('gf-chooser');
+    // The popup's own box position/size isn't known until it's laid out, so
+    // this has to run AFTER GF.openModal() flips .overlay to display:flex —
+    // but still in this same synchronous tick, before the browser paints the
+    // animation's first frame. transform-origin is expressed in the
+    // element's OWN local coordinate space (0,0 = its own top-left corner),
+    // so the trigger's viewport-space center must be converted into an
+    // offset from the popup's box, not used as a raw viewport coordinate.
+    if (triggerRect) {
+      const modalEl = el.querySelector('.sel-modal');
+      const modalRect = modalEl.getBoundingClientRect();
+      const originX = (triggerRect.left + triggerRect.width / 2) - modalRect.left;
+      const originY = (triggerRect.top + triggerRect.height / 2) - modalRect.top;
+      modalEl.style.transformOrigin = `${originX}px ${originY}px`;
+    }
     const s = GF.$('sel-search'); if (s) s.focus();
   };
 

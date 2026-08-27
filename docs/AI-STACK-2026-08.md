@@ -1,0 +1,500 @@
+# KVM4 AI stack — 2026-08-16 session
+
+Groundwork for the next-generation AI layer: Letta backup, the letta-code
+deployment fix, Ollama local-model runtime, and the research that picked the
+RAG stack. RAGflow/LiteLLM deployment itself is a later session.
+
+## 1. The 62-agent Letta instance finally has a backup
+
+`letta-postgres` (DB `letta`, 761 MB — 62 agents, 9 RAG sources, three production
+dependents) had **no backup** since 2026-07-16, and the same day's code-server
+volume deletion (75 GB, see below) proved how fast a volume can vanish.
+
+| Artifact | Size | Verify |
+|---|---|---|
+| `/opt/backups/letta/letta-db-20260816.dump` (`pg_dump -Fc`) | 301 MB | `pg_restore --list` → 361 objects; sha256 `8f2e7b59…c79f15` |
+| `/opt/backups/letta/letta-app-data-20260816.tgz` (volume `letta_letta_data`) | 88 MB | `tar -tzf` → 4,587 files; sha256 `d5a87ec7…baca77` |
+
+Offsite: both copied to `wwf-crypt:letta-backups/20260816` and verified byte-exact
+with `rclone lsl`. Note: `wwf-gdrive` still uses rclone's shared Google client_id,
+which Google retires during 2026 — create a dedicated client_id before it breaks.
+
+## 2. code-server volume is gone (owner deletion, 2026-08-16)
+
+The owner deleted the `visual-studio-code-server-7gqe` container and its
+**72.63 GB** volume (mount has `discard` → unrecoverable). Lost with it: `fal-gen`
+(uncommitted), untracked workspace dirs, ~40 MB chat history of 9 other projects,
+`rclone.conf`/service-account JSONs/MCP configs/`/config/bin` scripts, drive-diff
+lists. Survived: **Zelena Imperija** (rescued to GitHub `3p4e/zelena_imperija` the
+day before), the RAG corpus at `/opt/data` (1.2 GB), all production stacks, all
+Letta DBs. Side effect: the dangerous bidirectional `rclone bisync` cron died with
+the container — that risk is permanently closed. `/opt` free went 36 → 115 GB
+(41% used).
+
+## 3. letta-code (`letta-6ou3`) dead image — FIXED via the Hostinger API
+
+The Hostinger catalog's Letta template had deployed **`lettaai/letta:latest`,
+built 2024-10-29** — the abandoned image name, ~19 months older than the
+production `letta` container's `letta/letta:latest` (2026-05-14).
+
+**Fixed 2026-08-16 through the Hostinger VPS API** (`KVM4_API_TOKEN`;
+`GET/POST /api/vps/v1/virtual-machines/1231216/docker` manages the panel's
+compose projects — this is the channel for panel-stack changes, since direct
+host edits of `/docker/*` are blocked for the agent). Changes applied to the
+project compose: `image:` → `letta/letta:latest`, env
+`OLLAMA_BASE_URL=http://ollama-bm3e-ollama-1:11434`, and durable `ai-net`
+membership (service `networks:` + external network block).
+
+Gotchas hit, recorded for the future:
+- `POST …/docker/{project}/update` and `/restart` **execute immediately** (they
+  are actions, not idempotent probes). The project create/update route is
+  `POST …/docker` with `{project_name, content, environment}`.
+- The old image had written its 0.5.x schema into the pg16 DB, so current
+  Letta's alembic baseline crashed with `relation … already exists`. Verified
+  **0 agents** existed, took a safety dump
+  (`letta-6ou3-pre-reset-20260816.dump`), dropped/recreated the `letta` DB with
+  `CREATE EXTENSION vector`, restarted — migration then completed cleanly.
+
+Verified: `letta/letta:latest` running, **v0.16.8 `{"status":"ok"}` HTTP 200**
+over `https://letta-6ou3.srv1231216.hstgr.cloud/v1/health/`, and Ollama
+(v0.32.13) reachable from inside the Letta container over `ai-net`.
+
+## 4. Ollama runtime
+
+`ollama-bm3e-ollama-1` (Hostinger stack, port 32775→11434). No GPU → CPU inference
+is automatic. Applied via `docker update` (mirror into the stack's compose to
+survive recreation): **3 CPUs, 10 GB memory cap** — a model load can never starve
+the 32 production containers. Network: new **`ai-net`** bridge connects ollama +
+letta-6ou3 (LiteLLM/RAGflow join later). No swap on the host by design — swap
+makes inference thrash; the 16 GB ceiling is managed by model choice
+(practical comfort limit ≈ 8–9B params at Q4; 12B only with nothing else loaded).
+Model library budget: 60 GB of the 115 GB free.
+
+Recommended (panel) env for the stack: `OLLAMA_MAX_LOADED_MODELS=1`,
+`OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=10m`.
+
+### Model inventory (9 pulls, ~32 GB)
+
+| Model | Role |
+|---|---|
+| `qwen2.5-coder:7b` | Primary coder + function calling (20.4M pulls) |
+| `granite4.1:8b` | Enterprise tools+code (current IBM line) |
+| `qwen3:8b` | General + tools + reasoning |
+| `phi4-mini` | Fast always-on small model, tools |
+| `dolphin3:8b` | Uncensored, explicit function calling, codes |
+| `hf.co/bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF:Q4_K_M` | Uncensored coder |
+| `hf.co/huihui-ai/Huihui-gemma-4-E4B-it-qat-q4_0-unquantized-abliterated-GGUF` | Gemma4 uncensored (E4B efficient — fits the box) |
+| `bge-m3` | Embeddings, multilingual (Macedonian-capable) |
+| `qwen3-embedding:0.6b` | Embeddings, small/fast |
+
+**HF pattern:** Ollama pulls HuggingFace GGUFs directly —
+`ollama pull hf.co/<user>/<repo>:<quant>` — and everything speaking the Ollama API
+(Letta, Agent Zero, Big-AGI) can use them immediately. Caveat: hf.co pulls don't
+always carry a correct chat/tool template; smoke-test before relying on tools.
+
+**Smoke-test results (2026-08-16):** all 9 pulled OK (35.4 GB). Generation
+verified through LiteLLM → Ollama (`local-small`/phi4-mini returned an exact
+requested string). Tool-calling: `qwen2.5-coder:7b` ✅ produced the correct
+structured `get_batch_potency(batch_id=P160012)` call. **`dolphin3:8b` ❌ — its
+Ollama chat template does not support tools** (registry error "does not support
+tools"); use it for uncensored chat/code *generation* only, and use
+`qwen2.5-coder` (or a custom Modelfile with a tool template) for agentic work.
+The hf.co abliterated pulls carry the same template caveat — test before agent use.
+Ceiling options researched but not pulled: `huihui_ai/gemma-4-abliterated:12b`,
+`hf.co/mradermacher/Huihui-gemma-4-12B-coder-fable5-composer2.5-v1-abliterated-GGUF`
+(the gemma4 **coder** abliterated), `Qwen2.5-Coder-14B-abliterated`.
+
+## 5. Chosen RAG direction (deployment later)
+
+**RAGflow** (DeepDoc: OCR + layout + table-structure → CoA rows survive; hybrid
+BM25+vector; per-page citations; **native VoyageAI** embeddings/rerank) +
+**LiteLLM** as the single OpenAI-compatible gateway (DeepSeek, Kimi/Moonshot,
+Ollama, Voyage behind one endpoint + virtual keys/spend logs) + **Postgres** for
+extracted CoA numbers (SQL answers numeric questions, never retrieval) + a
+**read-only MCP** in front for Letta/apps — write credential held only by the
+ingestion job ("cannot poison the memory" enforced at the credential layer).
+First validation: one scanned bilingual SOP + one ImB CoA from `/opt/data`
+through DeepDoc to test **Macedonian Cyrillic** OCR; fallback is Tesseract
+`mkd+eng` via a pre-processing stage.
+
+Old `letta` production stack: untouched, still the only live copy of the 62
+agents until migration to the fixed letta-6ou3.
+
+## 7. Provider keys wired + vision models (2026-08-16, later the same day)
+
+The session secrets manager held real `VOYAGE_API_KEY`, `DEEPSEEK_API_KEY`,
+`MOONSHOT_API_KEY`; all three were written into `/opt/stacks/litellm/.env`.
+**Operational gotcha that cost a debugging loop: `docker restart` does NOT
+reload `env_file` — a compose recreate is required** (`docker compose up -d
+--force-recreate`). Verified through the gateway afterwards:
+
+| Provider | Result |
+|---|---|
+| Voyage (`voyage/voyage-3.5`) | ✅ 1024-dim embedding returned — RAG embedding path live |
+| DeepSeek (`deepseek/deepseek-chat`) | ✅ chat verified (API serves deepseek-v4-flash) |
+| OpenAI / Anthropic | ✅ wired (keys from letta stack) |
+| Moonshot/Kimi | ⚠️ key valid but the **account is suspended** (top-up needed); wiring ready |
+
+**Vision models** (why: RAGflow's DeepDoc covers classical OCR of scans, but
+stamps/signatures/handwriting/figures need a VLM, and it doubles as RAGflow's
+img2txt + a vision tool for Letta/Agent Zero/Big-AGI):
+
+- `glm-ocr` (2.2 GB) — document-OCR specialist (7M pulls). **✅ verified**: read a
+  test image correctly; sub-second inference once loaded. This is the local
+  vision/OCR workhorse.
+- `qwen3-vl:4b` — **❌ removed**: its vision runner crashes reproducibly on this
+  CPU (`unexpected EOF`, twice on clean loads). Re-try with a future Ollama
+  release (`ollama pull qwen3-vl:4b`).
+- cloud tier: OpenAI vision already available through LiteLLM.
+
+Model library: 10 models / ~38 GB.
+
+## 8. RAGflow pipeline configured + Macedonian Cyrillic VALIDATED
+
+Models (set via the RAGflow UI, which creates *provider instances* with 3-part
+IDs `model@INSTANCE@Factory` — the API's legacy `add_llm` makes 2-part IDs the
+parser rejects, so **always configure models in the UI**):
+
+| Role | Model |
+|---|---|
+| Chat | `deepseek-v4-pro@DEEPSEEK_API@DeepSeek` |
+| Embedding | `voyage-3-large@VOYAGE_AI@Voyage AI` |
+| **VLM / page reader** | **`gemini-2.5-flash@GEMINI_BN@Gemini`** |
+| Rerank | `rerank-2.5@VOYAGE_AI@Voyage AI` |
+| ASR / TTS | `whisper-1` / `tts-1` (OpenAI) |
+
+### The Cyrillic finding (the go/no-go test — now GO)
+
+**DeepDoc cannot read Cyrillic.** Its bundled OCR (PaddleOCR-derived) has no
+Cyrillic character set and silently substitutes look-alike Latin glyphs, so it
+fails *quietly* rather than erroring:
+
+- `СТАНДАРДНА ОПЕРАТИВНА ПРОЦЕДУРА` → `CTAHAAPAHA OnEPATNBHA NPOLEAYPA`
+- `Параметар` → `IapaMerap`, `Резултат` → `Pe3yJITaT`
+- Cyrillic chars per chunk: **0**. English + table structure were fine.
+
+**Fix: set the KB's PDF parser (`layout_recognize`) to the VLM, not DeepDOC.**
+Re-parsed the same two real documents (`ППК26031.pdf` scanned ImB CoA,
+`QCSOP 012 v.02.pdf`) through `gemini-2.5-flash`:
+
+- Cyrillic chars per chunk: **0 → 499 / 801**
+- Exact: `Универзитет „Св. Кирил и Методиј“, Скопје, Фармацевтски факултет`,
+  `Проф. д-р Марија Карапанџова`, `BLQ - под лимит на квантификација`
+- Chemistry preserved: `Вкупно Δ9-THC — сума на содржина на Δ9-ТНС и Δ9-ТНСА х 0.877`
+- Tables emitted as clean **markdown**; fewer, cleaner chunks (CoA 6 → 2),
+  embedding 0.52 s.
+
+### Second bug: the `\n` delimiter eats the letter "n"
+
+RAGflow stores the default chunk delimiter as the literal 2-char string `\n`
+and applies it as a **character class**, so it also splits on `n`:
+`Testing` → `Testi⏎g`, `Orange Punch` → `Ora⏎ge Pu⏎ch`. Cyrillic `н` is
+unaffected, which makes it easy to miss. **Set `delimiter` to a real newline**
+in `parser_config`; verified clean afterwards (`Manufacturing`, `Annex`,
+`Sampling`, `Guidelines` all intact).
+
+### Standing config for every new KB
+PDF parser = `gemini-2.5-flash` (**never DeepDOC for MK**), embedding =
+`voyage-3-large`, delimiter = real newline. **The embedding model is locked at
+KB creation** — set it before creating the real KBs. Test KBs left in place:
+`TEST_CYRILLIC_VALIDATION` (DeepDoc, bad), `MK_VLM_TEST` (VLM, good).
+
+### Catalogue seeding caveat (v0.26.4)
+The model catalogue ships **empty** — `init_llm_factory()` is commented out in
+`api/db/init_data.py`, so `--init-model-provider-tables` reports success and
+seeds nothing, and every `add_llm` fails "factory not allowed". Seeded 66
+factories / 1063 models directly from `conf/llm_factories.json` via
+`LLMFactoriesService`/`LLMService`. Note `model_type` there may be a *list*, and
+vision capability is carried in the `tags` field (`IMAGE2TEXT`), not
+`model_type`. Re-check after any RAGflow upgrade.
+
+## 9. Host reboot (owner, 2026-08-16 ~13:50 UTC) — recovery notes
+
+All deployed stacks self-recovered (`restart: unless-stopped`); the Ollama
+CPU/memory caps and `ai-net` membership **survived the reboot** (docker
+persists both). Traefik-routed services 502 for the first ~2 minutes while
+apps boot — not a failure. Two containers with a non-restart policy stayed
+down and were started manually: `deepseek-tui`, `open-webui-deal`. WWF
+production `/health/ready` green post-reboot; RAGflow and letta-6ou3 URLs
+back to 200/ok.
+
+## 6. Deployed this session: LiteLLM + RAGflow (2026-08-16, same day)
+
+**LiteLLM** — `/opt/stacks/litellm`, container `litellm` on `ai-net`, 1 CPU/1 GB.
+Master key generated (0600 `.env`); OpenAI+Anthropic keys staged from the
+letta-6ou3 stack env (values never displayed); `VOYAGE_API_KEY`,
+`DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY` are **empty placeholders — owner fills
+them in `/opt/stacks/litellm/.env` and `docker restart litellm`**. Routes:
+`openai/*`, `anthropic/*`, `deepseek/*`, `moonshot/*`, `voyage/*`, plus local
+`local-coder|general|uncensored|small|embed` → Ollama. Verified: liveliness 200,
+chat round-trip via gateway → phi4-mini exact-string reply.
+
+> **Updated 2026-08-17:** the `deepseek/*` wildcard was replaced by explicit
+> `deepseek/deepseek-v4-flash` / `-pro` entries carrying
+> `extra_body: {thinking: {type: disabled}}`, and LiteLLM is now a registered
+> Letta provider serving the `gf_*` fleet. The wildcard could not carry the
+> per-model param that DeepSeek's thinking mode requires, and advertised four
+> models DeepSeek no longer serves. Full reasoning, the two Letta bugs behind it,
+> and the live verification: `LETTA-DEEPSEEK-VIA-LITELLM-2026-08.md`.
+> `DEEPSEEK_API_KEY` is no longer an empty placeholder.
+
+**RAGflow v0.26.4** — `/opt/stacks/ragflow`, official docker dir at the pinned
+tag, dedicated 6-container stack (`ragflow-cpu`, `es01` ES 8.11.3, MySQL 8,
+valkey Redis, MinIO) with its own volumes/network and generated 0600 secrets.
+Adaptations from stock: `MEM_LIMIT` 8 GB→2 GB per service, web ports 80/443 →
+**8090/8493** (Traefik owns 80/443), `docker-compose.override.yml` adds `ai-net`
++ Traefik labels. Gotcha for operators: `.env` sets
+`COMPOSE_PROFILES=elasticsearch,cpu` — run plain `docker compose up -d`; an
+explicit `--profile cpu` overrides the list and silently drops ES.
+Verified: all 6 healthy, ES cluster **green**, HTTP 200 on :8090 and on
+**https://ragflow.srv1231216.hstgr.cloud** (LetsEncrypt via existing Traefik).
+Post-deploy owner steps: create the admin account on first visit; add the
+Voyage key under Model providers (embeddings + rerank); per owner decision
+RAGflow starts on **cloud models, not Ollama**.
+
+Host after everything: MemAvailable ≈ 3 GB idle with the full RAGflow stack up —
+as predicted, heavy ingestion and large local-model inference should not run
+simultaneously. Disk: 63 GB free after all images/models.
+
+## 10. OpenAI vision enabled + full VLM parser bake-off (2026-08-16)
+
+### Enabling OpenAI as a VLM (catalogue patch)
+RAGflow's shipped catalogue declares OpenAI's 20 vision models with
+`model_type: "chat"`, carrying vision only in the `tags` string, while Gemini and
+12 other providers use `model_type: ['image2text','chat']`. The provider API reads
+`model_type` and ignores `tags`, so OpenAI never appeared in the VLM dropdown.
+`common/settings.py:249` loads `conf/llm_factories.json` at runtime, so the fix is a
+patched file:
+
+- `/opt/stacks/ragflow/llm_factories.json` (+ `.orig` for rollback), OpenAI-only
+  edit: vision-tagged models get `model_type: ["image2text","chat"]` (20 patched,
+  Gemini's 6 untouched).
+- Mounted read-only via `docker-compose.override.yml`:
+  `./llm_factories.json:/ragflow/conf/llm_factories.json:ro`
+- Verified: `GET /api/v1/providers/OpenAI/models` -> 31 models, 20 image2text.
+
+**Upgrade caveat:** the mount survives restarts but a RAGflow image upgrade ships a
+new catalogue - re-apply and re-verify after upgrading.
+
+**Instance naming:** models are addressed `model@INSTANCE@Factory`. This tenant has
+two OpenAI instances, `OPEN_AI_API` and `OPEN_AI_SERV` (one per key) - using a
+wrong instance name fails with "Instance ... not found".
+
+### Parser bake-off - same scanned CoA (`ППК26031.pdf`), same embedding/delimiter
+
+| Parser | Cyrillic | Tables | Values | Verdict |
+|---|---|---|---|---|
+| **gemini-2.5-flash** | ~1377 | markdown preserved | correct | **standard** |
+| gemini-2.5-flash-lite | 1355 | flattened to parallel lists | correct | narrative SOPs only |
+| gpt-4o-mini (OpenAI) | 1155 | none | **WRONG** | **reject for CoAs** |
+| gemini-2.0-flash / -lite | 0 | - | - | silent failure, DONE with 0 chunks |
+| DeepDoc (built-in) | 0 | yes | no Cyrillic at all | reject |
+
+**Why gpt-4o-mini is rejected:** it reported `Вкупно CBD = 88.90 %` where both
+Gemini models independently read `0.02 %` - and 88.90 % is chemically impossible in
+dried flower. It also read `∆9-THCA` as 8.29 % vs 8.89 %, dropped a digit from the
+batch number (`OPM12501` vs `ОРМ112501`), and mangled Macedonian technical terms
+(`губиток` -> `гутботок`). Wrong numbers on a CoA propagate into batch disposition,
+so this is disqualifying regardless of cost.
+
+**Standing rule:** PDF parser = `gemini-2.5-flash` for CoAs and specifications;
+`gemini-2.5-flash-lite` acceptable for narrative SOPs if cost matters. OpenAI vision
+remains available for non-critical image work.
+
+### Baidu Unlimited-OCR - evaluated, declined
+MIT licensed, OpenAI-compatible API via vLLM/SGLang - clean fit architecturally, but
+**requires an NVIDIA GPU with CUDA** (CUDA 13.0/Hopper images, no CPU path). KVM4 is
+4 vCPU / 16 GB / **no GPU**, so it cannot run here. Cyrillic support is undocumented.
+Its only edge over Gemini is physical data sovereignty; paid-tier Gemini already
+excludes prompts/files from training and human review contractually (only the free
+tier permits both). Revisit only if policy requires that no document leaves the
+facility - and test Cyrillic before committing to GPU spend.
+
+## 11. Ollama security: public exposure found and closed (2026-08-16)
+
+**The Ollama server was publicly reachable, unauthenticated.** The Hostinger
+template shipped `ollama-bm3e` with a Traefik route (`ollama-bm3e.srv1231216.hstgr.cloud`)
+AND a published host port. Ollama has **no built-in auth**, so from outside the
+network `GET /api/tags` listed all models, and `POST /api/pull` (disk-fill DoS),
+`DELETE /api/delete`, `POST /api/create` were all open. With RAGflow using it for
+OCR, confidential (`СТРОГО ДОВЕРЛИВО`) documents would have been processed by an
+internet-facing service.
+
+**Closed via the Hostinger VPS API** (`POST …/docker` on project `ollama-bm3e`):
+removed the Traefik labels, dropped `ports:` (now `expose: 11434` only), made
+`ai-net` membership + resource limits durable in the compose. Verified from
+outside: public URL → 404, host port → refused; from inside: RAGflow → Ollama on
+`ai-net` still works. Rollback JSON at `/opt/ai-stack/ollama-bm3e-compose.orig.json`.
+**Any Hostinger AI-app template may ship a public route — audit each one.**
+
+## 12. Local-model reality on this box (4 vCPU / 16 GB / no GPU)
+
+Extensive testing on the real scanned CoA `ППК26031.pdf` (150-DPI A4, 1241×1755):
+
+### Vision / OCR bake-off (local)
+| Model | Size | Cyrillic | Table | Values | Time | Verdict |
+|---|---|---|---|---|---|---|
+| **`qwen2.5vl:3b`** | 3.2 GB | ✅ 744 | ✅ **perfect markdown** | ✅ all correct | 336 s | **local winner** |
+| `glm-ocr` | 2.2 GB | ✅ 1277 | ❌ flattened to lists | ✅ | 295 s | removed |
+| `granite3.2-vision:2b` | 2.4 GB | ❌ 0 | ❌ | ❌ repeating-`1` loop | 681 s | removed |
+| `deepseek-ocr` | 6.7 GB | — | — | OOM-killed | — | removed |
+| `fredrezones55/chandra-ocr-2` | 5.8 GB | — | — | OOM-killed | — | removed |
+
+`qwen2.5vl:3b` is the only local model whose output is QC-grade: real
+analyte/limit/result markdown table, correct values (8.06 / 8.89 / 8.00 / 0.20 /
+BLQ), verbatim chemistry footnotes, one typo in the whole page (`Искрра`). Kept as
+the **sole local vision model** for documents too sensitive to send off-site.
+Everything ≥5.8 GB OOMs even post-reboot with ~10 GB free — the practical model
+ceiling here is ~3–4 GB weights; a dense 8B runs but is unreliable under load.
+
+### Dense vs MoE (text) — MoE LOSES on CPU
+Owner hypothesis was that MoE would fit/run better. Tested on the same box:
+| Model | Type | Active | tok/s |
+|---|---|---|---|
+| `phi4-mini` | dense 3.8B | 3.8B | **12.2** |
+| `Huihui-MoE-5B-A1.7B` | MoE | 1.7B | **2.6** (~5× slower) |
+| `Huihui-MoE-4.8B-A1.7B` (MXFP4) | MoE | 1.7B | broken quant (`EOF`) |
+| `qwen3:8b` | dense 8B | 8B | OOM under reasoning+context |
+
+**MoE saves compute, not RAM** — all experts stay resident, so a 12B-A4B still needs
+~8 GB. And on CPU the routing overhead + memory-bandwidth limit erased the
+fewer-active-params advantage: the dense 3.8B ran **4.7× faster** than the 1.7B-active
+MoE. MoE wins on GPUs, not here. Both MoE models removed. Also: Ollama rejects the
+`hf.co`→`huggingface.co` redirect on some GGUF repos (`realm host` error), and the
+`MXFP4_MOE` quant is unsupported by this Ollama version.
+
+## 13. Config changes + standing decisions
+
+- **Ollama memory cap removed** (owner request) — `mem_limit=0`; 3-CPU cap kept so a
+  load can't starve production of cores. Caveat recorded in the compose: with no
+  memory limit a runaway model can now OOM-kill **any** container (incl. the
+  WWF/Letta DBs), not just the ollama process.
+- **RAGflow OCR = `gemini-2.5-flash`** (owner decision) — corpus parser; ~$2.36 /
+  1000 pages, complete metadata capture. `qwen2.5vl:3b` via Ollama is the local
+  fallback for sensitive docs (wire in the RAGflow UI: Ollama provider, `img2txt`,
+  `qwen2.5vl:3b`, base URL `http://ollama-bm3e-ollama-1:11434`).
+- **RAGflow test datasets deleted** — the 8 VLM/OCR bake-off datasets removed; RAGflow
+  clean for real KB creation. Reminder: **embedding model locks at KB creation**, set
+  `voyage-3-large` first; PDF parser never DeepDOC for Cyrillic; delimiter a real
+  newline not `\n`.
+- **Ollama roster after cleanup:** `qwen2.5vl:3b` (vision), `phi4-mini` (fast general),
+  `qwen2.5-coder:7b` + abliterated coder (code), `dolphin3:8b` + `gemma-4-E4B`
+  (uncensored), `granite4.1:8b` (general/tools), `bge-m3` + `qwen3-embedding` (embed).
+
+## 14. Ollama roster re-cut → uncensored agents (2026-08-16)
+
+Owner asked to strip the roster down to `qwen2.5vl:3b` (vision) + `phi4-mini` (fast
+general) and add **uncensored (abliterated)** models under 8B that can use **tools,
+code, and vision**. Deleted 7 (`qwen3-embedding:0.6b`, `qwen2.5-coder:7b`, the
+abliterated Qwen2.5-Coder-7B, `Huihui-gemma-4-E4B`, `granite4.1:8b`, `dolphin3:8b`,
+`bge-m3`), then searched HF for GGUF-packaged, Ollama-runnable abliterated builds.
+
+**Reality of "tools + code + vision in one <8B uncensored model" on this box:** no
+single model delivers all three in Ollama 0.32.14. Findings, all tested on the box
+(`/api/chat` + `/api/generate` over `ai-net`):
+
+| Model (Ollama tag) | Size | text | tools | code | vision | verdict |
+|---|---|---|---|---|---|---|
+| `hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` | 3.3 GB | ✅ | ✅ (clean `tool_calls`) | ✅ | ❌ **runner crash** | **kept** — uncensored agent |
+| `hf.co/bartowski/mlabonne_Qwen3-4B-abliterated-GGUF:Q4_K_M` | 2.5 GB | ✅ | ✅ | ✅ | — | **kept** — uncensored text agent (thinking) |
+| `hf.co/mradermacher/Huihui-Qwen3-4B-Instruct-2507-abliterated-GGUF` | 2.5 GB | ⚠️ | ✗ | ⚠️ | — | **deleted** — broken template |
+| `hf.co/prithivMLmods/Qwen3-4B-2507-abliterated-GGUF` | 2.5 GB | ⚠️ | ✗ | ⚠️ | — | **deleted** — same bug |
+| `huihui-ai/Huihui-Qwen3.5-4B-abliterated` | — | — | — | — | — | **not pulled** — repo ships only safetensors + mmproj (no main GGUF); `qwen3_5` too new for this llama.cpp |
+
+Gotchas proven this round:
+- **Qwen3-VL vision is broken in Ollama 0.32.14.** The mmproj *does* download (VL tag is
+  3.3 GB = 2.5 GB quant + ~0.8 GB `mmproj-F16`), the chat template correctly advertises
+  `[tools completion vision]`, text/tools/code all work — but any image request dies mid
+  vision-encode: `error: unexpected EOF` during `process_mtmd … encoding mtmd batch`,
+  and it is **not** image-size (crashes identically at 1241 px and 896 px). It's the
+  Ollama-mtmd × Qwen3-VL path, not resources. **Vision stays on `qwen2.5vl:3b`**, whose
+  mtmd path works. (Abliteration buys nothing for OCR anyway — refusals aren't the
+  failure mode when transcribing a CoA.)
+- **`…-2507-abliterated` GGUFs (mradermacher & prithivMLmods) are unusable in Ollama:**
+  the repackaged template routes *all* real output into the `thinking` channel, leaving
+  `message.content` empty and `<tool_call>` tags unparsed (`tool_calls: null`). The
+  original **`mlabonne_Qwen3-4B-abliterated`** (bartowski GGUF) does not have this —
+  `content` populates, `thinking` is separated, tool calls parse. Prefer that lineage.
+
+**Final roster (4 models, ~11.5 GB, /opt at 67%):**
+`qwen2.5vl:3b` (vision/OCR) · `phi4-mini` (fast general) ·
+`hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` (uncensored
+tools+code+text) · `hf.co/bartowski/mlabonne_Qwen3-4B-abliterated-GGUF:Q4_K_M`
+(uncensored text agent, thinking).
+
+## 15. Spike: llama.cpp container for uncensored vision (2026-08-16)
+
+Tested whether swapping the runtime rescues Qwen3-VL vision (which crashes under
+Ollama 0.32.14, §14). Ran the official `ghcr.io/ggml-org/llama.cpp:server` in a
+throwaway container on `ai-net`, `-hf noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated
+-GGUF:Q4_K_M` (auto-pulls model + `mmproj-BF16`), posted the same CoA page to the
+OpenAI-compatible `/v1/chat/completions`.
+
+- **The crash is Ollama's, not the model's.** llama.cpp loaded the multimodal model,
+  encoded the image, and generated text **end-to-end — no `unexpected EOF`.** Ollama
+  ships an older/buggier llama.cpp for the Qwen3-VL `mtmd` path.
+- **But unusable on CPU.** The un-quantized BF16 vision tower on 4 cores: image-encode
+  took minutes, generation crawled at **~0.76 tok/s** (`n_gen=244, tg=0.76 t/s`) →
+  **~10+ min/page**. The only mmproj quants offered are BF16/F16/F32 (all heavy).
+
+**Conclusion:** local uncensored vision is blocked by **CPU-only hardware**, not the
+runtime — no engine swap fixes it. Practical stack is unchanged: **Gemini** for OCR,
+`qwen2.5vl:3b` as the only fast-enough *local* vision, the two uncensored 4B agents for
+tools/code/text. llama.cpp is the better *engine* (newer, OpenAI-native, no vision
+crash, leaner than LM Studio) but changes nothing for this workload on this box; a GPU
+host is the real unlock. Spike fully torn down (containers, volume, HF cache, image).
+
+## 16. Resolution: RAM contention (not CPU) + vaultbox qwen3.5 wins (2026-08-16)
+
+§15's "CPU is the wall, ~1 tok/s, unusable" conclusion was **wrong** — it was **RAM
+contention**, and a better model then solved the whole thing natively in Ollama.
+
+**The RAM-contention correction.** The ~0.76–1 tok/s in §15 was measured while the box
+had only ~4.8–6 GB free (RAGflow ~5.5 GB + a zoo of idle agents: agent-zero 1.3 GB,
+big-agi, 3× Letta, sentinel, collabora…). After stopping agent-zero/big-agi/sentinel
+and a reboot (~10 GB free), the **same** llama.cpp + Qwen3-VL-4B ran at **8.8 tok/s gen
++ ~42 s image-encode** (llama.cpp's own `timings`: `predicted_per_second 8.81`) — a
+~9–10× jump. The bottleneck was memory pressure/thrashing on a **0-swap** box, not the
+CPU ceiling. Lesson: on 16 GB with RAGflow resident, a local VLM needs the headroom
+*free* — one model on demand, not concurrent with heavy RAGflow parsing.
+- Caveat found: greedy decode (temp 0, no repeat penalty) makes the raw Q3 GGUF **loop**
+  on a full page (`…П. П. П.` forever). Needs `repeat_penalty`/`presence_penalty`.
+
+**Ollama upgrade (option to fix Qwen3-VL in Ollama) is a dead end:** already on the
+newest Ollama — **v0.32.14, released Aug 15 2026** (nothing newer). Ollama vendors a
+*forked* llama.cpp that lags upstream on the `qwen3vl` mtmd path; release notes show no
+Qwen3-VL fix. So "upgrade Ollama" has nowhere to go until maintainers catch up.
+
+**The winner — `vaultbox/qwen3.5-uncensored:4b` (arch `qwen35`, 4.7B, Q4_K_M, 3.4 GB,
+262K ctx).** A proper Ollama-registry model that passes the **full battery natively in
+Ollama**:
+- content ✅ (clean, `think:false`, no thinking-leak) · tools ✅ (parsed `tool_calls`)
+- **vision ✅ — works in Ollama**, where `qwen3vl` crashes. `qwen35` mtmd IS supported by
+  Ollama 0.32.14's llama.cpp. Encode ~34 s + **8.26 tok/s**; excellent Cyrillic
+  ("MKE EN ISO/IEC 17025", bilingual header, ППК26031, "Orange Punch Mimosa серија
+  OPM112501", got **канабис** right where noctrex wrote "канибис"), **no repetition
+  loop** — its Modelfile bakes `presence_penalty 1.5`.
+- Corrects §14's "`qwen3_5` too new for this llama.cpp" — that was a HF repo with no
+  GGUF; Ollama's build runs `qwen35` incl. vision fine.
+
+**Rejected — `fredrezones55/Gemma-4-Uncensored-HauhauCS-Aggressive` (arch `gemma4`, 8B,
+6.3 GB):** **OOM-killed on load** (`llama-server … signal: killed`, SIGKILL at 30 s) —
+8B + `gemma4a` CLIP projector + KV needs ~8 GB, only ~6 GB free → won't even load. Also
+wrong trade regardless: 8B (heavier/slower on CPU), Gemma has no real tool-calling
+template, and "aggressive" abliteration risks faithfulness in a QMS/OCR context.
+
+**Net:** no runtime switch, no llama.cpp sidecar needed — uncensored vision+tools+code
+runs in the Ollama you already have, via a 4.7B model, provided the RAM is kept free.
+Local vision is ~3 min/page → an overnight-batch option; **Gemini stays the bulk-OCR
+path** (faster, zero-tuning, paid-tier private). Treat vaultbox (unknown publisher) as
+an OCR assistant whose output is human-verified — which CoA review provides anyway.
+
+**Final Ollama roster (4 models, ~12.4 GB, /opt ~66%):**
+- `vaultbox/qwen3.5-uncensored:4b` — uncensored all-rounder: **vision + tools + code**
+- `hf.co/noctrex/Huihui-Qwen3-VL-4B-Instruct-abliterated-GGUF:Q4_K_M` — uncensored
+  **coding/tools** agent (its vision is dead in Ollama; kept for code)
+- `qwen2.5vl:3b` — light/fast local vision
+- `phi4-mini` — fast general
+Deleted this round: Gemma-4-Aggressive (OOM), `mlabonne_Qwen3-4B` (superseded by
+vaultbox). To wire vaultbox as RAGflow's local VLM: Ollama provider, `img2txt`,
+`vaultbox/qwen3.5-uncensored:4b`, base URL `http://ollama-bm3e-ollama-1:11434`.

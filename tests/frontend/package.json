@@ -1,0 +1,12 @@
+{
+  "name": "wwf-web-unit",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Unit tests for web/gf/*.js — the real sources, loaded into a jsdom window as classic <script> tags. Run with `npm ci && npm test`.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "jsdom": "26.1.0"
+  }
+}

@@ -55,11 +55,11 @@ GF.export = {
     let csv = '\uFEFF';
     csv += `${esc('GrowFlow Export')},${esc('W' + w.weekNum)},${esc(w.label)},${esc(new Date().toLocaleDateString())}\n`;
     csv += `${esc('User')},${esc(u.name)},${esc(u.roleLabel)}\n\n`;
-    csv += 'ID,Title,Department,Status,Priority,Days,Owner,Progress Notes\n';
+    csv += 'ID,Title,Department,Status,Priority,Type,Reference,Due Date,Tags,Archived,Days,Owner,Progress Notes\n';
     tasks.forEach(t => {
       const d = GF.dep(t.dept);
       const notes = (t.notes || []).map(n => `${n.d}: ${n.n}`).join(' | ');
-      csv += `${t.id},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(notes)}\n`;
+      csv += `${esc(t.id)},${esc(t.title)},${esc(d.name)},${t.status},${t.pr},${esc(t.type || '')},${esc(t.ref || '')},${esc(t.due || '')},${esc((t.tags||[]).join(', '))},${t.archived ? 'Y' : 'N'},${esc((t.days||[]).join(','))},${esc(GF.PEOPLE[t.owner]?.name)},${esc(notes)}\n`;
     });
     this._download(csv, base + '.csv', 'text/csv');
   },
@@ -73,6 +73,7 @@ GF.export = {
       telemetry: { total: tasks.length, done, rate: tasks.length ? Math.round(done / tasks.length * 100) : 0 },
       tasks: tasks.map(t => ({
         id: t.id, title: t.title, dept: t.dept, status: t.status, pr: t.pr,
+        type: t.type, ref: t.ref, due: t.due, tags: t.tags, archived: t.archived,
         days: t.days, owner: t.owner, notes: t.notes, deps: t.deps,
       })),
     };
@@ -81,13 +82,15 @@ GF.export = {
 
 };
 
-// ── Rollover ──
-GF.rollover = () => {
-  const weekId = GF.state.selWeek;
-  const nextId = weekId + 1;
-  const incomplete = GF.weekTasks(weekId).filter(t => t.status !== 'done');
-  if (!incomplete.length) { GF.toast(AL('All tasks are done — nothing to roll over', 'Сите задачи се завршени — нема што да се пренесе'), 'info'); return; }
-  incomplete.forEach(t => { t.weekId = nextId; });
-  GF.store.save(); GF.render.all();
-  GF.toast(AL(`${incomplete.length} task(s) rolled to next week`, `${incomplete.length} задача(и) пренесени во следната недела`), 'success');
-};
+// ── Rollover lives in integrate.js ──
+// It used to be defined here too, and that copy was DEAD: index.html loads
+// integrate.js after export.js, so its async, API-backed GF.rollover replaced
+// this one at startup, every time.
+//
+// Deleted rather than left in place because the dead copy was also WRONG — it
+// mutated t.weekId in memory and called GF.store.save(), the abandoned
+// client-side store, so it persisted nothing to the server. It also invented
+// `selWeek + 1` as the next week, which integrate.js deliberately does not do
+// (there is no API to create a calendar_weeks row, so it refuses when the next
+// week does not exist yet). Anyone who reordered these two script tags would
+// have silently restored a rollover that appears to work and saves nothing.

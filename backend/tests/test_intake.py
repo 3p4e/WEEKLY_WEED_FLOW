@@ -80,6 +80,19 @@ async def test_extract_short_text_rejected(client, admin_headers, org):
     assert r.status_code == 422
 
 
+async def test_extract_requires_elevated_role(client, admin_headers, org):
+    """/intake/extract performs the same bulk-extraction capability as
+    /ai/task_extract, which is ELEVATED_ROLES-only ("the API must enforce it
+    regardless of the client") — a base USER must be refused here too, not
+    just at the /ai door."""
+    from tests.conftest import create_user, login_and_set_password
+    user, otp = await create_user(client, admin_headers, role="USER")
+    tok = await login_and_set_password(client, user["username"], otp)
+    h = {"Authorization": f"Bearer {tok}"}
+    r = await client.post("/intake/extract", json={"text": "please extract these tasks now"}, headers=h)
+    assert r.status_code == 403
+
+
 def test_prompt_demands_bilingual_output():
     """Every extracted task must be bilingual МК | EN regardless of the source
     document's language — the requirement lives in the extraction prompt."""

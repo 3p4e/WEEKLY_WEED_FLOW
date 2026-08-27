@@ -6,9 +6,11 @@ server-side, and download header passthrough.
 """
 import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.api import qms as qms_mod
 from app.config import settings
+from app.docengine import _assert_forwardable
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -216,3 +218,70 @@ async def test_studio_real_client_injects_key(de_configured):
         assert str(c.base_url).startswith(settings.docengine_url)
     finally:
         await c.aclose()
+
+
+# ──────────────────── H1: forwarded-path traversal guard ────────────────────
+# The five studio routes below interpolate a caller-supplied segment into the
+# forwarded path with only a length cap. `..` is a single path segment, so it
+# satisfies FastAPI's `[^/]+` matching and arrives intact — and httpx's
+# RFC-3986 join then collapses the dot segments, landing the request on an
+# internal DocEngine endpoint the explicit route surface exists to bound. The
+# guard lives at the shared choke point (app/docengine.de_forward) so all five
+# inherit it, rather than five copies of the per-route predicate api/qms.py
+# already carries in document() and download().
+
+_STUDIO_ID_ROUTES = [
+    "/qms/studio/questionnaires/{}",
+    "/qms/studio/workflows/{}",
+    "/qms/studio/documents/{}",
+    "/qms/studio/documents/{}/download",
+    "/qms/studio/documents/{}/pdf",
+]
+
+# `%2e%2e` rather than a literal `..`: httpx (the test client) applies dot-segment
+# removal to the request URL itself, so a literal `..` never leaves the client.
+# Percent-encoded, it survives to the ASGI layer, which unquotes it back to `..`
+# — exactly the shape a non-normalizing HTTP client sends.
+@pytest.mark.parametrize("route", _STUDIO_ID_ROUTES)
+@pytest.mark.parametrize("payload", ["%2e%2e", "a%5Cb", "%5C%5Cevil.example"])
+async def test_studio_rejects_traversal_in_id(client, admin_headers, de_configured,
+                                              monkeypatch, route, payload):
+    _stub_de(monkeypatch, _FakeResponse(json_data={"ok": True}))
+    _FakeDEClient.last = None
+    r = await client.get(route.format(payload), headers=admin_headers)
+    assert r.status_code == 400, (route, payload, r.text)
+    assert r.json()["detail"] == "Invalid DocEngine path"
+    # rejected before the upstream is contacted at all
+    assert _FakeDEClient.last is None or _FakeDEClient.last.requests == []
+
+
+_GOOD_DE_PATHS = ["/documents", "/documents/abc", "/documents/abc/download",
+                  "/documents/abc/pdf", "/questionnaires/sop_qc", "/build",
+                  "/workflows", "/workflows/j1"]
+
+# Includes shapes no route can produce today but a future caller could: a
+# relative path (httpx would resolve it against base_url's directory) and a
+# `//` network-path reference, which re-points the request at another host
+# entirely, past base_url.
+_BAD_DE_PATHS = ["/documents/..", "/..", "/../etc", "documents/abc",
+                 "//evil.example/x", "/documents//abc", "/documents/a\\b",
+                 "/documents/..%2f/x".replace("%2f", "/")]
+
+
+@pytest.mark.parametrize("path", _GOOD_DE_PATHS)
+def test_forwardable_allows_real_paths(path):
+    _assert_forwardable(path)              # must not raise
+
+
+@pytest.mark.parametrize("path", _BAD_DE_PATHS)
+def test_forwardable_rejects_escapes(path):
+    with pytest.raises(HTTPException) as ei:
+        _assert_forwardable(path)
+    assert ei.value.status_code == 400
+    assert ei.value.detail == "Invalid DocEngine path"
+
+
+def test_build_path_of_certificate_pipeline_is_forwardable():
+    """The two QC callers (coq_aggregation, coq_docx) forward a fixed '/build'.
+    Pinned so the guard can never regress the certificate pipeline."""
+    _assert_forwardable("/build")

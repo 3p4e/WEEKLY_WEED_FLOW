@@ -111,11 +111,23 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 [`docker-compose.yml`](docker-compose.yml) describes the deployed stack
 (Ubuntu 24.04 + Docker + Traefik on KVM4):
 
-| Service    | Image                          | Role |
-|------------|--------------------------------|------|
-| `db`       | `postgres:17-alpine`           | RLS policies + audit trigger |
-| `backend`  | `weekly_weed_flow-backend`     | FastAPI API (:8000, internal) |
-| `frontend` | `wwf-growflow`                 | nginx + GrowFlow UI, published by Traefik (HTTPS) |
+| Service          | Image                        | Role |
+|------------------|------------------------------|------|
+| `db-users`       | `postgres:17-alpine`         | Identity DB (organizations, profiles) — own RLS + audit chain |
+| `db-tasks`       | `postgres:17-alpine`         | Work DB (tasks, QC LIMS, documents) — own RLS + audit chain |
+| `backend`        | `weekly_weed_flow-backend`   | FastAPI API (:8000, internal) |
+| `scheduler`      | `weekly_weed_flow-backend`   | Same image, scheduler entrypoint — weekly snapshot + due-scan |
+| `frontend`       | `wwf-growflow`               | nginx + GrowFlow UI, published by Traefik (HTTPS) |
+| `db-backup`      | `postgres:17-alpine`         | Scheduled `pg_dump` of both databases to a local volume |
+| `backup-offsite` | `rclone/rclone:1`            | Encrypted push of those dumps to Google Drive (rclone crypt) |
+| `capture-mcp`    | `wwf-capture-mcp`            | MCP connector for task capture (`connector/`) |
+
+This table listed three services long after the stack grew to eight — the
+single `db` in particular predates the users/tasks database split. It is what
+`docker-compose.yml` defines as of the 2026-07 review. A ninth service,
+`docengine`, runs on the deployed stacks but is **not** in this compose file;
+its service block is given in [`docs/DEPLOY.md`](docs/DEPLOY.md) and applied
+there.
 
 The always-on **Letta** agent layer runs in its own pre-existing stack and is
 reached over `host.docker.internal`. Production was provisioned out-of-band, so

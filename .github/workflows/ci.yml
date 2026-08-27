@@ -5,6 +5,44 @@ on:
   push:
     branches: [main]
 
+# ── The single self-hosted runner, and how it has already failed ──────────
+# There is exactly ONE registered runner: kvm4-wwf, a container (gh-runner-wwf)
+# on the KVM4 host. Every job below says `runs-on: self-hosted`, and that is not
+# a preference — GitHub-HOSTED minutes are unavailable on this account, so a job
+# targeting `ubuntu-latest` is never assigned a runner and therefore never runs
+# at all — it queues forever and reads as "in progress", not as an error. Any new
+# workflow in this repo must say self-hosted; treat a job that never starts as
+# the first thing to check for.
+#
+# KNOWN HAZARD, NOT FIXED HERE — runner self-update can delete its own bin/.
+# The runner agent updates itself in place. An update interrupted part-way (host
+# reboot, OOM kill, container restart) has already once left the runner's `bin/`
+# directory mass-deleted; the service then crash-looped with
+# `Runner.Listener: No such file or directory`. The reason that went unnoticed
+# for FIVE DAYS is the interaction with `cancel-in-progress` below: with no
+# runner available, jobs sat *queued* rather than failing, and each pending run
+# was then cancelled the moment the next push superseded it. The run list showed
+# a tidy column of cancellations — never a red X — so CI was silently dead while
+# looking merely busy.
+#
+# The real remediation lives on the HOST and cannot be expressed in this file:
+# re-register the runner with auto-update off (`./config.sh remove`, then
+# `./config.sh --url … --token … --disableupdate`) and upgrade it deliberately
+# instead, keep a restart policy on the gh-runner-wwf container, and alarm on
+# "no runner assigned" separately — because as shown above a queued-then-
+# cancelled run is indistinguishable from a legitimately superseded one.
+# NOTHING IN THIS FILE PINS THE RUNNER VERSION. This comment is the record of
+# the hazard and of where the fix has to be applied; it is not the fix.
+#
+# The runner uses HOST networking with the docker socket mounted, so
+# tests/docengine/migrations/e2e's Postgres service containers and e2e's local
+# nginx bind fixed host ports (5432, 8091) with no per-job VM isolation to fall
+# back on. A second in-flight run for the same ref would fight over those ports,
+# so cancel any superseded run for this ref before its jobs start.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # The app runs against TWO databases (identity vs work data — separate
 # Postgres containers in production). CI mirrors that: one postgres service
 # hosting two databases, bootstrapped from the two generated schema files.
@@ -17,7 +55,10 @@ env:
 jobs:
   backend:
     name: Backend deps + import
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    # Explicit per-job timeouts: this is ONE shared self-hosted runner, so a job
+    # left hanging on GitHub's 6-hour default blocks every other branch's CI too.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,7 +98,8 @@ jobs:
 
   security:
     name: Security scan (pip-audit + bandit)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,16 +111,25 @@ jobs:
         # Scans the requirement pins WITHOUT installing them. If a pinned dep
         # grows an unfixable advisory, add a targeted `--ignore-vuln GHSA-...`
         # here with a comment explaining why — never un-block wholesale.
-        run: pip-audit --no-deps -r backend/requirements.txt
+        # docengine and connector are separately-deployed services whose pins
+        # were previously never scanned at all.
+        run: |
+          set -euo pipefail
+          pip-audit --no-deps -r backend/requirements.txt
+          pip-audit --no-deps -r docengine/requirements.txt
+          pip-audit --no-deps -r connector/requirements.txt
       - name: bandit (static analysis, medium+ severity AND confidence)
         # -ii too: without it bandit's 17 low-confidence B608 hits (f-string
         # SQL that is actually parametrized asyncpg with code-controlled
         # column lists — this codebase's established pattern) fail the job.
-        run: bandit -r backend/app -ll -ii
+        # backend/scripts is included because it ships in the same image and
+        # runs as its own deployed container (wwf-scheduler).
+        run: bandit -r backend/app backend/scripts docengine/app connector -ll -ii
 
   tests:
     name: Backend test suite
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -126,9 +177,58 @@ jobs:
           SECRET_KEY: ci-only-dummy-secret-not-used-for-anything-real
         run: python -m pytest -v
 
+  docengine:
+    name: DocEngine test suite
+    runs-on: self-hosted
+    timeout-minutes: 15
+    # docengine is a separately-deployed service with its own suite that was
+    # never executed by CI — a regression in the document-generation PASS-gate
+    # could previously merge green.
+    #
+    # The Postgres service exists because app/db.py had NO executed coverage:
+    # db.init() returns early when DOCENGINE_DATABASE_URL is empty, so the
+    # whole persistence layer was skipped and `reap_stale_jobs` shipped having
+    # never run once. Its only caller wraps it in `except Exception:
+    # log.warning(...)`, so a wrong column name would have surfaced as a
+    # startup warning nobody reads while abandoned jobs piled up forever —
+    # precisely what that function exists to prevent. tests/conftest.py SKIPS
+    # the DB-backed tests when the variable is unset, so a bare local checkout
+    # still runs; setting it here is what makes the coverage real.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r docengine/requirements.txt pytest pytest-asyncio
+      - name: Create the docengine database
+        env:
+          PGPASSWORD: postgres
+        # The app creates its own schema at init() (CREATE SCHEMA/TABLE IF NOT
+        # EXISTS), so only the database itself is needed here.
+        run: psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
+      - name: Run tests
+        working-directory: docengine
+        env:
+          DOCENGINE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/docengine_test
+        run: python -m pytest -v
+
   migrations:
     name: Alembic baselines match schema files
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -152,6 +252,15 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
+          # `set -e` alone is NOT enough here: a failing command on the LEFT of
+          # `&&` is exempt from errexit, and because the for-loop is the last
+          # command in the script the job's exit status was whatever the LAST
+          # iteration returned. With `for which in users tasks`, that meant a
+          # users-DB drift was silently swallowed (only tasks-DB drift failed
+          # the job). Every check below is now an explicit if/exit instead.
+          # `pipefail` additionally un-masks a pg_dump failure inside dump(),
+          # which grep would otherwise paper over with its own exit status.
+          set -euo pipefail
           dump() { pg_dump -h localhost -U postgres -d "$1" --schema-only --no-owner --no-privileges \
             --exclude-table=alembic_version | grep -v '^--' | grep -vE '^\\restrict|^\\unrestrict'; }
           for which in users tasks; do
@@ -163,25 +272,84 @@ jobs:
             backend/scripts/load_schema.sh $which wwf_${which}_via_schemasql -h localhost -U postgres
             dump wwf_${which}_via_alembic   > /tmp/${which}_via_alembic.sql
             dump wwf_${which}_via_schemasql > /tmp/${which}_via_schemasql.sql
-            diff /tmp/${which}_via_alembic.sql /tmp/${which}_via_schemasql.sql \
-              && echo "$which: alembic baseline matches schema.${which}.sql exactly"
+            if ! diff /tmp/${which}_via_alembic.sql /tmp/${which}_via_schemasql.sql; then
+              echo "::error::$which: alembic baseline does NOT match schema.${which}.sql (see diff above)"
+              exit 1
+            fi
+            echo "$which: alembic baseline matches schema.${which}.sql exactly"
           done
       - name: alembic downgrade cleanly reverses each baseline
         env:
           PGPASSWORD: postgres
         run: |
+          # Same errexit caveat as the diff step above — `test ... && echo` let a
+          # users-DB leftover pass silently. Explicit if/exit instead.
+          set -euo pipefail
           for which in users tasks; do
             VAR=$(echo $which | tr a-z A-Z)_MIGRATION_DATABASE_URL
             env $VAR=postgresql+asyncpg://postgres:postgres@localhost:5432/wwf_${which}_via_alembic \
               alembic -c backend/alembic.ini -n $which downgrade base
             remaining=$(psql -h localhost -U postgres -d wwf_${which}_via_alembic -tAc \
               "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name != 'alembic_version'")
-            test "$remaining" = "0" && echo "$which: downgrade removed every table it created"
+            if [ "$remaining" != "0" ]; then
+              echo "::error::$which: downgrade left $remaining table(s) behind"
+              exit 1
+            fi
+            echo "$which: downgrade removed every table it created"
           done
+
+  web-unit:
+    name: Frontend unit suite (jsdom)
+    runs-on: self-hosted
+    timeout-minutes: 10
+    # DELIBERATELY NO `services:` BLOCK — this job needs no Postgres and so must
+    # not bind host port 5432. To be precise about the risk, because the sibling
+    # jobs show the naive version of this warning is wrong: there is ONE runner
+    # registration, so jobs execute SERIALLY and two jobs of the same run can
+    # never hold 5432 at once — which is exactly why tests, docengine, migrations
+    # and e2e can all declare `5432:5432` today and pass. The real collision is
+    # ACROSS concurrent runs on the same host, which the `ci-<ref>` concurrency
+    # group above only prevents per-ref: two different branches still overlap.
+    # Every needless binding widens that window, so this job takes none. This job
+    # also lives in ci.yml rather than its own workflow for the same reason — a
+    # separate workflow would sit outside that concurrency group entirely. If it
+    # ever does need a database, give it host port 5433.
+    #
+    # web/index.html is a no-build app: ~54 classic <script src> tags sharing a
+    # window.GF global, with no imports/exports and nothing to require(). The
+    # suite therefore loads the REAL web/gf/*.js sources as <script> elements in
+    # a jsdom window, each test naming the files it needs in dependency order —
+    # no logic is copied into the tests, so deleting a line from a source file
+    # turns a test red. jsdom is the only dependency; the runner is node --test.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same major as the e2e job: `node --test` and the assertions the suite
+          # relies on are the node 22 built-ins, so there is no framework to pin.
+          node-version: '22'
+      - name: Install jsdom
+        working-directory: tests/frontend
+        # `npm ci`, not `npm install`: it installs exactly the committed
+        # package-lock.json and hard-fails if the lockfile and package.json have
+        # drifted apart, so CI can never quietly test against a different jsdom
+        # than a developer does.
+        run: npm ci
+      - name: Run unit suite
+        working-directory: tests/frontend
+        # The suite pins TZ=Europe/Skopje itself (the facility timezone the
+        # backend hard-codes as settings.snapshot_tz) and asserts the zone
+        # actually resolved, because several helpers under test are only correct
+        # BECAUSE they read local date components rather than UTC ones — under
+        # TZ=UTC that distinction disappears and the tests would pass vacuously.
+        # If this step ever fails on the tzdata assertion, the runner image is
+        # missing zone data; that is an environment fix, not a test to relax.
+        run: npm test
 
   e2e:
     name: End-to-end (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -202,6 +370,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: "Free e2e ports (self-hosted runner: a cancelled prior run's nginx/uvicorn can be orphaned past its job and block this one)"
+        run: |
+          for port in 8000 8091; do
+            pid=$(ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | grep -oP 'pid=\K[0-9]+' | sort -u)
+            [ -n "$pid" ] && kill -9 $pid 2>/dev/null || true
+          done
+          pkill -9 -f 'nginx -c /tmp/wwf-e2e-nginx.conf' 2>/dev/null || true
+          sleep 1
       - name: Install nginx
         run: sudo apt-get update -q && sudo apt-get install -y -q nginx-light
       - name: Bootstrap test roles + both schemas
@@ -249,17 +425,33 @@ jobs:
 
   images:
     name: Build container images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -t wwf-backend:ci ./backend
       - name: Build web image
         run: docker build -t wwf-web:ci ./web
+      # docengine and connector are both DEPLOYED services (docker-compose.yml)
+      # that previously had no build validation at all — a broken Dockerfile in
+      # either could merge green.
+      - name: Build docengine image
+        run: docker build -t wwf-docengine:ci ./docengine
+      - name: Build connector image
+        run: docker build -t wwf-connector:ci ./connector
+      # The runner has no per-job VM isolation, so CI images accumulate on its
+      # disk run after run unless they're cleaned up here.
+      - name: Prune CI build artifacts
+        if: always()
+        run: |
+          docker rmi -f wwf-backend:ci wwf-web:ci wwf-docengine:ci wwf-connector:ci 2>/dev/null || true
+          docker image prune -f || true
 
   compose:
     name: Validate compose stack
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: docker compose config

@@ -18,6 +18,16 @@
   .brandleaf{ width:96px; height:96px; flex:none; }
   .loginpanel{ width:360px; max-width:80%; }
   .cursor::after{ content:"▌"; color:var(--mw-cyan); animation:mw-flicker 1.1s steps(1) infinite; }
+  .bootlog > div{ opacity:0; transform:translateX(-8px); }
+  .bootlog > div.in{ opacity:1; transform:none; transition:opacity .3s ease, transform .3s ease; }
+  .loginpanel{ opacity:0; transform:translateY(12px); transition:opacity .5s ease, transform .5s ease; }
+  .loginpanel.in{ opacity:1; transform:none; }
+  /* authenticating overlay */
+  .authov{ position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; background:radial-gradient(60% 60% at 50% 45%, rgba(9,24,47,.85), var(--mw-void)); opacity:0; pointer-events:none; transition:opacity .3s ease; }
+  .authov.on{ opacity:1; pointer-events:auto; }
+  .authov__ring{ width:74px; height:74px; border-radius:50%; border:2px solid rgba(94,200,240,.18); border-top-color:var(--mw-cyan-bright); box-shadow:0 0 24px -4px var(--mw-cyan); animation:mw-spin .8s linear infinite; }
+  .authov__t{ font-family:'Saira Condensed',sans-serif; text-transform:uppercase; letter-spacing:.22em; font-size:15px; color:var(--mw-cyan-bright); text-shadow:0 0 16px rgba(94,200,240,.6); }
+  @keyframes mw-spin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -42,7 +52,7 @@
       <div class="mw-header-bar"><span class="mw-rule"></span><h2 class="mw-title mw-title--lg">Secure Access</h2><span class="mw-rule"></span></div>
       <div class="mw-field"><label>Operator ID</label><input class="mw-input" id="uid" placeholder="e.g. SHEPARD-N7" autocomplete="off"></div>
       <div class="mw-field"><label>Passphrase</label><input class="mw-input" id="pwd" type="password" placeholder="••••••••••"></div>
-      <button class="mw-btn mw-btn--wide" style="margin-top:8px;" onclick="location.href='dashboard.html'">Authenticate</button>
+      <button class="mw-btn mw-btn--wide" style="margin-top:8px;" onclick="authenticate()">Authenticate</button>
       <div style="display:flex; justify-content:space-between; margin-top:16px;">
         <button class="mw-tabbtn">Biometric</button>
         <button class="mw-tabbtn">Request Access</button>
@@ -50,7 +60,30 @@
     </div>
   </div>
 </div>
+<div class="authov" id="authov"><div class="authov__ring"></div><div class="authov__t"><span class="en">Authenticating · Node 7</span><span class="mk">Автентикација · Јазол 7</span></div></div>
 </div>
 <script type="module" src="mw-leaf.js"></script>
+<script>
+  /* Login splash showcases a RANDOM scheme per load without overwriting the
+     user's saved choice (restored on next real navigation by mw-i18n). */
+  (function(){
+    var SKINS=['alliance','spectre','flux','paragon','omega','renegade','citadel'];
+    document.documentElement.setAttribute('data-skin', SKINS[Math.floor(Math.random()*SKINS.length)]);
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('mw-theme')||'dark');
+    document.documentElement.setAttribute('data-lang', localStorage.getItem('mw-lang')||'en');
+  })();
+  /* staggered boot reveal, then hand off to the login panel */
+  (function(){
+    var lines=[].slice.call(document.querySelectorAll('.bootlog > div'));
+    lines.forEach(function(el,i){ setTimeout(function(){ el.classList.add('in'); }, 260*i + 200); });
+    setTimeout(function(){ document.querySelector('.loginpanel').classList.add('in'); }, 260*lines.length + 300);
+  })();
+  function authenticate(){
+    document.getElementById('authov').classList.add('on');
+    setTimeout(function(){ location.href='dashboard.html'; }, 1100);
+  }
+  document.getElementById('pwd').addEventListener('keydown',function(e){ if(e.key==='Enter') authenticate(); });
+</script>
+<script src="mw-i18n.js"></script>
 </body>
 </html>

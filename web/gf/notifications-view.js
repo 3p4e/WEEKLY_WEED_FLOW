@@ -8,9 +8,19 @@
 window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
 (function () {
-  const AL = (en, mk) => (GF.state.lang === 'mk' ? mk : en);
   GF.WWF._notif = { items: [], feed: [], tab: 'inbox', filter: '', unread: 0, loaded: false,
-                    moreItems: false, moreFeed: false };
+                    moreItems: false, moreFeed: false,
+                    // Last user this inbox was loaded for — a login as someone
+                    // else must reset the module state, never show their items.
+                    user: null,
+                    // Team digest (GET /notifications/digest) — lazy: nothing is
+                    // fetched until the panel is first opened.
+                    digest: null, digestWindow: 'daily', digestOpen: false, digestLoading: false,
+                    // id -> expiry ms: a notification just marked done/read locally,
+                    // guarding against a 75s-poll GET that was already in flight
+                    // (started before the action's own write landed) resurrecting
+                    // it as undone/unread when it resolves a moment later.
+                    _justDone: {}, _justRead: {} };
   const PAGE = 50;   // backend default limit on /notifications and /activity
 
   const who = (id) => (GF.PEOPLE && GF.PEOPLE[id] && GF.PEOPLE[id].name) || AL('Someone', 'Некој');
@@ -25,8 +35,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'ack':            return p.accepted
                                    ? AL(`${a} accepted: ${t}`, `${a} прифати: ${t}`)
                                    : AL(`${a} declined: ${t}`, `${a} одби: ${t}`);
-      case 'status_changed': return AL(`${a}: ${t} → ${GF.statusLabel ? GF.statusLabel(({pending:'pending',ongoing:'working',completed:'done'})[p.new] || p.new) : p.new}`,
-                                       `${a}: ${t} → ${p.new}`);
+      case 'status_changed': {
+        // Backend status enum → GF status key → localized label; statusLabel
+        // is language-aware, so the one expression serves both branches (the
+        // MK sentence used to print the raw English enum).
+        const sl = GF.statusLabel
+          ? GF.statusLabel(({ pending: 'pending', ongoing: 'working', completed: 'done' })[p.new] || p.new)
+          : p.new;
+        return AL(`${a}: ${t} → ${sl}`, `${a}: ${t} → ${sl}`);
+      }
       case 'report_locked':  return AL(`${a} locked the weekly ${p.kind} (${p.week_start})`,
                                        `${a} го заклучи неделниот ${p.kind === 'plan' ? 'план' : 'извештај'} (${p.week_start})`);
       case 'created':        return AL(`${a} created: ${t}`, `${a} креираше: ${t}`);
@@ -54,6 +71,21 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     validation_stuck: { en: 'Validation stuck', mk: 'Валидација блокирана' },
   };
 
+  // Digest "by action" labels — the events table's verb enum, pluralised as
+  // count headings (the per-event sentence above stays the detailed render).
+  const VERB_LBL = {
+    created: { en: 'Created', mk: 'Креирани' }, assigned: { en: 'Assigned', mk: 'Доделени' },
+    unassigned: { en: 'Unassigned', mk: 'Отстранети' }, commented: { en: 'Comments', mk: 'Коментари' },
+    status_changed: { en: 'Status changes', mk: 'Промени на статус' },
+    report_locked: { en: 'Reports locked', mk: 'Заклучени извештаи' },
+    ack: { en: 'Acknowledged', mk: 'Потврдени' }, due_soon: { en: 'Due soon', mk: 'Наскоро рок' },
+    overdue: { en: 'Overdue', mk: 'Задоцнети' },
+    batch_added: { en: 'Batches added', mk: 'Додадени серии' },
+    batch_moved: { en: 'Batches moved', mk: 'Преместени серии' },
+    batch_closed: { en: 'Batches closed', mk: 'Затворени серии' },
+  };
+  const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };
+
   const dayLabel = (iso) => {
     const d = iso.slice(0, 10), today = GF.localDateStr ? GF.localDateStr(new Date()) : new Date().toISOString().slice(0, 10);
     if (d === today) return AL('Today', 'Денес');
@@ -63,14 +95,14 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   };
 
   const itemRow = (n) => `
-    <div class="ntf${n.read ? '' : ' unread'}" onclick="GF.WWF.openNotif('${n.id}','${n.task_id || ''}')">
+    <div class="ntf${n.read ? '' : ' unread'}" onclick="GF.WWF.openNotif('${GF.esc(n.id)}','${GF.esc(n.task_id || '')}')">
       <div class="ntf-b">
         <div class="ntf-tt">${GF.esc(sentence(n))}</div>
         <div class="ntf-meta"><span class="ntf-reason">${GF.esc(AL(REASONS[n.reason]?.en || n.reason, REASONS[n.reason]?.mk || n.reason))}</span>
           <span class="ntf-ts">${GF.esc(n.created_at.slice(11, 16))}</span></div>
       </div>
       <button class="mini-btn ntf-done" title="${AL('Done', 'Завршено')}"
-        onclick="event.stopPropagation();GF.WWF.notifDone('${n.id}')">${GF.icon('check', 'icon')}</button>
+        onclick="event.stopPropagation();GF.WWF.notifDone('${GF.esc(n.id)}')">${GF.icon('check', 'icon')}</button>
     </div>`;
 
   // Timeline dot colour by verb class (mockup .mw-feed): completions and
@@ -97,15 +129,61 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     return out || `<div class="ntf-empty">${AL('All clear — nothing here.', 'Сè е чисто — нема ништо.')}</div>`;
   };
 
+  /* ── Team digest panel — "what did my team do", daily/weekly, over the
+     same dept-scoped events feed (GET /notifications/digest). Collapsed by
+     default; the digest is fetched lazily on first open, never as part of a
+     plain notifications render. */
+  const digestPanel = () => {
+    const st = GF.WWF._notif;
+    const dg = st.digest;
+    const win = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.digestWindow === id ? 'btn-primary on' : ''}"
+      onclick="event.stopPropagation();GF.WWF.setDigestWindow('${id}')">${lbl}</button>`;
+    let body = '';
+    if (st.digestOpen) {
+      if (st.digestLoading || !dg) {
+        body = `<div class="panel-body"><div class="mw-skel" style="height:52px"></div></div>`;
+      } else {
+        const verbChips = (dg.by_verb || []).map(v =>
+          `<span class="chip-opt">${GF.esc(verbLabel(v.verb))} · ${Number(v.count) || 0}</span>`).join('');
+        const actorChips = (dg.by_actor || []).map(a =>
+          `<span class="chip-opt who">${GF.avatar ? GF.avatar(a.actor_id, 18) : ''}${GF.esc(who(a.actor_id))} · ${Number(a.count) || 0}</span>`).join('');
+        const empty = `<span class="ntf-empty">${AL('No activity in this window.', 'Нема активност во овој период.')}</span>`;
+        body = `<div class="panel-body">
+          <div class="sec-label">${AL('By action', 'По дејство')}</div>
+          <div class="chips">${verbChips || empty}</div>
+          <div class="sec-label">${AL('By person', 'По лице')}</div>
+          <div class="chips chips-who">${actorChips || empty}</div>
+          <div class="sec-label">${AL('Recent', 'Неодамнешни')}</div>
+          <div class="ntf-list">${grouped((dg.recent || []).slice(0, 12), feedRow)}</div>
+        </div>`;
+      }
+    }
+    return `<div class="panel" style="margin-bottom:12px">
+      <div class="panel-head" onclick="GF.WWF.toggleDigest()" style="cursor:pointer">
+        ${GF.icon('trend', 'icon')}<span class="ttl">${AL('Team digest', 'Тимски преглед')}</span>
+        ${st.digestOpen && dg ? `<span class="cnt">${Number(dg.total) || 0}</span>` : ''}
+        <div class="spacer"></div>
+        ${st.digestOpen ? win('daily', AL('Daily', 'Дневно')) + win('weekly', AL('Weekly', 'Неделно')) : ''}
+        ${GF.icon(st.digestOpen ? 'chevU' : 'chevD', 'icon')}
+      </div>
+      ${body}</div>`;
+  };
+
   GF.views.inbox = () => {
     const st = GF.WWF._notif;
-    if (!st.loaded) { GF.WWF.loadInbox(); }
+    if (!st.loaded || st.user !== GF.state.user) { GF.WWF.loadInbox(); }
     const tab = (id, lbl) => `<button class="btn btn-sm ntf-tab ${st.tab === id ? 'btn-primary on' : ''}"
       onclick="GF.WWF._notif.tab='${id}';GF.render.all()">${lbl}</button>`;
+    // Client-side filter over the already-loaded st.items (see `items` below)
+    // — toggling it must only re-render, never re-fetch all three data
+    // sources from the server. Fetching stays reserved for initial load
+    // (loadInbox() at the top of this view) and explicit refresh actions
+    // (notifOlder, the poll tick, notifDone/notifReadAll's server round-trip).
     const flt = (id, lbl) => `<span class="chip-opt ${st.filter === id ? 'on' : ''}"
-      onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.WWF.loadInbox()">${lbl}</span>`;
+      onclick="GF.WWF._notif.filter=GF.WWF._notif.filter==='${id}'?'':'${id}';GF.render.all()">${lbl}</span>`;
     const items = st.filter ? st.items.filter(n => n.reason === st.filter) : st.items;
-    return `${GF.viewHead ? GF.viewHead('inbox', 'inbox') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
+    return `${GF.viewHead ? GF.viewHead('inbox', 'inbox_sub') : `<h2>${AL('Inbox', 'Сандаче')}</h2>`}
+      ${digestPanel()}
       <div class="ntf-bar">
         ${tab('inbox', AL('Inbox', 'Сандаче') + (st.unread ? ` (${st.unread})` : ''))}
         ${tab('feed', AL('Activity', 'Активност'))}
@@ -113,8 +191,8 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
         ${st.tab === 'inbox' ? `<button class="btn btn-sm" onclick="GF.WWF.notifReadAll()">${AL('Mark all read', 'Означи сè прочитано')}</button>` : ''}
       </div>
       ${st.tab === 'inbox' ? `<div class="chips" style="margin:0 4px 10px">${
-        ['assigned', 'comment', 'status', 'report'].map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
-      <div class="ntf-list">${!st.loaded
+        Object.keys(REASONS).map(r => flt(r, AL(REASONS[r].en, REASONS[r].mk))).join('')}</div>` : ''}
+      <div class="ntf-list ntf-list-enter">${!st.loaded
         ? `<div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
            <div class="mw-skel" style="height:52px;margin-bottom:8px"></div>
            <div class="mw-skel" style="height:52px"></div>`
@@ -126,18 +204,68 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
 
   GF.WWF.loadInbox = async () => {
     const st = GF.WWF._notif;
-    // Demo mode has no notification data — the demo API router answers these
-    // paths with junk that would poison st.items (must stay an ARRAY).
-    if (GF.state && GF.state.demo) { st.items = []; st.feed = []; st.loaded = true; return; }
+    // Cross-login reset: a new session must never show the previous user's
+    // items/feed/badge while its own fetch is in flight.
+    if (st.user !== GF.state.user) {
+      st.user = GF.state.user;
+      st.items = []; st.feed = []; st.unread = 0; st.loaded = false;
+      st.moreItems = false; st.moreFeed = false;
+      st.digest = null; st.digestOpen = false; st.digestLoading = false;
+      st._justDone = {}; st._justRead = {};
+    }
     try {
       const [items, feed, uc] = await Promise.all([
         GF.API.notifications({}), GF.API.activity({}), GF.API.notifUnread()]);
-      st.items = Array.isArray(items) ? items : [];
+      const now = Date.now();
+      Object.keys(st._justDone).forEach(id => { if (st._justDone[id] < now) delete st._justDone[id]; });
+      Object.keys(st._justRead).forEach(id => { if (st._justRead[id] < now) delete st._justRead[id]; });
+      const fresh = (Array.isArray(items) ? items : []).filter(n => !st._justDone[n.id]);
+      fresh.forEach(n => { if (st._justRead[n.id]) n.read = true; });
+      st.items = fresh;
       st.feed = Array.isArray(feed) ? feed : [];
       st.unread = (uc && uc.unread) || 0; st.loaded = true;
       st.moreItems = st.items.length === PAGE; st.moreFeed = st.feed.length === PAGE;
       if (GF.state.view === 'inbox') GF.render.all(); else GF.render.sidebar();
     } catch (e) { /* offline / unauthenticated: badge just stays stale */ }
+  };
+
+  // Digest fetch — lazy (first open) + on window switch, never on a plain
+  // notifications render. Stale-response guard mirrors openEdit's _editTask
+  // check: a slow daily response must not clobber a newer weekly one.
+  GF.WWF.toggleDigest = () => {
+    const st = GF.WWF._notif;
+    st.digestOpen = !st.digestOpen;
+    if (st.digestOpen && !st.digest && !st.digestLoading) { GF.WWF.loadDigest(); return; }
+    GF.render.all();
+  };
+
+  GF.WWF.setDigestWindow = (w) => {
+    const st = GF.WWF._notif;
+    if (st.digestWindow === w) return;
+    st.digestWindow = w; st.digest = null;
+    GF.WWF.loadDigest();
+  };
+
+  GF.WWF.loadDigest = async () => {
+    const st = GF.WWF._notif;
+    const w = st.digestWindow;
+    const empty = { window: w, by_verb: [], by_actor: [], recent: [], total: 0 };
+    st.digestLoading = true;
+    GF.render.all();
+    try {
+      const d = await GF.API.notifDigest(w);
+      if (GF.WWF._notif.digestWindow !== w) return;   // window switched while in flight
+      st.digest = (d && typeof d === 'object' && Array.isArray(d.recent)) ? d : empty;
+    } catch (e) {
+      if (GF.WWF._notif.digestWindow !== w) return;
+      st.digest = empty;
+      GF.toast(AL('Digest failed: ', 'Прегледот не успеа: ') + e.message, 'error');
+    } finally {
+      if (GF.WWF._notif.digestWindow === w) {
+        st.digestLoading = false;
+        GF.render.all();
+      }
+    }
   };
 
   // Cursor pagination (mockup .mw-pager): append the next page of history
@@ -160,10 +288,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   };
 
   GF.WWF.openNotif = async (id, taskId) => {
-    try { await GF.API.notifRead(id); } catch (e) {}
+    // Mirror notifDone/notifReadAll: a failed write must abort BEFORE the
+    // optimistic local mutation below, not after — otherwise a network blip
+    // or expired session silently marks the notification read / decrements
+    // the badge client-side even though the server never recorded it.
+    try { await GF.API.notifRead(id); } catch (e) { return; }
     const st = GF.WWF._notif;
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) { n.read = true; st.unread = Math.max(0, st.unread - 1); }
+    st._justRead[id] = Date.now() + 10000;
     if (taskId && GF.WWF.xrJump) {
       const t = GF.task && GF.task(taskId);
       GF.WWF.xrJump(taskId, (t && t.week_start) || '');
@@ -176,21 +309,24 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     const n = st.items.find(x => x.id === id);
     if (n && !n.read) st.unread = Math.max(0, st.unread - 1);
     st.items = st.items.filter(x => x.id !== id);
+    st._justDone[id] = Date.now() + 10000;
     GF.render.all();
   };
 
   GF.WWF.notifReadAll = async () => {
     try { await GF.API.notifReadAll(); } catch (e) { return; }
-    GF.WWF._notif.items.forEach(n => n.read = true);
-    GF.WWF._notif.unread = 0;
+    const st = GF.WWF._notif;
+    const until = Date.now() + 10000;
+    st.items.forEach(n => { n.read = true; st._justRead[n.id] = until; });
+    st.unread = 0;
     GF.render.all();
   };
 
   // 75s poll + on-focus refresh (research: polling is correct at this scale;
   // server-side unread count is the single source of truth for the badge).
-  // Self-guarded: does nothing until a real session exists; never in demo.
+  // Self-guarded: does nothing until a real session exists.
   const tick = () => {
-    if (GF.API && GF.API.token && !(GF.state && GF.state.demo)) GF.WWF.loadInbox();
+    if (GF.API && GF.API.token) GF.WWF.loadInbox();
   };
   setInterval(tick, 75000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });

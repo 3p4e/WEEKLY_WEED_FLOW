@@ -31,9 +31,8 @@ test('due date + type at creation, weekend session logged; report renders WITHOU
     await page.getByRole('button', { name: /new task/i }).click();
     await page.locator('#add-title').fill(taskTitle);
     await page.locator('#add-due').fill(sat);
-    // task type is a popup chooser (chooser.js), not a native <select>
-    await page.locator('#add-type-btn').click();
-    await page.locator('#gf-chooser .sel-row[data-v="lab"]').click();
+    // task type is the design's inline chip group — every option visible
+    await page.locator('#add-type-chips .mw-chip[data-v="lab"]').click();
     await page.getByRole('button', { name: 'Create task' }).click();
     await expect(page.locator('.card-title', { hasText: taskTitle })).toBeVisible({ timeout: 10_000 });
   });

@@ -35,9 +35,12 @@ GF.views = {
 
     const card = t => {
       const d = GF.dep(t.dept);
-      return `<div class="kcard" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
+      // Archived cards get the same muted + "Archived" chip treatment as
+      // My Week, so a filtered-in archived row is never mistaken for live work.
+      return `<div class="kcard" style="--dept-acc:${d.color}${t.archived ? ';opacity:.55' : ''}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">
         <div class="kcard-top">
           <span class="kcard-dept" style="color:${d.color}" title="${GF.esc(GF.depName(t.dept))}">${GF.esc(GF.depAbbr(t.dept))}</span>
+          ${t.archived ? `<span class="type-chip" title="${GF.t('archived')}">${GF.t('archived')}</span>` : ''}
           <span class="kstatus pill s-${t.status}" title="${GF.esc(GF.statusLabel(t.status))}"><span class="dot" style="background:currentColor;opacity:.75"></span>${GF.statusLabel(t.status)}</span>
         </div>
         <div class="kcard-title" title="${GF.esc(t.title)}">${GF.esc(t.title)}</div>
@@ -57,7 +60,7 @@ GF.views = {
         </div></div>`).join('');
 
     const addBtn = GF.can('create')
-      ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus','icon','#fff')}${GF.t('new_task_btn')}</button>` : '';
+      ? `<button class="btn btn-orange btn-sm" onclick="GF.openAdd(${GF.state.selWeek})">${GF.icon('plus','icon','currentColor')}${GF.t('new_task_btn')}</button>` : '';
     return GF.viewHead('board','board_sub', addBtn)
       + `<div class="kboard">${body}</div>`;
   },
@@ -111,10 +114,34 @@ GF.views = {
 
   /* ── Dashboard: production overview ────────────────────── */
   dash() {
-    const all = GF.scopedTasks(GF.state.selWeek);
+    // Aggregate-only view: archived rows ("Show archived" on) are history —
+    // keep them out of every KPI / breakdown / workload number here.
+    const all = GF.scopedTasks(GF.state.selWeek).filter(t => !t.archived);
     const n = all.length;
     const by = s => all.filter(t => t.status === s).length;
     const rate = n ? Math.round(by('done')/n*100) : 0;
+
+    // ── KPI week-over-week deltas: the SAME sidebar-scoped aggregate one week
+    // earlier (GF.scopedTasks honours the active dept/tag/search filter, so the
+    // comparison is like-for-like). REAL task data only — with no prior week
+    // loaded (selWeek 0, or a genuinely empty previous week) every KPI renders
+    // WITHOUT a delta rather than inventing one.
+    const prevWeek = GF.state.selWeek - 1;
+    const prev = prevWeek >= 0 ? GF.scopedTasks(prevWeek).filter(t => !t.archived) : [];
+    const havePrev = prev.length > 0;
+    const pn = prev.length;
+    const pBy = s => prev.filter(t => t.status === s).length;
+    const pRate = pn ? Math.round(pBy('done')/pn*100) : 0;
+    // `dir` = which direction reads as good (green); omit for a neutral,
+    // purely-informational change (grey).
+    const wow = (cur, was, unit, dir) => {
+      if (!havePrev) return '';
+      const d = cur - was, mag = Math.abs(d);
+      const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '±';
+      const tone = d === 0 ? 'flat' : !dir ? 'flat' : ((dir === 'up') === (d > 0)) ? 'good' : 'bad';
+      return `<div class="kpi-delta kpi-delta--${tone}" title="${AL('vs last week','сп. со минатата недела')}">${arrow} ${mag}${unit || ''}</div>`;
+    };
+
     const statRows = GF.STATUS_ORDER.map(s => {
       const c = by(s), pct = n ? Math.round(c/n*100) : 0;
       const col = { pending:'var(--ink-3)', working:'var(--orange)', review:'var(--blue)', stuck:'var(--red)', postponed:'var(--amber)', done:'var(--green)' }[s];
@@ -141,13 +168,132 @@ GF.views = {
     const dayCount = {}; GF.DAYS.forEach(d => dayCount[d]=all.filter(t=>(t.days||[]).includes(d)).length);
     const busiest = Object.entries(dayCount).sort((a,b)=>b[1]-a[1])[0];
     const blockers = all.filter(t=>t.status==='stuck');
-    const kpi = (v,l,c) => `<div class="kpi"><div class="kpi-v" style="color:${c}">${v}</div><div class="kpi-l">${l}</div></div>`;
+
+    // ── Alerts feed: the user's REAL notifications (GF.WWF._notif.items — the
+    // very array the Inbox renders), surfaced here with ages. The notifications
+    // module owns loading/polling; kick a load if it hasn't run yet this
+    // session (self-guarded, re-renders when it lands), exactly as
+    // GF.views.inbox does. No new data, no invented fields.
+    const notif = (GF.WWF && GF.WWF._notif) || null;
+    if (notif && GF.API && GF.API.token && GF.WWF.loadInbox && (!notif.loaded || notif.user !== GF.state.user)) GF.WWF.loadInbox();
+    const ago = (iso) => {
+      const ms = Date.now() - Date.parse(iso);
+      if (!isFinite(ms) || ms < 0) return '';
+      const m = Math.floor(ms/60000);
+      if (m < 1) return AL('now','сега');
+      if (m < 60) return m + 'm';
+      const h = Math.floor(m/60);
+      if (h < 24) return h + 'h';
+      return Math.floor(h/24) + 'd';
+    };
+    // Compact one-line label from the backend's structured params only — the
+    // module's full sentence() renderer is a private closure we cannot call, so
+    // this is the short form the feed needs, built from the same real fields
+    // (verb + params + actor); never invents a field.
+    const alertText = (a) => {
+      const p = a.params || {}, t = p.title || '';
+      const who = (GF.PEOPLE[a.actor_id] && GF.PEOPLE[a.actor_id].name) || AL('Someone','Некој');
+      const stl = (v) => GF.statusLabel(({pending:'pending',ongoing:'working',completed:'done'})[v] || v);
+      switch (a.verb) {
+        case 'overdue':        return AL(`Overdue: ${t}`, `Задоцнето: ${t}`);
+        case 'due_soon':       return AL(`Due today: ${t}`, `Рок денес: ${t}`);
+        case 'assigned':       return AL(`Assigned: ${t}`, `Доделено: ${t}`);
+        case 'unassigned':     return AL(`Unassigned: ${t}`, `Отстрането: ${t}`);
+        case 'commented':      return AL(`${who} commented: ${t}`, `${who} коментираше: ${t}`);
+        case 'status_changed': return `${t} → ${stl(p.new)}`;
+        case 'created':        return AL(`New: ${t}`, `Ново: ${t}`);
+        case 'ack':            return p.accepted ? AL(`Accepted: ${t}`, `Прифатено: ${t}`) : AL(`Declined: ${t}`, `Одбиено: ${t}`);
+        case 'report_locked':  return AL(`Weekly ${p.kind||''} locked`, `Заклучен неделен запис`) + (p.week_start ? ` (${p.week_start})` : '');
+        case 'batch_added':    return `${p.plant_count||''}× ${p.strain||''} → ${p.room||''}`;
+        case 'batch_moved':    return `${p.strain||''}: ${p.old_room||''} → ${p.room||''}`;
+        case 'batch_closed':   return AL(`Batch closed: ${p.strain||''}`, `Затворена серија: ${p.strain||''}`);
+        default:               return t || a.verb;
+      }
+    };
+    // Severity from real fields: overdue + the quality-automation stuck reasons
+    // read critical; due-soon and a non-completing status change read warn.
+    const alertTone = (a) => (a.verb === 'overdue' || a.reason === 'capa_stuck' || a.reason === 'validation_stuck') ? 'crit'
+      : (a.verb === 'due_soon' || (a.verb === 'status_changed' && (a.params||{}).new !== 'completed')) ? 'warn' : '';
+    const alerts = notif ? (notif.items || []).slice(0, 5) : [];
+    const alertRows = alerts.map(a => {
+      const tone = alertTone(a);
+      return `<div class="dash-alert${tone ? ' dash-alert--' + tone : ''}"${a.task_id ? ` style="cursor:pointer" onclick="GF.WWF.openNotif&&GF.WWF.openNotif('${GF.esc(a.id)}','${GF.esc(a.task_id)}')"` : ''}>
+        <span class="dash-alert-dot"></span>
+        <span class="dash-alert-tx">${GF.esc(alertText(a))}</span>
+        <span class="dash-alert-age">${GF.esc(ago(a.created_at))}</span></div>`;
+    }).join('');
+    const alertsCard = `<div class="dash-card dash-card--wide"><div class="dash-card-ttl">${AL('Alerts','Предупредувања')}${
+        notif && notif.unread ? ' · ' + notif.unread : ''}</div>
+      ${alertRows || `<div class="dash-alert-empty">${!notif || !notif.loaded
+        ? AL('Loading notifications…','Вчитување известувања…')
+        : AL('All clear — no alerts.','Сè е чисто — нема предупредувања.')}</div>`}</div>`;
+
+    // ── Pipeline strip: every department as a compact lifecycle pill in
+    // batch-flow order (GF.HANDOFF), computed from the FULL week's live tasks
+    // (not the filtered aggregate above) so it stays a stable cross-department
+    // health + navigation control — clicking a pill filters the dashboard to
+    // that department, the same idiom as the sidebar department list. This is
+    // the real-data realization of the mockup's "modules strip with lifecycle
+    // pills"; the mockup's QMS validation lifecycle has no in-app data source
+    // (deferred — see report).
+    const weekLive = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);
+    const STATE_LBL = { idle:AL('Idle','Мирува'), blocked:AL('Blocked','Блокирано'),
+      done:AL('Done','Завршено'), active:AL('Active','Активно'), queued:AL('Queued','Во ред') };
+    const STATE_COL = { idle:'var(--ink-3)', blocked:'var(--red)', done:'var(--green)', active:'var(--orange)', queued:'var(--blue)' };
+    const deptState = (id) => {
+      const dt = weekLive.filter(t => t.dept === id);
+      if (!dt.length) return 'idle';
+      if (dt.some(t => t.status === 'stuck')) return 'blocked';
+      if (dt.every(t => t.status === 'done')) return 'done';
+      if (dt.some(t => t.status === 'working' || t.status === 'review')) return 'active';
+      return 'queued';
+    };
+    const H = GF.HANDOFF || {};
+    const tos = new Set(Object.values(H));
+    let cursor = Object.keys(H).find(f => !tos.has(f));
+    const order = [], seen = new Set();
+    while (cursor && !seen.has(cursor)) { order.push(cursor); seen.add(cursor); cursor = H[cursor]; }
+    GF.DEPTS.forEach(d => { if (!seen.has(d.id)) { order.push(d.id); seen.add(d.id); } });
+    const modPills = order.map(id => {
+      const st = deptState(id), cnt = weekLive.filter(t => t.dept === id).length;
+      const on = GF.state.deptFilter === id;
+      return `<button class="dash-mod dash-mod--${st}${on ? ' on' : ''}" style="--mc:${STATE_COL[st]}"
+        title="${GF.esc(GF.depName(id))} — ${STATE_LBL[st]}${cnt ? ' · ' + cnt : ''}" onclick="GF.filterDept('${id}')">
+        <span class="dash-mod-dot"></span>${GF.esc(GF.depAbbr(id))}${cnt ? `<span class="dash-mod-n">${cnt}</span>` : ''}</button>`;
+    }).join('');
+    const modsStrip = `<div class="dash-strip">
+      <span class="dash-strip-h">${AL('Pipeline','Тек')}</span>
+      <div class="dash-mods">${modPills}</div></div>`;
+
+    // ── Resource HUD: site-wide REAL totals, reusing the facility resource
+    // strip idiom (.fac-resbar). Crew / departments / active-this-week /
+    // open-handoffs are all in scope right now. Cultivar (strain) and batch
+    // counts render ONLY when the Cultivation view has already loaded them into
+    // GF.WWF._cult — forward-compatible, no dashboard-scope fetch. The mockup's
+    // revenue tile is DEFERRED: no field or endpoint exists for it (see report).
+    const activeIds = new Set();
+    weekLive.forEach(t => [t.owner, ...(t.helpers||[])].forEach(p => activeIds.add(p)));
+    const activeN = [...activeIds].filter(id => GF.PEOPLE[id]).length;
+    const crewN = Object.keys(GF.PEOPLE).filter(id => !GF.PEOPLE[id].inactive).length;
+    const pendingHandoffs = weekLive.filter(t => GF.HANDOFF[t.dept] && t.status !== 'done').length;
+    const cult = (GF.WWF && GF.WWF._cult) || null;
+    const res = (v, l, c, title) => `<div class="fac-res"${title ? ` title="${GF.esc(title)}"` : ''}><span class="fac-res-ic" style="color:${c}"></span><span class="fac-res-v" style="color:${c}">${v}</span><span class="fac-res-l">${GF.esc(l)}</span></div>`;
+    const hud = `<div class="fac-resbar">
+      ${res(crewN, AL('Crew','Екипаж'), 'var(--ink)', AL('Active roster','Активен состав'))}
+      ${res(GF.DEPTS.length, AL('Departments','Оддели'), 'var(--teal)')}
+      ${res(activeN, AL('Active this week','Активни оваа недела'), 'var(--green)')}
+      ${res(pendingHandoffs, AL('Open handoffs','Отворени предавања'), 'var(--orange)')}
+      ${cult && Array.isArray(cult.cultivars) ? res(cult.cultivars.length, AL('Strains','Сорти'), 'var(--violet)') : ''}
+      ${cult && Array.isArray(cult.batches) ? res(cult.batches.length, AL('Batches','Серии'), 'var(--blue)') : ''}
+    </div>`;
+
+    const kpi = (v,l,c,delta) => `<div class="kpi"><div class="kpi-v" style="color:${c}">${v}</div><div class="kpi-l">${l}</div>${delta || ''}</div>`;
     return GF.viewHead('dashboard','dash_sub') + `
       <div class="dash-kpis">
-        ${kpi(rate+'%', GF.t('completion'), 'var(--green)')}
-        ${kpi(n, GF.t('total'), 'var(--ink)')}
-        ${kpi(by('working'), GF.t('working'), 'var(--orange)')}
-        ${kpi(by('stuck'), GF.t('stuck'), 'var(--red)')}
+        ${kpi(rate+'%', GF.t('completion'), 'var(--green)', wow(rate, pRate, 'pp', 'up'))}
+        ${kpi(n, GF.t('total'), 'var(--ink)', wow(n, pn, ''))}
+        ${kpi(by('working'), GF.t('working'), 'var(--orange)', wow(by('working'), pBy('working'), ''))}
+        ${kpi(by('stuck'), GF.t('stuck'), 'var(--red)', wow(by('stuck'), pBy('stuck'), '', 'down'))}
         ${kpi(busiest?GF.dayLabel(busiest[0]):'—', GF.t('busiest'), 'var(--violet)')}
       </div>
       <div class="dash-grid">
@@ -162,8 +308,11 @@ GF.views = {
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('departments')}</div>${deptRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('responsible')}</div>${loadRows||'<div class="kempty">—</div>'}</div>
         <div class="dash-card"><div class="dash-card-ttl">${GF.t('blocker')} · ${blockers.length}</div>
-          ${blockers.map(t=>`<div class="dash-blk">${GF.icon('flag','icon','var(--red)')}<div><div class="dbk-t">${GF.esc(t.title)}</div><div class="dbk-s">${GF.esc(t.blocker||'')}</div></div></div>`).join('')||'<div class="kempty">None 🎉</div>'}</div>
-      </div>`;
+          ${blockers.map(t=>`<div class="dash-blk">${GF.icon('flag','icon','var(--red)')}<div><div class="dbk-t">${GF.esc(t.title)}</div><div class="dbk-s">${GF.esc(t.blocker||'')}</div></div></div>`).join('')||`<div class="kempty">${AL('None 🎉', 'Нема 🎉')}</div>`}</div>
+        ${alertsCard}
+      </div>
+      ${modsStrip}
+      ${hud}`;
   },
 
   /* ── Executive Overview: exec-only, cross-department, one screen ──────
@@ -175,7 +324,17 @@ GF.views = {
      choices and the selected week. */
   exec() {
     const todayStr = GF.localDateStr(new Date());
-    const allWeek = GF.weekTasks(GF.state.selWeek);              // every department
+    // Exec KPIs / matrix / pipeline / attention are live-work aggregates —
+    // archived tasks (visible only with "Show archived" on) stay out.
+    // NOTE: this is deliberately NOT `GF.execTasks(GF.state.selWeek)` (core.js)
+    // even though the two look interchangeable (both are "weekTasks filtered
+    // to the visible departments"). GF.execTasks omits the `!t.archived` step
+    // — its own test (task-filters.test.js) pins that it "ignores the sidebar
+    // filters and honours only the hidden-department set", archived included.
+    // Calling it here would let an archived task leak back into this screen's
+    // KPI totals and risk/blocked lists the moment "Show archived" is off,
+    // which is exactly the leak this filter exists to prevent. Keep both.
+    const allWeek = GF.weekTasks(GF.state.selWeek).filter(t => !t.archived);  // every department
     const shown = allWeek.filter(t => GF.execDeptShown(t.dept)); // visible only → KPIs
     const isDone = t => t.status === 'done';
     const n = shown.length;
@@ -386,11 +545,38 @@ GF.views = {
     // integrate.js defines canProvision; fall back to the perms gate if it
     // hasn't loaded yet.
     const canManage = GF.WWF && GF.WWF.canProvision ? GF.WWF.canProvision() : GF.can('team');
+
+    // ── Per-person REAL aggregates for the Mass Weed roster stat bars ──────
+    // Computed from the SAME live weekly task data every other view reads
+    // (GF.weekTasks → GF.state.tasks); archived rows are history and stay out,
+    // matching dash()/exec(). No invented fields. Guarded so a demo/empty week
+    // renders without throwing (the control-wiring e2e walks this view). The
+    // mockup's efficiency% / shift / zone need worklog-derived data that is not
+    // an app data source yet (part-owner decision) — DEFERRED below, never
+    // fabricated.
+    const weekly = (typeof GF.weekTasks === 'function'
+      ? GF.weekTasks(GF.state.selWeek) : (GF.state.tasks || [])).filter(t => t && !t.archived);
+    const owned = Object.create(null), doneBy = Object.create(null), load = Object.create(null);
+    weekly.forEach(t => {
+      if (t.owner) {
+        owned[t.owner] = (owned[t.owner] || 0) + 1;
+        if (t.status === 'done') doneBy[t.owner] = (doneBy[t.owner] || 0) + 1;
+      }
+      [t.owner, ...(t.helpers || [])].forEach(pid => { if (pid) load[pid] = (load[pid] || 0) + 1; });
+    });
+    const maxLoad = Math.max(1, ...Object.values(load));   // ≥1 → never divide by zero
+    const barTier = v => v >= 80 ? 'hi' : v >= 50 ? 'mid' : 'lo';
+
     const cards = ids.map(id => {
       const p = GF.PEOPLE[id];
       const isMe = id === GF.state.user;
+      // Real per-person figures (all default to 0 for someone with no weekly
+      // task involvement — the completion bar then yields to an honest note).
+      const own = owned[id] || 0, dn = doneBy[id] || 0;
+      const rate = own ? Math.round(dn / own * 100) : 0;
+      const ld = load[id] || 0, loadPct = Math.round(ld / maxLoad * 100);
       return `<div class="team-card ${isMe?'me':''}">
-        <div class="team-top">${GF.avatar(id,46)}
+        <div class="team-top"><div class="mwtm-hex">${GF.avatar(id,46)}</div>
           <div style="flex:1;min-width:0">
             <div class="tc-name">${GF.esc(p.name)}${isMe?` <span class="tc-you">${GF.t('you')}</span>`:''}</div>
             <div class="tc-role">${GF.esc(GF.roleLabel(p.role))}</div>
@@ -398,6 +584,20 @@ GF.views = {
         <div class="tc-dept">${p.dept
           ? `<span class="dept-dot" style="background:${GF.dep(p.dept).color}"></span>${GF.esc(GF.depName(p.dept))}`
           : `<span class="dept-dot" style="background:var(--ink-3)"></span>${GF.esc(GF.roleLabel(p.role))}`}</div>
+        <div class="mwtm-stats">
+          ${own ? `<div class="mwtm-stat">
+            <div class="mwtm-stat__head"><span class="mwtm-stat__name">${AL('Completed this week','Завршени оваа недела')}</span>
+              <span class="mwtm-stat__val">${dn}/${own} · ${rate}%</span></div>
+            <div class="mw-stat__track"><div class="mw-stat__fill mw-stat__fill--${barTier(rate)}" style="transform:scaleX(${(rate/100).toFixed(3)})"></div></div>
+          </div>`
+          : `<div class="mwtm-quiet">${AL('No tasks owned this week','Нема сопствени задачи оваа недела')}</div>`}
+          <div class="mwtm-stat">
+            <div class="mwtm-stat__head"><span class="mwtm-stat__name">${AL('Active load','Активно оптоварување')}</span>
+              <span class="mwtm-stat__val">${ld} ${ld===1?AL('task','задача'):AL('tasks','задачи')}</span></div>
+            <div class="mw-stat__track"><div class="mwtm-fill" style="transform:scaleX(${(loadPct/100).toFixed(3)})"></div></div>
+          </div>
+          <div class="mwtm-defer" title="${GF.esc(AL('Efficiency, shift and zone need worklog-derived data that is not an app data source yet (pending a part-owner decision).','Ефикасноста, смената и зоната бараат податоци од дневник што сè уште не се извор во апликацијата (во исчекување на одлука од сопственик).'))}">${AL('Efficiency · shift · zone — awaiting worklog data','Ефикасност · смена · зона — во исчекување податоци')}</div>
+        </div>
         <div class="tc-actions">
           ${isMe?`<span class="tc-active">${GF.icon('check','icon','var(--green)')}${GF.t('active')}</span>`:''}
           <div class="spacer"></div>
@@ -408,7 +608,7 @@ GF.views = {
     }).join('');
     const addBtn = canManage
       ? `<button class="btn btn-sm" onclick="GF.WWF.openDeletedUsers()">${GF.icon('box','icon')}${AL('Removed accounts','Отстранети сметки')}</button>`
-        + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','#fff')}${GF.t('add_user')}</button>`
+        + `<button class="btn btn-orange btn-sm" onclick="GF.openUser()">${GF.icon('plus','icon','currentColor')}${GF.t('add_user')}</button>`
       : `<span class="role-lock">${GF.icon('shield','icon','var(--ink-3)')}${GF.t('view_only')}</span>`;
     return GF.viewHead('team','team_sub', addBtn)
       + `<div class="team-count">${ids.length} ${GF.t('members')} · ${GF.t('your_role')}: <b>${GF.roleLabel(GF.curRole())}</b></div>`
@@ -424,9 +624,19 @@ GF.execBrief = async () => {
   el.style.display = 'block';
   el.innerHTML = `<div class="exec-brief-load">${GF.icon('sparkle', 'icon')}${AL('Generating executive brief…', 'Генерирам извршно резиме…')}</div>`;
   try {
-    const r = await GF.API.ai('weekly_summary', { week: GF.state.selWeek });
+    // Backend InvokeReq requires `input` (see backend/app/api/ai.py) — the
+    // week rides along in `context` as the REAL backend week uuid, same as
+    // GF.ai.summary does.
+    const wk = GF.calendar.weeks[GF.state.selWeek];
+    const r = await GF.API.ai('weekly_summary', {
+      input: AL('Summarize this week for the executive team: completion, risks, blockers, cross-department handoffs. Bullet points.',
+                'Резимирај ја оваа недела за извршниот тим: завршеност, ризици, блокади, меѓусекторски предавања. Кратки точки.'),
+      context: { week_id: wk && wk.realId },
+    });
     if (r && r.available === false) {
-      el.innerHTML = `<div class="exec-brief-off">${AL('AI is not configured for this workspace.', 'АИ не е конфигуриран за овој простор.')}</div>`;
+      el.innerHTML = `<div class="exec-brief-off">${r.reason === 'letta_unreachable'
+        ? AL('The AI service is unreachable right now — try again shortly.', 'АИ сервисот моментално е недостапен — обидете се повторно наскоро.')
+        : AL('AI is not configured for this workspace.', 'АИ не е конфигуриран за овој простор.')}</div>`;
       return;
     }
     const text = (r && (r.output || r.summary || r.text)) || AL('No summary available.', 'Нема достапно резиме.');

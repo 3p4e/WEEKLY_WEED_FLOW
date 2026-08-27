@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Sampling &amp; Custody</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone C · QC LIMS — Custody cluster (qccustody): RQS · SFR · chain of custody.
+  RQS 24h QC registration window (SOP-017) + RQS-before-sampling ordering
+  (§6.1.1), SFR field records, append-only chain of custody with transfer types.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 80px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:18px;flex-wrap:wrap;}
+  .hero__ic{width:48px;height:48px;flex:none;display:grid;place-items:center;color:#c0aef2;background:rgba(155,123,232,.14);box-shadow:inset 0 0 0 1px rgba(155,123,232,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero h1{font-family:var(--mw-font-cond);font-size:27px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 16px rgba(94,200,240,.3);}
+  .hero .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:560px;}
+  .hero__sp{flex:1;}
+  .subtabs{display:flex;gap:5px;margin-bottom:18px;flex-wrap:wrap;}
+  .subtab{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-weight:700;cursor:pointer;padding:9px 18px;color:var(--mw-text-dim);background:rgba(4,14,28,.6);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);transition:all .12s ease;}
+  .subtab:hover{color:var(--mw-cyan-bright);} .subtab.on{color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));}
+  .subtab .c{font-family:var(--mw-mono);opacity:.7;margin-left:6px;font-size:11px;}
+  .pane{display:none;} .pane.on{display:block;}
+  /* RQS window card */
+  .rqscard{padding:16px 18px;margin-bottom:14px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);}
+  .rqscard.warn{box-shadow:inset 0 0 0 1.5px rgba(236,236,74,.4);} .rqscard.met{box-shadow:inset 0 0 0 1.5px rgba(108,240,90,.34);} .rqscard.missed{box-shadow:inset 0 0 0 1.5px rgba(239,77,77,.4);}
+  .rqs__top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .rqs__no{font-family:var(--mw-mono);font-weight:700;font-size:15px;color:var(--mw-cyan-bright);}
+  .rqs__st{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 9px;color:var(--sc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc) 55%,transparent);background:color-mix(in srgb,var(--sc) 12%,transparent);clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);}
+  .rqs__sp{flex:1;}
+  .windowchip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mw-font-cond);font-weight:700;font-size:14px;letter-spacing:.03em;text-transform:uppercase;padding:6px 13px;clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .windowchip.warn{color:var(--mw-stat-mid);box-shadow:inset 0 0 0 1.5px rgba(236,236,74,.5);background:rgba(236,236,74,.08);}
+  .windowchip.met{color:var(--mw-stat-hi);box-shadow:inset 0 0 0 1.5px rgba(108,240,90,.5);background:rgba(108,240,90,.08);}
+  .windowchip.missed{color:#fff;background:var(--mw-stat-lo);}
+  .rqs__body{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;}
+  .rqs__kv .l{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);} .rqs__kv .v{font-family:var(--mw-mono);font-size:12px;color:var(--mw-ink);margin-top:4px;}
+  .orderbar{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;margin-top:14px;font-size:11px;line-height:1.5;color:var(--mw-text-dim);background:rgba(94,200,240,.06);box-shadow:inset 0 0 0 1px rgba(94,200,240,.22);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .orderbar .ic{color:var(--mw-cyan-bright);flex:none;margin-top:1px;} .orderbar b{color:var(--mw-ink);}
+  .rqs__acts{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap;}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-weight:700;cursor:pointer;padding:9px 16px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);transition:filter .12s ease;}
+  .btn:hover{filter:brightness(1.15);} .btn.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);} .btn[disabled]{opacity:.4;cursor:not-allowed;}
+  /* generic table */
+  table.t{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.t thead th{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;font-weight:700;color:var(--mw-text-dim);text-align:left;padding:9px 11px;box-shadow:inset 0 -1px 0 rgba(94,200,240,.2);white-space:nowrap;}
+  table.t td{padding:10px 11px;color:var(--mw-text);box-shadow:inset 0 -1px 0 rgba(94,200,240,.07);vertical-align:middle;}
+  .code{font-family:var(--mw-mono);font-weight:700;font-size:12px;color:var(--mw-cyan-bright);white-space:nowrap;}
+  .mono{font-family:var(--mw-mono);font-size:11px;color:var(--mw-text-dim);} .blank{color:var(--mw-stat-mid);}
+  .stc{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;white-space:nowrap;color:var(--sc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc) 55%,transparent);background:color-mix(in srgb,var(--sc) 12%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  /* custody chain */
+  .sec__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-header);margin:20px 0 12px;display:flex;align-items:center;gap:10px;}
+  .sec__t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(94,200,240,.28),transparent);}
+  .sec__t .side{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mw-text-faint);font-family:var(--mw-font);font-size:11px;}
+  .chain{display:flex;flex-direction:column;gap:0;}
+  .cnode{display:flex;align-items:flex-start;gap:12px;padding:12px 0;position:relative;}
+  .cnode:not(:last-child)::before{content:"";position:absolute;left:8px;top:26px;bottom:-4px;width:1px;background:rgba(94,200,240,.24);}
+  .cnode .dot{width:17px;height:17px;flex:none;margin-top:1px;border-radius:50%;background:var(--tc,var(--mw-cyan));box-shadow:0 0 8px var(--tc,var(--mw-cyan));position:relative;z-index:2;}
+  .cnode__b{flex:1;}
+  .cnode .flow{font-family:var(--mw-font-cond);font-weight:700;font-size:13px;color:var(--mw-ink);}
+  .cnode .flow .arw{color:var(--mw-text-faint);margin:0 6px;}
+  .cnode .ty{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;margin-left:8px;color:var(--tc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tc) 45%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .cnode .meta{font-size:11px;color:var(--mw-text-dim);margin-top:4px;} .cnode .meta b{color:var(--mw-text);}
+  .cnode .ts{margin-left:auto;font-family:var(--mw-mono);font-size:10px;color:var(--mw-text-faint);white-space:nowrap;}
+  .cnode__h{display:flex;align-items:baseline;}
+  @media(max-width:700px){.rqs__body{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Sampling & custody">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="qc-lab.html">QC LIMS</a><span>›</span><a href="#">Sampling &amp; custody</a>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <div>
+      <h1><span class="en">Sampling &amp; Custody</span><span class="mk">Земање и чување</span></h1>
+      <div class="sub"><span class="en">Field-to-lab traceability (ALCOA++): sampling requests, field records, and an append-only chain of custody. A request must exist before sampling.</span><span class="mk">Следливост од терен до лаб: барања, теренски записи и синџир на чување. Барањето мора да постои пред земање.</span></div>
+    </div>
+    <div class="hero__sp"></div>
+  </div>
+
+  <div class="subtabs">
+    <div class="subtab on" data-p="rqs" onclick="tab('rqs')"><span class="en">RQS · Sampling requests</span><span class="mk">RQS · Барања</span><span class="c">3</span></div>
+    <div class="subtab" data-p="sfr" onclick="tab('sfr')"><span class="en">SFR · Field records</span><span class="mk">SFR · Теренски</span><span class="c">2</span></div>
+    <div class="subtab" data-p="coc" onclick="tab('coc')"><span class="en">Chain of custody</span><span class="mk">Синџир на чување</span><span class="c">4</span></div>
+  </div>
+
+  <!-- RQS -->
+  <div class="pane on" id="pane-rqs">
+    <div class="rqscard warn" id="rqsCard">
+      <div class="rqs__top">
+        <span class="rqs__no">PP-RQS-2026-0044</span>
+        <span class="rqs__st" id="rqsSt" style="--sc:#f0b95e">OPEN</span>
+        <span class="rqs__sp"></span>
+        <span class="windowchip warn" id="winChip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="winTx"><span class="en">18 h 20 m left to register</span><span class="mk">18 ч 20 м до регистрација</span></span></span>
+      </div>
+      <div class="rqs__body">
+        <div class="rqs__kv"><div class="l"><span class="en">Requested by</span><span class="mk">Побарано од</span></div><div class="v">L. Vasquez (QC)</div></div>
+        <div class="rqs__kv"><div class="l"><span class="en">Batch / lot</span><span class="mk">Серија</span></div><div class="v">PP-B-2026-0312</div></div>
+        <div class="rqs__kv"><div class="l"><span class="en">Sampling plan</span><span class="mk">План</span></div><div class="v">QCSOP 011 · √n+1</div></div>
+        <div class="rqs__kv"><div class="l"><span class="en">Raised</span><span class="mk">Покрено</span></div><div class="v">23.07.2026 08:10</div></div>
+        <div class="rqs__kv"><div class="l"><span class="en">Register by (24 h)</span><span class="mk">Регистрирај до</span></div><div class="v" id="deadline">24.07.2026 08:10</div></div>
+        <div class="rqs__kv"><div class="l"><span class="en">Control №</span><span class="mk">Контрола №</span></div><div class="v">QC-RQS-018</div></div>
+      </div>
+      <div class="orderbar"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+        <div id="orderTx"><span class="en"><b>RQS before sampling (§6.1.1).</b> QC must register this request within <b>24 hours</b> (SOP-017). Sampling cannot begin until the request is registered — the window result is stamped and cannot be edited afterwards.</span><span class="mk"><b>RQS пред земање (§6.1.1).</b> КК мора да го регистрира барањето во <b>24 часа</b>. Земањето не може да почне пред регистрација.</span></div>
+      </div>
+      <div class="rqs__acts" id="rqsActs">
+        <button class="btn" onclick="registerRqs()"><span class="en">Register request (QC)</span><span class="mk">Регистрирај (КК)</span></button>
+        <button class="btn ghost" onclick="missWin()"><span class="en">Demo: let window lapse</span><span class="mk">Демо: истечи прозорец</span></button>
+      </div>
+    </div>
+
+    <table class="t"><thead><tr>
+      <th><span class="en">RQS №</span><span class="mk">RQS №</span></th><th><span class="en">Batch</span><span class="mk">Серија</span></th><th><span class="en">Status</span><span class="mk">Статус</span></th><th><span class="en">Window</span><span class="mk">Прозорец</span></th><th><span class="en">Produces sample</span><span class="mk">Мостра</span></th>
+    </tr></thead><tbody>
+      <tr><td class="code">PP-RQS-2026-0043</td><td class="mono">PP-B-2026-0311</td><td><span class="stc" style="--sc:#6cf05a">COMPLETED</span></td><td><span class="stc" style="--sc:#6cf05a"><span class="en">met</span><span class="mk">исполнет</span></span></td><td class="mono">PP-SMP-2026-0188</td></tr>
+      <tr><td class="code">PP-RQS-2026-0042</td><td class="mono">PP-B-2026-0309</td><td><span class="stc" style="--sc:#5ec8f0">IN_PROGRESS</span></td><td><span class="stc" style="--sc:#6cf05a"><span class="en">met</span><span class="mk">исполнет</span></span></td><td class="mono blank">—</td></tr>
+    </tbody></table>
+  </div>
+
+  <!-- SFR -->
+  <div class="pane" id="pane-sfr">
+    <table class="t"><thead><tr>
+      <th><span class="en">SFR №</span><span class="mk">SFR №</span></th><th><span class="en">Field location / GPS</span><span class="mk">Локација / GPS</span></th><th><span class="en">Barrels</span><span class="mk">Барели</span></th><th><span class="en">Receipt condition</span><span class="mk">Состојба</span></th><th><span class="en">Status</span><span class="mk">Статус</span></th>
+    </tr></thead><tbody>
+      <tr><td class="code">PP-SFR-2026-0031</td><td class="mono">Room F-2 · 41.99°N 21.43°E</td><td class="mono">B-01, B-02, B-03</td><td><span class="stc" style="--sc:#6cf05a"><span class="en">intact · sealed</span><span class="mk">цел · запечатен</span></span></td><td><span class="stc" style="--sc:#6cf05a">COMPLETED</span></td></tr>
+      <tr><td class="code">PP-SFR-2026-0030</td><td class="mono">Room F-3 · 41.99°N 21.43°E</td><td class="mono">B-04, B-05</td><td><span class="stc blank" style="--sc:#ecec4a"><span class="en">not yet recorded</span><span class="mk">не запишано</span></span></td><td><span class="stc" style="--sc:#5ec8f0">IN_FIELD</span></td></tr>
+    </tbody></table>
+    <div class="orderbar" style="margin-top:14px"><span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div><span class="en">Receipt condition on SFR-0030 is <b>blank, not "OK"</b> — it is genuinely not yet recorded. A blank field waits for the receiving analyst; it is never auto-filled.</span><span class="mk">Состојбата на SFR-0030 е <b>празна, не „ОК“</b> — навистина не е запишана. Празно поле чека аналитичар.</span></div>
+    </div>
+  </div>
+
+  <!-- Chain of custody -->
+  <div class="pane" id="pane-coc">
+    <p class="sec__t"><span class="en">Chain of custody — PP-SMP-2026-0188</span><span class="mk">Синџир на чување — PP-SMP-2026-0188</span><span class="side"><span class="en">append-only · continuous</span><span class="mk">само-додавање · непрекинато</span></span></p>
+    <div class="mw-panel" style="padding:8px 18px;">
+      <div class="chain" id="chain"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+function tab(p){ document.querySelectorAll('.subtab').forEach(function(x){x.classList.toggle('on',x.dataset.p===p);});
+  document.querySelectorAll('.pane').forEach(function(x){x.classList.toggle('on',x.id==='pane-'+p);}); }
+
+var COC=[
+  {tc:'#5ec8f0',ty:['FIELD_TO_LAB','FIELD → LAB'],from:'Field team',to:'K. Alenko (QC)',fromL:'Room F-2',toL:'QC receiving',reason:['Sample transfer to lab','Пренос до лаб'],cond:['sealed · intact','запечатен'],ts:'21.07.2026 11:05'},
+  {tc:'#c89bf0',ty:['LAB_INTERNAL','LAB INT'],from:'K. Alenko',to:'K. Alenko',fromL:'QC receiving',toL:'HPLC bench',reason:['Moved to test bench','Пренос до маса'],cond:['intact','цел'],ts:'22.07.2026 08:28'},
+  {tc:'#2FD9D9',ty:['STABILITY_TRANSFER','STABILITY'],from:'K. Alenko',to:'Stability store',fromL:'HPLC bench',toL:'Stability chamber',reason:['Retention aliquot to stability','Задржан примерок'],cond:['sealed','запечатен'],ts:'22.07.2026 14:10'},
+  {tc:'#7f6d9c',ty:['LAB_TO_DISPOSAL','DISPOSAL'],from:'K. Alenko',to:'Waste custody',fromL:'HPLC bench',toL:'Controlled waste',reason:['Spent test portion','Потрошен дел'],cond:['per QCSOP 020','по QCSOP 020'],ts:'23.07.2026 16:40'}
+];
+function paintChain(){ document.getElementById('chain').innerHTML=COC.map(function(c){
+  return '<div class="cnode" style="--tc:'+c.tc+'"><span class="dot"></span><div class="cnode__b"><div class="cnode__h"><span class="flow">'+c.from+'<span class="arw">→</span>'+c.to+'</span><span class="ty">'+bil(c.ty[0],c.ty[1])+'</span><span class="ts">'+c.ts+'</span></div>'+
+    '<div class="meta"><b>'+c.fromL+'</b> → <b>'+c.toL+'</b> · '+bil(c.reason[0],c.reason[1])+' · '+bil(c.cond[0],c.cond[1])+'</div></div></div>';
+}).join(''); }
+paintChain();
+
+function registerRqs(){ var card=document.getElementById('rqsCard');
+  card.className='rqscard met'; document.getElementById('rqsSt').textContent='REGISTERED'; document.getElementById('rqsSt').style.setProperty('--sc','#5ec8f0');
+  document.getElementById('winChip').className='windowchip met'; document.getElementById('winTx').innerHTML='<span class="en">✓ registered · window met</span><span class="mk">✓ регистрирано · исполнет</span>';
+  document.getElementById('orderTx').innerHTML='<span class="en"><b>Registered within window.</b> Result stamped 23.07.2026 14:30 (6 h 20 m). Sampling may now begin; the window result is now immutable.</span><span class="mk"><b>Регистрирано во прозорец.</b> Земањето може да почне; резултатот е непроменлив.</span>';
+  document.getElementById('rqsActs').innerHTML='<button class="btn ghost" onclick="resetRqs()"><span class="en">Reset demo</span><span class="mk">Ресетирај</span></button>';
+  toast('ok','RQS registered — window met','RQS регистриран');
+}
+function missWin(){ var card=document.getElementById('rqsCard');
+  card.className='rqscard missed'; document.getElementById('rqsSt').textContent='CANCELLED'; document.getElementById('rqsSt').style.setProperty('--sc','#ef4d4d');
+  document.getElementById('winChip').className='windowchip missed'; document.getElementById('winTx').innerHTML='<span class="en">✕ window missed (24 h)</span><span class="mk">✕ пропуштен прозорец</span>';
+  document.getElementById('orderTx').innerHTML='<span class="en"><b>Registration window missed.</b> The 24 h SOP-017 window lapsed unregistered — stamped as a deviation. A new RQS must be raised; sampling on the lapsed request is blocked.</span><span class="mk"><b>Пропуштен прозорец.</b> 24 ч истече — забележано како отстапување. Мора ново RQS.</span>';
+  document.getElementById('rqsActs').innerHTML='<button class="btn ghost" onclick="resetRqs()"><span class="en">Reset demo</span><span class="mk">Ресетирај</span></button>';
+  toast('err','Window missed — deviation logged','Пропуштен — отстапување');
+}
+function resetRqs(){ var card=document.getElementById('rqsCard'); card.className='rqscard warn';
+  document.getElementById('rqsSt').textContent='OPEN'; document.getElementById('rqsSt').style.setProperty('--sc','#f0b95e');
+  document.getElementById('winChip').className='windowchip warn'; document.getElementById('winTx').innerHTML='<span class="en">18 h 20 m left to register</span><span class="mk">18 ч 20 м до регистрација</span>';
+  document.getElementById('orderTx').innerHTML='<span class="en"><b>RQS before sampling (§6.1.1).</b> QC must register this request within <b>24 hours</b> (SOP-017). Sampling cannot begin until the request is registered.</span><span class="mk"><b>RQS пред земање.</b> КК мора да регистрира во <b>24 часа</b>.</span>';
+  document.getElementById('rqsActs').innerHTML='<button class="btn" onclick="registerRqs()"><span class="en">Register request (QC)</span><span class="mk">Регистрирај (КК)</span></button><button class="btn ghost" onclick="missWin()"><span class="en">Demo: let window lapse</span><span class="mk">Демо: истечи прозорец</span></button>';
+}
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

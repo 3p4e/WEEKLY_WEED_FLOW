@@ -13,13 +13,25 @@ DOCUMENT-AGNOSTIC: nothing here assumes a particular study, strain, matrix, rang
 number of levels. A validation with 3 levels of one matrix and a verification with 6 levels
 of another are both handled by binding their own dataset and calling the same helpers.
 No third-party dependency (pure stdlib) so it runs under any harness with CPython.
+
+NOTE (audit ITEM 4, confirmed by grep across docengine/): not imported anywhere in
+DocEngine's own request path (build_from_md.py / builder.py / pipeline.py never call
+this module) — currently unused here. Left in place rather than deleted: it may still
+be live for a separate, related document-authoring skill outside this repo.
 """
 import os, csv, json, math, statistics, hashlib, datetime
 
 # ---------------------------------------------------------------- dataset binding
 def load_dataset(path):
     """Load a bound dataset and return a native object.
-       .json -> the parsed object as-is; .csv/.tsv -> list[dict] (header-keyed rows)."""
+       .json -> the parsed object as-is; .csv/.tsv -> list[dict] (header-keyed rows).
+
+    AUDIT ITEM 5 (dead code today — see the module-level NOTE above): `path` is
+    opened here with no validation at all against a caller-influenced value
+    (no allowlisted directory, no traversal/symlink check). Harmless while
+    this module is unreachable from any live endpoint, but if it is ever
+    wired into a request path that lets a caller influence `path`, that gap
+    needs to be closed FIRST — don't let this open() go live unreviewed."""
     ext = os.path.splitext(path)[1].lower()
     if ext == ".json":
         with open(path, encoding="utf-8") as f:
@@ -33,7 +45,8 @@ def load_dataset(path):
 
 def provenance(path):
     """ALCOA+ data-provenance record to print in the document's data note."""
-    b = open(path, "rb").read()
+    with open(path, "rb") as f:
+        b = f.read()
     return {"file": os.path.basename(path),
             "sha256": hashlib.sha256(b).hexdigest()[:16],
             "bytes": len(b),

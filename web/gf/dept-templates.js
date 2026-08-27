@@ -59,6 +59,18 @@ GF.DEPT_TEMPLATES = {
                { v: 'in_process', en: 'In-process', mk: 'Процесна' }, { v: 'final', en: 'Final', mk: 'Финална' },
                { v: 'environmental', en: 'Environmental', mk: 'Амбиентална' }] },
       { key: 'batch_ref', en: 'Batch', mk: 'Серија', type: 'text', ph: 'B-2026-041' },
+      // QCSOP 001's five-phase lab-testing lifecycle and QCSOP 019's OOx
+      // deviation flag, exactly as the design's task-create-qc.html offers
+      // them at creation. Both are template ATTRS (the informational layer —
+      // WWF tracks that the work happened, it is not the SFR/register), so
+      // the card chips and dept-home grouping get them for free.
+      { key: 'lifecycle_phase', en: 'Lifecycle phase', mk: 'Фаза', type: 'select', chip: true,
+        opts: [{ v: 'rqs', en: '1 · RQS', mk: '1 · RQS' }, { v: 'sfr', en: '2 · SFR', mk: '2 · SFR' },
+               { v: 'str', en: '3 · STR', mk: '3 · STR' }, { v: 'ari', en: '4 · ARI', mk: '4 · ARI' },
+               { v: 'closure', en: '5 · Closure', mk: '5 · Затворање' }] },
+      { key: 'oox_flag', en: 'Deviation (OOx)', mk: 'Отстапување (OOx)', type: 'select', chip: true,
+        opts: [{ v: 'oos', en: 'OOS', mk: 'OOS' }, { v: 'oot', en: 'OOT', mk: 'OOT' },
+               { v: 'ooe', en: 'OOE', mk: 'OOE' }, { v: 'ooc', en: 'OOC', mk: 'OOC' }] },
     ],
     presets: [
       { en: 'Sampling', mk: 'Земање примероци' },
@@ -156,8 +168,18 @@ GF.renderDeptFields = (deptId, current) => {
   const input = (f) => {
     const v = cur[f.key] != null ? String(cur[f.key]) : '';
     if (f.type === 'select') {
-      // Popup chooser (chooser.js), not a native dropdown — the hidden input
-      // keeps the `GF.$('attr-f-…').value` contract for collectDeptAttrs.
+      // Small option sets render as the design's INLINE chip group — every
+      // option visible, one tap (task-create-*.html shows type, tier, phase
+      // and OOX exactly this way). Larger sets keep the searchable popup.
+      // Both keep the hidden-input `GF.$('attr-f-…').value` contract for
+      // collectDeptAttrs / applyPreset / openEdit.
+      if (f.opts.length <= 6) {
+        return GF.chipField(`attr-f-${f.key}`, {
+          value: v, title: GF.tplLabel(f),
+          options: f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) })),
+          onPick: () => GF.renderAddPreview && GF.renderAddPreview(),
+        });
+      }
       return GF.selectField(`attr-f-${f.key}`, {
         value: v, title: GF.tplLabel(f), placeholder: '—',
         options: [{ v: '', label: '—' }].concat(f.opts.map(o => ({ v: o.v, label: GF.tplLabel(o) }))),
@@ -234,7 +256,12 @@ GF.applyPreset = (i) => {
   const p = tpl && tpl.presets && tpl.presets[i];
   if (!p) return;
   const title = GF.$('add-title');
-  if (title) { title.value = `${p.mk} | ${p.en}`; title.focus(); }
+  // Only fill the title when it is still empty/whitespace-only — a Quick-add
+  // tap must never silently discard a title the user already typed. (This
+  // file has no confirm()/toast precedent for this kind of choice, so a
+  // silent skip — the field is simply left as the user left it — is the
+  // simplest option, and the attrs/type below still get applied either way.)
+  if (title && !title.value.trim()) { title.value = `${p.mk} | ${p.en}`; title.focus(); }
   if (p.type && GF.$('add-type')) { GF.$('add-type').value = p.type; if (GF.syncSelect) GF.syncSelect('add-type'); }
   Object.entries(p.attrs || {}).forEach(([k, v]) => {
     const el = GF.$('attr-f-' + k); if (el) { el.value = String(v); if (GF.syncSelect) GF.syncSelect('attr-f-' + k); }
@@ -255,7 +282,26 @@ GF.collectDeptAttrs = (deptId, base) => {
       if (!el) return;
       const raw = (el.value || '').trim();
       if (!raw) { delete out[f.key]; return; }
-      out[f.key] = f.type === 'number' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+      if (f.type === 'number') {
+        // The browser's own <input type="number"> sanitization (renderDeptFields
+        // emits type="number") already blocks most garbage before .value is
+        // ever read here — but it accepts anything that PARSES as a number
+        // syntactically, including "1e400", which overflows to Infinity. The
+        // old `Number.isFinite(...) ? Number(raw) : raw` fallback silently
+        // wrote that raw STRING into a JSONB column later code treats as a
+        // Number (sums, chip formatting, comparisons) — no coercion, no
+        // rejection. Reject it outright instead (same idiom as harvest-view.js's
+        // ipmSave: parseFloat + Number.isFinite, toast, drop the value).
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n)) {
+          GF.toast(AL(`"${f.en}" must be a valid number`, `„${f.mk}“ мора да биде важечки број`), 'error');
+          delete out[f.key];
+          return;
+        }
+        out[f.key] = n;
+        return;
+      }
+      out[f.key] = raw;
     });
   }
   return out;
@@ -264,9 +310,14 @@ GF.collectDeptAttrs = (deptId, base) => {
 // Card meta chips for a task's attributes — `chip:true` template fields (or,
 // with no template, the first few raw keys). Attribute chips are filled soft
 // chips with a mono value, visually distinct from #tag outline chips.
-GF.attrChips = (t) => {
+/* The label/value pairs behind a task's attribute chips, as DATA — one
+   source of truth for every chip renderer. attrChips (below) draws the
+   classic .attr-chip; depthome's .mw-tcard draws the design system's
+   .mw-attr from the same pairs, so the two can never disagree about WHICH
+   attributes a card shows. */
+GF.attrChipData = (t) => {
   const attrs = t && t.attrs;
-  if (!attrs || typeof attrs !== 'object') return '';
+  if (!attrs || typeof attrs !== 'object') return [];
   const tpl = GF.deptTemplate(t.dept);
   let entries;
   if (tpl) {
@@ -279,6 +330,8 @@ GF.attrChips = (t) => {
   } else {
     entries = Object.entries(attrs).slice(0, 3).map(([k, v]) => ({ label: k, val: String(v) }));
   }
-  return entries.slice(0, 4).map(e =>
-    `<span class="attr-chip" title="${GF.esc(e.label)}">${GF.esc(String(e.val).slice(0, 24))}</span>`).join('');
+  return entries.slice(0, 4).map(e => ({ label: e.label, val: String(e.val).slice(0, 24) }));
 };
+
+GF.attrChips = (t) => GF.attrChipData(t).map(e =>
+  `<span class="attr-chip" title="${GF.esc(e.label)}">${GF.esc(e.val)}</span>`).join('');

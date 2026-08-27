@@ -15,18 +15,22 @@ Two ways in:
     (qcm.blani). The token is valid ONLY on this route.
 """
 import hmac
+import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.tasks import _assert_scope_visible
+from app.api.weekwindow import ensure_week
 from app.db import rls, rls_users, users_admin_pool
-from app.deps import require_password_set
+from app.deps import dept_scope, require_password_set
 from app.worktime import TZ
 
 router = APIRouter(prefix="/capture", tags=["capture"])
+_log = logging.getLogger("app.capture")
 
 _STATUSES = {"pending", "ongoing", "review", "stuck", "postponed", "completed"}
 _TYPES = {"capa", "sop", "validation", "document", "lab", "meeting", "admin", "other"}
@@ -63,13 +67,13 @@ class CaptureTask(BaseModel):
     title: str
     description: str | None = None
     status: str = "pending"
-    priority: str = "medium"
-    task_type: str = "other"
+    priority: str | None = None
+    task_type: str | None = None
     reference_code: str | None = None
     department: str | None = None
     owner: str | None = None
-    assignees: list[str] = []
-    tags: list[str] = []
+    assignees: list[str] = Field(default_factory=list, max_length=64)
+    tags: list[str] = Field(default_factory=list, max_length=64)
     week_start: date | None = None
     due_date: date | None = None
     estimated_hours: float | None = Field(default=None, ge=0)
@@ -77,15 +81,19 @@ class CaptureTask(BaseModel):
     outcome: str | None = None
     blocker_reason: str | None = None
     recurrence_hint: str | None = None
-    subtasks: list[CaptureSubtask] = []
-    links: list[CaptureLink] = []
-    sessions: list[CaptureSession] = []
-    provenance: list[dict] = []   # Drive sweep carries source files; ignored here beyond links
+    # Explicit caps, matching every other write surface in the app. A capture
+    # is one person's session of work, so these bounds are far above any real
+    # payload while keeping a hostile or runaway one from turning into an
+    # unbounded per-task transaction loop below.
+    subtasks: list[CaptureSubtask] = Field(default_factory=list, max_length=200)
+    links: list[CaptureLink] = Field(default_factory=list, max_length=100)
+    sessions: list[CaptureSession] = Field(default_factory=list, max_length=500)
+    provenance: list[dict] = Field(default_factory=list, max_length=200)
 
 
 class CapturePayload(BaseModel):
     session_meta: dict = {}
-    tasks: list[CaptureTask]
+    tasks: list[CaptureTask] = Field(max_length=1000)
 
 
 def _tz(dt: datetime | None) -> datetime | None:
@@ -101,6 +109,21 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     honored on this route) acting as the configured capture user."""
     token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
     username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
+    # LOW (reviewed, Wave 3 item 4) — accepted as an operational concern, not
+    # a code bug: this single static token grants full import authority as
+    # whatever role CAPTURE_IMPORT_USER holds (an ADMIN-equivalent account in
+    # practice, e.g. qcm.blani) with no rotation happening anywhere in THIS
+    # code. That is deliberate — rotation of a deployment secret is the
+    # deployment's job, not the application's: this route only ever compares
+    # whatever value CAPTURE_IMPORT_TOKEN currently holds (env var, likely
+    # backed by the platform's secret manager — see docs/DEPLOY.md), so
+    # rotating it is a matter of issuing a new value there and restarting/
+    # redeploying, with no schema or code change required on this end. The
+    # code cannot enforce an operational policy (how often, by whom, on what
+    # trigger) it has no visibility into — that responsibility belongs with
+    # whoever owns the deployment's secret-management process. Do not read
+    # the absence of in-code rotation logic here as an oversight.
+    #
     # Constant-time compare so the static token can't be recovered byte-by-byte
     # via response-timing (same reason security.py always pays the bcrypt cost).
     if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
@@ -129,25 +152,12 @@ async def _actor(authorization: str | None = Header(None)) -> dict:
     return user
 
 
-async def _ensure_week(c, org_id, day: date):
-    """Same upsert as weekly_snapshot._ensure_week — calendar weeks are
-    auto-provisioned so imported tasks are always week-linked."""
-    iso_year, iso_week, _ = day.isocalendar()
-    monday = day - timedelta(days=day.weekday())
-    return await c.fetchval(
-        "INSERT INTO calendar_weeks(org_id, iso_year, iso_week, starts_on, ends_on)"
-        " VALUES ($1,$2,$3,$4,$5)"
-        " ON CONFLICT (org_id, iso_year, iso_week) DO UPDATE SET iso_year=EXCLUDED.iso_year"
-        " RETURNING id",
-        org_id, iso_year, iso_week, monday, monday + timedelta(days=6))
-
-
 def _validate(t: CaptureTask) -> str | None:
     if t.status not in _STATUSES:
         return f"invalid status '{t.status}'"
-    if t.task_type not in _TYPES:
+    if t.task_type is not None and t.task_type not in _TYPES:
         return f"invalid task_type '{t.task_type}'"
-    if t.priority not in _PRIORITIES:
+    if t.priority is not None and t.priority not in _PRIORITIES:
         return f"invalid priority '{t.priority}'"
     if t.recurrence_hint and t.recurrence_hint not in _RECURRENCE:
         return f"invalid recurrence_hint '{t.recurrence_hint}'"
@@ -171,6 +181,20 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
         dept_rows = await c.fetch("SELECT id, code FROM departments")
     depts = {r["code"]: r["id"] for r in dept_rows}
 
+    # A dept-scoped manager imports into their OWN department only — the same
+    # restriction create_task enforces (tasks.py:379-390) and that this endpoint
+    # never had: it resolved the capture's department code and used it verbatim,
+    # so a scoped manager could file work into any department just by naming it
+    # in the payload. An omitted department defaults to theirs rather than
+    # landing unassigned, where their own scoped list could never surface it
+    # again. Pure function of the actor, so it is resolved once here.
+    # This binds the connector path too (_capture_actor acts as the configured
+    # capture user) — whatever scope that account carries now applies to imports
+    # arriving through the MCP tool.
+    scope = dept_scope(actor)
+    scope_id = actor["department_id"] if scope else None
+    scope_code = next((r["code"] for r in dept_rows if str(r["id"]) == scope), None)
+
     for t in body.tasks:
         reason = _validate(t)
         if reason:
@@ -187,11 +211,24 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
             continue
 
         recurrence = {"freq": t.recurrence_hint, "interval": 1} if t.recurrence_hint else None
+        dept_code = t.department
         dept_id = depts.get(t.department) if t.department else None
+        if scope:
+            if t.department:
+                # An unresolvable code cannot be shown to be the actor's own, so
+                # it is refused rather than silently stored with a null
+                # department_id (which would land the task outside any scope).
+                if dept_id is None or str(dept_id) != scope:
+                    skipped.append({"external_ref": t.external_ref,
+                                    "reason": f"department '{t.department}' is outside"
+                                              " your department scope"})
+                    continue
+            else:
+                dept_code, dept_id = scope_code, scope_id
 
         try:
             async with rls(actor) as c:
-                week_id = await _ensure_week(c, actor["org_id"], t.week_start) if t.week_start else None
+                week_id = await ensure_week(c, actor["org_id"], t.week_start) if t.week_start else None
                 row = await c.fetchrow(
                     "SELECT * FROM tasks WHERE org_id=$1 AND external_ref=$2 AND is_deleted=false",
                     actor["org_id"], t.external_ref)
@@ -212,9 +249,10 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                                 " outcome,tags,estimated_hours,created_by,updated_by)"
                                 " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,"
                                 " $19,$20,$21,$21) RETURNING *",
-                                actor["org_id"], owner_id, t.title, t.description, t.status, t.priority,
-                                t.task_type, t.reference_code, t.external_ref, t.blocker_reason, recurrence,
-                                t.department, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
+                                actor["org_id"], owner_id, t.title, t.description, t.status,
+                                t.priority or "medium", t.task_type or "other", t.reference_code,
+                                t.external_ref, t.blocker_reason, recurrence,
+                                dept_code, dept_id, week_id, t.week_start, t.due_date, t.completed_date,
                                 t.outcome, t.tags, t.estimated_hours, actor["id"])
                     except asyncpg.exceptions.UniqueViolationError:
                         # Lost a concurrent-import race for this external_ref
@@ -233,6 +271,36 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                 if is_new:
                     created += 1
                 else:
+                    # Re-authorize against the REAL existing row before merging
+                    # into it. The owner-scoping check above (matching payload
+                    # owner vs actor) only looked at the PAYLOAD's declared
+                    # `owner` field — but external_ref is exactly the kind of
+                    # identifier a dept-scoped (or DB-elevated) actor could
+                    # know or guess, so trusting a self-declared owner would
+                    # let them silently edit ANY task — any real owner, any
+                    # department — just by matching its external_ref and
+                    # claiming ownership of it in the payload. Re-check the
+                    # actor against the row's actual department_id/user_id/
+                    # assignees using the SAME rule every other task mutation
+                    # enforces (tasks.py:_assert_scope_visible) rather than a
+                    # re-derived (and possibly looser) copy of it.
+                    # LOW (existence-oracle, reviewed): the skip reason here must
+                    # NOT distinguish "this external_ref matches a real task you
+                    # can't see" from "this external_ref matches nothing at all"
+                    # — a dept-scoped actor probing external_refs could otherwise
+                    # use the wording to learn that a task exists in a department
+                    # invisible to them. _assert_scope_visible's own 404 is
+                    # already deliberately ambiguous for exactly this reason (see
+                    # its docstring: "Raises 404 rather than 403 to avoid
+                    # confirming a foreign task's existence"); mirror that same
+                    # generic phrasing here instead of composing a more specific
+                    # ("outside your department scope") message.
+                    try:
+                        await _assert_scope_visible(c, str(row["id"]), actor)
+                    except HTTPException:
+                        skipped.append({"external_ref": t.external_ref,
+                                         "reason": "task not found or not permitted"})
+                        continue
                     # Forward-only merge: never regress status; fill blanks;
                     # union tags. Title/description follow the capture (it is
                     # the newer statement of the work).
@@ -241,7 +309,8 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                     merged_tags = sorted(set(row["tags"] or []) | set(t.tags))
                     row = await c.fetchrow(
                         "UPDATE tasks SET title=$2, description=COALESCE($3, description), status=$4,"
-                        " priority=$5, task_type=$6, reference_code=COALESCE($7, reference_code),"
+                        " priority=COALESCE($5, priority), task_type=COALESCE($6, task_type),"
+                        " reference_code=COALESCE($7, reference_code),"
                         " blocker_reason=COALESCE($8, blocker_reason), outcome=COALESCE($9, outcome),"
                         " due_date=COALESCE($10, due_date), completed_date=COALESCE($11, completed_date),"
                         " week_id=COALESCE($12, week_id), week_start=COALESCE($13, week_start),"
@@ -296,10 +365,20 @@ async def import_capture(body: CapturePayload, actor: dict = Depends(_actor)):
                         " department,department_id,week_id,week_start,created_by,updated_by)"
                         " VALUES ($1,$2,$3,$4,$5,$6,'medium',$7,$8,$9,$10,$11,$12,$12)",
                         actor["org_id"], owner_id, task_id, st.title, st.description, st_status, t.task_type,
-                        t.department, dept_id, week_id, t.week_start, actor["id"])
+                        dept_code, dept_id, week_id, t.week_start, actor["id"])
                     have_titles.add(st.title)
         except Exception as e:
-            skipped.append({"external_ref": t.external_ref, "reason": f"db error: {type(e).__name__}"})
+            # LOW (existence-oracle, reviewed): echoing the raw exception class
+            # name (e.g. "UniqueViolationError" from the tasks_org_external_ref_key
+            # race below) back to the caller is the same class of leak as the
+            # _assert_scope_visible catch above — it can confirm a conflicting
+            # row exists for this external_ref even when the caller never
+            # otherwise learns why. Log the real exception server-side (where an
+            # operator can act on it) and return one generic reason to the
+            # client regardless of which DB error actually occurred.
+            _log.warning("capture import: unhandled error for external_ref=%r (org=%s): %s: %s",
+                         t.external_ref, actor["org_id"], type(e).__name__, e, exc_info=True)
+            skipped.append({"external_ref": t.external_ref, "reason": "import failed for this task"})
 
     return {"ok": True, "created": created, "updated": updated,
             "sessions_added": sessions_added, "skipped": skipped,

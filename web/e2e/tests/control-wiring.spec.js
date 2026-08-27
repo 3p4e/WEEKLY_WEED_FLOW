@@ -1,9 +1,11 @@
 // @ts-check
 // Preventive smoke test for the class of bug where a control is wired to a
 // missing/misspelled handler, a view errors on render, or an inline handler
-// references a GF.* function that doesn't exist. Runs entirely in DEMO mode
-// (in-memory API, no seeded org) so it can walk every nav view + key modals
-// cheaply and assert:
+// references a GF.* function that doesn't exist. Runs inside the live demo
+// (GF.DEMO.enter() → a real POST /demo/start round trip against a dedicated,
+// disposable demo org — see backend/app/demo_org.py; the e2e backend launch
+// script sets DEMO_ENABLED=true) so it can walk every nav view + key modals
+// cheaply, with no per-spec org fixture, and assert:
 //   1. no uncaught page errors while navigating the whole app,
 //   2. every inline on*-handler's GF.<path>(...) call resolves to a function,
 //   3. every nav view renders a non-empty main region.
@@ -26,11 +28,14 @@ async function enterDemo(page) {
   await page.locator('#gf-leaf-stage').click().catch(() => {});
   await page.waitForTimeout(300);
   await page.evaluate(() => window['GF'].DEMO.enter());
-  // DEMO.enter() calls location.reload() — this predicate can run mid-reload
-  // when window.GF doesn't exist yet, and a THROWING predicate rejects
-  // waitForFunction immediately instead of polling again. Guard every step.
+  // DEMO.enter() awaits a real POST /demo/start, then calls location.reload().
+  // This predicate can run mid-reload when window.GF doesn't exist yet, and a
+  // THROWING predicate rejects waitForFunction immediately instead of polling
+  // again — guard every step. Readiness = a real session token landed in
+  // sessionStorage (the reload restores it as GF.API.token) and DEMO.active()
+  // is true; there's no in-memory flag to key off any more.
   await page.waitForFunction(() => window['GF'] && window['GF'].API
-    && window['GF'].API._demoWrapped && window['GF'].DEMO && window['GF'].DEMO.active());
+    && window['GF'].API.token && window['GF'].DEMO && window['GF'].DEMO.active());
   await page.waitForTimeout(1500);
   return errors;
 }

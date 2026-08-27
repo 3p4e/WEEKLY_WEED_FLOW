@@ -16,10 +16,15 @@ GF.views = GF.views || {};
 GF.WWF._xr = { kind: 'report', refDate: '', status: null, docs: {}, open: {},
                loading: false, error: null, seq: 0 };
 
+// Theme-aware tokens, not hardcoded hex — same fix, same reasoning, as
+// report-view.js's SC/SC_BG maps (that file's identical class of
+// hex-hardcoding). bg/bd both resolve to the status color's `-soft` token so
+// the chip repaints correctly in the light theme instead of staying pinned to
+// the dark palette's literal rgba values.
 const XR_STATUS_STYLE = {
-  missing: { bg: 'rgba(255,77,94,.12)', fg: 'var(--red-fg,#FF8090)', bd: 'rgba(255,77,94,.3)' },
-  draft:   { bg: 'rgba(224,167,62,.12)', fg: 'var(--amber-fg,#E0C074)', bd: 'rgba(224,167,62,.3)' },
-  locked:  { bg: 'rgba(43,232,160,.12)', fg: 'var(--primary,#2BE8A0)', bd: 'rgba(43,232,160,.3)' },
+  missing: { bg: 'var(--red-soft)', fg: 'var(--red-fg)', bd: 'var(--red-soft)' },
+  draft:   { bg: 'var(--amber-soft)', fg: 'var(--amber-fg)', bd: 'var(--amber-soft)' },
+  locked:  { bg: 'var(--primary-soft)', fg: 'var(--primary)', bd: 'var(--primary-soft)' },
 };
 const xrStatusLbl = (s) => s === 'locked' ? AL('Submitted', 'Поднесен')
   : s === 'draft' ? AL('Draft', 'Нацрт') : AL('Missing', 'Недостасува');
@@ -28,7 +33,10 @@ GF.WWF._xrRerender = () => { if (GF.state.view === 'execreport') GF.render.all()
 
 GF.WWF.xrLoad = async (force) => {
   const st = GF.WWF._xr;
-  if (st.loading) return;
+  // No `if (st.loading) return` here: this function already supersedes via
+  // st.seq below, so the early return added nothing except DROPPING the user's
+  // click — changing kind or ref_date mid-load did nothing at all, leaving the
+  // toolbar and the content disagreeing.
   st.loading = true; st.error = null;
   if (force) { st.status = null; st.docs = {}; }
   GF.WWF._xrRerender();
@@ -128,17 +136,31 @@ GF.WWF.xrStatusChips = (status, opts) => {
 
 /* ── section body renderers (all read-only; everything through GF.esc) ── */
 
+// The owner cockpit's headline band (mockup execreport.html .xr-kpis): four
+// tiles built entirely from the compiled document's `metrics` (documents.py
+// _metrics) — on-time rate, open-overdue count, total logged hours, and mean
+// effort ratio. Colour-toned so on-time reads green and overdue reads red at a
+// glance. Every field is degrade-safe: a missing metric shows "—"/0, never NaN.
 const xrKpis = (c) => {
   const m = (c && c.metrics) || {};
-  const tasks = (c && c.tasks) || [];
-  const done = tasks.filter(t => t.status === 'completed').length;
   const ot = m.on_time || {};
   const rate = (ot.rate != null && Number.isFinite(Number(ot.rate))) ? Math.round(ot.rate * 100) + '%' : '—';
-  const kpi = (v, l) => `<div class="xr-kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  return `<div class="xr-kpis">
-    ${kpi(tasks.length, AL('Tasks', 'Задачи'))}
-    ${kpi(done, AL('Completed', 'Завршени'))}
-    ${kpi(rate, AL('On-time', 'Навремено'))}
+  const overdue = m.overdue_open || [];
+  const oldest = overdue.reduce((mx, o) => Math.max(mx, o.age_days || 0), 0);
+  const hours = (m.per_dept || []).reduce((s, d) => s + (Number(d.hours) || 0), 0);
+  const ratios = (m.complexity || []).map(x => x.est_ratio).filter(r => r != null && Number.isFinite(Number(r)));
+  const cplx = ratios.length ? ratios.reduce((s, r) => s + Number(r), 0) / ratios.length : null;
+  return `<div class="ana-tiles">
+    ${GF.kpiTile(AL('On-time', 'Навремено'), rate,
+        ot.measured ? `${ot.on_time || 0}/${ot.measured} ${AL('on time', 'навреме')}` : AL('no deadlines', 'без рокови'),
+        'good')}
+    ${GF.kpiTile(AL('Overdue', 'Задоцнети'), overdue.length,
+        overdue.length ? `${AL('oldest', 'најстаро')} ${oldest}${AL('d', 'д')}` : AL('none past due', 'ништо задоцнето'),
+        overdue.length ? 'bad' : null)}
+    ${GF.kpiTile(AL('Logged hours', 'Логирани часови'), hours ? hours.toFixed(hours < 100 ? 1 : 0) : '0',
+        AL('this week', 'оваа недела'))}
+    ${GF.kpiTile(AL('Complexity', 'Комплексност'), cplx != null ? cplx.toFixed(1) : '—',
+        AL('actual ÷ est', 'реално ÷ план'), cplx != null && cplx > 1.2 ? 'warn' : null)}
   </div>`;
 };
 
@@ -185,7 +207,7 @@ const xrTasks = (c) => {
         ${n.user_id && who(n.user_id) ? `<span class="by">— ${GF.esc(who(n.user_id))}</span>` : ''}</div>`;
     }).join('');
     return `<details class="xr-task"><summary>
-        <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(t.status || '')}</span>
+        <span class="pill s-${GF.esc((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending')}" style="pointer-events:none">${GF.esc(GF.statusLabel((t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending'))}</span>
         <span class="xr-task-title">${GF.esc(t.title || '')}</span>
         ${t.reference_code ? `<span class="ref-code">${GF.esc(t.reference_code)}</span>` : ''}
       </summary>
@@ -215,6 +237,13 @@ const xrSection = (label, deptId, statusEntry) => {
   let body = '';
   if (open) {
     const doc = st.docs[deptId];
+    // Self-heal on cache-miss: xrSetKind/xrSetRef wipe st.docs on a kind/week
+    // change but leave already-open sections open (xrSetRef especially — the
+    // user is still looking at this department, just a different week), so
+    // without this an open section stuck at `undefined` never re-fetches and
+    // shows "Loading…" forever. Mirrors the org-wide KPI band's own
+    // self-healing fetch above (GF.views.execreport), now for every section.
+    if (doc === undefined) GF.WWF.xrFetchDoc(deptId);
     if (doc === null || doc === undefined) {
       body = `<div class="xr-sec-body sub" style="display:flex;align-items:center;gap:10px">
         <span class="mw-spinner mw-spinner--sm"></span>${AL('Loading…', 'Се вчитува…')}</div>`;
@@ -293,10 +322,9 @@ GF.views.execreport = function () {
 GF.WWF._registerFullPageView({
   key: 'execreport',
   icon: 'eye',
-  insertBefore: 'coord',   // Management group of the rail (mockup nav.js)
+  insertBefore: 'report',   // Management group of the rail (mockup nav.js)
   label: () => AL('Executive Report', 'Извештај'),
   // Same gate as the backend's require_role(*ELEVATED_ROLES) on /status and
   // the document endpoints — a base USER would only collect 403s here.
   guard: () => ELEVATED_ROLES.includes((GF.API.user || {}).role),
-  insertBefore: 'report',
 });

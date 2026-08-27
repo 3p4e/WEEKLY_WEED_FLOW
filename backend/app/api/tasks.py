@@ -5,6 +5,7 @@ recurrence / outcome / archive on tasks, plus two child resources —
 work_sessions (every sitting of real work; the overtime engine's source of
 truth) and task_links (external Drive/SOP references)."""
 import json
+import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -14,12 +15,15 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.weekwindow import ensure_week
 from app.automation import canned_recipients
 from app.db import rls
 from app.deps import dept_scope, require_password_set, require_role
-from app.notify import emit, participants
+from app.notify import participants, safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
-from app.worktime import classify, session_hours
+from app.worktime import facility_today, classify, session_hours
+
+_log = logging.getLogger("app.tasks")
 
 router = APIRouter(tags=["tasks"])
 
@@ -37,6 +41,16 @@ Priority = Literal["low", "normal", "medium", "high", "critical"]
 # FK-bearing columns whose bad/non-existent value should be a 422, not a 500.
 _FK_ERRORS = (asyncpg.ForeignKeyViolationError, asyncpg.DataError, asyncpg.InvalidTextRepresentationError)
 
+
+
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _uuid_or_422(val: str | None, name: str) -> None:
+    """Malformed uuids on raw-SQL read paths otherwise surface as asyncpg
+    cast errors -> 500; the write paths already map them via _FK_ERRORS."""
+    if val is not None and not _UUID_RE.match(str(val)):
+        raise HTTPException(422, f"{name} must be a uuid")
 
 def _ser(rows):
     return [dict(r) for r in rows]
@@ -121,7 +135,7 @@ _TASK_COLS = (
     "t.id,t.user_id,t.parent_id,t.title,t.description,t.status,t.priority,t.workflow_state,"
     "t.task_type,t.node_kind,t.reference_code,t.external_ref,t.blocker_reason,t.recurrence,t.outcome,t.is_archived,"
     "t.department,t.department_id,t.week_id,t.week_start,t.days,t.tags,t.attributes,t.progress,"
-    "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at"
+    "t.due_date,t.completed_date,t.estimated_hours,t.actual_hours,t.created_at,t.updated_at,t.batch_id"
 )
 
 
@@ -133,6 +147,8 @@ async def list_tasks(
     include_archived: bool = False,
     user: dict = Depends(require_password_set),
 ):
+    _uuid_or_422(week_id, "week_id")
+    _uuid_or_422(department_id, "department_id")
     clauses, args = ["t.is_deleted=false"], []
     if not include_archived:
         clauses.append("t.is_archived=false")
@@ -221,6 +237,8 @@ async def task_tree(include_archived: bool = False, user: dict = Depends(require
 
 @router.get("/tasks/{task_id}")
 async def get_task(task_id: str, user: dict = Depends(require_password_set)):
+    if not _UUID_RE.match(str(task_id)):
+        raise HTTPException(404, "Task not found")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT * FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -237,14 +255,28 @@ async def get_task(task_id: str, user: dict = Depends(require_password_set)):
         # Dependency edges: what this task is blocked_by, and (reverse) what it
         # blocks. Each carries the depended-on task's title + status so the UI
         # can render "blocked by X (ongoing)" without a second round trip.
+        # The linked task gets the SAME department-scope predicate as every
+        # other cross-task exposure point in this file (_scope_clause, the
+        # list_tasks/task_tree/reports rule) — without it a dept-scoped
+        # manager viewing an in-scope task could read the title/status of any
+        # task it depends on/blocks, including one in a department they have
+        # no visibility into at all. Out-of-scope links are omitted entirely
+        # (not shown as a placeholder), matching _assert_scope_visible's
+        # existence-hiding convention elsewhere in this module. No-ops (and
+        # appends nothing) for an org-wide caller, same as everywhere else
+        # _scope_clause is used.
+        blocked_by_args = [task_id]
+        blocked_by_scope = _scope_clause(user, blocked_by_args)
         blocked_by = await c.fetch(
             "SELECT d.depends_on_task_id AS id, t.title, t.status FROM task_dependencies d"
             " JOIN tasks t ON t.id=d.depends_on_task_id AND t.is_deleted=false"
-            " WHERE d.task_id=$1 ORDER BY t.created_at", task_id)
+            f" WHERE d.task_id=$1{blocked_by_scope} ORDER BY t.created_at", *blocked_by_args)
+        blocks_args = [task_id]
+        blocks_scope = _scope_clause(user, blocks_args)
         blocks = await c.fetch(
             "SELECT d.task_id AS id, t.title, t.status FROM task_dependencies d"
             " JOIN tasks t ON t.id=d.task_id AND t.is_deleted=false"
-            " WHERE d.depends_on_task_id=$1 ORDER BY t.created_at", task_id)
+            f" WHERE d.depends_on_task_id=$1{blocks_scope} ORDER BY t.created_at", *blocks_args)
         return {"task": dict(task), "subtasks": _ser(subs), "progress": _ser(prog),
                 "sessions": [_session_out(s) for s in sessions], "links": _ser(links),
                 "blocked_by": _ser(blocked_by), "blocks": _ser(blocks)}
@@ -274,6 +306,10 @@ class TaskIn(BaseModel):
     attributes: dict | None = None
     estimated_hours: Decimal | None = Field(default=None, ge=0)
     progress: int = Field(default=0, ge=0, le=100)
+    # Migration 0054 (cultivation Phase 3): the batch this task was performed
+    # on, if any. Validated org-scoped below (RLS-filtered SELECT, not the raw
+    # FK — see the note at that check).
+    batch_id: str | None = None
 
 
 _RECURRENCE_FREQS = {"daily", "weekly", "monthly"}
@@ -374,47 +410,95 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
         if not body.department_id:
             body.department_id = scope
     async with rls(user) as c:
-        if scope and body.parent_id:
+        if body.parent_id is not None:
+            # Org-scoped existence check (RLS-filtered SELECT under this same
+            # connection — same idiom as batch_id below). Postgres validates a
+            # foreign key against the referenced TABLE, not through this
+            # session's RLS, so a bare FK check would accept a real parent
+            # task id belonging to ANOTHER org. This used to run ONLY inside
+            # `if scope and body.parent_id`, so every org-wide caller
+            # (ADMIN/OWNER/CEO/COO/QP, a department-less manager) *and* every
+            # plain USER (not in DEPT_SCOPED_ROLES, so dept_scope() is None
+            # for them too) skipped it entirely — any authenticated caller who
+            # knew a foreign org's real parent-task uuid could silently attach
+            # a new task to it. Runs unconditionally now, for every caller.
             parent = await c.fetchrow(
                 "SELECT department_id, user_id FROM tasks WHERE id=$1 AND is_deleted=false",
                 body.parent_id)
             if parent is None:
-                raise HTTPException(422, "Unknown department, week, or parent task")
-            mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
-                or str(parent["user_id"]) == str(user["id"])
-            if not mine and body.department_id and str(body.department_id) != scope:
-                raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
-            if not body.department_id:
-                # Inherit the parent's department ONLY when the parent is the
-                # manager's own — otherwise an omitted department_id under a
-                # FOREIGN parent would silently plant the child in that other
-                # department. Default to the manager's own scope in that case.
-                body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
+                raise HTTPException(422, "Unknown parent task")
+            if scope:
+                mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
+                    or str(parent["user_id"]) == str(user["id"])
+                if not mine:
+                    # A foreign parent is attachable ONLY if it is ALREADY visible
+                    # to this manager (existing multi-departmental family / own or
+                    # assigned task). Without this, attaching a child in their own
+                    # department to ANY org task uuid would grant them the family
+                    # visibility clause on that task — a self-served scope
+                    # escalation (_assert_scope_visible counts existing children,
+                    # so the check runs before the new child exists).
+                    await _assert_scope_visible(c, str(body.parent_id), user)
+                if not mine and body.department_id and str(body.department_id) != scope:
+                    raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
+                if not body.department_id:
+                    # Inherit the parent's department ONLY when the parent is the
+                    # manager's own — otherwise an omitted department_id under a
+                    # FOREIGN parent would silently plant the child in that other
+                    # department. Default to the manager's own scope in that case.
+                    body.department_id = str(parent["department_id"]) if (mine and parent["department_id"]) else scope
+        if body.department_id is not None:
+            # Same org-scoped existence check as parent_id/batch_id, same
+            # reason: a bare FK on department_id accepts any org's real
+            # department id, not just the caller's own.
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1", body.department_id):
+                raise HTTPException(422, "Unknown department")
+        if body.week_id is not None:
+            if not await c.fetchval("SELECT 1 FROM calendar_weeks WHERE id=$1", body.week_id):
+                raise HTTPException(422, "Unknown week")
+        if body.batch_id is not None:
+            # Migration 0054: the FK alone is not enough — Postgres validates a
+            # foreign key against the referenced TABLE, not through the
+            # referencing session's RLS, so a bare FK check would accept a real
+            # batch id belonging to ANOTHER org. This SELECT runs under the same
+            # rls(user) connection as everything else in this function, so
+            # plant_batches' org_isolation policy (migration 0045) filters it —
+            # a cross-org id reads back as "no such row" here, the same way
+            # _batch_or_422 already does it in cultivation.py/harvest.py. The
+            # same check now runs unconditionally for parent_id/department_id/
+            # week_id above too — that used to be a gap, gated behind
+            # `if scope and ...` and so skipped for every org-wide caller and
+            # every plain USER; it isn't anymore.
+            if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", body.batch_id):
+                raise HTTPException(422, "Unknown batch")
         try:
             row = await c.fetchrow(
                 "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
                 " task_type,node_kind,reference_code,external_ref,blocker_reason,recurrence,"
                 " department,department_id,week_id,week_start,due_date,days,tags,attributes,"
-                " estimated_hours,progress,created_by,updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$2,$2)"
+                " estimated_hours,progress,batch_id,created_by,updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$2,$2)"
                 " RETURNING *",
                 user["org_id"], user["id"], body.parent_id, body.title, body.description, body.status,
                 body.priority, body.task_type, body.node_kind, body.reference_code, body.external_ref,
                 body.blocker_reason, body.recurrence, body.department, body.department_id, body.week_id,
                 body.week_start, body.due_date, body.days, body.tags, body.attributes or {},
-                body.estimated_hours, body.progress,
+                body.estimated_hours, body.progress, body.batch_id,
             )
+        except asyncpg.UniqueViolationError:
+            # M5: a repeated external_ref (at-least-once integration retry) hits
+            # tasks_org_external_ref_key. The unique index signals idempotency was
+            # intended, so map to 409 (not an uncaught 500) — the caller can treat
+            # it as "already imported".
+            raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
-            raise HTTPException(422, "Unknown department, week, or parent task")
+            raise HTTPException(422, "Unknown department, week, parent task, or batch")
         # Feed-only awareness (NO recipients): creation never notifies —
         # Slack/Linear defaults — but the shared activity stream shows it,
         # which is what makes exec-created work visible to the org.
-        try:
-            await emit(c, user, verb="created", object_type="task", object_id=row["id"],
-                       recipients=[], task_id=row["id"], department_id=row["department_id"],
-                       params={"title": row["title"]})
-        except Exception:
-            pass
+        await safe_emit(c, user, verb="created", object_type="task", object_id=row["id"],
+                   recipients=[], task_id=row["id"], department_id=row["department_id"],
+                   params={"title": row["title"]})
     return dict(row)
 
 
@@ -423,7 +507,10 @@ class TaskPatch(BaseModel):
     description: str | None = Field(default=None, max_length=10000)
     status: Status | None = None
     priority: Priority | None = None
-    workflow_state: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    # workflow_state is deliberately NOT patchable: the sign-off lifecycle
+    # (SUMA v2) moves only through POST /tasks/{id}/workflow so every
+    # transition is second-person-checked and evidenced in
+    # task_workflow_events. A raw write would bypass the record.
     task_type: TaskType | None = None
     node_kind: NodeKind | None = None
     department: str | None = Field(default=None, max_length=120)
@@ -438,6 +525,7 @@ class TaskPatch(BaseModel):
     tags: list[str] | None = None
     attributes: dict | None = None
     week_id: str | None = None
+    batch_id: str | None = None
     week_start: date | None = None
     due_date: date | None = None
     completed_date: date | None = None
@@ -457,7 +545,12 @@ _NULLABLE_PATCH_COLS = {"description", "week_id", "week_start", "estimated_hours
                         # department is its nullable text label — an explicit
                         # PATCH {"department_id": null} must clear the assignment,
                         # not be silently dropped as "field omitted".
-                        "department", "department_id"}
+                        "department", "department_id",
+                        # batch_id (migration 0054): same shape as department_id
+                        # — a nullable FK a caller must be able to explicitly
+                        # unlink, e.g. correcting a task attached to the wrong
+                        # batch.
+                        "batch_id"}
 
 
 def _advance(d: date, rec: dict) -> date:
@@ -467,11 +560,14 @@ def _advance(d: date, rec: dict) -> date:
         return d + timedelta(days=interval)
     if freq == "weekly":
         return d + timedelta(weeks=interval)
-    # monthly: same day-of-month, clamped
+    # monthly: same day-of-month, clamped. anchor_day (RFC-5545 semantics)
+    # remembers the ORIGINAL day so a Jan-31 monthly task clamped to Feb-28
+    # springs back to Mar-31 instead of drifting to the 28th forever.
     month = d.month - 1 + interval
     year, month = d.year + month // 12, month % 12 + 1
-    day = min(d.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
-                      31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    anchor = int(rec.get("anchor_day") or d.day)
+    day = min(anchor, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
     return date(year, month, day)
 
 
@@ -479,33 +575,41 @@ async def _materialize_recurrence(c, row) -> dict | None:
     """When a recurring task completes, create its next instance: same
     definition, dates advanced by the recurrence rule, fresh lifecycle.
     Stops silently once `until` is passed."""
-    rec = row["recurrence"]
-    base = row["due_date"] or row["week_start"] or date.today()
+    rec = dict(row["recurrence"])
+    base = row["due_date"] or row["week_start"] or facility_today()
+    # Pin the monthly day anchor on first materialization (before any clamp
+    # rewrites it) so the cadence never drifts off the original day-of-month.
+    if rec.get("freq") == "monthly" and not rec.get("anchor_day"):
+        rec["anchor_day"] = base.day
     nxt = _advance(base, rec)
     until = rec.get("until")
     if until and nxt > date.fromisoformat(str(until)):
         return None
     next_week_start = _advance(row["week_start"], rec) if row["week_start"] else None
     # Resolve the next instance's calendar week so it still shows up in
-    # ?week_id= week views (it lands in a different week than the completed one).
+    # ?week_id= week views (it lands in a different week than the completed
+    # one). ensure_week UPSERTs the row instead of a plain SELECT — a
+    # recurrence can advance past however far the org's calendar_weeks has
+    # been seeded, and a plain SELECT miss would silently orphan the new task
+    # with week_id=NULL even though next_week_start is a well-defined date.
     next_week_id = None
     if next_week_start is not None:
-        next_week_id = await c.fetchval(
-            "SELECT id FROM calendar_weeks WHERE org_id=$1 AND starts_on=$2",
-            row["org_id"], next_week_start)
+        next_week_id = await ensure_week(c, row["org_id"], next_week_start)
     new = await c.fetchrow(
         "INSERT INTO tasks(org_id,user_id,parent_id,title,description,status,priority,"
-        " task_type,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
+        " task_type,node_kind,reference_code,recurrence,department,department_id,week_id,week_start,due_date,"
         " days,tags,attributes,estimated_hours,created_by,updated_by)"
         " SELECT org_id,user_id,parent_id,title,description,'pending',priority,"
-        " task_type,reference_code,recurrence,department,department_id,$2,$3,$4,"
+        " task_type,node_kind,reference_code,$6,department,department_id,$2,$3,$4,"
         " days,tags,attributes,estimated_hours,$5,$5 FROM tasks WHERE id=$1 RETURNING *",
-        row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None, row["updated_by"])
+        row["id"], next_week_id, next_week_start, nxt if row["due_date"] else None,
+        row["updated_by"], rec)
     return dict(new) if new else None
 
 
 @router.patch("/tasks/{task_id}")
 async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     patch = body.model_dump(exclude_unset=True)
     if "recurrence" in patch:
         _check_recurrence(patch["recurrence"])
@@ -519,18 +623,27 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # which is the empty map (recurrence, by contrast, genuinely nulls out).
         if patch["attributes"] is None:
             patch["attributes"] = {}
+    # A completed task must carry a completed_date — completion-rate
+    # analytics filters/aggregates on it being non-null (matching the
+    # auto-fill/auto-clear convention below for other status-driven
+    # side-effects on this column). An explicit `completed_date: null`
+    # alongside `status: "completed"` used to be honored verbatim and
+    # silently dropped the task out of that analytics; treat it the same as
+    # an omitted completed_date (auto-fill today) instead of accepting it.
+    if patch.get("status") == "completed" and patch.get("completed_date") is None:
+        patch["completed_date"] = facility_today()
     scope = dept_scope(user)
     fields, args = [], []
     for col, val in patch.items():
         if val is None and col not in _NULLABLE_PATCH_COLS:
             continue
         args.append(val); fields.append(f"{col}=${len(args)}")
-    # Completing a task stamps completed_date unless the caller set one;
-    # reopening it (status moves away from completed) clears the stale stamp
-    # unless the caller is explicitly setting completed_date themselves.
-    if patch.get("status") == "completed" and "completed_date" not in patch:
-        args.append(date.today()); fields.append(f"completed_date=${len(args)}")
-    elif patch.get("status") not in (None, "completed") and "completed_date" not in patch:
+    # Completing a task is now guaranteed to carry a completed_date — either
+    # the caller's own value, or the today-stamp forced above — so it's
+    # already in `patch` and picked up by the loop above; only reopening
+    # (status moves away from completed) needs a side-effect here, clearing
+    # the stale stamp unless the caller is explicitly setting one themselves.
+    if patch.get("status") not in (None, "completed") and "completed_date" not in patch:
         args.append(None); fields.append(f"completed_date=${len(args)}")
     # Completing forward-fills the completion bar unless the caller set one.
     # Deliberately one-directional: progress=100 never forces status (the
@@ -550,32 +663,91 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
         # must be enforced on writes exactly as it already is on reads.
         await _assert_scope_visible(c, task_id, user)
         if noop:
+            # _assert_scope_visible no-ops for an org-wide caller (dept_scope
+            # is None) — it never confirms the row exists in that case. Without
+            # this, an empty-body PATCH to a nonexistent id returned 200
+            # "noop" for org-wide callers while a non-empty PATCH to the same
+            # id correctly 404's below (via UPDATE ... RETURNING NULL) —
+            # inconsistent, and it turned "does this task exist" into a
+            # response-shape oracle. A dept-scoped caller already gets this
+            # for free (their visibility EXISTS query requires the row to
+            # exist), so this is a no-op there.
+            if not await c.fetchval("SELECT 1 FROM tasks WHERE id=$1 AND is_deleted=false", task_id):
+                raise HTTPException(404, "Task not found or not permitted")
             return {"ok": True, "noop": True}
         # A dept-scoped manager can't move a task into another department (or
         # unassign it into the no-department pool their scoped list can't
         # see) — EXCEPT re-targeting a subtask whose parent is in their own
         # department (or personally theirs): that's the delegation move that
         # makes a task multi-departmental.
-        if scope and "department_id" in patch and str(patch["department_id"] or "") != scope:
-            fam = await c.fetchrow(
-                "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
-                " JOIN tasks p ON p.id=t.parent_id"
-                " WHERE t.id=$1 AND t.is_deleted=false", task_id)
-            delegable = fam is not None and (
-                (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
-            if not delegable:
-                raise HTTPException(403, "Managers may not move tasks outside their own department")
-        # Capture the pre-update status so a repeated/retried PATCH that sets
-        # status='completed' on an ALREADY-completed recurring task doesn't
-        # re-materialize a duplicate next instance (recurrence isn't cleared
-        # on completion, so this check is the only idempotency guard).
-        prev_status = await c.fetchval("SELECT status FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        # Lock the row before reading anything from it that a permission
+        # check or the recurrence-idempotency guard below depends on: the
+        # department-move check reads department_id/user_id, and prev_status
+        # reads status — both must see the row FOR UPDATE actually locks, not
+        # a pre-lock snapshot a second, concurrent PATCH on this same task
+        # could still change before this transaction commits (that earlier,
+        # separate read was the audit-flagged race — narrow, since it only
+        # matters when a department-move patch races another write to the
+        # same row, but real).
+        cur_t = await c.fetchrow(
+            "SELECT department_id, user_id, status FROM tasks WHERE id=$1 AND is_deleted=false FOR UPDATE",
+            task_id)
+        prev_status = cur_t["status"] if cur_t else None
+        if scope and "department_id" in patch:
+            cur_dept = str(cur_t["department_id"]) if cur_t and cur_t["department_id"] else None
+            if cur_t is not None and str(patch["department_id"] or "") != (cur_dept or ""):
+                fam = await c.fetchrow(
+                    "SELECT p.department_id AS pd, p.user_id AS pu FROM tasks t"
+                    " JOIN tasks p ON p.id=t.parent_id"
+                    " WHERE t.id=$1 AND t.is_deleted=false", task_id)
+                delegable = fam is not None and (
+                    (fam["pd"] and str(fam["pd"]) == scope) or str(fam["pu"]) == str(user["id"]))
+                owns = str(cur_t["user_id"]) == str(user["id"])
+                # Both directions are guarded: OUT of their department (the
+                # original rule) and IN to it — without src_ok a scoped
+                # manager could hijack any task they can merely see (e.g. as
+                # assignee) onto their own board by setting department_id to
+                # their scope, which the old !=scope condition never checked.
+                src_ok = cur_dept == scope or owns or delegable
+                dst_ok = str(patch["department_id"] or "") == scope or delegable
+                if not (src_ok and dst_ok):
+                    raise HTTPException(403, "Managers may not move tasks outside their own department")
+        if patch.get("department_id") is not None:
+            # Org-scoped existence check (RLS-filtered), same idiom as
+            # batch_id below and create_task's equivalent checks. This used to
+            # be missing entirely — a bare FK would accept another org's real
+            # department id for EVERY caller, dept-scoped or not (the dept-move
+            # authorization block above only fires `if scope`, and even then
+            # only restricts department_id to the manager's own scope/family —
+            # it never confirmed the id actually resolves within the org).
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1", patch["department_id"]):
+                raise HTTPException(422, "Unknown department")
+        if patch.get("week_id") is not None:
+            if not await c.fetchval("SELECT 1 FROM calendar_weeks WHERE id=$1", patch["week_id"]):
+                raise HTTPException(422, "Unknown week")
+        if patch.get("batch_id") is not None:
+            # Same org-scoped existence check as create_task, and for the same
+            # reason: the FK alone would accept another org's real batch id.
+            if not await c.fetchval("SELECT 1 FROM plant_batches WHERE id=$1", patch["batch_id"]):
+                raise HTTPException(422, "Unknown batch")
+        # prev_status was captured above under the same FOR UPDATE lock: a
+        # repeated/retried PATCH that sets status='completed' on an ALREADY-
+        # completed recurring task must not re-materialize a duplicate next
+        # instance (recurrence isn't cleared on completion, so this check is
+        # the only idempotency guard), and two concurrent completion PATCHes
+        # must not both read a pre-completion status — the lock held since
+        # the read above ensures the second transaction blocks until the
+        # first commits, then sees the already-applied status.
         try:
             row = await c.fetchrow(
                 f"UPDATE tasks SET {', '.join(fields)}, updated_at=now() WHERE id=${len(args)}"
                 f" AND is_deleted=false RETURNING *", *args)
+        except asyncpg.UniqueViolationError:
+            # M5: patching external_ref to a value another task already carries
+            # would otherwise 500 — surface the collision as a 409.
+            raise HTTPException(409, "A task with this external_ref already exists")
         except _FK_ERRORS:
-            raise HTTPException(422, "Unknown department, week, or parent task")
+            raise HTTPException(422, "Unknown department, week, parent task, or batch")
         if row is None:
             raise HTTPException(404, "Task not found or not permitted")
         out = dict(row)
@@ -597,22 +769,28 @@ async def update_task(task_id: str, body: TaskPatch, user: dict = Depends(requir
                 # instead of the generic "status" one.
                 canned = await canned_recipients(user, row["task_type"], row["status"])
                 recipients = canned + [(u, "status") for u in who]
-                await emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
+                await safe_emit(c, user, verb="status_changed", object_type="task", object_id=task_id,
                            recipients=recipients, task_id=task_id,
                            department_id=row["department_id"],
                            params={"title": row["title"], "old": prev_status, "new": row["status"]})
             except Exception:
-                pass
+                # safe_emit() itself never raises (it logs and swallows
+                # internally) — anything caught here came from participants()
+                # or canned_recipients() before it. Must not fail the status
+                # update, but must not vanish silently either (H4 idiom).
+                _log.warning("status-change notification setup failed for task %s",
+                             task_id, exc_info=True)
     return out
 
 
 class ProgressIn(BaseModel):
-    day_label: str
-    note: str
+    day_label: str = Field(max_length=40)
+    note: str = Field(max_length=10_000)
 
 
 @router.post("/tasks/{task_id}/progress", status_code=201)
 async def add_progress(task_id: str, body: ProgressIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -630,7 +808,7 @@ class SessionIn(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     hours: Decimal | None = Field(default=None, gt=0)
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=10_000)
     source: Literal["manual", "timer", "capture"] = "manual"
 
 
@@ -658,6 +836,7 @@ def _session_out(r) -> dict:
 
 @router.post("/tasks/{task_id}/sessions", status_code=201)
 async def add_session(task_id: str, body: SessionIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     body.started_at = _facility_tz(body.started_at)
     body.ended_at = _facility_tz(body.ended_at)
     if body.ended_at is None and body.hours is None:
@@ -679,6 +858,7 @@ async def add_session(task_id: str, body: SessionIn, user: dict = Depends(requir
 
 @router.get("/tasks/{task_id}/sessions")
 async def list_sessions(task_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     async with rls(user) as c:
         task = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
         if task is None:
@@ -699,6 +879,7 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
     """Only the person who logged a session (or an elevated role) may remove
     it — sessions are the overtime evidence, so deletion stays narrow (and is
     audit-trailed by the row trigger either way)."""
+    _uuid_or_422(session_id, "session_id")
     async with rls(user) as c:
         row = await c.fetchrow("SELECT user_id, task_id FROM work_sessions WHERE id=$1", session_id)
         if row is None:
@@ -717,13 +898,18 @@ async def delete_session(session_id: str, user: dict = Depends(require_password_
 
 # ── Task links (external references — Drive docs, SOPs) ─────────────────────
 class LinkIn(BaseModel):
-    url: str
-    label: str | None = None
+    # max_length bounds are DoS hygiene (same convention as TaskIn/TaskPatch
+    # above) — url matches external_ref-scale free text (200) rounded up for
+    # real-world Drive/SOP URL length, label matches the file's other
+    # short-label fields (external_ref, department).
+    url: str = Field(max_length=2000)
+    label: str | None = Field(default=None, max_length=200)
     kind: Literal["drive", "sop", "doc", "other"] = "other"
 
 
 @router.post("/tasks/{task_id}/links", status_code=201)
 async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
     url = (body.url or "").strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(422, "url must be http(s)")
@@ -741,6 +927,8 @@ async def add_link(task_id: str, body: LinkIn, user: dict = Depends(require_pass
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
 async def delete_link(task_id: str, link_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    _uuid_or_422(link_id, "link_id")
     async with rls(user) as c:
         # Look the task up under RLS first — task_links' only policy is
         # org_isolation, so without this any org member who knows a link id
@@ -768,10 +956,19 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
     that would introduce a CYCLE — if the prospective blocker is already
     (transitively) blocked by this task, adding the edge would deadlock the
     graph, so it's a 422."""
+    _uuid_or_422(task_id, "task_id")
     dep = body.depends_on_task_id
+    _uuid_or_422(dep, "depends_on_task_id")
     if dep == task_id:
         raise HTTPException(422, "A task cannot depend on itself")
     async with rls(user) as c:
+        # Serialize dependency writes within an org so the RECURSIVE cycle check
+        # and the INSERT below act as one critical section. Without this, two
+        # concurrent calls adding the reverse edges (A->B and B->A) can each pass
+        # the cycle check against a graph that doesn't yet contain the other's
+        # edge, then both insert — closing a cycle the guard was meant to reject.
+        # Mirrors the batch/org advisory-lock idiom used in harvest.py / waste.py.
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"taskdeps:{user['org_id']}")
         for tid in (task_id, dep):
             t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
             if t is None:
@@ -799,13 +996,144 @@ async def add_dependency(task_id: str, body: DependencyIn, user: dict = Depends(
 
 @router.delete("/tasks/{task_id}/dependencies/{dep_id}")
 async def delete_dependency(task_id: str, dep_id: str, user: dict = Depends(require_password_set)):
+    """Both sides of the edge get the SAME scope check add_dependency applies
+    when creating one. Checking only task_id let an out-of-scope dep_id's
+    existence be inferred from whether the delete succeeded (edge existed,
+    dep_id in scope) vs 404'd (edge missing, OR dep_id out of scope) — an
+    existence oracle for a task the caller otherwise can't see."""
+    _uuid_or_422(task_id, "task_id")
+    _uuid_or_422(dep_id, "dep_id")
     async with rls(user) as c:
-        t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
-        if t is None:
-            raise HTTPException(404, "Task not found or not permitted")
-        await _assert_scope_visible(c, task_id, user)
+        for tid in (task_id, dep_id):
+            t = await c.fetchrow("SELECT id FROM tasks WHERE id=$1 AND is_deleted=false", tid)
+            if t is None:
+                raise HTTPException(404, "Task not found or not permitted")
+            await _assert_scope_visible(c, tid, user)
         res = await c.execute(
             "DELETE FROM task_dependencies WHERE task_id=$1 AND depends_on_task_id=$2", task_id, dep_id)
     if res.split()[-1] == "0":
         raise HTTPException(404, "Dependency not found")
     return {"ok": True}
+
+
+# ── Workflow sign-off (SUMA v2 assimilation) ─────────────────────────────────
+# draft → submitted → approved | rejected (rejected → resubmittable), plus a
+# qp_blocked quality hold (QP/ADMIN only; lifting returns to draft for rework).
+# Every transition is a row in the append-only task_workflow_events record; the
+# approver must be a different person than the submitter (second-person rule);
+# a rejection or block without a remark is refused — an unexplained verdict is
+# not a record. workflow_state itself is not patchable (see TaskPatch).
+_WF_ACTIONS = ("SUBMIT", "APPROVE", "REJECT", "BLOCK", "UNBLOCK")
+_WF_QP = (ADMIN, "QP")
+
+
+class WorkflowIn(BaseModel):
+    action: str
+    remark: str | None = Field(default=None, max_length=2000)
+
+
+def _wf_event_out(r: dict) -> dict:
+    return {
+        "id": str(r["id"]), "action": r["action"],
+        "from_state": r["from_state"], "to_state": r["to_state"],
+        "actor_id": str(r["actor_id"]), "actor_role": r["actor_role"],
+        "remark": r["remark"],
+        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+    }
+
+
+@router.get("/tasks/{task_id}/workflow")
+async def list_workflow_events(task_id: str, user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    async with rls(user) as c:
+        t = await c.fetchrow(
+            "SELECT id, workflow_state FROM tasks WHERE id=$1 AND is_deleted=false", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        rows = await c.fetch(
+            "SELECT * FROM task_workflow_events WHERE task_id=$1 ORDER BY created_at", task_id)
+    return {"workflow_state": t["workflow_state"],
+            "events": [_wf_event_out(dict(r)) for r in rows]}
+
+
+@router.post("/tasks/{task_id}/workflow", status_code=201)
+async def workflow_transition(task_id: str, body: WorkflowIn,
+                              user: dict = Depends(require_password_set)):
+    _uuid_or_422(task_id, "task_id")
+    action = (body.action or "").upper()
+    if action not in _WF_ACTIONS:
+        raise HTTPException(422, f"action must be one of: {', '.join(_WF_ACTIONS)}")
+    remark = (body.remark or "").strip() or None
+    if action in ("REJECT", "BLOCK") and not remark:
+        raise HTTPException(422, "A remark is required to reject or block")
+    async with rls(user) as c:
+        # FOR UPDATE (same idiom as update_task's recurrence guard): two
+        # concurrent transitions on the same task (e.g. one APPROVE, one
+        # REJECT, both read while the task was still 'submitted') must
+        # serialize — the second transaction blocks here until the first
+        # commits, then its own read reflects the already-applied
+        # transition, so its `cur != 'submitted'` check correctly 409s
+        # instead of writing a second, conflicting sign-off event.
+        t = await c.fetchrow(
+            "SELECT id, title, department_id, workflow_state FROM tasks"
+            " WHERE id=$1 AND is_deleted=false FOR UPDATE", task_id)
+        if t is None:
+            raise HTTPException(404, "Task not found or not permitted")
+        await _assert_scope_visible(c, task_id, user)
+        cur = t["workflow_state"] or "draft"
+        role = user["role"]
+        if action == "SUBMIT":
+            # Any in-scope participant may submit; a legacy free-text state is
+            # treated as draft (the column was a passthrough before 0037).
+            if cur in ("submitted", "qp_blocked"):
+                raise HTTPException(409, f"Cannot submit from state '{cur}'")
+            new = "submitted"
+        elif action in ("APPROVE", "REJECT"):
+            if role not in ELEVATED_ROLES:
+                raise HTTPException(403, "Sign-off is a manager decision")
+            if cur != "submitted":
+                raise HTTPException(409, f"Cannot {action.lower()} from state '{cur}'")
+            # Second-person rule: the approver must not be the person who
+            # submitted (the actor of the most recent SUBMIT event).
+            submitter = await c.fetchval(
+                "SELECT actor_id FROM task_workflow_events WHERE task_id=$1 AND action='SUBMIT'"
+                " ORDER BY created_at DESC LIMIT 1", task_id)
+            if submitter is not None and str(submitter) == str(user["id"]):
+                raise HTTPException(403, "The sign-off must be a different person than the submitter")
+            new = "approved" if action == "APPROVE" else "rejected"
+        elif action == "BLOCK":
+            if role not in _WF_QP:
+                raise HTTPException(403, "A quality block is a Qualified-Person act")
+            if cur == "qp_blocked":
+                raise HTTPException(409, "Task is already blocked")
+            new = "qp_blocked"
+        else:  # UNBLOCK
+            if role not in _WF_QP:
+                raise HTTPException(403, "Lifting a quality block is a Qualified-Person act")
+            if cur != "qp_blocked":
+                raise HTTPException(409, "Task is not blocked")
+            new = "draft"   # rework + resubmission after a quality hold
+        row = await c.fetchrow(
+            "INSERT INTO task_workflow_events(org_id, task_id, action, from_state, to_state,"
+            " actor_id, actor_role, remark) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+            user["org_id"], task_id, action, cur, new, user["id"], role, remark)
+        await c.execute(
+            "UPDATE tasks SET workflow_state=$1, updated_by=$2, updated_at=now() WHERE id=$3",
+            new, user["id"], task_id)
+        try:
+            who = await participants(c, task_id)
+            await safe_emit(c, user, verb="workflow_" + action.lower(), object_type="task",
+                       object_id=task_id, recipients=[(u, "workflow") for u in who],
+                       task_id=task_id, department_id=t["department_id"],
+                       params={"title": t["title"], "from": cur, "to": new,
+                               **({"remark": remark} if remark else {})})
+        except Exception:
+            # safe_emit() itself never raises — anything caught here came from
+            # participants() before it. Must not fail the workflow transition,
+            # but must not vanish silently either (H4 idiom).
+            _log.warning("workflow-transition notification setup failed for task %s",
+                         task_id, exc_info=True)
+    out = _wf_event_out(dict(row))
+    out["workflow_state"] = new
+    return out

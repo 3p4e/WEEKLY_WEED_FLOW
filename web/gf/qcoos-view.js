@@ -5,7 +5,9 @@
    two-phase flow — Phase I laboratory investigation → Phase II full/root-cause
    investigation → QP disposition → close. Closing the OOS and setting a batch
    disposition (RELEASE/REJECT/REPROCESS/RETAIN) are Qualified-Person decisions
-   (backend-gated; mirrored by canQP() here). The register is append-only.
+   (Annex 16 — QP or ADMIN ONLY, backend-gated; mirrored by canQP() here;
+   executives are business leadership, not a GMP quality role). The register
+   is append-only.
 
    CAPA is not a separate record: it is derived at read time from the OOS rows
    (/qc/capa), so the CAPA register panel here is a live view of OOS state.
@@ -16,10 +18,10 @@
   GF.WWF._qcoos = { rows: null, sel: null, detail: null, capa: null,
                     q: '', status: '', tab: 'oos', loading: false, error: null };
 
-  const _WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QC_MGR', 'QP'];
-  const _QP = ['ADMIN', 'OWNER', 'CEO', 'COO', 'QP'];
-  const canWrite = () => _WRITERS.includes((GF.API.user || {}).role);
-  const canQP = () => _QP.includes((GF.API.user || {}).role);
+  // Shared QC/LIMS role gates (core.js GF.QC_WRITERS / GF.QC_QP) — see that
+  // file's comment; were local copy-pasted arrays here.
+  const canWrite = () => GF.QC_WRITERS.includes((GF.API.user || {}).role);
+  const canQP = () => GF.QC_QP.includes((GF.API.user || {}).role);
 
   const ST = {
     OPEN:     { en: 'Open', mk: 'Отворено', c: 'var(--orange)' },
@@ -40,11 +42,15 @@
   GF.WWF.loadQcOos = async () => {
     const st = GF.WWF._qcoos;
     st.loading = true; st.error = null;
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const q = {}; if (st.status) q.status = st.status;
-      st.rows = await GF.API.qcOos(q);
+      const rows = await GF.API.qcOos(q);
+      if (my !== st.lseq) return;
+      st.rows = rows;
       st.capa = await GF.API.qcCapa({}).catch(() => []);
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my === st.lseq) st.error = e.message; }
+    if (my !== st.lseq) return;
     st.loading = false;
     if (GF.state.view === 'qcoos') GF.render.all();
   };
@@ -53,11 +59,12 @@
     const st = GF.WWF._qcoos;
     if (st.sel === id) { st.sel = null; st.detail = null; GF.render.all(); return; }
     st.sel = id; st.detail = null; GF.render.all();
-    try { st.detail = await GF.API.qcOosOne(id); } catch (e) { GF.toast(e.message, 'error'); }
-    if (GF.state.view === 'qcoos') GF.render.all();
+    try { const d = await GF.API.qcOosOne(id); if (st.sel === id) st.detail = d; }
+    catch (e) { if (st.sel === id) GF.toast(e.message, 'error'); }
+    if (st.sel === id && GF.state.view === 'qcoos') GF.render.all();
   };
-  GF.WWF.qcOosFilter = (v) => { GF.WWF._qcoos.q = v; GF.render.all(); };
-  GF.WWF.qcOosStatus = (v) => { GF.WWF._qcoos.status = v; GF.WWF.loadQcOos(); };
+  GF.WWF.qcOosFilter = (v) => { GF.WWF._qcoos.q = v; GF.render.all(); GF.refocus('qoo-search'); };
+  GF.WWF.qcOosStatus = async (v) => { GF.WWF._qcoos.status = v; await GF.WWF.loadQcOos(); GF.refocus('qoo-status'); };
   GF.WWF.qcOosTab = (t) => { GF.WWF._qcoos.tab = t; GF.render.all(); };
 
   const _reload = async (id) => {
@@ -154,8 +161,16 @@
         ${o.disposition ? `<span>${AL('Disposition', 'Диспозиција')}</span><b>${chip(o.disposition, DISP[o.disposition] || 'var(--ink-3)')}</b>` : ''}
       </div>
       ${canWrite() ? `<div class="qms-dl" style="margin-top:8px">
-        ${nxt && (!QP_TARGETS[nxt] || canQP()) ? `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosAdvance('${o.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>` : ''}
-        ${canClose && canQP() && nxt !== 'CLOSED' ? `<button class="btn btn-sm" onclick="GF.WWF.qcOosAdvance('${o.id}','CLOSED')">${AL('Close (QP)', 'Затвори (КЛ)')}</button>` : ''}
+        ${nxt && (!QP_TARGETS[nxt] || canQP())
+          ? (QP_TARGETS[nxt] && !o.disposition
+              ? `<button class="btn btn-sm" disabled title="${AL('Set a disposition before closing — closing attests the QP decision', 'Поставете диспозиција пред затворање — затворањето ја потврдува одлуката на КЛ')}">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>`
+              : `<button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosAdvance('${o.id}','${nxt}')">${AL('Advance to', 'Напредувај до')} ${GF.esc(AL((ST[nxt]||{}).en||nxt, (ST[nxt]||{}).mk||nxt))}</button>`)
+          : ''}
+        ${canClose && canQP() && nxt !== 'CLOSED'
+          ? (!o.disposition
+              ? `<button class="btn btn-sm" disabled title="${AL('Set a disposition before closing — closing attests the QP decision', 'Поставете диспозиција пред затворање — затворањето ја потврдува одлуката на КЛ')}">${AL('Close (QP)', 'Затвори (КЛ)')}</button>`
+              : `<button class="btn btn-sm" onclick="GF.WWF.qcOosAdvance('${o.id}','CLOSED')">${AL('Close (QP)', 'Затвори (КЛ)')}</button>`)
+          : ''}
       </div>` : ''}
       ${canWrite() && o.status !== 'CLOSED' ? `
       <div class="ana-panel" style="margin-top:10px;padding:10px">
@@ -269,8 +284,8 @@
       <div class="panel ana-panel">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div class="ana-pt" style="margin:0">${AL('Investigations', 'Истраги')}</div>
-          <input class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcOosFilter(this.value)">
-          <select onchange="GF.WWF.qcOosStatus(this.value)">
+          <input id="qoo-search" class="qms-search" placeholder="${GF.t('search')}" value="${GF.esc(st.q)}" oninput="GF.WWF.qcOosFilter(this.value)">
+          <select id="qoo-status" onchange="GF.WWF.qcOosStatus(this.value)">
             <option value="">${AL('All statuses', 'Сите статуси')}</option>
             ${Object.keys(ST).map(s => `<option value="${s}" ${st.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>

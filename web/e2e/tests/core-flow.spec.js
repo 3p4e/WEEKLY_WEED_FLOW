@@ -57,3 +57,43 @@ test('login, create a task, cycle its status, assign a teammate, logout', async 
     await expect(page.locator('#wwf-login')).toBeVisible({ timeout: 10_000 });
   });
 });
+
+test('a second submit while the create is in flight makes no second task (H6)', async ({ page }) => {
+  const taskTitle = `E2E resubmit ${Date.now()}`;
+  await login(page, creds.username, creds.password);
+
+  // Hold POST /tasks open so the in-flight window is wide and deterministic.
+  let release;
+  const held = new Promise((r) => { release = r; });
+  let posts = 0;
+  await page.route('**/tasks', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    posts += 1;
+    if (posts === 1) await held;          // first create waits for us
+    return route.fallback();
+  });
+
+  await page.getByRole('button', { name: /new task/i }).click();
+  await page.locator('#add-title').fill(taskTitle);
+  await page.locator('#add-submit-btn').click();
+  await expect.poll(() => posts, { timeout: 10_000 }).toBe(1);   // create is in flight
+
+  // Re-enter through the JS entry point rather than the DOM. The original bug
+  // was NOT reachable by two fast clicks — submitAdd disabled the button
+  // synchronously before its first await. The window opened later: the
+  // translate step's `finally` re-enabled the button while createTask and the
+  // assign loop were still to come, so a click landing THERE ran the handler a
+  // second time. Calling GF.submitAdd() directly reproduces exactly that
+  // second entry, and is the layer GF._busy has to hold.
+  await page.evaluate(() => window.GF.submitAdd());
+  release();
+
+  await expect(page.locator('.card-title', { hasText: taskTitle })).toHaveCount(1, { timeout: 10_000 });
+  expect(posts).toBe(1);                  // the re-entry never reached the API
+
+  // Confirm against the server, not just the rendered list.
+  await page.unroute('**/tasks');
+  await page.reload();
+  await page.waitForLoadState('load');
+  await expect(page.locator('.card-title', { hasText: taskTitle })).toHaveCount(1, { timeout: 10_000 });
+});

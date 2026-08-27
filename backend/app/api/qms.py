@@ -22,6 +22,7 @@ from fastapi.responses import Response
 from app import docengine
 from app.config import settings
 from app.deps import require_password_set
+from app.roles import ADMIN, ELEVATED_ROLES
 
 router = APIRouter(prefix="/qms", tags=["qms"])
 
@@ -43,7 +44,7 @@ _GET_MAP = {
 def _require_elevated(user: dict = Depends(require_password_set)) -> dict:
     # Same read gate as /facility and /reports/analytics: every role above
     # base USER (executives, QP, department managers).
-    if user["role"] == "USER":
+    if user["role"] not in ELEVATED_ROLES:
         raise HTTPException(status_code=403, detail="Managers and executives only")
     return user
 
@@ -96,6 +97,12 @@ async def families(user: dict = Depends(_require_elevated)):
 async def document(code: str, user: dict = Depends(_require_elevated)):
     if len(code) > 64:
         raise HTTPException(status_code=422, detail="Code too long")
+    # Same traversal guard as download() below: `code` reaches the upstream
+    # unescaped, and a value like ".." (a single path segment, so it passes
+    # FastAPI's route matching) would collapse the forwarded URL onto an
+    # arbitrary internal qms-api endpoint the allowlist exists to block.
+    if code.startswith(("/", "\\")) or "\\" in code or ".." in code.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid code")
     return (await _forward_get(f"/api/documents/{code}")).json()
 
 
@@ -127,6 +134,13 @@ async def download(path: str, user: dict = Depends(_require_elevated)):
     output/ directory; length-cap here keeps abuse out of the upstream."""
     if len(path) > 512:
         raise HTTPException(status_code=422, detail="Path too long")
+    # M2: {path:path} allows slashes, and httpx RFC-3986 joins collapse `../`, so
+    # an un-validated path (e.g. `../../api/workflows`) would reach arbitrary
+    # internal qms-api endpoints the allowlist exists to block. Reject traversal
+    # and absolute paths before forwarding — this download is confined to the
+    # upstream's output/ directory.
+    if path.startswith(("/", "\\")) or "\\" in path or ".." in path.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
     r = await _forward_get(f"/api/download/{path}")
     return Response(
         content=r.content,
@@ -145,7 +159,7 @@ async def download(path: str, user: dict = Depends(_require_elevated)):
 _DE_UNAVAILABLE = docengine.DE_UNAVAILABLE
 # Controlled-document AUTHORING is a quality function: QP, QA manager, ADMIN
 # (and OWNER — the site's top authority). Reading stays at elevated.
-_AUTHOR_ROLES = ("ADMIN", "OWNER", "QP", "QA_MGR")
+_AUTHOR_ROLES = (ADMIN, "OWNER", "QP", "QA_MGR")
 
 
 def _require_author(user: dict = Depends(_require_elevated)) -> dict:

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Deviations &amp; CAPA</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone B/QA — Deviations & CAPA (capa). Module MOD-CAPA.
+  Deviation report → root cause → CAPA plan (corrective + preventive actions
+  with owners/due) → effectiveness check → closure. Append-only, QA-gated close.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px 70px;}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);margin-bottom:16px;flex-wrap:wrap;}
+  .crumb a{color:var(--mw-cyan-dim);text-decoration:none;} .crumb a:hover{color:var(--mw-cyan-bright);} .crumb .sp{flex:1;}
+  .modbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:9px 14px;flex-wrap:wrap;background:rgba(240,185,94,.06);box-shadow:inset 0 0 0 1px rgba(240,185,94,.28);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .modbar .dot{width:8px;height:8px;border-radius:50%;background:#f0b95e;box-shadow:0 0 8px #f0b95e;flex:none;}
+  .modbar .t{font-size:11.5px;color:var(--mw-text);} .modbar .t b{color:#f0b95e;} .modbar a{margin-left:auto;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mw-cyan-bright);text-decoration:none;}
+  .rolebar{display:flex;align-items:center;gap:9px;margin-bottom:18px;padding:9px 13px;flex-wrap:wrap;background:rgba(155,123,232,.07);box-shadow:inset 0 0 0 1px rgba(155,123,232,.28);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .rolebar .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--mw-text-faint);}
+  .hero{display:flex;align-items:flex-start;gap:15px;margin-bottom:8px;flex-wrap:wrap;}
+  .hero__ic{width:46px;height:46px;flex:none;display:grid;place-items:center;color:#f0c98a;background:rgba(240,185,94,.14);box-shadow:inset 0 0 0 1px rgba(240,185,94,.4);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .hero__no{font-family:var(--mw-mono);font-weight:700;font-size:20px;color:var(--mw-cyan-bright);}
+  .hero__t{font-family:var(--mw-font-cond);font-size:15px;font-weight:600;color:var(--mw-ink);margin-top:2px;line-height:1.25;}
+  .hero__s{font-size:11px;color:var(--mw-text-faint);margin-top:3px;} .hero__sp{flex:1;}
+  .statebig{display:inline-flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;padding:6px 14px;color:var(--sc);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--sc) 60%,transparent);background:color-mix(in srgb,var(--sc) 12%,transparent);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:18px 0 4px;background:rgba(94,200,240,.14);box-shadow:inset 0 0 0 1px rgba(94,200,240,.14);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);overflow:hidden;}
+  .meta__c{background:var(--mw-panel-in);padding:11px 14px;} .meta__l{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--mw-text-faint);} .meta__v{font-family:var(--mw-mono);font-size:12px;color:var(--mw-ink);margin-top:4px;} .meta__v.link{color:var(--mw-cyan-bright);cursor:pointer;}
+  .sec{margin:22px 0;}
+  .sec__t{font-family:var(--mw-font-cond);font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mw-header);margin:0 0 12px;display:flex;align-items:center;gap:10px;}
+  .sec__t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(94,200,240,.28),transparent);}
+  .sec__t .side{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mw-text-faint);font-family:var(--mw-font);font-size:11px;}
+  .flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;}
+  .fst{display:flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mw-text-faint);padding:6px 11px;}
+  .fst .n{width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;}
+  .fst.done{color:var(--mw-stat-hi);} .fst.done .n{background:var(--mw-stat-hi);color:var(--mw-void);box-shadow:none;}
+  .fst.cur{color:var(--mw-cyan-bright);} .fst.cur .n{box-shadow:inset 0 0 0 2px var(--mw-cyan-bright),0 0 10px var(--mw-cyan);background:rgba(94,200,240,.12);}
+  .arw{color:var(--mw-text-faint);font-size:11px;}
+  .rca{padding:13px 15px;background:rgba(94,200,240,.05);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);font-size:12px;line-height:1.55;color:var(--mw-text-dim);}
+  .rca b{color:var(--mw-ink);}
+  .actions{display:flex;flex-direction:column;gap:9px;}
+  .act{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.16);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);--tc:#5ec8f0;position:relative;}
+  .act::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--tc);}
+  .act__chk{width:20px;height:20px;flex:none;margin-top:1px;cursor:pointer;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--mw-text-faint);display:grid;place-items:center;color:transparent;transition:all .12s ease;}
+  .act__chk.on{box-shadow:inset 0 0 0 1.5px var(--mw-stat-hi);background:var(--mw-stat-hi);color:var(--mw-void);}
+  .act__b{flex:1;} .act__type{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:1px 7px;color:var(--tc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tc) 45%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .act__t{font-size:12.5px;color:var(--mw-ink);margin-top:6px;line-height:1.35;} .act.done .act__t{color:var(--mw-text-faint);text-decoration:line-through;}
+  .act__meta{font-size:10.5px;color:var(--mw-text-faint);margin-top:6px;font-family:var(--mw-mono);}
+  .eff{padding:13px 15px;background:rgba(108,240,90,.05);box-shadow:inset 0 0 0 1px rgba(108,240,90,.24);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);}
+  .eff__q{font-size:12px;color:var(--mw-text);line-height:1.5;margin-bottom:10px;} .eff__q b{color:var(--mw-ink);}
+  .effbtns{display:flex;gap:8px;}
+  .gate-note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;margin-top:14px;font-size:11.5px;line-height:1.5;color:var(--mw-text);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .gate-note.block{background:rgba(239,77,77,.08);box-shadow:inset 0 0 0 1px rgba(239,77,77,.32);} .gate-note.ok{background:rgba(108,240,90,.07);box-shadow:inset 0 0 0 1px rgba(108,240,90,.3);} .gate-note.info{background:rgba(94,200,240,.07);box-shadow:inset 0 0 0 1px rgba(94,200,240,.28);}
+  .gate-note .ic{flex:none;margin-top:1px;} .gate-note.block .ic{color:var(--mw-stat-lo);} .gate-note.ok .ic{color:var(--mw-stat-hi);} .gate-note.info .ic{color:var(--mw-cyan-bright);}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.07em;font-size:12.5px;font-weight:700;cursor:pointer;padding:10px 18px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);transition:filter .12s ease;margin-top:12px;}
+  .btn:hover{filter:brightness(1.16);} .btn.qa{background:linear-gradient(180deg,#f0d08a,#e0a73e);} .btn[disabled]{opacity:.4;cursor:not-allowed;filter:none;}
+  .btn.sm{font-size:10px;padding:6px 11px;margin:0;}
+  .btn.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);}
+  @media(max-width:640px){.meta{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Deviations & CAPA">
+  <div class="crumb">
+    <a href="modules.html">QMS</a><span>›</span><a href="#">CAPA</a><span>›</span><span>PP-DEV-2026-0019</span>
+    <span class="sp"></span>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="modbar">
+    <span class="dot"></span>
+    <span class="t"><b>MOD-CAPA</b> · <span class="en">Deviations &amp; CAPA — Draft (v0.2) · read-only until approved for use</span><span class="mk">Отстапувања и CAPA — Нацрт (v0.2) · само читање до одобрување</span></span>
+    <a href="modules.html"><span class="en">Module registry ↗</span><span class="mk">Регистар ↗</span></a>
+  </div>
+
+  <div class="rolebar">
+    <span class="lbl"><span class="en">Signed in as</span><span class="mk">Најавен како</span></span>
+    <div class="mw-chips" id="roleSw">
+      <button class="mw-chip on" type="button" data-role="prmgr" style="--cc:#2FD9D9"><span class="d"></span><span class="en">Production Mgr · G. Vakarian</span><span class="mk">Производство · Г. Вакаријан</span></button>
+      <button class="mw-chip" type="button" data-role="qamgr" style="--cc:#E0743A"><span class="d"></span><span class="en">QA Manager · M. Solus</span><span class="mk">QA Менаџер · М. Солус</span></button>
+    </div>
+    <span style="flex:1"></span>
+    <span style="font-size:10.5px;color:var(--mw-text-faint);letter-spacing:.03em;"><span class="en">closure is QA-gated</span><span class="mk">затворањето е QA</span></span>
+  </div>
+
+  <div class="hero">
+    <div class="hero__ic"><svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;"><path d="M12 2L1 21h22L12 2z"/><path d="M12 9v5M12 17h.01"/></svg></div>
+    <div>
+      <div class="hero__no">PP-DEV-2026-0019</div>
+      <div class="hero__t"><span class="en">Deviation — Extraction pressure spike, live-resin run LR-0088</span><span class="mk">Отстапување — скок на притисок, LR-0088</span></div>
+      <div class="hero__s"><span class="en">Raised by Production · Major severity · linked OOS none · QASOP 019 §6.16</span><span class="mk">Покрената од Производство · голема тежина · §6.16</span></div>
+    </div>
+    <div class="hero__sp"></div>
+    <span class="statebig" id="stateBig" style="--sc:#5ec8f0"><span id="stateTx">CAPA_PLAN</span></span>
+  </div>
+
+  <div class="meta">
+    <div class="meta__c"><div class="meta__l"><span class="en">Severity</span><span class="mk">Тежина</span></div><div class="meta__v" style="color:#f0b95e">MAJOR</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Area</span><span class="mk">Област</span></div><div class="meta__v">Production · Extraction</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">Raised</span><span class="mk">Покрената</span></div><div class="meta__v">24.07.2026</div></div>
+    <div class="meta__c"><div class="meta__l"><span class="en">CAPA owner</span><span class="mk">Носител</span></div><div class="meta__v">G. Vakarian</div></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">CAPA lifecycle</span><span class="mk">Животен циклус</span></p>
+    <div class="mw-panel" style="padding:12px 14px;"><div class="flow" id="flow"></div></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Root cause</span><span class="mk">Корен на проблемот</span><span class="side"><span class="en">5-why / fishbone summary</span><span class="mk">5-зошто</span></span></p>
+    <div class="rca"><span class="en">Pressure relief setpoint on the LR extractor had drifted after the last seal change; the interlock did not trip because its calibration was <b>overdue</b>. <b>Root cause:</b> maintenance-calibration schedule for the interlock was not linked to the seal-change work order.</span><span class="mk">Притисочниот вентил се померил по последната промена на заптивка; калибрацијата на интерлокот беше <b>задоцнета</b>. <b>Корен:</b> распоредот за калибрација не беше поврзан со работниот налог.</span></div>
+  </div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">CAPA plan</span><span class="mk">CAPA план</span><span class="side"><span class="en">corrective + preventive · check off as completed</span><span class="mk">корективни + превентивни</span></span></p>
+    <div class="actions" id="actions"></div>
+  </div>
+
+  <div class="sec" id="effSec"></div>
+
+  <div class="sec">
+    <p class="sec__t"><span class="en">Disposition</span><span class="mk">Дејство</span></p>
+    <div id="gateNote"></div>
+    <div id="rail"></div>
+  </div>
+</div>
+</div>
+
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var FLOW=[['OPEN','Reported','Пријавена'],['RCA','Root cause','Корен'],['CAPA_PLAN','CAPA plan','CAPA план'],['EFFECTIVENESS','Effectiveness','Ефективност'],['CLOSED','Closed','Затворена']];
+var COL={OPEN:'#ef4d4d',RCA:'#f0b95e',CAPA_PLAN:'#5ec8f0',EFFECTIVENESS:'#c89bf0',CLOSED:'#6cf05a'};
+var S={ user:'prmgr', state:'CAPA_PLAN', eff:null,
+  actions:[
+    {type:['CORRECTIVE','Корективна'],tc:'#5ec8f0',t:['Recalibrate the pressure interlock on LR extractor & re-run LR-0088 setup check','Рекалибрирај интерлок и повтори проверка'],who:'G. Vakarian',due:'26.07.2026',done:true},
+    {type:['CORRECTIVE','Корективна'],tc:'#5ec8f0',t:['Quarantine LR-0088 output pending QC re-test','Карантин на LR-0088 до ретест'],who:'L. T\u2019Soni',due:'25.07.2026',done:true},
+    {type:['PREVENTIVE','Превентивна'],tc:'#f0b95e',t:['Link interlock calibration to seal-change work order in the maintenance schedule','Поврзи калибрација со работен налог'],who:'MU_MGR',due:'05.08.2026',done:false},
+    {type:['PREVENTIVE','Превентивна'],tc:'#f0b95e',t:['Add pre-run interlock check to the extraction SOP (QCWI)','Додај проверка во SOP'],who:'M. Solus',due:'08.08.2026',done:false}
+  ]
+};
+function stamp(){var d=new Date();function p(n){return(''+n).padStart(2,'0');}return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear();}
+function allDone(){ return S.actions.every(function(a){return a.done;}); }
+
+function paintFlow(){ var ci=FLOW.findIndex(function(x){return x[0]===S.state;});
+  document.getElementById('flow').innerHTML=FLOW.map(function(x,i){ var cls=i<ci?'done':i===ci?'cur':'';
+    return (i?'<span class="arw">→</span>':'')+'<div class="fst '+cls+'" style="color:'+(cls?COL[x[0]]:'')+'"><span class="n">'+(i<ci?'✓':(i+1))+'</span>'+bil(x[1],x[2])+'</div>';}).join('');
+  var sb=document.getElementById('stateBig'); sb.style.setProperty('--sc',COL[S.state]); document.getElementById('stateTx').textContent=S.state+(S.state==='CLOSED'?' 🔒':'');
+}
+function paintActions(){
+  document.getElementById('actions').innerHTML=S.actions.map(function(a,i){
+    return '<div class="act'+(a.done?' done':'')+'" style="--tc:'+a.tc+'"><span class="act__chk '+(a.done?'on':'')+'" onclick="toggleAct('+i+')">'+(a.done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>':'')+'</span>'+
+      '<div class="act__b"><span class="act__type">'+bil(a.type[0],a.type[1])+'</span><div class="act__t">'+bil(a.t[0],a.t[1])+'</div><div class="act__meta">@'+a.who+' · '+bil('due','рок')+' '+a.due+'</div></div></div>';
+  }).join('');
+}
+function paintEff(){
+  var sec=document.getElementById('effSec');
+  if(S.state==='CAPA_PLAN'||S.state==='OPEN'||S.state==='RCA'){ sec.innerHTML=''; return; }
+  var chosen=S.eff;
+  sec.innerHTML='<p class="sec__t"><span class="en">Effectiveness check</span><span class="mk">Проверка на ефективност</span><span class="side"><span class="en">verify the CAPA actually worked</span><span class="mk">потврди дека мерката работи</span></span></p>'+
+    '<div class="eff"><div class="eff__q"><span class="en">Did the preventive actions eliminate recurrence? <b>Review window: 60 days · 3 subsequent LR runs, no pressure excursions recorded.</b></span><span class="mk">Дали превентивните мерки спречија повторување? <b>60 дена · 3 серии без отстапки.</b></span></div>'+
+    '<div class="effbtns"><button class="btn sm '+(chosen==='eff'?'':'ghost')+'" onclick="setEff(\'eff\')">'+bil('✓ Effective','✓ Ефективна')+'</button><button class="btn sm '+(chosen==='noteff'?'':'ghost')+'" onclick="setEff(\'noteff\')">'+bil('✕ Not effective','✕ Неефективна')+'</button></div></div>';
+}
+function paintGate(){
+  var gn=document.getElementById('gateNote'), rail=document.getElementById('rail'), u=S.user;
+  var ic={block:'<path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',ok:'<path d="M20 6L9 17l-5-5"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'};
+  function note(k,en,mk){return '<div class="gate-note '+k+'"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic[k]+'</svg></span><div>'+bil(en,mk)+'</div></div>';}
+  gn.innerHTML=''; rail.innerHTML='';
+  if(S.state==='CLOSED'){ gn.innerHTML=note('ok','<b>Closed — CAPA effective.</b> All actions complete, effectiveness verified, and QA signed the closure. The record is frozen; a recurrence would open a new deviation referencing this one.','<b>Затворена — CAPA ефективна.</b> Сите мерки завршени, ефективноста потврдена, QA потпиша.'); return; }
+  if(S.state==='CAPA_PLAN'){
+    if(!allDone()){ gn.innerHTML=note('info','Corrective actions are done; two preventive actions remain open. All CAPA actions must be completed before the effectiveness check can begin.','Корективните се завршени; две превентивни остануваат. Сите мерки мора да завршат.');
+      rail.innerHTML='<button class="btn" disabled>'+bil('Begin effectiveness check','Почни проверка')+'</button>'; return; }
+    gn.innerHTML=note('ok','All CAPA actions are complete. Begin the effectiveness check to verify the preventive actions actually prevent recurrence.','Сите мерки завршени. Почни проверка на ефективност.');
+    rail.innerHTML='<button class="btn" onclick="S.state=\'EFFECTIVENESS\';paintAll();">'+bil('Begin effectiveness check','Почни проверка')+'</button>'; return;
+  }
+  if(S.state==='EFFECTIVENESS'){
+    if(S.eff==='noteff'){ gn.innerHTML=note('block','<b>CAPA not effective.</b> Recurrence still possible — the deviation re-opens for a revised plan. It cannot be closed.','<b>CAPA неефективна.</b> Отстапувањето се враќа за нов план.');
+      rail.innerHTML='<button class="btn ghost" onclick="S.state=\'CAPA_PLAN\';S.eff=null;S.actions[2].done=false;S.actions[3].done=false;paintAll();">'+bil('Re-open CAPA plan','Врати CAPA план')+'</button>'; return; }
+    if(S.eff!=='eff'){ gn.innerHTML=note('info','Record the effectiveness verdict above before closing.','Запиши го резултатот пред затворање.'); return; }
+    if(u!=='qamgr'){ gn.innerHTML=note('block','<b>Closure is QA-gated.</b> Production can run the CAPA but only QA may verify effectiveness and close the deviation. Switch to the QA Manager.','<b>Затворањето е QA.</b> Само QA може да ја затвори. Префрли се на QA Менаџер.');
+      rail.innerHTML='<button class="btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'+bil('QA close','QA затвори')+'</button>'; return; }
+    gn.innerHTML=note('ok','Effectiveness verified. The <b>QA Manager</b> may now close the CAPA — this freezes the record.','Ефективноста потврдена. <b>QA Менаџер</b> може да ја затвори.');
+    rail.innerHTML='<button class="btn qa" onclick="S.state=\'CLOSED\';paintAll();toast(\'ok\',\'CAPA closed by QA\',\'CAPA затворена\')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>'+bil('Verify &amp; close CAPA','Потврди и затвори')+'</button>';
+  }
+}
+function toggleAct(i){ if(S.state!=='CAPA_PLAN'){return;} S.actions[i].done=!S.actions[i].done; paintAll(); }
+function setEff(v){ S.eff=v; paintAll(); }
+document.getElementById('roleSw').addEventListener('click',function(e){ var b=e.target.closest('.mw-chip'); if(!b)return;
+  document.querySelectorAll('#roleSw .mw-chip').forEach(function(x){x.classList.toggle('on',x===b);}); S.user=b.dataset.role; paintGate(); });
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  document.getElementById('toasts').appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+function paintAll(){ paintFlow(); paintActions(); paintEff(); paintGate(); if(window.mwSync)window.mwSync(); }
+paintAll();
+new MutationObserver(paintAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

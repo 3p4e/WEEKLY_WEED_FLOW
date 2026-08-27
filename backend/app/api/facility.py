@@ -6,26 +6,32 @@ cultivation phase; how many in clones/nursery, vegetation, flowering.
 Access model (role gating here, org isolation via RLS as everywhere):
   read   — every role above base USER (executives, QP, ALL department
            managers), per the owner's request;
-  write  — the cultivation manager (CU_MGR), executives, ADMIN;
   rooms  — registry changes are ADMIN-only, same reasoning as POST
            /departments: physical org structure is a system-administration
            concern, seeded via API so the audit trail attributes it.
 
-Batch changes emit feed-only events (recipients=[]) so the activity stream
-shows plants moving through the facility without pinging anyone's inbox.
+READ-ONLY over plant_batches. Batch create/move/close lives exclusively in
+cultivation.py — this board used to also expose POST/PATCH /facility/batches,
+a second, independent write path over the same `plant_batches` row
+cultivation.py owns. That duplication was a real defect, not a style choice:
+the facility-side batch model had no `cultivar_id`/`code` (so a batch created
+there could never get plant ids or a genealogy edge), no validation of
+`plant_count` against the headcount invariant harvest.py/waste.py trust, no
+`plant_phase_events` audit trail on a move, and its own phase vocabulary was a
+strict subset of cultivation.py's — so an ordinary cultivation batch sitting
+in `nursery`, `harvested`, or `destroyed` (all normal, expected phases) could
+crash this endpoint's phase-totals computation outright. Batch management now
+lives only at /cultivation/batches; this file only ever reads what's there.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.db import rls
-from app.deps import require_role
-from app.notify import emit
-from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.deps import require_role, uuid_or_404
+from app.roles import ADMIN, ELEVATED_ROLES
 
 router = APIRouter(prefix="/facility", tags=["facility"])
 
-_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
-_PHASES = ("clone", "veg", "flower", "mother", "drying")
 _KINDS = ("nursery", "veg", "flower", "mother", "dry", "other")
 
 
@@ -43,30 +49,6 @@ class RoomPatch(BaseModel):
     kind: str | None = None
     sort: int | None = Field(default=None, ge=0, le=1000)
     is_active: bool | None = None
-
-
-class BatchIn(BaseModel):
-    room_id: str
-    strain: str = Field(max_length=120)
-    plant_count: int = Field(ge=0, le=100000)
-    phase: str
-    phase_since: str | None = None   # ISO date; defaults to today in the DB
-    note: str | None = Field(default=None, max_length=500)
-
-
-class BatchPatch(BaseModel):
-    room_id: str | None = None
-    strain: str | None = Field(default=None, max_length=120)
-    plant_count: int | None = Field(default=None, ge=0, le=100000)
-    phase: str | None = None
-    phase_since: str | None = None
-    note: str | None = Field(default=None, max_length=500)
-    is_active: bool | None = None
-
-
-def _check_phase(phase: str | None) -> None:
-    if phase is not None and phase not in _PHASES:
-        raise HTTPException(422, f"phase must be one of: {', '.join(_PHASES)}")
 
 
 def _check_kind(kind: str | None) -> None:
@@ -87,7 +69,14 @@ async def facility(user: dict = Depends(require_role(*ELEVATED_ROLES))):
             " updated_at FROM plant_batches WHERE is_active"
             " ORDER BY phase_since, strain")
     by_room: dict = {}
-    totals = {p: 0 for p in _PHASES}
+    # A plain dict keyed by whatever phase strings actually show up, not a
+    # fixed whitelist — cultivation.py's phase vocabulary is a superset of
+    # this board's own display phases (nursery, plus the terminal states,
+    # though terminal batches never appear here since they're is_active=false
+    # by the time they get there). Any phase the DB actually contains must be
+    # summable without a KeyError; a fixed dict comprehension over a narrower
+    # tuple is exactly what crashed this endpoint before.
+    totals: dict = {}
     for b in batches:
         row = {
             "id": str(b["id"]), "room_id": str(b["room_id"]), "strain": b["strain"],
@@ -96,7 +85,7 @@ async def facility(user: dict = Depends(require_role(*ELEVATED_ROLES))):
             "note": b["note"], "updated_at": b["updated_at"].isoformat(),
         }
         by_room.setdefault(row["room_id"], []).append(row)
-        totals[b["phase"]] += b["plant_count"]
+        totals[b["phase"]] = totals.get(b["phase"], 0) + b["plant_count"]
     out_rooms = []
     for r in rooms:
         rid = str(r["id"])
@@ -106,7 +95,7 @@ async def facility(user: dict = Depends(require_role(*ELEVATED_ROLES))):
             "kind": r["kind"], "sort": r["sort"], "batches": blist,
             "plant_total": sum(b["plant_count"] for b in blist),
         })
-    totals["total"] = sum(totals[p] for p in _PHASES)
+    totals["total"] = sum(totals.values())
     return {"rooms": out_rooms, "totals": totals}
 
 
@@ -131,6 +120,7 @@ async def create_room(body: RoomIn, user: dict = Depends(require_role(ADMIN))):
 @router.patch("/rooms/{room_id}")
 async def update_room(room_id: str, body: RoomPatch,
                       user: dict = Depends(require_role(ADMIN))):
+    uuid_or_404(room_id, "Room not found")
     patch = body.model_dump(exclude_unset=True)
     _check_kind(patch.get("kind"))
     fields, args = [], []
@@ -150,84 +140,7 @@ async def update_room(room_id: str, body: RoomPatch,
     return {"ok": True}
 
 
-async def _room_or_422(c, room_id: str):
-    room = await c.fetchrow("SELECT id, name FROM rooms WHERE id=$1 AND is_active", room_id)
-    if room is None:
-        raise HTTPException(422, "Unknown or inactive room")
-    return room
-
-
-@router.post("/batches", status_code=201)
-async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITERS))):
-    _check_phase(body.phase)
-    async with rls(user) as c:
-        room = await _room_or_422(c, body.room_id)
-        row = await c.fetchrow(
-            "INSERT INTO plant_batches(org_id, room_id, strain, plant_count, phase,"
-            " phase_since, note, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, CURRENT_DATE),$7,$8,$8) RETURNING *",
-            user["org_id"], body.room_id, body.strain, body.plant_count,
-            body.phase, body.phase_since, body.note, user["id"])
-        try:
-            await emit(c, user, verb="batch_added", object_type="plant_batch",
-                       object_id=row["id"], recipients=[],
-                       params={"strain": row["strain"], "plant_count": row["plant_count"],
-                               "phase": row["phase"], "room": room["name"]})
-        except Exception:
-            pass
-    out = dict(row)
-    return {"id": str(out["id"]), "room_id": str(out["room_id"]), "strain": out["strain"],
-            "plant_count": out["plant_count"], "phase": out["phase"],
-            "phase_since": out["phase_since"].isoformat(), "note": out["note"]}
-
-
-@router.patch("/batches/{batch_id}")
-async def update_batch(batch_id: str, body: BatchPatch,
-                       user: dict = Depends(require_role(*_WRITERS))):
-    patch = body.model_dump(exclude_unset=True)
-    _check_phase(patch.get("phase"))
-    async with rls(user) as c:
-        prev = await c.fetchrow(
-            "SELECT b.*, r.name AS room_name FROM plant_batches b"
-            " JOIN rooms r ON r.id=b.room_id WHERE b.id=$1", batch_id)
-        if prev is None:
-            raise HTTPException(404, "Batch not found")
-        if "room_id" in patch:
-            await _room_or_422(c, patch["room_id"])
-        # A phase move stamps phase_since unless the caller set it explicitly.
-        if patch.get("phase") and patch["phase"] != prev["phase"] and "phase_since" not in patch:
-            patch["phase_since"] = None   # placeholder; swapped to CURRENT_DATE below
-        fields, args = [], []
-        for col, val in patch.items():
-            if col == "phase_since" and val is None:
-                fields.append("phase_since=CURRENT_DATE")
-                continue
-            if val is None and col != "note":
-                continue
-            args.append(val); fields.append(f"{col}=${len(args)}")
-        if not fields:
-            return {"ok": True, "noop": True}
-        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
-        args.append(batch_id)
-        row = await c.fetchrow(
-            f"UPDATE plant_batches SET {', '.join(fields)}, updated_at=now()"
-            f" WHERE id=${len(args)} RETURNING *", *args)
-        try:
-            closed = patch.get("is_active") is False
-            moved = ("room_id" in patch and str(patch["room_id"]) != str(prev["room_id"])) \
-                or (patch.get("phase") and patch["phase"] != prev["phase"])
-            verb = "batch_closed" if closed else ("batch_moved" if moved else None)
-            if verb:
-                room = await c.fetchrow("SELECT name FROM rooms WHERE id=$1", row["room_id"])
-                await emit(c, user, verb=verb, object_type="plant_batch",
-                           object_id=row["id"], recipients=[],
-                           params={"strain": row["strain"], "plant_count": row["plant_count"],
-                                   "phase": row["phase"], "room": room["name"] if room else "",
-                                   "old_phase": prev["phase"], "old_room": prev["room_name"]})
-        except Exception:
-            pass
-    out = dict(row)
-    return {"id": str(out["id"]), "room_id": str(out["room_id"]), "strain": out["strain"],
-            "plant_count": out["plant_count"], "phase": out["phase"],
-            "phase_since": out["phase_since"].isoformat(), "note": out["note"],
-            "is_active": out["is_active"]}
+# Batch create/move/close: see the module docstring — this used to be a
+# second write path over plant_batches, independent of and inconsistent with
+# cultivation.py's. Removed; use POST /cultivation/batches and
+# POST /cultivation/batches/{id}/move instead.

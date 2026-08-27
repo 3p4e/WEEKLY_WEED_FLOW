@@ -3,7 +3,7 @@
 // the on-time line, department + type breakdowns — and, per the owner's
 // decision, not a single hour metric anywhere on the screen.
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, gotoModule } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -27,6 +27,7 @@ test('analytics view renders trends without hour metrics', async ({ page }) => {
   });
 
   await test.step('open Analytics from the rail', async () => {
+    await gotoModule(page, 'analytics');   // Analytics lives in the analytics module
     await page.locator('[data-nav="analytics"]').click();
     await expect(page.locator('.ana-tiles .ana-tile')).toHaveCount(4, { timeout: 15_000 });
   });

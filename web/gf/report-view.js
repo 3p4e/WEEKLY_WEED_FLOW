@@ -15,7 +15,15 @@ GF.WWF._sc = (label, value, color) =>
   </div>`;
 
 GF.views.report = function () {
-  setTimeout(() => GF.WWF.loadReport(), 0);
+  const st = GF.WWF._report;
+  // Already have a fetched report (e.g. the user navigated away and back) —
+  // render it straight away instead of flashing the loading skeleton and
+  // silently re-fetching every time this view is entered.
+  if (st.data) {
+    setTimeout(() => { if (GF.WWF.loadDocument) GF.WWF.loadDocument(); }, 0);
+    return `<div id="report-view" style="padding:4px 2px 40px">${GF.WWF._reportMarkup()}</div>`;
+  }
+  if (!st.loading) setTimeout(() => GF.WWF.loadReport(), 0);
   return `<div id="report-view" style="padding:4px 2px 40px">
     <div style="padding:40px;text-align:center;color:var(--ink-3)">${AL('Loading report…', 'Се вчитува извештај…')}</div>
   </div>`;
@@ -23,14 +31,21 @@ GF.views.report = function () {
 
 GF.WWF.loadReport = async () => {
   const st = GF.WWF._report;
-  if (st.loading) return;
+  // lseq, not `if (st.loading) return`. The early return DROPPED the user's
+  // click — switch mode or week while a load is in flight and nothing
+  // happened, leaving the toolbar showing one selection and the content
+  // another. Superseding instead: the newest request always wins and the
+  // stale response is discarded.
+  const my = (st.lseq = (st.lseq || 0) + 1);
   st.loading = true;
   st.aiInsights = null;
   st.pins = null; st.pinsUser = null;
   try {
     const q = { mode: st.mode };
     if (st.refDate) q.ref_date = st.refDate;
-    st.data = await GF.API.weeklyReport(q);
+    const data = await GF.API.weeklyReport(q);
+    if (my !== st.lseq) return;                   // superseded by a newer load
+    st.data = data;
     // The scheduler archives the AI weekly report / next-week plan to ai_pins
     // (function_key weekly_report / next_week_plan, +_user per person). Best
     // effort — the panel just shows an empty state until the first run lands.
@@ -39,6 +54,7 @@ GF.WWF.loadReport = async () => {
       GF.API.pins({ function_key: orgKey, limit: 1 }).catch(() => []),
       GF.API.pins({ function_key: orgKey + '_user', limit: 10 }).catch(() => []),
     ]);
+    if (my !== st.lseq) return;
     st.pins = (org && org[0]) || null;
     st.pinsUser = per || [];
     GF.WWF.renderReport();
@@ -46,10 +62,11 @@ GF.WWF.loadReport = async () => {
     // Seen: clear the "new AI report" nav badge now that the user is looking at it.
     if (GF.WWF._markReportSeen) GF.WWF._markReportSeen();
   } catch (e) {
+    if (my !== st.lseq) return;                   // a newer load owns the view
     const v = GF.$('report-view');
-    if (v) v.innerHTML = `<div style="padding:40px;text-align:center;color:#E5484D">${AL('Failed to load report', 'Не може да се вчита извештај')}: ${GF.esc(e.message)}</div>`;
+    if (v) v.innerHTML = `<div style="padding:40px;text-align:center;color:var(--red)">${AL('Failed to load report', 'Не може да се вчита извештај')}: ${GF.esc(e.message)}</div>`;
   } finally {
-    st.loading = false;
+    if (my === st.lseq) st.loading = false;
   }
 };
 
@@ -57,6 +74,7 @@ GF.WWF._loadAiInsights = async () => {
   const st = GF.WWF._report;
   if (!st.data) return;
   st.aiLoading = true;
+  const my = (st.lseq = (st.lseq || 0) + 1);
   const el = GF.$('report-ai');
   if (el) el.innerHTML = `<div style="padding:16px;text-align:center;color:var(--ink-3)">${GF.icon('sparkle')} ${AL('Generating AI insights…', 'Генерирање AI увиди…')}</div>`;
   try {
@@ -69,10 +87,13 @@ GF.WWF._loadAiInsights = async () => {
              ', pending: ' + s.pending + '. ' +
              'Provide insights on productivity, risks, and recommendations for next week.',
     });
+    if (my !== st.lseq) return;
     st.aiInsights = result.available ? result.output : null;
   } catch (e) {
+    if (my !== st.lseq) return;
     st.aiInsights = null;
   }
+  if (my !== st.lseq) return;
   st.aiLoading = false;
   const aiEl = GF.$('report-ai');
   if (aiEl) aiEl.innerHTML = GF.WWF._renderAiBox();
@@ -180,15 +201,15 @@ GF.WWF._renderTimeBand = (band) => {
     const total = day.hours.reduce((a, b) => a + b, 0);
 
     html += `<div style="flex:1;min-width:58px;text-align:center">
-      <div style="font-size:11px;font-weight:600;color:${isWe ? '#E5484D' : 'var(--ink-2)'};margin-bottom:6px;line-height:1.3">${lbl}</div>
+      <div style="font-size:11px;font-weight:600;color:${isWe ? 'var(--red)' : 'var(--ink-2)'};margin-bottom:6px;line-height:1.3">${lbl}</div>
       <div style="display:flex;flex-direction:column;gap:1px;background:var(--surface-3);border-radius:4px;padding:2px;overflow:hidden">`;
 
     for (let h = 0; h < 24; h++) {
       const count = day.hours[h];
       let color;
-      if (isWe) color = '#E5484D';
-      else if (h >= 8 && h < 17) color = '#2BE8A0';
-      else color = '#E0A73E';
+      if (isWe) color = 'var(--red)';
+      else if (h >= 8 && h < 17) color = 'var(--primary)';
+      else color = 'var(--orange)';
       const opacity = count > 0 ? Math.min(0.3 + (count / maxCount) * 0.7, 1) : 0.05;
       const tip = day.day_name + ' ' + String(h).padStart(2, '0') + ':00 — ' + count + ' event' + (count !== 1 ? 's' : '');
       html += `<div title="${GF.esc(tip)}" style="height:3px;background:${color};opacity:${opacity.toFixed(2)};border-radius:1px"></div>`;
@@ -201,16 +222,18 @@ GF.WWF._renderTimeBand = (band) => {
 
   html += '</div>';
   html += `<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--ink-3)">
-    <span><span style="display:inline-block;width:10px;height:10px;background:#2BE8A0;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#E0A73E;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
-    <span><span style="display:inline-block;width:10px;height:10px;background:#E5484D;border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Weekend', 'Викенд')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Regular (8–17)', 'Редовно (8–17)')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--orange);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Overtime', 'Прекувремено')}</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:var(--red);border-radius:2px;margin-right:4px;vertical-align:middle"></span>${AL('Weekend', 'Викенд')}</span>
   </div></div>`;
   return html;
 };
 
-GF.WWF.renderReport = () => {
-  const v = GF.$('report-view'); if (!v) return;
-  const d = GF.WWF._report.data; if (!d) return;
+// Pure markup builder — no DOM access — so GF.views.report can render an
+// already-fetched report directly (H12) without going through renderReport's
+// getElementById + innerHTML side effect.
+GF.WWF._reportMarkup = () => {
+  const d = GF.WWF._report.data; if (!d) return '';
   const isR = d.mode === 'report';
   const s = d.summary;
 
@@ -221,8 +244,8 @@ GF.WWF.renderReport = () => {
       </h2>
       <div style="flex:1"></div>
       <div style="display:flex;gap:4px">
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Report', 'Извештај')}</button>
-        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:#03130C' : ''}">${AL('Plan', 'План')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('report')" style="${isR ? 'background:var(--blue);color:var(--text-on-primary)' : ''}">${AL('Report', 'Извештај')}</button>
+        <button class="btn btn-sm" onclick="GF.WWF.switchReportMode('plan')" style="${!isR ? 'background:var(--blue);color:var(--text-on-primary)' : ''}">${AL('Plan', 'План')}</button>
       </div>
       <div style="display:flex;gap:4px;align-items:center">
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
@@ -244,10 +267,10 @@ GF.WWF.renderReport = () => {
       ${GF.WWF._sc(AL('Total', 'Вкупно'), s.total, 'var(--blue)')}
       ${GF.WWF._sc(AL('Completed', 'Завршени'), s.completed, 'var(--primary)')}
       ${GF.WWF._sc(AL('In Progress', 'Во тек'), s.in_progress, 'var(--orange)')}
-      ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, '#E5484D')}
-      ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, '#5A6B82')}
-      ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, '#7A5BE0') : ''}
-      ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, '#F6A609') : ''}
+      ${GF.WWF._sc(AL('Stuck', 'Блокирани'), s.stuck, 'var(--red)')}
+      ${GF.WWF._sc(AL('Pending', 'Чекаат'), s.pending, 'var(--ink-3)')}
+      ${s.review ? GF.WWF._sc(AL('In Review', 'На преглед'), s.review, 'var(--violet)') : ''}
+      ${s.postponed ? GF.WWF._sc(AL('Postponed', 'Одложени'), s.postponed, 'var(--amber)') : ''}
     </div>`;
 
   const band = isR ? GF.WWF._renderTimeBand(d.time_band) : '';
@@ -259,15 +282,19 @@ GF.WWF.renderReport = () => {
   // ── Overdue (due_date passed, not completed) ──
   let overdueList = '';
   if (isR && d.overdue && d.overdue.length) {
-    const today = new Date();
+    // Local-midnight anchored on both sides (not `new Date()` vs a UTC-parsed
+    // due_date): a positive-offset facility would otherwise see its "now" sit
+    // ahead of the UTC-midnight due date by the timezone offset, adding an
+    // extra day to every count (same idiom as GF.WWF.shiftReportWeek above).
+    const today = new Date(GF.todayISO() + 'T00:00:00');
     overdueList = `<div style="margin:18px 0" id="report-overdue">
-      <div style="font-weight:700;font-size:14px;color:#E5484D;margin-bottom:8px">${GF.icon('flag', 'icon', '#E5484D')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
+      <div style="font-weight:700;font-size:14px;color:var(--red);margin-bottom:8px">${GF.icon('flag', 'icon', 'var(--red)')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {
-        const daysLate = Math.max(1, Math.floor((today - new Date(t.due_date)) / 86400000));
-        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid #E5484D;border-radius:9px;margin-bottom:5px">
+        const daysLate = Math.max(1, Math.round((today - new Date(t.due_date + 'T00:00:00')) / 86400000));
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--red-soft);border-left:4px solid var(--red);border-radius:9px;margin-bottom:5px">
           <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono);white-space:nowrap">${GF.esc(t.due_date)}</span>
-          <span style="font-size:11px;font-weight:800;color:#E5484D;white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
+          <span style="font-size:11px;font-weight:800;color:var(--red);white-space:nowrap">${daysLate} ${AL(daysLate === 1 ? 'day late' : 'days late', daysLate === 1 ? 'ден доцни' : 'дена доцни')}</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -301,19 +328,33 @@ GF.WWF.renderReport = () => {
     </div>`;
   }
 
-  const SC = { completed: '#2BE8A0', done: '#2BE8A0', ongoing: '#E0A73E', in_progress: '#E0A73E',
-               stuck: '#E5484D', pending: '#5A6B82', review: '#7A5BE0', postponed: '#F6A609' };
+  // Theme-aware tokens, not hardcoded hex — this map still covers BOTH the raw
+  // backend vocabulary (completed/ongoing) and the frontend one (done/in_progress)
+  // defensively, same as before. A parallel *_BG map supplies the soft chip
+  // background (var(--x-soft) tokens), since CSS custom properties can't take
+  // the old `${col}1A` hex-alpha-suffix trick that only works on hex literals.
+  const SC = { completed: 'var(--primary)', done: 'var(--primary)', ongoing: 'var(--orange)', in_progress: 'var(--orange)',
+               stuck: 'var(--red)', pending: 'var(--ink-3)', review: 'var(--violet)', postponed: 'var(--amber)' };
+  const SC_BG = { completed: 'var(--primary-soft)', done: 'var(--primary-soft)', ongoing: 'var(--orange-soft)', in_progress: 'var(--orange-soft)',
+                  stuck: 'var(--red-soft)', pending: 'var(--surface-3)', review: 'var(--violet-soft)', postponed: 'var(--amber-soft)' };
   let taskList;
   if (d.tasks.length) {
     taskList = `<div style="margin:18px 0">
       <div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px">${AL('Tasks', 'Задачи')} (${d.tasks.length})</div>
       ${d.tasks.map(t => {
-        const col = SC[t.status] || '#5A6B82';
+        const col = SC[t.status] || 'var(--ink-3)';
+        const bg = SC_BG[t.status] || 'var(--surface-3)';
+        // d.tasks[].status is the RAW backend status ('ongoing'/'completed'/…),
+        // not the frontend-normalized vocabulary GF.STATUS/GF.statusLabel knows
+        // about — this endpoint doesn't go through the /tasks S_IN map. Same
+        // raw-status shape, same normalization xrTasks() in execreport-view.js
+        // already applies before calling GF.statusLabel.
+        const normStatus = (t.status === 'completed' ? 'done' : t.status === 'ongoing' ? 'working' : t.status) || 'pending';
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;margin-bottom:5px">
           <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span>
           <span style="flex:1;font-size:13px;font-weight:500;color:var(--ink)">${GF.esc(t.title)}</span>
           <span style="font-size:11px;color:var(--ink-3);white-space:nowrap">${GF.esc(t.department || '')}</span>
-          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${col}1A;border-radius:6px">${GF.esc(t.status)}</span>
+          <span style="font-size:11px;font-weight:700;color:${col};padding:2px 8px;background:${bg};border-radius:6px">${GF.esc(GF.statusLabel ? GF.statusLabel(normStatus) : normStatus)}</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -332,7 +373,13 @@ GF.WWF.renderReport = () => {
   const pinsPanel = GF.WWF._renderPinsPanel();
   // Document panel (document-view.js) renders into #report-doc after load.
   const docPanel = '<div id="report-doc"></div>';
-  v.innerHTML = toolbar + period + cards + docPanel + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+  return toolbar + period + cards + docPanel + typeLine + band + hoursByPerson + overdueList + pinsPanel + depts + taskList + ai;
+};
+
+GF.WWF.renderReport = () => {
+  const v = GF.$('report-view'); if (!v) return;
+  if (!GF.WWF._report.data) return;
+  v.innerHTML = GF.WWF._reportMarkup();
   if (GF.WWF.loadDocument) GF.WWF.loadDocument();
 };
 

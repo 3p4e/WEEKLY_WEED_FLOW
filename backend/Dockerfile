@@ -1,9 +1,12 @@
 # WEEKLY_WEED_FLOW API — FastAPI (async, asyncpg) served by uvicorn.
 # Built and run on KVM4 as `weekly_weed_flow-backend:latest`; the GrowFlow
 # nginx frontend reverse-proxies /auth /departments /weeks /tasks /ai /audit
-# /reports /health to it over the internal Docker network. Intentionally no
-# HEALTHCHECK — Traefik (host network mode) won't route containers marked
-# "unhealthy".
+# /reports /health to it over the internal Docker network. The HEALTHCHECK is
+# declared in docker-compose.yml, not here, because this same image also runs
+# as the scheduler (a loop with no HTTP surface) and the two need different
+# probes. The "Traefik won't route unhealthy containers" rationale that used to
+# sit here was copied from the frontend and never applied: this service carries
+# no Traefik labels, so nothing was watching it at all (H12).
 FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

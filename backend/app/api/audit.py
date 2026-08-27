@@ -17,13 +17,15 @@ database.
                           chains have colliding bigint ids. Every row carries
                           `source: "users" | "tasks"`.
   • GET /audit/tables   → distinct table names + counts across both chains.
-  • GET /audit/verify   → walk BOTH global chains (admin pools, ADMIN only)
+  • GET /audit/verify   → walk BOTH global chains (admin pools; ADMIN plus the
+                          QA_MGR / QP auditor roles — read-only verification)
                           and report each one's first linkage break, if any.
 """
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.config import settings
 from app.db import rls, rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import dept_scope, require_role
 from app.roles import ELEVATED_ROLES
@@ -142,37 +144,174 @@ async def audit_tables(user: dict = Depends(require_role(*_ELEVATED))):
             for t, n in sorted(counts.items(), key=lambda kv: -kv[1])]
 
 
+# M6/H2: verify RECOMPUTES each row's entry_hash from the stored columns and
+# compares it to the recorded hash — not just the prev_hash⇄entry_hash pointer
+# linkage. The recompute mirrors app.fn_audit_row's payload EXACTLY:
+#   COALESCE(prev_hash,'') || actor || action || table_name || record_id
+#   || created_at::text || new_values::text || old_values::text
+#
+# THE ACTOR AMBIGUITY. The trigger's actor is
+# COALESCE(current_setting('app.user_id',true),'system'). For a real user the app
+# SETs it to the canonical uuid text → the stored user_id, which `user_id::text`
+# reproduces. For a system/admin write the actor is either '' (the empty-string
+# placeholder a custom GUC reverts to on a connection that has had it set with SET
+# LOCAL — the common warm-pool case) or 'system' (a never-set connection). Both
+# leave user_id NULL and are indistinguishable from the stored row, so a
+# NULL-user_id row is accepted if EITHER reconstruction matches — no false break,
+# while a genuine content edit matches NEITHER.
+#
+# THE TIMEZONE AMBIGUITY (H2), and why this query is parameterised by zone.
+# `now()::text` in the trigger and `created_at::text` here both render a
+# timestamptz under the SESSION's TimeZone. A row written by a connection at UTC+2
+# therefore cannot be recomputed under UTC — the instant is identical, the TEXT is
+# not, so the digest differs. This was NOT hypothetical: production carried 377
+# such rows from a single UTC+2 transaction which verified 377/377 under
+# Europe/Skopje and 0/377 under UTC. An earlier version of this comment asserted
+# that created_at "renders under the same server TimeZone the writes used", and
+# that assumption was simply wrong.
+#
+# So the caller runs this once per candidate zone (UTC first, then the facility
+# zone) and a row is HASH-VERIFIED if it matches under any of them. A row matching
+# only a non-UTC zone is reported as `hash_legacy_tz` — explained, not hidden, and
+# not counted as a break. Tolerating the zone costs nothing in tamper detection: a
+# forger controls the row's content and would simply hash it correctly, and what
+# actually catches them is that altering any row invalidates every downstream link.
+# tasks-0050 / users-0009 pin the trigger's own TimeZone to UTC, so rows written
+# from now on are zone-canonical and this tolerance only ever applies to history.
+#
+# LINK BREAKS ARE CLASSIFIED, not lumped together, because the two kinds mean
+# opposite things:
+#   fork   — prev_hash matches the entry_hash of a real row with a LOWER id. Two
+#            writers read the same chain tail and both linked to it. That is the
+#            pre-hardening concurrency bug tasks-0012 / users-0006 fixed with an
+#            advisory lock (2026-07-14); production's 38 such rows are all dated
+#            2026-07-11, before the lock existed, and nothing after id 2500 is
+#            affected. Historical and explained — NOT a tamper signal.
+#   orphan — prev_hash matches NO row at all. That is what a deleted or rewritten
+#            predecessor looks like. THIS is the alarm.
+# `ok` therefore requires zero hash breaks, zero orphans and zero head breaks.
+# Forks are reported with their id range so a NEW one (which would mean the
+# advisory lock failed) is visibly outside the known historical window.
 _CHAIN_SQL = """
 WITH chained AS (
-  SELECT id, entry_hash, prev_hash,
-         lag(entry_hash) OVER (ORDER BY id) AS prior_entry
+  SELECT id, entry_hash, prev_hash, user_id, action, table_name, record_id,
+         old_values, new_values, created_at,
+         lag(entry_hash) OVER (ORDER BY id) AS prior_entry,
+         row_number()   OVER (ORDER BY id) AS rn
   FROM audit_log
+),
+recomputed AS (
+  SELECT id, entry_hash, prev_hash, prior_entry, rn,
+         encode(digest(convert_to(
+             COALESCE(prev_hash,'') || COALESCE(user_id::text,'')
+             || action || table_name || COALESCE(record_id,'')
+             || created_at::text
+             || COALESCE(new_values::text,'') || COALESCE(old_values::text,''),
+           'UTF8'), 'sha256'), 'hex') AS calc_empty,
+         encode(digest(convert_to(
+             COALESCE(prev_hash,'') || COALESCE(user_id::text,'system')
+             || action || table_name || COALESCE(record_id,'')
+             || created_at::text
+             || COALESCE(new_values::text,'') || COALESCE(old_values::text,''),
+           'UTF8'), 'sha256'), 'hex') AS calc_system
+  FROM chained
 )
-SELECT count(*)                                                       AS total,
-       count(*) FILTER (
-         WHERE prior_entry IS NOT NULL
-           AND COALESCE(prev_hash,'') <> prior_entry)                 AS breaks,
-       min(id) FILTER (
-         WHERE prior_entry IS NOT NULL
-           AND COALESCE(prev_hash,'') <> prior_entry)                 AS first_break
-FROM chained
+SELECT id, rn,
+       (calc_empty = entry_hash OR calc_system = entry_hash) AS hash_ok,
+       (prior_entry IS NOT NULL AND COALESCE(prev_hash,'') <> prior_entry) AS link_bad,
+       -- a broken link that still points at a REAL earlier row is a fork, not a
+       -- deletion; resolved here so the caller needs no second round trip
+       (prev_hash IS NOT NULL AND EXISTS (
+          SELECT 1 FROM audit_log a WHERE a.entry_hash = recomputed.prev_hash
+                                      AND a.id < recomputed.id)) AS prev_resolves,
+       (rn = 1 AND COALESCE(prev_hash,'') <> '') AS head_bad
+FROM recomputed
 """
 
 
+async def _verify_one(pool) -> dict:
+    """Verify one chain, recomputing under each candidate TimeZone.
+
+    The zone is applied with SET LOCAL inside a transaction so Postgres itself
+    renders the timestamp — reproducing `timestamptz::text` by hand is a trap
+    (it trims trailing zeros in the microseconds, among other things), and the
+    whole point is to reproduce the trigger's rendering byte for byte."""
+    zones = ["UTC"]
+    if settings.snapshot_tz and settings.snapshot_tz != "UTC":
+        zones.append(settings.snapshot_tz)
+
+    hash_ok_utc: set[int] = set()
+    hash_ok_any: set[int] = set()
+    rows: list = []
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for zone in zones:
+                # set_config, not an interpolated SET: the zone comes from config
+                # and must never be concatenated into SQL.
+                await conn.execute("SELECT set_config('TimeZone', $1, true)", zone)
+                rows = await conn.fetch(_CHAIN_SQL)
+                ok = {r["id"] for r in rows if r["hash_ok"]}
+                if zone == "UTC":
+                    hash_ok_utc = ok
+                hash_ok_any |= ok
+
+    total = len(rows)
+    hash_breaks, legacy_tz, forks, orphans, head_breaks = 0, 0, 0, 0, 0
+    fork_ids: list[int] = []
+    break_ids: list[int] = []
+    for r in rows:
+        rid = r["id"]
+        if rid not in hash_ok_any:
+            hash_breaks += 1
+            break_ids.append(rid)
+        elif rid not in hash_ok_utc:
+            legacy_tz += 1
+        if r["link_bad"]:
+            if r["prev_resolves"]:
+                forks += 1
+                fork_ids.append(rid)
+            else:
+                orphans += 1
+                break_ids.append(rid)
+        if r["head_bad"]:
+            head_breaks += 1
+            break_ids.append(rid)
+
+    breaks = hash_breaks + orphans + head_breaks
+    out = {
+        "ok": breaks == 0,
+        "total": total,
+        "breaks": breaks,
+        "hash_breaks": hash_breaks,
+        "link_orphans": orphans,
+        "head_breaks": head_breaks,
+        # Informational: intact rows that only reproduce under a non-UTC zone.
+        "hash_legacy_tz": legacy_tz,
+        # Informational: pre-advisory-lock chain forks (tasks-0012 / users-0006).
+        "link_forks": forks,
+        "first_break_id": min(break_ids) if break_ids else None,
+        "zones_tried": zones,
+    }
+    if fork_ids:
+        out["fork_id_range"] = [min(fork_ids), max(fork_ids)]
+    return out
+
+
 @router.get("/verify")
-async def verify_chain(user: dict = Depends(require_role("ADMIN"))):
-    """Validate both global hash chains (each row links the prior one).
+async def verify_chain(user: dict = Depends(require_role("ADMIN", "QA_MGR", "QP"))):
+    """Validate both global hash chains: recompute each row's hash from its stored
+    columns AND check pointer linkage + head anchoring.
 
     Runs over the admin pools because each chain spans every org — verifying
     only the org-visible subset would report false breaks where other-org
-    rows were filtered out."""
+    rows were filtered out.
+
+    `ok` is false only for a genuine integrity failure: a row whose content does
+    not reproduce its hash under ANY candidate zone, a link pointing at a row that
+    does not exist, or a rewritten head. `hash_legacy_tz` and `link_forks` are
+    reported alongside because they are explained history (see _CHAIN_SQL above),
+    and burying them would be as wrong as failing on them."""
     out = {}
     for source, pool in (("users", users_admin_pool()), ("tasks", tasks_admin_pool())):
-        row = await pool.fetchrow(_CHAIN_SQL)
-        out[source] = {
-            "ok": (row["breaks"] or 0) == 0,
-            "total": row["total"],
-            "breaks": row["breaks"] or 0,
-            "first_break_id": row["first_break"],
-        }
+        out[source] = await _verify_one(pool)
     return {"ok": out["users"]["ok"] and out["tasks"]["ok"], **out}

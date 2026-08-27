@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MASS WEED — Audit Trail</title>
+<link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone A/C — Audit trail (audit). Tamper-evident, hash-chained, append-only.
+  Rows: timestamp · actor · entity · action · source · before→after diff.
+  Verify chain → "Verified ✓ / N breaks". Read-only history; elevated roles.
+  Serves the QMS §8 GxP tamper-evident-audit requirement.
+-->
+<style>
+  html,body{margin:0;background:var(--mw-void);}
+  .wrap{max-width:1180px;margin:0 auto;padding:16px 24px 70px;}
+  .top{display:flex;align-items:flex-end;gap:16px;margin:2px 0 6px;flex-wrap:wrap;}
+  .top h1{font-family:var(--mw-font-cond);font-size:28px;font-weight:700;color:var(--mw-ink);margin:0;letter-spacing:.02em;text-shadow:0 0 18px rgba(94,200,240,.28);}
+  .top .sub{font-size:12px;color:var(--mw-text-dim);margin-top:4px;max-width:560px;}
+  .top .sp{flex:1;}
+  /* verify bar */
+  .verifybar{display:flex;align-items:center;gap:14px;margin:16px 0;padding:13px 18px;flex-wrap:wrap;background:var(--mw-panel-in);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);}
+  .verifybar .chainic{width:38px;height:38px;flex:none;display:grid;place-items:center;color:var(--mw-cyan-bright);background:rgba(94,200,240,.1);box-shadow:inset 0 0 0 1px rgba(94,200,240,.3);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+  .verifybar__b{flex:1;min-width:180px;} .verifybar__t{font-family:var(--mw-font-cond);font-weight:700;font-size:15px;color:var(--mw-ink);letter-spacing:.03em;}
+  .verifybar__d{font-size:11px;color:var(--mw-text-faint);margin-top:2px;font-family:var(--mw-mono);}
+  .verdict{display:inline-flex;align-items:center;gap:8px;font-family:var(--mw-font-cond);font-weight:700;font-size:14px;letter-spacing:.05em;text-transform:uppercase;padding:7px 15px;clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .verdict.ok{color:var(--mw-void);background:linear-gradient(180deg,#8ff07a,var(--mw-stat-hi));} .verdict.bad{color:#fff;background:var(--mw-stat-lo);} .verdict.idle{color:var(--mw-text-dim);box-shadow:inset 0 0 0 1.5px rgba(94,200,240,.3);}
+  .btn{font-family:var(--mw-font-cond);text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-weight:700;cursor:pointer;padding:10px 17px;border:none;color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);transition:filter .12s ease;}
+  .btn:hover{filter:brightness(1.16);} .btn.ghost{color:var(--mw-cyan-bright);background:rgba(6,20,40,.5);box-shadow:inset 0 0 0 1px rgba(94,200,240,.34);}
+  /* filters */
+  .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .fseg{display:flex;gap:4px;flex-wrap:wrap;}
+  .fbtn{font-family:var(--mw-font);text-transform:uppercase;letter-spacing:.05em;font-size:10.5px;font-weight:600;cursor:pointer;padding:6px 11px;color:var(--mw-text-dim);background:rgba(4,14,28,.6);box-shadow:inset 0 0 0 1px rgba(94,200,240,.14);border:none;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);transition:all .12s ease;}
+  .fbtn:hover{color:var(--mw-cyan-bright);} .fbtn.on{color:var(--mw-void);background:linear-gradient(180deg,var(--mw-cyan-bright),var(--mw-cyan));}
+  .search{flex:1;min-width:150px;display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(4,14,28,.7);box-shadow:inset 0 0 0 1px rgba(94,200,240,.2);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);}
+  .search input{flex:1;background:none;border:none;outline:none;color:var(--mw-ink);font-family:var(--mw-font);font-size:12.5px;} .search input::placeholder{color:var(--mw-text-faint);} .search svg{color:var(--mw-text-faint);flex:none;}
+  /* rows */
+  .log{display:flex;flex-direction:column;}
+  .arow{box-shadow:inset 0 -1px 0 rgba(94,200,240,.08);}
+  .arow__hd{display:flex;align-items:center;gap:12px;padding:11px 12px;cursor:pointer;transition:background .1s ease;} .arow__hd:hover{background:rgba(58,159,212,.07);}
+  .actbadge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;white-space:nowrap;color:var(--ac);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ac) 50%,transparent);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .entity{font-family:var(--mw-mono);font-size:12px;font-weight:700;color:var(--mw-cyan-bright);white-space:nowrap;}
+  .field{font-size:12px;color:var(--mw-text);flex:1;min-width:80px;} .field .mk{color:var(--mw-text-dim);}
+  .actor{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--mw-text-dim);white-space:nowrap;}
+  .av{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--mw-font-cond);font-weight:700;font-size:9px;color:var(--mw-void);background:linear-gradient(135deg,var(--mw-cyan-dim),rgba(16,48,80,.8));}
+  .src{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(94,200,240,.18);clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);white-space:nowrap;}
+  .ts{font-family:var(--mw-mono);font-size:10.5px;color:var(--mw-text-faint);white-space:nowrap;}
+  .chev{color:var(--mw-text-faint);transition:transform .15s ease;flex:none;} .arow.open .chev{transform:rotate(90deg);}
+  .arow__bd{display:none;padding:2px 14px 14px 46px;} .arow.open .arow__bd{display:block;}
+  .diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  .diffcol{padding:10px 13px;background:rgba(6,20,40,.4);clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);}
+  [data-theme="light"] .diffcol{background:rgba(255,255,255,.5);}
+  .diffcol.before{box-shadow:inset 0 0 0 1px rgba(239,77,77,.2);} .diffcol.after{box-shadow:inset 0 0 0 1px rgba(108,240,90,.24);}
+  .diffcol__l{font-size:8.5px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;} .diffcol.before .diffcol__l{color:var(--mw-stat-lo);} .diffcol.after .diffcol__l{color:var(--mw-stat-hi);}
+  .diffcol pre{margin:0;font-family:var(--mw-mono);font-size:11px;line-height:1.6;color:var(--mw-text);white-space:pre-wrap;word-break:break-word;}
+  .hashline{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-family:var(--mw-mono);font-size:9.5px;color:var(--mw-text-faint);}
+  .hashline b{color:var(--mw-cyan-dim);font-weight:400;}
+  .hashline .brk{color:var(--mw-stat-lo);}
+  .arow.broken .arow__hd{background:rgba(239,77,77,.06);} .arow.broken .entity{color:#ff9a9a;}
+  .brokentag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:var(--mw-stat-lo);padding:1px 6px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);}
+  .empty{padding:36px;text-align:center;color:var(--mw-text-faint);font-size:13px;}
+  @media(max-width:760px){.diff{grid-template-columns:1fr;}.arow__hd .hidem{display:none;}}
+</style>
+</head>
+<body>
+<div class="mw-root">
+<div class="wrap" data-screen-label="Audit trail">
+  <nav class="mw-nav">
+    <span class="mw-nav__mark"></span><span class="mw-nav__brand">Mass Weed</span>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="qc-lab.html">QC Lab</a>
+    <a href="audit.html" class="is-active">Audit</a>
+    <a href="modules.html">Modules</a>
+    <a href="review.html">Review</a>
+    <a href="login.html" style="margin-left:auto;">Sign Out</a>
+  </nav>
+
+  <div class="top">
+    <div>
+      <h1><span class="en">Audit Trail</span><span class="mk">Ревизорска трага</span></h1>
+      <div class="sub"><span class="en">Tamper-evident, hash-chained, append-only history of every create / update / delete. Read-only — rows are permanent records.</span><span class="mk">Отпорна на манипулација, хеш-поврзана историја на секое создавање / измена / бришење. Само за читање.</span></div>
+    </div>
+    <div class="sp"></div>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="verifybar">
+    <span class="chainic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></span>
+    <div class="verifybar__b">
+      <div class="verifybar__t"><span class="en">Chain integrity</span><span class="mk">Интегритет на синџирот</span></div>
+      <div class="verifybar__d" id="chainMeta">SHA-256 · <span id="rowCount">0</span> entries · head 7c02…a91f</div>
+    </div>
+    <span class="verdict idle" id="verdict"><span class="en">Not verified</span><span class="mk">Неверификуван</span></span>
+    <button class="btn" onclick="verify()"><span class="en">Verify chain</span><span class="mk">Верифицирај синџир</span></button>
+    <button class="btn ghost" onclick="tamper()"><span class="en">Demo: tamper a row</span><span class="mk">Демо: измени ред</span></button>
+  </div>
+
+  <div class="filters">
+    <div class="fseg" id="entseg"></div>
+    <div class="fseg" id="actseg"></div>
+    <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="q" type="text" placeholder="Search entity, actor, field…" oninput="draw()"></div>
+  </div>
+
+  <div class="mw-panel" style="padding:4px 6px;"><div class="mw-well" style="padding:2px 4px;"><div class="log" id="log"></div></div></div>
+</div>
+</div>
+
+<script>
+function bil(en,mk){return '<span class="en">'+en+'</span><span class="mk">'+mk+'</span>';}
+var AC={INSERT:'#6cf05a',UPDATE:'#5ec8f0',DELETE:'#ef4d4d'};
+var USERS={ka:['Kaidan A.','КА'],lv:['Liara V.','ЛВ'],da:['D. Anderson','ДА'],sys:['System','СИ']};
+var ROWS=[
+  {id:9,act:'UPDATE',ent:'certificate:iCoA-PP-2026-0042',src:'quality',by:'lv',fen:'status',fmk:'статус',ts:'23.07.2026 14:32',bef:'DRAFT',aft:'REVIEWED',h:'e41a…9d2c',ph:'c7b0…41ef'},
+  {id:8,act:'INSERT',ent:'oos:PP-OOS-2026-0007',src:'quality',by:'sys',fen:'record created',fmk:'запис создаден',ts:'23.07.2026 09:42',bef:'—',aft:'{param:"Total THC", value:25.8, limit:"18–24"}',h:'c7b0…41ef',ph:'a913…77c0'},
+  {id:7,act:'UPDATE',ent:'sample:PP-SMP-2026-0186',src:'quality',by:'sys',fen:'state',fmk:'состојба',ts:'23.07.2026 09:42',bef:'IN_TEST',aft:'QUARANTINE',h:'a913…77c0',ph:'5f2d…b8a1'},
+  {id:6,act:'UPDATE',ent:'spec:QCSP 001',src:'quality',by:'lv',fen:'lifecycle',fmk:'циклус',ts:'14.10.2025 10:04',bef:'DRAFT',aft:'ACTIVE',h:'5f2d…b8a1',ph:'2c88…e33d'},
+  {id:5,act:'INSERT',ent:'document:QASOP 004 v3',src:'docstudio',by:'da',fen:'issued',fmk:'издаден',ts:'12.07.2026 16:20',bef:'—',aft:'{type:"SOP", verify:"PASS"}',h:'2c88…e33d',ph:'91ff…0a4b'},
+  {id:4,act:'UPDATE',ent:'task:QA-80',src:'tasks',by:'ka',fen:'status',fmk:'статус',ts:'11.07.2026 08:15',bef:'working',aft:'review',h:'91ff…0a4b',ph:'44de…7c19'},
+  {id:3,act:'DELETE',ent:'task:PR-114 (duplicate)',src:'tasks',by:'ka',fen:'record removed',fmk:'запис отстранет',ts:'10.07.2026 17:50',bef:'{title:"Duplicate IPM check"}',aft:'—',h:'44de…7c19',ph:'0b71…f2a8'},
+  {id:2,act:'UPDATE',ent:'user:operator-12',src:'users',by:'da',fen:'role',fmk:'улога',ts:'09.07.2026 11:02',bef:'USER',aft:'CU_MGR',h:'0b71…f2a8',ph:'8e40…1d55'},
+  {id:1,act:'INSERT',ent:'batch:PP-B-2026-0311',src:'tasks',by:'ka',fen:'record created',fmk:'запис создаден',ts:'07.07.2026 07:40',bef:'—',aft:'{strain:"Nebula OG", rooms:["F-2","F-3"]}',h:'8e40…1d55',ph:'GENESIS'}
+];
+var entF='all', actF='all', tampered=null, verified=false;
+
+function chips(id,items,cur,cb){
+  document.getElementById(id).innerHTML=items.map(function(x){return '<button class="fbtn'+(x[0]===cur?' on':'')+'" data-v="'+x[0]+'">'+bil(x[1],x[2])+'</button>';}).join('');
+  document.querySelectorAll('#'+id+' .fbtn').forEach(function(b){b.onclick=function(){cb(b.dataset.v);};});
+}
+function paintFilters(){
+  chips('entseg',[['all','All sources','Сите'],['tasks','Tasks','Задачи'],['quality','Quality','Квалитет'],['docstudio','Docs','Документи'],['users','Users','Корисници']],entF,function(v){entF=v;paintFilters();draw();});
+  chips('actseg',[['all','All','Сите'],['INSERT','Insert','Внес'],['UPDATE','Update','Измена'],['DELETE','Delete','Бришење']],actF,function(v){actF=v;paintFilters();draw();});
+}
+function draw(){
+  var q=(document.getElementById('q').value||'').toLowerCase();
+  var rows=ROWS.filter(function(r){ if(entF!=='all'&&r.src!==entF)return false; if(actF!=='all'&&r.act!==actF)return false;
+    if(q)return (r.ent+' '+USERS[r.by][0]+' '+r.fen+' '+r.aft+' '+r.bef).toLowerCase().indexOf(q)>=0; return true; });
+  document.getElementById('rowCount').textContent=ROWS.length;
+  var log=document.getElementById('log');
+  if(!rows.length){ log.innerHTML='<div class="empty">'+bil('No entries match this filter.','Нема записи за овој филтер.')+'</div>'; return; }
+  log.innerHTML=rows.map(function(r){
+    var broken=verified&&tampered===r.id;
+    return '<div class="arow'+(broken?' broken':'')+'" data-id="'+r.id+'"><div class="arow__hd" onclick="this.parentNode.classList.toggle(\'open\')">'+
+      '<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>'+
+      '<span class="actbadge" style="--ac:'+AC[r.act]+'">'+r.act+'</span>'+
+      '<span class="entity">'+r.ent+'</span>'+
+      '<span class="field hidem"><span class="en">'+r.fen+'</span><span class="mk">'+r.fmk+'</span></span>'+
+      (broken?'<span class="brokentag">'+bil('hash break','прекин')+'</span>':'')+
+      '<span class="actor hidem"><span class="av">'+USERS[r.by][1]+'</span>'+USERS[r.by][0]+'</span>'+
+      '<span class="src hidem">'+r.src+'</span>'+
+      '<span class="ts">'+r.ts+'</span></div>'+
+      '<div class="arow__bd"><div class="diff">'+
+        '<div class="diffcol before"><div class="diffcol__l">'+bil('before','пред')+'</div><pre>'+r.bef+'</pre></div>'+
+        '<div class="diffcol after"><div class="diffcol__l">'+bil('after','по')+'</div><pre>'+r.aft+'</pre></div>'+
+      '</div><div class="hashline"><span>'+bil('entry','запис')+' #'+r.id+'</span><span>hash <b>'+r.h+'</b></span><span class="'+(broken?'brk':'')+'">prev <b>'+r.ph+'</b>'+(broken?' ✕ '+bil('recomputed hash ≠ stored','пресметан ≠ зачуван'):'')+'</span></div></div></div>';
+  }).join('');
+}
+function verify(){ verified=true; var v=document.getElementById('verdict');
+  if(tampered==null){ v.className='verdict ok'; v.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'+bil('Verified — 0 breaks','Верифициран — 0 прекини');
+    toast('ok','Chain verified · '+ROWS.length+' entries intact','Синџирот верификуван'); }
+  else { v.className='verdict bad'; v.innerHTML='✕ '+bil('1 break found','1 прекин најден'); toast('err','Chain broken at entry #'+tampered,'Синџир прекинат'); }
+  draw();
+}
+function tamper(){ tampered=7; var r=ROWS.find(function(x){return x.id===7;}); r.aft='RELEASED'; verified=false;
+  document.getElementById('verdict').className='verdict idle'; document.getElementById('verdict').innerHTML=bil('Not verified','Неверификуван');
+  toast('err','Row #7 altered off-ledger — now run Verify','Ред #7 изменет — верифицирај'); draw(); }
+function toast(kind,tt,ds){ var ic={ok:'<path d="M20 6L9 17l-5-5"/>',err:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>'}[kind];
+  var el=document.createElement('div'); el.className='mw-toast mw-toast--'+(kind==='ok'?'ok':'err');
+  el.innerHTML='<span class="mw-toast__ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ic+'</svg></span><div><div class="mw-toast__tt"><span class="en">'+tt+'</span><span class="mk">'+ds+'</span></div></div>';
+  (document.getElementById('toasts')||document.body).appendChild(el); setTimeout(function(){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(function(){el.remove();},400);},2600);
+}
+paintFilters(); draw();
+new MutationObserver(paintFilters).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
+</script>
+<div class="toaststack" id="toasts" style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:80;"></div>
+<script src="mw-i18n.js"></script>
+</body>
+</html>

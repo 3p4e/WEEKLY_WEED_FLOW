@@ -5,26 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MASS WEED — Approvals</title>
 <link rel="stylesheet" href="mass-weed.css">
+<!--
+  Zone A/B/C bridge — Approvals (approvals). Unified sign-off queue: task
+  sign-offs + QC review/approve/release + Zone-B controlled-document locks.
+  Second-person and QP gates reuse the coa/oos gate vocabulary, with reasons.
+-->
 <style>
   html,body{margin:0;background:var(--mw-void);}
-  .wrap{ max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
-  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
-  .tabs{ display:flex; gap:0; margin-bottom:16px; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:16px 24px 60px; }
+  .topbar{display:flex;align-items:center;gap:14px;margin-bottom:6px;flex-wrap:wrap;}
+  .topbar .sp{flex:1;}
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:14px 0 16px; }
+  .tabs{ display:flex; gap:0; margin-bottom:16px; flex-wrap:wrap; }
   .tab{ padding:10px 20px; font-size:13px; font-family:var(--mw-font); color:var(--mw-text-dim); background:rgba(6,20,40,.4); cursor:pointer;
     box-shadow:inset 0 -2px 0 transparent; transition:all .12s; letter-spacing:.03em; }
   .tab:hover{ color:var(--mw-text); }
   .tab.on{ color:var(--mw-cyan-bright); box-shadow:inset 0 -2px 0 var(--mw-cyan); background:rgba(58,159,212,.08); }
   .tab .c{ font-family:var(--mw-font-cond); margin-left:6px; color:var(--mw-text-faint); } .tab.on .c{ color:var(--mw-cyan); }
-
   .appr{ display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center; padding:15px 18px; margin-bottom:10px; transition:box-shadow .12s ease; }
   .appr:hover{ box-shadow:inset 0 0 0 1.5px rgba(94,200,240,.35); }
-  .appr__ic{ width:42px; height:42px; flex:none; display:flex; align-items:center; justify-content:center;
-    clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
+  .appr__ic{ width:42px; height:42px; flex:none; display:flex; align-items:center; justify-content:center; clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); }
   .appr__ic svg{ width:20px; height:20px; }
   .ic-coa{ background:rgba(108,240,90,.14); } .ic-coa svg{ fill:var(--mw-stat-hi); }
   .ic-dev{ background:rgba(239,77,77,.14); } .ic-dev svg{ fill:var(--mw-stat-lo); }
   .ic-order{ background:rgba(58,159,212,.14); } .ic-order svg{ fill:var(--mw-cyan-bright); }
   .ic-po{ background:rgba(236,236,74,.14); } .ic-po svg{ fill:var(--mw-stat-mid); }
+  .ic-doc{ background:rgba(155,123,232,.16); } .ic-doc svg{ fill:#c0aef2; }
+  .ic-task{ background:rgba(47,217,217,.14); } .ic-task svg{ fill:#2FD9D9; }
   .appr__t{ font-size:14.5px; color:var(--mw-ink); font-weight:600; }
   .appr__sub{ font-size:12px; color:var(--mw-text-dim); margin-top:3px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .appr__req{ display:inline-flex; align-items:center; gap:6px; }
@@ -34,22 +41,26 @@
   .appr__amt{ font-family:var(--mw-font-cond); font-size:16px; font-weight:700; color:var(--mw-ink); margin-right:6px; }
   .btn-appr,.btn-rej{ width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none;
     clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); transition:all .12s; }
-  .btn-appr{ background:rgba(108,240,90,.16); box-shadow:inset 0 0 0 1px rgba(108,240,90,.4); }
-  .btn-appr:hover{ background:rgba(108,240,90,.3); }
+  .btn-appr{ background:rgba(108,240,90,.16); box-shadow:inset 0 0 0 1px rgba(108,240,90,.4); } .btn-appr:hover{ background:rgba(108,240,90,.3); }
   .btn-appr svg{ width:16px; height:16px; fill:var(--mw-stat-hi); }
-  .btn-rej{ background:rgba(239,77,77,.12); box-shadow:inset 0 0 0 1px rgba(239,77,77,.4); }
-  .btn-rej:hover{ background:rgba(239,77,77,.26); }
+  .btn-rej{ background:rgba(239,77,77,.12); box-shadow:inset 0 0 0 1px rgba(239,77,77,.4); } .btn-rej:hover{ background:rgba(239,77,77,.26); }
   .btn-rej svg{ width:14px; height:14px; fill:var(--mw-stat-lo); }
-  .resolved{ opacity:.5; }
-  .resolved .appr__act{ pointer-events:none; }
-  .stamp{ font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:5px 12px;
-    clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
-  .stamp--ok{ color:var(--mw-stat-hi); background:rgba(108,240,90,.14); }
-  .stamp--no{ color:var(--mw-stat-lo); background:rgba(239,77,77,.14); }
+  .resolved{ opacity:.5; } .resolved .appr__act{ pointer-events:none; }
+  .stamp{ font-family:var(--mw-font-cond); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:5px 12px; clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .stamp--ok{ color:var(--mw-stat-hi); background:rgba(108,240,90,.14); } .stamp--no{ color:var(--mw-stat-lo); background:rgba(239,77,77,.14); }
   .age{ font-size:11px; color:var(--mw-text-faint); }
   .empty{ text-align:center; color:var(--mw-text-faint); padding:44px 0; }
-  .bulk{ display:flex; align-items:center; justify-content:space-between; padding:11px 16px; margin-bottom:12px;
+  .bulk{ display:flex; align-items:center; justify-content:space-between; padding:11px 16px; margin-bottom:12px; gap:10px; flex-wrap:wrap;
     background:rgba(58,159,212,.08); clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px); }
+  .rolebar{ display:flex; align-items:center; gap:9px; margin-bottom:16px; padding:9px 13px; flex-wrap:wrap;
+    background:rgba(155,123,232,.07); box-shadow:inset 0 0 0 1px rgba(155,123,232,.28); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+  .rolebar .lbl{ font-size:10px; text-transform:uppercase; letter-spacing:.11em; color:var(--mw-text-faint); }
+  .gatemsg{ display:flex; align-items:center; gap:7px; font-size:11px; line-height:1.4; color:var(--mw-text-dim); max-width:250px; }
+  .gatemsg svg{ width:14px; height:14px; flex:none; stroke:var(--mw-stat-lo); fill:none; stroke-width:2; }
+  .gatemsg.qp svg{ stroke:#c0aef2; }
+  .gpill{ font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:1px 7px; margin-left:6px;
+    clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px); color:#c0aef2; box-shadow:inset 0 0 0 1px rgba(155,123,232,.4); }
+  .zpill{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;margin-left:6px;clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px);color:var(--mw-text-faint);box-shadow:inset 0 0 0 1px rgba(94,200,240,.22);}
 </style>
 </head>
 <body>
@@ -60,59 +71,87 @@
     <a href="dashboard.html">Dashboard</a>
     <a href="my-day.html">My Day</a>
     <a href="approvals.html" class="is-active">Approvals</a>
-    <a href="reports.html">Reports</a>
-    <a href="board.html">Cycle Board</a>
+    <a href="qc-lab.html">QC Lab</a>
+    <a href="review.html">Review</a>
     <a href="login.html" style="margin-left:auto;">Sign Out</a>
   </nav>
 
-  <div class="mw-header-bar"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl">Approvals &amp; Sign-Off</h1><span class="mw-rule"></span></div>
+  <div class="topbar">
+    <div class="mw-header-bar" style="flex:1;"><span class="mw-rule"></span><h1 class="mw-title mw-title--xl"><span class="en">Approvals &amp; Sign-Off</span><span class="mk">Одобрувања и потпис</span></h1><span class="mw-rule"></span></div>
+    <div class="mw-ctlbar">
+      <div class="mw-seg"><button data-set-lang="en" type="button">EN</button><button data-set-lang="mk" type="button">МК</button></div>
+      <div class="mw-seg"><button data-set-theme="dark" type="button">◗</button><button data-set-theme="light" type="button">◔</button></div>
+    </div>
+  </div>
+
+  <div class="rolebar">
+    <span class="lbl"><span class="en">Signed in as</span><span class="mk">Најавен како</span></span>
+    <div class="mw-chips" id="roleSw">
+      <button class="mw-chip on" type="button" data-role="qcmgr" style="--cc:#2BE8A0"><span class="d"></span><span class="en">QC Manager · L. T’Soni</span><span class="mk">КК Менаџер · Л. Т’Сони</span></button>
+      <button class="mw-chip" type="button" data-role="qamgr" style="--cc:#E0743A"><span class="d"></span><span class="en">QA Manager · M. Solus</span><span class="mk">QA Менаџер · М. Солус</span></button>
+      <button class="mw-chip" type="button" data-role="qp" style="--cc:#9B7BE8"><span class="d"></span><span class="en">QP · A. Shepard</span><span class="mk">QP · А. Шепард</span></button>
+    </div>
+    <span style="flex:1"></span>
+    <span style="font-size:10.5px;color:var(--mw-text-faint);letter-spacing:.03em;"><span class="en">segregation of duties on GxP items</span><span class="mk">поделба на должности на GxP ставки</span></span>
+  </div>
 
   <div class="kpis">
-    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Pending</div><div class="mw-kpi__val mw-kpi__val--amber" id="k-pend">—</div><div class="mw-kpi__delta">awaiting you</div></div>
-    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Approved Today</div><div class="mw-kpi__val mw-kpi__val--green" id="k-appr">0</div><div class="mw-kpi__delta">signed off</div></div>
-    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Rejected</div><div class="mw-kpi__val" id="k-rej">0</div><div class="mw-kpi__delta">sent back</div></div>
-    <div class="mw-panel mw-kpi"><div class="mw-kpi__label">Avg Response</div><div class="mw-kpi__val">2.4h</div><div class="mw-kpi__delta">this week</div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label"><span class="en">Pending</span><span class="mk">На чекање</span></div><div class="mw-kpi__val mw-kpi__val--amber" id="k-pend">—</div><div class="mw-kpi__delta"><span class="en">awaiting you</span><span class="mk">чекаат вас</span></div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label"><span class="en">Approved Today</span><span class="mk">Одобрени денес</span></div><div class="mw-kpi__val mw-kpi__val--green" id="k-appr">0</div><div class="mw-kpi__delta"><span class="en">signed off</span><span class="mk">потпишани</span></div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label"><span class="en">Rejected</span><span class="mk">Одбиени</span></div><div class="mw-kpi__val" id="k-rej">0</div><div class="mw-kpi__delta"><span class="en">sent back</span><span class="mk">вратени</span></div></div>
+    <div class="mw-panel mw-kpi"><div class="mw-kpi__label"><span class="en">Avg Response</span><span class="mk">Просечен одговор</span></div><div class="mw-kpi__val">2.4h</div><div class="mw-kpi__delta"><span class="en">this week</span><span class="mk">оваа недела</span></div></div>
   </div>
 
   <div class="tabs" id="tabs"></div>
   <div class="bulk" id="bulk" style="display:none;">
-    <span style="font-size:12px;color:var(--mw-text-dim);">Approve all low-risk items in one action</span>
-    <button class="mw-btn mw-btn--primary" onclick="approveAll()">✓ Approve All Pending</button>
+    <span style="font-size:12px;color:var(--mw-text-dim);"><span class="en">Approve all ungated low-risk items in one action</span><span class="mk">Одобри ги сите незаштитени ставки со низок ризик</span></span>
+    <button class="mw-btn mw-btn--primary" onclick="approveAll()">✓ <span class="en">Approve All Ungated</span><span class="mk">Одобри незаштитени</span></button>
   </div>
   <div id="list"></div>
 </div>
 </div>
 
-<script src="nav.js"></script>
-<script src="cmdk.js"></script>
 <script>
   const CHK='<svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.4-1.4z"/></svg>';
   const X='<svg viewBox="0 0 24 24"><path d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg>';
   const ICG={
     coa:'<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm8 1.5V8h4.5zM8 13l2 2 4-4 1 1-5 5-3-3z"/></svg>',
     dev:'<svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 5l7.5 13h-15L12 7zm-1 4v4h2v-4zm0 6v2h2v-2z"/></svg>',
-    order:'<svg viewBox="0 0 24 24"><path d="M7 4h13l-1.5 9H8.5L7 4zm0 0L6 2H2m5 18a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zm9 0a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0z"/></svg>',
+    doc:'<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm8 1.5V8h4.5zM8 12h8v1.6H8zm0 3h8v1.6H8z"/></svg>',
     po:'<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zm0 4H4V6h16zM6 10h6v2H6zm0 4h10v2H6z"/></svg>',
+    task:'<svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.4-1.4zM3 4h10v2H3zm0 14h6v2H3z"/></svg>',
   };
+  // gate: 'qp' → QP only; 'second' → submitter can't self-approve; 'qa' → QA Manager only (doc issue/lock)
   const ITEMS=[
-    {id:1,kind:'coa',icls:'ic-coa',t:'COA Release — Batch F-24 (Gorilla Glue #4)',sub:'Potency 24.1% THC · All contaminants pass',req:'LT',reqn:'L. T\u2019Soni',age:'12m ago',risk:'low'},
-    {id:2,kind:'dev',icls:'ic-dev',t:'Deviation — Extraction pressure spike',sub:'Live resin run · Major severity',req:'TK',reqn:'T. Krios',age:'40m ago',risk:'high'},
-    {id:3,kind:'order',icls:'ic-order',t:'Order #MW-3182 — Nova Dispensary',sub:'42 kg flower · Credit terms Net-30',req:'AS',reqn:'A. Shepard',age:'1h ago',amt:'$186K',risk:'med'},
-    {id:4,kind:'po',icls:'ic-po',t:'Purchase Order — Nutrient restock',sub:'Res B base + Cal-Mag · 12 units',req:'MS',reqn:'M. Solus',age:'2h ago',amt:'$4.2K',risk:'low'},
-    {id:5,kind:'coa',icls:'ic-coa',t:'COA Release — Batch F-23 (Blue Dream)',sub:'Potency 19.8% THC · All pass',req:'LT',reqn:'L. T\u2019Soni',age:'3h ago',risk:'low'},
-    {id:6,kind:'order',icls:'ic-order',t:'Order #MW-3179 — Element Retail',sub:'18 kg pre-roll · Prepaid',req:'AS',reqn:'A. Shepard',age:'4h ago',amt:'$72K',risk:'low'},
-    {id:7,kind:'dev',icls:'ic-dev',t:'Deviation — RH excursion Flower B',sub:'RH 68% for 40min · Minor severity',req:'GV',reqn:'G. Vakarian',age:'5h ago',risk:'med'},
+    {id:1,kind:'coa',icls:'ic-coa',zone:'C',ten:'CoQ Release — Batch PP-B-2026-0301',tmk:'Издавање CoQ — Серија PP-B-2026-0301',suben:'iCoA-PP-2026-0038 · all params comply',submk:'iCoA-PP-2026-0038 · сите усогласени',req:'LT',reqn:'L. T\u2019Soni',age:['12m ago','пред 12м'],risk:'low',gate:'qp',submitter:'qcmgr',glabel:['QP release','QP']},
+    {id:8,kind:'doc',icls:'ic-doc',zone:'B',ten:'Issue controlled document — QASOP 004 v3',tmk:'Издај контролиран документ — QASOP 004 v3',suben:'Document Studio · verify PASS · lock on issue',submk:'Студио · verify PASS · заклучи',req:'MS',reqn:'M. Solus',age:['22m ago','пред 22м'],risk:'low',gate:'qa',submitter:'qamgr',glabel:['QA issue','QA']},
+    {id:2,kind:'dev',icls:'ic-dev',zone:'C',ten:'Deviation — Extraction pressure spike',tmk:'Отстапување — скок на притисок',suben:'Live resin run · Major severity',submk:'Жива смола · голема тежина',req:'TK',reqn:'T. Krios',age:['40m ago','пред 40м'],risk:'high'},
+    {id:3,kind:'coa',icls:'ic-coa',zone:'C',ten:'Certificate review — iCoA-PP-2026-0041',tmk:'Преглед на сертификат — iCoA-PP-2026-0041',suben:'Second-person review required',submk:'Потребен преглед од второ лице',req:'LT',reqn:'L. T\u2019Soni',age:['55m ago','пред 55м'],risk:'low',gate:'second',submitter:'qcmgr',glabel:['2nd person','2-ро лице']},
+    {id:9,kind:'task',icls:'ic-task',zone:'A',ten:'Task sign-off — W28 cultivation plan',tmk:'Потпис на задача — план за одгледување W28',suben:'Manager submit → approve · Cultivation',submk:'Менаџер поднесе → одобри · Одгледување',req:'GV',reqn:'G. Vakarian',age:['1h ago','пред 1ч'],risk:'low'},
+    {id:4,kind:'po',icls:'ic-po',zone:'A',ten:'Purchase Order — Nutrient restock',tmk:'Нарачка — надополна на нутриенти',suben:'Res B base + Cal-Mag · 12 units',submk:'Res B + Cal-Mag · 12 единици',req:'MS',reqn:'M. Solus',age:['2h ago','пред 2ч'],amt:'$4.2K',risk:'low'},
+    {id:5,kind:'coa',icls:'ic-coa',zone:'C',ten:'CoQ Release — Batch PP-B-2026-0298',tmk:'Издавање CoQ — Серија PP-B-2026-0298',suben:'CoQ-PP-2026-0037 · all pass',submk:'CoQ-PP-2026-0037 · сите поминаа',req:'GV',reqn:'G. Vakarian',age:['3h ago','пред 3ч'],risk:'low',gate:'qp',submitter:'qcmgr',glabel:['QP release','QP']},
+    {id:7,kind:'dev',icls:'ic-dev',zone:'C',ten:'Deviation — RH excursion Flower B',tmk:'Отстапување — RH отстапка Цвет Б',suben:'RH 68% for 40min · Minor severity',submk:'RH 68% за 40мин · мала тежина',req:'GV',reqn:'G. Vakarian',age:['5h ago','пред 5ч'],risk:'med'},
   ];
   const state={}; ITEMS.forEach(i=>state[i.id]='pending');
-  let TAB='pending';
-  const TABS=[['pending','Pending'],['approved','Approved'],['rejected','Rejected']];
+  let TAB='pending', ROLE='qcmgr';
+  const isMk=()=>document.documentElement.getAttribute('data-lang')==='mk';
+  document.getElementById('roleSw').addEventListener('click',e=>{ const b=e.target.closest('.mw-chip'); if(!b)return;
+    document.querySelectorAll('#roleSw .mw-chip').forEach(x=>x.classList.toggle('on',x===b)); ROLE=b.dataset.role; render(); });
+  function gateBlock(i){
+    if(i.gate==='qp' && ROLE!=='qp') return {cls:'qp',en:'QP release only — switch to the Qualified Person',mk:'Само QP издавање — префрли се на Квалификуваното лице'};
+    if(i.gate==='qa' && ROLE!=='qamgr') return {cls:'',en:'Controlled-doc issue is a QA act — switch to QA Manager',mk:'Издавањето документ е QA дејство — префрли се на QA Менаџер'};
+    if(i.gate==='second' && ROLE===i.submitter) return {cls:'',en:'You submitted this — review needs a second person',mk:'Ти го поднесе ова — преглед бара второ лице'};
+    return null;
+  }
+  const TABS=[['pending','Pending','На чекање'],['approved','Approved','Одобрени'],['rejected','Rejected','Одбиени']];
   const RISKTAG={low:'mw-tag--lo',med:'mw-tag--mid',high:'mw-tag--hi'};
+  const RISKLBL={low:['low risk','низок ризик'],med:['med risk','среден ризик'],high:['high risk','висок ризик']};
 
   function counts(){ const c={pending:0,approved:0,rejected:0}; Object.values(state).forEach(s=>c[s]++); return c; }
   function drawTabs(){
     const c=counts();
-    document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>
-      `<div class="tab ${k===TAB?'on':''}" onclick="TAB='${k}';drawTabs();render()">${l}<span class="c">${c[k]}</span></div>`).join('');
+    document.getElementById('tabs').innerHTML=TABS.map(([k,en,mk])=>
+      `<div class="tab ${k===TAB?'on':''}" onclick="TAB='${k}';drawTabs();render()"><span class="en">${en}</span><span class="mk">${mk}</span><span class="c">${c[k]}</span></div>`).join('');
     document.getElementById('k-pend').textContent=c.pending;
     document.getElementById('k-appr').textContent=c.approved;
     document.getElementById('k-rej').textContent=c.rejected;
@@ -120,31 +159,39 @@
   }
   function render(){
     const rows=ITEMS.filter(i=>state[i.id]===TAB);
-    if(!rows.length){ document.getElementById('list').innerHTML=`<div class="empty">No ${TAB} items.</div>`; return; }
+    if(!rows.length){ document.getElementById('list').innerHTML=`<div class="empty"><span class="en">No ${TAB} items.</span><span class="mk">Нема ставки.</span></div>`; return; }
     document.getElementById('list').innerHTML=rows.map(i=>{
       const resolved=state[i.id]!=='pending';
+      const blk = !resolved && i.gate ? gateBlock(i) : null;
+      const lock='<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+      const gpill = i.gate?`<span class="gpill">${i.glabel[0]}</span>`:'';
       return `<div class="mw-panel appr ${resolved?'resolved':''}">
         <div class="appr__ic ${i.icls}">${ICG[i.kind]}</div>
-        <div><div class="appr__t">${i.t}</div>
+        <div><div class="appr__t"><span class="en">${i.ten}</span><span class="mk">${i.tmk}</span><span class="zpill">Zone ${i.zone}</span>${gpill}</div>
           <div class="appr__sub">
-            <span class="mw-tag ${RISKTAG[i.risk]}">${i.risk} risk</span>
-            <span>${i.sub}</span>
+            <span class="mw-tag ${RISKTAG[i.risk]}"><span class="en">${RISKLBL[i.risk][0]}</span><span class="mk">${RISKLBL[i.risk][1]}</span></span>
+            <span><span class="en">${i.suben}</span><span class="mk">${i.submk}</span></span>
             <span class="appr__req"><span class="av">${i.req}</span>${i.reqn}</span>
-            <span class="age">· ${i.age}</span>
+            <span class="age">· <span class="en">${i.age[0]}</span><span class="mk">${i.age[1]}</span></span>
           </div></div>
         <div class="appr__act">
           ${i.amt?`<span class="appr__amt">${i.amt}</span>`:''}
           ${resolved
-            ? `<span class="stamp ${state[i.id]==='approved'?'stamp--ok':'stamp--no'}">${state[i.id]==='approved'?'✓ Signed':'✕ Sent back'}</span>`
-            : `<button class="btn-rej" title="Reject" onclick="setState(${i.id},'rejected')">${X}</button>
-               <button class="btn-appr" title="Approve" onclick="setState(${i.id},'approved')">${CHK}</button>`}
+            ? `<span class="stamp ${state[i.id]==='approved'?'stamp--ok':'stamp--no'}">${state[i.id]==='approved'?'✓ <span class="en">Signed</span><span class="mk">Потпишано</span>':'✕ <span class="en">Sent back</span><span class="mk">Вратено</span>'}</span>`
+            : blk
+              ? `<span class="gatemsg ${blk.cls}">${lock}<span><span class="en">${blk.en}</span><span class="mk">${blk.mk}</span></span></span>`
+              : `<button class="btn-rej" title="Reject" onclick="setState(${i.id},'rejected')">${X}</button>
+                 <button class="btn-appr" title="Approve" onclick="setState(${i.id},'approved')">${CHK}</button>`}
         </div>
       </div>`;
     }).join('');
+    if(window.mwSync)window.mwSync();
   }
   function setState(id,s){ state[id]=s; drawTabs(); render(); }
-  function approveAll(){ ITEMS.forEach(i=>{ if(state[i.id]==='pending') state[i.id]='approved'; }); drawTabs(); render(); }
+  function approveAll(){ ITEMS.forEach(i=>{ if(state[i.id]==='pending' && !(i.gate && gateBlock(i))) state[i.id]='approved'; }); drawTabs(); render(); }
   drawTabs(); render();
+  new MutationObserver(render).observe(document.documentElement,{attributes:true,attributeFilter:['data-lang']});
 </script>
+<script src="mw-i18n.js"></script>
 </body>
 </html>

@@ -21,5 +21,8 @@ COPY --chown=docengine:docengine engine ./engine
 
 USER docengine
 
-# state lives in Postgres; 2 workers are safe
+# Workflow/document state lives in Postgres, so any worker can serve any
+# poll. Build OUTPUT is what used to be worker-unsafe (a shared filename
+# per document code); builder.build now writes a per-build unique path and
+# publishes it with os.replace, so 2 workers are safe for that too (H13).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

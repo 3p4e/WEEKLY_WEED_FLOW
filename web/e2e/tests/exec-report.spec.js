@@ -6,7 +6,7 @@
 // authenticated API client (page.evaluate) — the authoring UI has its own
 // spec coverage; this one tests CONSUMPTION.
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, gotoModule } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -30,6 +30,7 @@ test('executive report: status board, drill-down, deep link, HTML export', async
   });
 
   await test.step('open the Executive Report view — org chip shows draft', async () => {
+    await gotoModule(page, 'analytics');   // Executive Report lives in the analytics module
     await page.locator('.nav-item', { hasText: 'Executive Report' }).click();
     await expect(page.locator('.xr-chips .xr-chip-in', { hasText: 'Org-wide' })).toBeVisible({ timeout: 10_000 });
     // one department chip (cultivation) still missing, org-wide is a draft
@@ -57,6 +58,9 @@ test('executive report: status board, drill-down, deep link, HTML export', async
   });
 
   await test.step('standalone interactive HTML downloads', async () => {
+    // The deep-link step above followed "Open in board" back into the tasks
+    // module (setView is module-aware now); return to analytics for the export.
+    await gotoModule(page, 'analytics');
     await page.locator('.nav-item', { hasText: 'Executive Report' }).click();
     const sec = page.locator('.xr-sec', { hasText: 'Org-wide' });
     if (!(await sec.locator('.xr-exports').isVisible())) await sec.locator('.xr-sec-head').click();

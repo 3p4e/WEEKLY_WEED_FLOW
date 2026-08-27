@@ -133,7 +133,14 @@ GF.leaf3d = (function () {
   // and the service-worker read happen a single time.
   let _objText = null;
   function loadObjText(url) {
-    if (!_objText) _objText = fetch(url).then(r => { if (!r.ok) throw new Error('leaf mesh ' + r.status); return r.text(); });
+    // Memoize the SUCCESS only. Caching the promise unconditionally meant one
+    // transient blip during boot pinned a rejected promise for the rest of the
+    // session, permanently downgrading the 3D leaf app-wide with no retry.
+    if (!_objText) {
+      _objText = fetch(url)
+        .then(r => { if (!r.ok) throw new Error('leaf mesh ' + r.status); return r.text(); })
+        .catch(e => { _objText = null; throw e; });   // let the next mount retry
+    }
     return _objText;
   }
 

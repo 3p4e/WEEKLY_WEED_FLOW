@@ -32,12 +32,44 @@ PAGE_W = pr.PAGE_W  # 18.46 cm text width (base-template 1.27 cm margins)
 
 def parse(md):
     hd={}
-    m=re.search(r'<!--HEADERDATA(.*?)-->', md, re.S)
-    if m:
-        for ln in m.group(1).strip().splitlines():
+    # Line-anchored scan, not a single regex across the whole block: the
+    # terminator must be a line that IS "-->" by itself, not any "-->"
+    # substring — a field value containing a literal "-->" (e.g. an
+    # informally-written title) must never be mistaken for the block end,
+    # which would truncate the header and leak the remaining fields into
+    # the document body as garbage paragraphs.
+    all_lines=md.splitlines(); hd_start=hd_end=None
+    for idx,ln in enumerate(all_lines):
+        if ln.strip()=='<!--HEADERDATA':
+            hd_start=idx; break
+    if hd_start is not None:
+        for idx in range(hd_start+1, len(all_lines)):
+            if all_lines[idx].strip()=='-->':
+                hd_end=idx; break
+    if hd_start is not None and hd_end is not None:
+        for ln in all_lines[hd_start+1:hd_end]:
             if ':' in ln:
-                k,v=ln.split(':',1); hd[k.strip()]=v.strip()
-        md=md[m.end():]
+                k,v=ln.split(':',1); k=k.strip()
+                # Reject a repeated key rather than silently keeping the last
+                # occurrence: a caller that lets a HEADERDATA field value
+                # contain an embedded newline (assemble_markdown now rejects
+                # that at the source, but this parser must not depend on
+                # every caller remembering to) can smuggle extra fabricated
+                # "key: value" lines into the block. Last-line-wins would let
+                # that forged line silently override the real code/version/
+                # title field the rest of the pipeline (and the audit-trail
+                # registry row) actually recorded. No legitimate HEADERDATA
+                # producer in this codebase ever repeats a key (see
+                # PP_UNIFIED_DOCX_GUIDE.md's field list and every generator:
+                # each key appears at most once), so this can never reject a
+                # genuine document.
+                if k in hd:
+                    raise ValueError(
+                        f"HEADERDATA has a duplicate key {k!r} — refusing to parse "
+                        "(last-line-wins would let an injected line override the real value)"
+                    )
+                hd[k]=v.strip()
+        md="\n".join(all_lines[hd_end+1:])
     blocks=[]; lines=md.splitlines(); i=0
     while i<len(lines):
         s=lines[i].strip()
@@ -256,7 +288,8 @@ def build_sop(hd, blocks, out):
     pf.save(d, out)
 
 def main(src,out):
-    hd,blocks=parse(open(src,encoding='utf-8').read())
+    with open(src,encoding='utf-8') as f:
+        hd,blocks=parse(f.read())
     dt=hd.get('doctype','SOP').upper()
     (build_sop if dt=='SOP' else build_annex)(hd, blocks, out)
     print("WROTE", out, "("+dt+")")

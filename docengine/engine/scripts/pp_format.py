@@ -266,24 +266,53 @@ def apply_pp_header(d, mk_name, code, en_name, version="1.0"):
     own centre-cell run layout has a middle slot (originally used for a secondary identifier) that
     must NOT be reused for the code, or the code appears twice on the same header. That middle
     slot (and its adjoining separator/newline runs) is cleared instead, so the centre cell shows
-    just the bilingual title on two lines: MK title, then EN title."""
+    just the bilingual title on two lines: MK title, then EN title.
+
+    Every index/structure assumption below (header table present, a given paragraph
+    having a given run at a given position) used to silently no-op when it didn't
+    hold — new_sop()/new_annex() call this and ignore its return value, so a base
+    template whose header layout had drifted (an edit to PP_BASE_TEMPLATE.docx that
+    added/removed a run) would ship a GMP document with the Document-name/Code/
+    Version field left BLANK and no error anywhere. Same class of bug as the missing-
+    template case those two functions already fail loudly on (see their
+    FileNotFoundError guards) — match that precedent here too: raise instead of
+    quietly leaving a header field unstamped."""
     try:
         h = d.sections[0].header.tables[0]
-    except (IndexError, AttributeError):
-        return False
-    def setrun(runs, i, t):
-        if i < len(runs):
-            runs[i].text = t
+    except (IndexError, AttributeError) as e:
+        raise RuntimeError(
+            "PP base template header table not found (sections[0].header.tables[0]) "
+            "-- the template's header layout no longer matches what apply_pp_header "
+            "expects, so Document name/Code/Version cannot be stamped."
+        ) from e
+
+    def setrun(runs, i, t, field):
+        if i >= len(runs):
+            raise RuntimeError(
+                f"PP base template header: expected a run at index {i} in the "
+                f"{field} but only {len(runs)} run(s) are present -- the template's "
+                "header structure has changed; refusing to silently leave this "
+                "field blank."
+            )
+        runs[i].text = t
+
     nm = h.cell(0, 1).paragraphs[1].runs
-    setrun(nm, 0, mk_name + " ")
+    setrun(nm, 0, mk_name + " ", "document-name cell")
     for i in (1, 2, 3):          # clear the template's middle line + separator (was: code, duplicating the right cell)
-        setrun(nm, i, "")
-    setrun(nm, 5, en_name)
+        setrun(nm, i, "", "document-name cell (clearing the unused middle slot)")
+    setrun(nm, 5, en_name, "document-name cell")
     cd = h.cell(0, 2).paragraphs[2].runs
-    setrun(cd, 0, code); setrun(cd, 2, ""); setrun(cd, 3, "")
+    setrun(cd, 0, code, "code cell")
+    setrun(cd, 2, "", "code cell (clearing)")
+    setrun(cd, 3, "", "code cell (clearing)")
     vr = h.cell(1, 2).paragraphs[0].runs
-    if vr:
-        vr[-1].text = version
+    if not vr:
+        raise RuntimeError(
+            "PP base template header: version cell has no runs to stamp -- the "
+            "template's header structure has changed; refusing to silently leave "
+            "the version field blank."
+        )
+    vr[-1].text = version
     return True
 
 # ============================ SOP (two-column) ============================
@@ -299,7 +328,23 @@ def new_sop(margin_cm=1.27, from_template=True, code=None,
     tpl = template or PP_TEMPLATE
     hdr_mk = mk_title or mk_name
     hdr_en = en_title or en_name or ("STANDARD OPERATING PROCEDURE — %s" % (code or ""))
-    if from_template and os.path.exists(tpl):
+    if from_template:
+        if not os.path.exists(tpl):
+            # A missing template here is a deployment defect (container image
+            # missing assets/PP_BASE_TEMPLATE.docx, or a bad relative path),
+            # NOT a legitimate "no template wanted" case — from_template=True
+            # means the caller wants the mandatory header/footer/logo. Silently
+            # falling through to a bare Document() below would build (and
+            # PASS pp_verify's gate — it never checks the header/footer table
+            # exists) a document missing the running header and "Page X of Y"
+            # footer this module's own docstring calls MANDATORY on every
+            # Purely Plant document. Fail loud instead.
+            raise FileNotFoundError(
+                f"PP base template not found at {tpl!r} — cannot build a "
+                "from_template=True SOP without it (the mandatory header/logo/"
+                "footer live there). Pass from_template=False explicitly if a "
+                "templateless document is actually intended."
+            )
         d = Document(tpl)
         apply_pp_header(d, hdr_mk, code or "", hdr_en, version)
         wipe_body(d)
@@ -441,7 +486,17 @@ def new_annex(orient="portrait", from_template=True, code=None,
     tpl = template or PP_TEMPLATE
     hdr_mk = mk_title or mk_name
     hdr_en = en_title or en_name or ("ANNEX — %s" % (code or ""))
-    if from_template and os.path.exists(tpl):
+    if from_template:
+        if not os.path.exists(tpl):
+            # See new_sop()'s identical guard: from_template=True asked for the
+            # mandatory header/footer/logo, so a missing template file is a
+            # deployment defect to fail loudly on, not a silent bare Document().
+            raise FileNotFoundError(
+                f"PP base template not found at {tpl!r} — cannot build a "
+                "from_template=True annex without it (the mandatory header/logo/"
+                "footer live there). Pass from_template=False explicitly if a "
+                "templateless document is actually intended."
+            )
         d = Document(tpl)
         apply_pp_header(d, hdr_mk, code or "", hdr_en, version)
         wipe_body(d)
