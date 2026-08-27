@@ -154,6 +154,14 @@ preserve.
 
 ### The guardrail, enforced rather than requested
 
+- **The scope is now a control, not an instruction.** Each agent's permitted
+  dataset list is passed into its tool sandbox as `RAGFLOW_ALLOWED_DATASETS`,
+  and the tool refuses any name outside it. This is the important one: the tool
+  cannot see which agent is calling it, so it resolved whatever names it was
+  handed against the whole tenant. The `ragflow_scope` block *asked* the model
+  not to name anything else, and asking was all it was. The variable is
+  per-agent execution environment rather than model-visible text, so the model
+  cannot argue with it, edit it or forget it.
 - `ragflow_search` **refuses an unscoped search**. `datasets` is required; an
   empty value returns an error instead of searching the tenant.
 - On an unresolvable scope it returns **only the names the caller asked for**,
@@ -162,14 +170,71 @@ preserve.
   agent's own `memory_replace`/`memory_insert` without blocking the management
   API — verified live: a `read_only` block still accepts a value PATCH, which is
   what lets a block be both agent-immutable and declaratively reconcilable.
+- `ensure_tool` now **updates a registered tool whose source has drifted**
+  instead of adopting it by name. The tool is a shared server object, so nothing
+  in the create-if-missing path ever revisited it — meaning every hardening
+  above could have reached the repo, the tests and the image and never the
+  server.
 
 ## Verification
 
-- DocEngine suite: **164 passed, 6 skipped** (was 145/6 — 19 new tests).
-- The two tool guardrails are tested by **executing the uploaded source** the
-  way Letta's sandbox does, not by parsing it: one asserts an unscoped search is
-  refused, the other stubs the dataset listing to contain `STABILITY_PROGRAMME`
-  and asserts the error response does not contain the string.
+- DocEngine suite: **175 passed, 6 skipped** (was 145/6 — 30 new tests).
+- The tool guardrails are tested by **executing the uploaded source** the way
+  Letta's sandbox does, not by parsing it: an unscoped search is refused; a
+  dataset outside the allowlist is refused *before any network call*, so a real
+  request would blow the test up rather than pass it; and the "none of these
+  exist" error is asserted not to contain the withheld dataset's name.
+
+### Applied to the live fleet and checked by asking it real questions
+
+`ensure_fleet` was run against `letta-6ou3` from an image built at this commit.
+All eight agents came back at `context_window 128000 / max_tokens 16384`, with
+`gf_mission` added, every governance block `read_only`, and `gf_corpus` present
+on exactly the five agents that retrieve. The registered `ragflow_search` tool
+was rewritten to the committed source.
+
+Then three questions, each to a fresh ephemeral clone so nothing polluted the
+real agents' history:
+
+**A batch-QC question that can only be answered by retrieving.** Asked what the
+certificates say about batch `BG1024`, `gf_app_assistant` called
+`ragflow_search` itself with `datasets: "eCoA_DATABASE"` explicitly — and asked
+its question **in Macedonian** (`BG1024 аналитички резултати`), which is what
+`gf_corpus` tells it to do because the corpus is Macedonian. It answered with
+four heavy-metal results and named the certificate. Checked against RAGflow
+directly, the source document
+`BG1024, 752-2025, 27.02.2025, IJZ.pdf` reads:
+
+```
+* олово     0,01   mg/kg
+* кадмиум   0,016  mg/kg
+* арсен     0,014  mg/kg
+* жива      0,005  mg/kg
+```
+
+Every value it reported is exactly what the certificate says, from exactly the
+document it cited, with Macedonian decimal commas preserved.
+
+**A section for a corpus that does not exist.** Asked `gf_sop_author` to draft
+§4 REFERENCES, it opened with a bilingual statement that the facility corpus is
+not ingested and that the references are therefore unknown, then emitted every
+reference as a blank write-in (`код: ____________`) rather than inventing SOP
+codes or an EU GMP annex number. That is precisely the behaviour the mission
+block and the "NO working corpus" scope text were written to produce.
+
+**A stability question.** Asked for a 9-month 25 °C/60 % RH result,
+`gf_app_assistant` declined and said the data was outside what it can access.
+Correct — **but it named the withheld dataset in the refusal**, having read the
+name out of the `gf_corpus` block that this same change had given it. Two
+things came out of that:
+
+1. `gf_corpus` no longer names it. It describes the boundary and why it exists —
+   stability certificates report the same analytes as release, so at retrieval
+   time they are indistinguishable — without handing over the name.
+2. More importantly, it made clear the refusal was **behavioural, not
+   enforced**. The agent declined because it had been told to; nothing would
+   have stopped it had it decided otherwise. That is what
+   `RAGFLOW_ALLOWED_DATASETS` above now fixes.
 
 ## Owner decisions — two things this work deliberately did not do
 

@@ -150,16 +150,25 @@ async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | No
         return None
 
 
-def _tool_env() -> dict:
-    """RAGflow credentials for the tool sandbox. Empty if unconfigured — the
-    tool then returns a clear 'not set' error instead of silently answering
-    from the model's own memory."""
+def _tool_env(datasets: list[str]) -> dict:
+    """RAGflow credentials AND this agent's permitted scope, for the tool
+    sandbox. Empty if unconfigured — the tool then returns a clear 'not set'
+    error instead of silently answering from the model's own memory.
+
+    RAGFLOW_ALLOWED_DATASETS is what makes the scope a control rather than an
+    instruction. The tool cannot tell which agent is calling it, so it resolves
+    whatever names it is handed against the whole tenant; the ragflow_scope
+    memory block asks the model not to name anything else, and asking is all it
+    was. Passing the permitted list through the tool's per-agent execution
+    environment puts the limit somewhere the model cannot reach: it is not
+    model-visible text, so it cannot be argued with, edited or forgotten."""
     if not (settings.ragflow_base and settings.ragflow_key):
         log.warning("RAGFLOW_BASE_URL / RAGFLOW_API_KEY unset — %s will not retrieve", TOOL_NAME)
         return {}
     return {
         "RAGFLOW_BASE_URL": settings.ragflow_base,
         "RAGFLOW_API_KEY": settings.ragflow_key,
+        "RAGFLOW_ALLOWED_DATASETS": ",".join(datasets),
     }
 
 
@@ -217,7 +226,7 @@ def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, des
         body["context_window_limit"] = int(defaults["context_window"])
     if defaults.get("max_tokens"):
         body["max_tokens"] = int(defaults["max_tokens"])
-    env = _tool_env()
+    env = _tool_env(ag.get("datasets", []))
     if env and ag.get("datasets"):
         body["tool_exec_environment_variables"] = env
     return body
@@ -277,6 +286,44 @@ async def _reconcile_blocks(
     if changed:
         log.info("reconciled blocks on %s: %s", label, ", ".join(changed))
     return changed
+
+
+async def _reconcile_tool_env(
+    client: LettaClient, agent: dict, ag: dict, label: str
+) -> bool:
+    """Push this agent's permitted-dataset allowlist into its tool sandbox.
+
+    Like the memory blocks and the sizing fields, tool_exec_environment_variables
+    is a create-time argument, so every agent that predates RAGFLOW_ALLOWED_
+    DATASETS would keep an unenforced scope forever.
+
+    Only agents WITH datasets are touched. gf_doc_orchestrator carries unrelated
+    secrets for a different tool, and a PATCH here replaces the whole set — so
+    an agent this module has no RAGflow env for must be left strictly alone
+    rather than reconciled to an empty one."""
+    if not ag.get("datasets"):
+        return False
+    env = _tool_env(ag["datasets"])
+    if not env:
+        return False
+    have = {
+        e.get("key"): e.get("value")
+        for e in (agent.get("tool_exec_environment_variables") or [])
+        if isinstance(e, dict)
+    }
+    # Compare only on the scope: the credentials are secrets and the server may
+    # not echo their values back, which would make every run look like a change.
+    if have.get("RAGFLOW_ALLOWED_DATASETS") == env["RAGFLOW_ALLOWED_DATASETS"]:
+        return False
+    try:
+        await client.update_agent_config(
+            agent["id"], {"tool_exec_environment_variables": env}
+        )
+        log.info("reconciled tool scope on %s: %s", label, env["RAGFLOW_ALLOWED_DATASETS"])
+        return True
+    except LettaError as e:  # non-fatal: the memory-block scope still applies
+        log.warning("could not reconcile tool scope on %s: %s", label, e)
+        return False
 
 
 async def _reconcile_config(
@@ -408,6 +455,7 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
             if TOOL_NAME not in {t.get("name") for t in (cur.get("tools") or [])}:
                 await _attach_retrieval(client, cur["id"], ag, tool_id, name)
             await _reconcile_blocks(client, cur["id"], ag, spec, name)
+            await _reconcile_tool_env(client, cur, ag, name)
             await _reconcile_config(client, cur, spec, name)
             continue
         body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""))

@@ -181,12 +181,17 @@ corpus_guide: |
     If a retrieved value is not clearly legible, say it is not legible. Do not
     normalise it into something that looks right.
 
-  STABILITY_PROGRAMME — 10 ICH stability certificates (25 °C/60 % RH long-term
-  and 40 °C/75 % RH accelerated, at 3/6/9-month timepoints). NO document agent
-  is granted this dataset, and that is deliberate: stability certificates report
-  the SAME analytes as batch release, so at retrieval time they are otherwise
-  indistinguishable from release results and can be read back as if they were a
-  batch's release values. If you were not granted it, you do not know it exists.
+  STABILITY-STUDY CERTIFICATES are held in a SEPARATE dataset that no agent in
+  this fleet is granted, and the name of it is deliberately not written here.
+  The reason for the separation: stability certificates report the SAME analytes
+  as batch release (total Δ⁹-THC, CBN, loss on drying) but as timepoint analyses
+  of stored material under ICH conditions. At retrieval time they are otherwise
+  indistinguishable from release results, and can be read back as if they were a
+  batch's release values. So if a question asks for a stability figure —
+  a 3/6/9-month timepoint, a 25 °C/60 % RH or 40 °C/75 % RH condition — the
+  answer is that the data is outside what you can see. Say that, without naming
+  a dataset. The tool enforces this independently of what you decide: it refuses
+  any dataset name outside the scope in your ragflow_scope block.
 
   HOW TO SEARCH WELL
   - Ask one specific question per call, in the language the documents use.

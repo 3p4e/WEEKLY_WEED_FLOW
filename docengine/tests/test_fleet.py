@@ -547,3 +547,121 @@ async def test_ensure_tool_still_registers_when_nothing_is_there():
     client = _ToolClient(None)
     assert await fleet.ensure_tool(client) == "tool-new"
     assert client.creates[0][0] == load_tool_source()
+
+
+# ── The scope as a control, not an instruction ──────────────────────────────
+# Found by running the live fleet: asked for a stability result, gf_app_assistant
+# correctly declined — but only because it had been told to. The tool cannot see
+# which agent is calling it, so nothing would have stopped it had it decided
+# otherwise. RAGFLOW_ALLOWED_DATASETS moves the limit into the tool's per-agent
+# execution environment, where the model cannot reach it.
+
+
+def test_the_tool_env_carries_the_agents_permitted_scope(monkeypatch):
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    env = fleet._tool_env(["eCoA_DATABASE", "DB1_REGULATORY"])
+    assert env["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE,DB1_REGULATORY"
+
+
+def test_the_tool_env_is_empty_when_ragflow_is_unconfigured(monkeypatch):
+    """The tool then returns a clear 'not set' error rather than the agent
+    quietly answering from its own memory."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "", raising=False)
+    assert fleet._tool_env(["eCoA_DATABASE"]) == {}
+
+
+def test_tool_refuses_a_dataset_outside_the_agents_allowlist(monkeypatch):
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "eCoA_DATABASE")
+    # No urlopen stub: the refusal must happen BEFORE any network call, so a
+    # real request here would blow up the test rather than pass it.
+    out = json.loads(_load_tool_callable()("stability at 9 months", "STABILITY_PROGRAMME"))
+    assert out["ok"] is False
+    assert out["refused"] == ["STABILITY_PROGRAMME"]
+
+
+def test_tool_allows_the_datasets_the_agent_is_granted(monkeypatch):
+    """The allowlist must not break the one agent that can actually retrieve."""
+    listing = {"data": [{"name": "eCoA_DATABASE", "id": "1"}]}
+    chunks = {"data": {"chunks": [{"document_keyword": "BG1024, 752-2025, 27.02.2025, IJZ.pdf",
+                                   "content": "олово 0,01 mg/kg"}]}}
+    seq = [listing, chunks]
+
+    class _Resp:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def read(self):
+            return json.dumps(self.payload).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "eCoA_DATABASE,DB1_REGULATORY")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp(seq.pop(0)))
+
+    out = json.loads(_load_tool_callable()("heavy metals BG1024", "eCoA_DATABASE"))
+    assert out["ok"] is True
+    assert out["hits"][0]["document"] == "BG1024, 752-2025, 27.02.2025, IJZ.pdf"
+
+
+def test_the_corpus_guide_does_not_name_the_withheld_dataset():
+    """It used to, and the live agent then read the name straight back out in a
+    refusal. Describing the boundary is the point; handing over the name is not."""
+    spec = load_fleet()
+    for withheld in spec["ragflow"]["withheld"]:
+        assert withheld not in spec["corpus_guide"], withheld
+
+
+class _EnvClient(_ConfigClient):
+    pass
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_leaves_an_agent_with_no_datasets_alone(monkeypatch):
+    """A PATCH replaces the whole environment set, and gf_doc_orchestrator
+    carries unrelated secrets for a different tool. An agent this module has no
+    RAGflow env for must be left strictly alone, not reconciled to empty."""
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": [{"key": "KVM4_RUNNER_URL"}]}
+    assert await fleet._reconcile_tool_env(client, agent, {"name": "gf_x"}, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_is_a_no_op_once_the_scope_matches(monkeypatch):
+    """Credentials are secrets the server may not echo back, so the comparison
+    is on the scope alone — otherwise every ensure_fleet run looks like drift."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {
+        "id": "a",
+        "tool_exec_environment_variables": [
+            {"key": "RAGFLOW_ALLOWED_DATASETS", "value": "eCoA_DATABASE"}
+        ],
+    }
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_pushes_a_missing_allowlist(monkeypatch):
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": [
+        {"key": "RAGFLOW_BASE_URL", "value": "http://r"}]}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE", "DB1_REGULATORY"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
+    body = client.patches[0][1]["tool_exec_environment_variables"]
+    assert body["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE,DB1_REGULATORY"
