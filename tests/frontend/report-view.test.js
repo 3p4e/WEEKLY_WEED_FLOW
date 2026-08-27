@@ -134,3 +134,56 @@ test('the rendered report carries no hardcoded hex colors — every color is a t
   assert.ok(html.includes('var(--red)'), 'the Stuck/red semantic must use the theme token');
   h.close();
 });
+
+/* ──────────────────────────────────────────────────────────────────────
+   3. The boot-time pin prefetch must not fire before authentication.
+
+   report-view.js ends with a module-scope setTimeout(...,0) that calls
+   _checkNewReportPin() -> GET /ai/pins, to light the "new AI report" nav
+   badge. Unguarded, that runs while the LOGIN screen is showing: there is
+   no token yet, so the request can only ever 401 — on every anonymous page
+   load, logging a console error before anyone has signed in.
+
+   Caught by driving the real app as ADMIN: /ai/pins?function_key=
+   weekly_report&limit=1 was the FIRST request of the session, ahead of
+   /auth/login. approvals-view.js's sibling prefetch already guards on
+   GF.API.token for exactly this reason (and its comment cites this very
+   line as the pattern it mirrors) — this file had never grown the guard.
+   ────────────────────────────────────────────────────────────────────── */
+test('the boot pin-prefetch is skipped when no token exists (anonymous page load)', async () => {
+  const h = loadGF({
+    files: ['data.js', 'core.js', 'report-view.js'],
+    preScript: `
+      window.GF = window.GF || {}; window.GF.views = window.GF.views || {};
+      window.GF.WWF = window.GF.WWF || {};
+      window.GF.WWF._registerFullPageView = function (s) { window.__reg = s; };
+      window.GF.state = { view: 'mywork', lang: 'en' };
+      window.GF.render = { all(){}, sidebar(){} };
+      window.__pinCalls = 0;
+      window.GF.API = { user: null, token: '',
+        pins: function () { window.__pinCalls++; return Promise.resolve([]); } };
+    `,
+  });
+  await new Promise((r) => setTimeout(r, 30));   // let the setTimeout(...,0) fire
+  assert.equal(h.window.__pinCalls, 0,
+    'GET /ai/pins must not be issued on an anonymous (pre-login) page load');
+});
+
+test('the boot pin-prefetch still runs when a session token is already present', async () => {
+  const h = loadGF({
+    files: ['data.js', 'core.js', 'report-view.js'],
+    preScript: `
+      window.GF = window.GF || {}; window.GF.views = window.GF.views || {};
+      window.GF.WWF = window.GF.WWF || {};
+      window.GF.WWF._registerFullPageView = function (s) { window.__reg = s; };
+      window.GF.state = { view: 'mywork', lang: 'en' };
+      window.GF.render = { all(){}, sidebar(){} };
+      window.__pinCalls = 0;
+      window.GF.API = { user: { role: 'ADMIN' }, token: 'tok123',
+        pins: function () { window.__pinCalls++; return Promise.resolve([]); } };
+    `,
+  });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(h.window.__pinCalls, 1,
+    'a persisted session must still get the new-report badge prefetch');
+});
