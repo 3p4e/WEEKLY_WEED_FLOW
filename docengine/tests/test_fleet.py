@@ -2,7 +2,9 @@
 # (the create/attach/delete round-trips are exercised on the wwf_mass stack,
 # same convention as test_pipeline.py).
 import ast
+import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -74,11 +76,11 @@ def test_scope_block_tells_an_ungranted_agent_not_to_search():
 
 
 def test_scope_block_flags_a_dataset_that_is_not_ingested_yet():
-    block = _scope_block(["DB1_REGULATORY", "eCOA_INGEST"], ["DB1_REGULATORY"])
+    block = _scope_block(["DB1_REGULATORY", "eCoA_DATABASE"], ["DB1_REGULATORY"])
     assert "NOT YET INGESTED (DB1_REGULATORY)" in block
-    assert "WITHOUT corpus" in block
+    assert "They are not a corpus you have." in block
     # the granted-and-present dataset is still named as searchable
-    assert "eCOA_INGEST" in block
+    assert "eCoA_DATABASE" in block
 
 
 def test_every_agent_with_datasets_gets_a_scope_block_naming_them():
@@ -246,3 +248,250 @@ def test_context_window_and_max_tokens_are_declared_and_sane():
     assert d["context_window"] >= 100_000
     assert d["max_tokens"] >= 8_000
     assert d["max_tokens"] < d["context_window"]
+
+
+# ── The dataset map vs reality ──────────────────────────────────────────────
+# These exist because of a live failure on 2026-08-27: RAGflow's eCOA_INGEST /
+# eCOA_INGEST_SUMMA datasets had been deleted and replaced by a single
+# eCoA_DATABASE re-ingest the day before, and nothing updated fleet.yaml. Five
+# of eight agents were pointed at names that no longer resolved — including the
+# one agent this file's own comment claimed had live grounding. Nothing caught
+# it, because nothing checked the names against anything.
+
+
+def test_every_declared_dataset_is_tracked_as_ingested_or_pending():
+    """A dataset name in neither list is the exact failure above: an agent
+    pointed at a corpus nobody is tracking the existence of."""
+    spec = load_fleet()
+    rag = spec["ragflow"]
+    known = set(rag["ingested"]) | set(rag["pending_ingest"])
+    for ag in spec["agents"]:
+        for ds in ag.get("datasets", []):
+            assert ds in known, f"{ag['name']} names untracked dataset {ds!r}"
+
+
+def test_ingested_and_pending_are_disjoint():
+    rag = load_fleet()["ragflow"]
+    assert not (set(rag["ingested"]) & set(rag["pending_ingest"]))
+
+
+def test_no_agent_is_granted_a_withheld_dataset():
+    """The stability corpus is present in RAGflow and granted to nobody. This
+    is the same guarantee as the STABILITY substring test above, asserted
+    against the declared list rather than a name pattern."""
+    spec = load_fleet()
+    withheld = set(spec["ragflow"]["withheld"])
+    for ag in spec["agents"]:
+        assert not (set(ag.get("datasets", [])) & withheld), ag["name"]
+
+
+def test_at_least_one_agent_can_actually_retrieve_something_today():
+    """Guards the state this fix found the fleet in: every retrieval agent
+    scoped exclusively to datasets that do not exist, so the entire fleet was
+    ungrounded while presenting itself as grounded."""
+    spec = load_fleet()
+    live = set(spec["ragflow"]["ingested"])
+    grounded = [a["name"] for a in spec["agents"] if set(a.get("datasets", [])) & live]
+    assert grounded, "no agent is scoped to any dataset that exists"
+
+
+def test_the_app_assistant_is_the_one_with_live_grounding():
+    """Staff ask batch-QC questions in the app; the certificates answer them."""
+    assert "eCoA_DATABASE" in agent_datasets("gf_app_assistant")
+
+
+# ── Instruction blocks ──────────────────────────────────────────────────────
+
+
+def _labels(blocks):
+    return [b["label"] for b in blocks]
+
+
+def test_every_agent_carries_the_mission_and_the_house_rules():
+    """The mission block is what tells an agent WHY it is being asked — the
+    thing that makes 'leave it blank' obviously right rather than unhelpful."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        labels = _labels(fleet._blocks_for(ag, spec))
+        assert fleet.MISSION_BLOCK in labels, ag["name"]
+        assert fleet.RULES_BLOCK in labels, ag["name"]
+        assert fleet.PERSONA_BLOCK in labels, ag["name"]
+        assert fleet.SCOPE_BLOCK in labels, ag["name"]
+
+
+def test_the_corpus_guide_goes_only_to_agents_that_can_retrieve():
+    """An agent with no datasets has no use for a description of corpora it
+    cannot search, and is one nudge away from citing one."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        has_guide = fleet.CORPUS_BLOCK in _labels(fleet._blocks_for(ag, spec))
+        assert has_guide == bool(ag.get("datasets")), ag["name"]
+
+
+def test_governance_blocks_are_read_only_and_the_persona_is_not():
+    """Every gf_ agent carries memory_replace/memory_insert, so without the
+    flag an agent can rewrite its own house rules — or widen its own dataset
+    scope, which is the guardrail keeping stability data out of release
+    documents. `persona` stays writable: Letta owns that block."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        for block in fleet._blocks_for(ag, spec):
+            expected = block["label"] != fleet.PERSONA_BLOCK
+            assert block["read_only"] is expected, (ag["name"], block["label"])
+    assert fleet.PERSONA_BLOCK not in fleet.GOVERNANCE_BLOCKS
+
+
+def test_every_persona_is_a_brief_not_a_sentence():
+    """The personas are the training. A one-line persona is what the fleet had
+    before, and it left the model to guess its own output contract — which is
+    how commentary and duplicated headings ended up inside controlled
+    documents."""
+    for ag in load_fleet()["agents"]:
+        persona = ag["persona"]
+        assert len(persona) > 600, ag["name"]
+        for heading in ("ROLE", "NEVER"):
+            assert heading in persona, (ag["name"], heading)
+
+
+def test_the_authors_are_told_their_reply_is_used_verbatim():
+    """The single fact that makes 'no preamble' a hard rule rather than a style
+    note: nothing edits these replies before they reach the .docx."""
+    spec = load_fleet()
+    by_name = {a["name"]: a for a in spec["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist"):
+        assert "VERBATIM" in by_name[name]["persona"], name
+
+
+def test_the_auditor_is_warned_off_the_both_tokens_verdict():
+    """_qa_audit_passed fails a reply containing BOTH PASS and FIX, so a
+    well-meant 'Verdict: PASS, no fixes needed' kills the document."""
+    persona = next(a for a in load_fleet()["agents"] if a["name"] == "gf_qa_auditor")["persona"]
+    assert "Verdict: PASS" in persona
+    assert "NEVER write both tokens" in persona
+
+
+# ── Scope block ─────────────────────────────────────────────────────────────
+
+
+def test_scope_block_names_the_one_live_dataset_when_the_rest_are_pending():
+    block = _scope_block(["eCoA_DATABASE", "DB1_REGULATORY"], ["DB1_REGULATORY"])
+    assert "NOT YET INGESTED (DB1_REGULATORY)" in block
+    assert "Only eCoA_DATABASE actually answers today." in block
+
+
+def test_scope_block_says_there_is_no_corpus_at_all_when_every_grant_is_pending():
+    """Five agents were in exactly this state and their scope block still read
+    as though retrieval worked."""
+    block = _scope_block(["DB1_REGULATORY"], ["DB1_REGULATORY"])
+    assert "NO working corpus" in block
+
+
+def test_scope_block_forbids_an_unscoped_search():
+    """Omitting the tool's `datasets` argument searches every dataset the API
+    key can reach — including the withheld one. The tool refuses it now; the
+    block says so too."""
+    assert "never omit the argument" in _scope_block(["eCoA_DATABASE"], [])
+
+
+# ── Config reconciliation ───────────────────────────────────────────────────
+
+
+class _ConfigClient:
+    """Minimal stand-in: records the PATCH bodies _reconcile_config sends."""
+
+    def __init__(self):
+        self.patches: list[tuple[str, dict]] = []
+
+    async def update_agent_config(self, agent_id: str, body: dict) -> dict:
+        self.patches.append((agent_id, body))
+        return {}
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_pushes_the_declared_window_onto_a_live_agent():
+    """All eight live agents sat at Letta's LLM_MAX_CONTEXT_WINDOW['DEFAULT']
+    of 30000 while fleet.yaml declared 128000, because both values are
+    create-time only and the agents predate the declaration."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "agent-1", "llm_config": {"context_window": 30000, "max_tokens": 16384}}
+    assert await fleet._reconcile_config(client, agent, spec, "gf_x") is True
+    assert client.patches == [("agent-1", {"context_window_limit": 128000})]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_is_a_no_op_when_the_agent_already_matches():
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {
+        "id": "agent-1",
+        "llm_config": {
+            "context_window": spec["defaults"]["context_window"],
+            "max_tokens": spec["defaults"]["max_tokens"],
+        },
+    }
+    assert await fleet._reconcile_config(client, agent, spec, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_never_touches_the_model_handle():
+    """fleet.yaml records leaving an existing agent's model alone as a standing
+    decision; widening this reconciler would silently reverse it."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 30000, "handle": "some/other-model"}}
+    await fleet._reconcile_config(client, agent, spec, "gf_x")
+    for _, body in client.patches:
+        assert set(body) <= {"context_window_limit", "max_tokens"}
+
+
+# ── The tool's own guardrails, executed rather than parsed ──────────────────
+
+
+def _load_tool_callable():
+    """Run the uploaded source the way Letta's sandbox does, and hand back the
+    function itself so its behaviour can be tested, not just its shape."""
+    ns: dict = {}
+    exec(compile(load_tool_source(), TOOL_NAME + ".py", "exec"), ns)  # noqa: S102
+    return ns[TOOL_NAME]
+
+
+def test_tool_refuses_an_unscoped_search(monkeypatch):
+    """Omitting `datasets` used to search every dataset the key could see —
+    turning a forgotten argument into a full scope bypass, stability corpus
+    included."""
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    out = json.loads(_load_tool_callable()("what is the TAMC limit", ""))
+    assert out["ok"] is False
+    assert "datasets is required" in out["err"]
+
+
+def test_tool_error_never_names_a_dataset_the_caller_was_not_granted(monkeypatch):
+    """On an unresolvable scope the tool used to return the tenant's full
+    dataset list — naming STABILITY_PROGRAMME to agents whose entire design is
+    that they cannot know it exists, and handing them a name to try next."""
+    listing = {"data": [{"name": "eCoA_DATABASE", "id": "1"},
+                        {"name": "STABILITY_PROGRAMME", "id": "2"}]}
+
+    class _Resp:
+        def read(self):
+            return json.dumps(listing).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
+
+    raw = _load_tool_callable()("any question", "DB1_REGULATORY,DB3_PP_CURRENT_unified")
+    assert "STABILITY" not in raw
+    out = json.loads(raw)
+    assert out["ok"] is False
+    assert out["unknown_datasets"] == ["DB1_REGULATORY", "DB3_PP_CURRENT_unified"]
+    assert "available" not in out

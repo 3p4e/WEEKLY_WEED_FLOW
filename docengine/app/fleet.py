@@ -29,7 +29,19 @@ AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 FLEET_FILE = AGENTS_DIR / "fleet.yaml"
 TOOL_NAME = "ragflow_search"
 TOOL_FILE = AGENTS_DIR / f"{TOOL_NAME}.py"
+
+# The core-memory blocks this module owns. `persona` is the agent's own block
+# (Letta creates it with a stock description); the other four are governance and
+# are created read_only, because every gf_ agent carries memory_replace /
+# memory_insert and could otherwise rewrite its own house rules — or widen its
+# own dataset scope, which is the guardrail keeping stability data out of
+# release documents. read_only blocks the AGENT's memory tools, not this API.
+PERSONA_BLOCK = "persona"
+MISSION_BLOCK = "gf_mission"
+RULES_BLOCK = "gf_house_rules"
+CORPUS_BLOCK = "gf_corpus"
 SCOPE_BLOCK = "ragflow_scope"
+GOVERNANCE_BLOCKS = (MISSION_BLOCK, RULES_BLOCK, CORPUS_BLOCK, SCOPE_BLOCK)
 
 
 # fleet.yaml is static for the life of the process (it's a declarative spec,
@@ -70,21 +82,34 @@ def _scope_block(datasets: list[str], pending: list[str]) -> str:
             "work only from what the caller gives you."
         )
     lines = [
-        "RETRIEVAL: use the ragflow_search tool. Search ONLY these RAGflow datasets:",
+        "RETRIEVAL: use the ragflow_search tool. Pass these dataset names, and only",
+        "these, as its `datasets` argument:",
         "  " + ", ".join(datasets),
-        "Never name a dataset outside that list. Stability-study data is held in a",
-        "separate dataset you are not granted — never present a stability result as a",
-        "release value. Cite the document name returned with each passage, and if a",
-        "search returns nothing say so rather than filling the gap from memory.",
+        "Never name a dataset outside that list, and never omit the argument — an",
+        "omitted `datasets` searches everything the API key can reach, which is not",
+        "your scope. Stability-study data is held in a separate dataset you are not",
+        "granted; never present a stability result as a release value. Cite the",
+        "document name returned with each passage, and if a search returns nothing",
+        "say so rather than filling the gap from memory. gf_corpus describes what",
+        "these datasets contain and how to search them well.",
     ]
     waiting = [d for d in datasets if d in pending]
     if waiting:
+        live = [d for d in datasets if d not in pending]
         lines += [
             "",
             "NOT YET INGESTED (" + ", ".join(waiting) + "): ragflow_search will report",
-            "these as unknown_datasets. Until they exist you are drafting WITHOUT corpus",
-            "grounding — say so in your output instead of inventing citations.",
+            "these as unknown_datasets. They are not a corpus you have.",
         ]
+        lines += (
+            ["Only " + ", ".join(live) + " actually answers today."]
+            if live
+            else [
+                "That is EVERY dataset you were granted, so you have NO working corpus",
+                "right now. You are drafting without grounding — say so plainly in your",
+                "output instead of inventing citations, and leave unknown values blank.",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -126,19 +151,42 @@ def agent_datasets(agent_name: str, spec: dict | None = None) -> list[str]:
     return list((ag or {}).get("datasets", []))
 
 
-def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, description: str) -> dict:
-    house_rules = spec["house_rules"].strip()
+def _blocks_for(ag: dict, spec: dict) -> list[dict]:
+    """Every core-memory block this agent should carry, in one place.
+
+    Used both at creation (memory_blocks in the create body) and by the
+    reconcile loop, so a live agent and a freshly created one end up with
+    byte-identical instructions — the whole point of a declarative fleet.
+
+    gf_corpus is only given to agents that retrieve. An agent with no datasets
+    has no use for a description of corpora it cannot search, and telling it
+    what exists in RAGflow would be actively unhelpful: it is one nudge away
+    from citing a corpus it has no access to."""
     pending = (spec.get("ragflow") or {}).get("pending_ingest", [])
+    blocks = [
+        {"label": MISSION_BLOCK, "value": spec["mission"].strip(), "read_only": True},
+        {"label": RULES_BLOCK, "value": spec["house_rules"].strip(), "read_only": True},
+        {"label": PERSONA_BLOCK, "value": ag["persona"].strip(), "read_only": False},
+        {
+            "label": SCOPE_BLOCK,
+            "value": _scope_block(ag.get("datasets", []), pending),
+            "read_only": True,
+        },
+    ]
+    if ag.get("datasets") and spec.get("corpus_guide"):
+        blocks.append(
+            {"label": CORPUS_BLOCK, "value": spec["corpus_guide"].strip(), "read_only": True}
+        )
+    return blocks
+
+
+def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, description: str) -> dict:
     body = {
         "name": name,
         "description": description,
         "model": model,
         "embedding": embedding,
-        "memory_blocks": [
-            {"label": "gf_house_rules", "value": house_rules},
-            {"label": "persona", "value": ag["persona"].strip()},
-            {"label": SCOPE_BLOCK, "value": _scope_block(ag.get("datasets", []), pending)},
-        ],
+        "memory_blocks": _blocks_for(ag, spec),
     }
     # Letta sizes an unknown model from its DEFAULT (30000) and clamps output
     # to its own guess. Both are declared in fleet.yaml because the default
@@ -165,23 +213,84 @@ async def _attach_retrieval(client: LettaClient, agent_id: str, ag: dict, tool_i
         log.warning("attach %s -> %s failed: %s", TOOL_NAME, label, e)
 
 
-async def _reconcile_scope(
+async def _reconcile_blocks(
     client: LettaClient, agent_id: str, ag: dict, spec: dict, label: str
-) -> None:
-    """Bring a live agent's ragflow_scope block back in line with fleet.yaml."""
-    pending = (spec.get("ragflow") or {}).get("pending_ingest", [])
-    want = _scope_block(ag.get("datasets", []), pending)
+) -> list[str]:
+    """Bring a live agent's memory blocks back in line with fleet.yaml.
+
+    This used to reconcile ragflow_scope and nothing else, which quietly made
+    the rest of the file decorative: an agent is only ever CREATED once, so
+    every edit to house_rules or to a persona reached new agents and no
+    existing one. The fleet had been live for weeks, so in practice that meant
+    no instruction change reached anything at all. Reconcile every block the
+    module owns instead, and create-then-attach the ones an agent predates.
+
+    Note this deliberately includes `persona`, which the agent itself can
+    write: fleet.yaml is the declaration, so a self-edited persona is drift to
+    be corrected, not state to preserve.
+
+    Returns the labels actually changed, for the caller to log/report."""
+    changed: list[str] = []
+    for want in _blocks_for(ag, spec):
+        lbl, val, ro = want["label"], want["value"], want["read_only"]
+        try:
+            block = await client.get_block(agent_id, lbl)
+            if block is None:
+                created = await client.create_block(lbl, val, read_only=ro)
+                await client.attach_block(agent_id, created["id"])
+                changed.append(lbl + " (added)")
+                continue
+            stale_value = (block.get("value") or "").strip() != val.strip()
+            stale_flag = bool(block.get("read_only")) != ro
+            if not (stale_value or stale_flag):
+                continue
+            await client.update_block(
+                agent_id,
+                lbl,
+                value=val if stale_value else None,
+                read_only=ro if stale_flag else None,
+            )
+            changed.append(lbl)
+        except LettaError as e:  # non-fatal: a stale block beats a dead ensure
+            log.warning("could not reconcile %s on %s: %s", lbl, label, e)
+    if changed:
+        log.info("reconciled blocks on %s: %s", label, ", ".join(changed))
+    return changed
+
+
+async def _reconcile_config(
+    client: LettaClient, agent: dict, spec: dict, label: str
+) -> bool:
+    """Push the declared context window / output ceiling onto a live agent.
+
+    Both are passed at creation, which is not enough: an agent created before a
+    value was declared keeps whatever Letta guessed, forever. Every one of the
+    eight live agents sat at Letta's LLM_MAX_CONTEXT_WINDOW["DEFAULT"] of 30000
+    while this file declared 128000 — the exact shortfall whose symptom
+    (a 9-section SOP repair prompt truncating mid-section) is why the value was
+    declared in the first place.
+
+    Scope is deliberately narrow: context_window_limit and max_tokens only. The
+    model handle is NOT reconciled — fleet.yaml records leaving it alone as a
+    standing decision, and widening this would silently reverse it."""
+    defaults = spec.get("defaults") or {}
+    lc = agent.get("llm_config") or {}
+    body: dict[str, int] = {}
+    if defaults.get("context_window") and lc.get("context_window") != int(
+        defaults["context_window"]
+    ):
+        body["context_window_limit"] = int(defaults["context_window"])
+    if defaults.get("max_tokens") and lc.get("max_tokens") != int(defaults["max_tokens"]):
+        body["max_tokens"] = int(defaults["max_tokens"])
+    if not body:
+        return False
     try:
-        block = await client.get_block(agent_id, SCOPE_BLOCK)
-        if block is None:
-            log.warning("%s has no %s block to reconcile", label, SCOPE_BLOCK)
-            return
-        if (block.get("value") or "").strip() == want.strip():
-            return
-        await client.update_block(agent_id, SCOPE_BLOCK, want)
-        log.info("updated %s on %s", SCOPE_BLOCK, label)
-    except LettaError as e:  # non-fatal: stale scope is better than a dead ensure
-        log.warning("could not reconcile %s on %s: %s", SCOPE_BLOCK, label, e)
+        await client.update_agent_config(agent["id"], body)
+        log.info("reconciled config on %s: %s", label, body)
+        return True
+    except LettaError as e:  # non-fatal: an undersized window still runs
+        log.warning("could not reconcile config on %s: %s", label, e)
+        return False
 
 
 async def _served_handles(client: LettaClient) -> tuple[set[str] | None, set[str] | None]:
@@ -263,16 +372,22 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
             #    with agents but no tool (seen live: Letta rejected the source
             #    over a nested helper, all 8 agents were created anyway, and the
             #    fleet ran with no retrieval at all).
-            #  * its dataset scope. `datasets:` in fleet.yaml is what governs
-            #    which corpora the agent may reach, so an edit there that never
-            #    reaches the live ragflow_scope block leaves the declaration and
-            #    the agent's actual instructions disagreeing about data access.
+            #  * its INSTRUCTIONS — every block this module owns: the mission,
+            #    the house rules, the persona, the corpus guide and the dataset
+            #    scope. `datasets:` in fleet.yaml is what governs which corpora
+            #    the agent may reach, so an edit there that never reaches the
+            #    live ragflow_scope block leaves the declaration and the agent's
+            #    actual instructions disagreeing about data access — and the
+            #    same is true, less visibly, of every other instruction here.
+            #  * its context window / output ceiling, which are create-time
+            #    arguments and so never moved on an agent that already existed.
             #
-            # Both are bounded: gf_* only, the one block this module owns, and
-            # only when the value actually differs.
+            # All bounded: gf_* only, the blocks this module owns, the two
+            # sizing fields, and only when the live value actually differs.
             if TOOL_NAME not in {t.get("name") for t in (cur.get("tools") or [])}:
                 await _attach_retrieval(client, cur["id"], ag, tool_id, name)
-            await _reconcile_scope(client, cur["id"], ag, spec, name)
+            await _reconcile_blocks(client, cur["id"], ag, spec, name)
+            await _reconcile_config(client, cur, spec, name)
             continue
         body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""))
         created = await client.create_agent(body)

@@ -129,18 +129,59 @@ class LettaClient:
         except LettaError:  # absent on an agent created before the block existed
             return None
 
-    async def update_block(self, agent_id: str, label: str, value: str) -> None:
-        """Rewrite one core-memory block's value.
+    async def update_block(
+        self, agent_id: str, label: str, value: str | None = None, read_only: bool | None = None
+    ) -> None:
+        """Rewrite one core-memory block's value and/or its read_only flag.
 
         This is a memory write, not a config write — the handover's "never edit
         an existing agent" caution is about POST/PATCH of llm_config, which this
         server rejects over the legacy provider enum. Callers must keep it to
-        blocks they own on gf_* agents."""
-        await self._req(
-            "PATCH",
-            f"/agents/{agent_id}/core-memory/blocks/{label}",
-            json={"value": value},
+        blocks they own on gf_* agents.
+
+        read_only is the agent-facing flag: it stops the agent editing the block
+        with its own memory_replace/memory_insert tools. It does NOT lock this
+        API out — verified live against letta-6ou3: a block set read_only still
+        accepts a value PATCH here, which is what lets fleet.py keep governance
+        blocks both agent-immutable and declaratively reconcilable."""
+        body: dict[str, Any] = {}
+        if value is not None:
+            body["value"] = value
+        if read_only is not None:
+            body["read_only"] = read_only
+        if not body:
+            return
+        await self._req("PATCH", f"/agents/{agent_id}/core-memory/blocks/{label}", json=body)
+
+    async def create_block(
+        self, label: str, value: str, read_only: bool = False, limit: int = 100_000
+    ) -> dict:
+        """Create a standalone memory block, for attaching to an agent below.
+
+        Needed for the block an agent does not have yet: an agent created before
+        a block was declared simply has no such label, and the per-label PATCH
+        route 404s on it. Blocks are created then attached (two calls) because
+        that is the only route the server exposes for adding one to a live
+        agent — memory_blocks is create-time only."""
+        return await self._req(
+            "POST",
+            "/blocks/",
+            json={"label": label, "value": value, "read_only": read_only, "limit": limit},
         )
+
+    async def attach_block(self, agent_id: str, block_id: str) -> None:
+        await self._req("PATCH", f"/agents/{agent_id}/core-memory/blocks/attach/{block_id}")
+
+    async def update_agent_config(self, agent_id: str, body: dict) -> dict:
+        """PATCH an existing agent's own config, after the gf_ namespace check.
+
+        Deliberately narrow in what callers pass: fleet.py sends only
+        context_window_limit / max_tokens. The model handle is NOT reconciled —
+        fleet.yaml documents that as a standing decision, not an oversight, and
+        this method does not change it."""
+        agent = await self.get_agent(agent_id)
+        self._guard_gf((agent or {}).get("name", ""))
+        return await self._req("PATCH", f"/agents/{agent_id}", json=body)
 
     async def get_agent(self, agent_id: str) -> dict:
         """Fetch one agent's full record by id. Used by delete_agent's guard

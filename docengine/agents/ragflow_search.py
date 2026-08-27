@@ -21,10 +21,22 @@
 #   RAGFLOW_BASE_URL  e.g. http://ragflow-ragflow-cpu-1:9380
 #   RAGFLOW_API_KEY   a RAGflow API token for the tenant owning the datasets
 #
-# Dataset scoping is the guardrail. The caller passes the datasets it is allowed
-# to name (from its ragflow_scope memory block); a name that does not exist is
-# reported back as unknown_datasets rather than silently returning nothing, so
-# the agent can say "not ingested" instead of filling the gap from memory.
+# Dataset scoping is the guardrail, and it is enforced here, not merely asked
+# for. The caller passes the datasets it is allowed to name (from its
+# ragflow_scope memory block); a name that does not exist is reported back as
+# unknown_datasets rather than silently returning nothing, so the agent can say
+# "not ingested" instead of filling the gap from memory.
+#
+# Two things this function must never do, both of which it used to:
+#
+#   1. Search everything when `datasets` is omitted. That was the documented
+#      behaviour ("omit to search every dataset this key can see") and it turns
+#      a forgotten argument into a full scope bypass — including the stability
+#      corpus that no document agent is granted. An unscoped search is refused.
+#   2. Report the full list of datasets on the tenant when the requested ones do
+#      not resolve. That named STABILITY_PROGRAMME to agents whose entire design
+#      is that they cannot know it exists, and handed them a name to try next.
+#      Errors now echo only what the caller already asked for.
 
 
 def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
@@ -32,7 +44,7 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
 
     Args:
         question (str): what to look for, in natural language.
-        datasets (str): comma-separated RAGflow dataset names to search. Omit to search every dataset this key can see. Name only the datasets your instructions permit.
+        datasets (str): comma-separated RAGflow dataset names to search. Required: name exactly the datasets your ragflow_scope memory block permits. An empty value is refused rather than searching everything.
         top_k (int): maximum number of passages to return. Optional; defaults to 6.
     """
     import json
@@ -48,6 +60,16 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
 
     headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
 
+    wanted = [d.strip() for d in datasets.split(",") if d.strip()]
+    if not wanted:
+        return json.dumps(
+            {
+                "ok": False,
+                "err": "datasets is required — name the datasets your ragflow_scope "
+                "memory block permits. An unscoped search is not allowed.",
+            }
+        )
+
     # 1. resolve dataset names -> ids
     try:
         req = urllib.request.Request(
@@ -59,7 +81,6 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
         return json.dumps({"ok": False, "err": "dataset list failed: %s" % str(e)[:200]})
 
     by_name = {d["name"]: d["id"] for d in (listing.get("data") or [])}
-    wanted = [d.strip() for d in datasets.split(",") if d.strip()] if datasets else list(by_name)
     ids, missing = [], []
     for n in wanted:
         if n in by_name:
@@ -67,12 +88,14 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
         else:
             missing.append(n)
     if not ids:
+        # Deliberately does NOT list what else exists on the tenant — see the
+        # header note. The caller learns that its own datasets are absent, which
+        # is the fact it needs, and nothing about corpora it is not granted.
         return json.dumps(
             {
                 "ok": False,
-                "err": "no known dataset named",
-                "requested": wanted,
-                "available": sorted(by_name),
+                "err": "none of the requested datasets exist in RAGflow yet",
+                "unknown_datasets": wanted,
             }
         )
 
