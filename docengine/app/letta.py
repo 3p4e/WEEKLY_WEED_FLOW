@@ -14,7 +14,13 @@ from .config import settings
 
 
 class LettaError(RuntimeError):
-    pass
+    """Carries the HTTP status when there was one, because "absent" and "the
+    server had a bad moment" are different answers and one caller acts on the
+    difference (fleet._reconcile_blocks creates a block when one is missing)."""
+
+    def __init__(self, *args, status: int | None = None):
+        super().__init__(*args)
+        self.status = status
 
 
 class LettaClient:
@@ -71,7 +77,8 @@ class LettaClient:
         c = self._client()
         r = await c.request(method, path, **kw)
         if r.status_code >= 400:
-            raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
+            raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}",
+                             status=r.status_code)
         if not r.content:
             return None
         return r.json()
@@ -137,10 +144,20 @@ class LettaClient:
         await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
 
     async def get_block(self, agent_id: str, label: str) -> dict | None:
+        """The block, or None if the agent genuinely does not have it.
+
+        Only a 404 means absent. Swallowing everything here used to be
+        harmless — the caller just logged — but fleet._reconcile_blocks now
+        CREATES and attaches a block when this returns None, so a transient 5xx
+        or a proxy hiccup would have it manufacture a duplicate label on a live
+        agent. Anything that is not a 404 is re-raised for the caller's own
+        non-fatal handler to log."""
         try:
             return await self._req("GET", f"/agents/{agent_id}/core-memory/blocks/{label}")
-        except LettaError:  # absent on an agent created before the block existed
-            return None
+        except LettaError as e:
+            if e.status == 404:
+                return None
+            raise
 
     async def update_block(
         self, agent_id: str, label: str, value: str | None = None, read_only: bool | None = None

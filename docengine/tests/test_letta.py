@@ -200,3 +200,27 @@ async def test_reset_messages_refuses_a_non_gf_agent():
     with pytest.raises(LettaError, match="refusing to touch non-gf_"):
         await c.reset_messages("agent-1")
     assert not [c for c in fake.calls if c[0] == "PATCH"]
+
+
+async def test_get_block_returns_none_only_for_a_genuine_404():
+    """fleet._reconcile_blocks CREATES and attaches a block when this returns
+    None, so a transient 5xx must not be reported as "absent" — it would
+    manufacture a duplicate label on a live agent."""
+    class _Status(_RecordingClient):
+        def __init__(self, code):
+            super().__init__("gf_x"); self.code = code
+
+        async def request(self, method, path, **kw):
+            self.calls.append((method, path, kw))
+            return _FakeResponse(self.code, {})
+
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = _Status(404)
+    assert await c.get_block("agent-1", "persona") is None
+
+    for code in (500, 502, 401):
+        c = LettaClient(base="http://letta.invalid", key="k")
+        c._client_instance = _Status(code)
+        with pytest.raises(LettaError) as ei:
+            await c.get_block("agent-1", "persona")
+        assert ei.value.status == code

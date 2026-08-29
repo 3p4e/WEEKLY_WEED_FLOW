@@ -343,27 +343,50 @@ DocEngine's own REST API instead — a real `annex_form` workflow through
 `POST /workflows` — failed three times in a row, each for a different reason.
 None of these were visible from the agent side.
 
-### Ragged `[[FORM:grid]]` rows silently delete form fields
+### `[[FORM]]` rows silently delete form fields past the third cell
 
 `VERIFY-ANNEX-003` failed as an opaque `verify FAILED`: every one of pp_verify's
 own checks printed PASS and only the §5A fidelity line failed, **by one word**.
 
-Reproduced directly against the vendored engine. A `[[FORM:grid]]` block whose
-rows disagree on column count loses the overflow in the packer — a four-column
-block given one six-column row rendered 21 words from a 25-word source and
-dropped the last cell outright. In a GMP form that is a field a human was meant
-to fill which simply is not on the page.
+`emit_form` reads exactly three cells per row — MK label, EN label, value — and
+never looks at a fourth. Anything beyond is discarded, so a form can lose a
+field a human was meant to fill and still look complete.
 
-§5A caught it, which is exactly what §5A is for, so **the fidelity gate was left
-untouched**. But "the output is smaller than the source" is a poor error when
-the real answer is "row 3 of this block has six columns and its siblings have
-four". `_ragged_grids` now sits beside `_bilingual_gaps` — same position, same
-reasoning: before the audit and the build, while the offending block can still
-be pointed at. Rows are judged against the block's **modal** width, so one
-malformed first row is reported as the outlier rather than redefining the block.
-`[[TABLE]]` is deliberately not judged (verified: a ragged table row survives
-and fidelity passes). The annex author's persona already said "keep the same
-column count"; it now says what happens if you don't.
+**The first fix for this was wrong, in both directions.** It was inferred from a
+single experiment ("a row wider than its siblings loses content") and a code
+review challenged it. Settled properly by building each shape and diffing the
+tokens in the produced `.docx`:
+
+| shape | old gate | engine |
+|---|---|---|
+| `A ||| B` next to `C ||| D ||| E` | **flagged** | nothing lost |
+| uniform 5-cell rows | **passed** | cells 4-5 lost in *every* row |
+| SOP block wider than its first row | passed | **IndexError**, crashes the build |
+
+The second row is the dangerous one: a block with consistent wide rows looks
+tidy and drops a field from every one of them, and the old rule was structurally
+incapable of seeing it. `_grid_overflow` is now per doctype and checks what the
+engine actually does — annex `[[FORM]]` rows with a non-empty cell past the
+third, and SOP blocks with a row wider than their first (`build_sop` takes its
+column count from row 0 and does not clamp). Annex `[[TABLE]]` is left alone;
+`emit_table` sizes to `max(len(r))` and keeps the extra cell. The gate now
+agrees with the engine on every shape tested.
+
+§5A caught the original loss, which is exactly what §5A is for, so **the
+fidelity gate was left untouched** — but "the output is smaller than the source"
+is a poor error when the answer is "row 2 has a fourth cell and the formatter
+reads three".
+
+**The instruction was worse than the gate.** `fleet.yaml` told the annex author
+that rows must share a column count and that short rows should be *padded* to
+match — advice that manufactures precisely the uniform-wide block the old gate
+could not see, converting a detectable defect into an undetectable one. It now
+teaches the real grammar: one field per row, exactly three cells, and what goes
+wrong if you pack two label/value pairs onto a row. That last part is not
+hypothetical — it is what `VERIFY-ANNEX-006` did: `Датум~~Date ||| ||| 
+Партија~~Batch ||| ` is not two fields, it is ONE field labelled "Датум" whose
+value is pre-filled with the text "Партija~~Batch", and the write-in blank is
+gone.
 
 ### A failed build threw away the evidence
 
@@ -397,8 +420,25 @@ corpus availability inside a controlled document.
 
 ### The proof
 
-`VERIFY-ANNEX-006` — the same workflow that had failed three times — reached
-**`status=done`**:
+`VERIFY-ANNEX-007` — the same workflow that had failed three times — reached
+**`status=done`**, and this time the form is structurally correct as well as
+green. Every `[[FORM:grid]]` row is one field in three cells, write-ins are
+blank, and the §6A auditor remarked on it unprompted: *"the form uses
+[[FORM:grid]] correctly with three cells per row… write-in fields are blank"*.
+
+```
+RESULT: PASS
+   FIDELITY (§5A, markdown-source) output>=source: words 94>=88, chars 607>=500  [OK]
+qa_audit: Verdict: PASS   (first round, no repair needed)
+```
+
+A 57,759-byte `.docx` registered as `VERIFY-ANNEX-007` in `docengine.documents`.
+
+An earlier run, `VERIFY-ANNEX-006`, also reached `done` — but on the old
+instructions, and its grid rows carried the four-cell shape above. It passed
+every gate while quietly rendering one label as another field's value. Worth
+recording, because "the job went green" and "the document is right" are not the
+same claim:
 
 ```
 RESULT: PASS
@@ -411,4 +451,11 @@ A real 57,896-byte `.docx` registered as `VERIFY-ANNEX-006` in
 this stack has produced since 2026-08-14, and the first ever on the new Letta
 fleet. A second `ensure_fleet` run afterwards logged zero mutations: converged.
 
-DocEngine suite: **201 passed / 6 skipped**.
+Two further fixes from the same review: `get_block` now returns `None` only
+for a genuine 404 (it swallowed every error, and since `_reconcile_blocks` now
+CREATES a block when one is missing, a transient 5xx would have manufactured a
+duplicate label on a live agent), and `_reconcile_blocks` — the largest
+behavioural change here, previously with no test at all — has coverage for its
+match, drift, read-only-repair, create-and-attach and transient-error paths.
+
+DocEngine suite: **211 passed / 6 skipped**.

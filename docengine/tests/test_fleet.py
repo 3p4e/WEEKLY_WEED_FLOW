@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import fleet  # noqa: E402
+from app.letta import LettaError  # noqa: E402
 from app.fleet import (  # noqa: E402
     TOOL_NAME,
     _resolve_model,
@@ -874,3 +875,111 @@ def test_the_house_rules_state_the_three_cell_form_row():
     """The shared block is what every author reads, so the grammar belongs
     there too and not only in one persona."""
     assert "exactly three cells" in load_fleet()["house_rules"]
+
+
+# ── _reconcile_blocks ───────────────────────────────────────────────────────
+# It rewrites the persona and four governance blocks on every live agent on
+# every document job, and had no test at all — the largest behavioural change
+# in this work, uncovered, while its two siblings each had half a dozen.
+
+
+class _BlockClient:
+    """Serves a fixed set of blocks and records what was written."""
+
+    def __init__(self, existing: dict, missing_raises: Exception | None = None):
+        self.existing = existing          # label -> {"value","read_only"}
+        self.missing_raises = missing_raises
+        self.updates: list[tuple] = []
+        self.created: list[tuple] = []
+        self.attached: list[tuple] = []
+
+    async def get_block(self, agent_id, label):
+        if label in self.existing:
+            return dict(self.existing[label])
+        if self.missing_raises:
+            raise self.missing_raises
+        return None
+
+    async def update_block(self, agent_id, label, value=None, read_only=None):
+        self.updates.append((label, value, read_only))
+
+    async def create_block(self, label, value, read_only=False, limit=100_000):
+        self.created.append((label, value, read_only))
+        return {"id": "block-" + label}
+
+    async def attach_block(self, agent_id, block_id):
+        self.attached.append((agent_id, block_id))
+
+
+def _agent_and_spec():
+    spec = load_fleet()
+    ag = next(a for a in spec["agents"] if a["name"] == "gf_sop_author")
+    return ag, spec
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_is_silent_when_everything_already_matches():
+    """ensure_fleet runs many times per job; a matching agent must cost no
+    writes at all."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    client = _BlockClient(want)
+    assert await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author") == []
+    assert client.updates == [] and client.created == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_rewrites_a_drifted_value():
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    want["persona"]["value"] = "something an agent wrote over its own brief"
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == ["persona"]
+    assert client.updates[0][0] == "persona"
+    assert client.updates[0][1] == ag["persona"].strip()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_repairs_a_read_only_flag_without_touching_the_value():
+    """The flag is the guardrail — an agent that can edit its own scope is not
+    scoped. Repairing it must not rewrite a value that is already correct."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    want[fleet.SCOPE_BLOCK]["read_only"] = False
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == [fleet.SCOPE_BLOCK]
+    label, value, read_only = client.updates[0]
+    assert label == fleet.SCOPE_BLOCK and value is None and read_only is True
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_creates_and_attaches_a_block_the_agent_predates():
+    """How gf_mission and gf_corpus reached eight agents that were created
+    before either existed."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    del want[fleet.MISSION_BLOCK]
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == [fleet.MISSION_BLOCK + " (added)"]
+    assert client.created[0][0] == fleet.MISSION_BLOCK
+    assert client.created[0][2] is True          # governance blocks are read-only
+    assert client.attached == [("a", "block-" + fleet.MISSION_BLOCK)]
+
+
+@pytest.mark.asyncio
+async def test_a_transient_error_does_not_manufacture_a_duplicate_block():
+    """get_block re-raises anything that is not a 404, and the per-block
+    handler logs it — the agent is left alone rather than given a second block
+    with the same label."""
+    ag, spec = _agent_and_spec()
+    client = _BlockClient({}, missing_raises=LettaError("boom", status=503))
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == []
+    assert client.created == [] and client.attached == []
