@@ -101,29 +101,116 @@ class BilingualGap(Exception):
         self.gaps = gaps
 
 
-class RaggedGrid(Exception):
-    """A [[FORM:grid]] block carries rows of differing column counts.
+class GridOverflow(Exception):
+    """A block contains cells the formatter will not put in the document.
 
-    This is not a style nit — the grid packer DROPS the overflow. Reproduced
-    directly against the vendored engine: a four-column block given one
-    six-column row rendered 21 words from a 25-word source, silently losing the
-    last cell. The document that comes out is missing content its author wrote,
-    which in a GMP form means a field a human was meant to fill simply is not
-    there.
+    `emit_form` reads exactly three cells per [[FORM]] row — MK label, EN
+    label, value — and never looks at a fourth. Anything beyond is dropped
+    silently, so a form can lose a field a human was meant to fill and still
+    look complete. In an SOP the same shape is worse: `build_sop` sizes the
+    table from its first row and a wider data row raises IndexError inside the
+    formatter, which reaches the job as a bare "IndexError: list index out of
+    range".
 
-    It surfaced as an opaque `verify FAILED` on job VERIFY-ANNEX-003
-    (2026-08-29): pp_verify's own checks all printed PASS and only the §5A
-    fidelity line failed, by one word, with nothing naming the cause. §5A is
-    the right backstop and stays exactly as it is — but a backstop that says
-    "the output is smaller than the source" is a poor error message when the
-    real answer is "row 3 of this block has six columns and its siblings have
-    four". Checked HERE, before the audit and the build, where the offending
-    block can still be pointed at."""
+    Both surfaced only as opaque late failures. Job VERIFY-ANNEX-003
+    (2026-08-29) failed as `verify FAILED` with every pp_verify check printing
+    PASS and only the §5A fidelity line short, by one word — §5A is the right
+    backstop and is untouched, but "the output is smaller than the source" is a
+    poor error when the answer is "row 2 of this block has a fourth cell and
+    the formatter reads three". Checked here, before the audit and the build,
+    where the block can still be named.
+    """
 
     def __init__(self, gaps: list[str]):
-        super().__init__("ragged [[FORM:grid]] blocks (content would be dropped): "
-                         + "; ".join(gaps))
+        super().__init__("cells the formatter would discard: " + "; ".join(gaps))
         self.gaps = gaps
+
+
+# What the vendored engine actually does with a block's cells — read from
+# build_from_md.py and confirmed by building each shape and diffing the tokens
+# in the produced .docx, because guessing this wrong is how the first version of
+# this gate came to flag documents that build perfectly:
+#
+#   ANNEX  [[FORM]]/[[FORM:grid]]  emit_form() reads rd[0], rd[1], rd[2] and
+#          nothing else. A cell at index 3 or beyond is NEVER read, whatever the
+#          other rows look like. Uniform 5-cell rows lose cells 4-5 in EVERY row
+#          (verified: ExtraFourA/ExtraFiveA/ExtraFourB/ExtraFiveB all absent).
+#   ANNEX  [[TABLE]]  emit_table() sizes to max(len(r)) — tolerant, loses nothing.
+#   SOP    both  build_sop() takes ncol from row 0 and does not clamp, so a data
+#          row WIDER than the header raises IndexError inside pp_format
+#          (verified: widths 4,6,6 crash the build).
+#
+# So the rule is per doctype, and it is never "this row differs from its
+# siblings" — that comparison flags `A ||| B` next to `C ||| D ||| E`, which
+# builds with nothing lost.
+_BLOCK_OPEN = re.compile(r"^\s*\[\[(FORM|TABLE)\b([^\]]*)\]\]\s*$")
+_BLOCK_CLOSE = re.compile(r"^\s*(\[\[/|\[\[(?:FORM|TABLE)\b|#)")
+_FORM_CELLS_READ = 3
+
+
+def _blocks_in(content: str):
+    """Yield (kind, rows) for each [[FORM…]]/[[TABLE]] block in a section.
+
+    A block ends at a blank line, the next block marker, a closing [[/…]] or a
+    heading — the same set parse() closes on in build_from_md.py, so what is
+    counted here is what the engine will actually be handed."""
+    lines = (content or "").split("\n")
+    i = 0
+    while i < len(lines):
+        m = _BLOCK_OPEN.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        kind = m.group(1)
+        i += 1
+        rows = []
+        while i < len(lines) and lines[i].strip() and not _BLOCK_CLOSE.match(lines[i]):
+            rows.append(lines[i].split("|||"))
+            i += 1
+        yield kind, rows
+
+
+def _grid_overflow(sections: list[dict], doctype: str) -> list[str]:
+    """Cells the engine would silently discard, or a width that would crash it.
+
+    Named for the failure, not the shape: the point is content that does not
+    reach the document."""
+    gaps: list[str] = []
+    is_sop = (doctype or "").upper() == "SOP"
+    for sec in sections:
+        num = sec.get("num", "?")
+        for bno, (kind, rows) in enumerate(_blocks_in(sec.get("content") or ""), 1):
+            if not rows:
+                continue
+            label = f"section {num}, [[{kind}]] block {bno}"
+            if is_sop:
+                # ncol comes from row 0; a wider data row indexes past the table.
+                width0 = len(rows[0])
+                wide = [(n, len(r)) for n, r in enumerate(rows[1:], 2) if len(r) > width0]
+                if wide:
+                    detail = ", ".join(f"row {n} has {w}" for n, w in wide)
+                    gaps.append(
+                        f"{label}: the first row sets {width0} columns but {detail}"
+                        f" — in an SOP that crashes the formatter"
+                    )
+            elif kind == "FORM":
+                # Only a NON-EMPTY overflow cell is content actually lost; a
+                # trailing `||| ` is idiomatic and costs nothing.
+                bad = [
+                    (n, [c.strip() for c in r[_FORM_CELLS_READ:] if c.strip()])
+                    for n, r in enumerate(rows, 1)
+                    if any(c.strip() for c in r[_FORM_CELLS_READ:])
+                ]
+                if bad:
+                    detail = "; ".join(
+                        f"row {n} would lose {', '.join(repr(c) for c in cells)}"
+                        for n, cells in bad
+                    )
+                    gaps.append(
+                        f"{label}: a [[FORM]] row is read as "
+                        f"MK-label ||| EN-label ||| value and nothing after — {detail}"
+                    )
+    return gaps
 
 
 # Letters only. Digits, punctuation and the [[FORM]]/[[TABLE]] markers say
@@ -145,60 +232,6 @@ _MIN_TOTAL_TO_JUDGE = 120
 # present. Low on purpose — a real heading or clause clears it easily, while a
 # stray acronym or unit symbol ("pH", "HPLC", "mg") does not.
 _MIN_PRESENCE = 15
-
-
-_GRID_OPEN = re.compile(r"^\s*\[\[FORM:grid\]\]\s*$", re.M)
-_BLOCK_MARK = re.compile(r"^\s*\[\[/?(?:FORM|TABLE)[^\]]*\]\]\s*$")
-
-
-def _ragged_grids(sections: list[dict]) -> list[str]:
-    """Names of [[FORM:grid]] blocks whose rows disagree on column count.
-
-    Column count is the number of '|||' separated cells. Rows are compared
-    against the block's MODAL width rather than its first row: a single
-    malformed row should be reported as the outlier, not redefine the block.
-    Blank lines and the next block's marker close the block."""
-    gaps: list[str] = []
-    for s in sections:
-        lines = (s.get("content") or "").split("\n")
-        num = s.get("num", "?")
-        block_no = 0
-        i = 0
-        while i < len(lines):
-            if not _GRID_OPEN.match(lines[i] + "\n"):
-                i += 1
-                continue
-            block_no += 1
-            i += 1
-            # Numbered WITHIN the block: an author looking at the reply sees
-            # their own block, not a line offset into the assembled document.
-            rows: list[tuple[int, int]] = []  # (row number in block, width)
-            while i < len(lines) and lines[i].strip() and not _BLOCK_MARK.match(lines[i]):
-                rows.append((len(rows) + 1, len(lines[i].split("|||"))))
-                i += 1
-            if len(rows) < 2:
-                continue
-            widths = [w for _, w in rows]
-            # Ties go to the FIRST row: it is the shape the author declared,
-            # and set-iteration order is no basis for an error message.
-            best = max(widths, key=lambda w: (widths.count(w), w == widths[0]))
-            # ONLY rows WIDER than the block are reported. Verified against the
-            # engine: a row wider than its block loses the overflow (4-column
-            # block, one 6-column row: 21 words out of a 25-word source), while
-            # a NARROWER row is padded and loses nothing (20 out of 17, PASS)
-            # and a prose line after the rows is likewise harmless (26 out of
-            # 25, PASS). Flagging either of those would fail a job that builds
-            # correctly — and this gate is only worth having if it never does
-            # that. §5A fidelity remains the backstop for anything it misses.
-            odd = [(n, w) for n, w in rows if w > best]
-            if odd:
-                detail = ", ".join(f"row {n} has {w}" for n, w in odd)
-                gaps.append(
-                    f"section {num}, [[FORM:grid]] block {block_no}: rows are "
-                    f"{best} columns wide but {detail} — the packer drops the "
-                    f"overflow, so those cells would be missing from the form"
-                )
-    return gaps
 
 
 def _bilingual_gaps(sections: list[dict]) -> list[str]:
@@ -613,6 +646,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     # failure was worth having.
     reg_findings: list[str] = []
     audits: list[str] = []
+    sections: list[dict] = []
     markdown = ""
     try:
         job = await db.job_get(job_id)
@@ -632,7 +666,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         reg_corpora = agent_datasets("gf_reg_checker")
 
         # ---- section generation ----
-        sections: list[dict] = []
         if doctype == "SOP":
             for num, mk, en in SOP_SECTIONS:
                 author = agents["gf_raci_specialist"] if num == "3.0" else agents["gf_sop_author"]
@@ -739,9 +772,9 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # §5A fidelity — which can only report that the document came out
         # smaller than its source. Caught here, the message names the block.
         await db.job_update(job_id, stage="structure-check")
-        ragged = _ragged_grids(sections)
-        if ragged:
-            raise RaggedGrid(ragged)
+        overflow = _grid_overflow(sections, doctype)
+        if overflow:
+            raise GridOverflow(overflow)
 
         # ---- §6A audit ----
         # A FIX verdict is not the end: the auditor returns concrete, actionable
@@ -851,10 +884,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                                     # without it a FIX verdict cannot be checked
                                     "markdown": e.markdown,
                                     "regulatory": reg_findings})
-    except RaggedGrid as e:
-        log.error("job %s ragged grid: %s", job_id, e.gaps)
+    except GridOverflow as e:
+        log.error("job %s grid overflow: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed", error=str(e)[:500],
-                            result={"ragged_grids": e.gaps, "regulatory": reg_findings})
+                            result={"grid_overflow": e.gaps, "sections": sections,
+                                    "regulatory": reg_findings})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed",

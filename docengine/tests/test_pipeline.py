@@ -15,7 +15,7 @@ from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
     _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
-    _drop_echoed_heading, _reg_findings_context, _ragged_grids,
+    _drop_echoed_heading, _reg_findings_context, _grid_overflow,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -939,127 +939,102 @@ async def test_a_repair_that_already_has_markers_is_not_nudged(monkeypatch):
     assert not any("Output the corrected sections NOW" in p for p in prompts)
 
 
-# ── _ragged_grids ───────────────────────────────────────────────────────────
-# A [[FORM:grid]] row wider than its block loses the overflow in the packer.
-# Verified against the vendored engine: a four-column block given one
-# six-column row rendered 21 words from a 25-word source, dropping the last
-# cell outright. Downstream the only thing that noticed was §5A fidelity, which
-# can say no more than "the output is smaller than the source" — how job
-# VERIFY-ANNEX-003 (2026-08-29) presented as an opaque `verify FAILED`.
+# ── _grid_overflow ──────────────────────────────────────────────────────────
+# Every expectation below was decided by BUILDING the shape with the vendored
+# engine and diffing the tokens in the produced .docx — not by reading
+# build_from_md.py. The first version of this gate was written by inference
+# from a single experiment and got the rule backwards in both directions: it
+# failed `A ||| B` next to `C ||| D ||| E` (which loses nothing) and passed
+# uniform 5-cell rows (which lose cells 4-5 of every row).
 
 
-def test_ragged_grid_is_reported_with_the_block_and_the_row():
-    gaps = _ragged_grids([{"num": "1.0", "content":
+def test_form_row_with_a_fourth_cell_is_flagged():
+    """emit_form reads rd[0], rd[1], rd[2] and never a fourth. Verified: a
+    uniform 5-cell block lost ExtraFourA/ExtraFiveA/ExtraFourB/ExtraFiveB."""
+    gaps = _grid_overflow([{"num": "1.0", "content":
         "[[FORM:grid]]\n"
-        "A ||| B ||| C ||| D\n"
-        "E ||| F ||| G ||| H\n"
-        "I ||| J ||| K ||| L ||| M ||| N\n"}])
+        "AlphaMK ||| AlphaEN ||| ValueOne ||| ExtraFourA ||| ExtraFiveA\n"
+        "BetaMK ||| BetaEN ||| ValueTwo ||| ExtraFourB ||| ExtraFiveB\n"}], "FORM")
     assert len(gaps) == 1
-    assert "section 1.0" in gaps[0]
-    assert "4 columns wide" in gaps[0]
-    assert "row 3 has 6" in gaps[0]
+    assert "row 1 would lose" in gaps[0] and "ExtraFourA" in gaps[0]
+    assert "row 2 would lose" in gaps[0]
 
 
-def test_a_consistent_grid_passes():
-    assert _ragged_grids([{"num": "1.0", "content":
+def test_rows_of_differing_width_are_not_flagged_on_their_own():
+    """The rule is NOT "this row differs from its siblings". Verified: all five
+    tokens of this block survive the build."""
+    assert _grid_overflow([{"num": "1.0", "content":
         "[[FORM:grid]]\n"
-        "A ||| B ||| C ||| D\n"
-        "E ||| F ||| G ||| H\n"}]) == []
+        "LabelTwoA ||| LabelTwoB\n"
+        "LabelThreeA ||| LabelThreeB ||| ValueThreeC\n"}], "FORM") == []
 
 
-def test_the_odd_row_is_the_outlier_not_the_first_row():
-    """Compared against the block's MODAL width: one malformed FIRST row must
-    be reported as the outlier rather than redefining the block and condemning
-    every correct row after it."""
-    gaps = _ragged_grids([{"num": "2.0", "content":
-        "[[FORM:grid]]\n"
-        "A ||| B ||| C ||| D ||| E\n"
-        "F ||| G ||| H ||| I\n"
-        "J ||| K ||| L ||| M\n"
-        "N ||| O ||| P ||| Q\n"}])
+def test_a_trailing_empty_cell_is_not_flagged():
+    """`MK~~EN ||| ||| ` is the idiomatic blank write-in and loses nothing —
+    only a NON-EMPTY overflow cell is content that fails to reach the page."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nДатумMK ||| ||| \nПартијаMK ||| ||| \n"}], "FORM") == []
+
+
+def test_an_annex_table_is_tolerant_and_not_flagged():
+    """emit_table sizes to max(len(r)), so a ragged [[TABLE]] row keeps its
+    extra cell (verified: ExtraU1 present in the output)."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[TABLE]]\nNo1 ||| Desc1 ||| Qty1\nR1 ||| S1 ||| T1 ||| ExtraU1\n"}], "FORM") == []
+
+
+def test_in_an_sop_a_row_wider_than_the_first_is_flagged():
+    """build_sop takes ncol from row 0 and does not clamp, so pp_format indexes
+    past the table: verified IndexError, which reaches the job as a bare
+    "IndexError: list index out of range"."""
+    gaps = _grid_overflow([{"num": "6.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C ||| D\nE ||| F ||| G ||| H ||| I ||| J\n"}], "SOP")
     assert len(gaps) == 1
-    assert "4 columns wide" in gaps[0] and "row 1 has 5" in gaps[0]
+    assert "first row sets 4 columns" in gaps[0] and "row 2 has 6" in gaps[0]
+    assert "crashes the formatter" in gaps[0]
 
 
-def test_a_single_row_block_is_not_judged():
-    """Nothing to be inconsistent with."""
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\nA ||| B ||| C\n"}]) == []
+def test_the_sop_rule_also_covers_tables():
+    """Same build_sop path for [[TABLE]] — tolerant in an annex, fatal here."""
+    assert _grid_overflow([{"num": "6.0", "content":
+        "[[TABLE]]\nA ||| B\nC ||| D ||| E\n"}], "SOP")
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[TABLE]]\nA ||| B\nC ||| D ||| E\n"}], "FORM") == []
 
 
-def test_tables_are_not_judged_as_grids():
-    """[[TABLE]] tolerates a ragged row (verified: the extra cell survived and
-    fidelity passed), so only [[FORM:grid]] blocks are checked."""
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[TABLE]]\n"
-        "No. ||| Description ||| Qty\n"
-        "1 ||| Sample ||| 5 ||| EXTRA\n"}]) == []
+def test_a_heading_closes_a_block():
+    """parse() closes a block on a heading, so what follows is not its row."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\n# 2 X|X\nD ||| E ||| F ||| GHOST\n"}], "FORM") == []
 
 
-def test_a_second_block_is_judged_independently():
-    gaps = _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\n"
-        "A ||| B\n"
-        "C ||| D\n"
-        "\n"
-        "[[FORM:grid]]\n"
-        "E ||| F\n"
-        "G ||| H\n"
-        "I ||| J ||| K\n"}])
-    assert len(gaps) == 1
-    assert "block 2" in gaps[0]
-    assert "row 3 has 3" in gaps[0]
+def test_a_closing_marker_ends_the_block():
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\n[[/FORM]]\n"}], "FORM") == []
+
+
+def test_grid_overflow_survives_odd_content():
+    for content in ("", None, "[[FORM:grid]]", "[[FORM:grid]]\nA ||| B ||| C"):
+        assert _grid_overflow([{"num": "1.0", "content": content}], "FORM") == []
 
 
 @pytest.mark.asyncio
-async def test_a_ragged_grid_fails_the_job_before_the_build(monkeypatch):
-    """The gate sits where the bilingual one does — before the audit and the
-    build — so the error names the block instead of arriving as `verify
-    FAILED` with no way back to the cause."""
+async def test_overflow_fails_the_job_before_the_build(monkeypatch):
+    """Positioned like the bilingual gate — before the audit and the build — so
+    the error names the block instead of arriving as `verify FAILED`."""
     updates = _patch_common(monkeypatch)
 
-    class RaggedClient(FakeClient):
+    class OverflowClient(FakeClient):
         async def send_message(self, agent_id, prompt):
-            return ("[[FORM:grid]]\n"
-                    "Поле А~~Field A ||| ||| Поле Б~~Field B ||| \n"
-                    "Поле В~~Field C ||| ||| Поле Г~~Field D ||| ||| Поле Д~~Field E ||| X\n")
+            return "[[FORM:grid]]\nAmk ||| Aen ||| Aval ||| DROPPED\nBmk ||| Ben ||| Bval\n"
 
     def _boom(*a, **k):
         raise AssertionError("build must not run on a document that would lose content")
 
     monkeypatch.setattr(builder, "build", _boom)
-    await run_workflow("job-1", client=RaggedClient())
+    await run_workflow("job-1", client=OverflowClient())
     assert updates[-1]["status"] == "failed"
-    assert "ragged [[FORM:grid]]" in updates[-1]["error"]
-    assert updates[-1]["result"]["ragged_grids"]
-
-
-def test_a_narrower_row_is_not_flagged():
-    """Verified against the engine: a 2-cell row in a 4-cell block is padded
-    and loses nothing (20 words out of a 17-word source, PASS). Flagging it
-    would fail a job that builds correctly."""
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\n"
-        "A ||| B ||| C ||| D\n"
-        "E ||| F ||| G ||| H\n"
-        "I ||| J\n"}]) == []
-
-
-def test_a_prose_line_after_the_rows_is_not_flagged():
-    """Also verified against the engine (26 words out of 25, PASS). Counted as
-    a one-cell row it would look ragged, and the job would fail for nothing."""
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\n"
-        "A ||| B ||| C\n"
-        "D ||| E ||| F\n"
-        "Забелешка: пополни ги сите полиња.\n"}]) == []
-
-
-def test_a_two_row_tie_takes_the_first_row_as_the_block_shape():
-    """With one row of each width there is no majority. The first row is the
-    shape the author declared, so the WIDER second row is the overflow — and
-    the reverse order must not flag the narrower one."""
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\nA ||| B\nC ||| D ||| E\n"}])
-    assert _ragged_grids([{"num": "1.0", "content":
-        "[[FORM:grid]]\nA ||| B ||| C\nD ||| E\n"}]) == []
+    assert "discard" in updates[-1]["error"]
+    assert updates[-1]["result"]["grid_overflow"]
+    # the sections are kept, so the named block can actually be looked at
+    assert updates[-1]["result"]["sections"]

@@ -856,10 +856,21 @@ def test_the_auditor_is_told_to_raise_every_issue_at_once():
     assert "List EVERY issue you have, in that one verdict." in persona
 
 
-def test_the_annex_author_is_told_why_ragged_grids_lose_content():
-    """"Keep the same column count" was already there and was not enough; the
-    consequence (the packer drops the overflow) is the part that makes it a
-    rule rather than a preference."""
+def test_the_annex_author_is_taught_the_engine_s_actual_row_grammar():
+    """It was told rows must share a column count and that short rows should be
+    padded. Both are wrong against the engine, and the second is worse than
+    wrong: padding rows out to a common width produces a UNIFORM block that
+    loses cells 4+ of every row and looks consistent doing it. emit_form reads
+    exactly three cells and never a fourth."""
     persona = next(a for a in load_fleet()["agents"]
                    if a["name"] == "gf_annex_author")["persona"]
-    assert "DROPS the cells" in persona
+    assert "ONE FIELD PER ROW" in persona
+    assert "EXACTLY three cells" in persona
+    assert "padded with empty cells" not in persona
+    assert "same number of" not in persona
+
+
+def test_the_house_rules_state_the_three_cell_form_row():
+    """The shared block is what every author reads, so the grammar belongs
+    there too and not only in one persona."""
+    assert "exactly three cells" in load_fleet()["house_rules"]
