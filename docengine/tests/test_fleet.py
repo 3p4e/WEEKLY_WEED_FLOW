@@ -779,3 +779,87 @@ async def test_reconcile_does_not_re_clear_a_settled_agent():
     assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is False
     assert client.resets == []
     assert client.patches == []
+
+
+# ── verbatim_output: whose reply BECOMES the document ───────────────────────
+# The ungrounded branch of the scope block used to tell every agent to "say so
+# plainly in your output". For three of them the output IS the document, so the
+# instruction put a note about corpus availability inside a controlled document
+# (seen in a direct probe: a section opening with a bilingual sentence about the
+# facility corpus not being ingested). A blank field is how a document says a
+# value is unknown.
+
+
+def test_the_three_verbatim_authors_declare_it():
+    """Exactly the agents whose reply pipeline.py inserts into the document."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist"):
+        assert by_name[name].get("verbatim_output") is True, name
+
+
+def test_reporting_and_conversational_agents_are_not_verbatim():
+    """gf_reg_checker returns findings and gf_app_assistant talks to a person —
+    both SHOULD say when a corpus is missing."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_reg_checker", "gf_app_assistant", "gf_qa_auditor",
+                 "gf_translator_mk_en", "gf_doc_orchestrator"):
+        assert not by_name[name].get("verbatim_output"), name
+
+
+def test_ungrounded_verbatim_author_is_told_to_leave_blanks_not_to_narrate():
+    block = _scope_block(["DB3_PP_CURRENT_unified"], ["DB3_PP_CURRENT_unified"], True)
+    assert "BLANK write-in field" in block
+    assert "The blank" in block
+    assert "say so plainly" not in block
+
+
+def test_ungrounded_reporter_still_says_so():
+    """The original wording is right for anything that is not document text."""
+    block = _scope_block(["DB1_REGULATORY"], ["DB1_REGULATORY"], False)
+    assert "say so plainly" in block   # wraps across lines in the block
+
+
+def test_the_verbatim_flag_reaches_the_generated_scope_block():
+    """_blocks_for is what the reconciler diffs against the live agent, so the
+    flag has to survive the trip from fleet.yaml into the block value."""
+    spec = load_fleet()
+    by_name = {a["name"]: a for a in spec["agents"]}
+    author = next(b for b in fleet._blocks_for(by_name["gf_sop_author"], spec)
+                  if b["label"] == fleet.SCOPE_BLOCK)["value"]
+    checker = next(b for b in fleet._blocks_for(by_name["gf_reg_checker"], spec)
+                   if b["label"] == fleet.SCOPE_BLOCK)["value"]
+    assert "BLANK write-in field" in author and "say so plainly" not in author
+    assert "say so plainly" in checker
+
+
+def test_the_corpus_guide_does_not_order_document_text_to_narrate():
+    """The shared corpus block carried the same instruction and would have
+    re-introduced it regardless of the scope block."""
+    guide = load_fleet()["corpus_guide"]
+    assert "never document text" in guide
+    assert "blank write-in fields instead" in guide
+
+
+def test_no_persona_still_references_the_host_exec_tool():
+    """gf_doc_orchestrator's persona described how to use an unrestricted host
+    shell. The tool is detached from the live agent; the file must not invite
+    it back."""
+    for ag in load_fleet()["agents"]:
+        assert "kvm4_runner_exec" not in ag["persona"], ag["name"]
+
+
+def test_the_auditor_is_told_to_raise_every_issue_at_once():
+    """A real job died with the auditor's second-round issue unaddressed
+    because the first round had not mentioned it."""
+    persona = next(a for a in load_fleet()["agents"]
+                   if a["name"] == "gf_qa_auditor")["persona"]
+    assert "List EVERY issue you have, in that one verdict." in persona
+
+
+def test_the_annex_author_is_told_why_ragged_grids_lose_content():
+    """"Keep the same column count" was already there and was not enough; the
+    consequence (the packer drops the overflow) is the part that makes it a
+    rule rather than a preference."""
+    persona = next(a for a in load_fleet()["agents"]
+                   if a["name"] == "gf_annex_author")["persona"]
+    assert "DROPS the cells" in persona

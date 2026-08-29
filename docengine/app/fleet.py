@@ -73,7 +73,7 @@ def load_tool_source() -> str:
     return TOOL_FILE.read_text(encoding="utf-8")
 
 
-def _scope_block(datasets: list[str], pending: list[str]) -> str:
+def _scope_block(datasets: list[str], pending: list[str], verbatim_output: bool = False) -> str:
     """The agent's own statement of what it may retrieve. Written into memory so
     the model can see its limits rather than having to be told each turn."""
     if not datasets:
@@ -101,15 +101,29 @@ def _scope_block(datasets: list[str], pending: list[str]) -> str:
             "NOT YET INGESTED (" + ", ".join(waiting) + "): ragflow_search will report",
             "these as unknown_datasets. They are not a corpus you have.",
         ]
-        lines += (
-            ["Only " + ", ".join(live) + " actually answers today."]
-            if live
-            else [
+        if live:
+            lines += ["Only " + ", ".join(live) + " actually answers today."]
+        elif verbatim_output:
+            # This agent's reply IS document text. Telling it to "say so in your
+            # output" would put a note about corpus availability inside a
+            # controlled document — seen live in a direct probe, where a section
+            # opened with a bilingual sentence explaining that the facility
+            # corpus was not ingested. A blank field is the correct way for a
+            # document to say a value is unknown.
+            lines += [
+                "That is EVERY dataset you were granted, so you have NO working corpus",
+                "right now. Draft from the brief alone and leave every unknown facility",
+                "specific as a BLANK write-in field. Do NOT write anything about corpora,",
+                "retrieval or grounding into your reply: it is inserted verbatim into a",
+                "controlled document, where such a note becomes document text. The blank",
+                "IS the message.",
+            ]
+        else:
+            lines += [
                 "That is EVERY dataset you were granted, so you have NO working corpus",
                 "right now. You are drafting without grounding — say so plainly in your",
                 "output instead of inventing citations, and leave unknown values blank.",
             ]
-        )
     return "\n".join(lines)
 
 
@@ -199,7 +213,8 @@ def _blocks_for(ag: dict, spec: dict) -> list[dict]:
         {"label": PERSONA_BLOCK, "value": ag["persona"].strip(), "read_only": False},
         {
             "label": SCOPE_BLOCK,
-            "value": _scope_block(ag.get("datasets", []), pending),
+            "value": _scope_block(ag.get("datasets", []), pending,
+                                  bool(ag.get("verbatim_output"))),
             "read_only": True,
         },
     ]

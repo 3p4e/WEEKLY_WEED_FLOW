@@ -101,6 +101,31 @@ class BilingualGap(Exception):
         self.gaps = gaps
 
 
+class RaggedGrid(Exception):
+    """A [[FORM:grid]] block carries rows of differing column counts.
+
+    This is not a style nit — the grid packer DROPS the overflow. Reproduced
+    directly against the vendored engine: a four-column block given one
+    six-column row rendered 21 words from a 25-word source, silently losing the
+    last cell. The document that comes out is missing content its author wrote,
+    which in a GMP form means a field a human was meant to fill simply is not
+    there.
+
+    It surfaced as an opaque `verify FAILED` on job VERIFY-ANNEX-003
+    (2026-08-29): pp_verify's own checks all printed PASS and only the §5A
+    fidelity line failed, by one word, with nothing naming the cause. §5A is
+    the right backstop and stays exactly as it is — but a backstop that says
+    "the output is smaller than the source" is a poor error message when the
+    real answer is "row 3 of this block has six columns and its siblings have
+    four". Checked HERE, before the audit and the build, where the offending
+    block can still be pointed at."""
+
+    def __init__(self, gaps: list[str]):
+        super().__init__("ragged [[FORM:grid]] blocks (content would be dropped): "
+                         + "; ".join(gaps))
+        self.gaps = gaps
+
+
 # Letters only. Digits, punctuation and the [[FORM]]/[[TABLE]] markers say
 # nothing about language.
 _CYR = re.compile(r"[Ѐ-ӿ]")
@@ -120,6 +145,49 @@ _MIN_TOTAL_TO_JUDGE = 120
 # present. Low on purpose — a real heading or clause clears it easily, while a
 # stray acronym or unit symbol ("pH", "HPLC", "mg") does not.
 _MIN_PRESENCE = 15
+
+
+_GRID_OPEN = re.compile(r"^\s*\[\[FORM:grid\]\]\s*$", re.M)
+_BLOCK_MARK = re.compile(r"^\s*\[\[/?(?:FORM|TABLE)[^\]]*\]\]\s*$")
+
+
+def _ragged_grids(sections: list[dict]) -> list[str]:
+    """Names of [[FORM:grid]] blocks whose rows disagree on column count.
+
+    Column count is the number of '|||' separated cells. Rows are compared
+    against the block's MODAL width rather than its first row: a single
+    malformed row should be reported as the outlier, not redefine the block.
+    Blank lines and the next block's marker close the block."""
+    gaps: list[str] = []
+    for s in sections:
+        lines = (s.get("content") or "").split("\n")
+        num = s.get("num", "?")
+        block_no = 0
+        i = 0
+        while i < len(lines):
+            if not _GRID_OPEN.match(lines[i] + "\n"):
+                i += 1
+                continue
+            block_no += 1
+            i += 1
+            # Numbered WITHIN the block: an author looking at the reply sees
+            # their own block, not a line offset into the assembled document.
+            rows: list[tuple[int, int]] = []  # (row number in block, width)
+            while i < len(lines) and lines[i].strip() and not _BLOCK_MARK.match(lines[i]):
+                rows.append((len(rows) + 1, len(lines[i].split("|||"))))
+                i += 1
+            if len(rows) < 2:
+                continue
+            widths = [w for _, w in rows]
+            modal = max(set(widths), key=widths.count)
+            odd = [(n, w) for n, w in rows if w != modal]
+            if odd:
+                detail = ", ".join(f"row {n} has {w}" for n, w in odd)
+                gaps.append(
+                    f"section {num}, [[FORM:grid]] block {block_no}: rows are "
+                    f"{modal} columns wide but {detail}"
+                )
+    return gaps
 
 
 def _bilingual_gaps(sections: list[dict]) -> list[str]:
@@ -528,6 +596,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     partial state, etc. — not a mechanical fix, so it is intentionally left
     for a dedicated pass rather than attempted piecemeal here."""
     client = client or LettaClient()
+    # Bound up front so every except clause below can persist whatever the job
+    # had reached. They are the job's diagnostics, and a handler that raises
+    # NameError while recording a failure loses exactly the evidence the
+    # failure was worth having.
+    reg_findings: list[str] = []
+    audits: list[str] = []
+    markdown = ""
     try:
         job = await db.job_get(job_id)
         p = job["payload"]
@@ -611,7 +686,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # who wants to change this should make it a deliberate call, not a
         # side effect of an unrelated change.
         await db.job_update(job_id, stage="regulatory-check")
-        reg_findings: list[str] = []
         for s in sections:
             await db.job_update(job_id, stage=f"regulatory-check {s['num']}")
             tmp_id = await spawn_ephemeral(
@@ -648,6 +722,16 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         if gaps:
             raise BilingualGap(gaps)
 
+        # Structural gate, same reasoning and the same position as the
+        # bilingual one: a ragged [[FORM:grid]] silently loses its overflow
+        # cells in the packer, and the only thing downstream that notices is
+        # §5A fidelity — which can only report that the document came out
+        # smaller than its source. Caught here, the message names the block.
+        await db.job_update(job_id, stage="structure-check")
+        ragged = _ragged_grids(sections)
+        if ragged:
+            raise RaggedGrid(ragged)
+
         # ---- §6A audit ----
         # A FIX verdict is not the end: the auditor returns concrete, actionable
         # issues ("add the ~~Шифра | Code~~ row ... after adding it the document
@@ -658,7 +742,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # only buys more attempts at earning it.
         await db.job_update(job_id, stage="qa-audit")
         author = "gf_sop_author" if doctype == "SOP" else "gf_annex_author"
-        audits: list[str] = []
         markdown = assemble_markdown(meta, sections)
         # Cross-ref: the regulatory-check loop above computes reg_findings and
         # explains there why it is advisory context here rather than a hard
@@ -736,9 +819,17 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             },
         )
     except builder.VerifyFailed as e:
+        # The verify report alone is not enough to act on. §5A fidelity in
+        # particular only says the document is smaller than its source, and
+        # without the source there is nothing to compare it against — job
+        # VERIFY-ANNEX-003 (2026-08-29) failed exactly this way and its input
+        # could not be recovered afterwards. Persist what the auditor saw, the
+        # same way QaAuditFailed already does.
         log.error("job %s verify FAILED", job_id)
         await db.job_update(job_id, status="failed", error="verify FAILED",
-                            result={"verify": e.report})
+                            result={"verify": e.report, "markdown": markdown,
+                                    "qa_audit_history": audits,
+                                    "regulatory": reg_findings})
     except QaAuditFailed as e:
         log.error("job %s §6A audit did not pass", job_id)
         await db.job_update(job_id, status="failed", error="§6A audit did not pass",
@@ -747,7 +838,12 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                                     "qa_repair_rounds": len(e.history) - 1,
                                     # the document the auditor actually judged —
                                     # without it a FIX verdict cannot be checked
-                                    "markdown": e.markdown})
+                                    "markdown": e.markdown,
+                                    "regulatory": reg_findings})
+    except RaggedGrid as e:
+        log.error("job %s ragged grid: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed", error=str(e)[:500],
+                            result={"ragged_grids": e.gaps, "regulatory": reg_findings})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed",

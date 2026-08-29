@@ -15,7 +15,7 @@ from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
     _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
-    _drop_echoed_heading, _reg_findings_context,
+    _drop_echoed_heading, _reg_findings_context, _ragged_grids,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -224,6 +224,13 @@ async def test_verify_failed_records_failed_status(monkeypatch):
     assert updates[-1]["status"] == "failed"
     assert updates[-1]["error"] == "verify FAILED"
     assert updates[-1]["result"]["verify"] == "bad report"
+    # A verify report alone is not actionable — §5A fidelity in particular can
+    # only say the document came out smaller than its source, and the source is
+    # what you need to see. Job VERIFY-ANNEX-003 failed exactly that way and its
+    # input was unrecoverable afterwards.
+    assert updates[-1]["result"]["markdown"], "the judged document must be kept"
+    assert "qa_audit_history" in updates[-1]["result"]
+    assert "regulatory" in updates[-1]["result"]
 
 
 @pytest.mark.asyncio
@@ -930,3 +937,96 @@ async def test_a_repair_that_already_has_markers_is_not_nudged(monkeypatch):
 
     await run_workflow("job-1", client=GoodClient())
     assert not any("Output the corrected sections NOW" in p for p in prompts)
+
+
+# ── _ragged_grids ───────────────────────────────────────────────────────────
+# A [[FORM:grid]] row wider than its block loses the overflow in the packer.
+# Verified against the vendored engine: a four-column block given one
+# six-column row rendered 21 words from a 25-word source, dropping the last
+# cell outright. Downstream the only thing that noticed was §5A fidelity, which
+# can say no more than "the output is smaller than the source" — how job
+# VERIFY-ANNEX-003 (2026-08-29) presented as an opaque `verify FAILED`.
+
+
+def test_ragged_grid_is_reported_with_the_block_and_the_row():
+    gaps = _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B ||| C ||| D\n"
+        "E ||| F ||| G ||| H\n"
+        "I ||| J ||| K ||| L ||| M ||| N\n"}])
+    assert len(gaps) == 1
+    assert "section 1.0" in gaps[0]
+    assert "4 columns wide" in gaps[0]
+    assert "row 3 has 6" in gaps[0]
+
+
+def test_a_consistent_grid_passes():
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B ||| C ||| D\n"
+        "E ||| F ||| G ||| H\n"}]) == []
+
+
+def test_the_odd_row_is_the_outlier_not_the_first_row():
+    """Compared against the block's MODAL width: one malformed FIRST row must
+    be reported as the outlier rather than redefining the block and condemning
+    every correct row after it."""
+    gaps = _ragged_grids([{"num": "2.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B ||| C ||| D ||| E\n"
+        "F ||| G ||| H ||| I\n"
+        "J ||| K ||| L ||| M\n"
+        "N ||| O ||| P ||| Q\n"}])
+    assert len(gaps) == 1
+    assert "4 columns wide" in gaps[0] and "row 1 has 5" in gaps[0]
+
+
+def test_a_single_row_block_is_not_judged():
+    """Nothing to be inconsistent with."""
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\n"}]) == []
+
+
+def test_tables_are_not_judged_as_grids():
+    """[[TABLE]] tolerates a ragged row (verified: the extra cell survived and
+    fidelity passed), so only [[FORM:grid]] blocks are checked."""
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[TABLE]]\n"
+        "No. ||| Description ||| Qty\n"
+        "1 ||| Sample ||| 5 ||| EXTRA\n"}]) == []
+
+
+def test_a_second_block_is_judged_independently():
+    gaps = _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B\n"
+        "C ||| D\n"
+        "\n"
+        "[[FORM:grid]]\n"
+        "E ||| F ||| G\n"
+        "H ||| I\n"}])
+    assert len(gaps) == 1
+    assert "block 2" in gaps[0]
+
+
+@pytest.mark.asyncio
+async def test_a_ragged_grid_fails_the_job_before_the_build(monkeypatch):
+    """The gate sits where the bilingual one does — before the audit and the
+    build — so the error names the block instead of arriving as `verify
+    FAILED` with no way back to the cause."""
+    updates = _patch_common(monkeypatch)
+
+    class RaggedClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            return ("[[FORM:grid]]\n"
+                    "Поле А~~Field A ||| ||| Поле Б~~Field B ||| \n"
+                    "Поле В~~Field C ||| ||| Поле Г~~Field D ||| ||| Поле Д~~Field E ||| X\n")
+
+    def _boom(*a, **k):
+        raise AssertionError("build must not run on a document that would lose content")
+
+    monkeypatch.setattr(builder, "build", _boom)
+    await run_workflow("job-1", client=RaggedClient())
+    assert updates[-1]["status"] == "failed"
+    assert "ragged [[FORM:grid]]" in updates[-1]["error"]
+    assert updates[-1]["result"]["ragged_grids"]
