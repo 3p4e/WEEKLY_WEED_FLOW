@@ -1003,10 +1003,12 @@ def test_a_second_block_is_judged_independently():
         "C ||| D\n"
         "\n"
         "[[FORM:grid]]\n"
-        "E ||| F ||| G\n"
-        "H ||| I\n"}])
+        "E ||| F\n"
+        "G ||| H\n"
+        "I ||| J ||| K\n"}])
     assert len(gaps) == 1
     assert "block 2" in gaps[0]
+    assert "row 3 has 3" in gaps[0]
 
 
 @pytest.mark.asyncio
@@ -1030,3 +1032,34 @@ async def test_a_ragged_grid_fails_the_job_before_the_build(monkeypatch):
     assert updates[-1]["status"] == "failed"
     assert "ragged [[FORM:grid]]" in updates[-1]["error"]
     assert updates[-1]["result"]["ragged_grids"]
+
+
+def test_a_narrower_row_is_not_flagged():
+    """Verified against the engine: a 2-cell row in a 4-cell block is padded
+    and loses nothing (20 words out of a 17-word source, PASS). Flagging it
+    would fail a job that builds correctly."""
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B ||| C ||| D\n"
+        "E ||| F ||| G ||| H\n"
+        "I ||| J\n"}]) == []
+
+
+def test_a_prose_line_after_the_rows_is_not_flagged():
+    """Also verified against the engine (26 words out of 25, PASS). Counted as
+    a one-cell row it would look ragged, and the job would fail for nothing."""
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "A ||| B ||| C\n"
+        "D ||| E ||| F\n"
+        "Забелешка: пополни ги сите полиња.\n"}]) == []
+
+
+def test_a_two_row_tie_takes_the_first_row_as_the_block_shape():
+    """With one row of each width there is no majority. The first row is the
+    shape the author declared, so the WIDER second row is the overflow — and
+    the reverse order must not flag the narrower one."""
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B\nC ||| D ||| E\n"}])
+    assert _ragged_grids([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\nD ||| E\n"}]) == []

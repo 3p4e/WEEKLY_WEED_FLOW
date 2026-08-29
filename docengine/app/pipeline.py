@@ -179,13 +179,24 @@ def _ragged_grids(sections: list[dict]) -> list[str]:
             if len(rows) < 2:
                 continue
             widths = [w for _, w in rows]
-            modal = max(set(widths), key=widths.count)
-            odd = [(n, w) for n, w in rows if w != modal]
+            # Ties go to the FIRST row: it is the shape the author declared,
+            # and set-iteration order is no basis for an error message.
+            best = max(widths, key=lambda w: (widths.count(w), w == widths[0]))
+            # ONLY rows WIDER than the block are reported. Verified against the
+            # engine: a row wider than its block loses the overflow (4-column
+            # block, one 6-column row: 21 words out of a 25-word source), while
+            # a NARROWER row is padded and loses nothing (20 out of 17, PASS)
+            # and a prose line after the rows is likewise harmless (26 out of
+            # 25, PASS). Flagging either of those would fail a job that builds
+            # correctly — and this gate is only worth having if it never does
+            # that. §5A fidelity remains the backstop for anything it misses.
+            odd = [(n, w) for n, w in rows if w > best]
             if odd:
                 detail = ", ".join(f"row {n} has {w}" for n, w in odd)
                 gaps.append(
                     f"section {num}, [[FORM:grid]] block {block_no}: rows are "
-                    f"{modal} columns wide but {detail}"
+                    f"{best} columns wide but {detail} — the packer drops the "
+                    f"overflow, so those cells would be missing from the form"
                 )
     return gaps
 
