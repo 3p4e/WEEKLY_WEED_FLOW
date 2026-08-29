@@ -277,7 +277,7 @@ outside this fleet and were not touched.
 
 ## Owner decisions — two things this work deliberately did not do
 
-### 1. `gf_doc_orchestrator` holds an unrestricted host-exec tool
+### 1. `gf_doc_orchestrator` holds an unrestricted host-exec tool — RESOLVED 2026-08-29
 
 The agent carries a custom tool `kvm4_runner_exec`, described by its own source
 as *"full host exec, no allowlist"*, and it is **armed**: the agent has live
@@ -292,6 +292,22 @@ document content, questionnaire answers or retrieved passages). **Instructions
 are not a control.** If the tool is not actively needed, detaching it or
 clearing its two secrets is the real fix, and that is an owner call.
 
+**Resolved.** The owner asked what the agent is actually for and how it should
+be configured properly. It is the human-facing **router** of the document
+engine: it resolves TYPE (SOP | Annex/Form/Checklist/Log | Report/Record) and
+MODE (A develop | B format | C restyle), asks rather than guesses, and hands
+off. It never writes final content, and the automated pipeline never calls it —
+jobs route straight from the questionnaire key. Routing needs no side-effecting
+tools of any kind. On 2026-08-29 `kvm4_runner_exec` was **detached** from the
+agent and its `KVM4_RUNNER_URL` / `KVM4_RUNNER_TOKEN` secrets **cleared**
+(verified by re-reading the agent: tools now `conversation_search`,
+`memory_insert`, `memory_replace`; env keys empty). The tool remains registered
+on the server, so it can be re-attached deliberately. Its persona no longer
+explains how to use a host shell, and a test asserts no persona in `fleet.yaml`
+mentions it. If host operations are ever wanted from an agent, they belong to a
+dedicated ops agent behind an **allowlisted, audited** runner — the current
+runner accepts any command, which is why no agent should hold it.
+
 ### 2. Three corpora still need ingesting — and no instruction can substitute
 
 `DB3_PP_CURRENT_unified` (facility QMS), `DB1_REGULATORY` and
@@ -302,8 +318,97 @@ words rather than implying retrieval works. A regulatory checker with no
 regulatory corpus can only ever answer "not verifiable against the available
 corpus".
 
-These were Letta sources on the decommissioned `letta-scy7` server, whose
-volumes (`letta-scy7_db_data`, `letta-scy7_letta_data`) are still on disk.
-Whether the source documents can be recovered from them, or should be
-re-gathered from Drive, is the next piece of work and a much larger one than
-this.
+These were Letta sources on the decommissioned `letta-scy7` server. Per the
+owner (2026-08-29), **letta-scy7 is out of scope** — it has nothing to do with
+this app and is not to be touched. The owner will point the fleet at the source
+knowledge base instead. What each corpus is needed for:
+
+| Dataset | Content | Who needs it, and why |
+|---|---|---|
+| `DB3_PP_CURRENT_unified` | The facility's own current QMS documents | `gf_sop_author`, `gf_annex_author`, `gf_raci_specialist` — facility specifics (equipment, room codes, roles, frequencies, related documents) so drafts stop being all-blanks; `gf_reg_checker` for checks against the facility's own QMS. **Highest value of the three.** |
+| `DB1_REGULATORY` | EU GMP, Ph. Eur., ICH, MALMED texts | `gf_reg_checker` only — without it every check can honestly answer no more than "not verifiable against the available corpus". |
+| `GrowFlow_Weekly_Snapshots` | The weekly operational snapshots the scheduler exports | `gf_app_assistant` — grounding staff questions on operational history. `backend/scripts/weekly_snapshot.py` still pushes these to a Letta source; once the dataset exists, future snapshots should land in RAGflow too. |
+
+Ingestion is mechanical once sources exist: create the dataset under **exactly**
+the name in `fleet.yaml`, upload, parse, verify the counts, then move the name
+from `ragflow.pending_ingest` to `ragflow.ingested` and run `ensure_fleet` —
+the reconciler rewrites every affected scope block by itself.
+
+---
+
+## The pipeline could not actually finish a document — three more defects
+
+Everything above was verified by driving the AGENTS directly. Driving the
+DocEngine's own REST API instead — a real `annex_form` workflow through
+`POST /workflows` — failed three times in a row, each for a different reason.
+None of these were visible from the agent side.
+
+### Ragged `[[FORM:grid]]` rows silently delete form fields
+
+`VERIFY-ANNEX-003` failed as an opaque `verify FAILED`: every one of pp_verify's
+own checks printed PASS and only the §5A fidelity line failed, **by one word**.
+
+Reproduced directly against the vendored engine. A `[[FORM:grid]]` block whose
+rows disagree on column count loses the overflow in the packer — a four-column
+block given one six-column row rendered 21 words from a 25-word source and
+dropped the last cell outright. In a GMP form that is a field a human was meant
+to fill which simply is not on the page.
+
+§5A caught it, which is exactly what §5A is for, so **the fidelity gate was left
+untouched**. But "the output is smaller than the source" is a poor error when
+the real answer is "row 3 of this block has six columns and its siblings have
+four". `_ragged_grids` now sits beside `_bilingual_gaps` — same position, same
+reasoning: before the audit and the build, while the offending block can still
+be pointed at. Rows are judged against the block's **modal** width, so one
+malformed first row is reported as the outlier rather than redefining the block.
+`[[TABLE]]` is deliberately not judged (verified: a ragged table row survives
+and fidelity passes). The annex author's persona already said "keep the same
+column count"; it now says what happens if you don't.
+
+### A failed build threw away the evidence
+
+`VerifyFailed` persisted the verify report and nothing else, so -003's input was
+unrecoverable — and §5A can only ever say the document came out smaller than a
+source you cannot see. It now persists the markdown, the audit history and the
+regulatory findings, the way `QaAuditFailed` already did. The three diagnostic
+locals are bound at the top of the `try`, because a handler that raises
+`NameError` while recording a failure loses the very evidence the failure was
+worth having.
+
+### The read timeout was failing turns the model would have finished
+
+`VERIFY-ANNEX-005` died at `generate`, 315 s in — the annex author writing a
+whole form in one call. -003's earlier qa-audit timeout was the same boundary.
+Neither was a hang: this model reasons before it answers and one turn of real
+work simply crosses five minutes. The 300 s default was raised to **900 s** in
+`config.py` (not merely in the host env, so every deployment gets it). A
+timeout that ends a call the model would have completed is worse than waiting.
+
+Alongside these, two instruction fixes from the same evidence: the §6A auditor
+is now told to raise **every** issue in one verdict (`VERIFY-ANNEX-002` died
+with a second-round issue unaddressed that round one never mentioned, and each
+FIX spends one of a finite budget — production also went from 1 repair round to
+2), and `verbatim_output` splits the ungrounded scope wording by what the reply
+*becomes*: the three authors whose text lands verbatim in the document are told
+to leave a **blank write-in field**, while `gf_reg_checker` and
+`gf_app_assistant`, which write reports and conversation, still say the corpus
+is missing. Telling an author to "say so in your output" had put a note about
+corpus availability inside a controlled document.
+
+### The proof
+
+`VERIFY-ANNEX-006` — the same workflow that had failed three times — reached
+**`status=done`**:
+
+```
+RESULT: PASS
+   FIDELITY (§5A, markdown-source) output>=source: words 103>=91, chars 620>=512  [OK]
+qa_audit: Verdict: PASS   (first round, no repair needed)
+```
+
+A real 57,896-byte `.docx` registered as `VERIFY-ANNEX-006` in
+`docengine.documents` and written to `/data/docengine-out/` — the first document
+this stack has produced since 2026-08-14, and the first ever on the new Letta
+fleet. A second `ensure_fleet` run afterwards logged zero mutations: converged.
+
+DocEngine suite: **201 passed / 6 skipped**.
