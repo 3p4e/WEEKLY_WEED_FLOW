@@ -397,14 +397,19 @@ def test_scope_block_forbids_an_unscoped_search():
 
 
 class _ConfigClient:
-    """Minimal stand-in: records the PATCH bodies _reconcile_config sends."""
+    """Minimal stand-in: records the PATCH bodies _reconcile_config sends, and
+    whether it went on to clear the agent's accumulated message buffer."""
 
     def __init__(self):
         self.patches: list[tuple[str, dict]] = []
+        self.resets: list[str] = []
 
     async def update_agent_config(self, agent_id: str, body: dict) -> dict:
         self.patches.append((agent_id, body))
         return {}
+
+    async def reset_messages(self, agent_id: str) -> None:
+        self.resets.append(agent_id)
 
 
 @pytest.mark.asyncio
@@ -414,8 +419,10 @@ async def test_reconcile_config_pushes_the_declared_window_onto_a_live_agent():
     create-time only and the agents predate the declaration."""
     spec = load_fleet()
     client = _ConfigClient()
-    agent = {"id": "agent-1", "llm_config": {"context_window": 30000, "max_tokens": 16384}}
-    assert await fleet._reconcile_config(client, agent, spec, "gf_x") is True
+    agent = {"id": "agent-1", "llm_config": {"context_window": 30000, "max_tokens": 16384},
+             "message_buffer_autoclear": True}
+    ag = {"name": "gf_x", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x") is True
     assert client.patches == [("agent-1", {"context_window_limit": 128000})]
 
 
@@ -429,9 +436,12 @@ async def test_reconcile_config_is_a_no_op_when_the_agent_already_matches():
             "context_window": spec["defaults"]["context_window"],
             "max_tokens": spec["defaults"]["max_tokens"],
         },
+        "message_buffer_autoclear": True,
     }
-    assert await fleet._reconcile_config(client, agent, spec, "gf_x") is False
+    ag = {"name": "gf_x", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x") is False
     assert client.patches == []
+    assert client.resets == []
 
 
 @pytest.mark.asyncio
@@ -441,9 +451,10 @@ async def test_reconcile_config_never_touches_the_model_handle():
     spec = load_fleet()
     client = _ConfigClient()
     agent = {"id": "a", "llm_config": {"context_window": 30000, "handle": "some/other-model"}}
-    await fleet._reconcile_config(client, agent, spec, "gf_x")
+    await fleet._reconcile_config(client, agent, {"name": "gf_x"}, spec, "gf_x")
     for _, body in client.patches:
-        assert set(body) <= {"context_window_limit", "max_tokens"}
+        assert set(body) <= {"context_window_limit", "max_tokens", "message_buffer_autoclear"}
+        assert "model" not in body and "handle" not in body
 
 
 # ── The tool's own guardrails, executed rather than parsed ──────────────────
@@ -665,3 +676,87 @@ async def test_reconcile_tool_env_pushes_a_missing_allowlist(monkeypatch):
     assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
     body = client.patches[0][1]["tool_exec_environment_variables"]
     assert body["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE,DB1_REGULATORY"
+
+
+# ── autoclear: the mandatory companion to a large context window ────────────
+# Raising context_window_limit 30000 -> 128000 removed the trimming Letta had
+# been doing to fit the smaller window, so a persistent one-shot worker started
+# carrying every document it had ever seen into its next prompt. Measured live
+# on 2026-08-27, the first time the declared window actually reached the fleet:
+# gf_qa_auditor at 78,201 of 128,000 tokens after ten messages, and a real
+# annex job dying on a 300s ReadTimeout at the qa-audit stage. The same audit
+# on a clone with no history took 49.5s and passed, which is what ruled the
+# instructions out as the cost.
+
+
+def test_every_pipeline_worker_declares_autoclear():
+    """These five are sent one prompt and read for one reply; none of them ever
+    refers back to a previous turn, so none of them may keep one."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist",
+                 "gf_qa_auditor", "gf_reg_checker"):
+        assert by_name[name].get("autoclear") is True, name
+
+
+def test_the_conversational_agents_keep_their_history():
+    """Clearing these would break the thing they exist to do — gf_app_assistant
+    holds a real back-and-forth with staff, and the orchestrator resolves
+    TYPE/MODE across turns."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_app_assistant", "gf_doc_orchestrator"):
+        assert by_name[name].get("autoclear") is False, name
+
+
+def test_every_agent_states_its_autoclear_intent_explicitly():
+    """`autoclear` reads as False when omitted, and False is the setting that
+    caused the outage — so an agent added without thinking about it would
+    silently inherit the broken behaviour. Make the file say which it is."""
+    for ag in load_fleet()["agents"]:
+        assert "autoclear" in ag, ag["name"]
+        assert isinstance(ag["autoclear"], bool), ag["name"]
+
+
+def test_created_agents_carry_their_autoclear_setting():
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        body = fleet._build_body(ag, spec, "m", "e", ag["name"], "")
+        assert body["message_buffer_autoclear"] is ag["autoclear"], ag["name"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_turns_autoclear_on_and_clears_the_existing_buffer():
+    """Turning the flag on only bounds growth from here. gf_qa_auditor was
+    already at 78k and would have stayed slow — so the reconciler drops the
+    accumulated buffer in the same pass."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": False}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is True
+    assert client.patches == [("a", {"message_buffer_autoclear": True})]
+    assert client.resets == ["a"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_clear_the_buffer_of_a_conversational_agent():
+    """A reset here would throw away a staff member's conversation."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 30000, "max_tokens": 16384},
+             "message_buffer_autoclear": False}
+    ag = {"name": "gf_app_assistant", "autoclear": False}
+    await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_app_assistant")
+    assert client.resets == []
+    for _, body in client.patches:
+        assert "message_buffer_autoclear" not in body
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_re_clear_an_agent_already_set():
+    """ensure_fleet runs on every document job; re-clearing a buffer that is
+    already autoclearing would be pointless churn."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 30000, "max_tokens": 16384},
+             "message_buffer_autoclear": True}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor")
+    assert client.resets == []

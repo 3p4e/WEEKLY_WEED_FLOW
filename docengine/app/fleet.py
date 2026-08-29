@@ -226,6 +226,9 @@ def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, des
         body["context_window_limit"] = int(defaults["context_window"])
     if defaults.get("max_tokens"):
         body["max_tokens"] = int(defaults["max_tokens"])
+    # See fleet.yaml: the mandatory companion to a large context window for
+    # every agent the pipeline drives as a one-shot worker.
+    body["message_buffer_autoclear"] = bool(ag.get("autoclear"))
     env = _tool_env(ag.get("datasets", []))
     if env and ag.get("datasets"):
         body["tool_exec_environment_variables"] = env
@@ -327,7 +330,7 @@ async def _reconcile_tool_env(
 
 
 async def _reconcile_config(
-    client: LettaClient, agent: dict, spec: dict, label: str
+    client: LettaClient, agent: dict, ag: dict, spec: dict, label: str
 ) -> bool:
     """Push the declared context window / output ceiling onto a live agent.
 
@@ -338,27 +341,47 @@ async def _reconcile_config(
     (a 9-section SOP repair prompt truncating mid-section) is why the value was
     declared in the first place.
 
-    Scope is deliberately narrow: context_window_limit and max_tokens only. The
-    model handle is NOT reconciled — fleet.yaml records leaving it alone as a
-    standing decision, and widening this would silently reverse it."""
+    Scope is deliberately narrow: context_window_limit, max_tokens and
+    message_buffer_autoclear. The model handle is NOT reconciled — fleet.yaml
+    records leaving it alone as a standing decision, and widening this would
+    silently reverse it.
+
+    autoclear is here rather than beside the memory blocks because it belongs to
+    the window: raising context_window without it is what broke a real document
+    job. Letta had been trimming these agents' buffers to fit 30000; at 128000
+    it stops, and a one-shot worker then carries every document it has ever seen
+    into its next prompt. See the note in fleet.yaml for the measurements."""
     defaults = spec.get("defaults") or {}
     lc = agent.get("llm_config") or {}
-    body: dict[str, int] = {}
+    body: dict = {}
     if defaults.get("context_window") and lc.get("context_window") != int(
         defaults["context_window"]
     ):
         body["context_window_limit"] = int(defaults["context_window"])
     if defaults.get("max_tokens") and lc.get("max_tokens") != int(defaults["max_tokens"]):
         body["max_tokens"] = int(defaults["max_tokens"])
+    want_autoclear = bool(ag.get("autoclear"))
+    turning_on = want_autoclear and not agent.get("message_buffer_autoclear")
+    if bool(agent.get("message_buffer_autoclear")) != want_autoclear:
+        body["message_buffer_autoclear"] = want_autoclear
     if not body:
         return False
     try:
         await client.update_agent_config(agent["id"], body)
         log.info("reconciled config on %s: %s", label, body)
-        return True
     except LettaError as e:  # non-fatal: an undersized window still runs
         log.warning("could not reconcile config on %s: %s", label, e)
         return False
+    # Turning autoclear ON only bounds growth from here. An agent that already
+    # accumulated stays slow — and slow here meant the 300s read timeout that
+    # failed a real job — so drop the existing buffer at the same moment.
+    if turning_on:
+        try:
+            await client.reset_messages(agent["id"])
+            log.info("cleared accumulated message buffer on %s", label)
+        except LettaError as e:  # non-fatal: autoclear still bounds it going forward
+            log.warning("could not clear message buffer on %s: %s", label, e)
+    return True
 
 
 async def _served_handles(client: LettaClient) -> tuple[set[str] | None, set[str] | None]:
@@ -456,7 +479,7 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
                 await _attach_retrieval(client, cur["id"], ag, tool_id, name)
             await _reconcile_blocks(client, cur["id"], ag, spec, name)
             await _reconcile_tool_env(client, cur, ag, name)
-            await _reconcile_config(client, cur, spec, name)
+            await _reconcile_config(client, cur, ag, spec, name)
             continue
         body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""))
         created = await client.create_agent(body)

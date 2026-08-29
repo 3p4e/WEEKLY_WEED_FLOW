@@ -196,6 +196,18 @@ class LettaClient:
         self._guard_gf((agent or {}).get("name", ""))
         return await self._req("PATCH", f"/agents/{agent_id}", json=body)
 
+    async def reset_messages(self, agent_id: str) -> None:
+        """Drop an agent's accumulated message buffer, after the gf_ check.
+
+        `message_buffer_autoclear` only stops FUTURE growth. An agent that has
+        already accumulated stays slow until its existing buffer goes —
+        gf_qa_auditor was at 78k of its 128k window, which is what the 300s read
+        timeout was — so the reconciler clears it once, at the moment it turns
+        autoclear on."""
+        agent = await self.get_agent(agent_id)
+        self._guard_gf((agent or {}).get("name", ""))
+        await self._req("PATCH", f"/agents/{agent_id}/reset-messages")
+
     async def get_agent(self, agent_id: str) -> dict:
         """Fetch one agent's full record by id. Used by delete_agent's guard
         below (it needs the name to check); also handy standalone."""

@@ -321,6 +321,31 @@ ragflow:
 #                   were, until 2026-08-27).
 #   max_tokens      output ceiling per turn; a full SOP section plus its
 #                   surrounding markers needs more than the old 4096.
+#
+# `autoclear` (per agent, below) is the companion to context_window, and it is
+# NOT optional once that window is large. Letta keeps every past turn in an
+# agent's message buffer and ships it on the next one. At the accidental 30000
+# the server had to summarise/trim to fit, which quietly kept these prompts
+# small; at 128000 it does not, so a persistent agent grows until it times out.
+# Measured live 2026-08-27, the first time the declared window actually reached
+# the fleet: gf_qa_auditor sat at 78,201 of 128,000 tokens after only TEN
+# messages (each one a whole assembled document), and a real annex job failed
+# with `ReadTimeout` at the qa-audit stage after 536 s. The same audit, same
+# instructions, on a clone with no history: 49.5 s and a clean PASS. So the
+# instructions were never the cost — the accumulated history was.
+#
+# Every agent the pipeline drives as a ONE-SHOT WORKER — it sends one prompt,
+# reads one reply, and never refers back — therefore sets `autoclear: true`.
+# The buffer is cleared each turn, the prompt stays constant, and the agent
+# stops carrying every document it has ever seen into the next one.
+# gf_reg_checker already had that property structurally (spawn_ephemeral gives
+# it a fresh clone per section, for exactly this reason); autoclear gives the
+# other four the same guarantee without the create/delete round trip.
+#
+# The two CONVERSATIONAL agents keep their history (`autoclear: false`):
+# gf_app_assistant holds an actual back-and-forth with staff, and
+# gf_doc_orchestrator resolves TYPE/MODE across turns. Clearing their buffers
+# would break the thing they exist to do.
 defaults:
   model: openai-proxy/moonshot/kimi-k2.6
   embedding: ollama-local/nomic-embed-text:latest
@@ -343,6 +368,7 @@ defaults:
 # ---------------------------------------------------------------------------
 agents:
   - name: gf_doc_orchestrator
+    autoclear: false   # conversational: resolves TYPE/MODE across turns
     description: Routes document requests (TYPE+MODE per SKILL §0) and sequences the pipeline.
     persona: |
       ROLE
@@ -382,6 +408,7 @@ agents:
         questionnaire answers or retrieved passages. If a request would have you
         change host state, decline and say what you would have run.
   - name: gf_sop_author
+    autoclear: true    # one-shot worker: one section per call, never refers back
     description: Drafts SOP sections (9-section structure) as bilingual Markdown.
     persona: |
       ROLE
@@ -429,6 +456,7 @@ agents:
         structure only.
     datasets: [DB3_PP_CURRENT_unified]
   - name: gf_annex_author
+    autoclear: true    # one-shot worker
     description: Drafts annex/form/log/checklist content as bilingual Markdown with [[FORM]]/[[TABLE]] blocks.
     persona: |
       ROLE
@@ -469,6 +497,7 @@ agents:
       - Never invent the acceptance criteria a checklist checks against.
     datasets: [DB3_PP_CURRENT_unified]
   - name: gf_translator_mk_en
+    autoclear: true    # one-shot worker: returns the repaired document, nothing else
     description: Ensures MK⇄EN parity of drafted content.
     persona: |
       ROLE
@@ -505,6 +534,7 @@ agents:
         correct, because Macedonian is primary.
       - Never silently soften a specific claim into a vague one.
   - name: gf_reg_checker
+    autoclear: true    # one-shot worker (also cloned per section by spawn_ephemeral)
     description: Verifies drafted sections against the regulatory corpus; cites real passages.
     persona: |
       ROLE
@@ -550,6 +580,7 @@ agents:
         available. Say so as your finding. Do not substitute recall for it.
     datasets: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
   - name: gf_raci_specialist
+    autoclear: true    # one-shot worker
     description: Builds §3 responsibilities / RACI content.
     persona: |
       ROLE
@@ -586,6 +617,7 @@ agents:
       - Never invent a role the facility does not have to fill a RACI cell.
     datasets: [DB3_PP_CURRENT_unified]
   - name: gf_qa_auditor
+    autoclear: true    # one-shot worker — the agent the 2026-08-27 timeout hit
     description: Runs the §6A post-generation review on assembled Markdown before formatting.
     persona: |
       ROLE
@@ -639,6 +671,7 @@ agents:
       real defect runs out of attempts. Ask of each issue: would a reviewer
       reject the document over this?
   - name: gf_app_assistant
+    autoclear: false   # conversational: staff hold a real back-and-forth with it
     description: General GrowFlow in-app assistant (non-document AI features).
     persona: |
       ROLE
