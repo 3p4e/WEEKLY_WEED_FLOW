@@ -196,6 +196,40 @@ def _custody_out(r: dict) -> dict:
     }
 
 
+# ── one physical sample, one active custody record ──────────────────────────
+# The 2026-08 audit reported that nothing stopped a sample being linked to two
+# custody records. Note which table is NOT involved: qc_chain_of_custody is an
+# append-only log of transfer events, and many rows per sample is exactly what
+# it is for — constraining it would break the chain it exists to record. The
+# gap was the custody RECORD of the specimen: the field record (SFR) and the
+# sampling request, whose sample_id carried no uniqueness at all.
+#
+# Migration 0063 adds the partial unique indexes that enforce it (partial on
+# status <> 'CANCELLED', so cancelling a record raised in error and re-issuing
+# for the same specimen stays legal). This pre-check is the API half, and it
+# exists to name the record standing in the way — the index alone answers with
+# a 500. It is deliberately TOCTOU-tolerant: two concurrent requests can both
+# read "free", and the loser is caught by the index and mapped back to this
+# same 409 by the handler in app/main.py.
+_CLAIMED_MSG = ("that sample is already linked to {num} — one physical sample"
+                " carries one active custody record; cancel that record first")
+
+
+async def _assert_sample_unclaimed(c, table: str, number_col: str, sample_id: str,
+                                   exclude_id: str | None = None) -> None:
+    if not sample_id:
+        return
+    args = [sample_id]
+    sql = (f"SELECT id, {number_col} AS num FROM {table}"  # nosec B608 — both are module constants
+           "  WHERE sample_id=$1 AND status <> 'CANCELLED'")
+    if exclude_id:                       # a record may keep the sample it already holds,
+        args.append(exclude_id)          # or every no-op PATCH would conflict with itself
+        sql += f" AND id <> ${len(args)}"
+    clash = await c.fetchrow(sql + " LIMIT 1", *args)
+    if clash is not None:
+        raise HTTPException(409, _CLAIMED_MSG.format(num=clash["num"]))
+
+
 @router.get("/sampling-requests")
 async def list_rqs(status: str | None = None, batch_id: str | None = None,
                    user: dict = Depends(require_role(*ELEVATED_ROLES))):
@@ -302,6 +336,8 @@ async def update_rqs(rqs_id: str, body: RqsPatch, user: dict = Depends(require_r
         if patch.get("sample_id"):
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
                 raise HTTPException(422, "Unknown sample")
+            await _assert_sample_unclaimed(
+                c, "qc_sampling_requests", "rqs_number", patch["sample_id"], exclude_id=rqs_id)
         if patch.get("specification_id"):
             if await c.fetchrow("SELECT id FROM qc_specifications WHERE id=$1",
                                 patch["specification_id"]) is None:
@@ -442,6 +478,8 @@ async def create_sfr(body: SfrIn, user: dict = Depends(require_role(*_WRITERS)))
         if body.sample_id:
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", body.sample_id) is None:
                 raise HTTPException(422, "Unknown sample")
+            await _assert_sample_unclaimed(
+                c, "qc_sample_field_records", "sfr_number", body.sample_id)
         row = await c.fetchrow(
             "INSERT INTO qc_sample_field_records(org_id, sfr_number, rqs_id, sampling_location,"
             " sampling_coordinates, barrel_numbers, num_containers, destination_facility,"
@@ -471,6 +509,8 @@ async def update_sfr(sfr_id: str, body: SfrPatch, user: dict = Depends(require_r
         if patch.get("sample_id"):
             if await c.fetchrow("SELECT id FROM qc_samples WHERE id=$1", patch["sample_id"]) is None:
                 raise HTTPException(422, "Unknown sample")
+            await _assert_sample_unclaimed(
+                c, "qc_sample_field_records", "sfr_number", patch["sample_id"], exclude_id=sfr_id)
         fields, args = [], []
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict pFbHOS7LN8qCApeP2pYF2WRGxSauhYOGffvMXwfFkgAafFKevg4EGRRYXAtp909
+\restrict YdbFTXE3Ijl1xeLmmCJGY3P0WaIKfs3xXenQ6JKwMkDfqzgvLQZb1WWWkDJa905
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3304,6 +3304,13 @@ CREATE INDEX qc_results_coa_idx ON public.qc_results USING btree (org_id, coa_id
 
 
 --
+-- Name: qc_rqs_sample_active_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_rqs_sample_active_uniq ON public.qc_sampling_requests USING btree (sample_id) WHERE ((sample_id IS NOT NULL) AND (status <> 'CANCELLED'::text));
+
+
+--
 -- Name: qc_sample_field_records_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3357,6 +3364,13 @@ CREATE INDEX qc_sampling_requests_batch_idx ON public.qc_sampling_requests USING
 --
 
 CREATE INDEX qc_sampling_requests_status_idx ON public.qc_sampling_requests USING btree (org_id, status);
+
+
+--
+-- Name: qc_sfr_sample_active_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_sfr_sample_active_uniq ON public.qc_sample_field_records USING btree (sample_id) WHERE ((sample_id IS NOT NULL) AND (status <> 'CANCELLED'::text));
 
 
 --
@@ -5651,5 +5665,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict pFbHOS7LN8qCApeP2pYF2WRGxSauhYOGffvMXwfFkgAafFKevg4EGRRYXAtp909
+\unrestrict YdbFTXE3Ijl1xeLmmCJGY3P0WaIKfs3xXenQ6JKwMkDfqzgvLQZb1WWWkDJa905
 
