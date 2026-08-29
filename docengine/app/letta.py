@@ -206,7 +206,15 @@ class LettaClient:
         autoclear on."""
         agent = await self.get_agent(agent_id)
         self._guard_gf((agent or {}).get("name", ""))
-        await self._req("PATCH", f"/agents/{agent_id}/reset-messages")
+        # The body is REQUIRED — the route 422s without one (seen live).
+        # add_default_initial_messages stays false: these agents are driven by
+        # the pipeline, which supplies the whole prompt every turn, so a
+        # re-seeded greeting would just be tokens nobody reads.
+        await self._req(
+            "PATCH",
+            f"/agents/{agent_id}/reset-messages",
+            json={"add_default_initial_messages": False},
+        )
 
     async def get_agent(self, agent_id: str) -> dict:
         """Fetch one agent's full record by id. Used by delete_agent's guard

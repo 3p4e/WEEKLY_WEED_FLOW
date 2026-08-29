@@ -155,3 +155,48 @@ async def test_delete_agent_refuses_a_non_gf_named_agent(monkeypatch):
 
     # the guard must fire BEFORE any DELETE is issued
     assert ("DELETE", "/agents/tmp-1") not in fake.calls
+
+
+class _RecordingClient:
+    """Records method/path/kwargs and answers GET /agents/<id> with a name, so
+    the gf_ namespace guard has something to check."""
+
+    def __init__(self, agent_name):
+        self.agent_name = agent_name
+        self.is_closed = False
+        self.calls: list[tuple] = []
+
+    async def request(self, method, path, **kw):
+        self.calls.append((method, path, kw))
+        if method == "GET":
+            return _FakeResponse(200, {"name": self.agent_name})
+        return _FakeResponse(200, {"ok": True})
+
+    async def aclose(self):
+        self.is_closed = True
+
+
+async def test_reset_messages_sends_the_required_body():
+    """The route is a PATCH with a REQUIRED body — calling it bare returns 422.
+    Seen live against letta-6ou3 on all six one-shot agents at once: the
+    non-fatal handler logged it, the autoclear flag landed, and the already
+    accumulated buffers stayed exactly as full as before."""
+    fake = _RecordingClient("gf_qa_auditor")
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    await c.reset_messages("agent-1")
+    method, path, kwargs = fake.calls[-1]
+    assert method == "PATCH"
+    assert path.endswith("/reset-messages")
+    assert kwargs["json"] == {"add_default_initial_messages": False}
+
+
+async def test_reset_messages_refuses_a_non_gf_agent():
+    """Same namespace guard as delete_agent: this throws conversation history
+    away, so it must never reach an agent this client does not own."""
+    fake = _RecordingClient("wwf_weekly_report")
+    c = LettaClient(base="http://letta.invalid", key="k")
+    c._client_instance = fake
+    with pytest.raises(LettaError, match="refusing to touch non-gf_"):
+        await c.reset_messages("agent-1")
+    assert not [c for c in fake.calls if c[0] == "PATCH"]
