@@ -725,16 +725,32 @@ def test_created_agents_carry_their_autoclear_setting():
 
 @pytest.mark.asyncio
 async def test_reconcile_turns_autoclear_on_and_clears_the_existing_buffer():
-    """Turning the flag on only bounds growth from here. gf_qa_auditor was
-    already at 78k and would have stayed slow — so the reconciler drops the
-    accumulated buffer in the same pass."""
+    """Setting the flag only bounds growth from here. gf_qa_auditor was already
+    at 78k and would have stayed slow — so the accumulated buffer goes too."""
     client = _ConfigClient()
     agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
-             "message_buffer_autoclear": False}
+             "message_buffer_autoclear": False, "message_ids": ["m"] * 9}
     ag = {"name": "gf_qa_auditor", "autoclear": True}
     assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is True
     assert client.patches == [("a", {"message_buffer_autoclear": True})]
     assert client.resets == ["a"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_clear_is_retried_on_the_next_pass():
+    """The regression this replaced: the clear was keyed off the flag's
+    TRANSITION, so the first live run set the flag, failed the clear (the route
+    wants a body), and spent the edge. The next run saw the flag already on,
+    concluded there was nothing to do, and left the agent at 78k. Keyed off the
+    buffer, an agent whose flag is already set but whose history survived still
+    gets cleared."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": True, "message_ids": ["m"] * 9}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is True
+    assert client.patches == []          # nothing left to configure
+    assert client.resets == ["a"]        # but the stale buffer still goes
 
 
 @pytest.mark.asyncio
@@ -743,6 +759,7 @@ async def test_reconcile_does_not_clear_the_buffer_of_a_conversational_agent():
     client = _ConfigClient()
     agent = {"id": "a", "llm_config": {"context_window": 30000, "max_tokens": 16384},
              "message_buffer_autoclear": False}
+    agent["message_ids"] = ["m"] * 16   # a real staff conversation
     ag = {"name": "gf_app_assistant", "autoclear": False}
     await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_app_assistant")
     assert client.resets == []
@@ -751,12 +768,14 @@ async def test_reconcile_does_not_clear_the_buffer_of_a_conversational_agent():
 
 
 @pytest.mark.asyncio
-async def test_reconcile_does_not_re_clear_an_agent_already_set():
-    """ensure_fleet runs on every document job; re-clearing a buffer that is
-    already autoclearing would be pointless churn."""
+async def test_reconcile_does_not_re_clear_a_settled_agent():
+    """ensure_fleet runs many times per document job. A reset leaves exactly one
+    message behind (measured live, 41 -> 1 on the worst agent), so an
+    autoclearing agent settles at 1 and must not be reset again and again."""
     client = _ConfigClient()
-    agent = {"id": "a", "llm_config": {"context_window": 30000, "max_tokens": 16384},
-             "message_buffer_autoclear": True}
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": True, "message_ids": ["only-one"]}
     ag = {"name": "gf_qa_auditor", "autoclear": True}
-    await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor")
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is False
     assert client.resets == []
+    assert client.patches == []

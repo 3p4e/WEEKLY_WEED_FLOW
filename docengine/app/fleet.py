@@ -361,21 +361,38 @@ async def _reconcile_config(
     if defaults.get("max_tokens") and lc.get("max_tokens") != int(defaults["max_tokens"]):
         body["max_tokens"] = int(defaults["max_tokens"])
     want_autoclear = bool(ag.get("autoclear"))
-    turning_on = want_autoclear and not agent.get("message_buffer_autoclear")
     if bool(agent.get("message_buffer_autoclear")) != want_autoclear:
         body["message_buffer_autoclear"] = want_autoclear
-    if not body:
+
+    # Setting the flag only bounds growth from HERE; the history already in the
+    # buffer is what made a real job time out, so it has to be dropped too.
+    #
+    # The condition is the buffer's actual state, not the flag's transition.
+    # Tying it to "we are turning autoclear on" looked equivalent and was not:
+    # the first live run set the flag and its clear failed (the route wants a
+    # body — see LettaClient.reset_messages), which spent the transition. The
+    # next run saw the flag already on, concluded there was nothing to do, and
+    # left gf_qa_auditor sitting at 78k of its 128k window. Keyed off the
+    # buffer instead, a failed clear simply retries on the next pass.
+    #
+    # `message_ids` is already on the agent record this function was handed, so
+    # this costs no extra call. A reset leaves exactly one message behind
+    # (measured on all six agents, 41 -> 1 for the worst), so >1 means real
+    # accumulated history and an autoclearing agent settles at 1 and stays
+    # there — which makes this idempotent across the many ensure_fleet calls a
+    # single document job makes.
+    stale_buffer = want_autoclear and len(agent.get("message_ids") or []) > 1
+
+    if not body and not stale_buffer:
         return False
-    try:
-        await client.update_agent_config(agent["id"], body)
-        log.info("reconciled config on %s: %s", label, body)
-    except LettaError as e:  # non-fatal: an undersized window still runs
-        log.warning("could not reconcile config on %s: %s", label, e)
-        return False
-    # Turning autoclear ON only bounds growth from here. An agent that already
-    # accumulated stays slow — and slow here meant the 300s read timeout that
-    # failed a real job — so drop the existing buffer at the same moment.
-    if turning_on:
+    if body:
+        try:
+            await client.update_agent_config(agent["id"], body)
+            log.info("reconciled config on %s: %s", label, body)
+        except LettaError as e:  # non-fatal: an undersized window still runs
+            log.warning("could not reconcile config on %s: %s", label, e)
+            return False
+    if stale_buffer:
         try:
             await client.reset_messages(agent["id"])
             log.info("cleared accumulated message buffer on %s", label)
