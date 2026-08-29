@@ -323,7 +323,8 @@ Compose service (added to the stack's compose.yaml):
       # A stateful-agent generation can take minutes; the read timeout covers
       # ONE agent turn (the pipeline makes ~11 sequential calls per SOP as a
       # polled background job). Connect stays short so a down server fails fast.
-      LETTA_READ_TIMEOUT: "300"     # optional; default 300s
+      LETTA_READ_TIMEOUT: "900"     # optional; default 900s — 300 was too tight
+                                    # and failed two real jobs mid-turn
       LETTA_CONNECT_TIMEOUT: "15"   # optional; default 15s
     extra_hosts:
       - host.docker.internal:host-gateway

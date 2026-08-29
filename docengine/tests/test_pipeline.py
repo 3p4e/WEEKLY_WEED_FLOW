@@ -15,7 +15,7 @@ from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
     assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
     _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
-    _drop_echoed_heading, _reg_findings_context,
+    _drop_echoed_heading, _reg_findings_context, _grid_overflow,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
 
@@ -224,6 +224,13 @@ async def test_verify_failed_records_failed_status(monkeypatch):
     assert updates[-1]["status"] == "failed"
     assert updates[-1]["error"] == "verify FAILED"
     assert updates[-1]["result"]["verify"] == "bad report"
+    # A verify report alone is not actionable — §5A fidelity in particular can
+    # only say the document came out smaller than its source, and the source is
+    # what you need to see. Job VERIFY-ANNEX-003 failed exactly that way and its
+    # input was unrecoverable afterwards.
+    assert updates[-1]["result"]["markdown"], "the judged document must be kept"
+    assert "qa_audit_history" in updates[-1]["result"]
+    assert "regulatory" in updates[-1]["result"]
 
 
 @pytest.mark.asyncio
@@ -930,3 +937,104 @@ async def test_a_repair_that_already_has_markers_is_not_nudged(monkeypatch):
 
     await run_workflow("job-1", client=GoodClient())
     assert not any("Output the corrected sections NOW" in p for p in prompts)
+
+
+# ── _grid_overflow ──────────────────────────────────────────────────────────
+# Every expectation below was decided by BUILDING the shape with the vendored
+# engine and diffing the tokens in the produced .docx — not by reading
+# build_from_md.py. The first version of this gate was written by inference
+# from a single experiment and got the rule backwards in both directions: it
+# failed `A ||| B` next to `C ||| D ||| E` (which loses nothing) and passed
+# uniform 5-cell rows (which lose cells 4-5 of every row).
+
+
+def test_form_row_with_a_fourth_cell_is_flagged():
+    """emit_form reads rd[0], rd[1], rd[2] and never a fourth. Verified: a
+    uniform 5-cell block lost ExtraFourA/ExtraFiveA/ExtraFourB/ExtraFiveB."""
+    gaps = _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "AlphaMK ||| AlphaEN ||| ValueOne ||| ExtraFourA ||| ExtraFiveA\n"
+        "BetaMK ||| BetaEN ||| ValueTwo ||| ExtraFourB ||| ExtraFiveB\n"}], "FORM")
+    assert len(gaps) == 1
+    assert "row 1 would lose" in gaps[0] and "ExtraFourA" in gaps[0]
+    assert "row 2 would lose" in gaps[0]
+
+
+def test_rows_of_differing_width_are_not_flagged_on_their_own():
+    """The rule is NOT "this row differs from its siblings". Verified: all five
+    tokens of this block survive the build."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\n"
+        "LabelTwoA ||| LabelTwoB\n"
+        "LabelThreeA ||| LabelThreeB ||| ValueThreeC\n"}], "FORM") == []
+
+
+def test_a_trailing_empty_cell_is_not_flagged():
+    """`MK~~EN ||| ||| ` is the idiomatic blank write-in and loses nothing —
+    only a NON-EMPTY overflow cell is content that fails to reach the page."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nДатумMK ||| ||| \nПартијаMK ||| ||| \n"}], "FORM") == []
+
+
+def test_an_annex_table_is_tolerant_and_not_flagged():
+    """emit_table sizes to max(len(r)), so a ragged [[TABLE]] row keeps its
+    extra cell (verified: ExtraU1 present in the output)."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[TABLE]]\nNo1 ||| Desc1 ||| Qty1\nR1 ||| S1 ||| T1 ||| ExtraU1\n"}], "FORM") == []
+
+
+def test_in_an_sop_a_row_wider_than_the_first_is_flagged():
+    """build_sop takes ncol from row 0 and does not clamp, so pp_format indexes
+    past the table: verified IndexError, which reaches the job as a bare
+    "IndexError: list index out of range"."""
+    gaps = _grid_overflow([{"num": "6.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C ||| D\nE ||| F ||| G ||| H ||| I ||| J\n"}], "SOP")
+    assert len(gaps) == 1
+    assert "first row sets 4 columns" in gaps[0] and "row 2 has 6" in gaps[0]
+    assert "crashes the formatter" in gaps[0]
+
+
+def test_the_sop_rule_also_covers_tables():
+    """Same build_sop path for [[TABLE]] — tolerant in an annex, fatal here."""
+    assert _grid_overflow([{"num": "6.0", "content":
+        "[[TABLE]]\nA ||| B\nC ||| D ||| E\n"}], "SOP")
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[TABLE]]\nA ||| B\nC ||| D ||| E\n"}], "FORM") == []
+
+
+def test_a_heading_closes_a_block():
+    """parse() closes a block on a heading, so what follows is not its row."""
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\n# 2 X|X\nD ||| E ||| F ||| GHOST\n"}], "FORM") == []
+
+
+def test_a_closing_marker_ends_the_block():
+    assert _grid_overflow([{"num": "1.0", "content":
+        "[[FORM:grid]]\nA ||| B ||| C\n[[/FORM]]\n"}], "FORM") == []
+
+
+def test_grid_overflow_survives_odd_content():
+    for content in ("", None, "[[FORM:grid]]", "[[FORM:grid]]\nA ||| B ||| C"):
+        assert _grid_overflow([{"num": "1.0", "content": content}], "FORM") == []
+
+
+@pytest.mark.asyncio
+async def test_overflow_fails_the_job_before_the_build(monkeypatch):
+    """Positioned like the bilingual gate — before the audit and the build — so
+    the error names the block instead of arriving as `verify FAILED`."""
+    updates = _patch_common(monkeypatch)
+
+    class OverflowClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            return "[[FORM:grid]]\nAmk ||| Aen ||| Aval ||| DROPPED\nBmk ||| Ben ||| Bval\n"
+
+    def _boom(*a, **k):
+        raise AssertionError("build must not run on a document that would lose content")
+
+    monkeypatch.setattr(builder, "build", _boom)
+    await run_workflow("job-1", client=OverflowClient())
+    assert updates[-1]["status"] == "failed"
+    assert "discard" in updates[-1]["error"]
+    assert updates[-1]["result"]["grid_overflow"]
+    # the sections are kept, so the named block can actually be looked at
+    assert updates[-1]["result"]["sections"]

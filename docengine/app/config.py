@@ -19,7 +19,16 @@ class Settings:
     # A stateful-agent generation can take minutes; the read timeout must cover
     # ONE agent turn (the pipeline makes ~11 sequential calls, each polled as a
     # background job). Connect stays short so an unreachable server fails fast.
-    letta_read_timeout: float = float(os.environ.get("LETTA_READ_TIMEOUT", "300"))
+    #
+    # 300 was too tight and cost two real jobs on Moonshot Kimi K2.6, which
+    # reasons before it answers: VERIFY-ANNEX-003 died at qa-audit and
+    # VERIFY-ANNEX-005 at generate, both on a single turn crossing five
+    # minutes — the annex author writing a whole form in one call is simply a
+    # long turn. This is not a hang, and a value that fails a job the model
+    # would have finished is worse than waiting. 900 leaves real headroom for
+    # one turn while still ending a genuinely stuck call; the pipeline's own
+    # per-stage job updates are what report progress in the meantime.
+    letta_read_timeout: float = float(os.environ.get("LETTA_READ_TIMEOUT", "900"))
     letta_connect_timeout: float = float(os.environ.get("LETTA_CONNECT_TIMEOUT", "15"))
 
     # Postgres for workflow state (fixes the per-worker in-memory bug class).

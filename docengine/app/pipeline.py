@@ -101,6 +101,118 @@ class BilingualGap(Exception):
         self.gaps = gaps
 
 
+class GridOverflow(Exception):
+    """A block contains cells the formatter will not put in the document.
+
+    `emit_form` reads exactly three cells per [[FORM]] row — MK label, EN
+    label, value — and never looks at a fourth. Anything beyond is dropped
+    silently, so a form can lose a field a human was meant to fill and still
+    look complete. In an SOP the same shape is worse: `build_sop` sizes the
+    table from its first row and a wider data row raises IndexError inside the
+    formatter, which reaches the job as a bare "IndexError: list index out of
+    range".
+
+    Both surfaced only as opaque late failures. Job VERIFY-ANNEX-003
+    (2026-08-29) failed as `verify FAILED` with every pp_verify check printing
+    PASS and only the §5A fidelity line short, by one word — §5A is the right
+    backstop and is untouched, but "the output is smaller than the source" is a
+    poor error when the answer is "row 2 of this block has a fourth cell and
+    the formatter reads three". Checked here, before the audit and the build,
+    where the block can still be named.
+    """
+
+    def __init__(self, gaps: list[str]):
+        super().__init__("cells the formatter would discard: " + "; ".join(gaps))
+        self.gaps = gaps
+
+
+# What the vendored engine actually does with a block's cells — read from
+# build_from_md.py and confirmed by building each shape and diffing the tokens
+# in the produced .docx, because guessing this wrong is how the first version of
+# this gate came to flag documents that build perfectly:
+#
+#   ANNEX  [[FORM]]/[[FORM:grid]]  emit_form() reads rd[0], rd[1], rd[2] and
+#          nothing else. A cell at index 3 or beyond is NEVER read, whatever the
+#          other rows look like. Uniform 5-cell rows lose cells 4-5 in EVERY row
+#          (verified: ExtraFourA/ExtraFiveA/ExtraFourB/ExtraFiveB all absent).
+#   ANNEX  [[TABLE]]  emit_table() sizes to max(len(r)) — tolerant, loses nothing.
+#   SOP    both  build_sop() takes ncol from row 0 and does not clamp, so a data
+#          row WIDER than the header raises IndexError inside pp_format
+#          (verified: widths 4,6,6 crash the build).
+#
+# So the rule is per doctype, and it is never "this row differs from its
+# siblings" — that comparison flags `A ||| B` next to `C ||| D ||| E`, which
+# builds with nothing lost.
+_BLOCK_OPEN = re.compile(r"^\s*\[\[(FORM|TABLE)\b([^\]]*)\]\]\s*$")
+_BLOCK_CLOSE = re.compile(r"^\s*(\[\[/|\[\[(?:FORM|TABLE)\b|#)")
+_FORM_CELLS_READ = 3
+
+
+def _blocks_in(content: str):
+    """Yield (kind, rows) for each [[FORM…]]/[[TABLE]] block in a section.
+
+    A block ends at a blank line, the next block marker, a closing [[/…]] or a
+    heading — the same set parse() closes on in build_from_md.py, so what is
+    counted here is what the engine will actually be handed."""
+    lines = (content or "").split("\n")
+    i = 0
+    while i < len(lines):
+        m = _BLOCK_OPEN.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        kind = m.group(1)
+        i += 1
+        rows = []
+        while i < len(lines) and lines[i].strip() and not _BLOCK_CLOSE.match(lines[i]):
+            rows.append(lines[i].split("|||"))
+            i += 1
+        yield kind, rows
+
+
+def _grid_overflow(sections: list[dict], doctype: str) -> list[str]:
+    """Cells the engine would silently discard, or a width that would crash it.
+
+    Named for the failure, not the shape: the point is content that does not
+    reach the document."""
+    gaps: list[str] = []
+    is_sop = (doctype or "").upper() == "SOP"
+    for sec in sections:
+        num = sec.get("num", "?")
+        for bno, (kind, rows) in enumerate(_blocks_in(sec.get("content") or ""), 1):
+            if not rows:
+                continue
+            label = f"section {num}, [[{kind}]] block {bno}"
+            if is_sop:
+                # ncol comes from row 0; a wider data row indexes past the table.
+                width0 = len(rows[0])
+                wide = [(n, len(r)) for n, r in enumerate(rows[1:], 2) if len(r) > width0]
+                if wide:
+                    detail = ", ".join(f"row {n} has {w}" for n, w in wide)
+                    gaps.append(
+                        f"{label}: the first row sets {width0} columns but {detail}"
+                        f" — in an SOP that crashes the formatter"
+                    )
+            elif kind == "FORM":
+                # Only a NON-EMPTY overflow cell is content actually lost; a
+                # trailing `||| ` is idiomatic and costs nothing.
+                bad = [
+                    (n, [c.strip() for c in r[_FORM_CELLS_READ:] if c.strip()])
+                    for n, r in enumerate(rows, 1)
+                    if any(c.strip() for c in r[_FORM_CELLS_READ:])
+                ]
+                if bad:
+                    detail = "; ".join(
+                        f"row {n} would lose {', '.join(repr(c) for c in cells)}"
+                        for n, cells in bad
+                    )
+                    gaps.append(
+                        f"{label}: a [[FORM]] row is read as "
+                        f"MK-label ||| EN-label ||| value and nothing after — {detail}"
+                    )
+    return gaps
+
+
 # Letters only. Digits, punctuation and the [[FORM]]/[[TABLE]] markers say
 # nothing about language.
 _CYR = re.compile(r"[Ѐ-ӿ]")
@@ -528,6 +640,14 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
     partial state, etc. — not a mechanical fix, so it is intentionally left
     for a dedicated pass rather than attempted piecemeal here."""
     client = client or LettaClient()
+    # Bound up front so every except clause below can persist whatever the job
+    # had reached. They are the job's diagnostics, and a handler that raises
+    # NameError while recording a failure loses exactly the evidence the
+    # failure was worth having.
+    reg_findings: list[str] = []
+    audits: list[str] = []
+    sections: list[dict] = []
+    markdown = ""
     try:
         job = await db.job_get(job_id)
         p = job["payload"]
@@ -546,7 +666,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         reg_corpora = agent_datasets("gf_reg_checker")
 
         # ---- section generation ----
-        sections: list[dict] = []
         if doctype == "SOP":
             for num, mk, en in SOP_SECTIONS:
                 author = agents["gf_raci_specialist"] if num == "3.0" else agents["gf_sop_author"]
@@ -611,7 +730,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # who wants to change this should make it a deliberate call, not a
         # side effect of an unrelated change.
         await db.job_update(job_id, stage="regulatory-check")
-        reg_findings: list[str] = []
         for s in sections:
             await db.job_update(job_id, stage=f"regulatory-check {s['num']}")
             tmp_id = await spawn_ephemeral(
@@ -648,6 +766,16 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         if gaps:
             raise BilingualGap(gaps)
 
+        # Structural gate, same reasoning and the same position as the
+        # bilingual one: a ragged [[FORM:grid]] silently loses its overflow
+        # cells in the packer, and the only thing downstream that notices is
+        # §5A fidelity — which can only report that the document came out
+        # smaller than its source. Caught here, the message names the block.
+        await db.job_update(job_id, stage="structure-check")
+        overflow = _grid_overflow(sections, doctype)
+        if overflow:
+            raise GridOverflow(overflow)
+
         # ---- §6A audit ----
         # A FIX verdict is not the end: the auditor returns concrete, actionable
         # issues ("add the ~~Шифра | Code~~ row ... after adding it the document
@@ -658,7 +786,6 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # only buys more attempts at earning it.
         await db.job_update(job_id, stage="qa-audit")
         author = "gf_sop_author" if doctype == "SOP" else "gf_annex_author"
-        audits: list[str] = []
         markdown = assemble_markdown(meta, sections)
         # Cross-ref: the regulatory-check loop above computes reg_findings and
         # explains there why it is advisory context here rather than a hard
@@ -736,9 +863,17 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             },
         )
     except builder.VerifyFailed as e:
+        # The verify report alone is not enough to act on. §5A fidelity in
+        # particular only says the document is smaller than its source, and
+        # without the source there is nothing to compare it against — job
+        # VERIFY-ANNEX-003 (2026-08-29) failed exactly this way and its input
+        # could not be recovered afterwards. Persist what the auditor saw, the
+        # same way QaAuditFailed already does.
         log.error("job %s verify FAILED", job_id)
         await db.job_update(job_id, status="failed", error="verify FAILED",
-                            result={"verify": e.report})
+                            result={"verify": e.report, "markdown": markdown,
+                                    "qa_audit_history": audits,
+                                    "regulatory": reg_findings})
     except QaAuditFailed as e:
         log.error("job %s §6A audit did not pass", job_id)
         await db.job_update(job_id, status="failed", error="§6A audit did not pass",
@@ -747,7 +882,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                                     "qa_repair_rounds": len(e.history) - 1,
                                     # the document the auditor actually judged —
                                     # without it a FIX verdict cannot be checked
-                                    "markdown": e.markdown})
+                                    "markdown": e.markdown,
+                                    "regulatory": reg_findings})
+    except GridOverflow as e:
+        log.error("job %s grid overflow: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed", error=str(e)[:500],
+                            result={"grid_overflow": e.gaps, "sections": sections,
+                                    "regulatory": reg_findings})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
         await db.job_update(job_id, status="failed",

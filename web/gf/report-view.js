@@ -411,4 +411,11 @@ GF.WWF._markReportSeen = () => {
   GF.WWF._hasNewReportPin = false;
 };
 
-setTimeout(() => GF.WWF._checkNewReportPin(), 0);
+// Guarded on GF.API.token, exactly like approvals-view.js's sibling prefetch
+// (whose own comment cites this line as the pattern it mirrors — it grew the
+// guard, this one never did). Unguarded, this fires on the LOGIN screen, where
+// no token exists yet: a GET /ai/pins that can only ever 401, on every single
+// anonymous page load, logging a console error before anyone has signed in.
+// Verified against the running app: /ai/pins?function_key=weekly_report&limit=1
+// was the first request of the session, ahead of /auth/login.
+setTimeout(() => { if (GF.API && GF.API.token) GF.WWF._checkNewReportPin(); }, 0);

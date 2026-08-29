@@ -2,7 +2,9 @@
 # (the create/attach/delete round-trips are exercised on the wwf_mass stack,
 # same convention as test_pipeline.py).
 import ast
+import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import fleet  # noqa: E402
+from app.letta import LettaError  # noqa: E402
 from app.fleet import (  # noqa: E402
     TOOL_NAME,
     _resolve_model,
@@ -74,11 +77,11 @@ def test_scope_block_tells_an_ungranted_agent_not_to_search():
 
 
 def test_scope_block_flags_a_dataset_that_is_not_ingested_yet():
-    block = _scope_block(["DB1_REGULATORY", "eCOA_INGEST"], ["DB1_REGULATORY"])
+    block = _scope_block(["DB1_REGULATORY", "eCoA_DATABASE"], ["DB1_REGULATORY"])
     assert "NOT YET INGESTED (DB1_REGULATORY)" in block
-    assert "WITHOUT corpus" in block
+    assert "They are not a corpus you have." in block
     # the granted-and-present dataset is still named as searchable
-    assert "eCOA_INGEST" in block
+    assert "eCoA_DATABASE" in block
 
 
 def test_every_agent_with_datasets_gets_a_scope_block_naming_them():
@@ -246,3 +249,737 @@ def test_context_window_and_max_tokens_are_declared_and_sane():
     assert d["context_window"] >= 100_000
     assert d["max_tokens"] >= 8_000
     assert d["max_tokens"] < d["context_window"]
+
+
+# ── The dataset map vs reality ──────────────────────────────────────────────
+# These exist because of a live failure on 2026-08-27: RAGflow's eCOA_INGEST /
+# eCOA_INGEST_SUMMA datasets had been deleted and replaced by a single
+# eCoA_DATABASE re-ingest the day before, and nothing updated fleet.yaml. Five
+# of eight agents were pointed at names that no longer resolved — including the
+# one agent this file's own comment claimed had live grounding. Nothing caught
+# it, because nothing checked the names against anything.
+
+
+def test_every_declared_dataset_is_tracked_as_ingested_or_pending():
+    """A dataset name in neither list is the exact failure above: an agent
+    pointed at a corpus nobody is tracking the existence of."""
+    spec = load_fleet()
+    rag = spec["ragflow"]
+    known = set(rag["ingested"]) | set(rag["pending_ingest"])
+    for ag in spec["agents"]:
+        for ds in ag.get("datasets", []):
+            assert ds in known, f"{ag['name']} names untracked dataset {ds!r}"
+
+
+def test_ingested_and_pending_are_disjoint():
+    rag = load_fleet()["ragflow"]
+    assert not (set(rag["ingested"]) & set(rag["pending_ingest"]))
+
+
+def test_no_agent_is_granted_a_withheld_dataset():
+    """The stability corpus is present in RAGflow and granted to nobody. This
+    is the same guarantee as the STABILITY substring test above, asserted
+    against the declared list rather than a name pattern."""
+    spec = load_fleet()
+    withheld = set(spec["ragflow"]["withheld"])
+    for ag in spec["agents"]:
+        assert not (set(ag.get("datasets", [])) & withheld), ag["name"]
+
+
+def test_at_least_one_agent_can_actually_retrieve_something_today():
+    """Guards the state this fix found the fleet in: every retrieval agent
+    scoped exclusively to datasets that do not exist, so the entire fleet was
+    ungrounded while presenting itself as grounded."""
+    spec = load_fleet()
+    live = set(spec["ragflow"]["ingested"])
+    grounded = [a["name"] for a in spec["agents"] if set(a.get("datasets", [])) & live]
+    assert grounded, "no agent is scoped to any dataset that exists"
+
+
+def test_the_app_assistant_is_the_one_with_live_grounding():
+    """Staff ask batch-QC questions in the app; the certificates answer them."""
+    assert "eCoA_DATABASE" in agent_datasets("gf_app_assistant")
+
+
+# ── Instruction blocks ──────────────────────────────────────────────────────
+
+
+def _labels(blocks):
+    return [b["label"] for b in blocks]
+
+
+def test_every_agent_carries_the_mission_and_the_house_rules():
+    """The mission block is what tells an agent WHY it is being asked — the
+    thing that makes 'leave it blank' obviously right rather than unhelpful."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        labels = _labels(fleet._blocks_for(ag, spec))
+        assert fleet.MISSION_BLOCK in labels, ag["name"]
+        assert fleet.RULES_BLOCK in labels, ag["name"]
+        assert fleet.PERSONA_BLOCK in labels, ag["name"]
+        assert fleet.SCOPE_BLOCK in labels, ag["name"]
+
+
+def test_the_corpus_guide_goes_only_to_agents_that_can_retrieve():
+    """An agent with no datasets has no use for a description of corpora it
+    cannot search, and is one nudge away from citing one."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        has_guide = fleet.CORPUS_BLOCK in _labels(fleet._blocks_for(ag, spec))
+        assert has_guide == bool(ag.get("datasets")), ag["name"]
+
+
+def test_governance_blocks_are_read_only_and_the_persona_is_not():
+    """Every gf_ agent carries memory_replace/memory_insert, so without the
+    flag an agent can rewrite its own house rules — or widen its own dataset
+    scope, which is the guardrail keeping stability data out of release
+    documents. `persona` stays writable: Letta owns that block."""
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        for block in fleet._blocks_for(ag, spec):
+            expected = block["label"] != fleet.PERSONA_BLOCK
+            assert block["read_only"] is expected, (ag["name"], block["label"])
+    assert fleet.PERSONA_BLOCK not in fleet.GOVERNANCE_BLOCKS
+
+
+def test_every_persona_is_a_brief_not_a_sentence():
+    """The personas are the training. A one-line persona is what the fleet had
+    before, and it left the model to guess its own output contract — which is
+    how commentary and duplicated headings ended up inside controlled
+    documents."""
+    for ag in load_fleet()["agents"]:
+        persona = ag["persona"]
+        assert len(persona) > 600, ag["name"]
+        for heading in ("ROLE", "NEVER"):
+            assert heading in persona, (ag["name"], heading)
+
+
+def test_the_authors_are_told_their_reply_is_used_verbatim():
+    """The single fact that makes 'no preamble' a hard rule rather than a style
+    note: nothing edits these replies before they reach the .docx."""
+    spec = load_fleet()
+    by_name = {a["name"]: a for a in spec["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist"):
+        assert "VERBATIM" in by_name[name]["persona"], name
+
+
+def test_the_auditor_is_warned_off_the_both_tokens_verdict():
+    """_qa_audit_passed fails a reply containing BOTH PASS and FIX, so a
+    well-meant 'Verdict: PASS, no fixes needed' kills the document."""
+    persona = next(a for a in load_fleet()["agents"] if a["name"] == "gf_qa_auditor")["persona"]
+    assert "Verdict: PASS" in persona
+    assert "NEVER write both tokens" in persona
+
+
+# ── Scope block ─────────────────────────────────────────────────────────────
+
+
+def test_scope_block_names_the_one_live_dataset_when_the_rest_are_pending():
+    block = _scope_block(["eCoA_DATABASE", "DB1_REGULATORY"], ["DB1_REGULATORY"])
+    assert "NOT YET INGESTED (DB1_REGULATORY)" in block
+    assert "Only eCoA_DATABASE actually answers today." in block
+
+
+def test_scope_block_says_there_is_no_corpus_at_all_when_every_grant_is_pending():
+    """Five agents were in exactly this state and their scope block still read
+    as though retrieval worked."""
+    block = _scope_block(["DB1_REGULATORY"], ["DB1_REGULATORY"])
+    assert "NO working corpus" in block
+
+
+def test_scope_block_forbids_an_unscoped_search():
+    """Omitting the tool's `datasets` argument searches every dataset the API
+    key can reach — including the withheld one. The tool refuses it now; the
+    block says so too."""
+    assert "never omit the argument" in _scope_block(["eCoA_DATABASE"], [])
+
+
+# ── Config reconciliation ───────────────────────────────────────────────────
+
+
+class _ConfigClient:
+    """Minimal stand-in: records the PATCH bodies _reconcile_config sends, and
+    whether it went on to clear the agent's accumulated message buffer."""
+
+    def __init__(self):
+        self.patches: list[tuple[str, dict]] = []
+        self.resets: list[str] = []
+
+    async def update_agent_config(self, agent_id: str, body: dict) -> dict:
+        self.patches.append((agent_id, body))
+        return {}
+
+    async def reset_messages(self, agent_id: str) -> None:
+        self.resets.append(agent_id)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_pushes_the_declared_window_onto_a_live_agent():
+    """All eight live agents sat at Letta's LLM_MAX_CONTEXT_WINDOW['DEFAULT']
+    of 30000 while fleet.yaml declared 128000, because both values are
+    create-time only and the agents predate the declaration."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "agent-1", "llm_config": {"context_window": 30000, "max_tokens": 16384},
+             "message_buffer_autoclear": True}
+    ag = {"name": "gf_x", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x") is True
+    assert client.patches == [("agent-1", {"context_window_limit": 128000})]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_is_a_no_op_when_the_agent_already_matches():
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {
+        "id": "agent-1",
+        "llm_config": {
+            "context_window": spec["defaults"]["context_window"],
+            "max_tokens": spec["defaults"]["max_tokens"],
+        },
+        "message_buffer_autoclear": True,
+    }
+    ag = {"name": "gf_x", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x") is False
+    assert client.patches == []
+    assert client.resets == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_config_never_touches_the_model_handle():
+    """fleet.yaml records leaving an existing agent's model alone as a standing
+    decision; widening this reconciler would silently reverse it."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 30000, "handle": "some/other-model"}}
+    await fleet._reconcile_config(client, agent, {"name": "gf_x"}, spec, "gf_x")
+    for _, body in client.patches:
+        assert set(body) <= {"context_window_limit", "max_tokens", "message_buffer_autoclear"}
+        assert "model" not in body and "handle" not in body
+
+
+# ── The tool's own guardrails, executed rather than parsed ──────────────────
+
+
+def _load_tool_callable():
+    """Run the uploaded source the way Letta's sandbox does, and hand back the
+    function itself so its behaviour can be tested, not just its shape."""
+    ns: dict = {}
+    exec(compile(load_tool_source(), TOOL_NAME + ".py", "exec"), ns)  # noqa: S102
+    return ns[TOOL_NAME]
+
+
+def test_tool_refuses_an_unscoped_search(monkeypatch):
+    """Omitting `datasets` used to search every dataset the key could see —
+    turning a forgotten argument into a full scope bypass, stability corpus
+    included."""
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    out = json.loads(_load_tool_callable()("what is the TAMC limit", ""))
+    assert out["ok"] is False
+    assert "datasets is required" in out["err"]
+
+
+def test_tool_error_never_names_a_dataset_the_caller_was_not_granted(monkeypatch):
+    """On an unresolvable scope the tool used to return the tenant's full
+    dataset list — naming STABILITY_PROGRAMME to agents whose entire design is
+    that they cannot know it exists, and handing them a name to try next."""
+    listing = {"data": [{"name": "eCoA_DATABASE", "id": "1"},
+                        {"name": "STABILITY_PROGRAMME", "id": "2"}]}
+
+    class _Resp:
+        def read(self):
+            return json.dumps(listing).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
+
+    raw = _load_tool_callable()("any question", "DB1_REGULATORY,DB3_PP_CURRENT_unified")
+    assert "STABILITY" not in raw
+    out = json.loads(raw)
+    assert out["ok"] is False
+    assert out["unknown_datasets"] == ["DB1_REGULATORY", "DB3_PP_CURRENT_unified"]
+    assert "available" not in out
+
+
+# ── The tool is a shared server object, and nothing ever revisited it ───────
+
+
+class _ToolClient:
+    """Records what ensure_tool does to an already-registered tool."""
+
+    def __init__(self, registered: dict | None):
+        self.registered = registered
+        self.updates: list[tuple] = []
+        self.creates: list[tuple] = []
+
+    async def list_tools(self):
+        return [self.registered] if self.registered else []
+
+    async def update_tool(self, tool_id, source_code, description=""):
+        self.updates.append((tool_id, source_code, description))
+        return {"id": tool_id}
+
+    async def create_tool(self, source_code, description=""):
+        self.creates.append((source_code, description))
+        return {"id": "tool-new"}
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_rewrites_a_registered_tool_whose_source_has_drifted():
+    """The tool is where dataset scoping is ENFORCED — it is what refuses an
+    unscoped search and decides what an error discloses. Adopting it by name
+    without checking its source meant a hardening edit could reach the repo,
+    the tests and the image, and never the server."""
+    client = _ToolClient({"id": "tool-1", "name": TOOL_NAME, "source_code": "def old(): pass"})
+    assert await fleet.ensure_tool(client) == "tool-1"
+    assert len(client.updates) == 1
+    assert client.updates[0][1] == load_tool_source()
+    assert not client.creates
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_leaves_an_up_to_date_tool_alone():
+    """ensure_fleet runs on every document job; rewriting an unchanged tool on
+    each one is pointless server churn."""
+    client = _ToolClient({"id": "tool-1", "name": TOOL_NAME, "source_code": load_tool_source()})
+    assert await fleet.ensure_tool(client) == "tool-1"
+    assert client.updates == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_still_registers_when_nothing_is_there():
+    client = _ToolClient(None)
+    assert await fleet.ensure_tool(client) == "tool-new"
+    assert client.creates[0][0] == load_tool_source()
+
+
+# ── The scope as a control, not an instruction ──────────────────────────────
+# Found by running the live fleet: asked for a stability result, gf_app_assistant
+# correctly declined — but only because it had been told to. The tool cannot see
+# which agent is calling it, so nothing would have stopped it had it decided
+# otherwise. RAGFLOW_ALLOWED_DATASETS moves the limit into the tool's per-agent
+# execution environment, where the model cannot reach it.
+
+
+def test_the_tool_env_carries_the_agents_permitted_scope(monkeypatch):
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    env = fleet._tool_env(["eCoA_DATABASE", "DB1_REGULATORY"])
+    assert env["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE,DB1_REGULATORY"
+
+
+def test_the_tool_env_is_empty_when_ragflow_is_unconfigured(monkeypatch):
+    """The tool then returns a clear 'not set' error rather than the agent
+    quietly answering from its own memory."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "", raising=False)
+    assert fleet._tool_env(["eCoA_DATABASE"]) == {}
+
+
+def test_tool_refuses_a_dataset_outside_the_agents_allowlist(monkeypatch):
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "eCoA_DATABASE")
+    # No urlopen stub: the refusal must happen BEFORE any network call, so a
+    # real request here would blow up the test rather than pass it.
+    out = json.loads(_load_tool_callable()("stability at 9 months", "STABILITY_PROGRAMME"))
+    assert out["ok"] is False
+    assert out["refused"] == ["STABILITY_PROGRAMME"]
+
+
+def test_tool_allows_the_datasets_the_agent_is_granted(monkeypatch):
+    """The allowlist must not break the one agent that can actually retrieve."""
+    listing = {"data": [{"name": "eCoA_DATABASE", "id": "1"}]}
+    chunks = {"data": {"chunks": [{"document_keyword": "BG1024, 752-2025, 27.02.2025, IJZ.pdf",
+                                   "content": "олово 0,01 mg/kg"}]}}
+    seq = [listing, chunks]
+
+    class _Resp:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def read(self):
+            return json.dumps(self.payload).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "eCoA_DATABASE,DB1_REGULATORY")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp(seq.pop(0)))
+
+    out = json.loads(_load_tool_callable()("heavy metals BG1024", "eCoA_DATABASE"))
+    assert out["ok"] is True
+    assert out["hits"][0]["document"] == "BG1024, 752-2025, 27.02.2025, IJZ.pdf"
+
+
+def test_the_corpus_guide_does_not_name_the_withheld_dataset():
+    """It used to, and the live agent then read the name straight back out in a
+    refusal. Describing the boundary is the point; handing over the name is not."""
+    spec = load_fleet()
+    for withheld in spec["ragflow"]["withheld"]:
+        assert withheld not in spec["corpus_guide"], withheld
+
+
+class _EnvClient(_ConfigClient):
+    pass
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_leaves_an_agent_with_no_datasets_alone(monkeypatch):
+    """A PATCH replaces the whole environment set, and gf_doc_orchestrator
+    carries unrelated secrets for a different tool. An agent this module has no
+    RAGflow env for must be left strictly alone, not reconciled to empty."""
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": [{"key": "KVM4_RUNNER_URL"}]}
+    assert await fleet._reconcile_tool_env(client, agent, {"name": "gf_x"}, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_is_a_no_op_once_the_scope_matches(monkeypatch):
+    """Credentials are secrets the server may not echo back, so the comparison
+    is on the scope alone — otherwise every ensure_fleet run looks like drift."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {
+        "id": "a",
+        "tool_exec_environment_variables": [
+            {"key": "RAGFLOW_ALLOWED_DATASETS", "value": "eCoA_DATABASE"}
+        ],
+    }
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_pushes_a_missing_allowlist(monkeypatch):
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": [
+        {"key": "RAGFLOW_BASE_URL", "value": "http://r"}]}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE", "DB1_REGULATORY"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
+    body = client.patches[0][1]["tool_exec_environment_variables"]
+    assert body["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE,DB1_REGULATORY"
+
+
+# ── autoclear: the mandatory companion to a large context window ────────────
+# Raising context_window_limit 30000 -> 128000 removed the trimming Letta had
+# been doing to fit the smaller window, so a persistent one-shot worker started
+# carrying every document it had ever seen into its next prompt. Measured live
+# on 2026-08-27, the first time the declared window actually reached the fleet:
+# gf_qa_auditor at 78,201 of 128,000 tokens after ten messages, and a real
+# annex job dying on a 300s ReadTimeout at the qa-audit stage. The same audit
+# on a clone with no history took 49.5s and passed, which is what ruled the
+# instructions out as the cost.
+
+
+def test_every_pipeline_worker_declares_autoclear():
+    """These five are sent one prompt and read for one reply; none of them ever
+    refers back to a previous turn, so none of them may keep one."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist",
+                 "gf_qa_auditor", "gf_reg_checker"):
+        assert by_name[name].get("autoclear") is True, name
+
+
+def test_the_conversational_agents_keep_their_history():
+    """Clearing these would break the thing they exist to do — gf_app_assistant
+    holds a real back-and-forth with staff, and the orchestrator resolves
+    TYPE/MODE across turns."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_app_assistant", "gf_doc_orchestrator"):
+        assert by_name[name].get("autoclear") is False, name
+
+
+def test_every_agent_states_its_autoclear_intent_explicitly():
+    """`autoclear` reads as False when omitted, and False is the setting that
+    caused the outage — so an agent added without thinking about it would
+    silently inherit the broken behaviour. Make the file say which it is."""
+    for ag in load_fleet()["agents"]:
+        assert "autoclear" in ag, ag["name"]
+        assert isinstance(ag["autoclear"], bool), ag["name"]
+
+
+def test_created_agents_carry_their_autoclear_setting():
+    spec = load_fleet()
+    for ag in spec["agents"]:
+        body = fleet._build_body(ag, spec, "m", "e", ag["name"], "")
+        assert body["message_buffer_autoclear"] is ag["autoclear"], ag["name"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_turns_autoclear_on_and_clears_the_existing_buffer():
+    """Setting the flag only bounds growth from here. gf_qa_auditor was already
+    at 78k and would have stayed slow — so the accumulated buffer goes too."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": False, "message_ids": ["m"] * 9}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is True
+    assert client.patches == [("a", {"message_buffer_autoclear": True})]
+    assert client.resets == ["a"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_clear_is_retried_on_the_next_pass():
+    """The regression this replaced: the clear was keyed off the flag's
+    TRANSITION, so the first live run set the flag, failed the clear (the route
+    wants a body), and spent the edge. The next run saw the flag already on,
+    concluded there was nothing to do, and left the agent at 78k. Keyed off the
+    buffer, an agent whose flag is already set but whose history survived still
+    gets cleared."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": True, "message_ids": ["m"] * 9}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is True
+    assert client.patches == []          # nothing left to configure
+    assert client.resets == ["a"]        # but the stale buffer still goes
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_clear_the_buffer_of_a_conversational_agent():
+    """A reset here would throw away a staff member's conversation."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 30000, "max_tokens": 16384},
+             "message_buffer_autoclear": False}
+    agent["message_ids"] = ["m"] * 16   # a real staff conversation
+    ag = {"name": "gf_app_assistant", "autoclear": False}
+    await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_app_assistant")
+    assert client.resets == []
+    for _, body in client.patches:
+        assert "message_buffer_autoclear" not in body
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_re_clear_a_settled_agent():
+    """ensure_fleet runs many times per document job. A reset leaves exactly one
+    message behind (measured live, 41 -> 1 on the worst agent), so an
+    autoclearing agent settles at 1 and must not be reset again and again."""
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": 128000, "max_tokens": 16384},
+             "message_buffer_autoclear": True, "message_ids": ["only-one"]}
+    ag = {"name": "gf_qa_auditor", "autoclear": True}
+    assert await fleet._reconcile_config(client, agent, ag, load_fleet(), "gf_qa_auditor") is False
+    assert client.resets == []
+    assert client.patches == []
+
+
+# ── verbatim_output: whose reply BECOMES the document ───────────────────────
+# The ungrounded branch of the scope block used to tell every agent to "say so
+# plainly in your output". For three of them the output IS the document, so the
+# instruction put a note about corpus availability inside a controlled document
+# (seen in a direct probe: a section opening with a bilingual sentence about the
+# facility corpus not being ingested). A blank field is how a document says a
+# value is unknown.
+
+
+def test_the_three_verbatim_authors_declare_it():
+    """Exactly the agents whose reply pipeline.py inserts into the document."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_sop_author", "gf_annex_author", "gf_raci_specialist"):
+        assert by_name[name].get("verbatim_output") is True, name
+
+
+def test_reporting_and_conversational_agents_are_not_verbatim():
+    """gf_reg_checker returns findings and gf_app_assistant talks to a person —
+    both SHOULD say when a corpus is missing."""
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name in ("gf_reg_checker", "gf_app_assistant", "gf_qa_auditor",
+                 "gf_translator_mk_en", "gf_doc_orchestrator"):
+        assert not by_name[name].get("verbatim_output"), name
+
+
+def test_ungrounded_verbatim_author_is_told_to_leave_blanks_not_to_narrate():
+    block = _scope_block(["DB3_PP_CURRENT_unified"], ["DB3_PP_CURRENT_unified"], True)
+    assert "BLANK write-in field" in block
+    assert "The blank" in block
+    assert "say so plainly" not in block
+
+
+def test_ungrounded_reporter_still_says_so():
+    """The original wording is right for anything that is not document text."""
+    block = _scope_block(["DB1_REGULATORY"], ["DB1_REGULATORY"], False)
+    assert "say so plainly" in block   # wraps across lines in the block
+
+
+def test_the_verbatim_flag_reaches_the_generated_scope_block():
+    """_blocks_for is what the reconciler diffs against the live agent, so the
+    flag has to survive the trip from fleet.yaml into the block value."""
+    spec = load_fleet()
+    by_name = {a["name"]: a for a in spec["agents"]}
+    author = next(b for b in fleet._blocks_for(by_name["gf_sop_author"], spec)
+                  if b["label"] == fleet.SCOPE_BLOCK)["value"]
+    checker = next(b for b in fleet._blocks_for(by_name["gf_reg_checker"], spec)
+                   if b["label"] == fleet.SCOPE_BLOCK)["value"]
+    assert "BLANK write-in field" in author and "say so plainly" not in author
+    assert "say so plainly" in checker
+
+
+def test_the_corpus_guide_does_not_order_document_text_to_narrate():
+    """The shared corpus block carried the same instruction and would have
+    re-introduced it regardless of the scope block."""
+    guide = load_fleet()["corpus_guide"]
+    assert "never document text" in guide
+    assert "blank write-in fields instead" in guide
+
+
+def test_no_persona_still_references_the_host_exec_tool():
+    """gf_doc_orchestrator's persona described how to use an unrestricted host
+    shell. The tool is detached from the live agent; the file must not invite
+    it back."""
+    for ag in load_fleet()["agents"]:
+        assert "kvm4_runner_exec" not in ag["persona"], ag["name"]
+
+
+def test_the_auditor_is_told_to_raise_every_issue_at_once():
+    """A real job died with the auditor's second-round issue unaddressed
+    because the first round had not mentioned it."""
+    persona = next(a for a in load_fleet()["agents"]
+                   if a["name"] == "gf_qa_auditor")["persona"]
+    assert "List EVERY issue you have, in that one verdict." in persona
+
+
+def test_the_annex_author_is_taught_the_engine_s_actual_row_grammar():
+    """It was told rows must share a column count and that short rows should be
+    padded. Both are wrong against the engine, and the second is worse than
+    wrong: padding rows out to a common width produces a UNIFORM block that
+    loses cells 4+ of every row and looks consistent doing it. emit_form reads
+    exactly three cells and never a fourth."""
+    persona = next(a for a in load_fleet()["agents"]
+                   if a["name"] == "gf_annex_author")["persona"]
+    assert "ONE FIELD PER ROW" in persona
+    assert "EXACTLY three cells" in persona
+    assert "padded with empty cells" not in persona
+    assert "same number of" not in persona
+
+
+def test_the_house_rules_state_the_three_cell_form_row():
+    """The shared block is what every author reads, so the grammar belongs
+    there too and not only in one persona."""
+    assert "exactly three cells" in load_fleet()["house_rules"]
+
+
+# ── _reconcile_blocks ───────────────────────────────────────────────────────
+# It rewrites the persona and four governance blocks on every live agent on
+# every document job, and had no test at all — the largest behavioural change
+# in this work, uncovered, while its two siblings each had half a dozen.
+
+
+class _BlockClient:
+    """Serves a fixed set of blocks and records what was written."""
+
+    def __init__(self, existing: dict, missing_raises: Exception | None = None):
+        self.existing = existing          # label -> {"value","read_only"}
+        self.missing_raises = missing_raises
+        self.updates: list[tuple] = []
+        self.created: list[tuple] = []
+        self.attached: list[tuple] = []
+
+    async def get_block(self, agent_id, label):
+        if label in self.existing:
+            return dict(self.existing[label])
+        if self.missing_raises:
+            raise self.missing_raises
+        return None
+
+    async def update_block(self, agent_id, label, value=None, read_only=None):
+        self.updates.append((label, value, read_only))
+
+    async def create_block(self, label, value, read_only=False, limit=100_000):
+        self.created.append((label, value, read_only))
+        return {"id": "block-" + label}
+
+    async def attach_block(self, agent_id, block_id):
+        self.attached.append((agent_id, block_id))
+
+
+def _agent_and_spec():
+    spec = load_fleet()
+    ag = next(a for a in spec["agents"] if a["name"] == "gf_sop_author")
+    return ag, spec
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_is_silent_when_everything_already_matches():
+    """ensure_fleet runs many times per job; a matching agent must cost no
+    writes at all."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    client = _BlockClient(want)
+    assert await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author") == []
+    assert client.updates == [] and client.created == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_rewrites_a_drifted_value():
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    want["persona"]["value"] = "something an agent wrote over its own brief"
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == ["persona"]
+    assert client.updates[0][0] == "persona"
+    assert client.updates[0][1] == ag["persona"].strip()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_repairs_a_read_only_flag_without_touching_the_value():
+    """The flag is the guardrail — an agent that can edit its own scope is not
+    scoped. Repairing it must not rewrite a value that is already correct."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    want[fleet.SCOPE_BLOCK]["read_only"] = False
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == [fleet.SCOPE_BLOCK]
+    label, value, read_only = client.updates[0]
+    assert label == fleet.SCOPE_BLOCK and value is None and read_only is True
+
+
+@pytest.mark.asyncio
+async def test_reconcile_blocks_creates_and_attaches_a_block_the_agent_predates():
+    """How gf_mission and gf_corpus reached eight agents that were created
+    before either existed."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    del want[fleet.MISSION_BLOCK]
+    client = _BlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == [fleet.MISSION_BLOCK + " (added)"]
+    assert client.created[0][0] == fleet.MISSION_BLOCK
+    assert client.created[0][2] is True          # governance blocks are read-only
+    assert client.attached == [("a", "block-" + fleet.MISSION_BLOCK)]
+
+
+@pytest.mark.asyncio
+async def test_a_transient_error_does_not_manufacture_a_duplicate_block():
+    """get_block re-raises anything that is not a 404, and the per-block
+    handler logs it — the agent is left alone rather than given a second block
+    with the same label."""
+    ag, spec = _agent_and_spec()
+    client = _BlockClient({}, missing_raises=LettaError("boom", status=503))
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == []
+    assert client.created == [] and client.attached == []

@@ -14,7 +14,13 @@ from .config import settings
 
 
 class LettaError(RuntimeError):
-    pass
+    """Carries the HTTP status when there was one, because "absent" and "the
+    server had a bad moment" are different answers and one caller acts on the
+    difference (fleet._reconcile_blocks creates a block when one is missing)."""
+
+    def __init__(self, *args, status: int | None = None):
+        super().__init__(*args)
+        self.status = status
 
 
 class LettaClient:
@@ -71,7 +77,8 @@ class LettaClient:
         c = self._client()
         r = await c.request(method, path, **kw)
         if r.status_code >= 400:
-            raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}")
+            raise LettaError(f"{method} {path} -> {r.status_code}: {r.text[:300]}",
+                             status=r.status_code)
         if not r.content:
             return None
         return r.json()
@@ -120,26 +127,110 @@ class LettaClient:
             body["description"] = description
         return await self._req("POST", "/tools/", json=body)
 
+    async def update_tool(self, tool_id: str, source_code: str, description: str = "") -> dict:
+        """Replace a registered tool's source in place.
+
+        The tool is a shared server object, not per-agent state, so nothing in
+        the create-if-missing path ever revisits it: once registered, an edit to
+        the committed source could not reach the server at all. That is exactly
+        wrong for this one, because the tool is where the dataset scoping is
+        actually enforced."""
+        body: dict[str, Any] = {"source_code": source_code}
+        if description:
+            body["description"] = description
+        return await self._req("PATCH", f"/tools/{tool_id}", json=body)
+
     async def attach_tool(self, agent_id: str, tool_id: str) -> None:
         await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
 
     async def get_block(self, agent_id: str, label: str) -> dict | None:
+        """The block, or None if the agent genuinely does not have it.
+
+        Only a 404 means absent. Swallowing everything here used to be
+        harmless — the caller just logged — but fleet._reconcile_blocks now
+        CREATES and attaches a block when this returns None, so a transient 5xx
+        or a proxy hiccup would have it manufacture a duplicate label on a live
+        agent. Anything that is not a 404 is re-raised for the caller's own
+        non-fatal handler to log."""
         try:
             return await self._req("GET", f"/agents/{agent_id}/core-memory/blocks/{label}")
-        except LettaError:  # absent on an agent created before the block existed
-            return None
+        except LettaError as e:
+            if e.status == 404:
+                return None
+            raise
 
-    async def update_block(self, agent_id: str, label: str, value: str) -> None:
-        """Rewrite one core-memory block's value.
+    async def update_block(
+        self, agent_id: str, label: str, value: str | None = None, read_only: bool | None = None
+    ) -> None:
+        """Rewrite one core-memory block's value and/or its read_only flag.
 
         This is a memory write, not a config write — the handover's "never edit
         an existing agent" caution is about POST/PATCH of llm_config, which this
         server rejects over the legacy provider enum. Callers must keep it to
-        blocks they own on gf_* agents."""
+        blocks they own on gf_* agents.
+
+        read_only is the agent-facing flag: it stops the agent editing the block
+        with its own memory_replace/memory_insert tools. It does NOT lock this
+        API out — verified live against letta-6ou3: a block set read_only still
+        accepts a value PATCH here, which is what lets fleet.py keep governance
+        blocks both agent-immutable and declaratively reconcilable."""
+        body: dict[str, Any] = {}
+        if value is not None:
+            body["value"] = value
+        if read_only is not None:
+            body["read_only"] = read_only
+        if not body:
+            return
+        await self._req("PATCH", f"/agents/{agent_id}/core-memory/blocks/{label}", json=body)
+
+    async def create_block(
+        self, label: str, value: str, read_only: bool = False, limit: int = 100_000
+    ) -> dict:
+        """Create a standalone memory block, for attaching to an agent below.
+
+        Needed for the block an agent does not have yet: an agent created before
+        a block was declared simply has no such label, and the per-label PATCH
+        route 404s on it. Blocks are created then attached (two calls) because
+        that is the only route the server exposes for adding one to a live
+        agent — memory_blocks is create-time only."""
+        return await self._req(
+            "POST",
+            "/blocks/",
+            json={"label": label, "value": value, "read_only": read_only, "limit": limit},
+        )
+
+    async def attach_block(self, agent_id: str, block_id: str) -> None:
+        await self._req("PATCH", f"/agents/{agent_id}/core-memory/blocks/attach/{block_id}")
+
+    async def update_agent_config(self, agent_id: str, body: dict) -> dict:
+        """PATCH an existing agent's own config, after the gf_ namespace check.
+
+        Deliberately narrow in what callers pass: fleet.py sends only
+        context_window_limit / max_tokens. The model handle is NOT reconciled —
+        fleet.yaml documents that as a standing decision, not an oversight, and
+        this method does not change it."""
+        agent = await self.get_agent(agent_id)
+        self._guard_gf((agent or {}).get("name", ""))
+        return await self._req("PATCH", f"/agents/{agent_id}", json=body)
+
+    async def reset_messages(self, agent_id: str) -> None:
+        """Drop an agent's accumulated message buffer, after the gf_ check.
+
+        `message_buffer_autoclear` only stops FUTURE growth. An agent that has
+        already accumulated stays slow until its existing buffer goes —
+        gf_qa_auditor was at 78k of its 128k window, which is what the 300s read
+        timeout was — so the reconciler clears it once, at the moment it turns
+        autoclear on."""
+        agent = await self.get_agent(agent_id)
+        self._guard_gf((agent or {}).get("name", ""))
+        # The body is REQUIRED — the route 422s without one (seen live).
+        # add_default_initial_messages stays false: these agents are driven by
+        # the pipeline, which supplies the whole prompt every turn, so a
+        # re-seeded greeting would just be tokens nobody reads.
         await self._req(
             "PATCH",
-            f"/agents/{agent_id}/core-memory/blocks/{label}",
-            json={"value": value},
+            f"/agents/{agent_id}/reset-messages",
+            json={"add_default_initial_messages": False},
         )
 
     async def get_agent(self, agent_id: str) -> dict:
