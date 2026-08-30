@@ -147,7 +147,23 @@ async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | No
         if t.get("name") != TOOL_NAME:
             continue
         tool_id = t.get("id")
-        if (t.get("source_code") or "").strip() == source.strip():
+        have = t.get("source_code")
+        if have is None:
+            # This server's /v1/tools listing does carry source_code (verified
+            # live: 7,275 chars for this tool), so this is a latent case, not a
+            # current one. But `(None or "").strip() != source.strip()` is
+            # always true, so a Letta version that dropped the field would
+            # rewrite the tool on EVERY document job — a silent write loop with
+            # no symptom other than churn. Adopt without rewriting and say so,
+            # so the failure mode is one log line instead.
+            log.warning(
+                "%s: this Letta's tool listing omits source_code — adopting %s "
+                "without verifying it matches the committed source",
+                TOOL_NAME,
+                tool_id,
+            )
+            return tool_id
+        if have.strip() == source.strip():
             return tool_id
         try:
             await client.update_tool(tool_id, source, description)
@@ -329,15 +345,47 @@ async def _reconcile_tool_env(
         for e in (agent.get("tool_exec_environment_variables") or [])
         if isinstance(e, dict)
     }
-    # Compare only on the scope: the credentials are secrets and the server may
-    # not echo their values back, which would make every run look like a change.
-    if have.get("RAGFLOW_ALLOWED_DATASETS") == env["RAGFLOW_ALLOWED_DATASETS"]:
+    # This used to short-circuit on RAGFLOW_ALLOWED_DATASETS alone, on the
+    # assumption that the server might withhold secret values and make every
+    # run look like a change. It does not: this Letta echoes all three back
+    # verbatim (checked against live gf_* agents — RAGFLOW_API_KEY comes back
+    # at full length, not starred). The cost of that assumption was that a
+    # ROTATED RAGFLOW_API_KEY, or a moved RAGFLOW_BASE_URL, never reached any
+    # agent whose dataset list happened to be unchanged — i.e. every agent —
+    # and retrieval would fail with no reconcile ever attempting a fix.
+    #
+    # So compare on everything the server is willing to show. A key it does
+    # withhold (None or empty) is skipped rather than counted as a mismatch:
+    # counting it would make a stricter server re-push the whole set on every
+    # single document job, which is the churn the old comment was right to
+    # fear even though its premise about THIS server was wrong.
+    #
+    # Only the three keys this module owns are judged. A PATCH replaces the
+    # whole set, so anything else the agent carries is merged back rather than
+    # deleted — the docstring's reason for leaving datasetless agents alone
+    # applies just as much to an agent that has datasets AND something else.
+    # A variable whose value the server withholds cannot be carried through a
+    # PATCH at all, so it is not invented as an empty string either.
+    stale = [
+        k
+        for k, want in env.items()
+        if k not in have or (have[k] and have[k] != want)
+    ]
+    if not stale:
         return False
+    body = {k: v for k, v in have.items() if k not in env and v}
+    body.update(env)
     try:
         await client.update_agent_config(
-            agent["id"], {"tool_exec_environment_variables": env}
+            agent["id"], {"tool_exec_environment_variables": body}
         )
-        log.info("reconciled tool scope on %s: %s", label, env["RAGFLOW_ALLOWED_DATASETS"])
+        # Names only — one of these keys is a credential.
+        log.info(
+            "reconciled tool env on %s (%s); scope=%s",
+            label,
+            ", ".join(stale),
+            env["RAGFLOW_ALLOWED_DATASETS"],
+        )
         return True
     except LettaError as e:  # non-fatal: the memory-block scope still applies
         log.warning("could not reconcile tool scope on %s: %s", label, e)

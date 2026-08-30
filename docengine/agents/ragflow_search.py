@@ -82,19 +82,36 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
         )
 
     allowed = [d.strip() for d in (os.environ.get("RAGFLOW_ALLOWED_DATASETS") or "").split(",") if d.strip()]
-    if allowed:
-        refused = [d for d in wanted if d not in allowed]
-        if refused:
-            # Echoes only what the caller asked for and what it is permitted —
-            # both already known to it. Nothing about the rest of the tenant.
-            return json.dumps(
-                {
-                    "ok": False,
-                    "err": "outside your permitted scope",
-                    "refused": refused,
-                    "your_scope": allowed,
-                }
-            )
+    if not allowed:
+        # FAIL CLOSED. `if allowed:` would have made an unset or empty variable
+        # disable enforcement entirely — the agent would then reach every
+        # dataset in the tenant, which is the exact failure this variable was
+        # added to prevent, arriving silently and looking like success.
+        # Nothing can produce that state today (both write paths in
+        # docengine.app.fleet gate on a non-empty `ag["datasets"]`), and that is
+        # precisely why it should be closed now, while it is still unreachable
+        # rather than after a fourth caller forgets.
+        return json.dumps(
+            {
+                "ok": False,
+                "err": "RAGFLOW_ALLOWED_DATASETS is not set for this tool — refusing to "
+                "search. The allowlist is the enforcement of your ragflow_scope; "
+                "without it there is no scope to enforce. Report this rather than "
+                "answering from memory.",
+            }
+        )
+    refused = [d for d in wanted if d not in allowed]
+    if refused:
+        # Echoes only what the caller asked for and what it is permitted —
+        # both already known to it. Nothing about the rest of the tenant.
+        return json.dumps(
+            {
+                "ok": False,
+                "err": "outside your permitted scope",
+                "refused": refused,
+                "your_scope": allowed,
+            }
+        )
 
     # 1. resolve dataset names -> ids
     try:
