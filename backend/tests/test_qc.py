@@ -4209,3 +4209,104 @@ async def test_concurrent_potency_import_creates_cultivar_once(client, admin_hea
     cults = (await client.get("/cultivation/cultivars", headers=admin_headers)).json()["cultivars"]
     codes = [c["code"] for c in cults]
     assert len(codes) == len(set(codes)), "concurrent import created a duplicate cultivar"
+
+
+# ── one physical sample, one active custody record ──────────────────────────
+# The 2026-08 audit reported that nothing stopped one sample being linked to two
+# custody records, and it was recorded rather than fixed. The obvious candidate
+# table is the wrong one: qc_chain_of_custody is an append-only transfer log and
+# many rows per sample is what it is FOR. The gap is the field record (SFR) and
+# the sampling request, whose sample_id had no uniqueness at all. Migration 0063
+# adds partial unique indexes; these cover the API half, which exists so the
+# caller learns WHICH record is in the way.
+
+
+async def test_a_second_field_record_cannot_claim_a_linked_sample(client, admin_headers):
+    smp = await _sample(client, admin_headers, batch="B-CUSTODY-UNIQ")
+    first = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-UNIQ-1")
+    r = await client.post("/qc/field-records", json={
+        "rqs_id": first["id"], "sampling_location": "GH", "destination_facility": "QC Lab",
+        "sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    sfr_a = r.json()
+
+    second = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-UNIQ-2")
+    r = await client.post("/qc/field-records", json={
+        "rqs_id": second["id"], "sampling_location": "GH", "destination_facility": "QC Lab",
+        "sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 409, r.text
+    # the message names the record standing in the way, not just "conflict"
+    assert sfr_a["sfr_number"] in r.text
+    assert "one physical sample" in r.text
+
+
+async def test_a_field_record_cannot_be_patched_onto_a_claimed_sample(client, admin_headers):
+    smp = await _sample(client, admin_headers, batch="B-CUSTODY-PATCH")
+    held = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-PATCH-1")
+    holder = (await client.post("/qc/field-records", json={
+        "rqs_id": held["id"], "sampling_location": "GH", "destination_facility": "QC Lab",
+        "sample_id": smp["id"]}, headers=admin_headers)).json()
+
+    other = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-PATCH-2")
+    free = (await client.post("/qc/field-records", json={
+        "rqs_id": other["id"], "sampling_location": "GH",
+        "destination_facility": "QC Lab"}, headers=admin_headers)).json()
+
+    r = await client.patch(f"/qc/field-records/{free['id']}",
+                           json={"sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 409 and holder["sfr_number"] in r.text
+    # and a record may still be patched onto the sample it ALREADY holds —
+    # the check excludes the row being updated, or every no-op PATCH would 409
+    r = await client.patch(f"/qc/field-records/{holder['id']}",
+                           json={"sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+
+async def test_cancelling_a_field_record_frees_its_sample(client, admin_headers):
+    """A record raised in error is cancelled, not deleted. If the dead row kept
+    the link, the specimen could never be re-recorded — which is why the index
+    is partial on status <> 'CANCELLED' rather than plain unique."""
+    smp = await _sample(client, admin_headers, batch="B-CUSTODY-CANCEL")
+    first = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-CANCEL-1")
+    sfr = (await client.post("/qc/field-records", json={
+        "rqs_id": first["id"], "sampling_location": "GH", "destination_facility": "QC Lab",
+        "sample_id": smp["id"]}, headers=admin_headers)).json()
+
+    assert (await client.patch(f"/qc/field-records/{sfr['id']}",
+                               json={"status": "CANCELLED"},
+                               headers=admin_headers)).status_code == 200
+
+    reissued = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-CANCEL-2")
+    r = await client.post("/qc/field-records", json={
+        "rqs_id": reissued["id"], "sampling_location": "GH", "destination_facility": "QC Lab",
+        "sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+
+
+async def test_a_sampling_request_cannot_claim_a_linked_sample(client, admin_headers):
+    """Same one-to-one argument on the RQS side; same partial index."""
+    smp = await _sample(client, admin_headers, batch="B-CUSTODY-RQS")
+    a = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-RQS-1")
+    assert (await client.patch(f"/qc/sampling-requests/{a['id']}",
+                               json={"sample_id": smp["id"]},
+                               headers=admin_headers)).status_code == 200
+    b = await _rqs_registered(client, admin_headers, batch_id="B-CUSTODY-RQS-2")
+    r = await client.patch(f"/qc/sampling-requests/{b['id']}",
+                           json={"sample_id": smp["id"]}, headers=admin_headers)
+    assert r.status_code == 409 and a["rqs_number"] in r.text
+
+
+async def test_the_transfer_chain_still_takes_many_entries_per_sample(client, admin_headers):
+    """The guard must NOT have leaked onto qc_chain_of_custody. That table is an
+    append-only log of transfer events and many rows per sample is the design —
+    constraining it would break the chain it exists to record."""
+    smp = await _sample(client, admin_headers, batch="B-CUSTODY-CHAIN")
+    for i, (frm, to) in enumerate([("Greenhouse", "Transit"), ("Transit", "QC Lab"),
+                                   ("QC Lab", "Cold store")]):
+        r = await client.post(f"/qc/samples/{smp['id']}/custody",
+                              json={"from_location": frm, "to_location": to,
+                                    "transfer_reason": f"leg {i + 1}"},
+                              headers=admin_headers)
+        assert r.status_code == 201, r.text
+    r = await client.get(f"/qc/samples/{smp['id']}/custody", headers=admin_headers)
+    assert r.status_code == 200 and len(r.json()) == 3

@@ -3,7 +3,9 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
+from asyncpg.exceptions import UniqueViolationError
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import ai, approvals, audit, auth, biosecurity, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, irrigation, notifications, qc, qms, reports, tasks, waste
@@ -24,6 +26,29 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WEEKLY_WEED_FLOW API", version="0.1.0", lifespan=lifespan,
               **docs_kwargs(settings.environment))
+
+# A unique-violation from the sample-claim indexes is a RACE, not a bug: the
+# pre-check in api/qc/custody.py reads "free" and a concurrent request commits
+# the same link before this one does. Migration 0063's partial unique indexes
+# are the actual control and one of the two loses there — but asyncpg raises,
+# and an unhandled UniqueViolationError is a 500. The caller who lost a race
+# deserves the same answer as the caller who was merely second, so it is mapped
+# onto the identical 409. Registered centrally rather than wrapped around each
+# write, so a future write path cannot forget it.
+_SAMPLE_CLAIM_INDEXES = {"qc_sfr_sample_active_uniq", "qc_rqs_sample_active_uniq"}
+
+
+@app.exception_handler(UniqueViolationError)
+async def _unique_violation(request: Request, exc: UniqueViolationError) -> Response:
+    if getattr(exc, "constraint_name", "") in _SAMPLE_CLAIM_INDEXES:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "that sample is already linked to another active record"
+                               " — one physical sample carries one active custody record;"
+                               " cancel that record first"},
+        )
+    raise exc
+
 
 app.add_middleware(
     CORSMiddleware,
