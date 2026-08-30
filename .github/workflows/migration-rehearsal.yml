@@ -208,7 +208,7 @@ jobs:
           PY
           python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$RUNNER_TEMP/kvm4.py"
 
-      - name: Resolve this repo's alembic head for both chains
+      - name: Resolve the alembic head for both chains (this ref, and the default branch)
         id: repo
         # Read straight out of the version files with stdlib only: no
         # `pip install -r backend/requirements.txt` (minutes on this runner)
@@ -217,52 +217,107 @@ jobs:
         # trusted blindly — the rehearsal asserts that alembic's own
         # `upgrade head` lands the restored copy on exactly the revision
         # computed here, so a mis-parse fails the job instead of passing.
+        #
+        # TWO chains are computed, because they answer two DIFFERENT questions:
+        #
+        #   * THIS REF's chain is what the rehearsal runs. Rehearsing a
+        #     branch's unshipped migrations against real production data is the
+        #     entire point of this workflow, so that does not change.
+        #
+        #   * THE DEFAULT BRANCH's chain is what production is JUDGED against.
+        #     Production cannot be "behind" a migration that has not merged
+        #     yet. Judging it against the checked-out ref made every branch
+        #     carrying a migration red by construction — and since deploy.yml
+        #     refuses to run unless every check on the SHA is green, that is a
+        #     deadlock exactly when a deploy is wanted. It is what made #42 red
+        #     while that same job's rehearsal half passed. Splitting the two
+        #     removes the deadlock without weakening anything: real drift on
+        #     the default branch still fails the job.
+        #
+        # One parser over both trees, rather than two that could disagree.
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          DEFAULT="${DEFAULT_BRANCH:-main}"
+          echo "baseline=$DEFAULT" >> "$GITHUB_OUTPUT"
+          BASELINE_ROOT=""
+          if [ "$GITHUB_REF_NAME" != "$DEFAULT" ]; then
+            # actions/checkout is shallow, so the default branch's blobs are
+            # not in this workspace yet. Materialise just its version files
+            # into a scratch tree; the parser below then walks both roots.
+            git fetch --depth=1 origin "$DEFAULT"
+            for which in tasks users; do
+              d="$RUNNER_TEMP/baseline/alembic_${which}/versions"
+              mkdir -p "$d"
+              git ls-tree --name-only "origin/$DEFAULT" "backend/alembic_${which}/versions/" \
+                | while read -r f; do
+                    case "$f" in
+                      *.py) git show "origin/$DEFAULT:$f" > "$d/$(basename "$f")" ;;
+                    esac
+                  done
+            done
+            BASELINE_ROOT="$RUNNER_TEMP/baseline"
+          fi
+          export BASELINE_ROOT DEFAULT
           python3 - <<'PY'
           import json, os, pathlib, re, sys
 
           REV = re.compile(r'^revision(?:\s*:[^=]*)?=\s*["\']([^"\']+)["\']', re.M)
           DOWN = re.compile(r'^down_revision(?:\s*:[^=]*)?=\s*(?:["\']([^"\']+)["\']|None)', re.M)
 
-          chains = {}
-          for which in ("tasks", "users"):
-              d = pathlib.Path("backend") / f"alembic_{which}" / "versions"
-              parent = {}
-              for p in sorted(d.glob("*.py")):
-                  text = p.read_text()
-                  rev, down = REV.search(text), DOWN.search(text)
-                  if not rev or not down:
-                      sys.exit(f"::error::{p}: cannot read revision / down_revision")
-                  parent[rev.group(1)] = down.group(1)  # None -> base
-              if not parent:
-                  sys.exit(f"::error::{d}: no revision files found")
-              # A head is a revision nothing else declares as its parent. More
-              # than one means a BRANCHED chain, which `upgrade head` would
-              # refuse anyway — surface it here rather than let the rehearsal
-              # fail with a confusing alembic error.
-              heads = sorted(set(parent) - {v for v in parent.values() if v})
-              if len(heads) != 1:
-                  sys.exit(f"::error::{which}: chain has {len(heads)} heads ({', '.join(heads)}) — "
-                           "expected exactly one linear head")
-              # Walk base -> head so the drift check can say WHICH revisions
-              # production is missing, in application order.
-              order, cur = [], heads[0]
-              seen = set()
-              while cur:
-                  if cur in seen:
-                      sys.exit(f"::error::{which}: cycle in chain at {cur}")
-                  seen.add(cur)
-                  order.append(cur)
-                  cur = parent.get(cur)
-              order.reverse()
-              if len(order) != len(parent):
-                  orphans = ", ".join(sorted(set(parent) - set(order)))
-                  sys.exit(f"::error::{which}: revision(s) not reachable from the head: {orphans}")
-              chains[which] = order
-              print(f"{which}: {len(order)} revisions, head {order[-1]}")
 
-          pathlib.Path(os.environ["RUNNER_TEMP"], "chains.json").write_text(json.dumps(chains))
+          def chains_under(root, label):
+              chains = {}
+              for which in ("tasks", "users"):
+                  d = pathlib.Path(root) / f"alembic_{which}" / "versions"
+                  parent = {}
+                  for p in sorted(d.glob("*.py")):
+                      text = p.read_text()
+                      rev, down = REV.search(text), DOWN.search(text)
+                      if not rev or not down:
+                          sys.exit(f"::error::{p}: cannot read revision / down_revision")
+                      parent[rev.group(1)] = down.group(1)  # None -> base
+                  if not parent:
+                      sys.exit(f"::error::{d}: no revision files found")
+                  # A head is a revision nothing else declares as its parent.
+                  # More than one means a BRANCHED chain, which `upgrade head`
+                  # would refuse anyway — surface it here rather than let the
+                  # rehearsal fail with a confusing alembic error.
+                  heads = sorted(set(parent) - {v for v in parent.values() if v})
+                  if len(heads) != 1:
+                      sys.exit(f"::error::[{label}] {which}: chain has {len(heads)} heads "
+                               f"({', '.join(heads)}) — expected exactly one linear head")
+                  # Walk base -> head so the drift check can say WHICH revisions
+                  # production is missing, in application order.
+                  order, cur = [], heads[0]
+                  seen = set()
+                  while cur:
+                      if cur in seen:
+                          sys.exit(f"::error::[{label}] {which}: cycle in chain at {cur}")
+                      seen.add(cur)
+                      order.append(cur)
+                      cur = parent.get(cur)
+                  order.reverse()
+                  if len(order) != len(parent):
+                      orphans = ", ".join(sorted(set(parent) - set(order)))
+                      sys.exit(f"::error::[{label}] {which}: revision(s) not reachable "
+                               f"from the head: {orphans}")
+                  chains[which] = order
+                  print(f"[{label}] {which}: {len(order)} revisions, head {order[-1]}")
+              return chains
+
+
+          tmp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          chains = chains_under("backend", "this ref")
+          (tmp / "chains.json").write_text(json.dumps(chains))
+
+          # On the default branch the two questions have the same answer, so the
+          # baseline is the same chain rather than a second, pointless parse.
+          root = os.environ.get("BASELINE_ROOT") or ""
+          baseline = chains_under(root, os.environ["DEFAULT"]) if root else chains
+          (tmp / "chains_baseline.json").write_text(json.dumps(baseline))
+
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               for which, order in chains.items():
                   out.write(f"{which}_head={order[-1]}\n")
@@ -295,14 +350,20 @@ jobs:
             echo "${which}_head=${v}" >> "$GITHUB_OUTPUT"
           done
 
-      - name: Drift check (production head vs this repo)
+      - name: Drift check (production head vs the default branch)
         id: drift
         # Records the verdict and annotates, but does NOT exit non-zero here:
         # the rehearsal below is exactly the thing you want to see the result of
         # when production is behind, so the job runs it and fails at the final
         # gate step instead. One run, both answers.
+        #
+        # Judged against the DEFAULT BRANCH's chain — see the reasoning on the
+        # head-resolution step. Revisions that exist only on this ref are
+        # reported as information, never as drift.
         env:
           CHAINS: ${{ runner.temp }}/chains.json
+          BASELINE: ${{ runner.temp }}/chains_baseline.json
+          BASELINE_NAME: ${{ steps.repo.outputs.baseline }}
           REPO_TASKS: ${{ steps.repo.outputs.tasks_head }}
           REPO_USERS: ${{ steps.repo.outputs.users_head }}
           PROD_TASKS: ${{ steps.prod.outputs.tasks_head }}
@@ -312,14 +373,18 @@ jobs:
           python3 - <<'PY'
           import json, os
 
-          chains = json.load(open(os.environ["CHAINS"]))
+          ref_chains = json.load(open(os.environ["CHAINS"]))
+          base_chains = json.load(open(os.environ["BASELINE"]))
+          base_name = os.environ.get("BASELINE_NAME") or "the default branch"
           drift = False
-          rows = ["| chain | production | this repo | unapplied |",
-                  "| --- | --- | --- | --- |"]
+          rows = [f"| chain | production | {base_name} | unapplied | only on this ref |",
+                  "| --- | --- | --- | --- | --- |"]
           for which in ("tasks", "users"):
-              order = chains[which]
-              repo_head = order[-1]
-              assert repo_head == os.environ[f"REPO_{which.upper()}"], "head outputs disagree"
+              order = base_chains[which]
+              base_head = order[-1]
+              ref_order = ref_chains[which]
+              assert ref_order[-1] == os.environ[f"REPO_{which.upper()}"], "head outputs disagree"
+              extra = [r for r in ref_order if r not in set(order)]
               prod = os.environ[f"PROD_{which.upper()}"].strip()
               if not prod:
                   drift, pending = True, "unknown"
@@ -329,19 +394,33 @@ jobs:
                   drift, pending = True, "unknown"
                   print(f"::error::{which}: production alembic_version holds MULTIPLE rows ({prod}) — "
                         "branched or duplicated history, resolve by hand before migrating")
-              elif prod == repo_head:
+              elif prod == base_head:
                   pending = "none"
-                  print(f"{which}: production is at {prod}, in sync with this repo")
+                  print(f"{which}: production is at {prod}, in sync with {base_name}")
               elif prod in order:
                   missing = order[order.index(prod) + 1:]
                   drift, pending = True, f"{len(missing)}: " + ", ".join(missing)
-                  print(f"::error::{which}: production is at {prod}, this repo's head is {repo_head} — "
-                        f"{len(missing)} unapplied migration(s): {', '.join(missing)}")
+                  print(f"::error::{which}: production is at {prod}, {base_name}'s head is "
+                        f"{base_head} — {len(missing)} unapplied migration(s): "
+                        f"{', '.join(missing)}")
+              elif prod in ref_order:
+                  # Production is ahead of the default branch, on a revision this
+                  # ref carries: the branch's migration is deployed and has not
+                  # merged yet. That is a merge outstanding, not drift — and
+                  # failing on it is the deadlock this split exists to remove.
+                  pending = "none"
+                  print(f"::notice::{which}: production is at {prod}, ahead of {base_name} "
+                        f"({base_head}) and present on this ref — this branch's migrations "
+                        "are already deployed, pending merge")
               else:
                   drift, pending = True, "unknown"
-                  print(f"::error::{which}: production is at {prod}, which does not exist in this "
-                        f"repo's {which} chain — production is ahead, or history was rewritten")
-              rows.append(f"| {which} | `{prod or 'none'}` | `{repo_head}` | {pending} |")
+                  print(f"::error::{which}: production is at {prod}, which exists in neither "
+                        f"{base_name}'s nor this ref's {which} chain — history was rewritten")
+              if extra:
+                  print(f"::notice::{which}: {len(extra)} revision(s) exist only on this ref and "
+                        f"are not expected in production yet: {', '.join(extra)}")
+              cell = ", ".join(f"`{r}`" for r in extra) or "—"
+              rows.append(f"| {which} | `{prod or 'none'}` | `{base_head}` | {pending} | {cell} |")
 
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
               s.write("## Alembic drift\n\n" + "\n".join(rows) + "\n\n")
@@ -798,13 +877,14 @@ jobs:
           if command -v dash >/dev/null 2>&1; then dash -n "$RUNNER_TEMP/sweep.sh"; else sh -n "$RUNNER_TEMP/sweep.sh"; fi
           python3 "$RUNNER_TEMP/kvm4.py" shell 120 "$RUNNER_TEMP/sweep.sh"
 
-      - name: Fail the job if production is behind this repo
+      - name: Fail the job if production is behind the default branch
         # Last, and if: always(), so the rehearsal result is already in the log
         # and the summary before the drift verdict decides the job's colour.
         # This is the check that would have caught the five-migration gap.
         if: always()
         env:
           DETECTED: ${{ steps.drift.outputs.detected }}
+          BASELINE_NAME: ${{ steps.repo.outputs.baseline }}
         run: |
           set -euo pipefail
           # An EMPTY verdict means the drift step never ran (something upstream
@@ -816,7 +896,7 @@ jobs:
             exit 1
           fi
           if [ "$DETECTED" = "true" ]; then
-            echo "::error::production's alembic head does not match this repo — see the Drift check step; apply the listed revisions per docs/DEPLOY.md"
+            echo "::error::production's alembic head does not match ${BASELINE_NAME:-the default branch} — see the Drift check step; apply the listed revisions per docs/DEPLOY.md"
             exit 1
           fi
-          echo "no alembic drift between production and this repo"
+          echo "no alembic drift between production and ${BASELINE_NAME:-the default branch}"

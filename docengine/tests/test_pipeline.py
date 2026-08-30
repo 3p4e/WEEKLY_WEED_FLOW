@@ -447,6 +447,12 @@ async def test_monolingual_section_fails_the_job_before_the_build(monkeypatch):
     assert "not bilingual" in updates[-1]["error"]
     assert updates[-1]["result"]["bilingual_gaps"] == ["1.0 (no MK)"]
     assert not built, "the build must not run once a section is known monolingual"
+    # The drafted sections are kept, exactly as the structure gate keeps them.
+    # Without this the only way to see what the gate objected to was to re-run
+    # the generation, and the agents do not draft the same document twice.
+    assert updates[-1]["result"]["sections"], "the failing sections must be readable afterwards"
+    assert updates[-1]["result"]["sections"][0]["num"] == "1.0"
+    assert "regulatory" in updates[-1]["result"]
 
 
 @pytest.mark.asyncio

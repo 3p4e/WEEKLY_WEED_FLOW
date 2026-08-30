@@ -891,9 +891,16 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                                     "regulatory": reg_findings})
     except BilingualGap as e:
         log.error("job %s bilingual gap: %s", job_id, e.gaps)
+        # Persist the sections, exactly as the structure gate above does. Both
+        # gates fire at the same point for the same reason — the sections are
+        # still separable — and both name a section the reader then wants to
+        # look at. Without them the only way to see what the gate objected to
+        # was to re-run the whole generation, which is not reproducible: the
+        # agents do not produce the same draft twice.
         await db.job_update(job_id, status="failed",
                             error="sections are not bilingual: " + ", ".join(e.gaps),
-                            result={"bilingual_gaps": e.gaps})
+                            result={"bilingual_gaps": e.gaps, "sections": sections,
+                                    "regulatory": reg_findings})
     except LettaError as e:
         log.error("job %s letta error: %s", job_id, e)
         await db.job_update(job_id, status="failed", error=f"letta: {e}")

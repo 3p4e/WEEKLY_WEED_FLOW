@@ -499,6 +499,9 @@ def test_tool_error_never_names_a_dataset_the_caller_was_not_granted(monkeypatch
 
     monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
     monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    # Granted but not yet ingested: this test is about what an unresolvable
+    # name DISCLOSES, so the caller has to clear the allowlist to reach it.
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "DB1_REGULATORY,DB3_PP_CURRENT_unified")
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp())
 
     raw = _load_tool_callable()("any question", "DB1_REGULATORY,DB3_PP_CURRENT_unified")
@@ -561,6 +564,18 @@ async def test_ensure_tool_still_registers_when_nothing_is_there():
     assert client.creates[0][0] == load_tool_source()
 
 
+@pytest.mark.asyncio
+async def test_ensure_tool_adopts_rather_than_rewrites_when_source_code_is_absent():
+    """This server's tool listing does return source_code, so this is latent.
+    But `(None or "").strip() != source.strip()` is ALWAYS true, so a Letta
+    that dropped the field would rewrite the tool on every document job — a
+    silent write loop whose only symptom is churn nobody is looking for."""
+    client = _ToolClient({"id": "tool-1", "name": TOOL_NAME})  # no source_code key
+    assert await fleet.ensure_tool(client) == "tool-1"
+    assert client.updates == []
+    assert client.creates == []
+
+
 # ── The scope as a control, not an instruction ──────────────────────────────
 # Found by running the live fleet: asked for a stability result, gf_app_assistant
 # correctly declined — but only because it had been told to. The tool cannot see
@@ -582,6 +597,36 @@ def test_the_tool_env_is_empty_when_ragflow_is_unconfigured(monkeypatch):
     monkeypatch.setattr(fleet.settings, "ragflow_base", "", raising=False)
     monkeypatch.setattr(fleet.settings, "ragflow_key", "", raising=False)
     assert fleet._tool_env(["eCoA_DATABASE"]) == {}
+
+
+def test_tool_refuses_to_search_at_all_when_no_allowlist_is_set(monkeypatch):
+    """FAIL CLOSED. `if allowed:` meant an unset or empty
+    RAGFLOW_ALLOWED_DATASETS disabled enforcement entirely and the agent
+    reached every dataset in the tenant — the exact bypass the variable exists
+    to prevent, arriving silently and looking like an ordinary success.
+
+    Nothing can produce that state today (both write paths in fleet.py gate on
+    a non-empty `ag["datasets"]`), which is why it is worth closing now, while
+    it is still unreachable rather than after a fourth caller forgets."""
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.delenv("RAGFLOW_ALLOWED_DATASETS", raising=False)
+    # No urlopen stub on purpose: reaching the network would blow up the test
+    # rather than quietly pass it.
+    out = json.loads(_load_tool_callable()("stability at 9 months", "STABILITY_PROGRAMME"))
+    assert out["ok"] is False
+    assert "RAGFLOW_ALLOWED_DATASETS is not set" in out["err"]
+    # and it must not hand back a scope it does not have
+    assert "your_scope" not in out
+
+
+def test_tool_refuses_to_search_when_the_allowlist_is_present_but_empty(monkeypatch):
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "  ,  ")
+    out = json.loads(_load_tool_callable()("anything", "eCoA_DATABASE"))
+    assert out["ok"] is False
+    assert "RAGFLOW_ALLOWED_DATASETS is not set" in out["err"]
 
 
 def test_tool_refuses_a_dataset_outside_the_agents_allowlist(monkeypatch):
@@ -648,19 +693,100 @@ async def test_reconcile_tool_env_leaves_an_agent_with_no_datasets_alone(monkeyp
     assert client.patches == []
 
 
+def _live_env(scope: str, key: str = "k", base: str = "http://r") -> list[dict]:
+    """The shape Letta actually returns: all three values echoed back."""
+    return [
+        {"key": "RAGFLOW_BASE_URL", "value": base},
+        {"key": "RAGFLOW_API_KEY", "value": key},
+        {"key": "RAGFLOW_ALLOWED_DATASETS", "value": scope},
+    ]
+
+
 @pytest.mark.asyncio
-async def test_reconcile_tool_env_is_a_no_op_once_the_scope_matches(monkeypatch):
-    """Credentials are secrets the server may not echo back, so the comparison
-    is on the scope alone — otherwise every ensure_fleet run looks like drift."""
+async def test_reconcile_tool_env_is_a_no_op_once_the_whole_env_matches(monkeypatch):
+    """ensure_fleet runs on every document job, so an agent that already has
+    the right environment must not be PATCHed again."""
     monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
     monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
     client = _EnvClient()
-    agent = {
-        "id": "a",
-        "tool_exec_environment_variables": [
-            {"key": "RAGFLOW_ALLOWED_DATASETS", "value": "eCoA_DATABASE"}
-        ],
-    }
+    agent = {"id": "a", "tool_exec_environment_variables": _live_env("eCoA_DATABASE")}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_pushes_a_rotated_credential(monkeypatch):
+    """This short-circuited on RAGFLOW_ALLOWED_DATASETS alone, so a rotated
+    RAGFLOW_API_KEY reached no agent whose dataset list was unchanged — i.e.
+    every agent — and retrieval would fail with no reconcile ever trying."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "rotated-key", raising=False)
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": _live_env("eCoA_DATABASE", key="old-key")}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
+    body = client.patches[0][1]["tool_exec_environment_variables"]
+    assert body["RAGFLOW_API_KEY"] == "rotated-key"
+    # and the scope it was already carrying survives the push
+    assert body["RAGFLOW_ALLOWED_DATASETS"] == "eCoA_DATABASE"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_pushes_a_moved_base_url(monkeypatch):
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://moved", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": _live_env("eCoA_DATABASE")}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
+    assert client.patches[0][1]["tool_exec_environment_variables"]["RAGFLOW_BASE_URL"] == "http://moved"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_keeps_variables_this_module_does_not_own(monkeypatch):
+    """A PATCH replaces the whole set. The docstring's reason for leaving a
+    datasetless agent alone applies just as much to an agent that has datasets
+    AND something else — pushing only the three RAGflow keys would delete it."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "rotated", raising=False)
+    client = _EnvClient()
+    env = _live_env("eCoA_DATABASE", key="old")
+    env.append({"key": "SOME_OTHER_TOOL_TOKEN", "value": "keep-me"})
+    agent = {"id": "a", "tool_exec_environment_variables": env}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is True
+    body = client.patches[0][1]["tool_exec_environment_variables"]
+    assert body["SOME_OTHER_TOOL_TOKEN"] == "keep-me"
+    assert body["RAGFLOW_API_KEY"] == "rotated"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_ignores_a_foreign_variable_when_deciding(monkeypatch):
+    """An unrelated variable is not this module's business, so its presence
+    must not trigger a PATCH on every document job."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    env = _live_env("eCoA_DATABASE")
+    env.append({"key": "SOME_OTHER_TOOL_TOKEN", "value": "x"})
+    agent = {"id": "a", "tool_exec_environment_variables": env}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is False
+    assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tool_env_does_not_churn_when_a_value_is_withheld(monkeypatch):
+    """This Letta echoes every value back, but a stricter server might blank
+    the secret. A withheld value must not read as a mismatch, or the whole set
+    would be re-pushed on every single document job."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    env = _live_env("eCoA_DATABASE")
+    env[1]["value"] = ""  # server declines to show RAGFLOW_API_KEY
+    agent = {"id": "a", "tool_exec_environment_variables": env}
     ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
     assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x") is False
     assert client.patches == []
