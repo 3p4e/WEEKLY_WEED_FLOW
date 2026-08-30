@@ -7,10 +7,11 @@ Pins the access model (read: every role above USER; write: CU_MGR + executives
 audit-lock-safe phase move (batch-level, not per plant).
 """
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 from app.db import tasks_admin_pool, users_admin_pool
 from app.security import hash_password
+from app.worktime import facility_today
 from tests.conftest import create_user, login_and_set_password, purge_org
 
 
@@ -175,8 +176,20 @@ async def _seed_cultivation_week(org, on=None):
     transition date — neither exists by default (the `org` fixture seeds only
     the admin profile), same precondition test_tasks.py's own week/department
     tests seed by hand (test_patch_week_id_moves_task_to_a_different_week,
-    test_patch_null_clears_department)."""
-    on = on or date.today()
+    test_patch_null_clears_department).
+
+    The week MUST be built from facility_today(), never date.today(). The move
+    endpoint stamps `body.occurred_on or facility_today()`, so seeding at the
+    process zone (UTC in CI and in every container) puts the calendar_weeks row
+    in a different week from the one the endpoint then looks up — every night
+    between facility-midnight and UTC-midnight. Within a week that is harmless;
+    across the Sunday->Monday boundary the two land in entirely different
+    weeks, `_generate_phase_tasks` finds no covering row, and correctly
+    generates nothing. Failed exactly so at 22:33 UTC on Sunday 2026-08-30 —
+    00:33 Monday in Europe/Skopje — seeding Aug 24-30 while the endpoint asked
+    for Aug 31. Same defect as CI run 356 (see app/worktime.py and
+    tests/test_documents.py); this was the last site of it left in the suite."""
+    on = on or facility_today()
     monday = on - timedelta(days=on.weekday())
     sunday = monday + timedelta(days=6)
     await tasks_admin_pool().execute(
