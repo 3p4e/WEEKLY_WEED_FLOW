@@ -150,11 +150,11 @@ house_rules: |
 # against the live RAGflow tenant on 2026-08-27.
 # ---------------------------------------------------------------------------
 corpus_guide: |
-  WHAT IS IN RAGFLOW (verified 2026-08-27)
+  WHAT IS IN RAGFLOW (verified 2026-09-02 against the live tenant)
 
-  eCoA_DATABASE — 291 laboratory certificates as PDFs, covering 102 production
-  batches, fully parsed. This is the SOURCE OF TRUTH for batch analytical
-  results. Note the exact spelling: lower-case 'e', capital 'CoA'.
+  eCOA_DB — 253 laboratory certificates as PDFs, fully parsed (317 chunks).
+  This is the SOURCE OF TRUTH for batch analytical results. Note the exact
+  spelling: lower-case 'e', then capital 'COA_DB'.
 
     Filenames follow a fixed grammar, and reading it is the fastest way to know
     what a hit actually is:
@@ -218,36 +218,48 @@ corpus_guide: |
 # that does not exist is reported by the tool as unknown_datasets rather than
 # failing the call.
 #
-# INGESTED AND QUERYABLE TODAY (verified 2026-08-27 against the live tenant):
-#   eCoA_DATABASE        291 batch certificates, 102 batches, 1,260 chunks
-#   STABILITY_PROGRAMME  10 ICH stability certificates — deliberately NOT
-#                        granted to ANY agent below
+# ON THE TENANT (verified 2026-09-02, owner-confirmed mapping):
+#   eCOA_DB          253 batch certificates, 317 chunks — parsed, queryable
+#   eCOA_SS          10 ICH stability certificates, 0 chunks — deliberately
+#                    NOT granted to ANY agent below (the withheld set)
+#   DB01_REG         79 regulatory documents, 18 chunks — the owner is
+#                    re-running the parse; treated as pending until it lands
+#   WATER_QC_REZULTS empty — water-testing data the owner is still processing;
+#                    to be granted to gf_app_assistant when they say it is ready
 #
-# HISTORY, so this is not "corrected" back: this file previously named
-# `eCOA_INGEST` and `eCOA_INGEST_SUMMA`. Both datasets were DELETED from
-# RAGflow and replaced by a single re-ingest, `eCoA_DATABASE`, created
-# 2026-08-26 18:57 UTC. Nothing updated this file at the time, so five agents
-# were pointed at names that no longer resolved — including the one agent this
-# file claimed had live grounding. The derived per-batch summary bundles
-# (BUNDLE_*, LIST_OF_COAS_index) did not survive the re-ingest; only the source
-# certificates are present. If the summaries are wanted back they must be
-# regenerated (docs/ECOA-SUMMA-BUNDLES-2026-08.md records how they were built).
+# HISTORY, so this is not "corrected" back. This file has named these corpora
+# three ways: `eCOA_INGEST` / `eCOA_INGEST_SUMMA` (deleted 2026-08-26 and
+# replaced by `eCoA_DATABASE`), then `eCoA_DATABASE` (replaced 2026-08-29 by
+# `eCOA_DB` when the tenant was rebuilt). Both times nothing updated this file
+# and every agent was pointed at names that no longer resolved, with the test
+# suite green. Since 2026-09-02 fleet.py asks RAGflow for the live names on
+# every reconcile pass (resolve_pending) and writes the answer into the scope
+# blocks, so the lists below are the declared INTENT and the fallback when
+# RAGflow is unreachable — not the thing that decides what an agent is told.
+# The derived per-batch summary bundles (BUNDLE_*, LIST_OF_COAS_index) did not
+# survive either re-ingest; only the source certificates are present. If the
+# summaries are wanted back they must be regenerated
+# (docs/ECOA-SUMMA-BUNDLES-2026-08.md records how they were built).
 #
-# NOT YET IN RAGFLOW — the QMS/regulatory corpora the document agents need.
-# They were Letta sources on the decommissioned server and still have to be
-# ingested. Until then ragflow_search reports them as unknown_datasets and the
-# affected agents draft WITHOUT corpus grounding:
-#   DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots
+# NOT ON THE TENANT AT ALL — the QMS corpus and the weekly digests. They were
+# Letta sources on the decommissioned server and still have to be ingested;
+# until then ragflow_search reports them as unknown_datasets and the affected
+# agents draft WITHOUT corpus grounding:
+#   DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots
 ragflow:
   # Declared so the test suite can check the agent map against reality instead
   # of trusting a comment. Every name under `datasets:` below must appear in
   # `ingested` or in `pending_ingest`; a name in neither is the failure this
   # file just had — an agent pointed at a dataset nobody tracks.
-  ingested: [eCoA_DATABASE]
+  ingested: [eCOA_DB]
   # Present in RAGflow and granted to NOBODY. Listed here so the suite can
   # assert it, rather than relying on a substring match on "STABILITY".
-  withheld: [STABILITY_PROGRAMME]
-  pending_ingest: [DB3_PP_CURRENT_unified, DB1_REGULATORY, GrowFlow_Weekly_Snapshots]
+  withheld: [eCOA_SS]
+  # DB01_REG resolves on the tenant already, so the live pass will report it
+  # as available the moment its name is checked — this list records that the
+  # owner considers its parse incomplete. See the note above on which of the
+  # two decides.
+  pending_ingest: [DB3_PP_CURRENT_unified, DB01_REG, GrowFlow_Weekly_Snapshots]
   # Registered with the tool on the Letta server; this is what the model reads
   # when deciding whether to call it. The source is agents/ragflow_search.py.
   tool_description: >
@@ -619,7 +631,7 @@ agents:
         that: "not verifiable against the available corpus".
       - If ragflow_search reports unknown_datasets, your corpus is NOT
         available. Say so as your finding. Do not substitute recall for it.
-    datasets: [DB1_REGULATORY, DB3_PP_CURRENT_unified]
+    datasets: [DB01_REG, DB3_PP_CURRENT_unified]
   - name: gf_raci_specialist
     verbatim_output: true  # reply is inserted straight into the document
     autoclear: true    # one-shot worker
@@ -740,11 +752,10 @@ agents:
 
       HOW TO WORK
       - You are the ONE agent in this fleet with live corpus grounding today:
-        eCoA_DATABASE holds 291 real laboratory certificates across 102
-        batches. When someone asks a batch-QC question — a potency figure, a
-        microbiological result, which laboratory issued what, when a batch was
-        tested — SEARCH IT. Answer with the value and the certificate it came
-        from.
+        eCOA_DB holds 253 real laboratory certificates. When someone asks a
+        batch-QC question — a potency figure, a microbiological result, which
+        laboratory issued what, when a batch was tested — SEARCH IT. Answer
+        with the value and the certificate it came from.
       - Match the language the person wrote in. If they mix, lead with
         Macedonian.
       - When you do not know, say so and say what would answer it. A colleague
@@ -760,9 +771,11 @@ agents:
       - Never present a stability figure as a release value. You are not
         granted the stability dataset; if a question needs it, say the data is
         outside what you can see.
-    # eCoA_DATABASE is the live re-ingest of the batch certificates and is the
-    # only dataset in this fleet that actually resolves today, which is why
+    # eCOA_DB is the live re-ingest of the batch certificates and is the only
+    # dataset in this fleet that is both present AND parsed today, which is why
     # this is the one agent with working retrieval. It is the right agent for
     # it: staff ask batch-QC questions and the certificates answer them.
-    # STABILITY_PROGRAMME is deliberately withheld here as everywhere else.
-    datasets: [eCoA_DATABASE, DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]
+    # eCOA_SS (stability) is deliberately withheld here as everywhere else.
+    # WATER_QC_REZULTS is NOT granted yet: the owner is still processing the
+    # water-testing data and will say when it is ready to link.
+    datasets: [eCOA_DB, DB3_PP_CURRENT_unified, GrowFlow_Weekly_Snapshots]
