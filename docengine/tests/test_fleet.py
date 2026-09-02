@@ -412,6 +412,13 @@ class _ConfigClient:
     async def reset_messages(self, agent_id: str) -> None:
         self.resets.append(agent_id)
 
+    async def get_agent(self, agent_id: str) -> dict:
+        # The churn guard re-reads after a push. This stub is a server that
+        # honours what it was sent.
+        d = load_fleet()["defaults"]
+        return {"id": agent_id, "name": "gf_x",
+                "llm_config": {"context_window": d["context_window"], "max_tokens": d["max_tokens"]}}
+
 
 @pytest.mark.asyncio
 async def test_reconcile_config_pushes_the_declared_window_onto_a_live_agent():
@@ -683,14 +690,63 @@ class _EnvClient(_ConfigClient):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_tool_env_leaves_an_agent_with_no_datasets_alone(monkeypatch):
-    """A PATCH replaces the whole environment set, and gf_doc_orchestrator
-    carries unrelated secrets for a different tool. An agent this module has no
-    RAGflow env for must be left strictly alone, not reconciled to empty."""
+async def test_reconcile_tool_env_leaves_a_foreign_only_env_alone(monkeypatch):
+    """A datasetless agent carrying ONLY someone else's variables is not this
+    module's business — gf_doc_orchestrator holds secrets for a different tool.
+    No RAGflow key present, nothing to revoke, no PATCH."""
     client = _EnvClient()
-    agent = {"id": "a", "tool_exec_environment_variables": [{"key": "KVM4_RUNNER_URL"}]}
+    agent = {"id": "a", "tool_exec_environment_variables": [{"key": "KVM4_RUNNER_URL", "value": "x"}]}
     assert await fleet._reconcile_tool_env(client, agent, {"name": "gf_x"}, "gf_x") is False
     assert client.patches == []
+
+
+@pytest.mark.asyncio
+async def test_revoking_datasets_strips_the_credentials_and_keeps_foreign_keys(monkeypatch):
+    """The gap the loop had: remove `datasets:` from an agent and its scope
+    block said "you have no corpus" while RAGFLOW_ALLOWED_DATASETS, the base
+    URL and the tenant key all stayed in its sandbox. Narrowing a list
+    reconciled; revoking it did not."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    env = _live_env("eCoA_DATABASE") + [{"key": "OTHER_TOOL_TOKEN", "value": "keep"}]
+    agent = {"id": "a", "tool_exec_environment_variables": env}
+    assert await fleet._reconcile_tool_env(client, agent, {"name": "gf_x"}, "gf_x") is True
+    body = client.patches[0][1]["tool_exec_environment_variables"]
+    assert body == {"OTHER_TOOL_TOKEN": "keep"}
+    for k in fleet.OWNED_ENV:
+        assert k not in body
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_custom_tool_revokes_the_credentials_even_with_datasets(monkeypatch):
+    """The key is per-agent, the allowlist is per-one-tool. An agent that has
+    picked up a custom tool fleet.yaml did not declare must not hold the key."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    client = _EnvClient()
+    agent = {"id": "a", "tool_exec_environment_variables": _live_env("eCoA_DATABASE")}
+    ag = {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}
+    assert await fleet._reconcile_tool_env(client, agent, ag, "gf_x", revoke=True) is True
+    assert client.patches[0][1]["tool_exec_environment_variables"] == {}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_tool_env_push_raises_instead_of_running_on(monkeypatch):
+    """The old handler continued on the grounds that "the memory-block scope
+    still applies" — a block the same file describes as asking, and asking was
+    all it was. An allowlist that could not be brought to the declaration may
+    be wider than it; that is not a state to run a job on."""
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+
+    class _Failing(_EnvClient):
+        async def update_agent_config(self, agent_id, body):
+            raise LettaError("nope", status=500)
+
+    agent = {"id": "a", "tool_exec_environment_variables": _live_env("eCoA_DATABASE", key="old")}
+    with pytest.raises(LettaError):
+        await fleet._reconcile_tool_env(_Failing(), agent, {"name": "gf_x", "datasets": ["eCoA_DATABASE"]}, "gf_x")
 
 
 def _live_env(scope: str, key: str = "k", base: str = "http://r") -> list[dict]:
@@ -1109,3 +1165,337 @@ async def test_a_transient_error_does_not_manufacture_a_duplicate_block():
     changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
     assert changed == []
     assert client.created == [] and client.attached == []
+
+
+# ── The loop converges now: it revokes, prunes and reports ───────────────────
+# Every reconciler below used to be additive. Each test here fails on the
+# code as it was before 2026-08-31.
+
+
+def _tool(name: str, kind: str = "custom", tid: str | None = None) -> dict:
+    return {"name": name, "tool_type": kind, "id": tid or f"tool-{name}"}
+
+
+_BUILTINS = [_tool("memory_insert", "letta_sleeptime_core"),
+             _tool("memory_replace", "letta_sleeptime_core"),
+             _tool("conversation_search", "letta_core")]
+
+
+def test_unknown_tools_ignores_lettas_own_core_tools_and_the_declared_ones():
+    """The exact tool set observed on every live gf_ agent: three Letta
+    built-ins plus (on retrievers) ragflow_search. None of those is unknown."""
+    agent = {"tools": _BUILTINS + [_tool(TOOL_NAME)]}
+    assert fleet._unknown_tools(agent, {"name": "gf_x", "datasets": ["d"]}) == []
+    agent = {"tools": _BUILTINS + [_tool(TOOL_NAME), _tool("host_exec")]}
+    assert fleet._unknown_tools(agent, {"name": "gf_x", "extra_tools": ["host_exec"]}) == []
+
+
+def test_unknown_tools_names_a_custom_tool_fleet_yaml_did_not_declare():
+    agent = {"tools": _BUILTINS + [_tool(TOOL_NAME), _tool("host_exec")]}
+    assert fleet._unknown_tools(agent, {"name": "gf_x", "datasets": ["d"]}) == ["host_exec"]
+
+
+class _AttachClient:
+    def __init__(self):
+        self.attached: list[tuple] = []
+        self.detached: list[tuple] = []
+
+    async def attach_tool(self, agent_id, tool_id):
+        self.attached.append((agent_id, tool_id))
+
+    async def detach_tool(self, agent_id, tool_id):
+        self.detached.append((agent_id, tool_id))
+
+
+@pytest.mark.asyncio
+async def test_retrieval_tool_is_detached_from_an_agent_that_lost_its_datasets():
+    """There was no detach at all — not in the reconciler, not in the client.
+    An agent whose corpus was revoked kept the search button forever."""
+    c = _AttachClient()
+    have = {TOOL_NAME: "tool-live"}
+    did = await fleet._reconcile_retrieval_tool(c, "a", {"name": "gf_x"}, "tool-1", have, "gf_x")
+    assert did == "tool detached"
+    assert c.detached == [("a", "tool-live")] and c.attached == []
+
+
+@pytest.mark.asyncio
+async def test_retrieval_tool_is_detached_when_an_unknown_tool_forces_revoke():
+    c = _AttachClient()
+    ag = {"name": "gf_x", "datasets": ["d"]}
+    did = await fleet._reconcile_retrieval_tool(c, "a", ag, "tool-1", {TOOL_NAME: "t"}, "gf_x", revoke=True)
+    assert did == "tool detached" and c.detached == [("a", "t")]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_tool_attach_and_no_op_still_work():
+    c = _AttachClient()
+    ag = {"name": "gf_x", "datasets": ["d"]}
+    assert await fleet._reconcile_retrieval_tool(c, "a", ag, "tool-1", {}, "gf_x") == "tool attached"
+    assert c.attached == [("a", "tool-1")]
+    assert await fleet._reconcile_retrieval_tool(c, "a", ag, "tool-1", {TOOL_NAME: "t"}, "gf_x") is None
+    assert await fleet._reconcile_retrieval_tool(c, "a", {"name": "gf_y"}, "tool-1", {}, "gf_y") is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_raises_when_it_cannot_bring_the_tool_to_the_committed_source():
+    """It used to return the id anyway, and every agent was then wired to an
+    unverified server object with the tenant key in hand. The pre-hardening
+    tool searched everything when `datasets` was omitted; a swallowed update
+    failure rolled back to exactly that, with one warning line."""
+    class _Refusing(_ToolClient):
+        async def update_tool(self, tool_id, source_code, description=""):
+            raise LettaError("forbidden", status=403)
+
+    client = _Refusing({"id": "tool-1", "name": TOOL_NAME, "source_code": "def old(): pass"})
+    with pytest.raises(LettaError):
+        await fleet.ensure_tool(client)
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_raises_when_registration_fails():
+    class _Refusing(_ToolClient):
+        async def create_tool(self, source_code, description=""):
+            raise LettaError("rejected", status=422)
+
+    with pytest.raises(LettaError):
+        await fleet.ensure_tool(_Refusing(None))
+
+
+class _ProbingConfigClient(_ConfigClient):
+    """Reports whatever llm_config the test says the server kept."""
+
+    def __init__(self, kept: dict):
+        super().__init__()
+        self.kept = kept
+
+    async def get_agent(self, agent_id):
+        return {"id": agent_id, "name": "gf_x", "llm_config": self.kept}
+
+
+@pytest.mark.asyncio
+async def test_a_context_window_the_server_does_not_honour_is_pushed_once_then_reported(monkeypatch):
+    """Read `context_window`, write `context_window_limit`. If the server
+    normalises the value, the two never agree and the old code PATCHed on
+    every document job forever with no symptom but churn — the same trap
+    ensure_tool guards against for source_code."""
+    monkeypatch.setattr(fleet, "_UNHONOURED", set())
+    spec = load_fleet()
+    want = spec["defaults"]["context_window"]
+    client = _ProbingConfigClient({"context_window": 32000, "max_tokens": spec["defaults"]["max_tokens"]})
+    agent = {"id": "agent-1", "llm_config": dict(client.kept), "message_buffer_autoclear": True}
+    ag = {"name": "gf_x", "autoclear": True}
+    report = fleet.FleetReport()
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x", report) is True
+    assert client.patches == [("agent-1", {"context_window_limit": want})]
+    assert any("not re-pushing" in d for d in report.drift)
+    # second pass, same agent, server still at 32000: no second PATCH
+    assert await fleet._reconcile_config(client, agent, ag, spec, "gf_x", fleet.FleetReport()) is False
+    assert len(client.patches) == 1
+
+
+@pytest.mark.asyncio
+async def test_model_handle_drift_is_reported_and_never_patched():
+    """fleet.yaml's `model:` governed only from-scratch agents while being
+    written, tested and read as a declaration. Still not patched — the server
+    rejects that write — but no longer silent."""
+    spec = load_fleet()
+    client = _ConfigClient()
+    agent = {"id": "a", "llm_config": {"context_window": spec["defaults"]["context_window"],
+                                       "max_tokens": spec["defaults"]["max_tokens"],
+                                       "handle": "some/other-model"},
+             "message_buffer_autoclear": True}
+    report = fleet.FleetReport()
+    await fleet._reconcile_config(client, agent, {"name": "gf_x", "autoclear": True}, spec, "gf_x", report)
+    assert client.patches == []
+    assert any("some/other-model" in d and "not reconciled" in d for d in report.drift)
+
+
+class _LeakyBlockClient(_BlockClient):
+    def __init__(self, want):
+        super().__init__(want)
+        self.deleted: list[str] = []
+
+    async def attach_block(self, agent_id, block_id):
+        raise LettaError("attach failed", status=500)
+
+    async def delete_block(self, block_id):
+        self.deleted.append(block_id)
+
+
+@pytest.mark.asyncio
+async def test_a_block_whose_attach_fails_is_deleted_rather_than_leaked():
+    """create-then-attach: a failure between the two leaked one unattached
+    block per pass, and the next pass (no block under that label on the agent)
+    created another. Unbounded on a flapping server."""
+    ag, spec = _agent_and_spec()
+    want = {b["label"]: {"value": b["value"], "read_only": b["read_only"]}
+            for b in fleet._blocks_for(ag, spec)}
+    del want[fleet.MISSION_BLOCK]
+    client = _LeakyBlockClient(want)
+    changed = await fleet._reconcile_blocks(client, "a", ag, spec, "gf_sop_author")
+    assert changed == []
+    assert client.deleted == ["block-" + fleet.MISSION_BLOCK]
+
+
+class _SweepClient:
+    def __init__(self):
+        self.deleted: list[str] = []
+
+    async def delete_agent(self, agent_id):
+        self.deleted.append(agent_id)
+
+
+@pytest.mark.asyncio
+async def test_orphan_sweep_deletes_old_tmp_clones_and_keeps_young_ones_and_the_fleet(monkeypatch):
+    """pipeline.py said "the next fleet audit sweeps _tmp_ leftovers"; nothing
+    did, and an orphan kept the RAGflow key. Age-gated because a clone younger
+    than a job's longest exchange may belong to the other worker."""
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setattr(fleet.settings, "letta_read_timeout", 100.0, raising=False)
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(seconds=1000)).isoformat()
+    young = (now - timedelta(seconds=10)).isoformat()
+    existing = [
+        {"id": "1", "name": "gf_reg_checker_tmp_abc", "created_at": old},
+        {"id": "2", "name": "gf_reg_checker_tmp_def", "created_at": young},
+        {"id": "3", "name": "gf_reg_checker", "created_at": old},
+        {"id": "4", "name": "planner_tmp_x", "created_at": old},   # not gf_: not ours
+    ]
+    c = _SweepClient()
+    report = fleet.FleetReport()
+    kept = await fleet._sweep_orphans(c, existing, report)
+    assert c.deleted == ["1"]
+    assert report.swept == ["gf_reg_checker_tmp_abc"]
+    assert [a["id"] for a in kept] == ["2", "3", "4"]
+
+
+@pytest.mark.asyncio
+async def test_pending_is_what_ragflow_says_not_what_the_yaml_says(monkeypatch):
+    """The test written after 2026-08-27 compared fleet.yaml to fleet.yaml and
+    was green through the identical 2026-08-29 rename. Pending must come from
+    the tenant: a dataset the YAML calls ingested but RAGflow does not have is
+    pending, and one the YAML calls pending but RAGflow now has is not."""
+    spec = load_fleet()
+    yaml_pending = fleet.declared_pending(spec)
+    assert "eCoA_DATABASE" not in yaml_pending and "DB1_REGULATORY" in yaml_pending
+
+    async def fake_live(*a, **k):
+        return {"DB1_REGULATORY", "something_else"}   # eCoA_DATABASE renamed away
+    monkeypatch.setattr(fleet, "list_dataset_names", fake_live)
+    report = fleet.FleetReport()
+    pending = await fleet.resolve_pending(spec, report)
+    assert "eCoA_DATABASE" in pending
+    assert "DB1_REGULATORY" not in pending
+    assert report.datasets_unresolved == pending and report.datasets_live is not None
+    # and it reaches the block the agent actually reads
+    ag = next(a for a in spec["agents"] if a["name"] == "gf_app_assistant")
+    scope = next(b for b in fleet._blocks_for(ag, spec, pending) if b["label"] == fleet.SCOPE_BLOCK)
+    assert "eCoA_DATABASE" in scope["value"] and "NOT YET INGESTED" in scope["value"]
+
+
+@pytest.mark.asyncio
+async def test_pending_falls_back_to_the_yaml_when_ragflow_is_unreachable(monkeypatch):
+    from app.ragflow_api import RagflowUnreachable
+    spec = load_fleet()
+
+    async def down(*a, **k):
+        raise RagflowUnreachable("connection refused")
+    monkeypatch.setattr(fleet, "list_dataset_names", down)
+    report = fleet.FleetReport()
+    assert await fleet.resolve_pending(spec, report) == fleet.declared_pending(spec)
+    assert report.datasets_live is None
+    assert any("unreachable" in w for w in report.warnings)
+
+
+def test_every_block_this_module_makes_carries_one_limit_and_derives_read_only():
+    """The create path used to take Letta's default limit while the reconcile
+    path set 100000, and read_only was written out per entry rather than
+    derived — so GOVERNANCE_BLOCKS named an invariant nothing consulted."""
+    ag, spec = _agent_and_spec()
+    for b in fleet._blocks_for(ag, spec):
+        assert b["limit"] == fleet.BLOCK_LIMIT
+        assert b["read_only"] == (b["label"] in fleet.GOVERNANCE_BLOCKS)
+
+
+@pytest.mark.asyncio
+async def test_spawn_ephemeral_with_a_context_lists_nothing(monkeypatch):
+    """Per section it re-listed agents, models, embeddings and tools — ~54
+    round-trips on a nine-section SOP for data the same job had just fetched."""
+    calls: list[str] = []
+
+    class _C:
+        async def list_agents(self):
+            calls.append("list_agents"); return []
+        async def list_models(self):
+            calls.append("list_models"); return []
+        async def list_embedding_models(self):
+            calls.append("list_embedding_models"); return []
+        async def list_tools(self):
+            calls.append("list_tools"); return []
+        async def create_agent(self, body):
+            calls.append("create"); return {"id": "tmp-1", "name": body["name"], "tools": []}
+        async def attach_tool(self, agent_id, tool_id):
+            calls.append("attach")
+
+    spec = load_fleet()
+    base = {"name": "gf_reg_checker", "llm_config": {"handle": "p/m"}, "embedding_config": {"handle": "p/e"}}
+    ctx = fleet.FleetContext({}, [base], "p/m", "p/e", "tool-1", [], fleet.FleetReport())
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+    tid = await fleet.spawn_ephemeral(_C(), "gf_reg_checker", "x", ctx=ctx)
+    assert tid == "tmp-1"
+    assert calls == ["create", "attach"]
+
+
+def test_fleet_yaml_flags_match_how_the_pipeline_actually_drives_each_agent():
+    """`verbatim_output` and `autoclear` are properties of how pipeline.py USES
+    an agent, declared in a file that cannot see the pipeline. The earlier
+    tests restated today's answer by name; this derives it from the pipeline's
+    own declaration, so a new verbatim author or one-shot worker wired in
+    without the matching flag fails here instead of in a controlled document."""
+    from app.pipeline import DRIVEN_AGENTS
+    by_name = {a["name"]: a for a in load_fleet()["agents"]}
+    for name, how in DRIVEN_AGENTS.items():
+        assert name in by_name, f"pipeline drives {name}, fleet.yaml does not declare it"
+        ag = by_name[name]
+        assert bool(ag.get("verbatim_output")) == how["verbatim"], name
+        assert bool(ag.get("autoclear")) == how["one_shot"], name
+    # and the reverse for the output contract: a verbatim agent nobody drives
+    # verbatim is a flag with no reader
+    for name, ag in by_name.items():
+        if ag.get("verbatim_output"):
+            assert DRIVEN_AGENTS.get(name, {}).get("verbatim"), name
+
+
+def test_the_tool_paginates_past_the_first_hundred_datasets(monkeypatch):
+    """Page 1 only: on a tenant past 100 datasets a granted corpus resolved as
+    "not ingested" — fail-closed, silent, permanent."""
+    pages = {1: [{"name": f"ds{i}", "id": str(i)} for i in range(100)],
+             2: [{"name": "eCoA_DATABASE", "id": "target"}]}
+    seen: list[int] = []
+
+    class _Resp:
+        def __init__(self, payload):
+            self.payload = payload
+        def read(self):
+            return json.dumps(self.payload).encode()
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=0):
+        url = req.full_url
+        if "/datasets" in url:
+            page = int(url.split("page=")[1].split("&")[0])
+            seen.append(page)
+            return _Resp({"data": pages.get(page, [])})
+        return _Resp({"data": {"chunks": []}})
+
+    monkeypatch.setenv("RAGFLOW_BASE_URL", "http://ragflow.invalid")
+    monkeypatch.setenv("RAGFLOW_API_KEY", "k")
+    monkeypatch.setenv("RAGFLOW_ALLOWED_DATASETS", "eCoA_DATABASE")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    out = json.loads(_load_tool_callable()("q", "eCoA_DATABASE"))
+    assert seen == [1, 2]
+    assert out["ok"] is True and out["searched"] == ["eCoA_DATABASE"]

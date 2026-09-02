@@ -353,8 +353,18 @@ ragflow:
 # gf_doc_orchestrator resolves TYPE/MODE across turns. Clearing their buffers
 # would break the thing they exist to do.
 defaults:
+  # model / embedding are CREATE-TIME ONLY. They govern an agent the moment it
+  # is made and never again: the server rejects the config write that would
+  # move an existing agent, so the reconciler does not attempt it. Until
+  # 2026-08-31 this file presented them as a declaration anyway — tested as
+  # one, read as one, inert on every agent that already existed. They still
+  # are not reconciled; the difference is that a live agent on a different
+  # handle is now REPORTED as drift (fleet.py _reconcile_config, /fleet/status)
+  # instead of silently staying where it is. Moving an agent means deleting
+  # and recreating it, on purpose, by a person.
   model: openai-proxy/moonshot/kimi-k2.6
   embedding: ollama-local/nomic-embed-text:latest
+  # These two ARE reconciled onto live agents, every pass.
   context_window: 128000
   max_tokens: 16384
 
@@ -371,6 +381,21 @@ defaults:
 #   * HOW TO WORK — the method, including when to retrieve;
 #   * NEVER — the specific, observed failure modes, so they read as concrete
 #     prohibitions rather than general caution.
+#
+# Per-agent keys the reconciler acts on (all optional except name/persona):
+#   datasets:       RAGflow datasets this agent may search. Grants the tool,
+#                   the credentials and the allowlist; REMOVING the key revokes
+#                   all three on the next pass (it used to revoke only the
+#                   instruction). Names are checked against the live tenant.
+#   extra_tools:    custom Letta tools this agent is allowed to carry BESIDES
+#                   ragflow_search. Any other custom tool found on the agent is
+#                   reported, and the agent is denied the RAGflow credentials
+#                   while it carries it — the key is per-agent, the allowlist is
+#                   per-one-tool, so an undeclared tool would hold the key with
+#                   no scope at all. Letta's own core tools are never counted.
+#   autoclear:      one-shot worker — must match how pipeline.py drives it
+#                   (pipeline.DRIVEN_AGENTS; test_fleet checks the two agree).
+#   verbatim_output: reply is spliced into the document — same check.
 # ---------------------------------------------------------------------------
 agents:
   - name: gf_doc_orchestrator

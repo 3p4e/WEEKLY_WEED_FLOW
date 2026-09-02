@@ -1,10 +1,15 @@
 # docengine.app.fleet — ensure-loop for the gf_* agent fleet.
 #
-# Declarative (agents/fleet.yaml) -> live Letta agents, ADDITIVELY:
-#   * create-by-name if missing (never edit an existing agent — the server
-#     rejects config writes for the legacy provider enum anyway);
-#   * attach the shared ragflow_search tool and pass it RAGflow credentials;
-#   * seed `gf_house_rules` + `ragflow_scope` core memory blocks.
+# Declarative (agents/fleet.yaml) -> live Letta agents, CONVERGENTLY:
+#   * create-by-name if missing;
+#   * on every run, bring an existing agent's blocks, tool, sandbox env and
+#     sizing back to the declaration — and, since 2026-08-31, take them AWAY
+#     again when the declaration no longer grants them. The loop used to be
+#     additive only: it granted, widened and repaired, but never revoked, so
+#     dropping `datasets:` from an agent left the tool attached and the tenant
+#     key in its sandbox indefinitely. "Declared absent" now means absent.
+#   * the model handle is the one field still create-time only (the server
+#     rejects that config write); it is REPORTED as drift, never patched.
 # The declared model/embedding handles win whenever the server actually serves
 # them; only an unserved handle falls back to adopting one a live agent already
 # uses (the handover documented that invented handles are rejected).
@@ -17,12 +22,15 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 from .config import settings
 from .letta import LettaClient, LettaError
+from .ragflow_api import RagflowUnreachable, list_dataset_names
 
 log = logging.getLogger("docengine.fleet")
 AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
@@ -42,6 +50,72 @@ RULES_BLOCK = "gf_house_rules"
 CORPUS_BLOCK = "gf_corpus"
 SCOPE_BLOCK = "ragflow_scope"
 GOVERNANCE_BLOCKS = (MISSION_BLOCK, RULES_BLOCK, CORPUS_BLOCK, SCOPE_BLOCK)
+# One limit for every block this module makes, whichever path makes it. The
+# create-time and reconcile-time paths used to differ here (the former took
+# Letta's default), which made _blocks_for's "byte-identical" claim untrue.
+BLOCK_LIMIT = 100_000
+# The three sandbox variables this module owns on an agent. Everything else in
+# tool_exec_environment_variables belongs to someone else and is carried
+# through a PATCH untouched.
+OWNED_ENV = ("RAGFLOW_BASE_URL", "RAGFLOW_API_KEY", "RAGFLOW_ALLOWED_DATASETS")
+# spawn_ephemeral's naming convention; the orphan sweep keys off it.
+TMP_MARKER = "_tmp_"
+
+
+@dataclass
+class FleetReport:
+    """What one ensure_fleet pass found and did. The reconcilers always knew
+    this — each returned what it changed — and ensure_fleet threw it away, so
+    there was no way, in code or over HTTP, to ask "does the live fleet agree
+    with fleet.yaml?" for a system whose whole premise is that divergence is
+    the enemy. Now it is kept, exposed by /fleet/status, and summarised on
+    /health."""
+    changed: dict[str, list[str]] = field(default_factory=dict)   # agent -> what
+    drift: list[str] = field(default_factory=list)                 # seen, not fixed
+    warnings: list[str] = field(default_factory=list)
+    unknown_tools: dict[str, list[str]] = field(default_factory=dict)
+    swept: list[str] = field(default_factory=list)                 # orphan _tmp_ agents
+    datasets_live: set[str] | None = None                          # None = RAGflow unreachable
+    datasets_unresolved: list[str] = field(default_factory=list)   # declared, not found
+    created: list[str] = field(default_factory=list)
+
+    def note(self, agent: str, what: str) -> None:
+        self.changed.setdefault(agent, []).append(what)
+
+    def summary(self) -> dict:
+        return {
+            "agents_changed": sorted(self.changed),
+            "drift": self.drift,
+            "warnings": self.warnings,
+            "unknown_tools": self.unknown_tools,
+            "swept_orphans": self.swept,
+            "ragflow_reachable": self.datasets_live is not None,
+            "datasets_unresolved": self.datasets_unresolved,
+            "created": self.created,
+            "converged": not (self.drift or self.warnings or self.unknown_tools
+                              or self.datasets_unresolved),
+        }
+
+
+@dataclass
+class FleetContext:
+    """Everything one ensure_fleet pass resolved, so the same document job can
+    spawn ephemeral clones without re-listing agents, models and tools per
+    section (~54 wasted round-trips on a nine-section SOP before this)."""
+    agents: dict[str, str]
+    existing: list[dict]
+    model: str
+    embedding: str
+    tool_id: str
+    pending: list[str]
+    report: FleetReport
+
+
+LAST_REPORT: FleetReport | None = None
+
+
+def last_report() -> FleetReport | None:
+    return LAST_REPORT
 
 
 # fleet.yaml is static for the life of the process (it's a declarative spec,
@@ -127,7 +201,7 @@ def _scope_block(datasets: list[str], pending: list[str], verbatim_output: bool 
     return "\n".join(lines)
 
 
-async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | None:
+async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str:
     """Register ragflow_search, or bring the already-registered one up to date.
 
     "Adopt the existing one" alone was not enough. The tool is a shared server
@@ -139,7 +213,16 @@ async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | No
 
     Comparing source before writing keeps this idempotent: ensure_fleet runs on
     every document job, and rewriting an unchanged tool on each one would be
-    pointless server churn."""
+    pointless server churn.
+
+    FAILS CLOSED. This used to return the tool's id even when the update that
+    was meant to bring it to the committed source had just failed — so a failed
+    hardening push did not degrade retrieval, it silently shipped whatever
+    ragflow_search happened to be on the server and wired every agent to it
+    with the tenant key in hand. The pre-hardening tool searched EVERYTHING when
+    `datasets` was omitted; that is the state a swallowed failure rolled back
+    to, with one warning line. For the object this module itself describes as
+    where scoping is enforced, the only honest failure mode is to raise."""
     spec = spec or load_fleet()
     description = (spec.get("ragflow") or {}).get("tool_description", "")
     source = load_tool_source()
@@ -167,17 +250,18 @@ async def ensure_tool(client: LettaClient, spec: dict | None = None) -> str | No
             return tool_id
         try:
             await client.update_tool(tool_id, source, description)
-            log.info("updated tool %s (%s) to the committed source", TOOL_NAME, tool_id)
-        except LettaError as e:  # non-fatal: the old tool still retrieves
-            log.warning("could not update %s: %s", TOOL_NAME, e)
+        except LettaError as e:
+            log.error("could not bring %s (%s) to the committed source: %s", TOOL_NAME, tool_id, e)
+            raise
+        log.info("updated tool %s (%s) to the committed source", TOOL_NAME, tool_id)
         return tool_id
     try:
         created = await client.create_tool(source, description)
-        log.info("registered tool %s -> %s", TOOL_NAME, created.get("id"))
-        return created.get("id")
-    except LettaError as e:  # non-fatal: agents still exist, retrieval degraded
-        log.warning("could not register %s: %s", TOOL_NAME, e)
-        return None
+    except LettaError as e:
+        log.error("could not register %s: %s", TOOL_NAME, e)
+        raise
+    log.info("registered tool %s -> %s", TOOL_NAME, created.get("id"))
+    return created["id"]
 
 
 def _tool_env(datasets: list[str]) -> dict:
@@ -211,43 +295,92 @@ def agent_datasets(agent_name: str, spec: dict | None = None) -> list[str]:
     return list((ag or {}).get("datasets", []))
 
 
-def _blocks_for(ag: dict, spec: dict) -> list[dict]:
+def declared_pending(spec: dict) -> list[str]:
+    """fleet.yaml's own statement of what is not ingested yet — the fallback
+    when RAGflow cannot be asked. Kept as a declaration of intent; it is no
+    longer what the scope blocks are written from when reality is available."""
+    return list((spec.get("ragflow") or {}).get("pending_ingest", []))
+
+
+async def resolve_pending(spec: dict, report: FleetReport | None = None) -> list[str]:
+    """Which declared datasets are NOT on the tenant right now, from RAGflow
+    itself rather than from a hand-maintained YAML list.
+
+    The 2026-08-27 and 2026-08-29 incidents were the same incident: RAGflow's
+    datasets were renamed, every agent's scope kept the old names, and nothing
+    on this side noticed — the test written after the first one compared
+    fleet.yaml to fleet.yaml. Asking RAGflow at ensure_fleet time means the
+    next rename is caught at the next document job, in the scope block the
+    agent reads and on /health, instead of at the next incident.
+
+    The mirror case matters as much: when a pending corpus is finally ingested
+    nothing used to notice either, so the three verbatim authors kept being
+    told to leave every facility specific BLANK against a corpus that was
+    sitting right there.
+
+    Unreachable RAGflow falls back to the YAML lists and says so. An empty
+    tenant is not unreachable: that is a real answer, and it is "everything is
+    pending"."""
+    declared = sorted({d for a in spec["agents"] for d in a.get("datasets", [])})
+    try:
+        live = await list_dataset_names()
+    except RagflowUnreachable as e:
+        log.warning("RAGflow unreachable (%s); scope blocks fall back to fleet.yaml", e)
+        if report is not None:
+            report.warnings.append(f"ragflow unreachable: {e}")
+        return declared_pending(spec)
+    pending = [d for d in declared if d not in live]
+    if report is not None:
+        report.datasets_live = live
+        report.datasets_unresolved = pending
+    if pending:
+        log.warning("declared datasets not on the RAGflow tenant: %s", ", ".join(pending))
+    return pending
+
+
+def _blocks_for(ag: dict, spec: dict, pending: list[str] | None = None) -> list[dict]:
     """Every core-memory block this agent should carry, in one place.
 
     Used both at creation (memory_blocks in the create body) and by the
     reconcile loop, so a live agent and a freshly created one end up with
     byte-identical instructions — the whole point of a declarative fleet.
+    read_only is derived from GOVERNANCE_BLOCKS rather than written out per
+    entry, so the constant is the invariant and not merely a name for it.
+
+    `pending` is what resolve_pending found on the tenant; callers without a
+    live answer (tests, a RAGflow outage) get fleet.yaml's declared list.
 
     gf_corpus is only given to agents that retrieve. An agent with no datasets
     has no use for a description of corpora it cannot search, and telling it
     what exists in RAGflow would be actively unhelpful: it is one nudge away
     from citing a corpus it has no access to."""
-    pending = (spec.get("ragflow") or {}).get("pending_ingest", [])
+    if pending is None:
+        pending = declared_pending(spec)
+
+    def block(label: str, value: str) -> dict:
+        return {"label": label, "value": value.strip(),
+                "read_only": label in GOVERNANCE_BLOCKS, "limit": BLOCK_LIMIT}
+
     blocks = [
-        {"label": MISSION_BLOCK, "value": spec["mission"].strip(), "read_only": True},
-        {"label": RULES_BLOCK, "value": spec["house_rules"].strip(), "read_only": True},
-        {"label": PERSONA_BLOCK, "value": ag["persona"].strip(), "read_only": False},
-        {
-            "label": SCOPE_BLOCK,
-            "value": _scope_block(ag.get("datasets", []), pending,
-                                  bool(ag.get("verbatim_output"))),
-            "read_only": True,
-        },
+        block(MISSION_BLOCK, spec["mission"]),
+        block(RULES_BLOCK, spec["house_rules"]),
+        block(PERSONA_BLOCK, ag["persona"]),
+        block(SCOPE_BLOCK, _scope_block(ag.get("datasets", []), pending,
+                                        bool(ag.get("verbatim_output")))),
     ]
     if ag.get("datasets") and spec.get("corpus_guide"):
-        blocks.append(
-            {"label": CORPUS_BLOCK, "value": spec["corpus_guide"].strip(), "read_only": True}
-        )
+        blocks.append(block(CORPUS_BLOCK, spec["corpus_guide"]))
     return blocks
 
 
-def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, description: str) -> dict:
+def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str,
+                description: str, pending: list[str] | None = None) -> dict:
     body = {
         "name": name,
         "description": description,
         "model": model,
         "embedding": embedding,
-        "memory_blocks": _blocks_for(ag, spec),
+        "memory_blocks": _blocks_for(ag, spec, pending),
     }
     # Letta sizes an unknown model from its DEFAULT (30000) and clamps output
     # to its own guess. Both are declared in fleet.yaml because the default
@@ -266,19 +399,65 @@ def _build_body(ag: dict, spec: dict, model: str, embedding: str, name: str, des
     return body
 
 
-async def _attach_retrieval(client: LettaClient, agent_id: str, ag: dict, tool_id: str | None, label: str) -> None:
-    """Give the agent the retrieval tool. Only agents with a dataset scope get
-    it — an agent with no corpus should not have a search button at all."""
-    if not tool_id or not ag.get("datasets"):
-        return
-    try:
+def _custom_tools(agent: dict) -> dict[str, str]:
+    """name -> id of every NON-built-in tool on a live agent. Letta's own
+    core tools (memory_replace, conversation_search, ...) carry a letta_*
+    tool_type; anything registered by a person or a service is "custom"."""
+    return {
+        t["name"]: t.get("id", "")
+        for t in (agent.get("tools") or [])
+        if isinstance(t, dict) and t.get("name") and t.get("tool_type") == "custom"
+    }
+
+
+def _unknown_tools(agent: dict, ag: dict) -> list[str]:
+    """Custom tools on the agent that fleet.yaml did not put there.
+
+    The RAGflow tenant key lives in the agent's sandbox environment, which is
+    per-AGENT, not per-tool: every tool attached to that agent runs with it.
+    The dataset allowlist is enforced by ragflow_search's own source and binds
+    nothing else. So a tool this module does not know about — attached by a
+    person, by another service, by a future feature — holds the key with no
+    allowlist at all. Until now nothing here enumerated, asserted or pruned an
+    agent's tool set; the only tool operation was attach-if-missing.
+
+    `extra_tools:` in fleet.yaml is the declared exception list. Anything else
+    custom is unknown, and an agent carrying one does not get the key."""
+    allowed = {TOOL_NAME, *ag.get("extra_tools", [])}
+    return sorted(n for n in _custom_tools(agent) if n not in allowed)
+
+
+async def _reconcile_retrieval_tool(
+    client: LettaClient, agent_id: str, ag: dict, tool_id: str,
+    have: dict[str, str], label: str, revoke: bool = False,
+) -> str | None:
+    """Attach ragflow_search to an agent that is granted datasets and does not
+    have it; DETACH it from one that is not granted datasets and does. An
+    agent with no corpus should not have a search button at all — and until
+    this could detach, one that had lost its corpus kept the button forever.
+
+    `revoke` forces the detach path regardless of the declaration: used when
+    the agent carries an unknown tool (see _unknown_tools), so the credential
+    is withdrawn rather than shared with it.
+
+    Raises on failure. The old handler swallowed an attach error as "agent
+    works, retrieval degraded" — leaving an agent whose scope block tells it to
+    use a tool it does not have, and (on the detach side) an agent holding a
+    tool the declaration revoked. Neither is a state to continue from."""
+    want = bool(ag.get("datasets")) and not revoke
+    has = TOOL_NAME in have
+    if want and not has:
         await client.attach_tool(agent_id, tool_id)
-    except LettaError as e:  # non-fatal: agent works, retrieval degraded
-        log.warning("attach %s -> %s failed: %s", TOOL_NAME, label, e)
+        return "tool attached"
+    if not want and has:
+        await client.detach_tool(agent_id, have[TOOL_NAME] or tool_id)
+        return "tool detached"
+    return None
 
 
 async def _reconcile_blocks(
-    client: LettaClient, agent_id: str, ag: dict, spec: dict, label: str
+    client: LettaClient, agent_id: str, ag: dict, spec: dict, label: str,
+    pending: list[str] | None = None, report: FleetReport | None = None,
 ) -> list[str]:
     """Bring a live agent's memory blocks back in line with fleet.yaml.
 
@@ -295,13 +474,23 @@ async def _reconcile_blocks(
 
     Returns the labels actually changed, for the caller to log/report."""
     changed: list[str] = []
-    for want in _blocks_for(ag, spec):
+    for want in _blocks_for(ag, spec, pending):
         lbl, val, ro = want["label"], want["value"], want["read_only"]
         try:
             block = await client.get_block(agent_id, lbl)
             if block is None:
-                created = await client.create_block(lbl, val, read_only=ro)
-                await client.attach_block(agent_id, created["id"])
+                created = await client.create_block(lbl, val, read_only=ro, limit=BLOCK_LIMIT)
+                try:
+                    await client.attach_block(agent_id, created["id"])
+                except LettaError:
+                    # Create-then-attach is two calls; a failure between them
+                    # used to leak one unattached block per pass, since the
+                    # next pass saw no block under that label and made another.
+                    try:
+                        await client.delete_block(created["id"])
+                    except LettaError as e2:
+                        log.warning("orphan block %s (%s) could not be removed: %s", lbl, created["id"], e2)
+                    raise
                 changed.append(lbl + " (added)")
                 continue
             stale_value = (block.get("value") or "").strip() != val.strip()
@@ -317,34 +506,57 @@ async def _reconcile_blocks(
             changed.append(lbl)
         except LettaError as e:  # non-fatal: a stale block beats a dead ensure
             log.warning("could not reconcile %s on %s: %s", lbl, label, e)
+            if report is not None:
+                report.warnings.append(f"{label}: block {lbl} not reconciled: {e}")
     if changed:
         log.info("reconciled blocks on %s: %s", label, ", ".join(changed))
     return changed
 
 
 async def _reconcile_tool_env(
-    client: LettaClient, agent: dict, ag: dict, label: str
+    client: LettaClient, agent: dict, ag: dict, label: str, revoke: bool = False
 ) -> bool:
-    """Push this agent's permitted-dataset allowlist into its tool sandbox.
+    """Push this agent's permitted-dataset allowlist and RAGflow credentials
+    into its tool sandbox — or take them OUT again.
 
     Like the memory blocks and the sizing fields, tool_exec_environment_variables
     is a create-time argument, so every agent that predates RAGFLOW_ALLOWED_
     DATASETS would keep an unenforced scope forever.
 
-    Only agents WITH datasets are touched. gf_doc_orchestrator carries unrelated
-    secrets for a different tool, and a PATCH here replaces the whole set — so
-    an agent this module has no RAGflow env for must be left strictly alone
-    rather than reconciled to an empty one."""
-    if not ag.get("datasets"):
-        return False
-    env = _tool_env(ag["datasets"])
-    if not env:
-        return False
+    A PATCH replaces the whole set, and gf_doc_orchestrator carries unrelated
+    secrets for a different tool, so only the three OWNED_ENV keys are ever
+    judged or written; everything else the agent carries is merged back.
+
+    Revocation is the half this never had. An agent whose `datasets:` was
+    removed from fleet.yaml got a scope block saying "you have no corpus" and
+    kept RAGFLOW_ALLOWED_DATASETS, the base URL and the tenant key exactly
+    where they were — narrowing a list reconciled, revoking it did not. Now an
+    agent that is not granted datasets, or that must be `revoke`d because it
+    carries a tool this module does not know (see _unknown_tools), has the
+    owned keys stripped. The tool's own fail-closed branch then refuses any
+    search from that sandbox, which is the point."""
     have = {
         e.get("key"): e.get("value")
         for e in (agent.get("tool_exec_environment_variables") or [])
         if isinstance(e, dict)
     }
+    grant = bool(ag.get("datasets")) and not revoke
+    if not grant:
+        if not any(k in have for k in OWNED_ENV):
+            return False
+        body = {k: v for k, v in have.items() if k not in OWNED_ENV and v}
+        try:
+            await client.update_agent_config(
+                agent["id"], {"tool_exec_environment_variables": body}
+            )
+        except LettaError as e:
+            log.error("could not REVOKE tool env on %s: %s", label, e)
+            raise
+        log.info("revoked tool env on %s (%s)", label, "unknown tool present" if revoke else "no datasets declared")
+        return True
+    env = _tool_env(ag["datasets"])
+    if not env:
+        return False
     # This used to short-circuit on RAGFLOW_ALLOWED_DATASETS alone, on the
     # assumption that the server might withhold secret values and make every
     # run look like a change. It does not: this Letta echoes all three back
@@ -379,21 +591,38 @@ async def _reconcile_tool_env(
         await client.update_agent_config(
             agent["id"], {"tool_exec_environment_variables": body}
         )
-        # Names only — one of these keys is a credential.
-        log.info(
-            "reconciled tool env on %s (%s); scope=%s",
-            label,
-            ", ".join(stale),
-            env["RAGFLOW_ALLOWED_DATASETS"],
-        )
-        return True
-    except LettaError as e:  # non-fatal: the memory-block scope still applies
-        log.warning("could not reconcile tool scope on %s: %s", label, e)
-        return False
+    except LettaError as e:
+        # Raised, not swallowed. The old comment said "the memory-block scope
+        # still applies", 200 lines below a comment saying of that same block
+        # that "asking is all it was". An agent whose allowlist could not be
+        # brought to the declaration may be holding a WIDER one; that is not a
+        # state to run a document job on.
+        log.error("could not reconcile tool env on %s: %s", label, e)
+        raise
+    # Names only — one of these keys is a credential.
+    log.info(
+        "reconciled tool env on %s (%s); scope=%s",
+        label,
+        ", ".join(stale),
+        env["RAGFLOW_ALLOWED_DATASETS"],
+    )
+    return True
+
+
+# (agent_id, field) pairs the server has demonstrably NOT honoured after a
+# PATCH. _reconcile_config reads `llm_config.context_window` and writes
+# `context_window_limit` — different names — so a Letta that clamps or
+# normalises the value would never read back equal, and the fleet would issue
+# the same PATCH on every document job, forever, with no symptom but churn.
+# That is the exact hazard ensure_tool guards against for source_code. After
+# a push, the value is re-read; if it still differs the pair lands here and
+# is reported as drift instead of re-pushed for the life of this process.
+_UNHONOURED: set[tuple[str, str]] = set()
 
 
 async def _reconcile_config(
-    client: LettaClient, agent: dict, ag: dict, spec: dict, label: str
+    client: LettaClient, agent: dict, ag: dict, spec: dict, label: str,
+    report: FleetReport | None = None,
 ) -> bool:
     """Push the declared context window / output ceiling onto a live agent.
 
@@ -416,13 +645,27 @@ async def _reconcile_config(
     into its next prompt. See the note in fleet.yaml for the measurements."""
     defaults = spec.get("defaults") or {}
     lc = agent.get("llm_config") or {}
+    aid = agent.get("id", "")
     body: dict = {}
-    if defaults.get("context_window") and lc.get("context_window") != int(
-        defaults["context_window"]
-    ):
-        body["context_window_limit"] = int(defaults["context_window"])
-    if defaults.get("max_tokens") and lc.get("max_tokens") != int(defaults["max_tokens"]):
-        body["max_tokens"] = int(defaults["max_tokens"])
+    want_cw = int(defaults["context_window"]) if defaults.get("context_window") else None
+    want_mt = int(defaults["max_tokens"]) if defaults.get("max_tokens") else None
+    if want_cw and lc.get("context_window") != want_cw and (aid, "context_window") not in _UNHONOURED:
+        body["context_window_limit"] = want_cw
+    if want_mt and lc.get("max_tokens") != want_mt and (aid, "max_tokens") not in _UNHONOURED:
+        body["max_tokens"] = want_mt
+
+    # The model handle is the field most likely to change and the one this
+    # deliberately does not write (the server rejects the config write).
+    # Not writing it is defensible; presenting fleet.yaml's `model:` as a
+    # declaration while it silently governed only from-scratch agents was
+    # not. It is now REPORTED as drift, so the declaration is at least honest.
+    declared_model = (defaults.get("model") or "").strip()
+    live_model = lc.get("handle") or lc.get("model") or ""
+    if declared_model and live_model and live_model != declared_model and report is not None:
+        report.drift.append(
+            f"{label}: model is {live_model}, fleet.yaml declares {declared_model} "
+            "(create-time only; not reconciled)"
+        )
     want_autoclear = bool(ag.get("autoclear"))
     if bool(agent.get("message_buffer_autoclear")) != want_autoclear:
         body["message_buffer_autoclear"] = want_autoclear
@@ -454,7 +697,23 @@ async def _reconcile_config(
             log.info("reconciled config on %s: %s", label, body)
         except LettaError as e:  # non-fatal: an undersized window still runs
             log.warning("could not reconcile config on %s: %s", label, e)
+            if report is not None:
+                report.warnings.append(f"{label}: config not reconciled: {e}")
             return False
+        # Re-read what the server actually kept. Anything it did not honour is
+        # recorded and never re-pushed by this process — see _UNHONOURED.
+        try:
+            fresh = (await client.get_agent(agent["id"]) or {}).get("llm_config") or {}
+        except LettaError:
+            fresh = {}
+        for key, want, wrote in (("context_window", want_cw, "context_window_limit"),
+                                 ("max_tokens", want_mt, "max_tokens")):
+            if wrote in body and fresh and fresh.get(key) != want:
+                _UNHONOURED.add((aid, key))
+                msg = f"{label}: server reports {key}={fresh.get(key)} after writing {want}; not re-pushing"
+                log.warning(msg)
+                if report is not None:
+                    report.drift.append(msg)
     if stale_buffer:
         try:
             await client.reset_messages(agent["id"])
@@ -520,14 +779,69 @@ def _resolve_model(
     return model, embedding
 
 
-async def ensure_fleet(client: LettaClient | None = None) -> dict:
-    """Idempotent. Returns {agent_name: agent_id} for the whole gf_ fleet."""
+def _orphan_age_s(agent: dict, now: datetime) -> float | None:
+    raw = agent.get("created_at")
+    if not raw:
+        return None
+    try:
+        ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return (now - ts).total_seconds()
+
+
+async def _sweep_orphans(client: LettaClient, existing: list[dict], report: FleetReport) -> list[dict]:
+    """Delete gf_*_tmp_* clones that outlived any job that could own them.
+
+    pipeline.py swallows a failed delete of an ephemeral clone on the stated
+    grounds that "the next fleet audit sweeps _tmp_ leftovers". No such sweep
+    existed; the sentence was load-bearing for the decision to continue and it
+    was false. A clone orphaned by a killed worker or a failed DELETE kept the
+    RAGflow key and a live allowlist in its sandbox indefinitely.
+
+    Age-gated, because two uvicorn workers share the server: a clone younger
+    than the longest exchange a job can legally be inside (three sequential
+    Letta reads at the configured timeout) may belong to a job on the other
+    worker. Anything older belongs to no one."""
+    limit = 3 * float(settings.letta_read_timeout)
+    now = datetime.now(timezone.utc)
+    kept: list[dict] = []
+    for a in existing:
+        name = a.get("name") or ""
+        age = _orphan_age_s(a, now)
+        if name.startswith("gf_") and TMP_MARKER in name and age is not None and age > limit:
+            try:
+                await client.delete_agent(a["id"])
+                report.swept.append(name)
+                log.warning("swept orphaned ephemeral agent %s (age %.0fs)", name, age)
+                continue
+            except LettaError as e:
+                report.warnings.append(f"orphan {name} could not be swept: {e}")
+        kept.append(a)
+    return kept
+
+
+async def ensure_fleet_ctx(client: LettaClient | None = None) -> FleetContext:
+    """Converge the live gf_ fleet on fleet.yaml and return everything a job
+    needs from the result. Idempotent: a second run against a converged fleet
+    makes zero writes.
+
+    Order matters. Orphans are swept first so they cannot be reconciled as if
+    declared. The tool is ensured before any agent, and it RAISES on failure —
+    the agents' scope enforcement lives inside it. Pending datasets are asked
+    of RAGflow once per pass and written into every scope block."""
+    global LAST_REPORT
     client = client or LettaClient()
     spec = load_fleet()
-    existing = {a.get("name"): a for a in await client.list_agents()}
+    report = FleetReport()
+    live = await _sweep_orphans(client, await client.list_agents(), report)
+    existing = {a.get("name"): a for a in live}
     served, served_emb = await _served_handles(client)
-    model, embedding = _resolve_model(spec, list(existing.values()), served, served_emb)
+    model, embedding = _resolve_model(spec, live, served, served_emb)
     tool_id = await ensure_tool(client, spec)
+    pending = await resolve_pending(spec, report)
 
     out: dict[str, str] = {}
     for ag in spec["agents"]:
@@ -535,41 +849,69 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
         cur = existing.get(name)
         if cur:
             out[name] = cur["id"]
-            # Reconcile an agent that already exists. Create-if-missing alone
-            # cannot, because the agent is no longer missing — and two things
-            # legitimately change under it:
-            #
-            #  * the tool. Registration is non-fatal, so the fleet can come up
-            #    with agents but no tool (seen live: Letta rejected the source
-            #    over a nested helper, all 8 agents were created anyway, and the
-            #    fleet ran with no retrieval at all).
-            #  * its INSTRUCTIONS — every block this module owns: the mission,
-            #    the house rules, the persona, the corpus guide and the dataset
-            #    scope. `datasets:` in fleet.yaml is what governs which corpora
-            #    the agent may reach, so an edit there that never reaches the
-            #    live ragflow_scope block leaves the declaration and the agent's
-            #    actual instructions disagreeing about data access — and the
-            #    same is true, less visibly, of every other instruction here.
-            #  * its context window / output ceiling, which are create-time
-            #    arguments and so never moved on an agent that already existed.
-            #
-            # All bounded: gf_* only, the blocks this module owns, the two
-            # sizing fields, and only when the live value actually differs.
-            if TOOL_NAME not in {t.get("name") for t in (cur.get("tools") or [])}:
-                await _attach_retrieval(client, cur["id"], ag, tool_id, name)
-            await _reconcile_blocks(client, cur["id"], ag, spec, name)
-            await _reconcile_tool_env(client, cur, ag, name)
-            await _reconcile_config(client, cur, ag, spec, name)
+            # Reconcile an agent that already exists. Everything below is
+            # bounded: gf_* only, the blocks and the three env keys this module
+            # owns, the two sizing fields, the one tool — and only when the
+            # live value actually differs from the declaration.
+            unknown = _unknown_tools(cur, ag)
+            if unknown:
+                # The tenant key is per-agent, not per-tool. An agent carrying
+                # a tool this module does not know does not get the key, and
+                # loses it if it had it. Loud, and in the report.
+                report.unknown_tools[name] = unknown
+                log.error("%s carries custom tool(s) fleet.yaml does not declare: %s "
+                          "— withholding RAGflow credentials", name, ", ".join(unknown))
+            revoke = bool(unknown)
+            did = await _reconcile_retrieval_tool(
+                client, cur["id"], ag, tool_id, _custom_tools(cur), name, revoke=revoke
+            )
+            if did:
+                report.note(name, did)
+            for lbl in await _reconcile_blocks(client, cur["id"], ag, spec, name, pending, report):
+                report.note(name, f"block {lbl}")
+            if await _reconcile_tool_env(client, cur, ag, name, revoke=revoke):
+                report.note(name, "tool env revoked" if (revoke or not ag.get("datasets")) else "tool env")
+            if await _reconcile_config(client, cur, ag, spec, name, report):
+                report.note(name, "config")
+            n_msgs = len(cur.get("message_ids") or [])
+            if not ag.get("autoclear") and n_msgs > 100:
+                # A conversational agent is allowed to keep history; it is not
+                # allowed to keep it silently forever. The qa-auditor timeout
+                # was this same curve, steeper.
+                report.warnings.append(f"{name}: {n_msgs} messages in buffer with autoclear off")
             continue
-        body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""))
+        body = _build_body(ag, spec, model, embedding, name, ag.get("description", ""), pending)
         created = await client.create_agent(body)
         out[name] = created["id"]
+        report.created.append(name)
         log.info("created agent %s -> %s", name, created["id"])
-        await _attach_retrieval(client, created["id"], ag, tool_id, name)
-    return out
+        await _reconcile_retrieval_tool(client, created["id"], ag, tool_id, _custom_tools(created), name)
+
+    declared = {a["name"] for a in spec["agents"]}
+    for name in sorted(existing):
+        if name and name.startswith("gf_") and TMP_MARKER not in name and name not in declared:
+            # Removed from fleet.yaml, still on the server: reported, not deleted.
+            # Deleting a persistent agent is a human decision; leaving it
+            # unmentioned was the problem.
+            report.drift.append(f"{name}: live on the server, not declared in fleet.yaml")
+    LAST_REPORT = report
+    if report.summary()["converged"]:
+        log.info("fleet converged: %d agents", len(out))
+    else:
+        log.warning("fleet not converged: %s", report.summary())
+    return FleetContext(out, live, model, embedding, tool_id, pending, report)
 
 
-async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str) -> str:
+async def ensure_fleet(client: LettaClient | None = None) -> dict:
+    """Idempotent. Returns {agent_name: agent_id} for the whole gf_ fleet.
+    Thin wrapper kept for callers that only need the map; the pipeline uses
+    ensure_fleet_ctx so its ephemeral clones reuse what this resolved."""
+    return (await ensure_fleet_ctx(client)).agents
+
+
+async def spawn_ephemeral(
+    client: LettaClient, agent_name: str, name_suffix: str, ctx: FleetContext | None = None
+) -> str:
     """Create a short-lived clone of a fleet agent (same persona/datasets/
     model) for exactly ONE isolated exchange, then the caller deletes it.
 
@@ -579,16 +921,29 @@ async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str
     (each turn's system-prompt token estimate keeps growing until it exceeds
     the model's context window; observed live at section 9 of 9 on a fresh
     gf_reg_checker). A fresh clone per exchange keeps that estimate constant
-    regardless of how many checks the pipeline runs."""
+    regardless of how many checks the pipeline runs.
+
+    With `ctx` (what the job's own ensure_fleet_ctx resolved) this makes
+    exactly two calls: create and attach. Without it — other callers, tests —
+    it re-lists agents, models, embeddings and tools itself, which is what
+    every call used to do: four listing round-trips per section, for data the
+    same job had fetched moments earlier over the same connection."""
     spec = load_fleet()
     ag = next(a for a in spec["agents"] if a["name"] == agent_name)
-    existing = await client.list_agents()
-    served, served_emb = await _served_handles(client)
-    model, embedding = _resolve_model(spec, existing, served, served_emb)
+    if ctx is not None:
+        existing, model, embedding, tool_id, pending = (
+            ctx.existing, ctx.model, ctx.embedding, ctx.tool_id, ctx.pending
+        )
+    else:
+        existing = await client.list_agents()
+        served, served_emb = await _served_handles(client)
+        model, embedding = _resolve_model(spec, existing, served, served_emb)
+        tool_id = await ensure_tool(client, spec)
+        pending = None
     # The clone must run the SAME model as the agent it clones ("same persona/
-    # datasets/model") — the global adoption above picks whatever agent happens
-    # to list first, which on a mixed instance (fleet + mirrored planners) can
-    # be a different provider whose tool-loop behavior differs from the base
+    # datasets/model") — global resolution picks whatever agent happens to list
+    # first, which on a mixed instance (fleet + mirrored planners) can be a
+    # different provider whose tool-loop behavior differs from the base
     # agent's proven config.
     base = next((a for a in existing if a.get("name") == agent_name), None)
     if base:
@@ -604,10 +959,10 @@ async def spawn_ephemeral(client: LettaClient, agent_name: str, name_suffix: str
         spec,
         model,
         embedding,
-        f"{agent_name}_tmp_{name_suffix}",
+        f"{agent_name}{TMP_MARKER}{name_suffix}",
         f"ephemeral clone of {agent_name} for one isolated exchange",
+        pending,
     )
-    tool_id = await ensure_tool(client, spec)
     created = await client.create_agent(body)
-    await _attach_retrieval(client, created["id"], ag, tool_id, body["name"])
+    await _reconcile_retrieval_tool(client, created["id"], ag, tool_id, _custom_tools(created), body["name"])
     return created["id"]

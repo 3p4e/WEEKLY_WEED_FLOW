@@ -32,6 +32,28 @@ SOP_SECTIONS = [
 
 _MD_FENCE = re.compile(r"^```[a-zA-Z]*\n|\n```$", re.M)
 
+# The agents THIS module drives, and how. This is the single place that knows
+# whether an agent's reply is spliced into the document (verbatim) and whether
+# it is sent one prompt and read for one reply (one_shot). Both facts used to
+# be declared only in fleet.yaml as `verbatim_output` / `autoclear` — a file
+# that cannot see how the pipeline uses an agent — and the tests restated
+# today's answer by name. A new verbatim author wired in here without the flag
+# would have silently reintroduced the "note about corpus availability inside
+# a controlled document" failure; a new one-shot worker without autoclear, the
+# 78k-token qa-auditor timeout. test_fleet now checks fleet.yaml against this.
+SOP_AUTHOR = "gf_sop_author"
+ANNEX_AUTHOR = "gf_annex_author"
+RACI_SPECIALIST = "gf_raci_specialist"
+REG_CHECKER = "gf_reg_checker"
+QA_AUDITOR = "gf_qa_auditor"
+DRIVEN_AGENTS: dict[str, dict[str, bool]] = {
+    SOP_AUTHOR: {"verbatim": True, "one_shot": True},
+    ANNEX_AUTHOR: {"verbatim": True, "one_shot": True},
+    RACI_SPECIALIST: {"verbatim": True, "one_shot": True},
+    REG_CHECKER: {"verbatim": False, "one_shot": True},
+    QA_AUDITOR: {"verbatim": False, "one_shot": True},
+}
+
 # Conversational lead-ins a stateful agent sometimes emits BEFORE the document
 # body despite being told "body only" (observed live: "Looking at the persona
 # description more carefully... Let me align..."). These must never reach the
@@ -500,7 +522,8 @@ def _split_repaired(body: str, original: list[dict]) -> tuple[list[dict] | None,
 
 
 async def _repair_sections(
-    client: LettaClient, author: str, sections: list[dict], audit: str, job_id: str
+    client: LettaClient, author: str, sections: list[dict], audit: str, job_id: str,
+    ctx=None,
 ) -> list[dict] | None:
     """Hand the auditor's issues back to the authoring agent, once.
 
@@ -515,7 +538,7 @@ async def _repair_sections(
     fails the job honestly, which is the correct outcome."""
     from .fleet import spawn_ephemeral  # late import: fleet needs live Letta
 
-    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}")
+    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}", ctx=ctx)
     try:
         reply = await client.send_message(
             tmp_id,
@@ -660,15 +683,16 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         await db.job_update(job_id, status="running", stage="generate")
 
         # late import: fleet needs live Letta
-        from .fleet import agent_datasets, ensure_fleet, spawn_ephemeral
+        from .fleet import agent_datasets, ensure_fleet_ctx, spawn_ephemeral
 
-        agents = await ensure_fleet(client)
-        reg_corpora = agent_datasets("gf_reg_checker")
+        ctx = await ensure_fleet_ctx(client)
+        agents = ctx.agents
+        reg_corpora = agent_datasets(REG_CHECKER)
 
         # ---- section generation ----
         if doctype == "SOP":
             for num, mk, en in SOP_SECTIONS:
-                author = agents["gf_raci_specialist"] if num == "3.0" else agents["gf_sop_author"]
+                author = agents[RACI_SPECIALIST] if num == "3.0" else agents[SOP_AUTHOR]
                 text = await client.send_message(
                     author,
                     f"Draft ONLY section {num} {mk}|{en} of the SOP "
@@ -686,7 +710,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 await db.job_update(job_id, stage=f"generate {num}")
         else:
             text = await client.send_message(
-                agents["gf_annex_author"],
+                agents[ANNEX_AUTHOR],
                 f"Design the {doctype} '{meta['title_mk']} | {meta['title_en']}' "
                 f"(code {meta['code']}). Content brief:\n{brief}\n\n"
                 "Return ONLY the bilingual Markdown body, using [[FORM:grid]] for the "
@@ -733,7 +757,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         for s in sections:
             await db.job_update(job_id, stage=f"regulatory-check {s['num']}")
             tmp_id = await spawn_ephemeral(
-                client, "gf_reg_checker", f"{job_id[:8]}_{s['num'].replace('.', '')}"
+                client, REG_CHECKER, f"{job_id[:8]}_{s['num'].replace('.', '')}", ctx=ctx
             )
             try:
                 finding = await client.send_message(
@@ -747,8 +771,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 # Broad catch on purpose: cleanup of a throwaway clone must
                 # never abort the job — delete_agent can also raise plain
                 # httpx transport errors (ReadTimeout etc.), not just
-                # LettaError, and an orphaned tmp agent is harmless (the next
-                # fleet audit sweeps _tmp_ leftovers) while a failed job isn't.
+                # LettaError, and an orphan is recoverable while a failed job
+                # isn't. Recoverable BECAUSE fleet._sweep_orphans now exists:
+                # the next ensure_fleet pass deletes any gf_*_tmp_* clone older
+                # than a job could legally be. This comment used to make that
+                # claim when nothing implemented it.
                 try:
                     await client.delete_agent(tmp_id)
                 except Exception as e:  # noqa: BLE001
@@ -785,7 +812,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # _qa_audit_passed still has to return True on the final verdict; repair
         # only buys more attempts at earning it.
         await db.job_update(job_id, stage="qa-audit")
-        author = "gf_sop_author" if doctype == "SOP" else "gf_annex_author"
+        author = SOP_AUTHOR if doctype == "SOP" else ANNEX_AUTHOR
         markdown = assemble_markdown(meta, sections)
         # Cross-ref: the regulatory-check loop above computes reg_findings and
         # explains there why it is advisory context here rather than a hard
@@ -795,7 +822,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         reg_context = _reg_findings_context(reg_findings)
         for attempt in range(max(0, settings.max_repair_rounds) + 1):
             audit = await client.send_message(
-                agents["gf_qa_auditor"],
+                agents[QA_AUDITOR],
                 "Run the §6A review on this assembled document Markdown. "
                 "Return verdict PASS or FIX with issues.\n\n"
                 "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
@@ -810,7 +837,7 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 break
 
             await db.job_update(job_id, stage=f"qa-repair {attempt + 1}")
-            repaired = await _repair_sections(client, author, sections, audit, job_id)
+            repaired = await _repair_sections(client, author, sections, audit, job_id, ctx=ctx)
             if repaired is None:
                 log.warning("job %s repair %d unusable — failing on the audit", job_id, attempt + 1)
                 break

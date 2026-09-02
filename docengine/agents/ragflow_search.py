@@ -113,17 +113,28 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
             }
         )
 
-    # 1. resolve dataset names -> ids
+    # 1. resolve dataset names -> ids, across EVERY page. The first version
+    #    read page 1 only, so on a tenant past 100 datasets a granted corpus
+    #    was reported as "not ingested" — fail-closed, but silently and for
+    #    good. The loop stops at the first short page.
+    by_name = {}
+    page = 1
     try:
-        req = urllib.request.Request(
-            base + "/api/v1/datasets?page=1&page_size=100", headers=headers, method="GET"
-        )
-        with urllib.request.urlopen(req, timeout=60) as r:
-            listing = json.loads(r.read().decode())
+        while True:
+            req = urllib.request.Request(
+                base + "/api/v1/datasets?page=%d&page_size=100" % page,
+                headers=headers,
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=60) as r:
+                rows = json.loads(r.read().decode()).get("data") or []
+            for d in rows:
+                by_name[d["name"]] = d["id"]
+            if len(rows) < 100:
+                break
+            page += 1
     except Exception as e:
         return json.dumps({"ok": False, "err": "dataset list failed: %s" % str(e)[:200]})
-
-    by_name = {d["name"]: d["id"] for d in (listing.get("data") or [])}
     ids, missing = [], []
     for n in wanted:
         if n in by_name:
@@ -142,12 +153,15 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
             }
         )
 
-    # 2. retrieve passages from just those datasets
+    # 2. retrieve passages from just those datasets. top_k is model-supplied:
+    #    clamp it, so a hallucinated 10000 cannot turn one search into a
+    #    context-window-sized payload.
     try:
+        k = max(1, min(int(top_k), 50))
         payload = {
             "question": question,
             "dataset_ids": ids,
-            "top_k": int(top_k),
+            "top_k": k,
             "similarity_threshold": 0.1,
         }
         req = urllib.request.Request(
@@ -161,7 +175,7 @@ def ragflow_search(question: str, datasets: str = "", top_k: int = 6) -> str:
     except Exception as e:
         return json.dumps({"ok": False, "err": "retrieval failed: %s" % str(e)[:200]})
 
-    chunks = ((res.get("data") or {}).get("chunks") or [])[: int(top_k)]
+    chunks = ((res.get("data") or {}).get("chunks") or [])[:k]
     hits = [
         {"document": c.get("document_keyword"), "text": (c.get("content") or "").strip()}
         for c in chunks

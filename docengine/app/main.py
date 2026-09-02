@@ -24,10 +24,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from . import builder, db
-from .config import settings
-from .letta import LettaClient
+from . import builder, db, fleet
+from .config import ENGINE_SCRIPTS, settings
+from .letta import LettaClient, LettaError
 from .pipeline import run_workflow
+from .ragflow_api import RagflowUnreachable, list_dataset_names
 from .questionnaires import QUESTIONNAIRES, InvalidAnswer, questionnaire_index, validate_answers
 from .security import require_api_key
 
@@ -80,13 +81,77 @@ def _valid_uuid(s: str) -> bool:
 
 
 # ---------- health (unauthenticated: compose healthcheck) ----------
+_PROBE_S = 4.0
+
+
+async def _probe_letta() -> bool:
+    """Reachable, not merely configured. `LettaClient().configured` only said
+    a URL was SET, which was true through every outage."""
+    c = LettaClient()
+    if not c.configured:
+        return False
+    try:
+        await asyncio.wait_for(c.list_tools(), _PROBE_S)
+        return True
+    except (LettaError, asyncio.TimeoutError, httpx.HTTPError):
+        return False
+    finally:
+        try:
+            await c.aclose()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def _probe_ragflow() -> dict:
+    """Whether RAGflow answers, and whether every dataset fleet.yaml grants is
+    actually on the tenant. This is the check that would have shown the fleet
+    running against renamed datasets on 2026-08-27 and again on 2026-08-29,
+    both times with /health reporting ok."""
+    declared = sorted({d for a in fleet.load_fleet()["agents"] for d in a.get("datasets", [])})
+    try:
+        live = await asyncio.wait_for(list_dataset_names(timeout=_PROBE_S), _PROBE_S + 1)
+    except (RagflowUnreachable, asyncio.TimeoutError):
+        return {"reachable": False, "declared": declared, "unresolved": declared}
+    return {"reachable": True, "declared": declared,
+            "unresolved": [d for d in declared if d not in live]}
+
+
 @app.get("/health")
 async def health():
-    return {
+    letta_ok, rag = await asyncio.gather(_probe_letta(), _probe_ragflow())
+    last = fleet.last_report()
+    body = {
         "ok": True,
         "db": db.ready(),
-        "letta": LettaClient().configured,
-        "engine": "pp-document-suite (canon 2026-07)",
+        "letta": letta_ok,
+        "ragflow": rag["reachable"],
+        "datasets_unresolved": rag["unresolved"],
+        # what the last ensure_fleet pass concluded; None until a job has run
+        "fleet": last.summary() if last else None,
+        # the tree the service actually imports (config.ENGINE_SCRIPTS), not a
+        # string that named the OTHER copy — see DEPLOY-2026-08-31 review, R3
+        "engine": ENGINE_SCRIPTS.parent.name,
+    }
+    # ok stays a liveness answer (the process is up and serving); the
+    # readiness facts sit beside it so a dashboard, a person, or the compose
+    # healthcheck can each take the view they need.
+    body["ready"] = bool(body["db"] and letta_ok and rag["reachable"] and not rag["unresolved"])
+    return body
+
+
+@app.get("/fleet/status", dependencies=[Depends(require_api_key)])
+async def fleet_status():
+    """The last ensure_fleet report in full, plus a fresh dataset resolution.
+    Read-only: it does not run a reconcile pass, because that mutates live
+    agents and a status probe must not."""
+    last = fleet.last_report()
+    return {
+        "last_pass": {
+            "changed": last.changed, "drift": last.drift, "warnings": last.warnings,
+            "unknown_tools": last.unknown_tools, "swept_orphans": last.swept,
+            "created": last.created, "converged": last.summary()["converged"],
+        } if last else None,
+        "datasets": await _probe_ragflow(),
     }
 
 
