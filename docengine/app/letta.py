@@ -89,9 +89,6 @@ class LettaClient:
         out = await self._req("GET", "/agents/", params=params)
         return out or []
 
-    async def list_sources(self) -> list[dict]:
-        return await self._req("GET", "/sources/") or []
-
     async def list_tools(self) -> list[dict]:
         return await self._req("GET", "/tools/") or []
 
@@ -115,11 +112,6 @@ class LettaClient:
         self._guard_gf(spec.get("name", ""))
         return await self._req("POST", "/agents/", json=spec)
 
-    async def attach_source(self, agent_id: str, source_id: str) -> None:
-        await self._req(
-            "PATCH", f"/agents/{agent_id}/sources/attach/{source_id}"
-        )
-
     async def create_tool(self, source_code: str, description: str = "") -> dict:
         """Register a Python source tool. Name is taken from the def by Letta."""
         body: dict[str, Any] = {"source_code": source_code}
@@ -142,6 +134,14 @@ class LettaClient:
 
     async def attach_tool(self, agent_id: str, tool_id: str) -> None:
         await self._req("PATCH", f"/agents/{agent_id}/tools/attach/{tool_id}")
+
+    async def detach_tool(self, agent_id: str, tool_id: str) -> None:
+        """The other half of attach. Until this existed the fleet could only
+        ever GRANT retrieval: removing `datasets:` from an agent in fleet.yaml
+        rewrote its scope block and left the tool — and the tenant credential
+        in its sandbox — exactly where they were. Route confirmed against this
+        server's own OpenAPI schema (PATCH .../tools/detach/{tool_id})."""
+        await self._req("PATCH", f"/agents/{agent_id}/tools/detach/{tool_id}")
 
     async def get_block(self, agent_id: str, label: str) -> dict | None:
         """The block, or None if the agent genuinely does not have it.
@@ -201,6 +201,13 @@ class LettaClient:
 
     async def attach_block(self, agent_id: str, block_id: str) -> None:
         await self._req("PATCH", f"/agents/{agent_id}/core-memory/blocks/attach/{block_id}")
+
+    async def delete_block(self, block_id: str) -> None:
+        """Remove a standalone block. Used only to clean up after a
+        create-then-attach whose attach step failed: without it every such
+        failure leaked one unattached block on the server, and the next pass
+        (seeing no block under that label on the agent) created another."""
+        await self._req("DELETE", f"/blocks/{block_id}")
 
     async def update_agent_config(self, agent_id: str, body: dict) -> dict:
         """PATCH an existing agent's own config, after the gf_ namespace check.

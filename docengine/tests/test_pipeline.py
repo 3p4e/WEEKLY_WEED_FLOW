@@ -156,8 +156,10 @@ def test_clean_section_keeps_legitimate_prose():
 # the Letta client, asserting on the job row run_workflow itself writes —
 # run_workflow "never raises: every failure lands in the job row as
 # status=failed" (its own docstring), and this is what pins that promise.
-_AGENT_NAMES = ("gf_sop_author", "gf_raci_specialist", "gf_annex_author",
-                "gf_reg_checker", "gf_qa_auditor")
+# Derived from fleet.yaml, not typed here. A hand-maintained tuple let a rename
+# in the declaration ship green and fail production with a bare KeyError on
+# section 3 of 9 — the fake fleet knew names the real one no longer had.
+_AGENT_NAMES = tuple(a["name"] for a in fleet.load_fleet()["agents"])
 
 
 def _job(qkey="annex_form"):
@@ -196,16 +198,22 @@ def _patch_common(monkeypatch, qkey="annex_form"):
     async def fake_document_create(job_id, meta):
         return "doc-1"
 
-    async def fake_ensure_fleet(client):
-        return {name: f"agent-{name}" for name in _AGENT_NAMES}
+    agents = {name: f"agent-{name}" for name in _AGENT_NAMES}
 
-    async def fake_spawn_ephemeral(client, agent_name, name_suffix):
+    async def fake_ensure_fleet(client):
+        return agents
+
+    async def fake_ensure_fleet_ctx(client):
+        return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None):
         return f"tmp-{agent_name}-{name_suffix}"
 
     monkeypatch.setattr(db, "job_get", fake_job_get)
     monkeypatch.setattr(db, "job_update", fake_job_update)
     monkeypatch.setattr(db, "document_create", fake_document_create)
     monkeypatch.setattr(fleet, "ensure_fleet", fake_ensure_fleet)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", fake_ensure_fleet_ctx)
     monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn_ephemeral)
     return updates
 
