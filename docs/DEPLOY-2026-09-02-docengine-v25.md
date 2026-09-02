@@ -117,7 +117,10 @@ eleven answers, code `QASOP_TRIAL_AD01`, title *Compilation and Review of the
 Batch Analytical Dossier*. Terminal state at 14:55:38, 1 h 41 min later:
 **`failed` — "§6A audit did not pass"**. The full result (document, verdict,
 findings) is in the job row and in `/opt/wwf-deploy/trial/result-2f4297b9.json`
-on the box.
+on the box; the document as the auditor judged it and the verdict plus the
+checker's findings are committed verbatim as
+`docs/trials/2026-09-02-QASOP_TRIAL_AD01-draft.md` and
+`docs/trials/2026-09-02-QASOP_TRIAL_AD01-audit.md`.
 
 | stage | window | what happened |
 | --- | --- | --- |
