@@ -53,7 +53,7 @@ def test_resolve_model_adopts_an_existing_agent_handle_over_the_yaml_default():
 
 
 def test_reg_checker_is_declared_with_its_regulatory_datasets():
-    assert "DB1_REGULATORY" in agent_datasets("gf_reg_checker")
+    assert "DB01_REG" in agent_datasets("gf_reg_checker")
 
 
 def test_no_agent_still_declares_a_letta_source():
@@ -298,7 +298,7 @@ def test_at_least_one_agent_can_actually_retrieve_something_today():
 
 def test_the_app_assistant_is_the_one_with_live_grounding():
     """Staff ask batch-QC questions in the app; the certificates answer them."""
-    assert "eCoA_DATABASE" in agent_datasets("gf_app_assistant")
+    assert "eCOA_DB" in agent_datasets("gf_app_assistant")
 
 
 # ── Instruction blocks ──────────────────────────────────────────────────────
@@ -1377,20 +1377,20 @@ async def test_pending_is_what_ragflow_says_not_what_the_yaml_says(monkeypatch):
     pending, and one the YAML calls pending but RAGflow now has is not."""
     spec = load_fleet()
     yaml_pending = fleet.declared_pending(spec)
-    assert "eCoA_DATABASE" not in yaml_pending and "DB1_REGULATORY" in yaml_pending
+    assert "eCOA_DB" not in yaml_pending and "DB01_REG" in yaml_pending
 
     async def fake_live(*a, **k):
-        return {"DB1_REGULATORY", "something_else"}   # eCoA_DATABASE renamed away
+        return {"DB01_REG", "something_else"}   # eCOA_DB renamed away
     monkeypatch.setattr(fleet, "list_dataset_names", fake_live)
     report = fleet.FleetReport()
     pending = await fleet.resolve_pending(spec, report)
-    assert "eCoA_DATABASE" in pending
-    assert "DB1_REGULATORY" not in pending
+    assert "eCOA_DB" in pending
+    assert "DB01_REG" not in pending
     assert report.datasets_unresolved == pending and report.datasets_live is not None
     # and it reaches the block the agent actually reads
     ag = next(a for a in spec["agents"] if a["name"] == "gf_app_assistant")
     scope = next(b for b in fleet._blocks_for(ag, spec, pending) if b["label"] == fleet.SCOPE_BLOCK)
-    assert "eCoA_DATABASE" in scope["value"] and "NOT YET INGESTED" in scope["value"]
+    assert "eCOA_DB" in scope["value"] and "NOT YET INGESTED" in scope["value"]
 
 
 @pytest.mark.asyncio
