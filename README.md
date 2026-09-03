@@ -71,6 +71,8 @@ web/                 Standalone front-end (open web/index.html — no build step
 backend/             FastAPI API (asyncpg, JWT, RLS, audit) — app/ package
   app/               main, config, db, security, deps, api/{auth,tasks,ai,audit}
   schema.users.sql / schema.tasks.sql   per-database structure + RLS + audit trigger (generated)
+bridge/              Bridge — self-hosted multi-agent vibe-coding workspace (Node + xterm.js);
+                     see bridge/README.md. Not part of the deployed WWF stack.
 docker-compose.yml   Deployed stack: db + backend + frontend (mirrors KVM4)
 docs/                Spec, status, deploy guide, provenance + design HTML
 ```
