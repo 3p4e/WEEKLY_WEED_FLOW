@@ -1,23 +1,48 @@
-# Bridge — multi-agent vibe-coding workspace
+# Bridge — agents, terminals and threads in one switch
 
-A self-hosted workspace in the spirit of BridgeMind's *BridgeSpace*: a browser
-grid of terminal panes, each running a CLI coding agent (Claude Code, Codex CLI,
-Gemini CLI, OpenCode, Aider — or a plain shell), side by side, on the same task
-or on different ones, paid for either by **your vendor subscription** or by
-**API keys you bring**.
+A self-hosted workspace with one switch in the title bar. Flip it and the whole
+app changes with it: the rail, the stage, the composer.
 
-```
-┌ Bridge ─────────────────────────────────────────── 3/16 agents · 2 open tasks ┐
-│ Tasks │ Agents │ Keys ││ claude · implementer   ││ codex · reviewer            │
-│ ──────────────────────││ bridge/add-login-…     ││ bridge/add-login-codex-…    │
-│ ▸ Add login  [in prog]││ $ …                    ││ $ …                         │
-│   claude/implementer  │├────────────────────────┴┴─────────────────────────────┤
-│   codex/reviewer      ││ claude · architect     ││ shell · ~/projects/wwf      │
-│ ▸ Fix CoA export      ││ bridge/add-login-…     ││ $ git log --oneline         │
-└───────────────────────┴┴────────────────────────┴┴─────────────────────────────┘
-```
+| Mode | Rail | Stage | Composer |
+| --- | --- | --- | --- |
+| **Agent** — teammates on routines | your named agents, next run, live state | the selected agent: runs, output, review | name · brief · folder · permission · routine (cron) |
+| **Code** — your terminals, your folders | folders you work in, live shells | a grid of PTY panes, a dock (browser or thread) beside them, the full workspace one fold down | a command line to the focused pane |
+| **Chat** — a conversation, not a repo | threads | messages | text · file drop · engine · key · model |
 
-## What it does
+Under the switch sits the original multi-agent workspace, in the spirit of
+BridgeMind's *BridgeSpace*: parallel CLI coding agents (Claude Code, Codex CLI,
+Gemini CLI, OpenCode, Aider) in a browser grid, each in its own git worktree,
+paid for by **your vendor subscription** or by **API keys you bring**.
+
+## Agent — teammates on routines
+
+Name an agent, give it a brief, put it on a routine. Each run launches the
+agent CLI **headlessly** (Claude Code `-p`, Codex `exec`, Gemini `-p`, OpenCode
+`run`, Aider `--message`) in the folder you chose, at the permission level you
+chose (`plan` read-only · `edit` may change files · `full` may run anything),
+optionally in a fresh git worktree. Output is captured and kept; runs are listed
+with status, duration and a review flag, so the work runs on a schedule and you
+review the result. Routines are 5-field cron in the server's local time, with
+presets (`@hourly`, `@daily`, `@weekdays`, `@weekly`).
+
+## Code — your terminals, your folders
+
+Live shells over the folders you already work in, up to 16 PTY panes (grid,
+columns or focus), each survives a reload. Beside them a **dock**: a browser
+(an iframe on the dev server your agent just started) or a sandboxed thread.
+**The full workspace is one fold down**: tasks, swarm launch, worktrees, keys and
+the installed-CLI list.
+
+## Chat — a conversation, not a repo
+
+Threads not tied to a project. Drop a file, ask a question, keep the thread.
+Two engines, both sandboxed so the engine cannot pretend it is inside your
+codebase: **Anthropic API** with a vault key (no tools offered; images, PDFs and
+text files go in as content blocks), or the **Claude CLI** run in an empty
+per-thread directory with every tool disallowed (rides your subscription login;
+text attachments only).
+
+## The workspace under the switch
 
 | Capability | How |
 | --- | --- |
@@ -31,8 +56,7 @@ or on different ones, paid for either by **your vendor subscription** or by
 | **Locked down** | Bearer token on every HTTP and WebSocket request, loopback bind by default, workspace secrets never reach agent shells. It hands out shells — treat it like SSH. |
 
 Not included, on purpose: a free‑form drag canvas, voice dictation, an MCP
-server for cross‑IDE memory. The shared notes file is the coordination
-primitive; an MCP wrapper over it is the obvious next step.
+server for cross‑IDE memory.
 
 ## Run
 
@@ -45,7 +69,8 @@ npm install            # also copies xterm.js into public/vendor
 npm start              # prints http://127.0.0.1:7788/?token=…
 ```
 
-Open the printed URL once; the token is remembered in the browser. Then:
+Open the printed URL once; the token is remembered in the browser. `Alt+1/2/3`
+switches Agent / Code / Chat. In Code mode:
 
 1. **Keys** tab → store `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` as needed — or skip this and use subscription mode.
 2. **Tasks** tab → *New task* with a title, description and the **repository path on this host**.
@@ -53,7 +78,7 @@ Open the printed URL once; the token is remembered in the browser. Then:
 4. Each agent appears in a pane already seeded with the task, its role, its branch and the shared notes path. Type to it as you would in a terminal.
 5. When the work is good, merge the `bridge/…` branch like any other branch and delete the worktree (`git worktree remove`).
 
-Keyboard: `Alt+N` new shell · `Alt+T` toggle tasks/keys · `Alt+L` cycle layout · `Ctrl/⌘+1…9` focus pane.
+Keyboard: `Alt+1/2/3` mode · `Alt+N` new shell · `Alt+L` cycle layout · `Ctrl/⌘+1…9` focus pane.
 
 ### Configuration
 
@@ -93,6 +118,11 @@ POST   /api/tasks/:id/swarm             {providerId, authMode, credentialId, iso
 GET    /api/tasks/:id/worktrees
 GET    /api/sessions                    POST /api/sessions {providerId, cwd, authMode, credentialId, prompt}
 POST   /api/sessions/:id/input {data}   POST /api/sessions/:id/kill {signal}   DELETE /api/sessions/:id
+GET    /api/agents                      POST /api/agents {name, brief, providerId, authMode, credentialId, cwd, isolation, permission, cron, enabled}
+PATCH  /api/agents/:id                  DELETE /api/agents/:id      POST /api/agents/:id/run      GET /api/agents/:id/runs
+GET    /api/runs/:id (with output)      PATCH /api/runs/:id {reviewed}      POST /api/runs/:id/cancel      POST /api/cron/preview {cron}
+GET    /api/chat/threads                POST /api/chat/threads {engine, model, credentialId, context}
+GET/PATCH/DELETE /api/chat/threads/:id  POST /api/chat/threads/:id/messages {text, attachments:[{name,type,data}]}
 GET/PUT /api/layout
 WS     /ws/term/:id?token=…             raw terminal I/O; JSON {type:"input"|"resize"}
 WS     /ws/events?token=…               session/task change stream
@@ -101,7 +131,7 @@ WS     /ws/events?token=…               session/task change stream
 ## Tests
 
 ```bash
-npm test     # node:test — vault, providers, worktrees, tasks + live PTY sessions
+npm test     # node:test — vault, providers, worktrees, tasks + live PTY sessions, cron, agents + runs, chat (fake claude)
 ```
 
 ## Honest limits

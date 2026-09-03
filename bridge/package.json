@@ -4,7 +4,9 @@
   "description": "Bridge — multi-agent vibe-coding workspace: parallel CLI coding agents in a browser grid, BYO API keys or vendor subscriptions, per-agent git worktrees, task board and swarm launch.",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "postinstall": "node scripts/copy-vendor.js",
     "start": "node server/index.js",
@@ -12,6 +14,7 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",

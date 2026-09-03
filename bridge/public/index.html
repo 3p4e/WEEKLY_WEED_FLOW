@@ -3,113 +3,104 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bridge — agent workspace</title>
+<title>Bridge</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230b0f14%27/%3E%3Cpath d=%27M16 5 28 26H4z%27 fill=%27none%27 stroke=%27%2327d3c3%27 stroke-width=%273%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/vendor/xterm.css">
 <link rel="stylesheet" href="/app.css">
 </head>
-<body>
-<header id="topbar">
-  <div class="brand"><span class="logo">⟁</span> Bridge <span class="sub">agent workspace</span></div>
+<body data-mode="code">
+<header id="top">
+  <div class="brand"><span class="logo">⟁</span> Bridge</div>
+  <nav class="switch" role="tablist" aria-label="Mode">
+    <button data-mode="agent" role="tab" title="Teammates on routines (Alt+1)"><b>Agent</b><small>routines</small></button>
+    <button data-mode="code" role="tab" title="Your terminals, your folders (Alt+2)"><b>Code</b><small>terminals</small></button>
+    <button data-mode="chat" role="tab" title="A conversation, not a repo (Alt+3)"><b>Chat</b><small>threads</small></button>
+  </nav>
   <div class="stats" id="stats"></div>
-  <div class="actions">
-    <button id="btn-new-shell" title="Open a plain shell pane (Alt+N)">+ Shell</button>
-    <button id="btn-new-agent" title="Launch an agent in a directory, not bound to a task">+ Agent</button>
-    <button id="btn-drawer" class="primary" title="Tasks · Agents · Keys (Alt+T)">Tasks &amp; Keys</button>
-    <button id="btn-layout" title="Cycle layout: auto grid / columns / focus (Alt+L)">Grid</button>
-  </div>
+  <div class="actions" id="top-actions"></div>
 </header>
 
 <main id="main">
-  <aside id="drawer" hidden>
-    <nav class="tabs">
-      <button data-tab="tasks" class="active">Tasks</button>
-      <button data-tab="agents">Agents</button>
-      <button data-tab="keys">Keys</button>
-    </nav>
-    <section id="tab-tasks" class="tab active">
-      <div class="row"><button id="btn-new-task" class="primary">+ New task</button></div>
-      <div id="board" class="board"></div>
-    </section>
-    <section id="tab-agents" class="tab">
-      <p class="hint">Installed CLI agents on this host. <b>Subscription</b> mode strips the API-key variable so the CLI uses its own vendor login; <b>Key</b> mode injects one of your vault keys.</p>
-      <div id="providers"></div>
-    </section>
-    <section id="tab-keys" class="tab">
-      <p class="hint">Outside API keys, AES-256-GCM encrypted at rest. Values never leave the server; they are injected only into the environment of the agent you launch with them.</p>
-      <form id="form-key" class="stack">
-        <input name="name" placeholder="Label (e.g. Anthropic prod)" required>
-        <input name="envVar" placeholder="ENV_VAR (e.g. ANTHROPIC_API_KEY)" pattern="[A-Z][A-Z0-9_]*" required>
-        <input name="value" type="password" placeholder="secret value" required autocomplete="off">
-        <button class="primary">Store key</button>
-      </form>
-      <div id="keys"></div>
-    </section>
-  </aside>
-  <section id="grid" class="grid mode-grid"></section>
+  <aside id="rail"></aside>
+  <section id="stage">
+    <!-- Code stage is persistent so xterm instances survive mode switches -->
+    <div id="stage-code" hidden>
+      <div class="codebar">
+        <div class="seg" id="gridmode"><button data-g="grid">Grid</button><button data-g="cols">Columns</button><button data-g="focus">Focus</button></div>
+        <div class="seg" id="dockmode"><span class="lbl">Dock</span><button data-d="none">None</button><button data-d="browser">Browser</button><button data-d="thread">Thread</button></div>
+        <span class="spacer"></span>
+        <button id="fold-toggle" class="ghost">Workspace: tasks, swarm, keys <span class="chev">▾</span></button>
+      </div>
+      <div class="codebody">
+        <section id="grid" class="grid mode-grid"></section>
+        <aside id="dock" hidden></aside>
+      </div>
+      <section id="fold" hidden>
+        <div class="foldcols">
+          <div class="foldcol">
+            <div class="row between"><h3>Tasks</h3><button id="btn-new-task" class="primary sm">+ New task</button></div>
+            <div id="board" class="board"></div>
+          </div>
+          <div class="foldcol">
+            <h3>Keys</h3>
+            <p class="hint">Outside API keys, AES‑256‑GCM encrypted at rest. Values never leave the server; a key is decrypted only into the environment of the agent or thread you launch with it.</p>
+            <form id="form-key" class="stack">
+              <input name="name" placeholder="Label (e.g. Anthropic prod)" required>
+              <input name="envVar" placeholder="ENV_VAR (e.g. ANTHROPIC_API_KEY)" pattern="[A-Z][A-Z0-9_]*" required>
+              <input name="value" type="password" placeholder="secret value" required autocomplete="off">
+              <button class="primary">Store key</button>
+            </form>
+            <div id="keys"></div>
+            <h3>Agent CLIs on this host</h3>
+            <div id="providers"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="stage-agent" hidden></div>
+    <div id="stage-chat" hidden></div>
+  </section>
+  <footer id="composer"></footer>
 </main>
 
-<!-- modals -->
-<dialog id="dlg-task">
-  <form method="dialog" class="stack" id="form-task">
-    <h3>New task</h3>
-    <input name="title" placeholder="Title" required autofocus>
-    <textarea name="description" rows="5" placeholder="What should be built / fixed? The agents receive this verbatim."></textarea>
-    <input name="repoPath" placeholder="Repository path on this host (git repo → agents get isolated worktrees)">
-    <input name="baseRef" placeholder="Base branch for worktrees (default: current HEAD)">
-    <menu><button value="cancel" type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button value="ok" class="primary">Create</button></menu>
-  </form>
-</dialog>
+<dialog id="dlg-task"><form method="dialog" class="stack" id="form-task">
+  <h3>New task</h3>
+  <input name="title" placeholder="Title" required autofocus>
+  <textarea name="description" rows="5" placeholder="What should be built / fixed? Agents receive this verbatim."></textarea>
+  <input name="repoPath" placeholder="Repository path on this host (git repo → isolated worktrees)">
+  <input name="baseRef" placeholder="Base branch for worktrees (default: current HEAD)">
+  <menu><button type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="primary">Create</button></menu>
+</form></dialog>
 
-<dialog id="dlg-launch">
-  <form method="dialog" class="stack" id="form-launch">
-    <h3 id="launch-title">Launch agent</h3>
-    <input type="hidden" name="taskId">
-    <input type="hidden" name="swarm" value="0">
-    <label>Agent <select name="providerId" id="launch-provider"></select></label>
-    <label>Authentication <select name="authMode">
-      <option value="subscription">Subscription (vendor login inside the CLI)</option>
-      <option value="key">API key from vault</option>
-      <option value="inherit">Inherit server environment</option>
-    </select></label>
-    <label>Key <select name="credentialId" id="launch-cred"><option value="">—</option></select></label>
-    <label id="launch-role-row">Role <select name="role" id="launch-role"></select></label>
-    <label>Isolation <select name="isolation">
-      <option value="worktree">Own git worktree + branch (recommended)</option>
-      <option value="shared">Shared checkout (task directory as-is)</option>
-    </select></label>
-    <p class="hint" id="launch-hint"></p>
-    <menu><button type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button value="ok" class="primary">Launch</button></menu>
-  </form>
-</dialog>
+<dialog id="dlg-launch"><form method="dialog" class="stack" id="form-launch">
+  <h3 id="launch-title">Launch agent</h3>
+  <input type="hidden" name="taskId"><input type="hidden" name="swarm" value="0">
+  <label>Agent <select name="providerId" id="launch-provider"></select></label>
+  <label>Authentication <select name="authMode"><option value="subscription">Subscription (vendor login inside the CLI)</option><option value="key">API key from vault</option><option value="inherit">Inherit server environment</option></select></label>
+  <label>Key <select name="credentialId" id="launch-cred"><option value="">—</option></select></label>
+  <label id="launch-role-row">Role <select name="role" id="launch-role"></select></label>
+  <label>Isolation <select name="isolation"><option value="worktree">Own git worktree + branch (recommended)</option><option value="shared">Shared checkout</option></select></label>
+  <p class="hint" id="launch-hint"></p>
+  <menu><button type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="primary">Launch</button></menu>
+</form></dialog>
 
-<dialog id="dlg-free">
-  <form method="dialog" class="stack" id="form-free">
-    <h3>New pane</h3>
-    <label>Agent <select name="providerId" id="free-provider"></select></label>
-    <input name="cwd" placeholder="Working directory (default: projects root)">
-    <label>Authentication <select name="authMode">
-      <option value="subscription">Subscription</option>
-      <option value="key">API key from vault</option>
-      <option value="inherit">Inherit</option>
-    </select></label>
-    <label>Key <select name="credentialId" id="free-cred"><option value="">—</option></select></label>
-    <textarea name="prompt" rows="3" placeholder="Optional opening prompt"></textarea>
-    <menu><button type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button value="ok" class="primary">Open</button></menu>
-  </form>
-</dialog>
+<dialog id="dlg-free"><form method="dialog" class="stack" id="form-free">
+  <h3>New pane</h3>
+  <label>Agent <select name="providerId" id="free-provider"></select></label>
+  <input name="cwd" placeholder="Working directory">
+  <label>Authentication <select name="authMode"><option value="subscription">Subscription</option><option value="key">API key from vault</option><option value="inherit">Inherit</option></select></label>
+  <label>Key <select name="credentialId" id="free-cred"><option value="">—</option></select></label>
+  <textarea name="prompt" rows="3" placeholder="Optional opening prompt"></textarea>
+  <menu><button type="button" class="ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="primary">Open</button></menu>
+</form></dialog>
 
-<dialog id="dlg-token">
-  <form method="dialog" class="stack" id="form-token">
-    <h3>Access token</h3>
-    <p class="hint">Paste the token printed by the server at start (or set in BRIDGE_TOKEN).</p>
-    <input name="token" type="password" required autofocus autocomplete="off">
-    <menu><button value="ok" class="primary">Connect</button></menu>
-  </form>
-</dialog>
+<dialog id="dlg-token"><form method="dialog" class="stack" id="form-token">
+  <h3>Access token</h3><p class="hint">Paste the token printed by the server at start (or set in BRIDGE_TOKEN).</p>
+  <input name="token" type="password" required autofocus autocomplete="off">
+  <menu><button class="primary">Connect</button></menu>
+</form></dialog>
 
 <div id="toast"></div>
-
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
 <script src="/vendor/addon-web-links.js"></script>
