@@ -11,6 +11,10 @@ Nothing is invented. A value the corpus does not hold is `—`; a page read that
 contradicts the certificate's own arithmetic is `held for review`; every difference
 against the owner's tracker is listed, never silently adopted.
 
+`parse_master_v9.py` reads the owner's own *CoQ_Analysis_Master_v9.xlsx* (the real layout, via
+openpyxl) into the same canonical shape — batches, certificates, results — for the
+app sync described in `docs/ECOA-MASTER-SYNC-DESIGN-2026-09.md`.
+
 ## Regenerate after the next ingestion
 
 ```
@@ -36,7 +40,7 @@ them as they are (they only feed the comparison, never a result cell).
 - **Coverage** counts only release eCoA certificates as ✓; ✓ᴿ and ✓ᴵ are shown
   but are not release coverage.
 - **OOS** only when a result provably exceeds the global criterion; microbial
-  counts use the Ph. Eur. 5.1.4 maximum acceptable count (5 × the stated limit);
+  counts use the Ph. Eur. 5.1.4 maximum acceptable count (2 × the stated limit);
   Total Δ⁹-THC is per target grade and never flagged.
 - Formulas (counts, status, dashboard) recalculate on open; LibreOffice could not
   run in the build sandbox, so cached values are not embedded.

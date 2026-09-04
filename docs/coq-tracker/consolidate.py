@@ -67,8 +67,8 @@ PARAMS = [  # (#, parameter, determination, key, method, criterion text, criteri
  ("6","Total CBN","Total CBN","cbn","Ph. Eur. 2.2.29 (HPLC) · CBN + CBNA x 0.876","≤ 1.0 % w/w"),
  ("7","Foreign Matter","Foreign Matter","foreign","Ph. Eur. 2.8.2 · In-house","≤ 2.0 % (25–50 g); leaves < 1 cm; no seeds"),
  ("8","Loss on Drying","Loss on Drying","lod","Ph. Eur. 2.2.32 (3028) · at 40 °C, 24 h, 15–25 mbar","≤ 12.0 %"),
- ("9.1","Microbiological Purity","TAMC","tamc","Ph. Eur. 2.6.12 cat. C","≤ 10⁵ CFU/g (max. acceptable count 5 × 10⁵, Ph. Eur. 5.1.4/5.1.8)"),
- ("9.2","Microbiological Purity","TYMC","tymc","Ph. Eur. 2.6.12 cat. C","≤ 10⁴ CFU/g (max. acceptable count 5 × 10⁴, Ph. Eur. 5.1.4/5.1.8)"),
+ ("9.1","Microbiological Purity","TAMC","tamc","Ph. Eur. 2.6.12 cat. C","≤ 10⁵ CFU/g (max. acceptable count 2 × 10⁵, Ph. Eur. 5.1.4)"),
+ ("9.2","Microbiological Purity","TYMC","tymc","Ph. Eur. 2.6.12 cat. C","≤ 10⁴ CFU/g (max. acceptable count 2 × 10⁴, Ph. Eur. 5.1.4)"),
  ("9.3","Microbiological Purity","Bile-tolerant gram-negative bacteria","gnb","Ph. Eur. 2.6.31 cat. C","≤ 10⁴ CFU/g"),
  ("9.4","Microbiological Purity","Salmonella","salm","Ph. Eur. 2.6.31 cat. C","Absence / 25 g"),
  ("9.5","Microbiological Purity","Escherichia coli","ecoli","Ph. Eur. 2.6.13 cat. C","Absence / 1 g"),
@@ -81,7 +81,7 @@ PARAMS = [  # (#, parameter, determination, key, method, criterion text, criteri
  ("11.4","Heavy Metals","Mercury (Hg)","hg","Ph. Eur. 2.4.27 (ICP-MS)","≤ 0.1 mg/kg"),
  ("12","Pesticide Residues","Pesticide Residues","pest","Ph. Eur. 2.8.13 (LC-MS/MS) · CUMCS Equivalency","≤ LOQ (Ph. Eur. 2.8.13 / CUMCS equivalency)"),
 ]
-LIMITS = {"cbd":1.0,"cbn":1.0,"lod":12.0,"tamc":5e5,"tymc":5e4,"gnb":1e4,"afb1":2,"afsum":4,"ota":20,"pb":0.5,"cd":0.3,"as":0.2,"hg":0.1}
+LIMITS = {"cbd":1.0,"cbn":1.0,"lod":12.0,"tamc":2e5,"tymc":2e4,"gnb":1e4,"afb1":2,"afsum":4,"ota":20,"pb":0.5,"cd":0.3,"as":0.2,"hg":0.1}
 SUPER = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 
 def to_number(key, raw):
