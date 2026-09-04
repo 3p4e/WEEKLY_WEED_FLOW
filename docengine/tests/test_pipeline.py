@@ -13,8 +13,9 @@ from app import builder, db, fleet  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
-    assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
-    _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
+    assemble_markdown, run_workflow, run_revision, RevisionFailed, _strip_fences,
+    _clean_section, _bilingual_gaps, _brief, _qa_audit_passed, _split_repaired,
+    _section_body, _repair_sections, _direct_edit_sections,
     _drop_echoed_heading, _reg_findings_context, _grid_overflow,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
@@ -206,7 +207,7 @@ def _patch_common(monkeypatch, qkey="annex_form"):
     async def fake_ensure_fleet_ctx(client):
         return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
 
-    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None):
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
         return f"tmp-{agent_name}-{name_suffix}"
 
     monkeypatch.setattr(db, "job_get", fake_job_get)
@@ -1052,3 +1053,196 @@ async def test_overflow_fails_the_job_before_the_build(monkeypatch):
     assert updates[-1]["result"]["grid_overflow"]
     # the sections are kept, so the named block can actually be looked at
     assert updates[-1]["result"]["sections"]
+
+
+# ---------- direct-edit: run_revision + _direct_edit_sections ----------
+
+_REV_SECTIONS = [
+    {"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Стара цел.|Old purpose."},
+    {"num": "2.0", "mk": "ПОДРАЧЈЕ", "en": "SCOPE", "content": "Стар опфат.|Old scope."},
+]
+_REV_META = {"title_mk": "МК", "title_en": "EN", "code": "C-9", "doctype": "SOP", "version": "1.0"}
+
+
+def _marker_block(num: str, mk: str, en: str, content: str) -> str:
+    return f"<<<PP-SECTION {num}|{mk}|{en}>>>\n{content}\n<<<PP-END {num}>>>"
+
+
+def _revise_job(instruction="Tighten the wording.", section_num=None, sections=None):
+    return {
+        "id": "rev-1",
+        "payload": {
+            "source_document_id": "doc-0",
+            "sections": sections if sections is not None else [dict(s) for s in _REV_SECTIONS],
+            "meta": dict(_REV_META),
+            "instruction": instruction,
+            "section_num": section_num,
+        },
+    }
+
+
+def _patch_common_for_revision(monkeypatch, job):
+    updates = []
+
+    async def fake_job_get(jid):
+        return job
+
+    async def fake_job_update(jid, **fields):
+        updates.append(fields)
+
+    async def fake_document_create(job_id, meta):
+        return "doc-1"
+
+    agents = {name: f"agent-{name}" for name in _AGENT_NAMES}
+
+    async def fake_ensure_fleet_ctx(client):
+        return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
+        return f"tmp-{agent_name}-{name_suffix}"
+
+    monkeypatch.setattr(db, "job_get", fake_job_get)
+    monkeypatch.setattr(db, "job_update", fake_job_update)
+    monkeypatch.setattr(db, "document_create", fake_document_create)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", fake_ensure_fleet_ctx)
+    monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn_ephemeral)
+    return updates
+
+
+@pytest.mark.asyncio
+async def test_run_revision_builds_a_new_document_from_the_editors_reply(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class EditClient:
+        async def send_message(self, agent_id, prompt):
+            assert "Tighten the wording." in prompt
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=EditClient())
+    assert updates[0]["status"] == "running"
+    assert updates[-1]["status"] == "done"
+    result = updates[-1]["result"]
+    assert result["document_id"] == "doc-1"
+    assert result["source_document_id"] == "doc-0"
+    assert result["section_num"] == "2.0"
+    revised = {s["num"]: s["content"] for s in result["sections"]}
+    assert revised["2.0"] == "Нов опфат.|New scope."
+    assert revised["1.0"] == "Стара цел.|Old purpose."  # untouched section carried over unchanged
+
+
+@pytest.mark.asyncio
+async def test_run_revision_rejects_an_unknown_section_without_calling_letta(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="9.9"))
+
+    class MustNotBeCalled:
+        async def send_message(self, agent_id, prompt):
+            raise AssertionError("no section 9.9 exists — Letta must never be asked")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=MustNotBeCalled())
+    assert updates[-1]["status"] == "failed"
+    assert "9.9" in updates[-1]["error"]
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_on_an_unparseable_reply(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job())
+
+    class UselessClient:
+        async def send_message(self, agent_id, prompt):
+            return "I have reviewed the request and will make the changes now."
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("an unparseable reply must never reach the build step")
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=UselessClient())
+    assert updates[-1]["status"] == "failed"
+    assert "no closed sections" in updates[-1]["error"]
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_when_the_edit_breaks_bilingual_parity(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="1.0"))
+
+    class MonolingualClient:
+        async def send_message(self, agent_id, prompt):
+            # English only — no Cyrillic — for a section the gate requires bilingual
+            return _marker_block("1.0", "ЦЕЛ", "PURPOSE", "New purpose, English only, long enough to trip the gate.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("a document that lost bilingual parity must never be built")
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=MonolingualClient())
+    assert updates[-1]["status"] == "failed"
+    assert "bilingual" in updates[-1]["error"]
+
+
+async def _fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
+    return f"tmp-{agent_name}-{name_suffix}"
+
+
+@pytest.mark.asyncio
+async def test_direct_edit_sections_rejects_a_reply_that_widens_past_the_requested_scope(monkeypatch):
+    """Scoped to section 1.0; the reply also (correctly-formed) touches 2.0.
+    That is not accepted quietly — the caller asked for one section."""
+    monkeypatch.setattr(fleet, "spawn_ephemeral", _fake_spawn_ephemeral)
+
+    class WideningClient:
+        async def send_message(self, agent_id, prompt):
+            return (
+                _marker_block("1.0", "ЦЕЛ", "PURPOSE", "Нова цел.|New purpose.") + "\n\n" +
+                _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+            )
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    revised, reason = await _direct_edit_sections(
+        WideningClient(), "gf_sop_author", [dict(s) for s in _REV_SECTIONS],
+        "Reword this.", "job-x", ctx=None, section_num="1.0",
+    )
+    assert revised is None
+    assert "outside the requested scope" in reason
+    assert "2.0" in reason
+
+
+@pytest.mark.asyncio
+async def test_direct_edit_sections_nudges_once_when_the_first_reply_has_no_markers(monkeypatch):
+    """Mirrors _repair_sections' own nudge behaviour — proves the autoclear=False
+    fix actually matters: this fake client returns nothing useful on the first
+    turn and a well-formed reply on the second, which is exactly the shape the
+    reported live failure was missing (a real clone forgot everything by then)."""
+    monkeypatch.setattr(fleet, "spawn_ephemeral", _fake_spawn_ephemeral)
+    calls = []
+
+    class NudgedClient:
+        async def send_message(self, agent_id, prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return "Let me think about how to best address this."
+            return _marker_block("1.0", "ЦЕЛ", "PURPOSE", "Нова цел.|New purpose.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    revised, reason = await _direct_edit_sections(
+        NudgedClient(), "gf_sop_author", [dict(s) for s in _REV_SECTIONS],
+        "Reword this.", "job-x", ctx=None, section_num="1.0",
+    )
+    assert len(calls) == 2
+    assert revised is not None
+    assert {s["num"]: s["content"] for s in revised}["1.0"] == "Нова цел.|New purpose."

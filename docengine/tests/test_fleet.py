@@ -1447,6 +1447,48 @@ async def test_spawn_ephemeral_with_a_context_lists_nothing(monkeypatch):
     assert calls == ["create", "attach"]
 
 
+@pytest.mark.asyncio
+async def test_spawn_ephemeral_autoclear_override_lets_a_clone_take_a_second_turn(monkeypatch):
+    """gf_reg_checker declares autoclear: true for its normal one-shot use.
+    A caller that will send this clone a SECOND turn (a repair's nudge) needs
+    the first turn still in the buffer when the second is composed — autoclear
+    left on wipes it in between, and the second turn runs with no memory of
+    the first (observed live: a repair nudge ran at 5.8k tokens right after a
+    34k-token first turn, and returned nothing). spawn_ephemeral(autoclear=False)
+    must override the base agent's own flag for this one clone."""
+    bodies: list[dict] = []
+
+    class _C:
+        async def list_agents(self):
+            return []
+        async def list_models(self):
+            return []
+        async def list_embedding_models(self):
+            return []
+        async def list_tools(self):
+            return []
+        async def create_agent(self, body):
+            bodies.append(body)
+            return {"id": "tmp-1", "name": body["name"], "tools": []}
+        async def attach_tool(self, agent_id, tool_id):
+            pass
+
+    spec = load_fleet()
+    ag = next(a for a in spec["agents"] if a["name"] == "gf_reg_checker")
+    assert ag.get("autoclear") is True  # the premise: the base agent IS autoclear:true
+    base = {"name": "gf_reg_checker", "llm_config": {"handle": "p/m"}, "embedding_config": {"handle": "p/e"}}
+    ctx = fleet.FleetContext({}, [base], "p/m", "p/e", "tool-1", [], fleet.FleetReport())
+    monkeypatch.setattr(fleet.settings, "ragflow_base", "http://r", raising=False)
+    monkeypatch.setattr(fleet.settings, "ragflow_key", "k", raising=False)
+
+    await fleet.spawn_ephemeral(_C(), "gf_reg_checker", "x", ctx=ctx, autoclear=False)
+    assert bodies[-1]["message_buffer_autoclear"] is False
+
+    bodies.clear()
+    await fleet.spawn_ephemeral(_C(), "gf_reg_checker", "y", ctx=ctx)
+    assert bodies[-1]["message_buffer_autoclear"] is True  # unchanged when no override is given
+
+
 def test_fleet_yaml_flags_match_how_the_pipeline_actually_drives_each_agent():
     """`verbatim_output` and `autoclear` are properties of how pipeline.py USES
     an agent, declared in a file that cannot see the pipeline. The earlier
