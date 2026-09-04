@@ -1,0 +1,622 @@
+{
+ "BG1024": {
+  "p_batch": "— not assigned —",
+  "strain": "Blue Gelato",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "BSS1024": {
+  "p_batch": "— not assigned —",
+  "strain": "Blue Sunset Sherbet",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "CC112501": {
+  "p_batch": "P060272",
+  "strain": "Cash Cow",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "CJ1024": {
+  "p_batch": "— not assigned —",
+  "strain": "Cup Junky",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "FB012601_1": {
+  "p_batch": "P060322",
+  "strain": "Fat Bastard",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "FB012603": {
+  "p_batch": "P060432",
+  "strain": "Fat Bastard",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "FB012603V": {
+  "p_batch": "P060392",
+  "strain": "FatBastard",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "FB032601": {
+  "p_batch": "P060452",
+  "strain": "FatBastard",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "FB112501": {
+  "p_batch": "P060292",
+  "strain": "Fat Bastard",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GG012601＊": {
+  "p_batch": "P060302",
+  "strain": "Gorilla Glue",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GG012603": {
+  "p_batch": "P060402",
+  "strain": "GorillaGlue",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "GG032601": {
+  "p_batch": "P060462",
+  "strain": "GorillaGlue",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "GG1024": {
+  "p_batch": "— not assigned —",
+  "strain": "Gorilla Glue",
+  "status": "❌ 10 MISSING",
+  "flags": "✓✗✗✗✗✗✓✗✗✗✗✗",
+  "missing_n": 10,
+  "missing": "\\#2 Ident. B; \\#3 Ident. C; \\#4 Δ⁹-THC; \\#5 CBD; \\#6 CBN; \\#8 LoD; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[PP\\]"
+ },
+ "GG112501": {
+  "p_batch": "P060252",
+  "strain": "Gorilla Glue",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GRC102501": {
+  "p_batch": "P060142 / P060182",
+  "strain": "",
+  "status": "❌ 7 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 7,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "HPA1024": {
+  "p_batch": "— not assigned —",
+  "strain": "HighProAmnesia",
+  "status": "❌ 4 MISSING",
+  "flags": "✓✗✓✓✓✓✓✓✗✓✗✗",
+  "missing_n": 4,
+  "missing": "\\#2 Ident. B; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 3,
+  "labs": "\\[FHM-K\\]"
+ },
+ "J31102501": {
+  "p_batch": "P060152",
+  "strain": "Jokerz 31",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "J31112501": {
+  "p_batch": "P060202",
+  "strain": "Jokerz 31",
+  "status": "❌ 7 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 7,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 6,
+  "labs": "\\[FHM-K\\]"
+ },
+ "J31122501": {
+  "p_batch": "P060262",
+  "strain": "Jokerz 31",
+  "status": "⚠ 3 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 3,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter",
+  "certs_n": 6,
+  "labs": "\\[FHM-K\\]"
+ },
+ "JD012601＊": {
+  "p_batch": "P060312",
+  "strain": "Jelly Donutz",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "JD012603": {
+  "p_batch": "P060362 / P060412 / P060422",
+  "strain": "",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[CNP\\]"
+ },
+ "JD022601": {
+  "p_batch": "P060482",
+  "strain": "JellyDonutz",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "JD112501": {
+  "p_batch": "P060212",
+  "strain": "Jelly Donutz",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "JD112501＊": {
+  "p_batch": "— not assigned —",
+  "strain": "Jelly Donutz",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "KC102501": {
+  "p_batch": "P060172",
+  "strain": "Kush Crasher",
+  "status": "❌ 7 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 7,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "OPM1024": {
+  "p_batch": "— not assigned —",
+  "strain": "OrangePunchMimosa",
+  "status": "❌ 4 MISSING",
+  "flags": "✓✗✓✓✓✓✓✓✗✓✗✗",
+  "missing_n": 4,
+  "missing": "\\#2 Ident. B; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 3,
+  "labs": "\\[FHM-K\\]"
+ },
+ "OPM112501": {
+  "p_batch": "P060222",
+  "strain": "Orange Punch Mimosa",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "OPM122501": {
+  "p_batch": "P060242",
+  "strain": "Orange Punch Mimosa",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "GG1024_02": {
+  "p_batch": "P050012",
+  "strain": "Gorilla Glue",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GP0824_02": {
+  "p_batch": "P050022",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 11,
+  "labs": "\\[CNP\\]"
+ },
+ "MB0824_04": {
+  "p_batch": "P050032",
+  "strain": "Motor Breath",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "OMP1024_01": {
+  "p_batch": "P050042",
+  "strain": "Orange Punch Mimosa",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "HPA1024_01": {
+  "p_batch": "P050052",
+  "strain": "High Pro Amnesia",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "OPM1024_02": {
+  "p_batch": "P050062",
+  "strain": "Orange Punch Mimosa",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "GP0824_03": {
+  "p_batch": "P050072",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 6,
+  "labs": "\\[CNP\\]"
+ },
+ "OPM1024_03": {
+  "p_batch": "P050082",
+  "strain": "Orange Punch Mimosa",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GG1024_01": {
+  "p_batch": "P050092",
+  "strain": "Gorilla Glue",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "GP0824_01": {
+  "p_batch": "P050102",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 4,
+  "labs": "\\[CNP\\]"
+ },
+ "MB0824_05": {
+  "p_batch": "P050112",
+  "strain": "Motor Breath",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "OPM052501": {
+  "p_batch": "P050132",
+  "strain": "Orange Punch Mimosa",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GP052501": {
+  "p_batch": "P050152",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "HPA052501": {
+  "p_batch": "P050182",
+  "strain": "High Pro Amnesia",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "BSS052501": {
+  "p_batch": "P050192",
+  "strain": "Blue Sunset Sherbet",
+  "status": "⚠ 3 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 3,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter",
+  "certs_n": 6,
+  "labs": "\\[DFL\\]"
+ },
+ "GP062501": {
+  "p_batch": "P050202",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 8,
+  "labs": "\\[CNP\\]"
+ },
+ "CJ072501": {
+  "p_batch": "P050252",
+  "strain": "Cup Junky",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "WC072501": {
+  "p_batch": "P050262",
+  "strain": "Wedding Crasher",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "PM072501": {
+  "p_batch": "P050272",
+  "strain": "Permanent Market",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "CLE072501": {
+  "p_batch": "P050282",
+  "strain": "Clemosa a bud",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "WC082501": {
+  "p_batch": "P060012",
+  "strain": "Wedding Crasher",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "OPM092501": {
+  "p_batch": "P060042",
+  "strain": "Orange Punch Mimosa",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "AB092501": {
+  "p_batch": "P060052",
+  "strain": "Apple and Banana",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "PM092501": {
+  "p_batch": "P060062",
+  "strain": "Permanent Market",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 5,
+  "labs": "\\[CNP\\]"
+ },
+ "CJ092501": {
+  "p_batch": "P060072",
+  "strain": "Cap Junky",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "SJ0925021": {
+  "p_batch": "P060082",
+  "strain": "Sleepy Joy",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "GP092501": {
+  "p_batch": "P060092",
+  "strain": "Grape Pie",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "FB012602\\*": {
+  "p_batch": "P060352",
+  "strain": "Fat Bastard",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "SCR012603": {
+  "p_batch": "P060382",
+  "strain": "Scrambler",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✓✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "PM112501": {
+  "p_batch": "P060232",
+  "strain": "Permanent Market",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "SCR022601": {
+  "p_batch": "P060442",
+  "strain": "Scrambler",
+  "status": "❌ 6 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 6,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 1,
+  "labs": "\\[CNP\\]"
+ },
+ "SCR112501": {
+  "p_batch": "P060282",
+  "strain": "Scrambler",
+  "status": "⚠ 2 MISSING",
+  "flags": "✗✓✓✓✓✓✗✓✓✓✓✓",
+  "missing_n": 2,
+  "missing": "\\#1 Ident. A; \\#7 Foreign matter",
+  "certs_n": 3,
+  "labs": "\\[CNP\\]"
+ },
+ "SJ102501": {
+  "p_batch": "P060162",
+  "strain": "Sleepy Joy",
+  "status": "❌ 7 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 7,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ },
+ "SJ112501": {
+  "p_batch": "P060192",
+  "strain": "Sleepy Joy",
+  "status": "❌ 7 MISSING",
+  "flags": "✗✗✓✓✓✓✗✓✗✗✗✗",
+  "missing_n": 7,
+  "missing": "\\#1 Ident. A; \\#2 Ident. B; \\#7 Foreign matter; \\#9 Microbiology; \\#10 Mycotoxins; \\#11 Heavy metals; \\#12 Pesticides",
+  "certs_n": 2,
+  "labs": "\\[FHM-K\\]"
+ }
+}
