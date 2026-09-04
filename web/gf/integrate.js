@@ -192,7 +192,9 @@ GF.WWF.doChangePw = async () => {
   const a = (GF.$('wwf-np')||{}).value || '', b = (GF.$('wwf-np2')||{}).value || '';
   const m = GF.$('wwf-login-msg');
   const mk = GF.state.lang === 'mk';
-  if (a.length < 8) { if (m) m.textContent = mk ? 'Лозинката мора да има најмалку 8 карактери' : 'Password must be at least 8 characters'; return; }
+  // Length policy is the server's (Settings.password_min_length, PASSWORD_MIN_LENGTH);
+  // the client only refuses an empty password and surfaces the server's message otherwise.
+  if (!a) { if (m) m.textContent = mk ? 'Внесете лозинка' : 'Enter a password'; return; }
   if (a !== b) { if (m) m.textContent = mk ? 'Лозинките не се совпаѓаат' : 'Passwords do not match'; return; }
   if (m) m.textContent = mk ? 'Зачувување…' : 'Saving…';
   try {
