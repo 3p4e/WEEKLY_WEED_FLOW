@@ -7,9 +7,27 @@
    0045): the cultivar master, coded batches (GP072501), the per-plant roster
    (<clone-date>_<cultivar>_<seq>), and dated whole-batch phase moves.
 
-   Read: every role above base USER. Write (register a cultivar, open a batch,
-   materialise plant ids, move a batch): cultivation manager + executives +
-   ADMIN — the same writer set the server enforces.
+   Read: every role above base USER. Write (register a cultivar, move a
+   batch): cultivation manager + executives + ADMIN. REGISTER a batch and
+   generate its plant ids: those PLUS the QA manager — the owner's model
+   (2026-09-05) is that QA, the CEO, the COO and the cultivation manager can
+   register a batch; the same set initiates a clone run (propagation-view.js).
+   Both sets mirror what the server enforces (_WRITERS / _REGISTRARS in
+   app/api/cultivation.py).
+
+   REGISTERING FROM THE PRODUCT SPECIFICATION. The batch form picks its
+   cultivar from the ImB Product Specifications — each cultivar arrives with
+   its potency ladder (strain name + grades), shown under the chooser — and
+   the batch number is pre-filled from the server's suggestion with the
+   cultivar code as its fixed head (GF.codeField).
+
+   THE JOURNEY STRIP. When a batch is registered it appears at the top of the
+   board as an animated bar: where the batch is on the cultivation →
+   production plan, how long it has been there, and what the next step is
+   (and whose it is — the harvest cut is where cultivation hands over to
+   production). Position comes from the batch's phase, nothing else; the
+   plan's phase DURATIONS are not known to the app yet, so the bar shows
+   position and elapsed days and makes no promise about dates.
 
    TWO SERVER RULES THIS VIEW RESPECTS RATHER THAN REIMPLEMENTS:
 
@@ -38,6 +56,9 @@
     plants: null,        // { batchId, code, total, offset, rows }
     filling: null,       // batch id currently being materialised
     tasks: null,          // { batchId, code, rows } — Phase 3 (migration 0054)
+    tab: 'batches',       // 'batches' | 'clones' | 'mothers' (the latter two render from propagation-view.js)
+    focus: null,          // batch id the journey strip follows: the last registered, else the newest open one
+    runs: null,           // clone runs (all), so the strip can say which run a batch was cut in
   };
 
   // Must stay in step with _PHASES in app/api/cultivation.py and the
@@ -67,6 +88,9 @@
 
   const role = () => (GF.API.user || {}).role;
   const canWrite = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
+  // Mirrors _REGISTRARS in app/api/cultivation.py: registering a batch (and
+  // generating its plant ids) is open to QA as well; moving it is not.
+  const canRegister = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
   // Mirrors CultivarIn.code / BatchIn.code server-side, so a bad code is
   // rejected before a round trip rather than as a bare 422.
   const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -90,6 +114,10 @@
       ]);
       st.batches = b.batches || [];
       st.cultivars = cv.cultivars || [];
+      // Clone runs are a separate module (propagation-view.js); the strip only
+      // needs to know which run fed a batch, so a missing API is not an error.
+      try { st.runs = GF.API.cloneRuns ? ((await GF.API.cloneRuns(false)).runs || []) : []; }
+      catch (_) { st.runs = []; }
     } catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'cultivation') GF.render.all();
@@ -121,7 +149,7 @@
     const planned = b.plant_count || 0;
     const filling = GF.WWF._cult.filling === b.id;
     const actions = [];
-    if (canWrite() && !terminal && made < planned) {
+    if (canRegister() && !terminal && made < planned) {
       actions.push(`<button class="btn btn-sm" id="cu-fill-${b.id}" ${filling ? 'disabled' : ''}
         onclick="GF.WWF.cultFillPlants('${b.id}')">${GF.icon('layers', 'icon')}${
         filling
@@ -160,6 +188,7 @@
         ${d != null ? ` · ${d} ${AL('d in phase', 'д. во фаза')}` : ''}
       </div>
       ${noCultivar}
+      ${GF.WWF.cultJourney(b, { compact: true })}
       <div style="font-size:12px;margin-bottom:8px">${headcount(b)}</div>
       ${b.note ? `<div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${GF.esc(b.note)}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap">${actions.join('')}</div>
@@ -171,10 +200,13 @@
   GF.views.cultivation = () => {
     const st = GF.WWF._cult;
     if (!st.batches && !st.loading && !st.error) GF.WWF.loadCultivation();
-    const right = canWrite()
-      ? `<button class="btn btn-sm" onclick="GF.WWF.cultCultivarList()">${GF.icon('leaf', 'icon')}${AL('Cultivars', 'Сорти')}</button>
-         <button class="btn btn-orange btn-sm" onclick="GF.WWF.cultBatchForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Open batch', 'Нов батч')}</button>`
-      : '';
+    const right = [
+      canWrite() ? `<button class="btn btn-sm" onclick="GF.WWF.cultCultivarList()">${GF.icon('leaf', 'icon')}${AL('Cultivars', 'Сорти')}</button>` : '',
+      canRegister() && GF.WWF.cloneRunForm
+        ? `<button class="btn btn-sm" onclick="GF.WWF.cloneRunForm()">${GF.icon('layers', 'icon')}${AL('Start clone run', 'Почни клонирање')}</button>` : '',
+      canRegister()
+        ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.cultBatchForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Register batch', 'Регистрирај батч')}</button>` : '',
+    ].join('');
     const head = GF.viewHead
       ? GF.viewHead('cultivation', 'cultivation_sub', right)
       : `<div class="view-head"><h2>${AL('Cultivation', 'Одгледување')}</h2>${right}</div>`;
@@ -184,10 +216,12 @@
     const toggle = `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);cursor:pointer">
       <input type="checkbox" ${st.showClosed ? 'checked' : ''} onchange="GF.WWF.cultToggleClosed()">
       ${AL('include closed batches', 'вклучи затворени батчови')}</label>`;
-    if (!batches.length) {
-      return head + `<div style="margin-bottom:10px">${toggle}</div>` + `<div class="ntf-empty">${AL(
-        'No batches yet. A batch is one cultivar in one room — register the cultivar first, then open the batch and generate its plant ids.',
-        'Нема батчови. Батч е една сорта во една соба — прво регистрирајте сорта, потоа отворете батч и генерирајте ID на растенијата.')}</div>`;
+    // An empty board still has its tabs: the mother bank and the clone runs
+    // are exactly what gets filled BEFORE the first batch exists.
+    if (!batches.length && st.tab === 'batches') {
+      return head + tabs(batches) + `<div style="margin-bottom:10px">${toggle}</div>` + `<div class="ntf-empty">${AL(
+        'No batches yet. A batch is one cultivar in one room — register the cultivar first, then register the batch from its product specification and generate its plant ids.',
+        'Нема батчови. Батч е една сорта во една соба — прво регистрирајте сорта, потоа регистрирајте батч од нејзината спецификација и генерирајте ID на растенијата.')}</div>`;
     }
     // Totals by phase, so the board answers "how many plants are flowering"
     // without anyone adding up cards.
@@ -219,7 +253,158 @@
           ${GF.esc(AL(p.en, p.mk))} <span style="color:var(--ink-3)">(${mine.length})</span></div>
         ${mine.map(batchCard).join('')}</div>`;
     }).join('');
-    return head + summary + groups;
+    const body = st.tab === 'batches'
+      ? summary + groups
+      : (GF.WWF.propagationSection ? GF.WWF.propagationSection(st.tab) : '');
+    return head + journeyStrip(batches) + tabs(batches) + body;
+  };
+
+  // ── the journey strip ─────────────────────────────────────────────────────
+  //
+  // The plan as a line: where cultivation's work ends and production's begins
+  // is the harvest cut (roles.py, harvest.py). A step's `who` names the
+  // department whose step it is; the handoff is drawn at the cut. Position is
+  // read from the batch's phase; a step the batch has passed is filled whether
+  // or not it stopped there (a batch may go clone → veg without a nursery
+  // stop — the plan still shows nursery as behind it). Durations are NOT in
+  // this list on purpose: the app has not been told the plan's phase lengths,
+  // and a bar that guessed them would be a schedule nobody set.
+  const PLAN = [
+    { key: 'registered', en: 'Registered',    mk: 'Регистриран',  who: 'cultivation' },
+    { key: 'clone',      en: 'Clones',        mk: 'Клонови',      who: 'cultivation' },
+    { key: 'nursery',    en: 'Nursery',       mk: 'Расадник',     who: 'cultivation' },
+    { key: 'veg',        en: 'Vegetation',    mk: 'Вегетација',   who: 'cultivation' },
+    { key: 'flower',     en: 'Flowering',     mk: 'Цветање',      who: 'cultivation' },
+    { key: 'cut',        en: 'Harvest cut',   mk: 'Жетва — сечење', who: 'cultivation', handoff: true },
+    { key: 'drying',     en: 'Drying',        mk: 'Сушење',       who: 'production' },
+    { key: 'closed',     en: 'Lot closed',    mk: 'Затворена серија', who: 'production' },
+  ];
+  const PLAN_POS = { clone: 1, nursery: 2, veg: 3, flower: 4, drying: 6, harvested: 7 };
+  const WHO = {
+    cultivation: { en: 'cultivation', mk: 'одгледување', color: '#3FA34D' },
+    production:  { en: 'production',  mk: 'производство', color: '#E0A73E' },
+  };
+
+  // Which clone run fed this batch, if the propagation record says so.
+  const runFor = (b) => ((GF.WWF._cult.runs || []).find(r => r.batch_id === b.id) || null);
+
+  GF.WWF.cultJourney = (b, opts = {}) => {
+    const compact = !!opts.compact;
+    // Mother stock is not on the production path, and a destroyed batch has
+    // left it: neither is drawn as "somewhere along the plan".
+    if (b.phase === 'destroyed') {
+      return compact ? '' : `<div class="cj cj-off">${AL('This batch was destroyed and has left the plan.', 'Овој батч е уништен и не е на планот.')}</div>`;
+    }
+    if (b.phase === 'mother') {
+      return compact ? '' : `<div class="cj cj-off">${AL('Mother stock — kept, not grown out. See the mother bank.', 'Мајки — се чуваат, не се одгледуваат. Видете банка на мајки.')}</div>`;
+    }
+    const pos = PLAN_POS[b.phase] != null ? PLAN_POS[b.phase] : 0;
+    const last = PLAN.length - 1;
+    const pct = Math.round((pos / last) * 100);
+    const cur = PLAN[pos], next = PLAN[pos + 1] || null;
+    const d = daysIn(b.phase_since);
+    const dots = PLAN.map((s, i) => {
+      const cls = i < pos ? 'cj-done' : i === pos ? 'cj-now' : 'cj-todo';
+      const who = WHO[s.who];
+      return `<div class="cj-step ${cls}${s.handoff ? ' cj-handoff' : ''}" style="--cj-who:${who.color}" title="${GF.esc(AL(s.en, s.mk))} · ${GF.esc(AL(who.en, who.mk))}">
+        <span class="cj-dot"></span>${compact ? '' : `<span class="cj-lbl">${GF.esc(AL(s.en, s.mk))}</span>`}</div>`;
+    }).join('');
+    const track = `<div class="cj-track${compact ? ' cj-track-sm' : ''}">
+      <div class="cj-rail"></div>
+      <div class="cj-fill" data-w="${pct}" style="width:0%"></div>
+      <div class="cj-steps">${dots}</div></div>`;
+    if (compact) return `<div class="cj cj-sm">${track}</div>`;
+    const nowWho = WHO[cur.who], nextWho = next ? WHO[next.who] : null;
+    const nowLine = `<span class="cj-now-lbl" style="--cj-who:${nowWho.color}">${GF.esc(AL(cur.en, cur.mk))}</span>
+      ${b.room_name ? ` · ${GF.esc(b.room_name)}` : ''}${d != null ? ` · ${d} ${AL('d in phase', 'д. во фаза')}` : ''}`;
+    const nextLine = next
+      ? `${AL('Next', 'Следно')}: <b style="color:${nextWho.color}">${GF.esc(AL(next.en, next.mk))}</b>
+         <span style="color:var(--ink-3)">· ${next.handoff
+           ? AL('cultivation records the cut, then production takes the lot', 'одгледувањето го запишува сечењето, потоа серијата е на производството')
+           : GF.esc(AL(nextWho.en, nextWho.mk))}</span>`
+      : `<span style="color:var(--ink-3)">${AL('The lot is closed — nothing follows on this plan.', 'Серијата е затворена — нема следен чекор.')}</span>`;
+    const run = runFor(b);
+    const runLine = run
+      ? `<div class="cj-run">${GF.icon('layers', 'icon')}${AL('Cut in clone run', 'Клонирано во')} ${GF.esc(run.code || (run.cultivar_code + ' · ' + (GF.fmtDateHuman ? GF.fmtDateHuman(run.started_on) : run.started_on)))}
+         · ${run.mothers.length} ${AL('mothers', 'мајки')}${run.cuttings_total ? ` · ${run.cuttings_total} ${AL('cuttings', 'резници')}` : ''}${
+         run.spec_version ? ` · ${GF.esc(run.spec_code || '')} ${GF.esc(run.spec_version)}` : ''}</div>`
+      : '';
+    return `<div class="cj">
+      <div class="cj-head">
+        <strong>${GF.esc(b.code || '—')}</strong>
+        <span style="color:var(--ink-3)">${GF.esc(b.cultivar_code || b.strain || '—')}${b.cultivar_name ? ' · ' + GF.esc(b.cultivar_name) : ''} · ${b.plant_count || 0} ${AL('plants', 'растенија')}</span>
+        <span class="spacer"></span>
+        <span class="cj-legend"><i style="background:${WHO.cultivation.color}"></i>${AL('cultivation', 'одгледување')} <i style="background:${WHO.production.color}"></i>${AL('production', 'производство')}</span>
+      </div>
+      ${track}
+      <div class="cj-foot"><div>${AL('Now', 'Сега')}: ${nowLine}</div><div>${nextLine}</div></div>
+      ${runLine}
+    </div>`;
+  };
+
+  // The strip follows one batch: the one just registered, else the newest open
+  // one. Chips switch it. Nothing to follow → no strip, not an empty frame.
+  const journeyStrip = (batches) => {
+    const st = GF.WWF._cult;
+    const open = batches.filter(b => !TERMINAL.includes(b.phase) && b.phase !== 'mother');
+    if (!open.length) return '';
+    let b = open.find(x => x.id === st.focus) || open[0];
+    const chips = open.length > 1 ? `<div class="cj-chips">${open.map(x =>
+      `<button class="cj-chip${x.id === b.id ? ' on' : ''}" onclick="GF.WWF.cultFocus('${x.id}')">${GF.esc(x.code || '—')}</button>`).join('')}</div>` : '';
+    // The fill is set to its width one frame after insertion so it animates
+    // from where the previous render left it, instead of appearing at rest.
+    setTimeout(GF.WWF._cultAnimate, 30);
+    return `<div class="cj-wrap">${GF.WWF.cultJourney(b)}${chips}</div>`;
+  };
+  GF.WWF._cultAnimate = () => {
+    if (typeof document === 'undefined') return;
+    document.querySelectorAll('.cj-fill[data-w]').forEach(el => { el.style.width = el.getAttribute('data-w') + '%'; });
+  };
+  GF.WWF.cultFocus = (id) => { GF.WWF._cult.focus = id; GF.render.all(); };
+
+  const tabs = (batches) => {
+    const st = GF.WWF._cult;
+    const pr = GF.WWF._prop || {};
+    const t = (key, label, n) => `<button class="cj-tab${st.tab === key ? ' on' : ''}" onclick="GF.WWF.cultTab('${key}')">${label}${n != null ? ` <span>${n}</span>` : ''}</button>`;
+    return `<div class="cj-tabs">
+      ${t('batches', AL('Batches', 'Батчови'), batches.length)}
+      ${t('clones', AL('Clone runs', 'Клонирања'), pr.runs ? pr.runs.length : null)}
+      ${t('mothers', AL('Mother bank', 'Банка на мајки'), pr.mothers ? pr.mothers.length : null)}
+    </div>`;
+  };
+  GF.WWF.cultTab = (key) => {
+    GF.WWF._cult.tab = key;
+    if (key !== 'batches' && GF.WWF.loadPropagation && !(GF.WWF._prop || {}).mothers) GF.WWF.loadPropagation();
+    GF.render.all();
+  };
+
+  // ── the product specification, as the forms show it ──────────────────────
+  // A cultivar arrives from GET /cultivars with its ImB ladder (APPROVED, else
+  // the newest DRAFT, else none). One line for a chooser's sub-text, one panel
+  // under the chooser. A missing ladder is said plainly, never drawn as a
+  // ladder with no rungs.
+  const pct = (v) => (v == null ? '—' : Number(v).toFixed(2));
+  GF.WWF.cultSpecLine = (cv) => {
+    const s = cv && cv.spec;
+    if (!s) return AL('no product specification yet', 'сè уште без спецификација');
+    const grades = (s.tiers || []).map(t => `${t.spec.replace('Spec ', '')} ${pct(t.range_min)}–${pct(t.range_max)}`).join(' · ');
+    return `${grades}${s.status === 'DRAFT' ? ' · ' + AL('DRAFT', 'НАЦРТ') : ''}`;
+  };
+  GF.WWF.cultSpecPanel = (cv) => {
+    if (!cv) return '';
+    const s = cv.spec;
+    if (!s) {
+      return `<div class="cu-spec cu-spec-none">${GF.icon('file', 'icon')}${AL(
+        `${GF.esc(cv.name)} has no product specification registered yet — its potency grades are set under QC → Potency specs.`,
+        `${GF.esc(cv.name)} сè уште нема регистрирана спецификација — потентните степени се поставуваат во QC → Спецификации на потентност.`)}</div>`;
+    }
+    const rows = (s.tiers || []).map(t => `<tr><td>${GF.esc(t.spec)}</td><td>${pct(t.range_min)} – ${pct(t.range_max)} %</td><td>${pct(t.nominal)} %</td></tr>`).join('');
+    return `<div class="cu-spec">
+      <div class="cu-spec-head"><strong>${GF.esc(cv.name)}</strong>
+        <span>${GF.esc(s.spec_code || '')} ${GF.esc(s.version || '')}</span>
+        <span class="cu-spec-st ${s.status === 'APPROVED' ? 'ok' : 'draft'}">${s.status === 'APPROVED' ? AL('APPROVED', 'ОДОБРЕНА') : AL('DRAFT — not yet approved', 'НАЦРТ — не е одобрена')}</span></div>
+      <table class="cu-spec-t"><thead><tr><th>${AL('Grade', 'Степен')}</th><th>${AL('Total Δ9-THC', 'Вкупен Δ9-THC')}</th><th>${AL('Nominal', 'Номинално')}</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
   };
 
   GF.WWF.cultToggleClosed = () => {
@@ -461,7 +646,7 @@
   // ── open a batch ──────────────────────────────────────────────────────────
 
   GF.WWF.cultBatchForm = async () => {
-    if (!canWrite()) return;
+    if (!canRegister()) return;
     const st = GF.WWF._cult;
     let rooms = [];
     try { rooms = (await GF.API.facility()).rooms || []; }
@@ -481,15 +666,23 @@
                   'Нема соби — прво додајте соби на Капацитет'), 'error');
       return;
     }
-    GF.WWF._ensureModal('cu-batch-modal', '460px');
-    GF.$('cu-batch-modal-title').textContent = AL('Open batch', 'Нов батч');
+    GF.WWF._ensureModal('cu-batch-modal', '500px');
+    GF.$('cu-batch-modal-title').textContent = AL('Register batch', 'Регистрирај батч');
     const nonTerminal = PHASES.filter(p => !TERMINAL.includes(p.key));
+    // The cultivar is chosen FROM the product specification: each option
+    // carries its grades, and picking one fills the batch number (fixed head
+    // = the cultivar code) and the specification panel beneath.
     GF.$('cu-batch-modal-body').innerHTML = `
-      <div class="field"><label>${AL('Batch code', 'Код на батч')}</label>
-        <input id="cu-b-code" maxlength="64" placeholder="GP072501"></div>
-      <div class="field"><label>${AL('Cultivar', 'Сорта')}</label>
-        ${GF.selectField('cu-b-cultivar', { value: cultivars[0].id, title: AL('Cultivar', 'Сорта'),
-          options: cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name })) })}</div>
+      <div class="field"><label>${AL('Cultivar — from the product specification', 'Сорта — од спецификацијата на производот')}</label>
+        ${GF.selectField('cu-b-cultivar', { value: cultivars[0].id, title: AL('Cultivar', 'Сорта'), searchable: true,
+          options: cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name, sub: GF.WWF.cultSpecLine(c) })),
+          onPick: () => GF.WWF._cultBatchCultivarSync() })}
+        <div id="cu-b-spec"></div></div>
+      <div class="field"><label>${AL('Batch number', 'Број на батч')}</label>
+        <div id="cu-b-code-wrap">${GF.codeField('cu-b-code', { prefix: cultivars[0].code, maxlength: 64, placeholder: 'GP072501' })}</div>
+        <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+          'The cultivar code is the fixed head; the rest is suggested from the batches already registered and can be edited.',
+          'Кодот на сортата е фиксен почеток; остатокот е предложен од веќе регистрираните батчови и може да се измени.')}</div></div>
       <div class="field"><label>${AL('Room', 'Соба')}</label>
         ${GF.selectField('cu-b-room', { value: rooms[0].id, title: AL('Room', 'Соба'),
           options: rooms.map(r => ({ v: r.id, label: r.name })) })}</div>
@@ -514,7 +707,28 @@
         <button class="btn btn-primary" id="cu-b-save" onclick="GF.WWF.cultBatchSave()">${GF.t('save')}</button>
       </div>`;
     GF.openModal('cu-batch-modal');
-    setTimeout(() => { const f = GF.$('cu-b-code'); if (f) f.focus(); }, 60);
+    await GF.WWF._cultBatchCultivarSync();
+    setTimeout(() => { const f = GF.$('cu-b-count'); if (f) f.focus(); }, 60);
+  };
+
+  // On a cultivar pick: show its specification and ask the server for the
+  // next batch number. The chooser assigns the hidden input directly and
+  // fires no change event, so this is called from its onPick — the only hook
+  // that runs (same lesson as _cultMoveSync).
+  GF.WWF._cultBatchCultivarSync = async () => {
+    const st = GF.WWF._cult;
+    const id = (GF.$('cu-b-cultivar') || {}).value;
+    const cv = (st.cultivars || []).find(c => c.id === id);
+    const spec = GF.$('cu-b-spec');
+    if (spec) spec.innerHTML = GF.WWF.cultSpecPanel(cv);
+    const wrap = GF.$('cu-b-code-wrap');
+    if (!wrap || !cv) return;
+    let suggested = '';
+    try { suggested = GF.API.cultivationBatchCode ? ((await GF.API.cultivationBatchCode(cv.id)).suggested || '') : ''; }
+    catch (_) { suggested = ''; }
+    // The pick may have changed again while the request was out.
+    if (((GF.$('cu-b-cultivar') || {}).value) !== cv.id) return;
+    wrap.innerHTML = GF.codeField('cu-b-code', { prefix: cv.code, value: suggested, maxlength: 64, placeholder: 'GP072501' });
   };
 
   GF.WWF.cultBatchSave = () => GF.once('cu-b-save', async () => {
@@ -530,7 +744,7 @@
     }
     const clone = ((GF.$('cu-b-clone') || {}).value || '') || null;
     try {
-      await GF.API.cultivationBatchCreate({
+      const created = await GF.API.cultivationBatchCreate({
         code,
         cultivar_id: (GF.$('cu-b-cultivar') || {}).value,
         room_id: (GF.$('cu-b-room') || {}).value,
@@ -541,8 +755,11 @@
         note: ((GF.$('cu-b-note') || {}).value || '').trim() || null,
       });
       GF.closeModal('cu-batch-modal');
-      GF.toast(AL('Batch opened — generate its plant ids from the card',
-                  'Батчот е отворен — генерирајте ID од картичката'), 'success');
+      GF.toast(AL('Batch registered — generate its plant ids from the card',
+                  'Батчот е регистриран — генерирајте ID од картичката'), 'success');
+      // The strip at the top now follows the batch just registered.
+      GF.WWF._cult.focus = (created || {}).id || null;
+      GF.WWF._cult.tab = 'batches';
       await GF.WWF.loadCultivation();
     } catch (e) { GF.toast(e.message, 'error'); }
   });

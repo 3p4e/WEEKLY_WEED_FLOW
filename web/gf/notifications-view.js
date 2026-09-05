@@ -52,6 +52,8 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       case 'overdue':        return AL(`Overdue (${p.due}): ${t}`, `Задоцнето (${p.due}): ${t}`);
       case 'batch_added':    return AL(`${a} added ${p.plant_count} × ${p.strain} to ${p.room} (${p.phase})`,
                                        `${a} додаде ${p.plant_count} × ${p.strain} во ${p.room} (${p.phase})`);
+      case 'clone_run_started': return AL(`${a} started a clone run: ${p.cultivar} · ${p.planned_count} cuttings from ${p.mothers} mothers (${p.started_on})`,
+                                          `${a} започна клонирање: ${p.cultivar} · ${p.planned_count} резници од ${p.mothers} мајки (${p.started_on})`);
       case 'batch_moved':    return AL(`${a} moved ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`,
                                        `${a} премести ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`);
       case 'batch_closed':   return AL(`${a} closed the ${p.strain} batch in ${p.room} (${p.plant_count} plants)`,
@@ -82,6 +84,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     overdue: { en: 'Overdue', mk: 'Задоцнети' },
     batch_added: { en: 'Batches added', mk: 'Додадени серии' },
     batch_moved: { en: 'Batches moved', mk: 'Преместени серии' },
+    clone_run_started: { en: 'Clone runs started', mk: 'Започнати клонирања' },
     batch_closed: { en: 'Batches closed', mk: 'Затворени серии' },
   };
   const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };

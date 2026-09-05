@@ -11,10 +11,26 @@ model into the identity the owner confirmed for the incoming genetics:
   - dated batch-level `plant_phase_events`.
 
 Access model, same shape as facility.py:
-  read   — every role above base USER (ELEVATED_ROLES);
-  write  — cultivation manager (CU_MGR), executives, ADMIN;
-  cultivar registry — same writers (it is master data, not physical org
-           structure, so unlike rooms it is not ADMIN-only).
+  read      — every role above base USER (ELEVATED_ROLES);
+  write     — cultivation manager (CU_MGR), executives, ADMIN (_WRITERS): the
+              cultivar master, phase moves;
+  register  — REGISTERING a batch (and materialising its plant ids, which is
+              the second half of the same act) is open to QA as well
+              (_REGISTRARS = _WRITERS + QA_MGR): the owner's model (2026-09-05)
+              is that "the QA manager, the CEO and COO as well as the
+              cultivation manager can register a batch". What QA may not do
+              is move the batch through its phases — that stays the floor's;
+  cultivar registry — _WRITERS (it is master data, not physical org
+              structure, so unlike rooms it is not ADMIN-only).
+
+REGISTERING FROM THE PRODUCT SPECIFICATION. The batch form chooses its cultivar
+from the ImB Product Specifications — the per-strain potency ladders in
+qc_potency_specs, which carry the strain name and its potency grades — so
+GET /cultivars returns each cultivar WITH its current specification (APPROVED
+if there is one, else the newest DRAFT, flagged as such). GET /batch-code
+suggests the next batch number for a cultivar: the constant head is the
+cultivar code (GP072501 = GP + period + sequence), and the tail is derived
+from what the org already has.
 
 THE AUDIT-LOCK RULE, enforced here rather than in the schema. app.fn_audit_row()
 holds one global advisory lock per audited write until commit. A ~2000-plant
@@ -27,7 +43,9 @@ database for the duration. So:
     so other writers interleave between chunks and an interrupted fill resumes
     from the last seq rather than restarting.
 """
+import json
 from datetime import date
+
 from app.worktime import SITE_TODAY_SQL, facility_today
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -41,6 +59,9 @@ from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
 _WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
+# Registering a batch — and generating its plant ids — is open to QA too; the
+# same set initiates a clone run (propagation.py). Phase moves are not.
+_REGISTRARS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "QA_MGR")
 # Widened vs facility's set: nursery split from clone, plus the terminal states.
 # Must stay in step with plant_batches_phase_check in migration 0045.
 _PHASES = ("nursery", "clone", "veg", "flower", "mother", "drying", "harvested", "destroyed")
@@ -204,15 +225,54 @@ async def _cultivar_or_422(c, cultivar_id: str):
 
 # ── cultivars ────────────────────────────────────────────────────────────────
 
+_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI"}
+
+
+def _spec_out(r) -> dict | None:
+    """The cultivar's product specification as the batch form shows it: the
+    ladder's identity and its grades (Spec I is the top range). None when the
+    cultivar has no ladder at all — the form then says so instead of showing
+    an empty table."""
+    if r["spec_id"] is None:
+        return None
+    tiers = r["spec_tiers"]
+    tiers = json.loads(tiers) if isinstance(tiers, str) else (tiers or [])
+    return {
+        "id": str(r["spec_id"]), "spec_code": r["spec_code"], "version": r["spec_version"],
+        "status": r["spec_status"],
+        "floor_pct": float(r["spec_floor"]) if r["spec_floor"] is not None else None,
+        "tiers": [{"tier": t["tier"], "spec": f"Spec {_ROMAN.get(t['tier'], t['tier'])}",
+                   "range_min": t["range_min"], "range_max": t["range_max"],
+                   "nominal": t["nominal"]} for t in tiers],
+    }
+
+
 @router.get("/cultivars")
 async def list_cultivars(user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Every cultivar WITH its product specification — the APPROVED potency
+    ladder if one exists, else the newest DRAFT (its status says which), else
+    none. One query: the lateral picks the ladder, the sub-select folds its
+    grades, so the batch form can show strain + grades without a round trip
+    per cultivar."""
     async with rls(user) as c:
         rows = await c.fetch(
-            "SELECT id, code, name, name_mk, note, is_active FROM cultivars"
-            " ORDER BY is_active DESC, code")
+            "SELECT cv.id, cv.code, cv.name, cv.name_mk, cv.note, cv.is_active,"
+            " ps.id AS spec_id, ps.spec_code, ps.version AS spec_version,"
+            " ps.status AS spec_status, ps.floor_pct AS spec_floor,"
+            " (SELECT json_agg(json_build_object('tier', g.tier, 'range_min', g.range_min,"
+            "     'range_max', g.range_max, 'nominal', g.nominal) ORDER BY g.tier)"
+            "   FROM qc_potency_spec_ranges g WHERE g.potency_spec_id = ps.id) AS spec_tiers"
+            " FROM cultivars cv"
+            " LEFT JOIN LATERAL ("
+            "   SELECT s.id, s.spec_code, s.version, s.status, s.floor_pct"
+            "   FROM qc_potency_specs s WHERE s.cultivar_id = cv.id"
+            "   AND s.status IN ('APPROVED','DRAFT')"
+            "   ORDER BY (s.status = 'APPROVED') DESC, s.updated_at DESC LIMIT 1) ps ON true"
+            " ORDER BY cv.is_active DESC, cv.code")
     return {"cultivars": [
         {"id": str(r["id"]), "code": r["code"], "name": r["name"],
-         "name_mk": r["name_mk"], "note": r["note"], "is_active": r["is_active"]}
+         "name_mk": r["name_mk"], "note": r["note"], "is_active": r["is_active"],
+         "spec": _spec_out(r)}
         for r in rows]}
 
 
@@ -258,6 +318,30 @@ async def update_cultivar(cultivar_id: str, body: CultivarPatch,
 
 # ── batches ──────────────────────────────────────────────────────────────────
 
+@router.get("/batch-code")
+async def next_batch_code(cultivar_id: str = Query(...),
+                          user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """Suggest the next batch number for a cultivar.
+
+    The owner's example GP072501 reads as <cultivar code> <period> <sequence>:
+    the cultivar code is the constant head (the same head every plant id in
+    the batch carries), the period is taken here as MMYY of the facility's
+    today, and the sequence is one past the batches this org already holds
+    for that cultivar in that period. The code field is pre-filled with the
+    whole suggestion and stays editable; only the head is fixed. If the
+    facility's period convention turns out to differ (ISO week, YYMM), it is
+    this one rule that changes."""
+    async with rls(user) as c:
+        cv = await _cultivar_or_422(c, cultivar_id)
+        period = facility_today().strftime("%m%y")
+        n = await c.fetchval(
+            "SELECT count(*) FROM plant_batches WHERE org_id=$1 AND code LIKE $2",
+            user["org_id"], f"{cv['code']}{period}%")
+    seq = int(n or 0) + 1
+    return {"prefix": cv["code"], "period": period, "seq": seq,
+            "suggested": f"{cv['code']}{period}{seq:02d}"}
+
+
 @router.get("/batches")
 async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
                        active: bool = Query(True)):
@@ -288,7 +372,7 @@ async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
 
 
 @router.post("/batches", status_code=201)
-async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITERS))):
+async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_REGISTRARS))):
     """Create the batch RECORD only — fast and atomic. The individual plant rows
     are materialised separately via POST /batches/{id}/plants, because ~2000
     audited inserts must not ride in one transaction (see module header)."""
@@ -329,7 +413,7 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_WRITER
 
 
 @router.post("/batches/{batch_id}/plants")
-async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_WRITERS))):
+async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REGISTRARS))):
     """Materialise the individual plant rows up to the batch's plant_count.
 
     CHUNKED and RESUMABLE: it starts from the highest existing seq and inserts in

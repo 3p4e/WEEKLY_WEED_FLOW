@@ -205,6 +205,7 @@ GF.views = {
         case 'ack':            return p.accepted ? AL(`Accepted: ${t}`, `Прифатено: ${t}`) : AL(`Declined: ${t}`, `Одбиено: ${t}`);
         case 'report_locked':  return AL(`Weekly ${p.kind||''} locked`, `Заклучен неделен запис`) + (p.week_start ? ` (${p.week_start})` : '');
         case 'batch_added':    return `${p.plant_count||''}× ${p.strain||''} → ${p.room||''}`;
+        case 'clone_run_started': return `${p.cultivar||''} · ${p.planned_count||''} cuttings`;
         case 'batch_moved':    return `${p.strain||''}: ${p.old_room||''} → ${p.room||''}`;
         case 'batch_closed':   return AL(`Batch closed: ${p.strain||''}`, `Затворена серија: ${p.strain||''}`);
         default:               return t || a.verb;

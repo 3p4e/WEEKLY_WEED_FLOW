@@ -1322,3 +1322,67 @@ body.demo-on .main{padding-bottom:56px}
   .td-stepper { flex-wrap: wrap; }
   .td-stepper .mw-step { flex: 1 1 40%; }
 }
+
+/* ── cultivation: the batch journey strip, board tabs, product-spec panel ──
+   The strip draws the cultivation → production plan as a line and the batch's
+   position on it (cultivation-view.js GF.WWF.cultJourney). The fill animates
+   to its width one frame after the render inserts it; the current step
+   pulses; the harvest cut — the handoff — is drawn as a diamond. Reduced
+   motion switches every animation off. */
+.cj-wrap{margin-bottom:14px}
+.cj{background:var(--surface-2,transparent);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.cj-off{color:var(--ink-3);font-size:12px}
+.cj-sm{padding:0;border:0;background:none;margin:0 0 2px}
+.cj-head{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
+.cj-legend{font-size:11px;color:var(--ink-3);display:inline-flex;gap:6px;align-items:center}
+.cj-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
+.cj-track{position:relative;height:46px;margin:4px 0}
+.cj-track-sm{height:14px;margin:2px 0 6px}
+.cj-rail{position:absolute;left:7px;right:7px;top:5px;height:4px;border-radius:2px;background:var(--surface-3)}
+.cj-fill{position:absolute;left:7px;top:5px;height:4px;border-radius:2px;max-width:calc(100% - 14px);overflow:hidden;
+  background:linear-gradient(90deg,#3FA34D,#2BE8A0);transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.cj-fill::after{content:'';position:absolute;top:0;bottom:0;width:30%;left:-30%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:gf-energy-sweep 2.4s ease-in-out infinite}
+.cj-steps{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between}
+.cj-step{display:flex;flex-direction:column;align-items:center;width:14px;position:relative}
+.cj-dot{display:block;width:14px;height:14px;border-radius:50%;background:var(--surface-3);border:2px solid var(--line);box-sizing:border-box}
+.cj-done .cj-dot{background:var(--cj-who);border-color:var(--cj-who)}
+.cj-now .cj-dot{background:var(--cj-who);border-color:#fff;animation:cj-pulse 1.6s ease-out infinite}
+.cj-handoff .cj-dot{border-radius:3px;transform:rotate(45deg) scale(.85)}
+.cj-lbl{position:absolute;top:19px;font-size:10px;color:var(--ink-3);white-space:nowrap;left:50%;transform:translateX(-50%)}
+.cj-now .cj-lbl{color:var(--ink);font-weight:700}
+.cj-foot{display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-top:6px;flex-wrap:wrap}
+.cj-now-lbl{font-weight:700;color:var(--cj-who)}
+.cj-run{font-size:11px;color:var(--ink-3);margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cj-chips{display:flex;gap:6px;flex-wrap:wrap}
+.cj-chip{font:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink-3);cursor:pointer}
+.cj-chip.on{color:var(--ink);border-color:rgba(var(--accent-rgb),.5);background:var(--primary-soft)}
+.cj-tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line);overflow-x:auto}
+.cj-tab{display:inline-flex;align-items:center;line-height:1.2;font:inherit;font-size:12px;padding:7px 12px;border:0;border-bottom:2px solid transparent;background:none;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.cj-tab.on{color:var(--ink);border-bottom-color:var(--orange)}
+.cj-tab span{font-size:11px;color:var(--ink-3);background:var(--surface-3);border-radius:999px;padding:0 6px;margin-left:4px}
+@keyframes cj-pulse{0%{box-shadow:0 0 0 0 rgba(43,232,160,.55)}100%{box-shadow:0 0 0 10px rgba(43,232,160,0)}}
+@media (max-width:640px){.cj-lbl{display:none}.cj-track{height:22px}}
+@media (prefers-reduced-motion:reduce){.cj-fill{transition:none}.cj-fill::after{animation:none}.cj-now .cj-dot{animation:none}}
+
+/* the product specification (ImB potency ladder) under a cultivar chooser */
+.cu-spec{margin-top:6px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;background:var(--surface-2,transparent)}
+.cu-spec-none{color:var(--ink-3);display:flex;gap:6px;align-items:center}
+.cu-spec-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.cu-spec-head span{color:var(--ink-3);font-size:11px}
+.cu-spec-st{padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700}
+.cu-spec-st.ok{background:rgba(43,232,160,.15);color:#2BE8A0}
+.cu-spec-st.draft{background:rgba(224,167,62,.15);color:#E0A73E}
+.cu-spec-t{width:100%;border-collapse:collapse}
+.cu-spec-t th,.cu-spec-t td{text-align:left;padding:3px 6px;border-top:1px solid var(--line);font-size:11px}
+.cu-spec-t th{color:var(--ink-3);font-weight:600;border-top:0}
+
+/* propagation: the mother bank table and the clone-run mother checklist */
+.pb-table{width:100%;border-collapse:collapse;font-size:12px}
+.pb-table th,.pb-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.pb-table th{color:var(--ink-3);font-weight:600;font-size:11px;white-space:nowrap}
+.pb-table .sub{color:var(--ink-3);font-size:11px}
+.pb-mlist{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
+.pb-mrow{display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer}
+.pb-mrow>span{flex:1;min-width:0}
+.pb-mrow input[type=number]{width:96px;flex:none}

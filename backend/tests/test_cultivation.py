@@ -335,3 +335,78 @@ async def test_phase_with_no_template_generates_nothing(client, admin_headers, o
     assert mv.json()["generated_task_ids"] == []
     tl = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
     assert tl.json()["tasks"] == []
+
+
+# ── registering from the product specification (owner, 2026-09-05) ───────────
+
+async def test_qa_registers_a_batch_and_its_ids_but_does_not_move_it(client, admin_headers):
+    """The owner's model: "the QA manager, the CEO and COO as well as the
+    cultivation manager can register a batch". Moving it through its phases
+    stays the floor's; QC registers nothing."""
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    _, ceo_h = await _actor(client, admin_headers, "CEO")
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_q", "Clone Q", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    body = {"room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092601",
+            "plant_count": 3, "phase": "clone"}
+    assert (await client.post("/cultivation/batches", json=body, headers=qc_h)).status_code == 403
+    r = await client.post("/cultivation/batches", json=body, headers=qa_h)
+    assert r.status_code == 201, r.text
+    bid = r.json()["id"]
+    g = await client.post(f"/cultivation/batches/{bid}/plants", headers=qa_h)
+    assert g.status_code == 200 and g.json()["complete"] is True
+    assert (await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "veg"},
+                              headers=qa_h)).status_code == 403
+    r = await client.post("/cultivation/batches", json={**body, "code": "GP092602"}, headers=ceo_h)
+    assert r.status_code == 201, r.text
+
+
+async def test_cultivars_carry_their_product_specification(client, admin_headers):
+    """GET /cultivars returns each cultivar WITH its ImB product specification —
+    the potency ladder's grades — so the batch form registers from it. APPROVED
+    wins over DRAFT; no ladder is None, never an empty ladder."""
+    from tests.test_propagation import _approved_ladder, LADDER
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    gp = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    fb = await _cultivar(client, cu_h, "FB", "Fat Bastard")
+
+    by_code = {c["code"]: c for c in (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
+    assert by_code["GP"]["spec"] is None and by_code["FB"]["spec"] is None
+
+    # A DRAFT ladder shows, flagged DRAFT.
+    r = await client.post("/qc/potency-specs", json={
+        "cultivar_id": fb["id"], "version": "v0.1", "floor_pct": 13.83, "n_batches": 1,
+        "ranges": LADDER}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    await _approved_ladder(client, admin_headers, gp["id"], version="v5.2")
+
+    by_code = {c["code"]: c for c in (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
+    assert by_code["FB"]["spec"]["status"] == "DRAFT" and by_code["FB"]["spec"]["version"] == "v0.1"
+    gp_spec = by_code["GP"]["spec"]
+    assert gp_spec["status"] == "APPROVED" and gp_spec["version"] == "v5.2"
+    assert gp_spec["spec_code"] == "PP-QC-SPEC-001" and gp_spec["floor_pct"] == 13.83
+    assert [t["spec"] for t in gp_spec["tiers"]] == ["Spec I", "Spec II", "Spec III", "Spec IV"]
+    assert gp_spec["tiers"][0]["range_max"] == 30 and gp_spec["tiers"][-1]["range_min"] == 13.83
+
+
+async def test_next_batch_code_is_the_cultivar_head_plus_period_plus_sequence(client, admin_headers):
+    """GP072501 = cultivar code + period + sequence. The head is the cultivar
+    code; the period is MMYY of the facility's today; the sequence counts what
+    the org already holds for that cultivar in that period."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    room = await _room(client, admin_headers, "clone_n", "Clone N", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    period = facility_today().strftime("%m%y")
+    r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}", headers=qa_h)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"prefix": "GP", "period": period, "seq": 1, "suggested": f"GP{period}01"}
+    r = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": r.json()["suggested"],
+        "plant_count": 1, "phase": "clone"}, headers=qa_h)
+    assert r.status_code == 201, r.text
+    r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}", headers=qa_h)
+    assert r.json()["seq"] == 2 and r.json()["suggested"] == f"GP{period}02"
+    assert (await client.get("/cultivation/batch-code?cultivar_id=nope", headers=qa_h)).status_code == 422

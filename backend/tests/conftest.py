@@ -146,6 +146,9 @@ async def purge_org(org_id) -> None:
                   # batches AND rooms (RESTRICT), so they precede both — same
                   # reason as the waste lines above.
                   "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
+                  # 0065: clone_run_mothers -> mother_plants / clone_runs (RESTRICT / CASCADE);
+                  # mother_plants and clone_runs -> cultivars + rooms (RESTRICT).
+                  "clone_run_mothers", "clone_runs", "mother_plants",
                   "plant_phase_events", "plants", "plant_batches", "cultivars",
                   "rooms",
                   "calendar_weeks", "departments"):

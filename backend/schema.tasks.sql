@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xCi0iH4K55lc6HhnynryZpemLT6hxqisKFbyqfjUoA6fy7VgKM6VLnt2jVYgtDr
+\restrict pWsaHlXgv1DUZPLuvgl2f8Tpl8tU965OwBtylt0bcZjX8PjYlmS6wjS1TvSkKiF
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -282,6 +282,52 @@ CREATE TABLE public.calendar_weeks (
 );
 
 ALTER TABLE ONLY public.calendar_weeks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: clone_run_mothers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.clone_run_mothers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    mother_plant_id uuid NOT NULL,
+    cuttings integer,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT clone_run_mothers_cuttings_check CHECK (((cuttings IS NULL) OR (cuttings >= 0)))
+);
+
+ALTER TABLE ONLY public.clone_run_mothers FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: clone_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.clone_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    cultivar_id uuid NOT NULL,
+    code text,
+    started_on date NOT NULL,
+    planned_count integer DEFAULT 0 NOT NULL,
+    room_id uuid,
+    batch_id uuid,
+    potency_spec_id uuid,
+    status text DEFAULT 'started'::text NOT NULL,
+    finished_on date,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT clone_runs_planned_count_check CHECK ((planned_count >= 0)),
+    CONSTRAINT clone_runs_status_check CHECK ((status = ANY (ARRAY['started'::text, 'transplanted'::text, 'failed'::text])))
+);
+
+ALTER TABLE ONLY public.clone_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -641,6 +687,33 @@ CREATE TABLE public.irrigation_events (
 );
 
 ALTER TABLE ONLY public.irrigation_events FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: mother_plants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mother_plants (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    cultivar_id uuid NOT NULL,
+    code text NOT NULL,
+    phenotype text,
+    room_id uuid,
+    "position" text,
+    started_on date,
+    source text,
+    status text DEFAULT 'active'::text NOT NULL,
+    status_since date DEFAULT CURRENT_DATE NOT NULL,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT mother_plants_status_check CHECK ((status = ANY (ARRAY['active'::text, 'retired'::text, 'destroyed'::text])))
+);
+
+ALTER TABLE ONLY public.mother_plants FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2152,6 +2225,30 @@ ALTER TABLE ONLY public.calendar_weeks
 
 
 --
+-- Name: clone_run_mothers clone_run_mothers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_run_mothers
+    ADD CONSTRAINT clone_run_mothers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: clone_run_mothers clone_run_mothers_run_id_mother_plant_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_run_mothers
+    ADD CONSTRAINT clone_run_mothers_run_id_mother_plant_id_key UNIQUE (run_id, mother_plant_id);
+
+
+--
+-- Name: clone_runs clone_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: corridor_cleanings corridor_cleanings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2301,6 +2398,22 @@ ALTER TABLE ONLY public.ipm_applications
 
 ALTER TABLE ONLY public.irrigation_events
     ADD CONSTRAINT irrigation_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mother_plants mother_plants_org_id_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_org_id_code_key UNIQUE (org_id, code);
+
+
+--
+-- Name: mother_plants mother_plants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_pkey PRIMARY KEY (id);
 
 
 --
@@ -2921,6 +3034,34 @@ CREATE INDEX biosecurity_events_room_idx ON public.biosecurity_events USING btre
 
 
 --
+-- Name: clone_run_mothers_mother_plant_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clone_run_mothers_mother_plant_id_idx ON public.clone_run_mothers USING btree (mother_plant_id);
+
+
+--
+-- Name: clone_runs_batch_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clone_runs_batch_id_idx ON public.clone_runs USING btree (batch_id);
+
+
+--
+-- Name: clone_runs_org_code_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX clone_runs_org_code_key ON public.clone_runs USING btree (org_id, code) WHERE (code IS NOT NULL);
+
+
+--
+-- Name: clone_runs_org_cultivar_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clone_runs_org_cultivar_idx ON public.clone_runs USING btree (org_id, cultivar_id, started_on);
+
+
+--
 -- Name: corridor_cleanings_manifest_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3065,6 +3206,13 @@ CREATE INDEX irrigation_events_org_applied_idx ON public.irrigation_events USING
 --
 
 CREATE INDEX irrigation_events_room_idx ON public.irrigation_events USING btree (room_id, applied_on DESC);
+
+
+--
+-- Name: mother_plants_org_cultivar_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mother_plants_org_cultivar_idx ON public.mother_plants USING btree (org_id, cultivar_id);
 
 
 --
@@ -3621,6 +3769,20 @@ CREATE TRIGGER audit_calendar_weeks AFTER INSERT OR DELETE OR UPDATE ON public.c
 
 
 --
+-- Name: clone_run_mothers audit_clone_run_mothers; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_clone_run_mothers AFTER INSERT OR DELETE OR UPDATE ON public.clone_run_mothers FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: clone_runs audit_clone_runs; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_clone_runs AFTER INSERT OR DELETE OR UPDATE ON public.clone_runs FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: corridor_cleanings audit_corridor_cleanings; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3709,6 +3871,13 @@ CREATE TRIGGER audit_ipm_applications AFTER INSERT OR DELETE OR UPDATE ON public
 --
 
 CREATE TRIGGER audit_irrigation_events AFTER INSERT OR DELETE OR UPDATE ON public.irrigation_events FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: mother_plants audit_mother_plants; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_mother_plants AFTER INSERT OR DELETE OR UPDATE ON public.mother_plants FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -4051,6 +4220,54 @@ ALTER TABLE ONLY public.biosecurity_events
 
 
 --
+-- Name: clone_run_mothers clone_run_mothers_mother_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_run_mothers
+    ADD CONSTRAINT clone_run_mothers_mother_plant_id_fkey FOREIGN KEY (mother_plant_id) REFERENCES public.mother_plants(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: clone_run_mothers clone_run_mothers_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_run_mothers
+    ADD CONSTRAINT clone_run_mothers_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.clone_runs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: clone_runs clone_runs_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE SET NULL;
+
+
+--
+-- Name: clone_runs clone_runs_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: clone_runs clone_runs_potency_spec_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_potency_spec_id_fkey FOREIGN KEY (potency_spec_id) REFERENCES public.qc_potency_specs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: clone_runs clone_runs_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: corridor_cleanings corridor_cleanings_manifest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4216,6 +4433,22 @@ ALTER TABLE ONLY public.irrigation_events
 
 ALTER TABLE ONLY public.irrigation_events
     ADD CONSTRAINT irrigation_events_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: mother_plants mother_plants_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: mother_plants mother_plants_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -4797,6 +5030,18 @@ ALTER TABLE public.biosecurity_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calendar_weeks ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: clone_run_mothers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.clone_run_mothers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: clone_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.clone_runs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: corridor_cleanings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4895,6 +5140,12 @@ ALTER TABLE public.ipm_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.irrigation_events ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: mother_plants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mother_plants ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: notifications notif_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4954,6 +5205,20 @@ CREATE POLICY org_isolation ON public.biosecurity_events USING ((org_id = app.cu
 --
 
 CREATE POLICY org_isolation ON public.calendar_weeks USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: clone_run_mothers org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.clone_run_mothers USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: clone_runs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.clone_runs USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5045,6 +5310,13 @@ CREATE POLICY org_isolation ON public.ipm_applications USING ((org_id = app.curr
 --
 
 CREATE POLICY org_isolation ON public.irrigation_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: mother_plants org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.mother_plants USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5682,5 +5954,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xCi0iH4K55lc6HhnynryZpemLT6hxqisKFbyqfjUoA6fy7VgKM6VLnt2jVYgtDr
+\unrestrict pWsaHlXgv1DUZPLuvgl2f8Tpl8tU965OwBtylt0bcZjX8PjYlmS6wjS1TvSkKiF
 

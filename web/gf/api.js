@@ -213,6 +213,20 @@ GF.API = {
   // auto-generated per-phase set plus any hand-linked via the ordinary task
   // create/PATCH endpoints. Read-only; linking happens on the task side.
   cultivationBatchTasks(batchId) { return this._req('GET', '/cultivation/batches/' + batchId + '/tasks'); },
+  // Registering from the product specification: the next batch number for a
+  // cultivar (constant head = the cultivar code, tail suggested from what the
+  // org already holds). The code field pre-fills it; the tail stays editable.
+  cultivationBatchCode(cultivarId) { return this._req('GET', '/cultivation/batch-code?cultivar_id=' + encodeURIComponent(cultivarId)); },
+  // Propagation (migration 0065, app/api/propagation.py): the mother-plant
+  // bank and clone runs — the clone end of cultivation's span. Same
+  // /cultivation prefix, separate server module, like harvest and irrigation.
+  mothers(active = true)         { return this._req('GET', '/cultivation/mothers?active=' + (active ? 'true' : 'false')); },
+  motherNextCode(cultivarId)     { return this._req('GET', '/cultivation/mothers/next-code?cultivar_id=' + encodeURIComponent(cultivarId)); },
+  motherCreate(body)             { return this._req('POST', '/cultivation/mothers', body); },
+  motherPatch(id, body)          { return this._req('PATCH', '/cultivation/mothers/' + id, body); },
+  cloneRuns(active = true)       { return this._req('GET', '/cultivation/clone-runs?active=' + (active ? 'true' : 'false')); },
+  cloneRunCreate(body)           { return this._req('POST', '/cultivation/clone-runs', body); },
+  cloneRunPatch(id, body)        { return this._req('PATCH', '/cultivation/clone-runs/' + id, body); },
 
   // ── Harvest / yield + IPM applications (migration 0051) ──
   // Same /cultivation prefix, separate server module: a harvest and a spray
