@@ -20,12 +20,16 @@ const DEPT_STYLE = {
   quality_control:{icon:'flask',color:'#9B7BE8'}, quality_assurance:{icon:'shield',color:'#E0743A'},
   logistics:{icon:'box',color:'#22B8D8'}, tooling:{icon:'wrench',color:'#8496B2'},
   security:{icon:'shield',color:'#7C90AE'},
+  // Not in the design mock (which predates them): irrigation as its own
+  // department, and Cloning / Nursery as sub-departments of Cultivation.
+  irrigation:{icon:'drop',color:'#0EA5A5'}, cloning:{icon:'leaf',color:'#2BE8A0'},
+  nursery:{icon:'leaf',color:'#3FA34D'},
 };
 // Short, language-neutral department abbreviations (QC, QA, WH…), shown on the
 // compact task cards / chips; the full bilingual name shows in lists + dropdowns.
 const DEPT_ABBR = {
   qc:'QC', quality_control:'QC', quality_assurance:'QA', production:'PR', cultivation:'CU',
-  tooling:'MU', logistics:'WH', security:'SE',
+  tooling:'MU', logistics:'WH', security:'SE', irrigation:'IR', cloning:'CL', nursery:'NU',
 };
 // Cross-department handoff pipeline, keyed by the backend's department `code`
 // (resolved to real ids once /departments loads — see loadAndRender).
@@ -39,16 +43,16 @@ GF.WWF.meId = 'me';
 // GrowFlow role keys <-> backend role enum. GF key = lowercased backend code
 // (USER keeps the historical 'operator' key — GF.PERMS/curRole default to it).
 const ROLE_OUT = { admin:'ADMIN', owner:'OWNER', ceo:'CEO', coo:'COO', qa_mgr:'QA_MGR', qc_mgr:'QC_MGR',
-  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
+  pr_mgr:'PR_MGR', wh_mgr:'WH_MGR', se_mgr:'SE_MGR', cu_mgr:'CU_MGR', ir_mgr:'IR_MGR', mu_mgr:'MU_MGR', qp:'QP', operator:'USER' };
 const ROLE_IN  = { ADMIN:'admin', OWNER:'owner', CEO:'ceo', COO:'coo', QA_MGR:'qa_mgr', QC_MGR:'qc_mgr',
-  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
+  PR_MGR:'pr_mgr', WH_MGR:'wh_mgr', SE_MGR:'se_mgr', CU_MGR:'cu_mgr', IR_MGR:'ir_mgr', MU_MGR:'mu_mgr', QP:'qp', USER:'operator' };
 // Backend roles that are "elevated" (must mirror app/roles.py ELEVATED_ROLES /
 // the DB app.is_elevated()). Everything but USER.
-const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+const ELEVATED_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP'];
 // Roles with no department affiliation — default the dept picker to "None" for these.
 const NO_DEPT_ROLES = new Set(['owner', 'ceo', 'coo', 'qp']);
-// The 9 department-manager roles (create only USER staff in their own dept).
-const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+// The department-manager roles (create only USER staff in their own dept).
+const MANAGER_ROLES = ['QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP'];
 GF.WWF.colorFor = (id) => {
   const c = (GF.AVATAR_COLORS && GF.AVATAR_COLORS.length) ? GF.AVATAR_COLORS
     : ['#2FD9D9','#15A86B','#E0A73E','#7A5BE0','#E5484D','#0EA5A5','#D6336C','#2BE8A0'];
@@ -326,7 +330,10 @@ GF.WWF.loadAndRender = async () => {
     GF.DEPTS = depts.map(d => { const st = DEPT_STYLE[d.code] || {icon:'box',color:'#5A6B82'};
       // `code` rides along so dept-templates.js can resolve the department's
       // field template / presets / home layout from the backend code.
+      // parent_id rides along too: Cloning and Nursery are sub-departments of
+      // Cultivation, and GF.WWF.deptFamily / GF.deptTemplate walk it.
       return { id:d.id, code:d.code, name:d.name, mk:d.name_mk || d.name,
+               parent_id: d.parent_id || null,
                abbr: DEPT_ABBR[d.code] || (d.code || '').toUpperCase().slice(0, 3),
                icon:st.icon, color:st.color }; });
     // Resolve the code-keyed handoff pipeline to the real backend ids.
@@ -905,10 +912,25 @@ GF.WWF.canProvision = () => {
 // (not QP — org-wide batch certification) are scoped to their own department.
 // This drives UI affordances only (sidebar, locked dept picker) — the API
 // enforces the actual visibility on GET /tasks and /reports/weekly.
-const DEPT_SCOPED_ROLES = new Set(['QA_MGR', 'QC_MGR', 'PR_MGR', 'WH_MGR', 'SE_MGR', 'CU_MGR', 'MU_MGR']);
+const DEPT_SCOPED_ROLES = new Set(['QA_MGR', 'QC_MGR', 'PR_MGR', 'WH_MGR', 'SE_MGR', 'CU_MGR', 'IR_MGR', 'MU_MGR']);
 GF.WWF.deptScope = () => {
   const u = GF.API.user || {};
   return (DEPT_SCOPED_ROLES.has(u.role) && u.department_id) ? u.department_id : null;
+};
+// A department AND its sub-departments — the client-side reading of the
+// tasks DB's app.dept_family(): Cloning and Nursery are inside the cultivation
+// manager's scope. Walks GF.DEPTS (which carries parent_id once /departments
+// has loaded); before that, or for an unknown id, it is just [rootId]. UI
+// affordances only — the API enforces the real boundary.
+GF.WWF.deptFamily = (rootId) => {
+  if (!rootId) return [];
+  const out = [String(rootId)];
+  for (let i = 0; i < out.length && i < 64; i++) {
+    (GF.DEPTS || []).forEach(d => {
+      if (d.parent_id && String(d.parent_id) === out[i] && !out.includes(String(d.id))) out.push(String(d.id));
+    });
+  }
+  return out;
 };
 
 // Strict ADMIN check — mirrors the AI-bindings endpoints' require_role(ADMIN)

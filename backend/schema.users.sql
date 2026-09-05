@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
+\restrict 55qqs13bfrrD9iaq0ewrkbnqsYRxSvtTgSf0l2WMamEEfheY6ytoM8TR9yuVwNB
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -107,7 +107,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP') $$;
 
 
 SET default_tablespace = '';
@@ -188,7 +188,7 @@ CREATE TABLE public.profiles (
     is_deleted boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'OWNER'::text, 'CEO'::text, 'COO'::text, 'QA_MGR'::text, 'QC_MGR'::text, 'PR_MGR'::text, 'WH_MGR'::text, 'SE_MGR'::text, 'CU_MGR'::text, 'MU_MGR'::text, 'QP'::text, 'USER'::text])))
+    CONSTRAINT profiles_role_check CHECK ((role = ANY (ARRAY['ADMIN'::text, 'OWNER'::text, 'CEO'::text, 'COO'::text, 'QA_MGR'::text, 'QC_MGR'::text, 'PR_MGR'::text, 'WH_MGR'::text, 'SE_MGR'::text, 'CU_MGR'::text, 'IR_MGR'::text, 'MU_MGR'::text, 'QP'::text, 'USER'::text])))
 );
 
 ALTER TABLE ONLY public.profiles FORCE ROW LEVEL SECURITY;
@@ -349,5 +349,5 @@ CREATE POLICY profiles_self ON public.profiles FOR UPDATE USING ((id = app.curre
 -- PostgreSQL database dump complete
 --
 
-\unrestrict P5SixNpXGaAdX50Md9hhclg9TTNjYgc6SivgXCuQ6ah4VyaD0aZyKazAxLo1WAc
+\unrestrict 55qqs13bfrrD9iaq0ewrkbnqsYRxSvtTgSf0l2WMamEEfheY6ytoM8TR9yuVwNB
 

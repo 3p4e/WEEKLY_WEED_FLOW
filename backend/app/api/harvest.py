@@ -11,21 +11,28 @@ cultivation.py) because a harvest and a spray record ARE cultivation records —
 they simply live in their own module, since together they carry one interlocking
 control that is easier to get wrong when split across files.
 
-Access model, same shape as cultivation.py and waste.py:
-  read     — every role above base USER (ELEVATED_ROLES);
-  record   — the dry weights, closing the lot, and IPM applications: cultivation
-             crew (CU_MGR) + executives + ADMIN;
-  the cut  — the same set PLUS QA authority (QA_MGR), for the reason below;
-  override — releasing a harvest that a pre-harvest interval blocks: QA authority
-             (QA_MGR) + executives + ADMIN, and never the recorder acting alone.
+Access model (owner's model of where the work changes hands, 2026-09-05):
+  read      — every role above base USER (ELEVATED_ROLES);
+  IPM       — applications are a cultivation-floor record: cultivation crew
+              (CU_MGR) + executives + ADMIN (_RECORDERS);
+  the cut   — cultivation records it, then hands over: _RECORDERS PLUS QA
+              authority (QA_MGR), for the reason below (_CUTTERS);
+  after it  — the dry weights and closing the lot belong to PRODUCTION
+              (PR_MGR) + executives + ADMIN (_POST_HARVEST). The cut is the
+              handoff: cultivation runs the plant from seed, import or clone up
+              to and including the cut; production takes the lot from the dry
+              room onward. Before this, cultivation held both sides and
+              PR_MGR appeared in no gate anywhere in the codebase;
+  override  — releasing a harvest that a pre-harvest interval blocks: QA
+              authority (QA_MGR) + executives + ADMIN, never the recorder alone.
 
 WHY QA CAN RECORD A CUT BUT NOT A DRY WEIGHT. The PHI override is expressed ON
 the harvest row (that is what makes it evidence rather than a note), so whoever
 releases the block has to be the one who writes the record carrying the release —
 otherwise the recorder would be signing someone else's decision. That gives
 QA_MGR exactly one extra write: creating a harvest. Recording the yield and
-closing the lot stay with the cultivation crew, so the widened surface is the
-minimum the control needs and not a general QA write into cultivation.
+closing the lot are production's, so the widened surface is the minimum the
+control needs and not a general QA write into the floor's records.
 
 THE FIVE GATES
 
@@ -104,6 +111,10 @@ _PHI_OVERRIDERS = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
 # being created (see the module header). Ordering is irrelevant to the guard but
 # dict.fromkeys keeps the tuple stable and duplicate-free as either set changes.
 _CUTTERS = tuple(dict.fromkeys((*_RECORDERS, *_PHI_OVERRIDERS)))
+# From the cut onward the lot is production's: the dry weights and the close.
+# Deliberately NOT a superset of _RECORDERS — the cultivation manager who cut
+# the plant does not also dry and close it; that is the handoff.
+_POST_HARVEST = (ADMIN, *EXECUTIVE_ROLES, "PR_MGR")
 
 # Must stay in step with the CHECK constraints in migration 0051.
 _IPM_CATEGORIES = ("biological", "botanical", "chemical", "mechanical", "other")
@@ -643,7 +654,7 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
 
 @router.post("/harvests/{harvest_id}/dry")
 async def record_dry(harvest_id: str, body: DryIn,
-                     user: dict = Depends(require_role(*_RECORDERS))):
+                     user: dict = Depends(require_role(*_POST_HARVEST))):
     """Record what came out of the dry room. Gate 3 lives here.
 
     Re-recordable while the lot is open, because correcting a mis-keyed weight
@@ -687,7 +698,7 @@ async def record_dry(harvest_id: str, body: DryIn,
 
 @router.post("/harvests/{harvest_id}/close")
 async def close_harvest(harvest_id: str, body: CloseIn,
-                        user: dict = Depends(require_role(*_RECORDERS))):
+                        user: dict = Depends(require_role(*_POST_HARVEST))):
     """Gate 4: a lot cannot be closed before its yield is recorded. A closed
     record with no yield in it looks finished, which is worse than an open one."""
     async with rls(user) as c:

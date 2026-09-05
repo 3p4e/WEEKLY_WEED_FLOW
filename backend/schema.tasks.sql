@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict YdbFTXE3Ijl1xeLmmCJGY3P0WaIKfs3xXenQ6JKwMkDfqzgvLQZb1WWWkDJa905
+\restrict xCi0iH4K55lc6HhnynryZpemLT6hxqisKFbyqfjUoA6fy7VgKM6VLnt2jVYgtDr
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -67,6 +67,24 @@ CREATE FUNCTION app.current_user_id() RETURNS uuid
 
 
 --
+-- Name: dept_family(uuid); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.dept_family(root uuid) RETURNS uuid[]
+    LANGUAGE sql STABLE
+    AS $$
+  WITH RECURSIVE fam(id, depth) AS (
+    SELECT d.id, 0 FROM public.departments d WHERE d.id = root
+    UNION ALL
+    SELECT d.id, fam.depth + 1
+      FROM public.departments d JOIN fam ON d.parent_id = fam.id
+     WHERE fam.depth < 8
+  )
+  SELECT coalesce(array_agg(DISTINCT id), ARRAY[root]) FROM fam
+$$;
+
+
+--
 -- Name: fn_audit_row(); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -107,7 +125,7 @@ END $$;
 
 CREATE FUNCTION app.is_elevated() RETURNS boolean
     LANGUAGE sql STABLE
-    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP') $$;
+    AS $$ SELECT app.current_role() IN ('ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP') $$;
 
 
 SET default_tablespace = '';
@@ -152,15 +170,6 @@ CREATE TABLE public.ai_pins (
 );
 
 ALTER TABLE ONLY public.ai_pins FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.alembic_version (
-    version_num character varying(32) NOT NULL
-);
 
 
 --
@@ -1792,7 +1801,8 @@ CREATE TABLE public.rooms (
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT rooms_kind_check CHECK ((kind = ANY (ARRAY['nursery'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'dry'::text, 'other'::text])))
+    department_id uuid,
+    CONSTRAINT rooms_kind_check CHECK ((kind = ANY (ARRAY['clone'::text, 'nursery'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'dry'::text, 'other'::text])))
 );
 
 ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
@@ -2091,14 +2101,6 @@ ALTER TABLE ONLY public.ai_agent_bindings
 
 ALTER TABLE ONLY public.ai_pins
     ADD CONSTRAINT ai_pins_pkey PRIMARY KEY (id);
-
-
---
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.alembic_version
-    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
 
 
 --
@@ -3423,6 +3425,13 @@ CREATE INDEX qc_water_tests_loc_idx ON public.qc_water_tests USING btree (org_id
 
 
 --
+-- Name: rooms_department_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX rooms_department_id_idx ON public.rooms USING btree (department_id);
+
+
+--
 -- Name: task_dependencies_dep_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4602,6 +4611,14 @@ ALTER TABLE ONLY public.qc_spec_parameters
 
 
 --
+-- Name: rooms rooms_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
 -- Name: task_assignees task_assignees_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5665,5 +5682,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YdbFTXE3Ijl1xeLmmCJGY3P0WaIKfs3xXenQ6JKwMkDfqzgvLQZb1WWWkDJa905
+\unrestrict xCi0iH4K55lc6HhnynryZpemLT6hxqisKFbyqfjUoA6fy7VgKM6VLnt2jVYgtDr
 

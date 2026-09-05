@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from app.api.weekwindow import ensure_week
 from app.automation import canned_recipients
 from app.db import rls
-from app.deps import dept_scope, require_password_set, require_role
+from app.deps import dept_family, dept_scope, require_password_set, require_role
 from app.notify import participants, safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
 from app.worktime import facility_today, classify, session_hours
@@ -77,10 +77,10 @@ async def _assert_scope_visible(c, task_id: str, user: dict) -> None:
         return
     visible = await c.fetchval(
         "SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id=$1 AND t.is_deleted=false AND ("
-        " t.department_id=$2 OR t.user_id=$3"
+        " t.department_id = ANY(app.dept_family($2)) OR t.user_id=$3"
         " OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id=t.id AND a.user_id=$3)"
-        " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=$2 AND ch.is_deleted=false)"
-        " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=$2)"
+        " OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family($2)) AND ch.is_deleted=false)"
+        " OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family($2)))"
         "))",
         task_id, scope, str(user["id"]))
     if not visible:
@@ -99,6 +99,10 @@ class DepartmentIn(BaseModel):
     code: str = Field(max_length=64, pattern=r"^[a-z0-9_]{1,64}$")
     name: str = Field(max_length=120)
     name_mk: str | None = Field(default=None, max_length=120)
+    # A SUB-department (Cloning and Nursery under Cultivation): its parent's
+    # manager runs it — see app.dept_family / roles.py. Optional; top-level
+    # departments have none.
+    parent_id: str | None = Field(default=None, max_length=64)
 
 
 @router.post("/departments", status_code=201)
@@ -113,10 +117,17 @@ async def create_department(body: DepartmentIn, user: dict = Depends(require_rol
     are safe. Inside rls(user) so the audit_departments trigger attributes the
     actor and RLS pins the org."""
     async with rls(user) as c:
+        if body.parent_id is not None:
+            # Org-scoped existence check under RLS, same reason as every other
+            # id this file accepts: a bare FK would admit any org's real id.
+            _uuid_or_422(body.parent_id, "parent_id")
+            if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1 AND is_active",
+                                    body.parent_id):
+                raise HTTPException(422, "Unknown parent department")
         row = await c.fetchrow(
-            "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4)"
+            "INSERT INTO departments(org_id, code, name, name_mk, parent_id) VALUES ($1,$2,$3,$4,$5)"
             " ON CONFLICT (org_id, code) DO NOTHING RETURNING *",
-            user["org_id"], body.code, body.name, body.name_mk)
+            user["org_id"], body.code, body.name, body.name_mk, body.parent_id)
         if row is None:  # already existed — return it unchanged
             row = await c.fetchrow(
                 "SELECT * FROM departments WHERE org_id=$1 AND code=$2",
@@ -169,11 +180,11 @@ async def list_tasks(
         args.append(scope); d = len(args)
         args.append(str(user["id"])); u = len(args)
         clauses.append(
-            f"(t.department_id=${d} OR t.user_id=${u}"
+            f"(t.department_id = ANY(app.dept_family(${d})) OR t.user_id=${u}"
             f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
             f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id"
-            f"            AND ch.department_id=${d} AND ch.is_deleted=false)"
-            f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
+            f"            AND ch.department_id = ANY(app.dept_family(${d})) AND ch.is_deleted=false)"
+            f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family(${d}))))")
     where = " AND ".join(clauses)
     async with rls(user) as c:
         return _ser(await c.fetch(
@@ -209,10 +220,10 @@ def _scope_clause(user: dict, args: list) -> str:
     args.append(scope); d = len(args)
     args.append(str(user["id"])); u = len(args)
     return (
-        f" AND (t.department_id=${d} OR t.user_id=${u}"
+        f" AND (t.department_id = ANY(app.dept_family(${d})) OR t.user_id=${u}"
         f" OR EXISTS (SELECT 1 FROM task_assignees sa WHERE sa.task_id=t.id AND sa.user_id=${u})"
-        f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id=${d} AND ch.is_deleted=false)"
-        f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id=${d}))")
+        f" OR EXISTS (SELECT 1 FROM tasks ch WHERE ch.parent_id=t.id AND ch.department_id = ANY(app.dept_family(${d})) AND ch.is_deleted=false)"
+        f" OR EXISTS (SELECT 1 FROM tasks pa WHERE pa.id=t.parent_id AND pa.department_id = ANY(app.dept_family(${d}))))")
 
 
 @router.get("/tasks/tree")
@@ -404,12 +415,16 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
     # (or personally theirs) — that delegation is exactly how a task becomes
     # multi-departmental, visible in full to every side involved.
     scope = dept_scope(user)
-    if scope and not body.parent_id:
-        if body.department_id and str(body.department_id) != scope:
-            raise HTTPException(403, "Managers may create tasks only in their own department")
-        if not body.department_id:
-            body.department_id = scope
     async with rls(user) as c:
+        # The manager's department PLUS its sub-departments: a cultivation
+        # head files work under Cloning or Nursery as naturally as under
+        # Cultivation itself. `scope` stays the department a bare task lands in.
+        fam = await dept_family(c, scope) if scope else None
+        if scope and not body.parent_id:
+            if body.department_id and str(body.department_id) not in fam:
+                raise HTTPException(403, "Managers may create tasks only in their own department")
+            if not body.department_id:
+                body.department_id = scope
         if body.parent_id is not None:
             # Org-scoped existence check (RLS-filtered SELECT under this same
             # connection — same idiom as batch_id below). Postgres validates a
@@ -428,7 +443,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
             if parent is None:
                 raise HTTPException(422, "Unknown parent task")
             if scope:
-                mine = (parent["department_id"] and str(parent["department_id"]) == scope) \
+                mine = (parent["department_id"] and str(parent["department_id"]) in fam) \
                     or str(parent["user_id"]) == str(user["id"])
                 if not mine:
                     # A foreign parent is attachable ONLY if it is ALREADY visible
@@ -439,7 +454,7 @@ async def create_task(body: TaskIn, user: dict = Depends(require_password_set)):
                     # escalation (_assert_scope_visible counts existing children,
                     # so the check runs before the new child exists).
                     await _assert_scope_visible(c, str(body.parent_id), user)
-                if not mine and body.department_id and str(body.department_id) != scope:
+                if not mine and body.department_id and str(body.department_id) not in fam:
                     raise HTTPException(403, "Managers may delegate subtasks only under their own department's tasks")
                 if not body.department_id:
                     # Inherit the parent's department ONLY when the parent is the

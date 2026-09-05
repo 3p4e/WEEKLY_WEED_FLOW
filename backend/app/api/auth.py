@@ -300,7 +300,21 @@ async def change_password(body: ChangePwReq, user: dict = Depends(get_current_us
     return {"ok": True, "access_token": token, "token_type": "bearer"}
 
 
-def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
+async def _actor_family(actor: dict) -> list[str] | None:
+    """The departments a manager may staff: their own AND its sub-departments
+    (Cloning and Nursery under Cultivation — app.dept_family, tasks 0064).
+    None for everyone else: ADMIN manages any account, and no other role
+    reaches _can_manage's manager branch. Read from the tasks DB, where
+    departments live; the actor's own department is always in the answer."""
+    if actor["role"] in MANAGER_ROLES and actor.get("department_id"):
+        async with tasks_admin_pool().acquire() as c:
+            arr = await c.fetchval("SELECT app.dept_family($1::uuid)", str(actor["department_id"]))
+        return [str(x) for x in (arr or [actor["department_id"]])]
+    return None
+
+
+def _can_manage(actor: dict, role: str, department_id: str | None,
+                family: list[str] | None = None) -> bool:
     # Admin (incl. qcm.blani, an ADMIN titled "QC Manager") manages any account
     # in the org, including other ADMIN accounts — assigning the ADMIN role
     # itself is blocked separately via CREATABLE_ROLES at each call site
@@ -312,8 +326,13 @@ def _can_manage(actor: dict, role: str, department_id: str | None) -> bool:
     # department. Managers can't create/deactivate other managers, executives,
     # or admins.
     if actor["role"] in MANAGER_ROLES:
-        return (role == "USER" and department_id is not None
-                and str(department_id) == str(actor["department_id"]))
+        if role != "USER" or department_id is None:
+            return False
+        # Their own department — or one beneath it (Cloning / Nursery under
+        # Cultivation): the cultivation manager staffs the clone room too.
+        if family is not None:
+            return str(department_id) in family
+        return str(department_id) == str(actor["department_id"])
     return False
 
 
@@ -347,7 +366,8 @@ async def create_user(body: CreateUserReq, actor: dict = Depends(require_role(AD
     # 422, rather than letting a bad value reach the DB CHECK as a 409.
     if body.role not in CREATABLE_ROLES:
         raise HTTPException(422, f"Role '{body.role}' cannot be assigned")
-    if not _can_manage(actor, body.role, body.department_id):
+    fam = await _actor_family(actor)
+    if not _can_manage(actor, body.role, body.department_id, fam):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create this account")
     await _validate_department(actor["org_id"], body.department_id)
     otp = generate_otp()
@@ -404,9 +424,10 @@ async def list_deleted_users(actor: dict = Depends(require_role(ADMIN, *MANAGER_
         rows = await conn.fetch(
             "SELECT id,username,full_name,role,department_id,updated_at FROM profiles"
             " WHERE is_deleted=true AND org_id=$1 ORDER BY updated_at DESC", actor["org_id"])
+    fam = await _actor_family(actor)
     out = []
     for r in rows:
-        if not _can_manage(actor, r["role"], r["department_id"]):
+        if not _can_manage(actor, r["role"], r["department_id"], fam):
             continue
         out.append({
             "id": str(r["id"]), "username": _DELETED_SUFFIX_RE.sub("", r["username"]),
@@ -472,7 +493,8 @@ async def delete_user(user_id: str, actor: dict = Depends(require_role(ADMIN, *M
             user_id, actor["org_id"])
         if target is None:
             raise HTTPException(404, "User not found")
-        if not _can_manage(actor, target["role"], target["department_id"]):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to delete this account")
         # Mangle the username so it's released for reuse — profiles_username_key
         # is a plain UNIQUE constraint with no is_deleted scoping, so a bare soft
@@ -518,7 +540,8 @@ async def reset_password(user_id: str, actor: dict = Depends(require_role(ADMIN,
             " FROM profiles WHERE id=$1 AND org_id=$2 AND is_deleted=false", user_id, actor["org_id"])
         if target is None:
             raise HTTPException(404, "User not found")
-        if not _can_manage(actor, target["role"], target["department_id"]):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to reset this account")
         row = await conn.fetchrow(
             "UPDATE profiles SET password_hash=$1, must_change_password=true,"
@@ -563,8 +586,9 @@ async def update_user(user_id: str, body: UpdateUserReq,
         # so a manager can't move a USER out of their department, or promote one.
         new_role = fields.get("role", target["role"])
         new_dept = fields.get("department_id", target["department_id"])
-        if not _can_manage(actor, target["role"], target["department_id"]) or \
-           not _can_manage(actor, new_role, new_dept):
+        fam = await _actor_family(actor)
+        if not _can_manage(actor, target["role"], target["department_id"], fam) or \
+           not _can_manage(actor, new_role, new_dept, fam):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to edit this account")
         if "department_id" in fields:
             await _validate_department(actor["org_id"], fields["department_id"])

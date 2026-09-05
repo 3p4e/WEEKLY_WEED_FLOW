@@ -30,6 +30,7 @@
     drying: { en: 'Drying',     mk: 'Сушење',     color: '#8296B4' },
   };
   const KINDS = {
+    clone: { en: 'Clone', mk: 'Клонирање' },
     nursery: { en: 'Nursery', mk: 'Расадник' }, veg: { en: 'Veg', mk: 'Вегетација' },
     flower: { en: 'Grow', mk: 'Одгледување' }, mother: { en: 'Mother', mk: 'Мајки' },
     dry: { en: 'Dry', mk: 'Сушење' }, other: { en: '—', mk: '—' },
@@ -37,10 +38,24 @@
   const phLbl = (p) => AL(PHASES[p]?.en || p, PHASES[p]?.mk || p);
   const phCol = (p) => (PHASES[p] || {}).color || 'var(--ink-3)';
   const roomName = (r) => (GF.state.lang === 'mk' && r.name_mk) ? r.name_mk : r.name;
-  // Room provisioning (POST /facility/rooms, PATCH /facility/rooms/{id}) is
-  // ADMIN-only. Reuses the shared strict-ADMIN helper (integrate.js) rather
-  // than duplicating the role check inline.
-  const canWriteRooms = () => !!(GF.WWF.isAdmin && GF.WWF.isAdmin());
+  // Rooms are opened and edited by whoever RUNS them — mirrors _ROOM_WRITERS
+  // and _KINDS_BY_ROLE in app/api/facility.py. ADMIN and the executives: any
+  // room. A department manager: only the kinds their department operates,
+  // within their own department (or a sub-department of it). Rooms used to be
+  // ADMIN-only, and a batch requires a room — so the cultivation manager
+  // could create a batch and had nowhere to put it.
+  const role = () => (GF.API.user || {}).role;
+  const ROOM_WRITERS = ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'PR_MGR'];
+  const KINDS_BY_ROLE = { CU_MGR: ['clone', 'nursery', 'veg', 'flower', 'mother'], PR_MGR: ['dry'] };
+  const isExec = () => ['ADMIN', 'OWNER', 'CEO', 'COO'].includes(role());
+  const myKinds = () => isExec() ? null : (KINDS_BY_ROLE[role()] || []);   // null = any
+  const myFamily = () => GF.WWF.deptFamily ? GF.WWF.deptFamily((GF.API.user || {}).department_id) : [];
+  const canWriteRooms = () => ROOM_WRITERS.includes(role()) && (isExec() || !!(GF.API.user || {}).department_id);
+  // This room, as it is: mine to edit? (The server decides; this only hides
+  // a button that would 403.) A legacy room with no department is editable by
+  // the manager whose kind it is — see facility.py's _assert_room_authority.
+  const canEditRoom = (r) => canWriteRooms() && (isExec() ||
+    (myKinds().includes(r.kind) && (!r.department_id || myFamily().includes(String(r.department_id)))));
   const ROOM_CODE_RE = /^[a-z0-9_]{1,64}$/;   // mirrors RoomIn.code server-side pattern
   const daysIn = (iso) => {
     if (!iso) return 0;
@@ -111,8 +126,8 @@
         canWriteRooms()
           ? AL('No rooms configured yet — use "Add room" above to create the first one.',
                'Сè уште нема соби — користете „Додади соба" погоре за да ја креирате првата.')
-          : AL('No rooms configured yet — an administrator sets them up on the facility board.',
-               'Сè уште нема соби — администраторот ги поставува на таблата за капацитет.')
+          : AL('No rooms configured yet — a department manager or an administrator sets them up on the facility board.',
+               'Сè уште нема соби — менаџер на оддел или администраторот ги поставува на таблата за капацитет.')
         }</div>`}</div>`;
   };
 
@@ -133,14 +148,15 @@
       <div id="fac-room-rows">${rows || `<div class="fr-empty" style="padding:8px 0">${AL('Empty', 'Празно')}</div>`}</div>
       <div style="font-size:12px;color:var(--ink-3);margin-top:12px">
         ${AL('Add, move, or close batches from the Cultivation board.', 'Додавајте, преместувајте или затворајте серии од таблата за Култивација.')}</div>
-      ${canWriteRooms() ? `<button class="btn" style="width:100%;justify-content:center;margin-top:8px"
+      ${canEditRoom(r) ? `<button class="btn" style="width:100%;justify-content:center;margin-top:8px"
         onclick="GF.WWF.openRoomForm('${r.id}')">${GF.icon('settings', 'icon')}${AL('Edit room', 'Уреди соба')}</button>` : ''}`;
     GF.openModal('fac-room-modal');
   };
 
-  /* ── Room editor: create (roomId null) or edit — ADMIN only ──
-     POST/PATCH /facility/rooms are require_role(ADMIN) on the backend, so
-     this is gated by the strict-ADMIN canWriteRooms(), not a broader role set. */
+  /* ── Room editor: create (roomId null) or edit ──
+     Gated by canWriteRooms(); the kinds on offer are the caller's own
+     (a cultivation manager is not shown 'dry'), and the department is theirs
+     unless they are ADMIN / an executive, who choose it — or leave it unset. */
   GF.WWF.openRoomForm = (roomId) => {
     if (!canWriteRooms()) return;
     const d = GF.WWF._fac.data; if (!d) return;
@@ -150,7 +166,20 @@
     GF.WWF._ensureModal('fac-roomform-modal', '420px');
     GF.$('fac-roomform-modal-title').textContent = r
       ? AL('Edit room', 'Уреди соба') : AL('Add room', 'Додади соба');
-    const kindOpts = Object.keys(KINDS).map(k => ({ v: k, label: AL(KINDS[k].en, KINDS[k].mk) }));
+    const kinds = myKinds();
+    const kindOpts = Object.keys(KINDS).filter(k => !kinds || kinds.includes(k))
+      .map(k => ({ v: k, label: AL(KINDS[k].en, KINDS[k].mk) }));
+    const defKind = r ? r.kind : (kinds ? kinds[0] : 'flower');
+    // ADMIN / executives pick the department that runs the room (or none);
+    // a manager's room is their department's, said rather than chosen.
+    const deptRow = isExec()
+      ? `<div class="field"><label>${AL('Department', 'Оддел')}</label>
+          ${GF.selectField('fr-dept', { value: r && r.department_id ? r.department_id : '',
+            title: AL('Department', 'Оддел'), searchable: true,
+            options: [{ v: '', label: AL('— none —', '— нема —') }].concat(
+              (GF.DEPTS || []).map(d => ({ v: d.id, label: GF.depName ? GF.depName(d.id) : d.name, color: d.color }))) })}</div>`
+      : `<div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+          'The room belongs to your department.', 'Собата припаѓа на вашиот оддел.')}</div>`;
     // code is immutable after creation (RoomPatch has no code field) — only
     // shown on the create form.
     GF.$('fac-roomform-modal-body').innerHTML = `
@@ -162,10 +191,11 @@
         <input id="fr-name-mk" maxlength="120" value="${GF.esc(r && r.name_mk ? r.name_mk : '')}"></div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1.4"><label>${AL('Kind', 'Тип')}</label>
-          ${GF.selectField('fr-kind', { value: r ? r.kind : 'flower', title: AL('Kind', 'Тип'), options: kindOpts })}</div>
+          ${GF.selectField('fr-kind', { value: defKind, title: AL('Kind', 'Тип'), options: kindOpts })}</div>
         <div class="field" style="flex:1"><label>${AL('Sort', 'Редослед')}</label>
           <input id="fr-sort" type="number" min="0" max="1000" step="1" value="${r ? r.sort : 0}"></div>
       </div>
+      ${deptRow}
       <div class="row" style="gap:10px">
         ${r ? `<button class="btn" style="color:var(--red)" onclick="GF.WWF.deactivateRoom('${r.id}')">${AL('Deactivate room', 'Деактивирај соба')}</button>` : ''}
         <div class="spacer"></div>
@@ -182,6 +212,10 @@
     const kind = (GF.$('fr-kind') || {}).value;
     const sortRaw = ((GF.$('fr-sort') || {}).value || '').trim();
     const sort = sortRaw === '' ? 0 : parseInt(sortRaw, 10);
+    // Only ADMIN / executives have the chooser; a manager sends no department
+    // and the server assigns their own (create) or leaves it as it is (edit).
+    const deptEl = GF.$('fr-dept');
+    const dept = deptEl ? ((deptEl.value || '') || null) : undefined;
     if (!name) {
       GF.toast(AL('Enter a room name', 'Внесете име на собата'), 'error');
       return;
@@ -195,7 +229,9 @@
         // name_mk is the one field the server treats an explicit null as
         // "clear it" rather than "not supplied" — sending '' as null here
         // lets an admin remove a Macedonian name they'd set earlier.
-        await GF.API.facilityPatchRoom(roomId, { name, name_mk: nameMk || null, kind, sort });
+        const patch = { name, name_mk: nameMk || null, kind, sort };
+        if (dept !== undefined) patch.department_id = dept;   // null = unassign (ADMIN/exec only)
+        await GF.API.facilityPatchRoom(roomId, patch);
       } else {
         const code = ((GF.$('fr-code') || {}).value || '').trim().toLowerCase();
         if (!ROOM_CODE_RE.test(code)) {
@@ -203,7 +239,9 @@
                        'Кодот смее да содржи само мали букви, цифри и долна црта (1-64 знаци)'), 'error');
           return;
         }
-        await GF.API.facilityAddRoom({ code, name, name_mk: nameMk || null, kind, sort });
+        const body = { code, name, name_mk: nameMk || null, kind, sort };
+        if (dept) body.department_id = dept;
+        await GF.API.facilityAddRoom(body);
       }
       GF.closeModal('fac-roomform-modal');
       GF.toast(GF.t('save') + ' ✓', 'success');

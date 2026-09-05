@@ -702,3 +702,16 @@ async def test_me_carries_the_facility_clock_the_ui_must_reckon_dates_by(client,
     # …and additive: the user fields every existing caller reads are untouched.
     for key in ("id", "username", "role", "must_change_password"):
         assert key in body
+
+
+async def test_the_irrigation_manager_role_is_provisionable_and_elevated(client, admin_headers):
+    """IR_MGR is new in users migration 0012 (the CHECK and app.is_elevated) and
+    tasks migration 0064 (the tasks DB's own is_elevated). A role that only one
+    database knows logs in to an empty app — that has happened before (tasks
+    0009) — so this reads through both."""
+    user, otp = await create_user(client, admin_headers, role="IR_MGR")
+    assert user["role"] == "IR_MGR"
+    token = await login_and_set_password(client, user["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/cultivation/irrigation", headers=h)).status_code == 200
+    assert (await client.get("/tasks", headers=h)).status_code == 200

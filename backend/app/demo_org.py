@@ -63,14 +63,21 @@ _TASKS_WIPE_ORDER = (
     "tasks", "calendar_weeks", "departments",
 )
 
+# (code, name, name_mk, parent code). Parents precede their children — the
+# seeding loop resolves parent_id from what it has already inserted. Cloning
+# and Nursery are SUB-departments of Cultivation, run by its manager (see
+# roles.py); Irrigation is a department of its own (owner, 2026-09-05).
 _DEPARTMENTS = (
-    ("cultivation",       "Cultivation",       "Одгледување"),
-    ("production",        "Production",        "Производство"),
-    ("qc",                "Quality Control",   "Контрола на квалитет"),
-    ("quality_assurance", "Quality Assurance", "Обезбедување квалитет"),
-    ("logistics",         "Warehouse",         "Магацин"),
-    ("security",          "Security",          "Обезбедување"),
-    ("tooling",           "Maintenance",       "Одржување"),
+    ("cultivation",       "Cultivation",       "Одгледување",           None),
+    ("cloning",           "Cloning",           "Клонирање",             "cultivation"),
+    ("nursery",           "Nursery",           "Расадник",              "cultivation"),
+    ("irrigation",        "Irrigation",        "Наводнување",           None),
+    ("production",        "Production",        "Производство",          None),
+    ("qc",                "Quality Control",   "Контрола на квалитет",  None),
+    ("quality_assurance", "Quality Assurance", "Обезбедување квалитет", None),
+    ("logistics",         "Warehouse",         "Магацин",               None),
+    ("security",          "Security",          "Обезбедување",          None),
+    ("tooling",           "Maintenance",       "Одржување",             None),
 )
 
 
@@ -104,6 +111,7 @@ def _cast_dune():
         ("qc",      "Dr Liet Kynes",       "QC_MGR", "qc",                "QC Manager"),
         ("pr",      "Gurney Halleck",      "PR_MGR", "production",        "Production Manager"),
         ("cu",      "Stilgar",             "CU_MGR", "cultivation",       "Cultivation Manager"),
+        ("ir",      "Otheym",              "IR_MGR", "irrigation",        "Irrigation Manager"),
         ("wh",      "Esmar Tuek",          "WH_MGR", "logistics",         "Warehouse Manager"),
         ("se",      "Duncan Idaho",        "SE_MGR", "security",          "Security Manager"),
         ("mu",      "Shadout Mapes",       "MU_MGR", "tooling",           "Maintenance Manager"),
@@ -341,10 +349,11 @@ async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
         async with t.transaction(), u.transaction():
             # departments
             dept_ids: dict[str, uuid.UUID] = {}
-            for code, name, name_mk in _DEPARTMENTS:
+            for code, name, name_mk, parent in _DEPARTMENTS:
                 dept_ids[code] = await t.fetchval(
-                    "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4) RETURNING id",
-                    org_id, code, name, name_mk)
+                    "INSERT INTO departments(org_id, code, name, name_mk, parent_id)"
+                    " VALUES ($1,$2,$3,$4,$5) RETURNING id",
+                    org_id, code, name, name_mk, dept_ids[parent] if parent else None)
 
             # calendar weeks (prev / cur / next)
             week_ids: dict[str, uuid.UUID] = {}

@@ -100,6 +100,7 @@ GF.ROLES = {
   wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
   se_mgr:  { en: 'Security Manager',       mk: 'Менаџер за обезбедување' },
   cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  ir_mgr:  { en: 'Irrigation Manager',     mk: 'Менаџер за наводнување' },
   mu_mgr:  { en: 'Maintenance Manager',    mk: 'Менаџер за одржување' },
   qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
   operator:{ en: 'Operator',               mk: 'Оператор' },
@@ -124,7 +125,7 @@ GF.QC_HOQC = ['ADMIN', 'QC_MGR', 'QP'];
 const _FULL = { create: true, editAny: true, deleteAny: true, status: 'any', team: true };
 GF.PERMS = {
   admin: _FULL, owner: _FULL, ceo: _FULL, coo: _FULL,
-  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
+  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, ir_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
   operator: { create: true, editAny: false, deleteAny: false, status: 'own', team: false },
 };
 GF.curRole = () => (GF.PEOPLE[GF.state.user] || {}).role || 'operator';
