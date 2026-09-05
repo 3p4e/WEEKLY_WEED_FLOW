@@ -331,18 +331,34 @@
         'Неодговорените прашања автоматски се пополнуваат со најусогласената опција.')}</div>`;
   };
 
+  // House convention for a controlled-document code: <DEPT>SOP_<NNN>, e.g.
+  // QASOP_031 / QCSOP_012, with annexes hanging off their parent as _A<NN>
+  // (QASOP_031_A10). Confirmed by the owner 2026-09-05; the underscore form
+  // is the canonical one of the several spellings the corpus carries.
+  //
+  // The department is the one the questionnaire is written for, so the head
+  // is only known once a bank is chosen — and an ANNEX's code is derived from
+  // its parent SOP, which this wizard does not ask for, so no head is offered
+  // there rather than a guessed one.
+  const DOC_CODE_PREFIX = { sop_qc: 'QCSOP_' };
+  const docCodePrefix = () => DOC_CODE_PREFIX[st().qkey] || '';
+
   const metaStep = () => {
     const s = st(); const m = s.meta;
     const inp = (k, lbl, ph) => `
       <label class="ana-note" style="display:block;margin:8px 0 2px">${lbl}</label>
       <input class="qms-search" style="width:100%" value="${GF.esc(m[k])}" placeholder="${ph}"
         oninput="GF.WWF.qstuMeta('${k}', this.value)">`;
+    const codeInp = (lbl, ph) => `
+      <label class="ana-note" style="display:block;margin:8px 0 2px">${lbl}</label>
+      ${GF.codeField('qstu-code', { prefix: docCodePrefix(), value: m.code, placeholder: ph,
+        style: 'width:100%', maxlength: 64, oninput: "GF.WWF.qstuMeta('code', this.value)" })}`;
     return `
       <div class="panel ana-panel">
         <div class="ana-h">${AL('Document identity', 'Идентитет на документот')}</div>
         ${inp('title_mk', AL('Title (Macedonian)', 'Наслов (македонски)'), 'СОП за …')}
         ${inp('title_en', AL('Title (English)', 'Наслов (англиски)'), 'SOP for …')}
-        ${inp('code', AL('Document code', 'Код на документ'), 'QCSOP-0XX')}
+        ${codeInp(AL('Document code', 'Код на документ'), docCodePrefix() ? docCodePrefix() + '012' : 'QASOP_031')}
         ${inp('version', AL('Version', 'Верзија'), '1.0')}
       </div>
       ${s.error ? `<div style="color:var(--red-fg,var(--red));margin:8px 0">${GF.esc(s.error)}</div>` : ''}
@@ -493,7 +509,8 @@
           style="width:100%;font:12px ui-monospace,monospace;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"
           oninput="GF.WWF.qstuBuildSet('md', this.value)">${GF.esc(b.md)}</textarea>
         <label class="ana-note" style="display:block;margin:8px 0 2px">${AL('Document code (optional)', 'Код на документ (опционално)')}</label>
-        <input class="qms-search" style="width:100%" value="${GF.esc(b.code)}" placeholder="QCSOP-0XX"
+        <input class="qms-search" style="width:100%" value="${GF.esc(b.code)}" placeholder="QASOP_031"
+          autocomplete="off" spellcheck="false"
           oninput="GF.WWF.qstuBuildSet('code', this.value)">
         ${b.error ? `
           <div style="color:var(--red-fg,var(--red));margin:10px 0 4px">${b.verify ? passChip(false) + ' ' : ''}${GF.esc(b.error)}</div>
