@@ -42,6 +42,28 @@ async def test_password_below_minimum_length_rejected(client, admin_headers):
     assert r.status_code == 422
 
 
+async def test_password_over_bcrypts_byte_cap_is_a_clean_422_not_a_500(client, admin_headers):
+    """bcrypt hashes only the first 72 BYTES and silently drops the rest, so
+    change-password rejects anything longer up front. The guard is what stands
+    between a user and a passphrase of which only part is ever checked — and
+    the units are bytes, not characters: this password is 40 Cyrillic
+    characters, well under the field's 256-character limit, and 80 bytes.
+
+    Pinned because without the explicit check `hash_password` raises
+    PasswordTooLong, which nothing catches — the user would get a 500 instead
+    of a message telling them what to do."""
+    user, otp = await create_user(client, admin_headers)
+    token = await login_and_set_password(client, user["username"], otp)
+
+    too_long = "ЛозинкаЗаТестирање" * 2 + "Лозинка"      # 43 chars, 86 bytes
+    assert len(too_long) < 256 and len(too_long.encode("utf-8")) > 72
+    r = await client.post("/auth/change-password",
+                          json={"current_password": "NewPassword123456", "new_password": too_long},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 422, r.text
+    assert "bytes" in r.json()["detail"]
+
+
 async def test_old_otp_rejected_after_password_change(client, admin_headers):
     user, otp = await create_user(client, admin_headers)
     await login_and_set_password(client, user["username"], otp)

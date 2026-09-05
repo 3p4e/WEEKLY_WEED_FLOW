@@ -118,3 +118,27 @@ if _secret_is_weak:
         f"SECRET_KEY is a known placeholder or shorter than {_MIN_SECRET_LENGTH} characters — "
         "fine for local development, never deploy this to production."
     )
+
+# Same problem as the SECRET_KEY guard above — the insecure value is the
+# DEFAULT, so forgetting to set the real one is silent — but deliberately NOT
+# the same remedy. This one warns where that one raises, and the asymmetry is
+# the point:
+#
+#   * The risk is genuinely smaller. Auth is bearer-only and allow_credentials
+#     is False (main.py), so a wildcard origin does not let another site read
+#     an authenticated response; it only lets any origin reach the
+#     unauthenticated surface from a victim's browser, behind nginx.
+#   * The cost of being wrong is not. Raising here turns "CORS_ORIGINS was
+#     never set on this deployment" into "the backend will not boot" — an
+#     outage of a production QMS, triggered by the deploy that shipped this
+#     line, to close a finding of that size. A guard must not be more
+#     dangerous than what it guards against.
+#
+# Promote this to a raise once a deployment is confirmed to set CORS_ORIGINS
+# (the committed .env.example does; the live env file is not in this repo).
+if settings.cors_origins.strip() == "*":
+    logging.getLogger(__name__).warning(
+        "CORS_ORIGINS is '*' (the default) — every origin may reach this API's unauthenticated "
+        "surface. Fine for local development; set the deployment's real scheme+host "
+        "(e.g. CORS_ORIGINS=https://wwf.example.com) in production."
+    )

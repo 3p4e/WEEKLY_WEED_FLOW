@@ -13,17 +13,69 @@ GF.API = {
     if (this.token) h['Authorization'] = 'Bearer ' + this.token;
     return h;
   },
-  async _req(method, path, body) {
+  // AL() lives in core.js, which loads AFTER this file (index.html's ordered
+  // script list). By the time any request can fail it is long since defined —
+  // but this file must not assume that, so fall back to English rather than
+  // let a ReferenceError replace the error we are trying to report.
+  _msg(en, mk) {
+    try { return AL(en, mk); } catch (e) { return en; }
+  },
+  // Without a timeout a hung backend never settles: the await never resolves,
+  // the caller's spinner never clears, and the only thing between the user and
+  // a permanently stuck screen is GF.once's per-button guard — which blocks a
+  // SECOND click, it does not rescue the first one.
+  //
+  // Both values sit just PAST the matching nginx proxy_read_timeout
+  // (web/nginx.conf: 60s general, 180s for /intake and the DocEngine agent
+  // routes), never before it. That ordering is the whole point: whichever hop
+  // gives up first is the one that writes the error the user sees, and nginx's
+  // 504 says something ("the server took too long") that a silent client-side
+  // abort cannot. Undercutting the proxy would also cancel slow-but-healthy
+  // calls — a large report that nginx would happily have waited out.
+  _TIMEOUT_MS: 65000,
+  _SLOW_TIMEOUT_MS: 190000,
+  // Exactly the paths web/nginx.conf gives its own 180s block — kept in step
+  // with that file deliberately, and no wider: /ai is NOT here, because nginx
+  // reads it for 60s and its backend timeout is 15s.
+  _SLOW_PATHS: /^\/(?:intake\/|qms\/(?:rag-query|studio\/(?:build|workflows\/[^/]+\/(?:chat|revise))))/,
+
+  _timeoutFor(path) {
+    return this._SLOW_PATHS.test(path) ? this._SLOW_TIMEOUT_MS : this._TIMEOUT_MS;
+  },
+
+  async _req(method, path, body, timeoutMs) {
     // Capture the token THIS request actually sends, before the fetch's
     // await hands control back to the event loop. _headers() reads
     // `this.token` synchronously right here, so `sentToken` is exactly what
     // went out on the wire for this call — even if `this.token` is rotated
     // to a different value while this request is still in flight.
     const sentToken = this.token;
-    const res = await fetch(this.base + path, {
-      method, headers: this._headers(),
-      body: body == null ? undefined : JSON.stringify(body),
-    });
+    const ctl = new AbortController();
+    const limit = timeoutMs || this._timeoutFor(path);
+    const timer = setTimeout(() => ctl.abort(), limit);
+    let res;
+    try {
+      res = await fetch(this.base + path, {
+        method, headers: this._headers(),
+        body: body == null ? undefined : JSON.stringify(body),
+        signal: ctl.signal,
+      });
+    } catch (e) {
+      // Distinguish "we gave up waiting" from "the network refused" — the two
+      // need different things from the user, and both used to surface as the
+      // same opaque "Failed to fetch".
+      const timedOut = e && e.name === 'AbortError';
+      const err = new Error(timedOut
+        ? GF.API._msg('The server did not respond in time — it may still be working. Try again in a moment.',
+                      'Серверот не одговори навреме — можеби сè уште работи. Обидете се повторно за момент.')
+        : GF.API._msg('Could not reach the server. Check your connection.',
+                      'Не може да се дојде до серверот. Проверете ја врската.'));
+      err.status = 0;              // no HTTP status: nothing came back
+      err.timeout = !!timedOut;    // callers that want to offer a retry can key on this
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 401) {
       // A failed /auth/login must NOT tear down and rebuild the login card the
       // user is already looking at — showLogin() re-renders the entry splash,

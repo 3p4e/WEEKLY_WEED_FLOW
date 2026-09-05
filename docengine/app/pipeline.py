@@ -948,11 +948,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 log.warning("job %s repair %d unusable — failing on the audit", job_id, attempt + 1)
                 break
             # A repair can break parity (dropping one language while rewording a
-            # cell). Re-run the same per-section gate rather than trusting it.
-            gaps = _bilingual_gaps(repaired)
-            if gaps:
-                log.warning("job %s repair %d broke bilingual parity %s — discarded",
-                            job_id, attempt + 1, gaps)
+            # cell) or widen a grid row past what the packer will place. Re-run
+            # BOTH per-section gates rather than trusting the repair: they ran
+            # before the audit for reasons a repair does nothing to retire.
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
                 break
             sections = repaired
             markdown = assemble_markdown(meta, sections)
@@ -1084,6 +1086,7 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
     client = client or LettaClient()
     sections: list[dict] = []
     markdown = ""
+    audits: list[str] = []
     try:
         job = await db.job_get(job_id)
         p = job["payload"]
@@ -1098,6 +1101,7 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
         from .fleet import ensure_fleet_ctx
 
         ctx = await ensure_fleet_ctx(client)
+        agents = ctx.agents
         author = SOP_AUTHOR if doctype == "SOP" else ANNEX_AUTHOR
 
         if section_num and not any(s["num"] == section_num for s in sections):
@@ -1124,6 +1128,50 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
         sections = revised
         markdown = assemble_markdown(meta, sections)
 
+        # ---- §6A audit ----
+        # The same gate, the same repair loop and the same PASS requirement
+        # run_workflow imposes. A revision reaches exactly the same place — a
+        # registered, downloadable controlled document — so it clears exactly
+        # the same bar; an edit is not a lesser act of authorship than a first
+        # draft. (Unlike run_workflow there is no regulatory-check context to
+        # fold in: this path runs no gf_reg_checker pass, and the source job's
+        # findings were computed on sections this edit may have just changed,
+        # so passing them here would describe a document that no longer
+        # exists. The auditor judges the revised document on its own terms.)
+        await db.job_update(job_id, stage="qa-audit")
+        for attempt in range(max(0, settings.max_repair_rounds) + 1):
+            audit = await client.send_message(
+                agents[QA_AUDITOR],
+                "Run the §6A review on this assembled document Markdown. "
+                "Return verdict PASS or FIX with issues.\n\n"
+                "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
+                "`# <number> <MK>|<EN>` section heading lines are emitted by the "
+                "formatter in canonical form — they are not the author's and not "
+                "yours to restyle. Do not raise issues about their spacing, level "
+                "or punctuation; no author can act on those and the document "
+                "cannot pass.\n\n" + markdown,
+            )
+            audits.append(audit)
+            if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
+                break
+
+            await db.job_update(job_id, stage=f"qa-repair {attempt + 1}")
+            repaired = await _repair_sections(client, author, sections, audit, job_id, ctx=ctx)
+            if repaired is None:
+                log.warning("job %s (revision) repair %d unusable — failing on the audit",
+                            job_id, attempt + 1)
+                break
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s (revision) repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
+                break
+            sections = repaired
+            markdown = assemble_markdown(meta, sections)
+
+        if not _qa_audit_passed(audits[-1]):
+            raise QaAuditFailed(audits[-1], audits, markdown)
+
         await db.job_update(job_id, stage="format")
         result = await asyncio.to_thread(
             builder.build, markdown, settings.out_dir, meta["code"]
@@ -1149,13 +1197,26 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
                 "instruction": instruction,
                 "section_num": section_num,
                 "source_document_id": p.get("source_document_id"),
+                "qa_audit": audits[-1],
+                "qa_audit_history": audits,
+                "qa_repair_rounds": len(audits) - 1,
                 "bytes": result.bytes,
             },
         )
     except builder.VerifyFailed as e:
         log.error("job %s (revision) verify FAILED", job_id)
         await db.job_update(job_id, status="failed", error="verify FAILED",
-                            result={"verify": e.report, "markdown": markdown, "sections": sections})
+                            result={"verify": e.report, "markdown": markdown, "sections": sections,
+                                    "qa_audit_history": audits})
+    except QaAuditFailed as e:
+        log.error("job %s (revision) §6A audit did not pass", job_id)
+        await db.job_update(job_id, status="failed", error="§6A audit did not pass",
+                            result={"qa_audit": e.verdict,
+                                    "qa_audit_history": e.history,
+                                    "qa_repair_rounds": len(e.history) - 1,
+                                    "markdown": e.markdown,
+                                    "sections": sections,
+                                    "instruction": instruction})
     except RevisionFailed as e:
         log.error("job %s (revision) could not be applied: %s", job_id, e.reason)
         await db.job_update(job_id, status="failed", error=str(e.reason)[:500])

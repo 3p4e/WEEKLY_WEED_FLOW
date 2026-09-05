@@ -1116,6 +1116,8 @@ async def test_run_revision_builds_a_new_document_from_the_editors_reply(monkeyp
 
     class EditClient:
         async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:      # the auditor's turn, not the editor's
+                return "PASS"
             assert "Tighten the wording." in prompt
             return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
 
@@ -1132,6 +1134,68 @@ async def test_run_revision_builds_a_new_document_from_the_editors_reply(monkeyp
     revised = {s["num"]: s["content"] for s in result["sections"]}
     assert revised["2.0"] == "Нов опфат.|New scope."
     assert revised["1.0"] == "Стара цел.|Old purpose."  # untouched section carried over unchanged
+    # the revision cleared the same §6A gate a first draft has to clear
+    assert result["qa_audit"] == "PASS"
+    assert result["qa_repair_rounds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_when_the_qa_audit_does_not_pass(monkeypatch):
+    """The gate that stands between a draft and a controlled document stands in
+    front of an EDIT too. A parseable, bilingual, well-formed revision that the
+    §6A auditor rejects must never reach builder.build — otherwise 'ask the AI
+    to change it' is a way around the gate the first draft had to clear."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(settings, "max_repair_rounds", 0)   # no hand-back: one verdict, final
+
+    class RejectedClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "**Verdict: FIX**\nSection 2.0 contradicts the stated scope."
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("a revision that failed the §6A audit must never be built")
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=RejectedClient())
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["error"] == "§6A audit did not pass"
+    result = updates[-1]["result"]
+    # the evidence a reviewer needs: the verdict, and the document it judged
+    assert "FIX" in result["qa_audit"]
+    assert result["markdown"]
+    assert result["instruction"] == "Tighten the wording."
+
+
+@pytest.mark.asyncio
+async def test_run_revision_hands_a_fix_verdict_back_before_giving_up(monkeypatch):
+    """Same repair-round machinery run_workflow uses: a FIX verdict buys one
+    hand-back to the author, and a PASS on the retry is a legitimate pass."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+    verdicts = []
+
+    class RepairedClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                verdicts.append(prompt)
+                return "PASS" if len(verdicts) > 1 else "**Verdict: FIX**\nTighten section 2.0."
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=RepairedClient())
+    assert updates[-1]["status"] == "done"
+    result = updates[-1]["result"]
+    # and the record must not read as a first-pass PASS
+    assert result["qa_repair_rounds"] == 1
+    assert len(result["qa_audit_history"]) == 2
 
 
 @pytest.mark.asyncio
@@ -1176,19 +1240,26 @@ async def test_run_revision_fails_closed_when_the_edit_breaks_bilingual_parity(m
 
     class MonolingualClient:
         async def send_message(self, agent_id, prompt):
-            # English only — no Cyrillic — for a section the gate requires bilingual
-            return _marker_block("1.0", "ЦЕЛ", "PURPOSE", "New purpose, English only, long enough to trip the gate.")
+            # English only — no Cyrillic — and comfortably past
+            # _MIN_TOTAL_TO_JUDGE (120 letters), or the gate rightly declines to
+            # judge a section too short to be sure about.
+            return _marker_block("1.0", "ЦЕЛ", "PURPOSE",
+                                 "This purpose section is written in English only, with no "
+                                 "Macedonian counterpart anywhere in its body, and it is "
+                                 "deliberately long enough to clear the gate's minimum "
+                                 "judging length so the check actually runs on it.")
 
         async def delete_agent(self, agent_id):
             pass
 
     def _boom(*a, **k):
-        raise AssertionError("a document that lost bilingual parity must never be built")
+        raise AssertionError("must never be built")   # no gate name: the assert below must not pass off this text
     monkeypatch.setattr(builder, "build", _boom)
 
     await run_revision("rev-1", client=MonolingualClient())
     assert updates[-1]["status"] == "failed"
-    assert "bilingual" in updates[-1]["error"]
+    assert updates[-1]["error"].startswith("revision broke bilingual parity")
+    assert "1.0 (no MK)" in updates[-1]["error"]
 
 
 async def _fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
