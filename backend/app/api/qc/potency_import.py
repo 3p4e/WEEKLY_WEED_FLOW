@@ -79,6 +79,55 @@ def _parse_rows(strain: str, rows: list[dict]) -> tuple[str, float, list[RangeIn
     return acr, floor, ranges
 
 
+
+
+async def resolve_or_create_cultivar(c, user: dict, acronym: str, strain: str,
+                                     dry_run: bool = False):
+    """Find the cultivar a catalogue row belongs to, creating it if it is new.
+
+    Shared by both catalogue importers (the August ladders and the official
+    product pages) so they resolve a strain identically. Returns
+    (cultivar_row_or_None, created_or_None, conflict_or_None):
+
+      - the acronym is free            → create it (or, in a dry run, report it);
+      - the acronym is taken by ANOTHER strain name → look the strain up by
+        name; if that fails, report a conflict and never reassign the code —
+        a mis-assigned acronym would print a wrong plant id forever;
+      - a dry run creates nothing, so the cultivar comes back None and the
+        caller reports what it would have done.
+    """
+    cv = await c.fetchrow("SELECT id, code, name FROM cultivars WHERE code=$1", acronym)
+    if cv is not None and cv["name"].strip().lower() != strain.strip().lower():
+        by_name = await c.fetchrow(
+            "SELECT id, code, name FROM cultivars WHERE lower(name)=lower($1)", strain)
+        if by_name is None:
+            return None, None, {"strain": strain, "code": acronym, "taken_by": cv["name"]}
+        cv = by_name
+    if cv is None:
+        cv = await c.fetchrow(
+            "SELECT id, code, name FROM cultivars WHERE lower(name)=lower($1)", strain)
+    if cv is not None:
+        return cv, None, None
+    if dry_run:
+        return None, {"code": acronym, "name": strain}, None
+    # Two concurrent imports can both reach this branch for the same
+    # never-before-seen code. cultivars carries UNIQUE(org_id, code), so use
+    # ON CONFLICT DO NOTHING and re-fetch: Postgres blocks this INSERT on the
+    # other transaction's row lock until it resolves, so by the time DO NOTHING
+    # skips, the winner has necessarily committed.
+    cv = await c.fetchrow(
+        "INSERT INTO cultivars(org_id, code, name, created_by, updated_by)"
+        " VALUES ($1,$2,$3,$4,$4)"
+        " ON CONFLICT (org_id, code) DO NOTHING RETURNING id, code, name",
+        user["org_id"], acronym, strain, user["id"])
+    if cv is None:
+        cv = await c.fetchrow("SELECT id, code, name FROM cultivars WHERE code=$1", acronym)
+    if cv is None:
+        raise HTTPException(
+            409, f"{strain}: cultivar '{acronym}' could not be created or resolved after a"
+                 " concurrent import created it — retry the import")
+    return cv, {"code": acronym, "name": strain}, None
+
 @router.post("/potency-specs/import")
 async def import_potency_catalogue(body: CatalogueImportIn,
                                    user: dict = Depends(require_role(*_HOQC))):
@@ -93,51 +142,13 @@ async def import_potency_catalogue(body: CatalogueImportIn,
             for strain, rows in (catalogue.get(fam) or {}).items():
                 acr, floor, ranges = _parse_rows(strain, rows)
                 # ── resolve or create the cultivar ─────────────────────────
-                cv = await c.fetchrow(
-                    "SELECT id, code, name FROM cultivars WHERE code=$1", acr)
-                if cv is not None and cv["name"].strip().lower() != strain.strip().lower():
-                    # The acronym is taken by a different strain — never guess.
-                    by_name = await c.fetchrow(
-                        "SELECT id, code, name FROM cultivars WHERE lower(name)=lower($1)", strain)
-                    if by_name is None:
-                        conflicts.append({"strain": strain, "code": acr,
-                                          "taken_by": cv["name"]})
-                        continue
-                    cv = by_name
-                if cv is None:
-                    cv = await c.fetchrow(
-                        "SELECT id, code, name FROM cultivars WHERE lower(name)=lower($1)", strain)
-                if cv is None:
-                    if body.dry_run:
-                        cultivars_created.append({"code": acr, "name": strain})
-                        cv = None
-                    else:
-                        # Two concurrent imports can both reach this branch for the
-                        # same never-before-seen strain code. cultivars carries
-                        # UNIQUE(org_id, code) (schema.tasks.sql), so rather than a
-                        # plain INSERT that would 500 the loser with a raw
-                        # UniqueViolationError, use ON CONFLICT DO NOTHING and
-                        # re-fetch: Postgres blocks this INSERT on the other
-                        # transaction's row lock until it resolves, so by the time
-                        # DO NOTHING skips (cv is None) the winner has necessarily
-                        # committed — the re-fetch is guaranteed to see it. Still
-                        # never trust that blindly: guard against a None surviving
-                        # the re-fetch so a `cv["id"]` below can never raise a bare
-                        # TypeError as an unhandled 500.
-                        cv = await c.fetchrow(
-                            "INSERT INTO cultivars(org_id, code, name, created_by, updated_by)"
-                            " VALUES ($1,$2,$3,$4,$4)"
-                            " ON CONFLICT (org_id, code) DO NOTHING RETURNING id, code, name",
-                            user["org_id"], acr, strain, user["id"])
-                        if cv is None:   # lost a race — re-read
-                            cv = await c.fetchrow(
-                                "SELECT id, code, name FROM cultivars WHERE code=$1", acr)
-                        if cv is None:
-                            raise HTTPException(
-                                409, f"{strain}: cultivar '{acr}' could not be created or"
-                                     " resolved after a concurrent import created it —"
-                                     " retry the import")
-                        cultivars_created.append({"code": acr, "name": strain})
+                cv, made, conflict = await resolve_or_create_cultivar(
+                    c, user, acr, strain, body.dry_run)
+                if conflict:
+                    conflicts.append(conflict)
+                    continue
+                if made:
+                    cultivars_created.append(made)
                 # ── idempotency: version already present? ──────────────────
                 if cv is not None:
                     existing = await c.fetchval(

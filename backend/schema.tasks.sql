@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict pWsaHlXgv1DUZPLuvgl2f8Tpl8tU965OwBtylt0bcZjX8PjYlmS6wjS1TvSkKiF
+\restrict z6Ndw72R2ybvIfqcFCcNjRZGH8vMFSzu2j9WqjwOIjfkmexryijnwCHja6aeWvM
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -296,6 +296,8 @@ CREATE TABLE public.clone_run_mothers (
     cuttings integer,
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    cutting_no integer,
+    CONSTRAINT clone_run_mothers_cutting_no_check CHECK (((cutting_no IS NULL) OR ((cutting_no >= 1) AND (cutting_no <= 99)))),
     CONSTRAINT clone_run_mothers_cuttings_check CHECK (((cuttings IS NULL) OR (cuttings >= 0)))
 );
 
@@ -323,6 +325,7 @@ CREATE TABLE public.clone_runs (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    product_id uuid,
     CONSTRAINT clone_runs_planned_count_check CHECK ((planned_count >= 0)),
     CONSTRAINT clone_runs_status_check CHECK ((status = ANY (ARRAY['started'::text, 'transplanted'::text, 'failed'::text])))
 );
@@ -756,6 +759,9 @@ CREATE TABLE public.plant_batches (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     code text,
     cultivar_id uuid,
+    product_id uuid,
+    clone_source text,
+    CONSTRAINT plant_batches_clone_source_check CHECK (((clone_source IS NULL) OR (clone_source = ANY (ARRAY['own_stock'::text, 'imported'::text])))),
     CONSTRAINT plant_batches_phase_check CHECK ((phase = ANY (ARRAY['nursery'::text, 'clone'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'drying'::text, 'harvested'::text, 'destroyed'::text]))),
     CONSTRAINT plant_batches_plant_count_check CHECK ((plant_count >= 0))
 );
@@ -810,6 +816,12 @@ CREATE TABLE public.plants (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    mother_plant_id uuid,
+    cutting_no integer,
+    clone_no integer,
+    CONSTRAINT plants_clone_no_check CHECK (((clone_no IS NULL) OR ((clone_no >= 1) AND (clone_no <= 999)))),
+    CONSTRAINT plants_cutting_no_check CHECK (((cutting_no IS NULL) OR ((cutting_no >= 1) AND (cutting_no <= 99)))),
+    CONSTRAINT plants_mother_lineage_check CHECK ((((mother_plant_id IS NULL) = (cutting_no IS NULL)) AND ((mother_plant_id IS NULL) = (clone_no IS NULL)))),
     CONSTRAINT plants_seq_check CHECK ((seq >= 1)),
     CONSTRAINT plants_status_check CHECK ((status = ANY (ARRAY['active'::text, 'culled'::text, 'destroyed'::text, 'harvested'::text, 'moved'::text])))
 );
@@ -1077,6 +1089,7 @@ CREATE TABLE public.qc_coq (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     cultivar_id uuid,
     potency_spec_id uuid,
+    product_id uuid,
     CONSTRAINT qc_coq_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'VOIDED'::text])))
 );
 
@@ -1399,6 +1412,38 @@ CREATE TABLE public.qc_potency_specs (
 );
 
 ALTER TABLE ONLY public.qc_potency_specs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: qc_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qc_products (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    cultivar_id uuid NOT NULL,
+    product_code text NOT NULL,
+    grade numeric NOT NULL,
+    nominal_pct numeric NOT NULL,
+    window_min numeric NOT NULL,
+    window_max numeric NOT NULL,
+    doc_code text DEFAULT 'QCSP 001'::text NOT NULL,
+    doc_version text DEFAULT 'v.03'::text NOT NULL,
+    source text,
+    status text DEFAULT 'DRAFT'::text NOT NULL,
+    effective_date date,
+    approved_by uuid,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT qc_products_grade_check CHECK (((grade > (0)::numeric) AND (grade <= (100)::numeric))),
+    CONSTRAINT qc_products_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'SUPERSEDED'::text]))),
+    CONSTRAINT qc_products_window_check CHECK (((window_max > window_min) AND (nominal_pct >= window_min) AND (nominal_pct <= window_max)))
+);
+
+ALTER TABLE ONLY public.qc_products FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1882,6 +1927,30 @@ ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: selection_campaigns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.selection_campaigns (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    seq integer NOT NULL,
+    started_on date NOT NULL,
+    material text NOT NULL,
+    cultivar_id uuid,
+    description text,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT selection_campaigns_material_check CHECK ((material = ANY (ARRAY['seeds'::text, 'clones'::text, 'phenotypes'::text]))),
+    CONSTRAINT selection_campaigns_seq_check CHECK ((seq >= 1))
+);
+
+ALTER TABLE ONLY public.selection_campaigns FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: task_assignees; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2038,6 +2107,40 @@ CREATE TABLE public.tasks (
 );
 
 ALTER TABLE ONLY public.tasks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: trichome_checks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trichome_checks (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    room_id uuid,
+    checked_on date NOT NULL,
+    instrument text NOT NULL,
+    magnification text,
+    sample_sites integer,
+    pct_clear numeric,
+    pct_cloudy numeric,
+    pct_amber numeric,
+    verdict text NOT NULL,
+    image_ref text,
+    checked_by uuid NOT NULL,
+    note text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trichome_checks_instrument_check CHECK ((instrument = ANY (ARRAY['stereo'::text, 'digital'::text]))),
+    CONSTRAINT trichome_checks_pct_check CHECK ((((pct_clear IS NULL) OR ((pct_clear >= (0)::numeric) AND (pct_clear <= (100)::numeric))) AND ((pct_cloudy IS NULL) OR ((pct_cloudy >= (0)::numeric) AND (pct_cloudy <= (100)::numeric))) AND ((pct_amber IS NULL) OR ((pct_amber >= (0)::numeric) AND (pct_amber <= (100)::numeric))))),
+    CONSTRAINT trichome_checks_sites_check CHECK (((sample_sites IS NULL) OR (sample_sites >= 1))),
+    CONSTRAINT trichome_checks_sum_check CHECK (((pct_clear IS NULL) OR (pct_cloudy IS NULL) OR (pct_amber IS NULL) OR ((((pct_clear + pct_cloudy) + pct_amber) >= (98)::numeric) AND (((pct_clear + pct_cloudy) + pct_amber) <= (102)::numeric)))),
+    CONSTRAINT trichome_checks_verdict_check CHECK ((verdict = ANY (ARRAY['immature'::text, 'approaching'::text, 'ready'::text, 'overripe'::text])))
+);
+
+ALTER TABLE ONLY public.trichome_checks FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2705,6 +2808,22 @@ ALTER TABLE ONLY public.qc_potency_specs
 
 
 --
+-- Name: qc_products qc_products_org_id_product_code_doc_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_products
+    ADD CONSTRAINT qc_products_org_id_product_code_doc_version_key UNIQUE (org_id, product_code, doc_version);
+
+
+--
+-- Name: qc_products qc_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_products
+    ADD CONSTRAINT qc_products_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: qc_results qc_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2881,6 +3000,22 @@ ALTER TABLE ONLY public.rooms
 
 
 --
+-- Name: selection_campaigns selection_campaigns_org_id_seq_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.selection_campaigns
+    ADD CONSTRAINT selection_campaigns_org_id_seq_key UNIQUE (org_id, seq);
+
+
+--
+-- Name: selection_campaigns selection_campaigns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.selection_campaigns
+    ADD CONSTRAINT selection_campaigns_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: task_assignees task_assignees_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2942,6 +3077,14 @@ ALTER TABLE ONLY public.task_workflow_events
 
 ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: trichome_checks trichome_checks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trichome_checks
+    ADD CONSTRAINT trichome_checks_pkey PRIMARY KEY (id);
 
 
 --
@@ -3031,6 +3174,13 @@ CREATE INDEX biosecurity_events_org_kind_idx ON public.biosecurity_events USING 
 --
 
 CREATE INDEX biosecurity_events_room_idx ON public.biosecurity_events USING btree (room_id, occurred_on DESC) WHERE (room_id IS NOT NULL);
+
+
+--
+-- Name: clone_run_mothers_mother_cutting_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX clone_run_mothers_mother_cutting_key ON public.clone_run_mothers USING btree (mother_plant_id, cutting_no) WHERE (cutting_no IS NOT NULL);
 
 
 --
@@ -3251,6 +3401,13 @@ CREATE INDEX plant_batches_org_room_idx ON public.plant_batches USING btree (org
 
 
 --
+-- Name: plant_batches_product_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plant_batches_product_id_idx ON public.plant_batches USING btree (product_id);
+
+
+--
 -- Name: plant_phase_events_org_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3262,6 +3419,13 @@ CREATE INDEX plant_phase_events_org_batch_idx ON public.plant_phase_events USING
 --
 
 CREATE INDEX plants_active_batch_idx ON public.plants USING btree (batch_id) WHERE (status = 'active'::text);
+
+
+--
+-- Name: plants_mother_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX plants_mother_idx ON public.plants USING btree (mother_plant_id, cutting_no) WHERE (mother_plant_id IS NOT NULL);
 
 
 --
@@ -3444,6 +3608,20 @@ CREATE INDEX qc_potency_spec_ranges_spec_idx ON public.qc_potency_spec_ranges US
 --
 
 CREATE UNIQUE INDEX qc_potency_specs_one_approved_idx ON public.qc_potency_specs USING btree (org_id, cultivar_id) WHERE (status = 'APPROVED'::text);
+
+
+--
+-- Name: qc_products_one_approved_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX qc_products_one_approved_idx ON public.qc_products USING btree (org_id, product_code) WHERE (status = 'APPROVED'::text);
+
+
+--
+-- Name: qc_products_org_cultivar_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qc_products_org_cultivar_idx ON public.qc_products USING btree (org_id, cultivar_id, grade);
 
 
 --
@@ -3668,6 +3846,13 @@ CREATE INDEX tasks_parent_idx ON public.tasks USING btree (parent_id);
 --
 
 CREATE INDEX tasks_week_idx ON public.tasks USING btree (week_id);
+
+
+--
+-- Name: trichome_checks_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX trichome_checks_batch_idx ON public.trichome_checks USING btree (batch_id, checked_on DESC);
 
 
 --
@@ -4035,6 +4220,13 @@ CREATE TRIGGER audit_qc_potency_specs AFTER INSERT OR DELETE OR UPDATE ON public
 
 
 --
+-- Name: qc_products audit_qc_products; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_qc_products AFTER INSERT OR DELETE OR UPDATE ON public.qc_products FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: qc_results audit_qc_results; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4119,6 +4311,13 @@ CREATE TRIGGER audit_rooms AFTER INSERT OR DELETE OR UPDATE ON public.rooms FOR 
 
 
 --
+-- Name: selection_campaigns audit_selection_campaigns; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_selection_campaigns AFTER INSERT OR DELETE OR UPDATE ON public.selection_campaigns FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
 -- Name: task_assignees audit_task_assignees; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4165,6 +4364,13 @@ CREATE TRIGGER audit_task_workflow_events AFTER INSERT OR DELETE OR UPDATE ON pu
 --
 
 CREATE TRIGGER audit_tasks AFTER INSERT OR DELETE OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: trichome_checks audit_trichome_checks; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_trichome_checks AFTER INSERT OR DELETE OR UPDATE ON public.trichome_checks FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -4257,6 +4463,14 @@ ALTER TABLE ONLY public.clone_runs
 
 ALTER TABLE ONLY public.clone_runs
     ADD CONSTRAINT clone_runs_potency_spec_id_fkey FOREIGN KEY (potency_spec_id) REFERENCES public.qc_potency_specs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: clone_runs clone_runs_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clone_runs
+    ADD CONSTRAINT clone_runs_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.qc_products(id) ON DELETE SET NULL;
 
 
 --
@@ -4468,6 +4682,14 @@ ALTER TABLE ONLY public.plant_batches
 
 
 --
+-- Name: plant_batches plant_batches_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plant_batches
+    ADD CONSTRAINT plant_batches_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.qc_products(id) ON DELETE SET NULL;
+
+
+--
 -- Name: plant_batches plant_batches_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4513,6 +4735,14 @@ ALTER TABLE ONLY public.plants
 
 ALTER TABLE ONLY public.plants
     ADD CONSTRAINT plants_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: plants plants_mother_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_mother_plant_id_fkey FOREIGN KEY (mother_plant_id) REFERENCES public.mother_plants(id) ON DELETE RESTRICT;
 
 
 --
@@ -4668,6 +4898,14 @@ ALTER TABLE ONLY public.qc_coq
 
 
 --
+-- Name: qc_coq qc_coq_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_coq
+    ADD CONSTRAINT qc_coq_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.qc_products(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: qc_coq_sources qc_coq_sources_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4764,6 +5002,14 @@ ALTER TABLE ONLY public.qc_potency_specs
 
 
 --
+-- Name: qc_products qc_products_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qc_products
+    ADD CONSTRAINT qc_products_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: qc_results qc_results_coa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4852,6 +5098,14 @@ ALTER TABLE ONLY public.rooms
 
 
 --
+-- Name: selection_campaigns selection_campaigns_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.selection_campaigns
+    ADD CONSTRAINT selection_campaigns_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: task_assignees task_assignees_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4937,6 +5191,22 @@ ALTER TABLE ONLY public.tasks
 
 ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_week_id_fkey FOREIGN KEY (week_id) REFERENCES public.calendar_weeks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: trichome_checks trichome_checks_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trichome_checks
+    ADD CONSTRAINT trichome_checks_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.plant_batches(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: trichome_checks trichome_checks_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trichome_checks
+    ADD CONSTRAINT trichome_checks_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
 
 
 --
@@ -5467,6 +5737,13 @@ CREATE POLICY org_isolation ON public.qc_potency_specs USING ((org_id = app.curr
 
 
 --
+-- Name: qc_products org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.qc_products USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_results org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5544,6 +5821,13 @@ CREATE POLICY org_isolation ON public.rooms USING ((org_id = app.current_org_id(
 
 
 --
+-- Name: selection_campaigns org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.selection_campaigns USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: task_assignees org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -5576,6 +5860,13 @@ CREATE POLICY org_isolation ON public.task_links USING ((org_id = app.current_or
 --
 
 CREATE POLICY org_isolation ON public.task_workflow_events USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: trichome_checks org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.trichome_checks USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -5767,6 +6058,12 @@ ALTER TABLE public.qc_potency_spec_ranges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.qc_potency_specs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: qc_products; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qc_products ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: qc_results; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5839,6 +6136,12 @@ ALTER TABLE public.qc_water_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: selection_campaigns; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.selection_campaigns ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: task_assignees; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5899,6 +6202,12 @@ CREATE POLICY tasks_write ON public.tasks USING (((org_id = app.current_org_id()
 
 
 --
+-- Name: trichome_checks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.trichome_checks ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: waste_manifest_lines; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5954,5 +6263,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict pWsaHlXgv1DUZPLuvgl2f8Tpl8tU965OwBtylt0bcZjX8PjYlmS6wjS1TvSkKiF
+\unrestrict z6Ndw72R2ybvIfqcFCcNjRZGH8vMFSzu2j9WqjwOIjfkmexryijnwCHja6aeWvM
 

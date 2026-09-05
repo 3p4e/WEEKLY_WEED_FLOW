@@ -59,8 +59,9 @@ _TASKS_WIPE_ORDER = (
     "decon_tool_log", "decon_positive_controls", "decon_swabs", "decon_bleach_log", "decon_step_signoffs", "decon_room_cycles",
     "corridor_cleanings", "waste_manifest_lines", "waste_manifests",
     "harvests", "ipm_applications",
-    "clone_run_mothers", "clone_runs", "mother_plants",
-    "plant_phase_events", "plants", "plant_batches", "cultivars", "rooms",
+    "trichome_checks", "clone_run_mothers", "clone_runs",
+    "plant_phase_events", "plants", "mother_plants", "selection_campaigns",
+    "plant_batches", "qc_products", "cultivars", "rooms",
     "tasks", "calendar_weeks", "departments",
 )
 

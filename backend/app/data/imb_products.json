@@ -1,0 +1,565 @@
+{
+ "source_documents": [
+  "PP_ImB_Specifications_Tran01-1-19.pdf",
+  "PP_ImB_Specifications_Tran02-20-48.pdf"
+ ],
+ "extracted_on": "2026-09-05",
+ "doc_code": "QCSP 001",
+ "doc_version": "v.03",
+ "window_rule": "nominal x 0.90 .. nominal x 1.10 - 0.01, two decimals — exactly as every page prints it (26 -> 23.40-28.59). Verified on all 48 pages.",
+ "note": "One row per distinct product across the 48 pages of the owner's two ImB specification documents; a product printed on more than one page lists every page. 'strain' is the name the August catalogue (imb_grade_ladders.json) holds for the same acronym; 'strain_printed' is the name as the page prints it.",
+ "products": [
+  {
+   "pages": [
+    "Tran02 p.1"
+   ],
+   "strain": "Amnesia Core Cut",
+   "strain_printed": "Amnesia Core Cut",
+   "acronym": "ACC",
+   "product_code": "ACC_THC12:CBD1",
+   "grade": 12,
+   "nominal_pct": 12.0,
+   "window_min": 10.8,
+   "window_max": 13.19
+  },
+  {
+   "pages": [
+    "Tran01 p.1"
+   ],
+   "strain": "Blue Gelato",
+   "strain_printed": "Blue Gelato",
+   "acronym": "BG",
+   "product_code": "BG_THC26:CBD1",
+   "grade": 26,
+   "nominal_pct": 26.0,
+   "window_min": 23.4,
+   "window_max": 28.59
+  },
+  {
+   "pages": [
+    "Tran01 p.2"
+   ],
+   "strain": "Blue Sunset Sherbet",
+   "strain_printed": "Blue Sunset Sherbet",
+   "acronym": "BSS",
+   "product_code": "BSS_THC24:CBD1",
+   "grade": 24,
+   "nominal_pct": 24.0,
+   "window_min": 21.6,
+   "window_max": 26.39
+  },
+  {
+   "pages": [
+    "Tran02 p.2"
+   ],
+   "strain": "Blue Sunset Sherbet",
+   "strain_printed": "Blue Sunset Sherbet",
+   "acronym": "BSS",
+   "product_code": "BSS_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran02 p.4"
+   ],
+   "strain": "Cap Junky",
+   "strain_printed": "Cap Junky",
+   "acronym": "CJ",
+   "product_code": "CJ_THC28:CBD1",
+   "grade": 28,
+   "nominal_pct": 28.0,
+   "window_min": 25.2,
+   "window_max": 30.79
+  },
+  {
+   "pages": [
+    "Tran02 p.5"
+   ],
+   "strain": "Cap Junky",
+   "strain_printed": "Cap Junky",
+   "acronym": "CJ",
+   "product_code": "CJ_THC26:CBD1",
+   "grade": 26,
+   "nominal_pct": 26.0,
+   "window_min": 23.4,
+   "window_max": 28.59
+  },
+  {
+   "pages": [
+    "Tran01 p.3",
+    "Tran02 p.3"
+   ],
+   "strain": "Cap Junky",
+   "strain_printed": "Cap Junky",
+   "acronym": "CJ",
+   "product_code": "CJ_THC24:CBD1",
+   "grade": 24,
+   "nominal_pct": 24.0,
+   "window_min": 21.6,
+   "window_max": 26.39
+  },
+  {
+   "pages": [
+    "Tran01 p.4"
+   ],
+   "strain": "Cap Junky",
+   "strain_printed": "Cap Junky",
+   "acronym": "CJ",
+   "product_code": "CJ_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran02 p.6"
+   ],
+   "strain": "Cash Cow",
+   "strain_printed": "Cash Cow",
+   "acronym": "CC",
+   "product_code": "CC_THC14:CBD1",
+   "grade": 14,
+   "nominal_pct": 14.0,
+   "window_min": 12.6,
+   "window_max": 15.39
+  },
+  {
+   "pages": [
+    "Tran02 p.7"
+   ],
+   "strain": "Chem Flyer",
+   "strain_printed": "Chem Flyer",
+   "acronym": "CF",
+   "product_code": "CF_THC10:CBD1",
+   "grade": 10,
+   "nominal_pct": 10.0,
+   "window_min": 9.0,
+   "window_max": 10.99
+  },
+  {
+   "pages": [
+    "Tran02 p.8"
+   ],
+   "strain": "Clemosa",
+   "strain_printed": "Clemosa A Bud",
+   "acronym": "CLE",
+   "product_code": "CLE_THC8:CBD1",
+   "grade": 8,
+   "nominal_pct": 8.0,
+   "window_min": 7.2,
+   "window_max": 8.79
+  },
+  {
+   "pages": [
+    "Tran01 p.5",
+    "Tran02 p.9"
+   ],
+   "strain": "Fat Bastard",
+   "strain_printed": "Fat Bastard",
+   "acronym": "FB",
+   "product_code": "FB_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran01 p.7"
+   ],
+   "strain": "Gorilla Glue",
+   "strain_printed": "Gorilla Glue",
+   "acronym": "GG",
+   "product_code": "GG_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran01 p.6",
+    "Tran02 p.10"
+   ],
+   "strain": "Gorilla Glue",
+   "strain_printed": "Gorilla Glue",
+   "acronym": "GG",
+   "product_code": "GG_THC16:CBD1",
+   "grade": 16,
+   "nominal_pct": 16.0,
+   "window_min": 14.4,
+   "window_max": 17.59
+  },
+  {
+   "pages": [
+    "Tran02 p.12"
+   ],
+   "strain": "Grape Pie",
+   "strain_printed": "Grape Pie",
+   "acronym": "GP",
+   "product_code": "GP_THC28:CBD1",
+   "grade": 28,
+   "nominal_pct": 28.0,
+   "window_min": 25.2,
+   "window_max": 30.79
+  },
+  {
+   "pages": [
+    "Tran02 p.13",
+    "Tran02 p.14"
+   ],
+   "strain": "Grape Pie",
+   "strain_printed": "Grape Pie",
+   "acronym": "GP",
+   "product_code": "GP_THC26:CBD1",
+   "grade": 26,
+   "nominal_pct": 26.0,
+   "window_min": 23.4,
+   "window_max": 28.59
+  },
+  {
+   "pages": [
+    "Tran01 p.9"
+   ],
+   "strain": "Grape Pie",
+   "strain_printed": "Grape Pie",
+   "acronym": "GP",
+   "product_code": "GP_THC24:CBD1",
+   "grade": 24,
+   "nominal_pct": 24.0,
+   "window_min": 21.6,
+   "window_max": 26.39
+  },
+  {
+   "pages": [
+    "Tran01 p.8",
+    "Tran02 p.11"
+   ],
+   "strain": "Grape Pie",
+   "strain_printed": "Grape Pie",
+   "acronym": "GP",
+   "product_code": "GP_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran01 p.10"
+   ],
+   "strain": "Grape Pie",
+   "strain_printed": "Grape Pie",
+   "acronym": "GP",
+   "product_code": "GP_THC16:CBD1",
+   "grade": 16,
+   "nominal_pct": 16.0,
+   "window_min": 14.4,
+   "window_max": 17.59
+  },
+  {
+   "pages": [
+    "Tran02 p.15"
+   ],
+   "strain": "Graps & Crème",
+   "strain_printed": "Grapes And Cream",
+   "acronym": "GRC",
+   "product_code": "GRC_THC10:CBD1",
+   "grade": 10,
+   "nominal_pct": 10.0,
+   "window_min": 9.0,
+   "window_max": 10.99
+  },
+  {
+   "pages": [
+    "Tran01 p.12"
+   ],
+   "strain": "High Pro Amnesia",
+   "strain_printed": "High Pro Amnesia",
+   "acronym": "HPA",
+   "product_code": "HPA_THC22:CBD1",
+   "grade": 22,
+   "nominal_pct": 22.0,
+   "window_min": 19.8,
+   "window_max": 24.19
+  },
+  {
+   "pages": [
+    "Tran02 p.16"
+   ],
+   "strain": "High Pro Amnesia",
+   "strain_printed": "High Pro Amnesia",
+   "acronym": "HPA",
+   "product_code": "HPA_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran01 p.11"
+   ],
+   "strain": "High Pro Amnesia",
+   "strain_printed": "High Pro Amnesia",
+   "acronym": "HPA",
+   "product_code": "HPA_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran02 p.17"
+   ],
+   "strain": "Jelly Donutz",
+   "strain_printed": "Jelly Donuts",
+   "acronym": "JD",
+   "product_code": "JD_THC22:CBD1",
+   "grade": 22,
+   "nominal_pct": 22.0,
+   "window_min": 19.8,
+   "window_max": 24.19
+  },
+  {
+   "pages": [
+    "Tran01 p.13"
+   ],
+   "strain": "Jelly Donutz",
+   "strain_printed": "Jelly Donuts",
+   "acronym": "JD",
+   "product_code": "JD_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran02 p.19"
+   ],
+   "strain": "Jelly Donutz",
+   "strain_printed": "Jelly Donuts",
+   "acronym": "JD",
+   "product_code": "JD_THC16:CBD1",
+   "grade": 16,
+   "nominal_pct": 16.0,
+   "window_min": 14.4,
+   "window_max": 17.59
+  },
+  {
+   "pages": [
+    "Tran02 p.18"
+   ],
+   "strain": "Jelly Donutz",
+   "strain_printed": "Jelly Donuts",
+   "acronym": "JD",
+   "product_code": "JD_THC14:CBD1",
+   "grade": 14,
+   "nominal_pct": 14.0,
+   "window_min": 12.6,
+   "window_max": 15.39
+  },
+  {
+   "pages": [
+    "Tran01 p.14"
+   ],
+   "strain": "Jokerz 31",
+   "strain_printed": "Jokerz 31",
+   "acronym": "J31",
+   "product_code": "J31_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran02 p.20"
+   ],
+   "strain": "Kush Crasher",
+   "strain_printed": "Kush Crasher",
+   "acronym": "KC",
+   "product_code": "KC_THC16:CBD1",
+   "grade": 16,
+   "nominal_pct": 16.0,
+   "window_min": 14.4,
+   "window_max": 17.59
+  },
+  {
+   "pages": [
+    "Tran02 p.21"
+   ],
+   "strain": "Motor Breath",
+   "strain_printed": "Motor Breath",
+   "acronym": "MB",
+   "product_code": "MB_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran01 p.15"
+   ],
+   "strain": "Orange Punch Mimosa",
+   "strain_printed": "Orange Punch Mimosa",
+   "acronym": "OPM",
+   "product_code": "OPM_THC22:CBD1",
+   "grade": 22,
+   "nominal_pct": 22.0,
+   "window_min": 19.8,
+   "window_max": 24.19
+  },
+  {
+   "pages": [
+    "Tran02 p.24"
+   ],
+   "strain": "Orange Punch Mimosa",
+   "strain_printed": "Orange Punch Mimosa",
+   "acronym": "OPM",
+   "product_code": "OPM_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran01 p.16",
+    "Tran02 p.22"
+   ],
+   "strain": "Orange Punch Mimosa",
+   "strain_printed": "Orange Punch Mimosa",
+   "acronym": "OPM",
+   "product_code": "OPM_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran02 p.23"
+   ],
+   "strain": "Orange Punch Mimosa",
+   "strain_printed": "Orange Punch Mimosa",
+   "acronym": "OPM",
+   "product_code": "OPM_THC10:CBD1",
+   "grade": 10,
+   "nominal_pct": 10.0,
+   "window_min": 9.0,
+   "window_max": 10.99
+  },
+  {
+   "pages": [
+    "Tran01 p.17"
+   ],
+   "strain": "Orange Punch Mimosa",
+   "strain_printed": "Orange Punch Mimosa",
+   "acronym": "OPM",
+   "product_code": "OPM_THC8:CBD1",
+   "grade": 8,
+   "nominal_pct": 8.0,
+   "window_min": 7.2,
+   "window_max": 8.79
+  },
+  {
+   "pages": [
+    "Tran01 p.18"
+   ],
+   "strain": "Permanent Marker",
+   "strain_printed": "Permanent Marker",
+   "acronym": "PM",
+   "product_code": "PM_THC12:CBD1",
+   "grade": 12,
+   "nominal_pct": 12.0,
+   "window_min": 10.8,
+   "window_max": 13.19
+  },
+  {
+   "pages": [
+    "Tran02 p.25"
+   ],
+   "strain": "Permanent Marker",
+   "strain_printed": "Permanent Marker",
+   "acronym": "PM",
+   "product_code": "PM_THC10:CBD1",
+   "grade": 10,
+   "nominal_pct": 10.0,
+   "window_min": 9.0,
+   "window_max": 10.99
+  },
+  {
+   "pages": [
+    "Tran02 p.26"
+   ],
+   "strain": "Pure Michigan",
+   "strain_printed": "Pure Michigen",
+   "acronym": "PUM",
+   "product_code": "PUM_THC14:CBD1",
+   "grade": 14,
+   "nominal_pct": 14.0,
+   "window_min": 12.6,
+   "window_max": 15.39
+  },
+  {
+   "pages": [
+    "Tran02 p.27"
+   ],
+   "strain": "Scrambler",
+   "strain_printed": "Scrambler",
+   "acronym": "SCR",
+   "product_code": "SCR_THC20:CBD1",
+   "grade": 20,
+   "nominal_pct": 20.0,
+   "window_min": 18.0,
+   "window_max": 21.99
+  },
+  {
+   "pages": [
+    "Tran01 p.19"
+   ],
+   "strain": "Scrambler",
+   "strain_printed": "Scrambler",
+   "acronym": "SCR",
+   "product_code": "SCR_THC18:CBD1",
+   "grade": 18,
+   "nominal_pct": 18.0,
+   "window_min": 16.2,
+   "window_max": 19.79
+  },
+  {
+   "pages": [
+    "Tran02 p.28"
+   ],
+   "strain": "Sleepy Joe",
+   "strain_printed": "Sleepy Joe",
+   "acronym": "SJ",
+   "product_code": "SJ_THC10:CBD1",
+   "grade": 10,
+   "nominal_pct": 10.0,
+   "window_min": 9.0,
+   "window_max": 10.99
+  },
+  {
+   "pages": [
+    "Tran02 p.29"
+   ],
+   "strain": "Wedding Crasher",
+   "strain_printed": "Wedding Crusher",
+   "acronym": "WC",
+   "product_code": "WC_THC24:CBD1",
+   "grade": 24,
+   "nominal_pct": 24.0,
+   "window_min": 21.6,
+   "window_max": 26.39
+  }
+ ]
+}
