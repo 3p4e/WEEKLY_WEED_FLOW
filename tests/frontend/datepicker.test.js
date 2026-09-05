@@ -178,3 +178,65 @@ test('the grid is Monday-first, matching the facility week', () => {
   // 1 April 2026 is a Wednesday → two leading pad cells.
   assert.equal(w.document.querySelectorAll('.dp-pad').length, 2);
 });
+
+
+/* ── The DOM contract the Playwright helper drives ─────────────────────────
+   web/e2e/seed.js's pickDate() clicks the trigger, then a day cell, and steps
+   months with the header controls. Those selectors are a real contract between
+   two suites that never run together: a rename here fails e2e minutes later,
+   in a job that needs a whole stack to reproduce. Pinned in the fast suite so
+   it fails here first, in milliseconds. */
+
+test('e2e contract: trigger, overlay, day cells and month controls exist as addressed', () => {
+  const w = load({ facility_tz: 'Europe/Skopje' }).window;
+  w.document.body.innerHTML = w.GF.dateField('add-due', {});
+
+  // 1. the trigger the helper clicks
+  assert.ok(w.document.querySelector('#add-due-btn'), 'trigger id must be <id>-btn');
+
+  w.GF.openDatePicker('add-due', null);
+
+  // 2. the overlay it waits for, and the class that makes it visible
+  const modal = w.document.querySelector('#gf-datepicker');
+  assert.ok(modal, 'overlay id must be #gf-datepicker');
+  assert.ok(modal.classList.contains('open'), 'opening must add .open (CSS visibility hangs off it)');
+
+  // 3. day cells addressed by ISO date
+  const today = w.GF.facilityToday();
+  assert.ok(modal.querySelector(`.dp-cell[data-v="${today}"]`), 'cells must carry data-v="YYYY-MM-DD"');
+
+  // 4. the two selects the helper reads to decide which way to step:
+  //    month first (0-based), year second
+  const sels = modal.querySelectorAll('.dp-sel');
+  assert.equal(sels.length, 2, 'header must expose exactly month + year selects, in that order');
+  const [y, m] = today.split('-').map(Number);
+  assert.equal(Number(sels[0].value), m - 1, 'first .dp-sel is the 0-based month');
+  assert.equal(Number(sels[1].value), y, 'second .dp-sel is the year');
+
+  // 5. prev/next, in that order
+  const navs = modal.querySelectorAll('.dp-nav');
+  assert.equal(navs.length, 2, 'header must expose prev and next');
+
+  // 6. …and stepping forward really advances one month
+  w.GF._dpMove(1);
+  const after = w.document.querySelectorAll('#gf-datepicker .dp-sel');
+  assert.equal(Number(after[0].value), m % 12, 'next must advance one month (wrapping)');
+
+  // 7. picking closes the overlay, which is what the helper waits on
+  w.GF.pickDate('add-due', today);
+  assert.ok(!w.document.querySelector('#gf-datepicker').classList.contains('open'),
+    'picking must remove .open so a hidden-state wait resolves');
+  assert.equal(w.document.getElementById('add-due').value, today);
+});
+
+test('e2e contract: a target in a neighbouring month is reachable by stepping', () => {
+  // The specs pick a Saturday days away, which can fall in the next month —
+  // the helper steps until the cell exists, so that must actually work.
+  const w = load({ facility_tz: 'Europe/Skopje' }, '2026-07-30T09:15:00+02:00').window;
+  w.document.body.innerHTML = w.GF.dateField('add-due', {});
+  w.GF.openDatePicker('add-due', null);
+  const q = (v) => w.document.querySelector(`#gf-datepicker .dp-cell[data-v="${v}"]`);
+  assert.ok(!q('2026-08-01'), 'precondition: August is not shown from a July open');
+  w.GF._dpMove(1);
+  assert.ok(q('2026-08-01'), 'one step forward must reveal it');
+});
