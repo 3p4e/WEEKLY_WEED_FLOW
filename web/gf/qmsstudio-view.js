@@ -366,6 +366,44 @@
       </div>`;
   };
 
+  // What the agents did not know, lifted out of the document by the engine
+  // (docengine app/needs.py). The same gaps are visible in the .docx as
+  // [NEEDS INPUT: …] markers, but a marker only helps someone already reading
+  // that page — this is the list, up front, of what the document is waiting on.
+  // Rendered whenever the job carries the key, INCLUDING when it is empty:
+  // "nothing outstanding" is worth stating plainly about a controlled document.
+  const needsPanel = (r) => {
+    const items = r.needs_input;
+    if (!Array.isArray(items)) return '';    // job predates the feature — say nothing
+    if (!items.length) {
+      return `<div class="panel ana-panel" style="margin-top:10px">
+        <div class="ana-h" style="color:var(--green)">✓ ${AL('Nothing outstanding',
+                                                             'Ништо не недостасува')}</div>
+        <div class="ana-note">${AL(
+          'The agents reported no missing facility information for this document.',
+          'Агентите не пријавија недостасувачки податоци за овој документ.')}</div>
+      </div>`;
+    }
+    const rows = items.map(n => `
+      <div class="qms-hit">
+        <div class="qms-hit-h"><span class="mono qms-code">${GF.esc(n.section || '?')}</span></div>
+        <div class="qms-hit-b">${GF.esc(n.item || '')}</div>
+      </div>`).join('');
+    return `
+      <div class="panel ana-panel" style="margin-top:10px">
+        <div class="ana-h">${AL('Needs your input', 'Потребни се вашите податоци')}
+          · ${items.length}</div>
+        <div class="ana-note" style="margin:2px 0 8px">${AL(
+          'The agents did not have these facts and did not invent them — each one is marked ' +
+          '[NEEDS INPUT: …] in the document at the point it belongs. Supply the values and ' +
+          'apply them as an edit below, or fill them in after downloading.',
+          'Агентите ги немаа овие податоци и не ги измислија — секој е означен со ' +
+          '[NEEDS INPUT: …] во документот на соодветното место. Дајте ги вредностите и ' +
+          'применете ги како измена подолу, или пополнете ги по преземањето.')}</div>
+        <div class="qms-list">${rows}</div>
+      </div>`;
+  };
+
   const doneStep = () => {
     const s = st(); const r = (s.job && s.job.result) || {};
     const did = r.document_id;
@@ -382,7 +420,8 @@
           <button class="btn btn-sm" onclick="GF.WWF.qstuReset()">${AL('New document', 'Нов документ')}</button>
         </div>
       </div>
-      ${reg ? `<div class="panel ana-panel"><div class="ana-h">${AL('Regulatory check', 'Регулаторна проверка')}</div>
+      ${needsPanel(r)}
+      ${reg ? `<div class="panel ana-panel" style="margin-top:10px"><div class="ana-h">${AL('Regulatory check', 'Регулаторна проверка')}</div>
                <div class="qms-list">${reg}</div></div>` : ''}
       ${chatPanel()}`;
   };

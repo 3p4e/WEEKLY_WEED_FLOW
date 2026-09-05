@@ -11,7 +11,7 @@ import asyncio
 import logging
 import re
 
-from . import builder, db
+from . import builder, db, needs
 from .config import settings
 from .letta import LettaClient, LettaError
 from .questionnaires import QUESTIONNAIRES, apply_defaults
@@ -575,10 +575,10 @@ async def _repair_sections(
             "AFTER the final '<<<PP-END ...>>>' line — never inside a section.\n"
             "- Change only what the issues require; leave everything else byte "
             "for byte as it is.\n"
-            "- NEVER invent data to satisfy an issue. Facility specifics, "
-            "measured values, dates, names and signatures stay BLANK write-ins. "
-            "If an issue cannot be fixed without inventing something, leave that "
-            "one unfixed and say so after the final marker.\n"
+            "- NEVER invent data to satisfy an issue. If an issue cannot be "
+            "fixed without inventing something, leave that one unfixed and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
             "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
             "- Output the document body first, with no preamble.\n\n"
             f"ISSUES:\n{audit.strip()}\n\n"
@@ -665,10 +665,10 @@ async def _direct_edit_sections(
             "section.\n"
             "- Change only what the request below requires; leave everything "
             "else byte for byte as it is.\n"
-            "- NEVER invent data to satisfy the request. Facility specifics, "
-            "measured values, dates, names and signatures stay BLANK write-ins. "
-            "If the request cannot be met without inventing something, leave "
-            "that part unmet and say so after the final marker.\n"
+            "- NEVER invent data to satisfy the request. If the request cannot "
+            "be met without inventing something, leave that part unmet and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
             "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
             "- Output the document body first, with no preamble.\n\n"
             f"REQUEST:\n{instruction.strip()}\n\n"
@@ -806,8 +806,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     f"Content brief:\n{brief}\n\n"
                     "Return ONLY the bilingual Markdown body — no heading line, no code "
                     "fences, and NO commentary, preamble, or explanation of what you are "
-                    "doing. Your entire reply is inserted verbatim into the document. "
-                    "Unknown facility specifics stay as blank fields.",
+                    "doing. Your entire reply is inserted verbatim into the document.\n\n"
+                    + needs.INSTRUCTION,
                 )
                 sections.append({
                     "num": num, "mk": mk, "en": en,
@@ -827,7 +827,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "around your output and a second one conflicts with it. Do NOT use the "
                 "SOP 9-section numbers (1 ЦЕЛ, 6 ПОСТАПКА, ...) — that structure is for "
                 "SOPs only; number any headings you need from 1 upward, or title them by "
-                "intent. Keep every [[FORM:grid]] row to the same column count.",
+                "intent. Keep every [[FORM:grid]] row to the same column count.\n\n"
+                + needs.INSTRUCTION,
             )
             sections.append(
                 {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
@@ -936,7 +937,14 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "formatter in canonical form — they are not the author's and not "
                 "yours to restyle. Do not raise issues about their spacing, level "
                 "or punctuation; no author can act on those and the document "
-                "cannot pass.\n\n" + reg_context + markdown,
+                "cannot pass.\n\n"
+                "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                "the requester has not supplied yet, and are reported to them "
+                "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                "alternative an author has is inventing the value, which is the thing "
+                "this document must never contain. Do raise an issue if a marker is "
+                "used where the answer WAS supplied, or where the blank belongs to a "
+                "human filling the form during execution.\n\n" + reg_context + markdown,
             )
             audits.append(audit)
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
@@ -1001,6 +1009,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 # time. Every verdict in order, and how many hand-backs it took.
                 "qa_audit_history": audits,
                 "qa_repair_rounds": len(audits) - 1,
+                # What the agents did NOT know. The document ships with a
+                # visible [NEEDS INPUT: …] marker at each of these points; this
+                # is the same list, lifted out so the requester is TOLD what to
+                # supply instead of having to find the markers by reading.
+                "needs_input": needs.extract_needs(sections),
                 "bytes": result.bytes,
             },
         )
@@ -1149,7 +1162,14 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
                 "formatter in canonical form — they are not the author's and not "
                 "yours to restyle. Do not raise issues about their spacing, level "
                 "or punctuation; no author can act on those and the document "
-                "cannot pass.\n\n" + markdown,
+                "cannot pass.\n\n"
+                "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                "the requester has not supplied yet, and are reported to them "
+                "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                "alternative an author has is inventing the value, which is the thing "
+                "this document must never contain. Do raise an issue if a marker is "
+                "used where the answer WAS supplied, or where the blank belongs to a "
+                "human filling the form during execution.\n\n" + markdown,
             )
             audits.append(audit)
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
@@ -1200,6 +1220,7 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
                 "qa_audit": audits[-1],
                 "qa_audit_history": audits,
                 "qa_repair_rounds": len(audits) - 1,
+                "needs_input": needs.extract_needs(sections),
                 "bytes": result.bytes,
             },
         )

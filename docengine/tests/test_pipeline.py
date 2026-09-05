@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import builder, db, fleet  # noqa: E402
+from app import builder, db, fleet, needs  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
@@ -778,8 +778,17 @@ def test_repair_prompt_forbids_inventing_data_to_satisfy_an_issue():
     prompt quietly drops it."""
     src = inspect.getsource(_repair_sections)
     assert "NEVER invent data" in src
-    assert "BLANK write-ins" in src
     assert "leave that" in src and "unfixed" in src
+    # The prohibition is only half of it: an agent under repair pressure needs
+    # a sanctioned way OUT, or "don't invent" and "fix the issue" simply
+    # conflict and one of them loses. That way out is the [NEEDS INPUT: …]
+    # marker, carried into this prompt (and every other authoring prompt) from
+    # one place so the wording cannot drift between them.
+    assert "needs.INSTRUCTION" in src
+    assert "[NEEDS INPUT:" in needs.INSTRUCTION
+    # …and it must keep saying which blanks are NOT gaps, or every signature
+    # line in the house style acquires a marker.
+    assert "write-in" in needs.INSTRUCTION and "signatures" in needs.INSTRUCTION
 
 
 def test_split_repaired_tolerates_chatter_around_a_correct_document():
@@ -1317,3 +1326,72 @@ async def test_direct_edit_sections_nudges_once_when_the_first_reply_has_no_mark
     assert len(calls) == 2
     assert revised is not None
     assert {s["num"]: s["content"] for s in revised}["1.0"] == "Нова цел.|New purpose."
+
+
+# ---------- [NEEDS INPUT: …] reaches the requester ----------
+
+@pytest.mark.asyncio
+async def test_a_generated_documents_open_questions_are_reported_on_the_job(monkeypatch):
+    """The point of the marker: an agent that did not know something says so in
+    place, and the person who asked for the document is HANDED that list rather
+    than having to find the markers by reading forty bilingual pages."""
+    updates = _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class GapClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            if "NO-FINDING" not in prompt and "Draft ONLY" not in prompt and "Design the" not in prompt:
+                return "NO-FINDING"
+            return ("Материјалот се чува во [NEEDS INPUT: cold room code].|"
+                    "The material is stored in [NEEDS INPUT: cold room code].")
+
+    await run_workflow("job-1", client=GapClient())
+    assert updates[-1]["status"] == "done"
+    assert updates[-1]["result"]["needs_input"] == [
+        {"section": "1.0", "item": "cold room code"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_document_with_no_gaps_reports_an_empty_list_not_a_missing_key(monkeypatch):
+    """Callers render this unconditionally — the key is always present, so
+    'nothing outstanding' is a fact the UI can state rather than infer from a
+    missing field."""
+    updates = _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class CompleteClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            return "Целосен текст.|Complete text."
+
+    await run_workflow("job-1", client=CompleteClient())
+    assert updates[-1]["result"]["needs_input"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_revision_reports_the_questions_left_in_the_document_it_produced(monkeypatch):
+    """A revision is a document in its own right, so it carries its own list —
+    including a gap the EDIT introduced by declining to invent a value."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class EditWithGapClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "PASS"
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE",
+                                 "Опфатот вклучува [NEEDS INPUT: line clearance frequency].|"
+                                 "The scope covers [NEEDS INPUT: line clearance frequency].")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=EditWithGapClient())
+    assert updates[-1]["status"] == "done"
+    assert updates[-1]["result"]["needs_input"] == [
+        {"section": "2.0", "item": "line clearance frequency"},
+    ]

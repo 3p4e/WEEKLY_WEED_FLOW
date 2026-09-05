@@ -46,8 +46,8 @@ PRESETS: list[dict] = [
             "Every regulatory or method claim in the targeted section(s) needs "
             "a citation to a real, retrievable source. Add one where missing, "
             "using ragflow_search against your permitted corpus; where a claim "
-            "cannot be verified against the corpus, mark it clearly rather than "
-            "inventing a reference."
+            "cannot be verified against the corpus, mark it as [NEEDS INPUT: source "
+            "for <the claim>] rather than inventing a reference."
         ),
     },
     {
@@ -57,8 +57,10 @@ PRESETS: list[dict] = [
         "instruction": (
             "Expand the targeted section(s) with more procedural detail — more "
             "explicit steps, clearer sequencing — without inventing facility "
-            "specifics, measured values, dates, names, or signatures; those "
-            "stay blank write-in fields."
+            "specifics. Where a step needs a fact you were not given (a room "
+            "or equipment code, a limit, a frequency), write [NEEDS INPUT: what "
+            "you need] in place so it can be supplied; measured values, dates, "
+            "names and signatures stay blank write-in fields."
         ),
     },
 ]
