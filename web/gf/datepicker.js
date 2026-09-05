@@ -185,8 +185,17 @@ window.GF = window.GF || {};
     if (!el) {
       el = document.createElement('div');
       el.id = 'gf-datepicker'; el.className = 'overlay';
-      document.body.appendChild(el);
     }
+    // Always (re)append: this picker is opened FROM inside other overlays
+    // (the task modal, the worklog modal), which are themselves created on
+    // first use and appended to <body>. Two .overlay siblings share one
+    // z-index, so DOM order decides which paints on top — and a modal first
+    // opened AFTER this element existed would land later in <body> and sit
+    // over the calendar, swallowing every click on it (seen live in e2e:
+    // "#worklog-modal subtree intercepts pointer events"). appendChild on an
+    // existing node MOVES it to the end, so the picker is always last, and
+    // app.css gives it a stacking layer above modals besides.
+    document.body.appendChild(el);
     el.innerHTML = `
       <div class="modal sel-modal dp-modal" role="dialog" aria-modal="true"
         aria-label="${mk() ? 'Избери датум' : 'Pick a date'}">

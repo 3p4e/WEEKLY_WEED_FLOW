@@ -561,6 +561,12 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
   visibility:hidden;opacity:0;
   transition:opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),visibility 200ms cubic-bezier(0.23, 1, 0.32, 1)}
 .overlay.open{visibility:visible;opacity:1}
+/* Nested pickers open FROM inside a modal (a date or a select in the task or
+   worklog form), so they must sit above the modal that opened them. Without
+   this every .overlay shares one layer and DOM order — i.e. which overlay
+   happened to be created first in the session — decides which one takes the
+   click. Below #toasts (700) so a toast still shows over an open picker. */
+#gf-datepicker,#gf-chooser{z-index:600}
 /* Flex column so the header + footer stay pinned and ONLY the body scrolls.
    (The previous rule set overflow-y:auto then immediately overflow:hidden on
    the same selector, which clipped tall modals with no way to scroll to Save.) */

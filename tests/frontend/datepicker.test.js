@@ -240,3 +240,26 @@ test('e2e contract: a target in a neighbouring month is reachable by stepping', 
   w.GF._dpMove(1);
   assert.ok(q('2026-08-01'), 'one step forward must reveal it');
 });
+
+test('opening the picker moves its overlay to the end of <body>, above whatever opened it', () => {
+  // The e2e failure this pins: the picker element was created during an
+  // earlier form, then the worklog modal was created LATER and so sat later in
+  // <body>. Same z-index → the later sibling paints on top → the calendar's
+  // cells were visible but every click landed on the modal behind them.
+  const w = load({ facility_tz: 'Europe/Skopje' }).window;
+  const d = w.document;
+  d.body.innerHTML = w.GF.dateField('wl-date', {});
+  w.GF.openDatePicker('wl-date', null);          // picker element now exists
+  w.GF.pickDate('wl-date', '');                  // and closes
+  // A modal created afterwards lands after it in <body>, as the worklog
+  // modal does via GF.WWF._ensureModal.
+  const later = d.createElement('div');
+  later.id = 'worklog-modal'; later.className = 'overlay open';
+  d.body.appendChild(later);
+  assert.equal(d.body.lastElementChild.id, 'worklog-modal', 'precondition: the modal is now last');
+
+  w.GF.openDatePicker('wl-date', null);
+  assert.equal(d.body.lastElementChild.id, 'gf-datepicker',
+    'reopening must move the picker after the modal, so it is the topmost overlay');
+  assert.equal(d.querySelectorAll('#gf-datepicker').length, 1, 'moved, not duplicated');
+});
