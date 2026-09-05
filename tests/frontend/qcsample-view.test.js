@@ -24,7 +24,7 @@ const PRE = `
 `;
 
 function load() {
-  return loadGF({ files: ['data.js', 'core.js', 'qcsample-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'qcsample-view.js'], preScript: PRE });
 }
 
 function setup(h, fields) {

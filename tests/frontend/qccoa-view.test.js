@@ -25,7 +25,7 @@ const PRE = `
 `;
 
 function load(role) {
-  const h = loadGF({ files: ['data.js', 'core.js', 'qccoa-view.js'], preScript: PRE });
+  const h = loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'qccoa-view.js'], preScript: PRE });
   if (role) h.window.GF.API.user = { role };
   return h;
 }

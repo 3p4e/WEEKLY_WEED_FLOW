@@ -32,7 +32,7 @@ const PRE = `
 `;
 
 function loadExecReport() {
-  return loadGF({ files: ['data.js', 'core.js', 'execreport-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'execreport-view.js'], preScript: PRE });
 }
 
 test('status chips use theme CSS custom properties, not hardcoded hex/rgba literals', () => {

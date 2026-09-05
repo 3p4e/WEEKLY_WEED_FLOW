@@ -74,7 +74,11 @@
     if (!iso) return null;
     return Math.max(0, Math.round((Date.now() - new Date(iso + 'T00:00:00')) / 864e5));
   };
-  const today = () => new Date().toISOString().slice(0, 10);
+  // FACILITY today, not UTC. This value is printed into every plant id in
+  // the batch (see the note under the field), and toISOString() renders the
+  // UTC day — so between facility-midnight and UTC-midnight every plant
+  // created here was stamped with YESTERDAY.
+  const today = () => GF.facilityToday();
 
   GF.WWF.loadCultivation = async () => {
     const st = GF.WWF._cult;
@@ -495,7 +499,7 @@
       <div class="field"><label>${AL('Plant count', 'Број на растенија')}</label>
         <input id="cu-b-count" type="number" min="0" max="100000" step="1" placeholder="2000"></div>
       <div class="field"><label>${AL('Clone date', 'Датум на клонирање')}</label>
-        <input id="cu-b-clone" type="date" value="${today()}">
+        ${GF.dateField('cu-b-clone', { value: today(), clearable: false })}
         <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
           'Plant ids are <clone date>_<cultivar>_<number>, so this date is printed on every plant in the batch.',
           'ID на растение е <датум>_<сорта>_<број>, па овој датум е на секое растение во батчот.')}</div></div>
@@ -580,7 +584,7 @@
       <div class="field"><label>${AL('To room', 'Во соба')}</label>
         ${GF.selectField('cu-m-room', { value: '', title: AL('To room', 'Во соба'), options: roomOpts })}</div>
       <div class="field"><label>${AL('Date', 'Датум')}</label>
-        <input id="cu-m-date" type="date" value="${today()}"></div>
+        ${GF.dateField('cu-m-date', { value: today(), clearable: false })}</div>
       <div class="field"><label>${AL('Reason / note', 'Причина / забелешка')}</label>
         <input id="cu-m-reason" maxlength="500"></div>
       <div id="cu-m-warn" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></div>

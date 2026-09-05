@@ -50,7 +50,7 @@ const PRE_CULT = `
 
 function load(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'cultivation-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'cultivation-view.js'],
     preScript: PRE_CULT,
   });
   if (role) h.window.GF.API.user = { role };
@@ -295,7 +295,7 @@ test('batch codes, cultivar names and room names are HTML-escaped', () => {
 
 function loadForms(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'cultivation-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'cultivation-view.js'],
     preScript: PRE_CULT,
   });
   const w = h.window;

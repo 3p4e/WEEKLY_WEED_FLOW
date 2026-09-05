@@ -182,7 +182,7 @@
           ${area('qoo-impact_assessment', AL('Impact assessment', 'Проценка на влијание'), o.impact_assessment)}
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${fld('qoo-capa_reference', AL('CAPA ref', 'CAPA реф.'), o.capa_reference)}
-            <input id="qoo-effectiveness_check_date" type="date" value="${GF.esc(o.effectiveness_check_date || '')}">
+            ${GF.dateField('qoo-effectiveness_check_date', { value: o.effectiveness_check_date || '' })}
             ${fld('qoo-effectiveness_check_result', AL('Effectiveness result', 'Резултат од ефективност'), o.effectiveness_check_result)}
           </div>
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosSavePhase('${o.id}')">${AL('Save investigation', 'Зачувај истрага')}</button>
@@ -275,8 +275,8 @@
           <input id="qoo-test_name" placeholder="${AL('Test name', 'Име на тест')}">
           <input id="qoo-material_code" placeholder="${AL('Material (optional)', 'Материјал (опц.)')}">
           <select id="qoo-risk"><option value="">${AL('Risk…', 'Ризик…')}</option>${Object.keys(RISK).map(r => `<option value="${r}">${r}</option>`).join('')}</select>
-          <input id="qoo-detection" type="date" title="${AL('Detection date', 'Датум на откривање')}">
-          <input id="qoo-deadline" type="date" title="${AL('Timeline deadline', 'Краен рок')}">
+          ${GF.dateField('qoo-detection', { placeholder: AL('Detection date', 'Датум на откривање') })}
+          ${GF.dateField('qoo-deadline', { placeholder: AL('Timeline deadline', 'Краен рок') })}
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcOosCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';

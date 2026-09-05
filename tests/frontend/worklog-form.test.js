@@ -38,7 +38,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadGF } = require('./helpers/gf-window.js');
 
-const FILES = ['data.js', 'core.js', 'worklog.js'];
+const FILES = ['data.js', 'core.js', 'datepicker.js', 'worklog.js'];
 
 /* worklog.js sits at the end of a chain of bare top-level consts that classic
  * <script> tags share (AUDIT_ROLES in audit-view.js, itself ELEVATED_ROLES from

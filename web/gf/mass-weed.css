@@ -315,6 +315,8 @@
 /* Chooser + af-block under the Mass Weed HUD: chamfer + accent glow. */
 :root[data-theme^="mass-weed"] .sel-btn{
   clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px);border-radius:0}
+:root[data-theme^="mass-weed"] .dp-cell,
+:root[data-theme^="mass-weed"] .dp-sel{border-radius:0}
 :root[data-theme^="mass-weed"] .sel-modal{
   box-shadow:var(--sh-3), 0 0 34px rgba(var(--accent-rgb),.35)}
 :root[data-theme^="mass-weed"] .af-block{

@@ -15,6 +15,7 @@ from app.db import rls_users, tasks_admin_pool, users_admin_pool
 from app.deps import get_current_user, require_password_set, require_role, uuid_or_404
 from app.roles import ADMIN, CREATABLE_ROLES, ELEVATED_ROLES, MANAGER_ROLES
 from app.security import BCRYPT_MAX_BYTES, create_access_token, hash_password, verify_password
+from app.worktime import facility_today
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -233,7 +234,24 @@ async def login(body: LoginReq, request: Request):
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
-    return _public(user)
+    """The signed-in user, plus the clock the UI must reckon dates by.
+
+    Every "what day is it" question in this system belongs to the FACILITY's
+    zone, not the reader's: worktime.facility_today() and SITE_TODAY_SQL both
+    say so, and tests/test_facility_clock.py enforces it server-side. The
+    browser had no way to ask — it used its own local day — so a date typed
+    from a phone in another zone, or during the nightly window where Skopje
+    and UTC disagree, defaulted to the wrong calendar day.
+
+    Sent as the zone (so a long-lived tab stays correct as it crosses
+    midnight) AND today's date (so a client whose Intl lacks the zone still
+    has an authoritative answer). Additive: every existing consumer of this
+    endpoint reads the same user fields it always did."""
+    return {
+        **_public(user),
+        "facility_tz": settings.snapshot_tz,
+        "facility_today": facility_today().isoformat(),
+    }
 
 
 @router.post("/change-password")

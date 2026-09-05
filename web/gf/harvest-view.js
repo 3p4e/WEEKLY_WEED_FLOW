@@ -398,7 +398,7 @@
       <div class="field"><label>${AL('Wet weight (g)', 'Свежа тежина (g)')}</label>
         <input id="hv-c-wet" type="number" min="0" step="1"></div>
       <div class="field"><label>${AL('Date', 'Датум')}</label>
-        <input id="hv-c-date" type="date"></div>
+        ${GF.dateField('hv-c-date', {})}</div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
         <input id="hv-c-note" maxlength="1000"></div>
       <div id="hv-c-override"></div>
@@ -556,7 +556,7 @@
         <input id="hv-d-waste" type="number" min="0" step="1"
           value="${h.dry_waste_g != null ? h.dry_waste_g : ''}"></div>
       <div class="field"><label>${AL('Date out of the dry room', 'Датум на излез од сушара')}</label>
-        <input id="hv-d-date" type="date"></div>
+        ${GF.dateField('hv-d-date', {})}</div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
         <input id="hv-d-note" maxlength="1000"></div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(

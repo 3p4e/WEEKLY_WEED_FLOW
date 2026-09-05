@@ -412,9 +412,11 @@ GF.WWF._renderDocPanel = () => {
   const rangeControls = elevated ? `
     <div style="padding:10px 14px;border-bottom:1px solid var(--line,#E2E8F0);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px">
       <span style="color:var(--ink-3);font-weight:600">${AL('Custom range', 'Прилагоден опсег')}</span>
-      <input type="date" value="${GF.esc(ds.rangeStart || '')}" onchange="GF.WWF._doc.rangeStart=this.value" style="${inStyle}">
+      ${GF.dateField('doc-range-start', { value: ds.rangeStart || '',
+        placeholder: AL('From', 'Од'), onPick: (v) => { GF.WWF._doc.rangeStart = v; } })}
       <span style="color:var(--ink-3)">→</span>
-      <input type="date" value="${GF.esc(ds.rangeEnd || '')}" onchange="GF.WWF._doc.rangeEnd=this.value" style="${inStyle}">
+      ${GF.dateField('doc-range-end', { value: ds.rangeEnd || '',
+        placeholder: AL('To', 'До'), onPick: (v) => { GF.WWF._doc.rangeEnd = v; } })}
       <button class="btn btn-sm btn-primary" onclick="GF.WWF.previewDocument()">${AL('Generate preview', 'Генерирај преглед')}</button>
       <span style="color:var(--ink-3);font-size:11px">${AL('unsaved draft for any interval', 'незачуван нацрт за секој интервал')}</span>
     </div>` : '';

@@ -884,6 +884,39 @@ body.demo-on .main{padding-bottom:56px}
 .sel-ck{flex:none;color:var(--primary)}
 .sel-empty{padding:18px;text-align:center;color:var(--ink-3);font-size:13px}
 
+/* ── Date picker (datepicker.js) — replaces <input type=date> ──────────────
+   Rides on .sel-btn for the trigger so a date field and a select field are
+   visually the same control; only the popup body differs. */
+.dp-btn .dp-empty{color:var(--ink-3)}
+.dp-modal{max-width:340px}
+.dp-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.dp-nav{flex:none;width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;line-height:1;border-radius:8px;color:var(--ink-2)}
+.dp-nav:hover{background:var(--primary-soft);color:var(--ink)}
+.dp-sel{flex:1;min-width:0;border:1px solid var(--glass-border);border-radius:8px;padding:7px 8px;
+  font-size:13px;font-family:inherit;background:var(--surface-2);color:var(--ink);cursor:pointer}
+.dp-sel:focus{outline:none;border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.dp-dows,.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.dp-dow{text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--ink-3);padding:4px 0}
+.dp-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:none;
+  border-radius:8px;background:none;color:var(--ink);font-size:13.5px;font-family:inherit;
+  cursor:pointer;transition:transform 160ms cubic-bezier(0.23, 1, 0.32, 1)}
+.dp-cell:hover:not(:disabled){background:var(--primary-soft)}
+.dp-cell:active:not(:disabled){transform:scale(.92)}
+.dp-cell:disabled{opacity:.3;cursor:not-allowed}
+.dp-pad{pointer-events:none}
+/* Today is always legible even when it is not the selection — this control
+   exists to make the facility's today findable at a glance. */
+.dp-today{box-shadow:inset 0 0 0 1.5px var(--primary);font-weight:600}
+.dp-cell.on{background:var(--primary);color:var(--text-on-primary);font-weight:600}
+.dp-foot{display:flex;gap:8px;margin-top:12px}
+.dp-foot .btn{flex:1}
+/* Toolbar-embedded date fields (report/exec-report week jump) size to their
+   content instead of filling the bar the way a form field does. */
+.xr-datefield,.rv-datefield{display:inline-flex}
+.xr-datefield .sel-btn,.rv-datefield .sel-btn{width:auto;padding:6px 10px;font-size:12.5px}
+
 /* ── Add-modal department-fields well (mockup af-modal .af-block) ──────── */
 .af-block{border:1px solid var(--glass-border);border-radius:10px;padding:12px;margin-bottom:12px;
   background:color-mix(in srgb, var(--dept-acc, var(--primary)) 7%, var(--surface-2))}

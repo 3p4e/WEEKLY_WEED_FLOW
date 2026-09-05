@@ -2,6 +2,7 @@
 import uuid
 
 from app.db import users_admin_pool
+from app.worktime import facility_today
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -675,3 +676,29 @@ async def test_login_is_case_insensitive_on_username(client, admin_headers):
     # And a completely different case variant also works.
     r = await client.post("/auth/login", json={"email": "MIXEDCASE.LOGIN", "password": password})
     assert r.status_code == 200, r.text
+
+
+async def test_me_carries_the_facility_clock_the_ui_must_reckon_dates_by(client, admin_headers):
+    """The browser cannot work out the facility's day on its own — its own
+    zone is the READER's, and this app's dates belong to the site. The date
+    picker reads these two fields; without them it silently falls back to the
+    browser's day, which is the bug this endpoint exists to close.
+
+    Sent as the zone (so a tab open across midnight stays right) and as
+    today (so a client whose Intl lacks the zone still has an answer)."""
+    from zoneinfo import ZoneInfo
+
+    from app.config import settings
+
+    r = await client.get("/auth/me", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert body["facility_tz"] == settings.snapshot_tz
+    # A real zone, not a label — the client passes it straight to Intl.
+    ZoneInfo(body["facility_tz"])
+
+    assert body["facility_today"] == facility_today().isoformat()
+    # …and additive: the user fields every existing caller reads are untouched.
+    for key in ("id", "username", "role", "must_change_password"):
+        assert key in body

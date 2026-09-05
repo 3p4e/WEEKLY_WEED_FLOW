@@ -43,7 +43,7 @@ const PRE_HARVEST = `
 
 function load(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'harvest-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'harvest-view.js'],
     preScript: PRE_HARVEST,
   });
   if (role) h.window.GF.API.user = { role };
@@ -326,7 +326,7 @@ test('lot codes, room names, override reasons and product names are HTML-escaped
 
 function loadForms(role) {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'harvest-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'harvest-view.js'],
     preScript: PRE_HARVEST,
   });
   const w = h.window;

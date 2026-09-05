@@ -33,7 +33,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadGF } = require('./helpers/gf-window.js');
 
-const FILES = ['data.js', 'core.js', 'document-view.js'];
+const FILES = ['data.js', 'core.js', 'datepicker.js', 'document-view.js'];
 
 // document-view.js sits after integrate.js in index.html and reads its bare
 // top-level ELEVATED_ROLES to decide whether Compile/Save/Lock controls
