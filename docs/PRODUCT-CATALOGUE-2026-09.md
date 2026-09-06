@@ -167,6 +167,36 @@ Pie satisfies Grade I, Grade II *and* Grade III as issued, so "which grade is
 this batch?" has three correct answers and the certificate cannot be derived
 from the result alone.
 
+### The HTML copies say the same thing (checked exhaustively)
+
+Each strain folder holds an HTML alongside every PDF (HTML written 09:16, PDF
+11:21 the same morning — the PDF is rendered from the HTML). Every HTML for
+every **multi-grade** strain was parsed; single-grade strains cannot overlap by
+definition and are excluded.
+
+| | |
+| --- | --- |
+| HTML documents parsed | **28**, across 9 multi-grade strains |
+| at exactly ±10.00 % | **28 / 28** |
+| adjacent grade pairs | 19 |
+| pairs that **overlap** | **15** |
+| pairs with a clean gap | 4 |
+
+```
+BSS   I/II   21.60–21.99      JD    I/II   19.80–21.99
+CJ    I/II   25.20–28.59      JD  III/IV   14.40–15.39
+CJ   II/III  23.40–26.39      OPM   I/II   19.80–21.99
+CJ  III/IV   21.60–21.99      OPM  II/III  18.00–19.79
+GP    I/II   25.20–28.59      PM    I/II   10.80–10.99
+GP   II/III  23.40–26.39      SCR   I/II   18.00–19.79
+GP   IV/V    16.20–17.59
+HPA   I/II   19.80–21.99      HPA  II/III  18.00–19.79
+```
+
+The HTML and PDF renderings agree on every value. There is no third reading of
+the issued specification, and no document anywhere in the archive prints a
+tolerance other than ±10 %.
+
 ### `_grades_data.json` is NOT the issued specification
 
 The archive root also holds `_grades_data.json`, which encodes a **different,
