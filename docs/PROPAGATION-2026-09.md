@@ -115,27 +115,39 @@ run does not change again.
 Routes (all under `/cultivation`): `GET/POST /mothers`, `GET /mothers/next-code`,
 `PATCH /mothers/{id}`, `GET/POST /clone-runs`, `PATCH /clone-runs/{id}`.
 
-## Conventions assumed — please confirm or correct
+## Conventions — settled by the owner (2026-09-05/06)
 
-These are rules the app now applies because something had to be pre-filled.
-Each is one line of code to change once the facility's convention is stated.
+- **Batch number.** `GP072501` = strain abbreviation + `MMYY` + sequence, the
+  nth cloning batch of that strain in that month. Confirmed as built.
+- **Mother ID.** `GP26_S1M03-2_020`: strain abbreviation + potency grade (the
+  product) · `S1` the selection campaign, numbered **facility-wide** · `M03`
+  mother plant number of that campaign · `-2` the mother's own generation ·
+  `_020` its clone number in stock. Composed by the server from columns
+  (migration 0067), not typed.
+- **Clone ID.** `GP26_S1M03-2_020-03.147`: the mother's id + the cutting
+  number (01–99) + the clone within that cutting (001–999). A mother is cut
+  6–9+ times at 200–300 clones each.
+- **Phase durations.** Cloning 7–14 days, with imported clones allowed up to 7
+  days more for quarantine and acclimatisation (they leave at roughly the same
+  time); vegetation 14–17 days; flowering 42–63 days, ended by trichome
+  maturation tracked under a stereo or digital microscope with documented
+  records. Harvest, cure and defoliation are the GACP → GMP boundary.
+- **Potency grades.** The official ImB product pages — see
+  `docs/PRODUCT-CATALOGUE-2026-09.md`.
+- **Phenotype.** Still free text on the mother; the app carries no verified
+  phenotype list.
 
-- **Batch number period.** The owner's example `GP072501` is read as
-  `<cultivar code><MMYY><NN>`: `GP` + `0725` (July 2025) + `01`. The
-  suggestion uses MMYY of the facility's today and the next sequence for that
-  cultivar in that period. `[NEEDS INPUT: is the period MMYY, YYMM, or an ISO
-  week? Does the sequence restart per period?]`
-- **Mother ID.** Suggested as `<cultivar code>_M<NN>` (`GP_M01`). `[NEEDS
-  INPUT: the facility's mother-plant numbering, if one exists.]`
-- **Clone-run record number.** Optional free text, unique when given. `[NEEDS
-  INPUT: whether a propagation record carries a number, and its form.]`
-- **Phase durations.** The strip shows position and elapsed days only.
-  `[NEEDS INPUT: the plan's expected days per phase (clone, nursery, veg,
-  flower, drying) per cultivar or overall]` — with them the strip can show an
-  expected date for the next step.
-- **Phenotype.** Free text on the mother; the app carries no verified
-  phenotype list (`qc/spec_html.py` renders the ImB phenotype tag unselected
-  for the same reason).
+## Who does what (amended 2026-09-05)
+
+QA (`QA_MGR`) is a floor writer: it registers batches, generates their plant
+ids, **moves them through their phases**, edits the cultivar master, keeps the
+mother bank and initiates clone runs. QC still writes none of it.
+
+## A name that was wrong
+
+The bank derived `generations` meaning "how many clone runs this mother was cut
+in" — which is not the `-2` in the owner's id. That reading is now `times_cut`;
+`generation` means only the mother's own generation.
 
 ## The specification files the owner sent (2026-09-05)
 
