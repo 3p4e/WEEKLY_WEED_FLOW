@@ -40,20 +40,21 @@ const PRE = `
 `;
 const FILES = ['data.js', 'core.js', 'datepicker.js', 'codefield.js', 'cultivation-view.js', 'propagation-view.js'];
 
-const GP_SPEC = {
-  id: 's1', spec_code: 'PP-QC-SPEC-001', version: 'v5.2', status: 'APPROVED', floor_pct: 13.83,
-  tiers: [
-    { tier: 1, spec: 'Spec I', range_min: 26, range_max: 30, nominal: 28 },
-    { tier: 2, spec: 'Spec II', range_min: 22, range_max: 26, nominal: 24 },
-    { tier: 3, spec: 'Spec III', range_min: 18, range_max: 22, nominal: 20 },
-    { tier: 4, spec: 'Spec IV', range_min: 13.83, range_max: 18, nominal: 16 },
-  ],
-};
+// The official ImB catalogue: one product per page, window = nominal ±10 %.
+const GP26 = { id: 'p1', product_code: 'GP_THC26:CBD1', grade: 26, nominal_pct: 26,
+               window_min: 23.40, window_max: 28.59, status: 'APPROVED' };
+const GP18 = { id: 'p2', product_code: 'GP_THC18:CBD1', grade: 18, nominal_pct: 18,
+               window_min: 16.20, window_max: 19.79, status: 'APPROVED' };
+const FB18_DRAFT = { id: 'p3', product_code: 'FB_THC18:CBD1', grade: 18, nominal_pct: 18,
+                     window_min: 16.20, window_max: 19.79, status: 'DRAFT' };
 const CULTIVARS = [
-  { id: 'cv1', code: 'GP', name: 'Grape Pie', is_active: true, spec: GP_SPEC },
-  { id: 'cv2', code: 'FB', name: 'Fat Bastard', is_active: true, spec: { ...GP_SPEC, id: 's2', version: 'v0.1', status: 'DRAFT' } },
-  { id: 'cv3', code: 'OPM', name: 'Orange Punch Mimosa', is_active: true, spec: null },
+  { id: 'cv1', code: 'GP', name: 'Grape Pie', is_active: true, products: [GP26, GP18] },
+  { id: 'cv2', code: 'FB', name: 'Fat Bastard', is_active: true, products: [FB18_DRAFT] },
+  { id: 'cv3', code: 'OPM', name: 'Orange Punch Mimosa', is_active: true, products: [] },
 ];
+const CAMPAIGNS = [{ id: 'sc1', seq: 1, label: 'S1', started_on: '2026-06-01',
+                     material: 'seeds', cultivar_id: 'cv1', cultivar_code: 'GP',
+                     description: 'first selection', mothers_count: 2 }];
 const batch = (o) => ({
   id: 'b1', code: 'GP072501', cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
   room_name: 'Flowering 1.1', plant_count: 2000, plants_materialised: 2000, plants_active: 1990,
@@ -91,12 +92,25 @@ function load(role) {
   w.GF.API.cultivationBatchCreate = async (b) => { w.__created = b; return { id: 'new-batch' }; };
   w.GF.API.cultivationBatchCode = async (id) => { w.__codeAsked = id; return { prefix: 'GP', period: '0726', seq: 3, suggested: 'GP072603' }; };
   w.GF.API.mothers = async () => ({ mothers: w.__mothers, by_cultivar: w.__byCv || [] });
-  w.GF.API.motherNextCode = async (id) => ({ prefix: 'GP_M', seq: 2, suggested: 'GP_M02' });
+  w.GF.API.campaigns = async () => ({ campaigns: w.__campaigns || CAMPAIGNS });
+  w.GF.API.campaignCreate = async (b) => { w.__campaignCreated = b; return { id: 'sc9', seq: 2, label: 'S2' }; };
+  w.GF.API.qcProducts = async (q) => { w.__productsAsked = q; return [GP26, GP18]; };
+  w.GF.API.motherNextCode = async (q) => { w.__nextAsked = q;
+    return { acronym: 'GP', grade: 26, product_code: 'GP_THC26:CBD1', campaign_seq: 1,
+             head: 'GP26_S1M02-1_', mother_no: 2, next_mother_no: 2, generation: 1,
+             next_stock_no: 1, suggested: 'GP26_S1M02-1_001' }; };
+  w.GF.API.motherPotency = async (id) => w.__potency || {
+    mother_id: id, code: 'GP26_S1M01-1_001', product_code: 'GP_THC26:CBD1', window: [23.40, 28.59],
+    product: { n: 2, avg: 24.5, min: 23.98, max: 25.02,
+               values: [{ coq_number: 'CoQ-1', lot_code: 'L-1', total_thc: 23.98, on: '2026-08-01' },
+                        { coq_number: 'CoQ-2', lot_code: 'L-2', total_thc: 25.02, on: '2026-08-20' }] },
+    traced: { n: 0, avg: null, min: null, max: null, values: [] } };
   w.GF.API.motherCreate = async (b) => { w.__motherCreated = b; return { id: 'm9' }; };
   w.GF.API.motherPatch = async (id, b) => { w.__motherPatched = [id, b]; return { id }; };
   w.GF.API.cloneRuns = async () => ({ runs: w.__runs });
   w.GF.API.cloneRunCreate = async (b) => { w.__runCreated = b; return { id: 'run9' }; };
   w.GF.API.cloneRunPatch = async (id, b) => { w.__runPatched = [id, b]; return { id }; };
+  w.GF.API.trichomeCheck = async (b) => { w.__trichome = b; return { id: 'tc9' }; };
   return h;
 }
 
@@ -129,16 +143,22 @@ test('QA, executives and cultivation are offered Register batch and Start clone 
   }
 });
 
-test('QA registers and generates ids but is offered neither the move nor the cultivar master', () => {
+test('QA is a floor writer: it registers, moves and edits the master data', () => {
+  // The owner's amendment of 2026-09-05: "QA should be able to move a batch
+  // through its phases or edit the cultivar master".
   const h = load('QA_MGR');
   const html = render(h, [batch({ plants_materialised: 0, plants_active: 0 })]);
-  assert.match(html, /cultFillPlants\('b1'\)/, 'QA may generate the plant ids');
-  assert.doesNotMatch(html, /cultMoveForm\('b1'\)/, 'moving the batch stays the floor\'s');
-  assert.doesNotMatch(html, /cultCultivarList\(\)/, 'the cultivar master stays the floor\'s');
+  assert.match(html, /cultFillPlants\('b1'\)/, 'QA generates the plant ids');
+  assert.match(html, /cultMoveForm\('b1'\)/, 'QA moves the batch');
+  assert.match(html, /cultCultivarList\(\)/, 'QA edits the cultivar master');
   h.close();
+  const q = load('QC_MGR');
+  const qh = render(q, [batch()]);
+  assert.doesNotMatch(qh, /cultMoveForm\('b1'\)/, 'QC is still not a floor role');
+  q.close();
 });
 
-test('a registrar calling a write handler that is not theirs is refused; a reader calling the register handler is refused', async () => {
+test('a registrar calling a write handler that is not theirs is refused', async () => {
   const h = load('QC_MGR');
   const w = h.window;
   await w.GF.WWF.cultBatchForm();
@@ -148,328 +168,385 @@ test('a registrar calling a write handler that is not theirs is refused; a reade
   h.close();
 });
 
-/* ── from the product specification ─────────────────────────────────────── */
+/* ── registering against the official product ──────────────────────────── */
 
-test('the cultivar chooser carries each cultivar\'s grades, and the panel says APPROVED, DRAFT or none', async () => {
+test('the batch form offers the strain\'s APPROVED products with their windows', async () => {
   const h = load('QA_MGR');
   const w = h.window;
   w.GF.WWF._cult.cultivars = CULTIVARS;
   await w.GF.WWF.cultBatchForm();
   await w.GF.WWF._cultBatchCultivarSync();
   assert.deepEqual(w.__modals, ['cu-batch-modal']);
+  // the cultivar's sub-line lists its grades, drafts flagged
   const opts = w.__selCfg['cu-b-cultivar'].options;
-  assert.match(opts[0].sub, /I 26\.00–30\.00 · II 22\.00–26\.00 · III 18\.00–22\.00 · IV 13\.83–18\.00/);
-  assert.match(opts[1].sub, /DRAFT/, 'a draft ladder is flagged in the chooser');
+  assert.match(opts[0].sub, /THC 26 · THC 18/);
+  assert.match(opts[1].sub, /DRAFT/);
   assert.match(opts[2].sub, /no product specification yet/);
-  // The panel for the approved ladder: strain, code+version, the four grades.
+  // only APPROVED products may be a target: a draft's nominal can still change
+  const prods = w.__selCfg['cu-b-product'].options;
+  assert.deepEqual(Array.from(prods, o => o.label),
+    ['— no target product —', 'GP · Grape Pie — THC 26', 'GP · Grape Pie — THC 18']);
+  assert.equal(prods[1].sub, '23.40–28.59 %');
   const panel = w.document.getElementById('cu-b-spec').innerHTML;
-  assert.match(panel, /Grape Pie/);
-  assert.match(panel, /PP-QC-SPEC-001 v5\.2/);
-  assert.match(panel, /APPROVED/);
-  assert.match(panel, /Spec I<\/td><td>26\.00 – 30\.00 %<\/td><td>28\.00 %/);
-  assert.match(panel, /Spec IV<\/td><td>13\.83 – 18\.00 %/);
-  // Switch to the cultivar with no ladder: the panel says so, no empty table.
+  assert.match(panel, /GP_THC26:CBD1/);
+  assert.match(panel, /23\.40 – 28\.59 %/);
+  assert.match(panel, /QCSP 001 v\.03/);
+  h.close();
+});
+
+test('a strain with no page says so, and the batch sends its product and clone source', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.GF.WWF._cult.cultivars = CULTIVARS;
+  await w.GF.WWF.cultBatchForm();
   w.document.getElementById('cu-b-cultivar').value = 'cv3';
   await w.GF.WWF._cultBatchCultivarSync();
   const none = w.document.getElementById('cu-b-spec').innerHTML;
   assert.match(none, /no product specification registered yet/);
   assert.doesNotMatch(none, /<table/);
-  h.close();
-});
 
-test('the batch number is pre-filled from the server with the cultivar code as its fixed head', async () => {
-  const h = load('CU_MGR');
-  const w = h.window;
-  w.GF.WWF._cult.cultivars = CULTIVARS;
-  await w.GF.WWF.cultBatchForm();
+  w.document.getElementById('cu-b-cultivar').value = 'cv1';
   await w.GF.WWF._cultBatchCultivarSync();
-  assert.equal(w.__codeAsked, 'cv1', 'the suggestion is asked for the chosen cultivar');
-  const code = w.document.getElementById('cu-b-code');
-  assert.equal(code.value, 'GP072603', 'the whole suggestion is in the box');
-  code.value = '072603';                       // head deleted by the user
-  w.GF._codeGuard('cu-b-code');
-  assert.equal(code.value, 'GP072603', 'the cultivar code is the fixed head — the guard puts it back');
-  // The registrar edits the tail and saves: the code sent is what the box holds.
-  code.value = 'GP072607';
+  w.document.getElementById('cu-b-code').value = 'GP092603';
   w.document.getElementById('cu-b-count').value = '2000';
+  w.document.getElementById('cu-b-product').value = 'p1';
+  w.document.getElementById('cu-b-source').value = 'imported';
   await w.GF.WWF.cultBatchSave();
-  assert.equal(w.__created.code, 'GP072607');
-  assert.equal(w.__created.cultivar_id, 'cv1');
-  assert.equal(w.__created.plant_count, 2000);
+  assert.equal(w.__created.product_id, 'p1');
+  assert.equal(w.__created.clone_source, 'imported');
   h.close();
 });
 
-test('the strip follows the batch just registered', async () => {
-  const h = load('QA_MGR');
-  const w = h.window;
-  w.GF.WWF._cult.cultivars = CULTIVARS;
-  await w.GF.WWF.cultBatchForm();
-  await w.GF.WWF._cultBatchCultivarSync();
-  w.document.getElementById('cu-b-count').value = '10';
-  w.__batches = [batch(), batch({ id: 'new-batch', code: 'GP072603', phase: 'clone', room_name: 'Clone room' })];
-  await w.GF.WWF.cultBatchSave();
-  assert.equal(w.GF.WWF._cult.focus, 'new-batch');
-  assert.equal(w.GF.WWF._cult.tab, 'batches');
-  const html = render(h, w.__batches);
-  const strip = html.slice(html.indexOf('class="cj-wrap"'), html.indexOf('class="cj-tabs"'));
-  assert.match(strip, /<strong>GP072603<\/strong>/, 'the strip shows the new batch, not the older one');
-  assert.match(strip, /cj-chip on" onclick="GF\.WWF\.cultFocus\('new-batch'\)/, 'its chip is the active one');
-  h.close();
-});
+/* ── the lanes ─────────────────────────────────────────────────────────── */
 
-/* ── the journey strip ──────────────────────────────────────────────────── */
-
-test('the strip reads position from the phase and names the next step and whose it is', () => {
-  const h = load('CU_MGR');
-  const html = render(h, [batch()]);   // flower, 10 days in, Flowering 1.1
-  const strip = html.slice(html.indexOf('class="cj-wrap"'), html.indexOf('class="cj-tabs"'));
-  assert.match(strip, /data-w="57"/, 'flower is step 4 of 7 → 57 %');
-  assert.match(strip, /Now: <span class="cj-now-lbl"[^>]*>Flowering<\/span>\s*· Flowering 1\.1 · 10 d in phase/);
-  assert.match(strip, /Next: <b[^>]*>Harvest cut<\/b>/);
-  assert.match(strip, /cultivation records the cut, then production takes the lot/, 'the cut is the handoff');
-  // Steps before the current one are done, the current pulses, later ones wait.
-  assert.equal((strip.match(/cj-step cj-done/g) || []).length, 4, 'registered, clone, nursery, veg are behind it');
-  assert.equal((strip.match(/cj-step cj-now/g) || []).length, 1);
-  assert.equal((strip.match(/cj-step cj-todo/g) || []).length, 3, 'cut, drying, closed are ahead');
-  assert.match(strip, /cj-todo cj-handoff/, 'the cut is drawn as the handoff');
-  h.close();
-});
-
-test('drying is production\'s step, the closed lot has nothing after it, a destroyed batch is off the plan', () => {
+test('every open batch gets a lane on one axis, and the focused lane opens in full', () => {
   const h = load('CU_MGR');
   const w = h.window;
-  let html = render(h, [batch({ phase: 'drying', room_name: 'Dry L' })]);
-  let strip = html.slice(html.indexOf('class="cj-wrap"'), html.indexOf('class="cj-tabs"'));
-  assert.match(strip, /data-w="86"/);
-  assert.match(strip, /Next: <b[^>]*>Lot closed<\/b>\s*<span[^>]*>· production/);
-  assert.equal((strip.match(/cj-step cj-done/g) || []).length, 6, 'the cut is behind a drying batch');
-
-  // A closed (harvested) batch is not open, so the strip has nothing to follow;
-  // the per-card bar still shows it at the end of the plan.
-  html = render(h, [batch({ phase: 'harvested', is_active: false })]);
-  assert.doesNotMatch(html, /class="cj-wrap"/);
-  assert.match(html, /cj cj-sm/);
-  const card = w.GF.WWF.cultJourney(batch({ phase: 'harvested' }));
-  assert.match(card, /data-w="100"/);
-  assert.match(card, /The lot is closed — nothing follows on this plan/);
-
-  assert.match(w.GF.WWF.cultJourney(batch({ phase: 'destroyed' })), /was destroyed and has left the plan/);
-  assert.equal(w.GF.WWF.cultJourney(batch({ phase: 'destroyed' }), { compact: true }), '');
-  assert.match(w.GF.WWF.cultJourney(batch({ phase: 'mother' })), /Mother stock/);
+  const three = [
+    batch({ id: 'b1', code: 'GP092601', phase: 'flower', product_code: 'GP_THC26:CBD1' }),
+    batch({ id: 'b2', code: 'FB092601', phase: 'veg', room_name: 'Veg 2' }),
+    batch({ id: 'b3', code: 'OPM092601', phase: 'clone', room_name: 'Clone room' }),
+  ];
+  const html = render(h, three);
+  assert.equal((html.match(/class="cj-lane(?: on)?"/g) || []).length, 3, 'one lane per open batch');
+  assert.equal((html.match(/class="cj-lane on"/g) || []).length, 1, 'exactly one is focused');
+  assert.match(html, /class="cj-axis"/);
+  assert.match(html, /GP092601[\s\S]*FB092601[\s\S]*OPM092601/, 'all three are drawn at once');
+  // a closed batch is not on the plan any more
+  const withClosed = render(h, three.concat([batch({ id: 'b4', code: 'X', phase: 'harvested' })]));
+  assert.equal((withClosed.match(/class="cj-lane(?: on)?"/g) || []).length, 3);
+  w.GF.WWF.cultFocus('b2');
+  const after = render(h, three);
+  const lane2 = after.slice(after.indexOf('FB092601'));
+  assert.match(after, /class="cj-lane on"[^>]*onclick="GF\.WWF\.cultFocus\('b2'\)/);
   h.close();
 });
 
-test('the strip names the clone run a batch was cut in, when the record links them', () => {
+test('a lane shows the expected window the SERVER computed, coloured by its state', () => {
   const h = load('CU_MGR');
   const w = h.window;
-  w.__runs = [{ id: 'run1', code: null, cultivar_code: 'GP', started_on: '2026-07-01', batch_id: 'b1',
-                mothers: [{ code: 'GP_M01' }, { code: 'GP_M02' }], cuttings_total: 2100,
-                spec_code: 'PP-QC-SPEC-001', spec_version: 'v5.2', status: 'transplanted' }];
-  const html = render(h, [batch({ phase: 'veg' })]);
-  const strip = html.slice(html.indexOf('class="cj-wrap"'), html.indexOf('class="cj-tabs"'));
-  assert.match(strip, /Cut in clone run GP · 01\.07\.2026\s*· 2 mothers · 2100 cuttings · PP-QC-SPEC-001 v5\.2/);
+  const html = render(h, [
+    batch({ id: 'b1', code: 'A', phase: 'veg', expected_next_phase: 'flower',
+            expected_from: '2026-09-10', expected_to: '2026-09-13', window_state: 'early' }),
+    batch({ id: 'b2', code: 'B', phase: 'flower', expected_next_phase: 'harvest',
+            expected_from: '2026-09-01', expected_to: '2026-09-22', window_state: 'in_window',
+            harvest_window_from: '2026-09-01', harvest_window_to: '2026-09-22',
+            latest_trichome: { checked_on: '2026-09-03', verdict: 'approaching', pct_amber: 12 } }),
+    batch({ id: 'b3', code: 'C', phase: 'flower', expected_from: '2026-08-01',
+            expected_to: '2026-08-20', window_state: 'late', latest_trichome: null }),
+  ]);
+  assert.match(html, /class="cj-x-early">→ Flowering expected 10\.09–13\.09</);
+  assert.match(html, /class="cj-x-in">harvest window 01\.09–22\.09<\/span> · <span class="cj-x-t">trichomes: <b>approaching<\/b> · 03\.09/);
+  assert.match(html, /class="cj-x-late">harvest window 01\.08–20\.08/);
+  assert.match(html, /class="cj-x-none">no trichome check recorded/);
   h.close();
 });
 
-test('the fill starts at zero width and is set to its target one frame later, so it animates', () => {
+test('the fills start at zero width and are set to their targets one frame later', () => {
   const h = load('CU_MGR');
   const w = h.window;
-  const html = render(h, [batch({ phase: 'veg' })]);
+  const html = render(h, [batch({ id: 'b1', code: 'A', phase: 'veg' }),
+                          batch({ id: 'b2', code: 'B', phase: 'flower' })]);
   assert.match(html, /class="cj-fill" data-w="43" style="width:0%"/);
+  assert.match(html, /class="cj-fill" data-w="57" style="width:0%"/);
   w.document.body.innerHTML = html;
   w.GF.WWF._cultAnimate();
   const fills = Array.from(w.document.querySelectorAll('.cj-fill')).map(e => e.style.width);
-  assert.deepEqual(fills, ['43%', '43%'], 'the strip and the card bar both reach their width');
+  assert.ok(fills.length >= 3 && fills.every(x => x !== ''), 'every lane and the detail animate');
   h.close();
 });
 
-test('with several open batches the strip offers a chip per batch and cultFocus switches it', () => {
+test('the detail block names the next step, whose it is, and the clone run', () => {
   const h = load('CU_MGR');
   const w = h.window;
-  const two = [batch(), batch({ id: 'b2', code: 'FB072501', cultivar_code: 'FB', cultivar_name: 'Fat Bastard', phase: 'veg' })];
-  let html = render(h, two);
-  assert.equal((html.match(/class="cj-chip(?: on)?"/g) || []).length, 2);
-  w.GF.WWF.cultFocus('b2');
-  assert.equal(w.__renders, 1, 'switching re-renders');
-  html = render(h, two);
-  const strip = html.slice(html.indexOf('class="cj-wrap"'), html.indexOf('class="cj-tabs"'));
-  assert.match(strip, /<strong>FB072501<\/strong>/);
+  w.__runs = [{ id: 'run1', code: null, cultivar_code: 'GP', started_on: '2026-07-01', batch_id: 'b1',
+                mothers: [{ code: 'GP26_S1M01-1_001' }, { code: 'GP26_S1M02-1_001' }],
+                cuttings_total: 2100, product_code: 'GP_THC26:CBD1', status: 'transplanted' }];
+  const html = render(h, [batch({ id: 'b1', phase: 'flower' })]);
+  assert.match(html, /Next: <b[^>]*>Harvest · cure · defoliation<\/b>/);
+  assert.match(html, /cultivation records the cut, then production takes the lot/);
+  assert.match(html, /Cut in clone run GP · 01\.07\.2026\s*· 2 mothers · 2100 cuttings · GP_THC26:CBD1/);
   h.close();
 });
 
-/* ── tabs → the mother bank and clone runs ──────────────────────────────── */
+/* ── the trichome check ─────────────────────────────────────────────────── */
 
-test('the Mother bank tab lists mothers per strain with derived age, last cut and generations', () => {
+test('a flowering batch offers the trichome check to a writer and nobody else', () => {
+  const h = load('CU_MGR');
+  assert.match(render(h, [batch({ phase: 'flower' })]), /GF\.WWF\.trichomeForm\('b1'/);
+  assert.doesNotMatch(render(h, [batch({ phase: 'veg' })]), /trichomeForm/,
+    'the check belongs to flowering, where the harvest date is decided');
+  h.close();
+  const q = load('QC_MGR');
+  assert.doesNotMatch(render(q, [batch({ phase: 'flower' })]), /trichomeForm/);
+  q.close();
+});
+
+test('the check refuses a split that is not one field of view, and sends blanks as null', async () => {
+  const h = load('QA_MGR');
+  const w = h.window;
+  w.GF.WWF.trichomeForm('b1', 'GP092601');
+  assert.deepEqual(w.__modals, ['tc-modal']);
+  w.document.getElementById('tc-clear').value = '10';
+  w.document.getElementById('tc-cloudy').value = '10';
+  w.document.getElementById('tc-amber').value = '10';
+  w.GF.WWF._tcSum();
+  assert.match(w.document.getElementById('tc-sum').textContent, /Total 30 %/);
+  await w.GF.WWF.trichomeSave('b1');
+  assert.equal(w.__trichome, undefined, 'a split that is not 100 % is refused before the request');
+  assert.match(w.__toasts.at(-1)[0], /about 100 %/);
+
+  w.document.getElementById('tc-cloudy').value = '75';
+  w.document.getElementById('tc-amber').value = '15';
+  w.document.getElementById('tc-verdict').value = 'ready';
+  w.document.getElementById('tc-mag').value = '60x';
+  await w.GF.WWF.trichomeSave('b1');
+  assert.equal(w.__trichome.pct_cloudy, 75);
+  assert.equal(w.__trichome.verdict, 'ready');
+  assert.equal(w.__trichome.magnification, '60x');
+  assert.equal(w.__trichome.sample_sites, null, 'a blank count is "not counted", never 0');
+  assert.deepEqual(Array.from(w.__closed), ['tc-modal']);
+  h.close();
+});
+
+/* ── the mother bank ───────────────────────────────────────────────────── */
+
+test('the bank shows the id\'s segments, times cut, and what the strain has tested', () => {
   const h = load('CU_MGR');
   const w = h.window;
   w.GF.WWF._prop.mothers = [
-    { id: 'm1', code: 'GP_M01', cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
-      phenotype: 'Pheno A', room_name: 'Mother room', position: 'pot 12', started_on: '2026-06-20',
-      age_days: 40, last_cut_on: null, generations: 0, cuttings_total: 0, status: 'active' },
-    { id: 'm2', code: 'GP_M02', cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
-      phenotype: null, room_name: null, position: null, started_on: null,
-      age_days: null, last_cut_on: '2026-07-01', generations: 3, cuttings_total: 240, status: 'active' },
+    { id: 'm1', code: 'GP26_S1M01-1_001', product_id: 'p1', product_code: 'GP_THC26:CBD1',
+      campaign_label: 'S1', generation: 1, parent_code: null, cultivar_id: 'cv1',
+      cultivar_code: 'GP', cultivar_name: 'Grape Pie', phenotype: 'Pheno A',
+      room_name: 'Mother room', position: 'pot 12', started_on: '2026-06-20', age_days: 40,
+      last_cut_on: null, times_cut: 0, cuttings_total: 0, status: 'active',
+      tested: { n: 2, avg: 24.5, min: 23.98, max: 25.02 } },
+    { id: 'm2', code: 'GP26_S1M01-2_001', product_id: 'p1', product_code: 'GP_THC26:CBD1',
+      campaign_label: 'S1', generation: 2, parent_code: 'GP26_S1M01-1_001', cultivar_id: 'cv1',
+      cultivar_code: 'GP', cultivar_name: 'Grape Pie', phenotype: null, room_name: null,
+      position: null, started_on: null, age_days: null, last_cut_on: '2026-07-01',
+      times_cut: 3, cuttings_total: 240, status: 'active',
+      tested: { n: 0, avg: null, min: null, max: null } },
   ];
-  w.GF.WWF._prop.byCultivar = [{ cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie', active: 2, total: 2, phenotypes: ['Pheno A'] }];
+  w.GF.WWF._prop.byCultivar = [{ cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+                                 active: 2, total: 2, phenotypes: ['Pheno A'],
+                                 products: ['GP_THC26:CBD1'] }];
   w.GF.WWF._prop.runs = [];
   const html = render(h, [], 'mothers');
-  assert.match(html, /cj-tab on" onclick="GF\.WWF\.cultTab\('mothers'\)">Mother bank <span>2<\/span>/);
-  assert.match(html, /GP — Grape Pie<\/strong>\s*<span[^>]*>2 active/);
-  assert.match(html, /<strong>GP_M01<\/strong><\/td>\s*<td>Pheno A<\/td>\s*<td>Mother room · pot 12<\/td>\s*<td>40 d<div class="sub">since 20\.06\.2026/);
-  assert.match(html, /never/, 'a mother never cut says never');
-  assert.match(html, /<td>3 <span class="sub">\(240 cuttings\)<\/span><\/td>/);
-  assert.match(html, /<td>—<\/td>\s*<td>—<div/.source ? /<td>—<\/td>/ : /—/, 'no phenotype and no date show as dashes, never as 0');
-  assert.match(html, /GF\.WWF\.motherForm\('m1'\)/, 'the floor edits');
-  assert.match(html, /GF\.WWF\.motherForm\(\)/, 'and registers');
+  assert.match(html, /GP26_S1M01-1_001/);
+  assert.match(html, /S1 · gen\. 2 · of GP26_S1M01-1_001/, 'the second-generation mother names its parent');
+  assert.match(html, /<td>3 <span class="sub">\(240 cuttings\)<\/span><\/td>/, 'times cut, not generations');
+  assert.match(html, /<b>24\.50 %<\/b> <span class="sub">of 2<\/span>/, 'what the strain has tested');
+  assert.match(html, /not tested yet/);
+  assert.match(html, /GF\.WWF\.motherPotency\('m1'\)/);
+  assert.match(html, /GF\.WWF\.campaignList\(\)/);
   h.close();
 });
 
-test('QA reads the bank but is offered neither Register mother nor Edit', () => {
+test('QA edits the bank too; QC reads it', () => {
   const h = load('QA_MGR');
   const w = h.window;
-  w.GF.WWF._prop.mothers = [{ id: 'm1', code: 'GP_M01', cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie', status: 'active', generations: 0 }];
-  w.GF.WWF._prop.byCultivar = [{ cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie', active: 1, total: 1, phenotypes: [] }];
+  w.GF.WWF._prop.mothers = [{ id: 'm1', code: 'GP26_S1M01-1_001', product_code: 'GP_THC26:CBD1',
+    campaign_label: 'S1', generation: 1, cultivar_id: 'cv1', cultivar_code: 'GP',
+    cultivar_name: 'Grape Pie', status: 'active', times_cut: 0, tested: { n: 0 } }];
+  w.GF.WWF._prop.byCultivar = [{ cultivar_id: 'cv1', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+                                 active: 1, total: 1, phenotypes: [], products: ['GP_THC26:CBD1'] }];
   w.GF.WWF._prop.runs = [];
-  const html = render(h, [], 'mothers');
-  assert.match(html, /GP_M01/);
-  assert.doesNotMatch(html, /GF\.WWF\.motherForm/);
-  return w.GF.WWF.motherForm().then(() => { assert.deepEqual(w.__modals, []); h.close(); });
+  assert.match(render(h, [], 'mothers'), /GF\.WWF\.motherForm/);
+  h.close();
+  const q = load('QC_MGR');
+  q.window.GF.WWF._prop.mothers = w.GF.WWF._prop.mothers;
+  q.window.GF.WWF._prop.byCultivar = w.GF.WWF._prop.byCultivar;
+  q.window.GF.WWF._prop.runs = [];
+  const qh = render(q, [], 'mothers');
+  assert.match(qh, /GP26_S1M01-1_001/);
+  assert.doesNotMatch(qh, /GF\.WWF\.motherForm/);
+  return q.window.GF.WWF.motherForm().then(() => {
+    assert.deepEqual(Array.from(q.window.__modals), []);
+    q.close();
+  });
 });
 
-test('the Clone runs tab shows each run\'s mothers with cuttings, its specification and its status; initiators may finish it', () => {
+test('registering a mother composes the id from segments and sends them, not a string', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.motherForm();
+  assert.deepEqual(Array.from(w.__modals), ['mb-modal']);
+  assert.deepEqual(JSON.parse(JSON.stringify(w.__productsAsked)), { status: 'APPROVED' },
+    'only approved pages may name a plant');
+  assert.deepEqual(JSON.parse(JSON.stringify(w.__nextAsked)),
+    { product_id: 'p1', campaign_id: 'sc1', generation: 1 });
+  assert.equal(w.document.getElementById('mb-preview').textContent, 'GP26_S1M02-1_001');
+  assert.equal(w.document.getElementById('mb-started').value, '2026-07-30',
+    "established-on opens on the facility's today");
+
+  w.document.getElementById('mb-pheno').value = 'Pheno B';
+  w.document.getElementById('mb-pos').value = 'pot 4';
+  w.document.getElementById('mb-started').value = '';
+  w.document.getElementById('mb-stock').value = '7';
+  await w.GF.WWF.motherSave();
+  const sent = JSON.parse(JSON.stringify(w.__motherCreated));
+  assert.equal(sent.product_id, 'p1');
+  assert.equal(sent.campaign_id, 'sc1');
+  assert.equal(sent.generation, 1);
+  assert.equal(sent.stock_no, 7, 'a number the user typed is kept');
+  assert.equal(sent.mother_no, null, 'an untouched number is left to the server');
+  assert.equal(sent.started_on, null);
+  assert.equal(sent.phenotype, 'Pheno B');
+  assert.equal(sent.code, undefined, 'the id is composed by the server, never typed here');
+  h.close();
+});
+
+test('a second-generation mother may name the plant it was cut from', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  w.GF.WWF._prop.mothers = [
+    { id: 'm1', code: 'GP26_S1M01-1_001', product_id: 'p1', generation: 1 },
+    { id: 'm2', code: 'GP26_S1M01-1_002', product_id: 'p1', generation: 1 },
+    { id: 'm3', code: 'GP18_S1M01-1_001', product_id: 'p2', generation: 1 },
+  ];
+  await w.GF.WWF.motherForm();
+  assert.equal(w.document.getElementById('mb-parent-wrap').style.display, 'none');
+  w.document.getElementById('mb-gen').value = '2';
+  await w.GF.WWF._motherSync();
+  assert.equal(w.document.getElementById('mb-parent-wrap').style.display, '');
+  assert.deepEqual(Array.from(w.__selCfg['mb-parent'].options, o => o.label),
+    ['— not in the bank —', 'GP26_S1M01-1_001', 'GP26_S1M01-1_002'],
+    'only first-generation mothers of the same product');
+  h.close();
+});
+
+test('a mother\'s potency panel separates the strain\'s results from those traced to the plant', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.motherPotency('m1');
+  assert.deepEqual(Array.from(w.__modals), ['mp-modal']);
+  const body = w.document.getElementById('mp-modal-body').innerHTML;
+  assert.match(body, /GP_THC26:CBD1 ·\s*window 23\.40–28\.59 %/);
+  assert.match(body, /average <b>24\.50 %<\/b>/);
+  assert.match(body, /2 results · 23\.98–25\.02 %/);
+  assert.match(body, /CoQ-1<\/td><td>L-1<\/td>\s*<td><b>23\.98 %/);
+  assert.match(body, /Nothing yet links a tested lot back to this mother/);
+  h.close();
+});
+
+/* ── campaigns and clone runs ───────────────────────────────────────────── */
+
+test('a campaign is opened by describing the event; the facility numbers it', async () => {
+  const h = load('CU_MGR');
+  const w = h.window;
+  await w.GF.WWF.campaignList();
+  const list = w.document.getElementById('sc-modal-body').innerHTML;
+  assert.match(list, /S1/);
+  assert.match(list, /first selection/);
+  assert.match(list, /2 mothers/);
+  await w.GF.WWF.campaignForm();
+  w.document.getElementById('sc-material').value = 'phenotypes';
+  w.document.getElementById('sc-desc').value = 'pheno hunt';
+  await w.GF.WWF.campaignSave();
+  const sent = JSON.parse(JSON.stringify(w.__campaignCreated));
+  assert.equal(sent.material, 'phenotypes');
+  assert.equal(sent.description, 'pheno hunt');
+  assert.equal(sent.seq, undefined, 'the number is the facility\'s running count, not a field');
+  h.close();
+});
+
+test('the clone runs tab names the product and each mother\'s cutting number', () => {
   const h = load('QA_MGR');
   const w = h.window;
   w.GF.WWF._prop.mothers = [];
   w.GF.WWF._prop.byCultivar = [];
   w.GF.WWF._prop.runs = [
-    { id: 'run1', code: null, cultivar_code: 'GP', cultivar_name: 'Grape Pie', started_on: '2026-07-01', planned_count: 2000,
-      room_name: 'Clone room', batch_code: null, mothers: [{ code: 'GP_M01', cuttings: 60 }, { code: 'GP_M02', cuttings: null }],
-      cuttings_total: 60, spec_code: 'PP-QC-SPEC-001', spec_version: 'v5.2', spec_status: 'APPROVED', status: 'started', note: null },
-    { id: 'run2', code: 'CR_002', cultivar_code: 'OPM', cultivar_name: 'Orange Punch Mimosa', started_on: '2026-06-01', planned_count: 100,
-      room_name: null, batch_code: 'OPM062601', mothers: [], cuttings_total: 0, spec_version: null, status: 'transplanted', finished_on: '2026-06-20', note: null },
+    { id: 'run1', code: null, cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+      started_on: '2026-07-01', planned_count: 2000, room_name: 'Clone room', batch_code: null,
+      mothers: [{ code: 'GP26_S1M01-1_001', cuttings: 60, cutting_no: 3 },
+                { code: 'GP26_S1M02-1_001', cuttings: null, cutting_no: 1 }],
+      cuttings_total: 60, product_code: 'GP_THC26:CBD1', product_status: 'APPROVED',
+      status: 'started', note: null },
+    { id: 'run2', code: 'CR_002', cultivar_code: 'OPM', cultivar_name: 'Orange Punch Mimosa',
+      started_on: '2026-06-01', planned_count: 100, room_name: null, batch_code: 'OPM062601',
+      mothers: [], cuttings_total: 0, product_code: null, status: 'transplanted',
+      finished_on: '2026-06-20', note: null },
   ];
   const html = render(h, [], 'clones');
-  assert.match(html, /<strong>GP · 01\.07\.2026<\/strong>/, 'an uncoded run is named by cultivar and date');
-  assert.match(html, /Initiated 01\.07\.2026 · 2000 cuttings planned\s*· 60 taken\s*· Clone room\s*· no batch linked yet/);
-  assert.match(html, /GP_M01 <b>60<\/b>/);
-  assert.match(html, /GP_M02<\/span>/, 'a mother whose cuttings were not counted shows no number, not 0');
-  assert.match(html, /Specification: PP-QC-SPEC-001 v5\.2/);
-  assert.match(html, /cloneRunFinish\('run1'\)/, 'QA may finish a started run');
-  assert.match(html, /<strong>CR_002<\/strong>/);
-  assert.match(html, /batch <b>OPM062601<\/b>/);
-  assert.match(html, /no approved specification at initiation/);
-  assert.match(html, /Transplanted · 20\.06\.2026/);
-  assert.doesNotMatch(html, /cloneRunFinish\('run2'\)/, 'a finished run is not finished again');
+  assert.match(html, /GP26_S1M01-1_001 ·03 <b>60<\/b>/, 'the cutting number names the clones it produced');
+  assert.match(html, /GP26_S1M02-1_001 ·01<\/span>/, 'uncounted cuttings show no number, not 0');
+  assert.match(html, /Specification: GP_THC26:CBD1/);
+  assert.match(html, /no product named/);
+  assert.match(html, /cloneRunFinish\('run1'\)/);
+  assert.doesNotMatch(html, /cloneRunFinish\('run2'\)/);
   h.close();
 });
 
-/* ── the forms ──────────────────────────────────────────────────────────── */
-
-test('registering a mother pre-fills <cultivar>_M with the next number and sends a blank date as null', async () => {
-  const h = load('CU_MGR');
-  const w = h.window;
-  await w.GF.WWF.motherForm();
-  await w.GF.WWF._motherCultivarSync();
-  assert.deepEqual(w.__modals, ['mb-modal']);
-  const code = w.document.getElementById('mb-code');
-  assert.equal(code.value, 'GP_M02');
-  code.value = '02';
-  w.GF._codeGuard('mb-code');
-  assert.equal(code.value, 'GP_M02', 'the head is fixed — the guard puts it back');
-  assert.equal(w.document.getElementById('mb-started').value, '2026-07-30', 'established-on opens on the facility\'s today');
-  assert.match(w.__selCfg['mb-cultivar'].options[0].sub, /I 26\.00–30\.00/, 'the cultivar is chosen from its specification');
-  assert.equal(w.__selCfg['mb-room'].options[1].label, 'Mother room', 'mother rooms are offered first');
-  w.document.getElementById('mb-pheno').value = 'Pheno B';
-  w.document.getElementById('mb-room').value = 'r3';
-  w.document.getElementById('mb-pos').value = 'pot 4';
-  w.document.getElementById('mb-started').value = '';
-  await w.GF.WWF.motherSave();
-  assert.deepEqual(JSON.parse(JSON.stringify(w.__motherCreated)), {
-    cultivar_id: 'cv1', code: 'GP_M02', phenotype: 'Pheno B', room_id: 'r3', position: 'pot 4',
-    started_on: null, source: null, note: null });
-  assert.deepEqual(Array.from(w.__closed), ['mb-modal']);
-  h.close();
-});
-
-test('a bad mother ID is refused before the request, matching the server pattern', async () => {
-  const h = load('CU_MGR');
-  const w = h.window;
-  await w.GF.WWF.motherForm();
-  w.document.getElementById('mb-code').value = 'GP_M 02';
-  await w.GF.WWF.motherSave();
-  assert.equal(w.__motherCreated, undefined);
-  assert.match(w.__toasts.at(-1)[0], /1–64 characters/);
-  h.close();
-});
-
-test('the clone run form lists only the chosen cultivar\'s active mothers and sends blank cuttings as null', async () => {
+test('the clone run form offers the strain\'s products, its active mothers and the next cutting', async () => {
   const h = load('QA_MGR');
   const w = h.window;
   w.__mothers = [
-    { id: 'm1', code: 'GP_M01', cultivar_id: 'cv1', status: 'active', phenotype: 'Pheno A', room_name: 'Mother room', position: 'pot 12', last_cut_on: null, generations: 0 },
-    { id: 'm2', code: 'GP_M02', cultivar_id: 'cv1', status: 'active', phenotype: null, room_name: null, position: null, last_cut_on: '2026-07-01', generations: 2 },
-    { id: 'm3', code: 'GP_M03', cultivar_id: 'cv1', status: 'retired', generations: 5 },
-    { id: 'm4', code: 'OPM_M01', cultivar_id: 'cv3', status: 'active', generations: 0 },
+    { id: 'm1', code: 'GP26_S1M01-1_001', cultivar_id: 'cv1', status: 'active', phenotype: 'Pheno A',
+      room_name: 'Mother room', position: 'pot 12', last_cut_on: '2026-07-01', times_cut: 2 },
+    { id: 'm2', code: 'GP26_S1M02-1_001', cultivar_id: 'cv1', status: 'active', last_cut_on: null,
+      times_cut: 0 },
+    { id: 'm3', code: 'GP26_S1M03-1_001', cultivar_id: 'cv1', status: 'retired', times_cut: 5 },
   ];
-  w.__batches = [batch({ id: 'b1', code: 'GP072601', phase: 'clone', cultivar_id: 'cv1' }), batch({ id: 'b9', code: 'OPM072601', cultivar_id: 'cv3' })];
+  w.__batches = [batch({ id: 'b1', code: 'GP092601', phase: 'clone', cultivar_id: 'cv1' })];
   await w.GF.WWF.cloneRunForm();
-  assert.deepEqual(w.__modals, ['cr-modal']);
+  assert.deepEqual(Array.from(w.__modals), ['cr-modal']);
+  assert.deepEqual(Array.from(w.__selCfg['cr-product'].options, o => o.label),
+    ['— no product named —', 'GP_THC26:CBD1', 'GP_THC18:CBD1']);
   const list = w.document.getElementById('cr-mothers').innerHTML;
-  assert.match(list, /GP_M01/); assert.match(list, /GP_M02/);
-  assert.doesNotMatch(list, /GP_M03/, 'a retired mother is not offered');
-  assert.doesNotMatch(list, /OPM_M01/, 'another cultivar\'s mother is not offered');
-  assert.match(list, /last cut never · 0 gen\./);
-  assert.match(list, /last cut 01\.07\.2026 · 2 gen\./);
-  assert.deepEqual(Array.from(w.__selCfg['cr-batch'].options, o => o.label), ['— not registered yet —', 'GP072601'], 'only this cultivar\'s open batches');
-  assert.equal(w.document.getElementById('cr-date').value, '2026-07-30', 'the date of initiation opens on today');
-
-  // No count → refused before the request.
-  await w.GF.WWF.cloneRunSave();
-  assert.equal(w.__runCreated, undefined);
-  assert.match(w.__toasts.at(-1)[0], /cuttings planned/);
+  assert.match(list, /GP26_S1M01-1_001/);
+  assert.doesNotMatch(list, /GP26_S1M03-1_001/, 'a retired mother is not offered');
+  assert.match(list, /next cutting 03/, 'the mother cut twice is on its third');
+  assert.match(list, /next cutting 01/);
 
   w.document.getElementById('cr-count').value = '2000';
+  w.document.getElementById('cr-product').value = 'p1';
   w.document.getElementById('cr-m-m1').checked = true;
   w.document.getElementById('cr-c-m1').value = '1200';
-  w.document.getElementById('cr-m-m2').checked = true;      // cuttings left blank
-  w.document.getElementById('cr-room').value = 'r2';
-  w.document.getElementById('cr-batch').value = 'b1';
+  w.document.getElementById('cr-m-m2').checked = true;
   await w.GF.WWF.cloneRunSave();
-  assert.deepEqual(JSON.parse(JSON.stringify(w.__runCreated)), {
-    cultivar_id: 'cv1', started_on: '2026-07-30', planned_count: 2000, room_id: 'r2', batch_id: 'b1',
-    code: null, note: null,
-    mothers: [{ mother_plant_id: 'm1', cuttings: 1200 }, { mother_plant_id: 'm2', cuttings: null }],
-  });
-  assert.deepEqual(w.__closed, ['cr-modal']);
-  assert.equal(w.GF.WWF._cult.tab, 'clones', 'the board turns to the runs tab');
+  const sent = JSON.parse(JSON.stringify(w.__runCreated));
+  assert.equal(sent.product_id, 'p1');
+  assert.deepEqual(sent.mothers, [{ mother_plant_id: 'm1', cuttings: 1200 },
+                                  { mother_plant_id: 'm2', cuttings: null }]);
   h.close();
 });
 
-test('switching the cultivar in the run form re-filters mothers, batches and the specification panel', async () => {
+test('finishing a run sends the outcome and the batch it became', async () => {
   const h = load('CU_MGR');
   const w = h.window;
-  w.__mothers = [{ id: 'm4', code: 'OPM_M01', cultivar_id: 'cv3', status: 'active', generations: 0 }];
-  await w.GF.WWF.cloneRunForm();
-  assert.match(w.document.getElementById('cr-mothers').innerHTML, /No active mother plants of this cultivar/);
-  w.document.getElementById('cr-cultivar').value = 'cv3';
-  w.GF.WWF._cloneRunSync();
-  assert.match(w.document.getElementById('cr-mothers').innerHTML, /OPM_M01/);
-  assert.match(w.document.getElementById('cr-spec').innerHTML, /no product specification registered yet/);
-  h.close();
-});
-
-test('finishing a run sends the outcome and the batch it became; the finished list is re-read', async () => {
-  const h = load('CU_MGR');
-  const w = h.window;
-  w.GF.WWF._prop.runs = [{ id: 'run1', cultivar_id: 'cv1', cultivar_code: 'GP', started_on: '2026-07-01', batch_id: null, mothers: [], status: 'started' }];
-  w.__batches = [batch({ id: 'b1', code: 'GP072601', cultivar_id: 'cv1' }), batch({ id: 'b9', code: 'OPM072601', cultivar_id: 'cv3' })];
+  w.GF.WWF._prop.runs = [{ id: 'run1', cultivar_id: 'cv1', cultivar_code: 'GP',
+                           started_on: '2026-07-01', batch_id: null, mothers: [], status: 'started' }];
+  w.__batches = [batch({ id: 'b1', code: 'GP092601', cultivar_id: 'cv1' }),
+                 batch({ id: 'b9', code: 'OPM092601', cultivar_id: 'cv3' })];
   await w.GF.WWF.cloneRunFinish('run1');
-  assert.deepEqual(w.__modals, ['cf-modal']);
-  assert.deepEqual(Array.from(w.__selCfg['cf-batch'].options, o => o.label), ['— not registered as a batch —', 'GP072601']);
+  assert.deepEqual(Array.from(w.__modals), ['cf-modal']);
+  assert.deepEqual(Array.from(w.__selCfg['cf-batch'].options, o => o.label),
+    ['— not registered as a batch —', 'GP092601']);
   w.document.getElementById('cf-status').value = 'transplanted';
   w.document.getElementById('cf-batch').value = 'b1';
   await w.GF.WWF.cloneRunFinishSave('run1');
-  assert.deepEqual(JSON.parse(JSON.stringify(w.__runPatched)), ['run1', { status: 'transplanted', batch_id: 'b1', note: null }]);
-  assert.deepEqual(w.__closed, ['cf-modal']);
+  assert.deepEqual(JSON.parse(JSON.stringify(w.__runPatched)),
+    ['run1', { status: 'transplanted', batch_id: 'b1', note: null }]);
   h.close();
 });

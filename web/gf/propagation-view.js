@@ -30,12 +30,13 @@
    GF.WWF._ensureModal, GF.selectField, GF.dateField, GF.codeField). */
 
 (function () {
-  GF.WWF._prop = { mothers: null, byCultivar: null, runs: null, loading: false, error: null, showAll: false };
+  GF.WWF._prop = { mothers: null, byCultivar: null, runs: null, campaigns: null, products: null,
+                   loading: false, error: null, showAll: false };
 
   const role = () => (GF.API.user || {}).role;
   // Mirrors _WRITERS / _INITIATORS in app/api/propagation.py.
-  const canBank = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
-  const canInitiate = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
+  const canBank = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
+  const canInitiate = canBank;
   const today = () => GF.facilityToday();
   const fmtD = (iso) => (iso && GF.fmtDateHuman) ? GF.fmtDateHuman(iso) : (iso || '—');
   const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -58,10 +59,13 @@
     const st = GF.WWF._prop;
     st.loading = true; st.error = null;
     try {
-      const [m, r] = await Promise.all([GF.API.mothers(!st.showAll), GF.API.cloneRuns(!st.showAll)]);
+      const [m, r, camps] = await Promise.all([
+        GF.API.mothers(!st.showAll), GF.API.cloneRuns(!st.showAll),
+        GF.API.campaigns ? GF.API.campaigns() : Promise.resolve({ campaigns: [] })]);
       st.mothers = m.mothers || [];
       st.byCultivar = m.by_cultivar || [];
       st.runs = r.runs || [];
+      st.campaigns = camps.campaigns || [];
     } catch (e) { st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'cultivation') GF.render.all();
@@ -79,14 +83,20 @@
   // ── the mother bank ───────────────────────────────────────────────────────
 
   const motherRow = (m) => `<tr>
-      <td><strong>${GF.esc(m.code)}</strong></td>
+      <td><strong>${GF.esc(m.code)}</strong>
+        <div class="sub">${GF.esc(m.campaign_label)} · ${AL('gen.', 'ген.')} ${m.generation}${
+          m.parent_code ? ` · ${AL('of', 'од')} ${GF.esc(m.parent_code)}` : ''}</div></td>
       <td>${GF.esc(m.phenotype || '—')}</td>
       <td>${GF.esc(m.room_name || AL('not placed', 'не е сместена'))}${m.position ? ` · ${GF.esc(m.position)}` : ''}</td>
       <td>${ageLbl(m.age_days)}${m.started_on ? `<div class="sub">${AL('since', 'од')} ${fmtD(m.started_on)}</div>` : ''}</td>
       <td>${m.last_cut_on ? fmtD(m.last_cut_on) : `<span class="sub">${AL('never', 'никогаш')}</span>`}</td>
-      <td>${m.generations}${m.cuttings_total ? ` <span class="sub">(${m.cuttings_total} ${AL('cuttings', 'резници')})</span>` : ''}</td>
+      <td>${m.times_cut}${m.cuttings_total ? ` <span class="sub">(${m.cuttings_total} ${AL('cuttings', 'резници')})</span>` : ''}</td>
+      <td>${m.tested && m.tested.n
+        ? `<b>${Number(m.tested.avg).toFixed(2)} %</b> <span class="sub">${AL('of', 'од')} ${m.tested.n}</span>`
+        : `<span class="sub">${AL('not tested yet', 'сè уште нетестирано')}</span>`}</td>
       <td><span style="color:${sCol(MSTATUS, m.status)}">${GF.esc(sLbl(MSTATUS, m.status))}</span></td>
-      <td>${canBank() ? `<button class="btn btn-sm" onclick="GF.WWF.motherForm('${m.id}')">${AL('Edit', 'Уреди')}</button>` : ''}</td>
+      <td><button class="btn btn-sm" onclick="GF.WWF.motherPotency('${m.id}')">${AL('Potency', 'Потентност')}</button>${
+        canBank() ? `<button class="btn btn-sm" onclick="GF.WWF.motherForm('${m.id}')">${AL('Edit', 'Уреди')}</button>` : ''}</td>
     </tr>`;
 
   const motherBank = () => {
@@ -96,6 +106,7 @@
         <input type="checkbox" ${st.showAll ? 'checked' : ''} onchange="GF.WWF.propToggleAll()">
         ${AL('include retired and finished', 'вклучи повлечени и завршени')}</label>
       <div class="spacer"></div>
+      ${canBank() ? `<button class="btn btn-sm" onclick="GF.WWF.campaignList()">${GF.icon('layers', 'icon')}${AL('Selection campaigns', 'Кампањи за селекција')}</button>` : ''}
       ${canBank() ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.motherForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('Register mother plant', 'Регистрирај мајка')}</button>` : ''}
     </div>`;
     if (st.error) return head + `<div class="ntf-empty">${GF.esc(st.error)}</div>`;
@@ -108,17 +119,19 @@
     const groups = (st.byCultivar || []).map(g => {
       const mine = st.mothers.filter(m => m.cultivar_id === g.cultivar_id);
       const phen = (g.phenotypes || []).map(p => `<span class="mw-attr">${GF.esc(p)}</span>`).join(' ');
+      const prods = (g.products || []).map(p => `<span class="mw-attr">${GF.esc(p)}</span>`).join(' ');
       return `<div class="card" style="padding:12px;margin-bottom:10px">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <strong>${GF.esc(g.cultivar_code)} — ${GF.esc(g.cultivar_name)}</strong>
           <span style="color:#2BE8A0;font-size:12px">${g.active} ${AL('active', 'активни')}</span>
           ${g.total !== g.active ? `<span style="color:var(--ink-3);font-size:12px">${g.total} ${AL('total', 'вкупно')}</span>` : ''}
-          ${phen}
+          ${prods} ${phen}
         </div>
         <div style="overflow-x:auto"><table class="pb-table"><thead><tr>
           <th>ID</th><th>${AL('Phenotype', 'Фенотип')}</th><th>${AL('Room · pot', 'Соба · саксија')}</th>
           <th>${AL('Age', 'Возраст')}</th><th>${AL('Last cut', 'Последно сечење')}</th>
-          <th>${AL('Generations', 'Генерации')}</th><th>${AL('Status', 'Статус')}</th><th></th>
+          <th>${AL('Times cut', 'Пати сечена')}</th><th>${AL('Tested', 'Тестирано')}</th>
+          <th>${AL('Status', 'Статус')}</th><th></th>
         </tr></thead><tbody>${mine.map(motherRow).join('')}</tbody></table></div>
       </div>`;
     }).join('');
@@ -129,10 +142,11 @@
 
   const runCard = (r) => {
     const mothers = (r.mothers || []).map(m =>
-      `<span class="mw-attr">${GF.esc(m.code)}${m.cuttings != null ? ` <b>${m.cuttings}</b>` : ''}</span>`).join(' ');
-    const spec = r.spec_version
-      ? `${GF.esc(r.spec_code || '')} ${GF.esc(r.spec_version)}${r.spec_status && r.spec_status !== 'APPROVED' ? ` (${GF.esc(r.spec_status)})` : ''}`
-      : `<span style="color:var(--ink-3)">${AL('no approved specification at initiation', 'без одобрена спецификација при започнување')}</span>`;
+      `<span class="mw-attr">${GF.esc(m.code)}${m.cutting_no != null ? ` ·${String(m.cutting_no).padStart(2, '0')}` : ''}${
+        m.cuttings != null ? ` <b>${m.cuttings}</b>` : ''}</span>`).join(' ');
+    const spec = r.product_code
+      ? `${GF.esc(r.product_code)}${r.product_status && r.product_status !== 'APPROVED' ? ` (${GF.esc(r.product_status)})` : ''}`
+      : `<span style="color:var(--ink-3)">${AL('no product named', 'без наведен производ')}</span>`;
     const actions = [];
     if (canInitiate() && r.status === 'started') {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cloneRunFinish('${r.id}')">${GF.icon('forward', 'icon')}${AL('Transplanted / failed', 'Пресадено / неуспешно')}</button>`);
@@ -200,38 +214,155 @@
 
   // ── register / edit a mother plant ────────────────────────────────────────
 
+  // ── selection campaigns ──────────────────────────────────────────────────
+  // The S<n> in a mother's id. Numbered facility-wide by the server, so the
+  // form asks only what the campaign WAS, never what to call it.
+
+  const MATERIALS = [
+    { v: 'seeds', en: 'From seeds', mk: 'Од семе' },
+    { v: 'clones', en: 'From new clones', mk: 'Од нови клонови' },
+    { v: 'phenotypes', en: 'Between phenotypes', mk: 'Помеѓу фенотипови' },
+  ];
+
+  GF.WWF.campaignList = async () => {
+    const st = GF.WWF._prop;
+    if (!st.campaigns) { try { st.campaigns = (await GF.API.campaigns()).campaigns || []; } catch (e) { GF.toast(e.message, 'error'); return; } }
+    GF.WWF._ensureModal('sc-modal', '520px');
+    GF.$('sc-modal-title').textContent = AL('Selection campaigns', 'Кампањи за селекција');
+    const rows = st.campaigns.length ? st.campaigns.map(c => `<tr>
+        <td><strong>${GF.esc(c.label)}</strong></td>
+        <td>${fmtD(c.started_on)}</td>
+        <td>${GF.esc(AL((MATERIALS.find(x => x.v === c.material) || {}).en || c.material,
+                        (MATERIALS.find(x => x.v === c.material) || {}).mk || c.material))}</td>
+        <td>${GF.esc(c.cultivar_code || '—')}</td>
+        <td>${c.mothers_count} ${AL('mothers', 'мајки')}</td>
+        <td>${GF.esc(c.description || '')}</td></tr>`).join('')
+      : `<tr><td colspan="6" style="color:var(--ink-3)">${AL(
+          'No campaigns yet. A campaign is one selection event — from seeds, from new clones, or between phenotypes — and every mother selected in it carries its number.',
+          'Нема кампањи. Кампањата е еден настан на селекција — од семе, од нови клонови или помеѓу фенотипови — и секоја мајка од неа го носи нејзиниот број.')}</td></tr>`;
+    GF.$('sc-modal-body').innerHTML = `
+      <div style="overflow-x:auto"><table class="pb-table"><thead><tr>
+        <th>#</th><th>${AL('Started', 'Започната')}</th><th>${AL('Material', 'Материјал')}</th>
+        <th>${AL('Strain', 'Сорта')}</th><th>${AL('Mothers', 'Мајки')}</th><th></th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+      ${canBank() ? `<div class="row" style="gap:10px;margin-top:10px"><div class="spacer"></div>
+        <button class="btn btn-orange btn-sm" onclick="GF.WWF.campaignForm()">${GF.icon('plus', 'icon', 'currentColor')}${AL('New campaign', 'Нова кампања')}</button></div>` : ''}`;
+    GF.openModal('sc-modal');
+  };
+
+  GF.WWF.campaignForm = async () => {
+    if (!canBank()) return;
+    let cultivars = [];
+    try { cultivars = await cultivarsLoaded(); } catch (e) { cultivars = []; }
+    GF.WWF._ensureModal('scf-modal', '460px');
+    GF.$('scf-modal-title').textContent = AL('New selection campaign', 'Нова кампања за селекција');
+    GF.$('scf-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Started on', 'Започната на')}</label>
+        ${GF.dateField('sc-date', { value: today(), clearable: false })}</div>
+      <div class="field"><label>${AL('Material selected from', 'Материјал')}</label>
+        ${GF.selectField('sc-material', { value: 'seeds', title: AL('Material', 'Материјал'),
+          options: MATERIALS.map(x => ({ v: x.v, label: AL(x.en, x.mk) })) })}</div>
+      <div class="field"><label>${AL('Strain (if the campaign is one strain)', 'Сорта (ако кампањата е за една сорта)')}</label>
+        ${GF.selectField('sc-cultivar', { value: '', title: AL('Strain', 'Сорта'), searchable: true,
+          options: [{ v: '', label: AL('— several strains —', '— повеќе сорти —') }]
+            .concat(cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name }))) })}</div>
+      <div class="field"><label>${AL('Description', 'Опис')}</label><input id="sc-desc" maxlength="300"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="sc-note" maxlength="500"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'The number is assigned by the facility’s running count — S1, S2, S3 — whatever the strain, and every mother selected in this campaign carries it in its id.',
+        'Бројот се доделува по редослед во фабриката — S1, S2, S3 — без разлика на сортата, и секоја мајка од оваа кампања го носи во својот ID.')}</div>
+      <div class="row" style="gap:10px"><div class="spacer"></div>
+        <button class="btn btn-primary" id="sc-save" onclick="GF.WWF.campaignSave()">${GF.t('save')}</button></div>`;
+    GF.openModal('scf-modal');
+  };
+
+  GF.WWF.campaignSave = () => GF.once('sc-save', async () => {
+    const val = (id) => ((GF.$(id) || {}).value || '').trim();
+    try {
+      await GF.API.campaignCreate({
+        started_on: val('sc-date') || null,
+        material: val('sc-material') || 'seeds',
+        cultivar_id: val('sc-cultivar') || null,
+        description: val('sc-desc') || null,
+        note: val('sc-note') || null });
+      GF.closeModal('scf-modal');
+      GF.toast(AL('Campaign opened', 'Кампањата е отворена'), 'success');
+      GF.WWF._prop.campaigns = null;
+      await GF.WWF.loadPropagation();
+      if (GF.$('sc-modal')) await GF.WWF.campaignList();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // ── register / edit a mother plant ────────────────────────────────────────
+  // The id is composed from segments, so the form offers the segments and the
+  // server builds GP26_S1M03-2_020 from them. The preview shows what will be
+  // written before it is written.
+
+  const productOpts = (products) => products.map(p => ({
+    v: p.id, label: `${p.product_code} — THC ${p.grade}`,
+    sub: `${Number(p.window_min).toFixed(2)}–${Number(p.window_max).toFixed(2)} %` }));
+
+  GF.WWF.motherCodePreview = (acr, grade, seq, motherNo, gen, stockNo) => {
+    const g = String(grade).replace(/\.0+$/, '');
+    return `${acr}${g}_S${seq}M${String(motherNo).padStart(2, '0')}-${gen}_${String(stockNo).padStart(3, '0')}`;
+  };
+
   GF.WWF.motherForm = async (motherId) => {
     if (!canBank()) return;
     const st = GF.WWF._prop;
     const m = motherId ? (st.mothers || []).find(x => x.id === motherId) : null;
     if (motherId && !m) return;
-    let cultivars = [], rooms = [];
+    let products = [], rooms = [], campaigns = [];
     try {
-      cultivars = await cultivarsLoaded();
+      products = (await GF.API.qcProducts({ status: 'APPROVED' })) || [];
       rooms = (await GF.API.facility()).rooms || [];
+      campaigns = (await GF.API.campaigns()).campaigns || [];
     } catch (e) { GF.toast(e.message, 'error'); return; }
-    if (!m && !cultivars.length) {
-      GF.toast(AL('Register a cultivar first — a mother plant is one cultivar', 'Прво регистрирајте сорта — мајката е една сорта'), 'error');
+    if (!m && !products.length) {
+      GF.toast(AL('No approved product specification yet — import and approve the ImB catalogue first',
+                  'Нема одобрена спецификација — прво внесете и одобрете го ImB каталогот'), 'error');
       return;
     }
-    GF.WWF._ensureModal('mb-modal', '500px');
+    if (!m && !campaigns.length) {
+      GF.toast(AL('Open a selection campaign first — a mother belongs to one',
+                  'Прво отворете кампања за селекција — мајката припаѓа на една'), 'error');
+      GF.WWF.campaignForm();
+      return;
+    }
+    GF.WWF._motherCtx = { products, campaigns, mothers: st.mothers || [] };
+    GF.WWF._ensureModal('mb-modal', '520px');
     GF.$('mb-modal-title').textContent = m
       ? AL('Mother plant', 'Мајка') + ' — ' + m.code
       : AL('Register mother plant', 'Регистрирај мајка');
     const identity = m
-      ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${GF.esc(m.cultivar_code)} — ${GF.esc(m.cultivar_name)} · ID <b>${GF.esc(m.code)}</b></div>
+      ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${GF.esc(m.product_code)} · ${GF.esc(m.campaign_label)} ·
+           ${AL('generation', 'генерација')} ${m.generation} · ID <b>${GF.esc(m.code)}</b></div>
          <div class="field"><label>${AL('Status', 'Статус')}</label>
            ${GF.selectField('mb-status', { value: m.status, title: AL('Status', 'Статус'),
              options: Object.keys(MSTATUS).map(k => ({ v: k, label: sLbl(MSTATUS, k), color: MSTATUS[k].color })) })}</div>`
-      : `<div class="field"><label>${AL('Cultivar — from the product specification', 'Сорта — од спецификацијата на производот')}</label>
-           ${GF.selectField('mb-cultivar', { value: cultivars[0].id, title: AL('Cultivar', 'Сорта'), searchable: true,
-             options: cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name, sub: GF.WWF.cultSpecLine(c) })),
-             onPick: () => GF.WWF._motherCultivarSync() })}</div>
-         <div class="field"><label>${AL('Mother ID', 'ID на мајка')}</label>
-           <div id="mb-code-wrap">${GF.codeField('mb-code', { prefix: cultivars[0].code + '_M', maxlength: 64 })}</div>
+      : `<div class="field"><label>${AL('Specification strain — the product it belongs to', 'Спецификациска сорта — производот')}</label>
+           ${GF.selectField('mb-product', { value: products[0].id, title: AL('Product', 'Производ'), searchable: true,
+             options: productOpts(products), onPick: () => GF.WWF._motherSync() })}</div>
+         <div class="row" style="gap:10px">
+           <div class="field" style="flex:2"><label>${AL('Selection campaign', 'Кампања')}</label>
+             ${GF.selectField('mb-campaign', { value: campaigns[0].id, title: AL('Campaign', 'Кампања'),
+               options: campaigns.map(c => ({ v: c.id, label: c.label, sub: fmtD(c.started_on) })),
+               onPick: () => GF.WWF._motherSync() })}</div>
+           <div class="field" style="flex:1"><label>${AL('Mother №', 'Мајка бр.')}</label>
+             <input id="mb-mno" type="number" min="1" max="99" step="1" oninput="GF.WWF._motherSync()"></div>
+           <div class="field" style="flex:1"><label>${AL('Generation', 'Генерација')}</label>
+             <input id="mb-gen" type="number" min="1" max="9" step="1" value="1" oninput="GF.WWF._motherSync()"></div>
+           <div class="field" style="flex:1"><label>${AL('In stock №', 'Во фонд бр.')}</label>
+             <input id="mb-stock" type="number" min="1" max="999" step="1" oninput="GF.WWF._motherSync()"></div>
+         </div>
+         <div class="field" id="mb-parent-wrap" style="display:none"><label>${AL('Cut from mother (if known)', 'Сечена од мајка (ако е позната)')}</label>
+           <div id="mb-parent-sel"></div></div>
+         <div class="field"><label>${AL('Plant ID', 'ID на растение')}</label>
+           <div id="mb-preview" class="mb-preview">—</div>
            <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
-             'Unique per plant. The cultivar code is the fixed head; the number is suggested from the bank and can be edited.',
-             'Единствен по растение. Кодот на сортата е фиксен почеток; бројот е предложен од банката и може да се измени.')}</div></div>`;
+             'Strain and grade · selection campaign · mother number · generation · number in stock. The facility’s numbers — the app only offers the next free one.',
+             'Сорта и степен · кампања · број на мајка · генерација · број во фонд. Броевите се на фабриката — апликацијата само го предлага следниот слободен.')}</div></div>`;
     GF.$('mb-modal-body').innerHTML = `
       ${identity}
       <div class="field"><label>${AL('Phenotype (if known)', 'Фенотип (ако е познат)')}</label>
@@ -245,7 +376,7 @@
       </div>
       <div class="field"><label>${AL('Established on (age counts from here)', 'Воспоставена на (возраста се смета од тука)')}</label>
         ${GF.dateField('mb-started', { value: m ? (m.started_on || '') : today(), clearable: true })}</div>
-      <div class="field"><label>${AL('Source (seed, import, clone of…)', 'Потекло (семе, увоз, клон од…)')}</label>
+      <div class="field"><label>${AL('Source (seed lot, import, clone of…)', 'Потекло (семе, увоз, клон од…)')}</label>
         <input id="mb-source" maxlength="200" value="${GF.esc((m || {}).source || '')}"></div>
       <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
         <input id="mb-note" maxlength="500" value="${GF.esc((m || {}).note || '')}"></div>
@@ -254,23 +385,54 @@
         <button class="btn btn-primary" id="mb-save" onclick="GF.WWF.motherSave(${m ? `'${m.id}'` : ''})">${GF.t('save')}</button>
       </div>`;
     GF.openModal('mb-modal');
-    if (!m) await GF.WWF._motherCultivarSync();
+    if (!m) await GF.WWF._motherSync();
   };
 
-  GF.WWF._motherCultivarSync = async () => {
-    const id = (GF.$('mb-cultivar') || {}).value;
-    const cv = (await cultivarsLoaded()).find(c => c.id === id);
-    const wrap = GF.$('mb-code-wrap');
-    if (!wrap || !cv) return;
-    let suggested = '';
-    try { suggested = GF.API.motherNextCode ? ((await GF.API.motherNextCode(cv.id)).suggested || '') : ''; }
-    catch (_) { suggested = ''; }
-    if (((GF.$('mb-cultivar') || {}).value) !== cv.id) return;
-    wrap.innerHTML = GF.codeField('mb-code', { prefix: cv.code + '_M', value: suggested, maxlength: 64 });
+  // Asks the server for the next free numbers whenever a segment changes, and
+  // shows the id that will be written. A number the user typed is kept.
+  GF.WWF._motherSync = async () => {
+    const ctx = GF.WWF._motherCtx || {};
+    const pid = (GF.$('mb-product') || {}).value;
+    const cid = (GF.$('mb-campaign') || {}).value;
+    const prod = (ctx.products || []).find(p => p.id === pid);
+    const camp = (ctx.campaigns || []).find(c => c.id === cid);
+    if (!prod || !camp) return;
+    const gen = parseInt(((GF.$('mb-gen') || {}).value || '1'), 10) || 1;
+    const typedM = ((GF.$('mb-mno') || {}).value || '').trim();
+    const typedS = ((GF.$('mb-stock') || {}).value || '').trim();
+    let next = null;
+    try {
+      next = await GF.API.motherNextCode({ product_id: pid, campaign_id: cid, generation: gen,
+                                           ...(typedM ? { mother_no: typedM } : {}) });
+    } catch (_) { next = null; }
+    // The pick may have changed while the request was out.
+    if (((GF.$('mb-product') || {}).value) !== pid || ((GF.$('mb-campaign') || {}).value) !== cid) return;
+    const mno = typedM ? parseInt(typedM, 10) : (next ? next.mother_no : 1);
+    const sno = typedS ? parseInt(typedS, 10) : (next ? next.next_stock_no : 1);
+    const mEl = GF.$('mb-mno'), sEl = GF.$('mb-stock');
+    if (mEl && !typedM) mEl.placeholder = String(mno);
+    if (sEl && !typedS) sEl.placeholder = String(sno);
+    const prev = GF.$('mb-preview');
+    if (prev) {
+      prev.textContent = GF.WWF.motherCodePreview(
+        prod.product_code.split('_')[0], prod.grade, camp.seq, mno, gen, sno);
+    }
+    // A second-generation mother may name the plant it was cut from.
+    const wrap = GF.$('mb-parent-wrap'), sel = GF.$('mb-parent-sel');
+    if (wrap && sel) {
+      if (gen > 1) {
+        const eligible = (ctx.mothers || []).filter(x => x.product_id === pid && x.generation === gen - 1);
+        wrap.style.display = '';
+        sel.innerHTML = GF.selectField('mb-parent', { value: '', title: AL('Mother', 'Мајка'),
+          options: [{ v: '', label: AL('— not in the bank —', '— не е во банката —') }]
+            .concat(eligible.map(x => ({ v: x.id, label: x.code }))) });
+      } else { wrap.style.display = 'none'; sel.innerHTML = ''; }
+    }
   };
 
   GF.WWF.motherSave = (motherId) => GF.once('mb-save', async () => {
     const val = (id) => ((GF.$(id) || {}).value || '').trim();
+    const num = (id) => { const v = val(id); return v === '' ? null : parseInt(v, 10); };
     const body = {
       phenotype: val('mb-pheno') || null,
       room_id: val('mb-room') || null,
@@ -284,20 +446,50 @@
         body.status = val('mb-status') || undefined;
         await GF.API.motherPatch(motherId, body);
       } else {
-        const code = val('mb-code');
-        if (!CODE_RE.test(code)) {
-          GF.toast(AL('Mother ID must be 1–64 characters: letters, digits, _ or -',
-                      'ID мора да е 1–64 знаци: букви, цифри, _ или -'), 'error');
-          return;
-        }
-        await GF.API.motherCreate({ ...body, cultivar_id: val('mb-cultivar'), code });
+        await GF.API.motherCreate({
+          ...body,
+          product_id: val('mb-product'),
+          campaign_id: val('mb-campaign'),
+          mother_no: num('mb-mno'),
+          generation: num('mb-gen') || 1,
+          stock_no: num('mb-stock'),
+          parent_id: val('mb-parent') || null });
       }
       GF.closeModal('mb-modal');
-      GF.toast(motherId ? AL('Mother plant updated', 'Мајката е ажурирана') : AL('Mother plant registered', 'Мајката е регистрирана'), 'success');
+      GF.toast(motherId ? AL('Mother plant updated', 'Мајката е ажурирана')
+                        : AL('Mother plant registered', 'Мајката е регистрирана'), 'success');
       GF.WWF._cult.tab = 'mothers';
       await GF.WWF.loadPropagation();
     } catch (e) { GF.toast(e.message, 'error'); }
   });
+
+  // ── what this mother's specification strain has tested ───────────────────
+
+  GF.WWF.motherPotency = async (motherId) => {
+    let body;
+    try { body = await GF.API.motherPotency(motherId); }
+    catch (e) { GF.toast(e.message, 'error'); return; }
+    GF.WWF._ensureModal('mp-modal', '520px');
+    GF.$('mp-modal-title').textContent = AL('Potency tested', 'Тестирана потентност') + ' — ' + body.code;
+    const stat = (s, label, none) => `<div style="margin-bottom:10px">
+      <div style="font-size:12px;margin-bottom:4px"><strong>${label}</strong></div>
+      ${s.n ? `<div style="font-size:13px">${AL('average', 'просек')} <b>${Number(s.avg).toFixed(2)} %</b>
+          <span style="color:var(--ink-3)">· ${s.n} ${AL('results', 'резултати')} · ${Number(s.min).toFixed(2)}–${Number(s.max).toFixed(2)} %</span></div>
+        <div style="overflow-x:auto;margin-top:4px"><table class="pb-table"><tbody>${s.values.map(v =>
+          `<tr><td>${GF.esc(v.coq_number || '—')}</td><td>${GF.esc(v.lot_code || '—')}</td>
+           <td><b>${Number(v.total_thc).toFixed(2)} %</b></td><td>${fmtD(v.on)}</td></tr>`).join('')}</tbody></table></div>`
+        : `<div style="color:var(--ink-3);font-size:12px">${none}</div>`}</div>`;
+    GF.$('mp-modal-body').innerHTML = `
+      <div style="font-size:12px;color:var(--ink-3);margin-bottom:10px">${GF.esc(body.product_code)} ·
+        ${AL('window', 'прозорец')} ${Number(body.window[0]).toFixed(2)}–${Number(body.window[1]).toFixed(2)} %</div>
+      ${stat(body.product, AL('This specification strain', 'Оваа спецификациска сорта'),
+             AL('No approved Certificate of Quality carries a Total Δ9-THC for this product yet.',
+                'Сè уште нема одобрен сертификат со вкупен Δ9-THC за овој производ.'))}
+      ${stat(body.traced, AL('Traceable to this plant', 'Следливо до ова растение'),
+             AL('Nothing yet links a tested lot back to this mother — it needs the clone run to name its batch and the harvest to record its lot.',
+                'Сè уште ништо не поврзува тестирана серија со оваа мајка — потребно е клонирањето да го наведе батчот и жетвата да ја запише серијата.'))}`;
+    GF.openModal('mp-modal');
+  };
 
   // ── start a clone run ─────────────────────────────────────────────────────
 
@@ -318,10 +510,12 @@
     GF.WWF._ensureModal('cr-modal', '560px');
     GF.$('cr-modal-title').textContent = AL('Start clone run', 'Почни клонирање');
     GF.$('cr-modal-body').innerHTML = `
-      <div class="field"><label>${AL('Cultivar — propagation material specification', 'Сорта — спецификација на материјалот за размножување')}</label>
+      <div class="field"><label>${AL('Cultivar', 'Сорта')}</label>
         ${GF.selectField('cr-cultivar', { value: cultivars[0].id, title: AL('Cultivar', 'Сорта'), searchable: true,
           options: cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name, sub: GF.WWF.cultSpecLine(c) })),
-          onPick: () => GF.WWF._cloneRunSync() })}
+          onPick: () => GF.WWF._cloneRunSync() })}</div>
+      <div class="field"><label>${AL('Propagation material specification', 'Спецификација на материјалот')}</label>
+        <div id="cr-product-wrap"></div>
         <div id="cr-spec"></div></div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1"><label>${AL('Date of cloning initiation', 'Датум на почеток на клонирање')}</label>
@@ -360,6 +554,15 @@
     const ctx = GF.WWF._cloneRunCtx || {};
     const id = (GF.$('cr-cultivar') || {}).value;
     const cv = (ctx.cultivars || []).find(c => c.id === id);
+    const pw = GF.$('cr-product-wrap');
+    if (pw && cv) {
+      const ps = ((cv.products || []).filter(p => p.status === 'APPROVED'));
+      pw.innerHTML = GF.selectField('cr-product', {
+        value: '', title: AL('Product', 'Производ'),
+        options: [{ v: '', label: AL('— no product named —', '— без наведен производ —') }]
+          .concat(ps.map(p => ({ v: p.id, label: p.product_code,
+                                 sub: `${Number(p.window_min).toFixed(2)}–${Number(p.window_max).toFixed(2)} %` }))) });
+    }
     const spec = GF.$('cr-spec');
     if (spec) spec.innerHTML = GF.WWF.cultSpecPanel(cv);
     const ml = GF.$('cr-mothers');
@@ -369,7 +572,8 @@
           <input type="checkbox" id="cr-m-${m.id}" data-mid="${m.id}">
           <span><b>${GF.esc(m.code)}</b>${m.phenotype ? ` · ${GF.esc(m.phenotype)}` : ''}
             <span style="color:var(--ink-3)"> · ${GF.esc(m.room_name || '—')}${m.position ? ` · ${GF.esc(m.position)}` : ''}
-            · ${AL('last cut', 'последно')} ${m.last_cut_on ? fmtD(m.last_cut_on) : AL('never', 'никогаш')} · ${m.generations} ${AL('gen.', 'ген.')}</span></span>
+            · ${AL('last cut', 'последно')} ${m.last_cut_on ? fmtD(m.last_cut_on) : AL('never', 'никогаш')}
+            · ${AL('next cutting', 'следно сечење')} ${String((m.times_cut || 0) + 1).padStart(2, '0')}</span></span>
           <input type="number" id="cr-c-${m.id}" min="0" max="100000" step="1" placeholder="${AL('cuttings', 'резници')}">
         </label>`).join('')
         : `<div style="color:var(--ink-3);font-size:12px">${AL(
@@ -407,6 +611,7 @@
     try {
       await GF.API.cloneRunCreate({
         cultivar_id: val('cr-cultivar'),
+        product_id: val('cr-product') || null,
         started_on: val('cr-date') || null,
         planned_count: count,
         room_id: val('cr-room') || null,

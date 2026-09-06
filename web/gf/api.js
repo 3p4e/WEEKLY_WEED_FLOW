@@ -217,11 +217,21 @@ GF.API = {
   // cultivar (constant head = the cultivar code, tail suggested from what the
   // org already holds). The code field pre-fills it; the tail stays editable.
   cultivationBatchCode(cultivarId) { return this._req('GET', '/cultivation/batch-code?cultivar_id=' + encodeURIComponent(cultivarId)); },
+  cultivationBatchPatch(id, b)   { return this._req('PATCH', '/cultivation/batches/' + id, b); },
+  // Trichome maturation checks (0066): the documented record behind a harvest
+  // date. Never a gate — the harvest form shows the latest verdict, nothing more.
+  trichomeChecks(q)              { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/cultivation/trichome-checks' + (u?'?'+u:'')); },
+  trichomeCheck(b)               { return this._req('POST', '/cultivation/trichome-checks', b); },
+  // Selection campaigns — the S<n> in a mother-plant id, numbered facility-wide.
+  campaigns()                    { return this._req('GET', '/cultivation/campaigns'); },
+  campaignCreate(b)              { return this._req('POST', '/cultivation/campaigns', b); },
+  campaignPatch(id, b)           { return this._req('PATCH', '/cultivation/campaigns/' + id, b); },
   // Propagation (migration 0065, app/api/propagation.py): the mother-plant
   // bank and clone runs — the clone end of cultivation's span. Same
   // /cultivation prefix, separate server module, like harvest and irrigation.
   mothers(active = true)         { return this._req('GET', '/cultivation/mothers?active=' + (active ? 'true' : 'false')); },
-  motherNextCode(cultivarId)     { return this._req('GET', '/cultivation/mothers/next-code?cultivar_id=' + encodeURIComponent(cultivarId)); },
+  motherNextCode(q)              { const u = new URLSearchParams(q).toString(); return this._req('GET', '/cultivation/mothers/next-code?' + u); },
+  motherPotency(id)              { return this._req('GET', '/cultivation/mothers/' + id + '/potency'); },
   motherCreate(body)             { return this._req('POST', '/cultivation/mothers', body); },
   motherPatch(id, body)          { return this._req('PATCH', '/cultivation/mothers/' + id, body); },
   cloneRuns(active = true)       { return this._req('GET', '/cultivation/clone-runs?active=' + (active ? 'true' : 'false')); },
@@ -355,6 +365,19 @@ GF.API = {
   qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
   qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
   qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
+  // The official ImB product catalogue (qc_products) — one page per product,
+  // window = nominal ±10 %. The ladders above stay readable for CoQs issued
+  // before it, but the catalogue is what a batch, a mother and a CoQ now name.
+  qcProducts(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/products' + (u?'?'+u:'')); },
+  qcProduct(id)            { return this._req('GET', '/qc/products/' + id); },
+  qcProductCreate(b)       { return this._req('POST', '/qc/products', b); },
+  qcProductPatch(id, b)    { return this._req('PATCH', '/qc/products/' + id, b); },
+  qcApproveProduct(id)     { return this._req('POST', '/qc/products/' + id + '/approve'); },
+  qcSupersedeProduct(id)   { return this._req('POST', '/qc/products/' + id + '/supersede'); },
+  qcImportProducts(b)      { return this._req('POST', '/qc/products/import', b || {}); },
+  qcProductPotency(id)     { return this._req('GET', '/qc/products/' + id + '/potency-history'); },
+  qcProductConformance(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/products/conformance?' + u); },
+  qcProductDocumentUrl(id) { return '/qc/products/' + encodeURIComponent(id) + '/document'; },
   // GET /qc/certificates/{coa_id}/icoa-html?parameter_id=... (the single-
   // parameter internal-CoA HTML view, spec_html.py) is real and migration-
   // backed but has no frontend caller — sibling gap to the one above.

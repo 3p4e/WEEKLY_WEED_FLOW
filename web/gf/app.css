@@ -1357,6 +1357,28 @@ body.demo-on .main{padding-bottom:56px}
 .cj-chips{display:flex;gap:6px;flex-wrap:wrap}
 .cj-chip{font:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink-3);cursor:pointer}
 .cj-chip.on{color:var(--ink);border-color:rgba(var(--accent-rgb),.5);background:var(--primary-soft)}
+/* lanes: one row per open batch on a shared axis — several operations at
+   different stages at once, which is how the floor actually runs */
+.cj-lanes{margin-bottom:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.cj-axis{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--ink-3);
+  padding:0 0 6px 196px;text-transform:uppercase;letter-spacing:.3px}
+.cj-axis span{flex:1;text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cj-lane{display:grid;grid-template-columns:186px 1fr 210px;gap:10px;align-items:center;
+  padding:6px 8px;border-radius:9px;cursor:pointer}
+.cj-lane:hover{background:var(--surface-3)}
+.cj-lane.on{background:var(--primary-soft)}
+.cj-lane-id{font-size:12px;min-width:0}
+.cj-lane-id .sub{color:var(--ink-3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cj-lane-x{font-size:11px;text-align:right;color:var(--ink-2,var(--ink-3))}
+.cj-x{font-size:11px;margin-top:6px}
+.cj-x-early{color:var(--ink-3)}
+.cj-x-in{color:#2BE8A0}
+.cj-x-late{color:#E0A73E}
+.cj-x-none{color:#E5484D}
+.cj-x-t{color:var(--ink-3)}
+@media (max-width:820px){.cj-axis{display:none}.cj-lane{grid-template-columns:1fr;gap:4px}
+  .cj-lane-x{text-align:left}}
+.cu-spec-t tr.on td{background:var(--primary-soft);font-weight:700}
 .cj-tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line);overflow-x:auto}
 .cj-tab{display:inline-flex;align-items:center;line-height:1.2;font:inherit;font-size:12px;padding:7px 12px;border:0;border-bottom:2px solid transparent;background:none;color:var(--ink-3);cursor:pointer;white-space:nowrap}
 .cj-tab.on{color:var(--ink);border-bottom-color:var(--orange)}
@@ -1386,3 +1408,7 @@ body.demo-on .main{padding-bottom:56px}
 .pb-mrow{display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer}
 .pb-mrow>span{flex:1;min-width:0}
 .pb-mrow input[type=number]{width:96px;flex:none}
+
+/* the composed mother-plant id, shown before it is written */
+.mb-preview{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:14px;
+  letter-spacing:.5px;padding:7px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--ink)}

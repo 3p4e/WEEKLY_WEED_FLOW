@@ -87,17 +87,24 @@
   };
 
   const role = () => (GF.API.user || {}).role;
-  const canWrite = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR'].includes(role());
-  // Mirrors _REGISTRARS in app/api/cultivation.py: registering a batch (and
-  // generating its plant ids) is open to QA as well; moving it is not.
-  const canRegister = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
+  // Mirrors _WRITERS in app/api/cultivation.py. QA joined the floor writers on
+  // 2026-09-05: "QA should be able to move a batch through its phases or edit
+  // the cultivar master".
+  const canWrite = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'CU_MGR', 'QA_MGR'].includes(role());
+  const canRegister = canWrite;
   // Mirrors CultivarIn.code / BatchIn.code server-side, so a bad code is
   // rejected before a round trip rather than as a bare 422.
   const CODE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  // Elapsed days counted on the FACILITY's day, not the browser's: the board
+  // compares this with windows the server computed from its own clock, and two
+  // clocks disagreeing for an hour or two every night would show a wrong answer
+  // rather than an off-by-one nobody notices.
   const daysIn = (iso) => {
     if (!iso) return null;
-    return Math.max(0, Math.round((Date.now() - new Date(iso + 'T00:00:00')) / 864e5));
+    return Math.max(0, Math.round(
+      (new Date(GF.facilityToday() + 'T00:00:00') - new Date(iso + 'T00:00:00')) / 864e5));
   };
+  const dm = (iso) => (iso ? (GF.fmtDateHuman ? GF.fmtDateHuman(iso).slice(0, 5) : iso.slice(5)) : '');
   // FACILITY today, not UTC. This value is printed into every plant id in
   // the batch (see the note under the field), and toISOString() renders the
   // UTC day — so between facility-midnight and UTC-midnight every plant
@@ -166,6 +173,11 @@
     // id exists.
     actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultTaskList('${b.id}','${GF.esc(b.code)}')">
       ${GF.icon('menu', 'icon')}${AL('Batch tasks', 'Задачи на батч')}</button>`);
+    // The documented record the owner's rule makes the decider of a cut.
+    if (canWrite() && b.phase === 'flower') {
+      actions.push(`<button class="btn btn-sm" onclick="GF.WWF.trichomeForm('${b.id}','${GF.esc(b.code)}')">
+        ${GF.icon('eye', 'icon')}${AL('Trichome check', 'Проверка на трихоми')}</button>`);
+    }
     if (canWrite() && !terminal) {
       actions.push(`<button class="btn btn-sm" onclick="GF.WWF.cultMoveForm('${b.id}')">
         ${GF.icon('forward', 'icon')}${AL('Move / advance', 'Премести / фаза')}</button>`);
@@ -183,12 +195,13 @@
         <span style="color:${phCol(b.phase)};font-size:12px">${GF.esc(phLbl(b.phase))}</span>
       </div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:6px">
-        ${GF.esc(b.cultivar_code || b.strain || '—')}${b.cultivar_name ? ' · ' + GF.esc(b.cultivar_name) : ''}
+        ${GF.esc(b.product_code || b.cultivar_code || b.strain || '—')}${b.cultivar_name ? ' · ' + GF.esc(b.cultivar_name) : ''}
         · ${GF.esc(b.room_name || AL('no room', 'без соба'))}
         ${d != null ? ` · ${d} ${AL('d in phase', 'д. во фаза')}` : ''}
       </div>
       ${noCultivar}
       ${GF.WWF.cultJourney(b, { compact: true })}
+      ${GF.WWF.cultExpectLine(b) ? `<div class="cj-x">${GF.WWF.cultExpectLine(b)}</div>` : ''}
       <div style="font-size:12px;margin-bottom:8px">${headcount(b)}</div>
       ${b.note ? `<div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${GF.esc(b.note)}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap">${actions.join('')}</div>
@@ -256,7 +269,7 @@
     const body = st.tab === 'batches'
       ? summary + groups
       : (GF.WWF.propagationSection ? GF.WWF.propagationSection(st.tab) : '');
-    return head + journeyStrip(batches) + tabs(batches) + body;
+    return head + journeyLanes(batches) + tabs(batches) + body;
   };
 
   // ── the journey strip ─────────────────────────────────────────────────────
@@ -275,7 +288,10 @@
     { key: 'nursery',    en: 'Nursery',       mk: 'Расадник',     who: 'cultivation' },
     { key: 'veg',        en: 'Vegetation',    mk: 'Вегетација',   who: 'cultivation' },
     { key: 'flower',     en: 'Flowering',     mk: 'Цветање',      who: 'cultivation' },
-    { key: 'cut',        en: 'Harvest cut',   mk: 'Жетва — сечење', who: 'cultivation', handoff: true },
+    // Harvest, cure and defoliation are one step and one boundary: the end of
+    // GACP and the start of GMP (owner, 2026-09-05).
+    { key: 'cut', en: 'Harvest · cure · defoliation', mk: 'Жетва · сушење · дефолијација',
+      sub: 'GACP → GMP', who: 'cultivation', handoff: true },
     { key: 'drying',     en: 'Drying',        mk: 'Сушење',       who: 'production' },
     { key: 'closed',     en: 'Lot closed',    mk: 'Затворена серија', who: 'production' },
   ];
@@ -327,34 +343,77 @@
     const runLine = run
       ? `<div class="cj-run">${GF.icon('layers', 'icon')}${AL('Cut in clone run', 'Клонирано во')} ${GF.esc(run.code || (run.cultivar_code + ' · ' + (GF.fmtDateHuman ? GF.fmtDateHuman(run.started_on) : run.started_on)))}
          · ${run.mothers.length} ${AL('mothers', 'мајки')}${run.cuttings_total ? ` · ${run.cuttings_total} ${AL('cuttings', 'резници')}` : ''}${
-         run.spec_version ? ` · ${GF.esc(run.spec_code || '')} ${GF.esc(run.spec_version)}` : ''}</div>`
+         run.product_code ? ` · ${GF.esc(run.product_code)}` : ''}</div>`
       : '';
     return `<div class="cj">
       <div class="cj-head">
         <strong>${GF.esc(b.code || '—')}</strong>
         <span style="color:var(--ink-3)">${GF.esc(b.cultivar_code || b.strain || '—')}${b.cultivar_name ? ' · ' + GF.esc(b.cultivar_name) : ''} · ${b.plant_count || 0} ${AL('plants', 'растенија')}</span>
+        ${b.product_code ? `<span class="mw-attr">${GF.esc(b.product_code)}</span>` : ''}
+        ${b.clone_source ? `<span class="mw-attr">${GF.esc(b.clone_source === 'imported' ? AL('imported clones', 'увезени клонови') : AL('own stock', 'сопствен фонд'))}</span>` : ''}
         <span class="spacer"></span>
         <span class="cj-legend"><i style="background:${WHO.cultivation.color}"></i>${AL('cultivation', 'одгледување')} <i style="background:${WHO.production.color}"></i>${AL('production', 'производство')}</span>
       </div>
       ${track}
       <div class="cj-foot"><div>${AL('Now', 'Сега')}: ${nowLine}</div><div>${nextLine}</div></div>
+      ${GF.WWF.cultExpectLine(b) ? `<div class="cj-x">${GF.WWF.cultExpectLine(b)}</div>` : ''}
       ${runLine}
     </div>`;
   };
 
-  // The strip follows one batch: the one just registered, else the newest open
-  // one. Chips switch it. Nothing to follow → no strip, not an empty frame.
-  const journeyStrip = (batches) => {
+  // What the plan expects next, in dates the SERVER computed. The board never
+  // derives an interval of its own: one copy of the plan, the same discipline
+  // the pre-harvest interval keeps.
+  const STATE_CLS = { early: 'cj-x-early', in_window: 'cj-x-in', late: 'cj-x-late' };
+  GF.WWF.cultExpectLine = (b) => {
+    const tc = b.latest_trichome;
+    const trich = b.phase === 'flower'
+      ? (tc
+        ? `<span class="cj-x-t">${AL('trichomes', 'трихоми')}: <b>${GF.esc(tc.verdict)}</b> · ${dm(tc.checked_on)}</span>`
+        : `<span class="cj-x-none">${AL('no trichome check recorded', 'нема запис за трихоми')}</span>`)
+      : '';
+    if (!b.expected_from) return trich;
+    const cls = STATE_CLS[b.window_state] || '';
+    const what = b.phase === 'flower'
+      ? AL('harvest window', 'прозорец за жетва')
+      : `→ ${GF.esc(AL((PH[b.expected_next_phase] || {}).en || b.expected_next_phase || '',
+                       (PH[b.expected_next_phase] || {}).mk || b.expected_next_phase || ''))} ${AL('expected', 'очекувано')}`;
+    return `<span class="${cls}">${what} ${dm(b.expected_from)}–${dm(b.expected_to)}</span>${
+      trich ? ' · ' + trich : ''}`;
+  };
+
+  // One lane per open batch on a shared axis — "there may be multiple
+  // operations at the same time at different stages" (owner, 2026-09-05). The
+  // focused lane opens into the full detail below; the rest stay one line each.
+  const journeyLanes = (batches) => {
     const st = GF.WWF._cult;
     const open = batches.filter(b => !TERMINAL.includes(b.phase) && b.phase !== 'mother');
     if (!open.length) return '';
-    let b = open.find(x => x.id === st.focus) || open[0];
-    const chips = open.length > 1 ? `<div class="cj-chips">${open.map(x =>
-      `<button class="cj-chip${x.id === b.id ? ' on' : ''}" onclick="GF.WWF.cultFocus('${x.id}')">${GF.esc(x.code || '—')}</button>`).join('')}</div>` : '';
-    // The fill is set to its width one frame after insertion so it animates
-    // from where the previous render left it, instead of appearing at rest.
+    const focused = open.find(x => x.id === st.focus) || open[0];
+    const axis = `<div class="cj-axis">${PLAN.map(s =>
+      `<span>${GF.esc(AL(s.en, s.mk))}</span>`).join('')}</div>`;
+    const lane = (b) => {
+      const pos = PLAN_POS[b.phase] != null ? PLAN_POS[b.phase] : 0;
+      const pct = Math.round((pos / (PLAN.length - 1)) * 100);
+      const dots = PLAN.map((s, i) => {
+        const cls = i < pos ? 'cj-done' : i === pos ? 'cj-now' : 'cj-todo';
+        return `<div class="cj-step ${cls}${s.handoff ? ' cj-handoff' : ''}" style="--cj-who:${WHO[s.who].color}"><span class="cj-dot"></span></div>`;
+      }).join('');
+      return `<div class="cj-lane${b.id === focused.id ? ' on' : ''}" onclick="GF.WWF.cultFocus('${b.id}')">
+        <div class="cj-lane-id"><strong>${GF.esc(b.code || '—')}</strong>
+          <div class="sub">${GF.esc(b.product_code || b.cultivar_code || b.strain || '—')} · ${b.plant_count || 0} ${AL('plants', 'растенија')}${
+            b.room_name ? ' · ' + GF.esc(b.room_name) : ''}</div></div>
+        <div class="cj-track cj-track-sm"><div class="cj-rail"></div>
+          <div class="cj-fill" data-w="${pct}" style="width:0%"></div>
+          <div class="cj-steps">${dots}</div></div>
+        <div class="cj-lane-x">${GF.WWF.cultExpectLine(b)}</div>
+      </div>`;
+    };
+    // The fills are set to their widths one frame after insertion so they
+    // animate from where the previous render left them, not at rest.
     setTimeout(GF.WWF._cultAnimate, 30);
-    return `<div class="cj-wrap">${GF.WWF.cultJourney(b)}${chips}</div>`;
+    return `<div class="cj-lanes">${axis}${open.map(lane).join('')}</div>`
+      + `<div class="cj-wrap">${GF.WWF.cultJourney(focused)}</div>`;
   };
   GF.WWF._cultAnimate = () => {
     if (typeof document === 'undefined') return;
@@ -376,35 +435,6 @@
     GF.WWF._cult.tab = key;
     if (key !== 'batches' && GF.WWF.loadPropagation && !(GF.WWF._prop || {}).mothers) GF.WWF.loadPropagation();
     GF.render.all();
-  };
-
-  // ── the product specification, as the forms show it ──────────────────────
-  // A cultivar arrives from GET /cultivars with its ImB ladder (APPROVED, else
-  // the newest DRAFT, else none). One line for a chooser's sub-text, one panel
-  // under the chooser. A missing ladder is said plainly, never drawn as a
-  // ladder with no rungs.
-  const pct = (v) => (v == null ? '—' : Number(v).toFixed(2));
-  GF.WWF.cultSpecLine = (cv) => {
-    const s = cv && cv.spec;
-    if (!s) return AL('no product specification yet', 'сè уште без спецификација');
-    const grades = (s.tiers || []).map(t => `${t.spec.replace('Spec ', '')} ${pct(t.range_min)}–${pct(t.range_max)}`).join(' · ');
-    return `${grades}${s.status === 'DRAFT' ? ' · ' + AL('DRAFT', 'НАЦРТ') : ''}`;
-  };
-  GF.WWF.cultSpecPanel = (cv) => {
-    if (!cv) return '';
-    const s = cv.spec;
-    if (!s) {
-      return `<div class="cu-spec cu-spec-none">${GF.icon('file', 'icon')}${AL(
-        `${GF.esc(cv.name)} has no product specification registered yet — its potency grades are set under QC → Potency specs.`,
-        `${GF.esc(cv.name)} сè уште нема регистрирана спецификација — потентните степени се поставуваат во QC → Спецификации на потентност.`)}</div>`;
-    }
-    const rows = (s.tiers || []).map(t => `<tr><td>${GF.esc(t.spec)}</td><td>${pct(t.range_min)} – ${pct(t.range_max)} %</td><td>${pct(t.nominal)} %</td></tr>`).join('');
-    return `<div class="cu-spec">
-      <div class="cu-spec-head"><strong>${GF.esc(cv.name)}</strong>
-        <span>${GF.esc(s.spec_code || '')} ${GF.esc(s.version || '')}</span>
-        <span class="cu-spec-st ${s.status === 'APPROVED' ? 'ok' : 'draft'}">${s.status === 'APPROVED' ? AL('APPROVED', 'ОДОБРЕНА') : AL('DRAFT — not yet approved', 'НАЦРТ — не е одобрена')}</span></div>
-      <table class="cu-spec-t"><thead><tr><th>${AL('Grade', 'Степен')}</th><th>${AL('Total Δ9-THC', 'Вкупен Δ9-THC')}</th><th>${AL('Nominal', 'Номинално')}</th></tr></thead><tbody>${rows}</tbody></table>
-    </div>`;
   };
 
   GF.WWF.cultToggleClosed = () => {
@@ -643,7 +673,42 @@
     } catch (e) { GF.toast(e.message, 'error'); }
   });
 
-  // ── open a batch ──────────────────────────────────────────────────────────
+  // ── the official product, as the forms show it ───────────────────────────
+  // A cultivar arrives from GET /cultivars with the ImB products it is grown
+  // to (approved first, drafts flagged). One line for a chooser's sub-text,
+  // one panel under it. No product page yet is said plainly, never drawn as a
+  // table with no rows.
+  const pct = (v) => (v == null ? '—' : Number(v).toFixed(2));
+  const pLabel = (p) => `THC ${GF.esc(String(p.grade))}`;
+  const approvedProducts = (cv) => ((cv && cv.products) || []).filter(p => p.status === 'APPROVED');
+
+  GF.WWF.cultSpecLine = (cv) => {
+    const ps = (cv && cv.products) || [];
+    if (!ps.length) return AL('no product specification yet', 'сè уште без спецификација');
+    return ps.map(p => `${pLabel(p)}${p.status === 'DRAFT' ? ' (' + AL('DRAFT', 'НАЦРТ') + ')' : ''}`).join(' · ');
+  };
+
+  GF.WWF.cultSpecPanel = (cv, productId) => {
+    if (!cv) return '';
+    const ps = (cv.products || []);
+    if (!ps.length) {
+      return `<div class="cu-spec cu-spec-none">${GF.icon('file', 'icon')}${AL(
+        `${GF.esc(cv.name)} has no product specification registered yet — its potency grades come from the ImB pages, imported under QC → Product catalogue.`,
+        `${GF.esc(cv.name)} сè уште нема регистрирана спецификација — потентните степени доаѓаат од ImB страниците, внесени во QC → Каталог на производи.`)}</div>`;
+    }
+    const rows = ps.map(p => `<tr${p.id === productId ? ' class="on"' : ''}>
+      <td>${GF.esc(p.product_code)}</td><td>${pct(p.window_min)} – ${pct(p.window_max)} %</td>
+      <td>${pct(p.nominal_pct)} %</td>
+      <td><span class="cu-spec-st ${p.status === 'APPROVED' ? 'ok' : 'draft'}">${
+        p.status === 'APPROVED' ? AL('APPROVED', 'ОДОБРЕНА') : AL('DRAFT', 'НАЦРТ')}</span></td></tr>`).join('');
+    return `<div class="cu-spec">
+      <div class="cu-spec-head"><strong>${GF.esc(cv.name)}</strong>
+        <span>${AL('ImB Product Specification · QCSP 001 v.03', 'ImB спецификација · QCSP 001 v.03')}</span></div>
+      <table class="cu-spec-t"><thead><tr><th>${AL('Product', 'Производ')}</th>
+        <th>${AL('Total Δ9-THC window', 'Прозорец вкупен Δ9-THC')}</th>
+        <th>${AL('Nominal', 'Номинално')}</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  };
 
   GF.WWF.cultBatchForm = async () => {
     if (!canRegister()) return;
@@ -673,11 +738,18 @@
     // carries its grades, and picking one fills the batch number (fixed head
     // = the cultivar code) and the specification panel beneath.
     GF.$('cu-batch-modal-body').innerHTML = `
-      <div class="field"><label>${AL('Cultivar — from the product specification', 'Сорта — од спецификацијата на производот')}</label>
+      <div class="field"><label>${AL('Cultivar', 'Сорта')}</label>
         ${GF.selectField('cu-b-cultivar', { value: cultivars[0].id, title: AL('Cultivar', 'Сорта'), searchable: true,
           options: cultivars.map(c => ({ v: c.id, label: c.code + ' — ' + c.name, sub: GF.WWF.cultSpecLine(c) })),
-          onPick: () => GF.WWF._cultBatchCultivarSync() })}
+          onPick: () => GF.WWF._cultBatchCultivarSync() })}</div>
+      <div class="field"><label>${AL('Target product — the ImB specification it is grown to', 'Целен производ — ImB спецификација')}</label>
+        <div id="cu-b-product-wrap"></div>
         <div id="cu-b-spec"></div></div>
+      <div class="field"><label>${AL('Clones from', 'Клонови од')}</label>
+        ${GF.selectField('cu-b-source', { value: '', title: AL('Clones from', 'Клонови од'), options: [
+          { v: '', label: AL('— not stated —', '— не е наведено —') },
+          { v: 'own_stock', label: AL('Own stock', 'Сопствен фонд'), sub: AL('cut from the mother bank', 'сечени од банката на мајки') },
+          { v: 'imported', label: AL('Imported', 'Увезени'), sub: AL('may stay longer in cloning for quarantine', 'може да останат подолго за карантин') }] })}</div>
       <div class="field"><label>${AL('Batch number', 'Број на батч')}</label>
         <div id="cu-b-code-wrap">${GF.codeField('cu-b-code', { prefix: cultivars[0].code, maxlength: 64, placeholder: 'GP072501' })}</div>
         <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
@@ -719,6 +791,19 @@
     const st = GF.WWF._cult;
     const id = (GF.$('cu-b-cultivar') || {}).value;
     const cv = (st.cultivars || []).find(c => c.id === id);
+    // Only APPROVED products may be registered against: a draft page's nominal
+    // — the 26 in GP26 — can still change.
+    const pw = GF.$('cu-b-product-wrap');
+    if (pw) {
+      const ps = approvedProducts(cv);
+      pw.innerHTML = GF.selectField('cu-b-product', {
+        value: '', title: AL('Target product', 'Целен производ'),
+        options: [{ v: '', label: AL('— no target product —', '— без целен производ —') }].concat(
+          ps.map(p => ({ v: p.id, label: `${cv.code} · ${cv.name} — ${pLabel(p)}`,
+                         sub: `${pct(p.window_min)}–${pct(p.window_max)} %` }))),
+        onPick: () => { const s = GF.$('cu-b-spec');
+                        if (s) s.innerHTML = GF.WWF.cultSpecPanel(cv, (GF.$('cu-b-product') || {}).value); } });
+    }
     const spec = GF.$('cu-b-spec');
     if (spec) spec.innerHTML = GF.WWF.cultSpecPanel(cv);
     const wrap = GF.$('cu-b-code-wrap');
@@ -747,6 +832,8 @@
       const created = await GF.API.cultivationBatchCreate({
         code,
         cultivar_id: (GF.$('cu-b-cultivar') || {}).value,
+        product_id: ((GF.$('cu-b-product') || {}).value || '') || null,
+        clone_source: ((GF.$('cu-b-source') || {}).value || '') || null,
         room_id: (GF.$('cu-b-room') || {}).value,
         phase: (GF.$('cu-b-phase') || {}).value,
         plant_count: count,
@@ -858,6 +945,108 @@
         ? AL(`Batch closed as ${phLbl(r.phase)}`, `Батчот е затворен како ${phLbl(r.phase)}`)
         : AL(`Moved to ${phLbl(r.phase)}`, `Преместено во ${phLbl(r.phase)}`),
         TERMINAL.includes(r.phase) ? 'error' : 'success');
+      await GF.WWF.loadCultivation();
+    } catch (e) { GF.toast(e.message, 'error'); }
+  });
+
+  // ── the trichome maturation check ────────────────────────────────────────
+  // The owner's rule: the harvest date is decided by progressive tracking of
+  // trichome maturation under a stereo or digital microscope, with documented
+  // records. This is the record. It gates nothing — the harvest form shows the
+  // latest verdict and a cut is never refused for want of one.
+
+  const TC_VERDICTS = [
+    { v: 'immature', en: 'Immature', mk: 'Незрели', color: '#8296B4' },
+    { v: 'approaching', en: 'Approaching', mk: 'Се приближува', color: '#2FD9D9' },
+    { v: 'ready', en: 'Ready', mk: 'Зрели', color: '#2BE8A0' },
+    { v: 'overripe', en: 'Overripe', mk: 'Презрели', color: '#E0A73E' },
+  ];
+
+  GF.WWF.trichomeForm = (batchId, code) => {
+    if (!canWrite()) return;
+    GF.WWF._ensureModal('tc-modal', '460px');
+    GF.$('tc-modal-title').textContent = AL('Trichome check', 'Проверка на трихоми') + ' — ' + code;
+    GF.$('tc-modal-body').innerHTML = `
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1"><label>${AL('Checked on', 'Датум')}</label>
+          ${GF.dateField('tc-date', { value: today(), clearable: false })}</div>
+        <div class="field" style="flex:1"><label>${AL('Microscope', 'Микроскоп')}</label>
+          ${GF.selectField('tc-instrument', { value: 'digital', title: AL('Microscope', 'Микроскоп'),
+            options: [{ v: 'stereo', label: AL('Stereo', 'Стерео') },
+                      { v: 'digital', label: AL('Digital', 'Дигитален') }] })}</div>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1"><label>${AL('Magnification', 'Зголемување')}</label>
+          <input id="tc-mag" maxlength="40" placeholder="60x"></div>
+        <div class="field" style="flex:1"><label>${AL('Sample sites', 'Мерни места')}</label>
+          <input id="tc-sites" type="number" min="1" max="1000" step="1"></div>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1"><label>${AL('Clear %', 'Бистри %')}</label>
+          <input id="tc-clear" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+        <div class="field" style="flex:1"><label>${AL('Cloudy %', 'Матни %')}</label>
+          <input id="tc-cloudy" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+        <div class="field" style="flex:1"><label>${AL('Amber %', 'Килибарни %')}</label>
+          <input id="tc-amber" type="number" min="0" max="100" step="1" oninput="GF.WWF._tcSum()"></div>
+      </div>
+      <div id="tc-sum" style="font-size:11px;color:var(--ink-3);margin-bottom:8px"></div>
+      <div class="field"><label>${AL('Verdict', 'Оцена')}</label>
+        ${GF.selectField('tc-verdict', { value: 'approaching', title: AL('Verdict', 'Оцена'),
+          options: TC_VERDICTS.map(x => ({ v: x.v, label: AL(x.en, x.mk), color: x.color })) })}</div>
+      <div class="field"><label>${AL('Image reference (optional)', 'Слика (опционално)')}</label>
+        <input id="tc-image" maxlength="300"></div>
+      <div class="field"><label>${AL('Note (optional)', 'Забелешка (опционално)')}</label>
+        <input id="tc-note" maxlength="1000"></div>
+      <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">${AL(
+        'The three states are one field of view, so if you give all three they must add up to about 100 %. Leave them blank for a qualitative check — blank means "not counted", not zero.',
+        'Трите состојби се едно видно поле, па ако ги внесете сите три мора да збирот е околу 100 %. Оставете празно за квалитативна проверка — празно значи „не е броено“, не нула.')}</div>
+      <div class="row" style="gap:10px">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="tc-save"
+          onclick="GF.WWF.trichomeSave('${batchId}')">${GF.t('save')}</button>
+      </div>`;
+    GF.openModal('tc-modal');
+    GF.WWF._tcSum();
+  };
+
+  // Shows the running total while the three are typed, so a mistyped split is
+  // seen here rather than coming back as a 422.
+  GF.WWF._tcSum = () => {
+    const el = GF.$('tc-sum');
+    if (!el) return;
+    const n = (id) => { const v = ((GF.$(id) || {}).value || '').trim(); return v === '' ? null : parseFloat(v); };
+    const vals = [n('tc-clear'), n('tc-cloudy'), n('tc-amber')];
+    if (vals.some(v => v == null)) { el.textContent = ''; el.style.color = 'var(--ink-3)'; return; }
+    const total = vals.reduce((a, b) => a + b, 0);
+    const ok = total >= 98 && total <= 102;
+    el.textContent = AL(`Total ${total} %`, `Вкупно ${total} %`) + (ok ? '' : ' — ' + AL('must be about 100 %', 'мора да е околу 100 %'));
+    el.style.color = ok ? '#2BE8A0' : '#E0A73E';
+  };
+
+  GF.WWF.trichomeSave = (batchId) => GF.once('tc-save', async () => {
+    const num = (id) => { const v = ((GF.$(id) || {}).value || '').trim(); return v === '' ? null : parseFloat(v); };
+    const vals = [num('tc-clear'), num('tc-cloudy'), num('tc-amber')];
+    if (vals.every(v => v != null)) {
+      const total = vals.reduce((a, b) => a + b, 0);
+      if (total < 98 || total > 102) {
+        GF.toast(AL('Clear + cloudy + amber must add up to about 100 %',
+                    'Бистри + матни + килибарни мора да е околу 100 %'), 'error');
+        return;
+      }
+    }
+    try {
+      await GF.API.trichomeCheck({
+        batch_id: batchId,
+        checked_on: ((GF.$('tc-date') || {}).value || '') || null,
+        instrument: (GF.$('tc-instrument') || {}).value || 'digital',
+        magnification: ((GF.$('tc-mag') || {}).value || '').trim() || null,
+        sample_sites: num('tc-sites'),
+        pct_clear: vals[0], pct_cloudy: vals[1], pct_amber: vals[2],
+        verdict: (GF.$('tc-verdict') || {}).value || 'approaching',
+        image_ref: ((GF.$('tc-image') || {}).value || '').trim() || null,
+        note: ((GF.$('tc-note') || {}).value || '').trim() || null });
+      GF.closeModal('tc-modal');
+      GF.toast(AL('Trichome check recorded', 'Проверката е запишана'), 'success');
       await GF.WWF.loadCultivation();
     } catch (e) { GF.toast(e.message, 'error'); }
   });
