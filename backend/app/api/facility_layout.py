@@ -100,10 +100,20 @@ async def list_layout(zone: str | None = Query(default=None),
                       wing: str | None = Query(default=None),
                       regime: str | None = Query(default=None),
                       q: str | None = Query(default=None, max_length=120),
+                      include_inactive: bool = Query(default=False),
                       user: dict = Depends(require_role(*ELEVATED_ROLES))):
     """The register, newest classification included. Filters are additive; `q`
-    matches the code or either printed name, case-insensitively."""
-    where, args = ["f.is_active"], []
+    matches the code or either printed name, case-insensitively.
+
+    `include_inactive` exists because deactivating a room was otherwise a
+    one-way door: this list hard-filtered on `is_active`, no other route
+    returned the room, and the import deliberately does not reset the flag — so
+    a room switched off through PATCH could never be found again to switch back
+    on. Re-activating is a PATCH like any other; it just needs the row to be
+    reachable first."""
+    where, args = [], []
+    if not include_inactive:
+        where.append("f.is_active")
     for col, val in (("zone", zone), ("wing", wing), ("regime", regime)):
         if val:
             args.append(val)
@@ -112,7 +122,8 @@ async def list_layout(zone: str | None = Query(default=None),
         args.append(f"%{q}%")
         where.append(f"(f.code ILIKE ${len(args)} OR f.name_en ILIKE ${len(args)}"
                      f" OR f.name_mk ILIKE ${len(args)})")
-    sql = f"{_SELECT} WHERE {' AND '.join(where)} ORDER BY f.wing, f.code"
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
+    sql = f"{_SELECT}{clause} ORDER BY f.wing, f.code"  # nosec B608
     async with rls(user) as c:
         rows = await c.fetch(sql, *args)
     out = [_out(r) for r in rows]
@@ -170,7 +181,13 @@ async def patch_layout_room(layout_id: str, body: LayoutPatch,
         cur = await c.fetchrow("SELECT id, code FROM facility_rooms WHERE id=$1", rid)
         if not cur:
             raise HTTPException(404, "Unknown room")
-        if data.get("department_id"):
+        # `is not None`, NOT truthiness: null clears the department, but the
+        # empty string is a malformed id and has to be refused. Gating on
+        # truthiness let "" skip both checks and reach asyncpg as a uuid
+        # parameter, which is a 500 where the caller deserves a 422.
+        # (facility.py::_check_department short-circuits on None for the same
+        # reason.)
+        if data.get("department_id") is not None:
             uuid_or_422(data["department_id"], "department_id must be a uuid")
             dept = data["department_id"]
             if not await c.fetchval("SELECT 1 FROM departments WHERE id=$1 AND is_active", dept):
@@ -187,13 +204,16 @@ async def patch_layout_room(layout_id: str, body: LayoutPatch,
                 f" updated_by = ${len(args)-1}, updated_at = now() WHERE id = ${len(args)}",
                 *args)
         if room_id is not ...:
+            # null unlinks; the empty string is a malformed id and is refused
+            # rather than silently unlinking, which is what truthiness did.
+            if room_id is not None:
+                uuid_or_422(room_id, "room_id must be a uuid")
             # One operational room per architectural room (partial unique index
             # in 0068). Clear any previous link before making the new one, so a
             # re-link reads as a move rather than a constraint violation.
             await c.execute("UPDATE rooms SET facility_room_id = NULL"
                             " WHERE facility_room_id = $1", rid)
-            if room_id:
-                uuid_or_422(room_id, "room_id must be a uuid")
+            if room_id is not None:
                 op_id = room_id
                 if not await c.fetchval("SELECT 1 FROM rooms WHERE id=$1", op_id):
                     raise HTTPException(422, "Unknown room")
@@ -214,10 +234,17 @@ async def import_layout(body: LayoutImportIn,
     read off the ground-floor sheet).
 
     Idempotent on (floor, code): a room already present is UPDATED with the
-    drawing's own columns — name, wing, area, perimeter, anchor — and its
-    judgement columns (grade, department, notes, the operational-room link) are
-    left exactly as they are. Re-importing a corrected register therefore never
-    discards a classification somebody made."""
+    drawing's own columns — name, wing, area, perimeter, anchor, geometry — and
+    every judgement column is left exactly as it is: grade, regime, ZONE,
+    department, notes, is_active and the operational-room link. Re-importing a
+    corrected register therefore never discards a classification somebody made.
+
+    `zone` is in that list even though the packaged register ships one, because
+    the shipped value is only what the room's printed NAME implied and QA can
+    edit it through PATCH. It used to be written back here, which quietly
+    reverted a re-zoned room on the next import while `regime` — the other
+    drawing-derived judgement column — was already excluded. The asymmetry was
+    the bug; a room's zone now only ever arrives on first insert."""
     rows = _load_register()
     created, updated = [], []
     async with rls(user) as c:
@@ -234,11 +261,11 @@ async def import_layout(body: LayoutImportIn,
                 continue
             if exists:
                 await c.execute(
-                    "UPDATE facility_rooms SET name_en=$1, name_mk=$2, wing=$3, zone=$4,"
-                    " area_m2=$5, net_area_m2=$6, perimeter_m=$7, plan_x=$8, plan_y=$9,"
-                    " box_x=$10, box_y=$11, box_w=$12, box_h=$13, box_conf=$14,"
-                    " source=$15, updated_by=$16, updated_at=now() WHERE id=$17",
-                    r["name_en"], r["name_mk"], r["wing"], r["zone"], r["area_m2"],
+                    "UPDATE facility_rooms SET name_en=$1, name_mk=$2, wing=$3,"
+                    " area_m2=$4, net_area_m2=$5, perimeter_m=$6, plan_x=$7, plan_y=$8,"
+                    " box_x=$9, box_y=$10, box_w=$11, box_h=$12, box_conf=$13,"
+                    " source=$14, updated_by=$15, updated_at=now() WHERE id=$16",
+                    r["name_en"], r["name_mk"], r["wing"], r["area_m2"],
                     r["net_area_m2"], r["perimeter_m"], r["plan_x"], r["plan_y"],
                     r.get("box_x"), r.get("box_y"), r.get("box_w"), r.get("box_h"),
                     r.get("box_conf"),

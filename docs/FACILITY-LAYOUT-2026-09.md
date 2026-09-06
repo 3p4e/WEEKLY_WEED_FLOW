@@ -203,14 +203,20 @@ without the other.
 
 | Route | Who | What |
 |---|---|---|
-| `GET /facility/layout` | every role above base USER | the register, filterable by zone, wing, regime or a text query, with per-zone room counts and areas |
+| `GET /facility/layout` | every role above base USER | the register, filterable by zone, wing, regime or a text query, with per-zone room counts and areas; `include_inactive=true` also returns rooms switched off, which is the only way to switch one back on |
 | `GET /facility/layout/{id}` | same | one room, plus the batches currently in the operational room it is linked to |
 | `PATCH /facility/layout/{id}` | ADMIN, executives, QA | the judgement columns only: regime, grade, zone, department, the room link, a note |
-| `POST /facility/layout/import` | ADMIN, executives | loads the packaged register; idempotent on the room code, and it never overwrites a classification somebody made |
+| `POST /facility/layout/import` | ADMIN, executives | loads the packaged register; idempotent on the room code, and it never overwrites a classification somebody made — grade, regime, **zone**, department, notes, `is_active` and the room link all survive a re-import |
 
 The code, name, area, perimeter and anchor are not editable through the API.
 They are what the sheet says, and a correction belongs in the register, not in a
 per-room edit that would leave the app quietly disagreeing with the drawing.
+
+`zone` is the one column that is both shipped by the register and editable, and
+that made it the one that could be quietly reverted: the register's zone is only
+what the room's printed NAME implied, so QA re-zoning a room is expected, and an
+import used to write the shipped value back over it. `regime` was already
+excluded from that update; both are now.
 
 **The board.** The Facility view has two tabs: *Rooms*, the live occupancy board
 that was already there, and *Floor plan*. The plan tab renders

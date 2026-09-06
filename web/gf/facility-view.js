@@ -396,16 +396,26 @@
   };
 
   GF.WWF.openPlanRoom = async (id) => {
-    GF.WWF._plan.sel = id;
-    GF.WWF._ensureModal('fac-plan-modal', '460px');
     const list = (GF.WWF._plan.data || {}).rooms || [];
     const r = list.find(x => x.id === id); if (!r) return;
+    GF.WWF._plan.sel = id;
+    // Selecting a room has to REDRAW it, or the .on highlight never appears on
+    // the room just opened and then turns up on the stale one at the next
+    // unrelated render. Only the shapes are re-emitted, so the modal opening
+    // over them is untouched.
+    const svg = GF.$('fp-svg'); if (svg) svg.innerHTML = GF.WWF._planShapes();
+    const stage = GF.$('fp-stage'); if (stage) stage.innerHTML = GF.WWF._planMarkers();
+    GF.WWF._ensureModal('fac-plan-modal', '460px');
     GF.$('fac-plan-modal-title').textContent = r.code + ' · ' + planName(r);
     GF.$('fac-plan-modal-body').innerHTML = GF.WWF._planCard(r, null);
     GF.openModal('fac-plan-modal');
-    // The detail call adds what is growing in the room right now.
+    // The detail call adds what is growing in the room right now. Clicking a
+    // second room while the first request is in flight must not let the slower
+    // answer paint over the newer card — the same guard qccoa-view.js and
+    // qccustody-view.js already use on their own detail fetches.
     try {
       const full = await GF.API.facilityLayoutRoom(id);
+      if (GF.WWF._plan.sel !== id) return;
       GF.WWF._plan.room = full;
       const body = GF.$('fac-plan-modal-body');
       if (body) body.innerHTML = GF.WWF._planCard(full, full.batches || []);

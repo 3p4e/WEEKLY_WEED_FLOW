@@ -293,3 +293,67 @@ test('the board opens on the rooms tab and the plan is a second tab', () => {
   assert.match(html, /class="cj-tab on"[^>]*>\s*Rooms/);
   h.close();
 });
+
+/* ── the detail fetch and the selection highlight ────────────────────────── */
+
+test('a slower detail answer never paints over the room opened after it', async () => {
+  const h = load();
+  // Distinct areas, or the two cards are indistinguishable and the assertion
+  // below cannot fail even when the race is real.
+  const F104 = ROOM({ id: 'l2', code: 'F104', name_en: 'DRYING ROOM 1A',
+                      area_m2: 98.27, net_area_m2: null, perimeter_m: 47.1 });
+  renderPlan(h, [ROOM(), F104]);
+  // Give the modal the nodes openPlanRoom writes into.
+  for (const id of ['fac-plan-modal-title', 'fac-plan-modal-body']) {
+    const el = h.window.document.createElement('div');
+    el.id = id;
+    h.window.document.body.appendChild(el);
+  }
+  h.window.GF.closeModal = () => {};
+  h.window.GF.openModal = () => {};
+  // C180's detail resolves LAST, after F104 has already been opened.
+  let releaseFirst;
+  const slow = new Promise((res) => { releaseFirst = res; });
+  h.window.GF.API.facilityLayoutRoom = (id) => id === 'l1'
+    ? slow.then(() => ({ ...ROOM(), batches: [] }))
+    : Promise.resolve({ ...F104, batches: [] });
+
+  const first = h.window.GF.WWF.openPlanRoom('l1');
+  await h.window.GF.WWF.openPlanRoom('l2');
+  releaseFirst();
+  await first;
+
+  assert.equal(h.window.GF.WWF._plan.sel, 'l2');
+  const body = h.window.document.getElementById('fac-plan-modal-body').innerHTML;
+  assert.ok(body.includes('98.27'), 'the F104 card should still be on screen');
+  assert.ok(!body.includes('501.38'), 'C180 area must not overwrite the F104 card');
+  h.close();
+});
+
+test('opening a room redraws the plan so its highlight actually appears', () => {
+  const h = load();
+  renderPlan(h, [ROOM()]);
+  // The stage the view renders into, as the real DOM would have it.
+  const svg = h.window.document.createElement('div');
+  svg.id = 'fp-svg';
+  h.window.document.body.appendChild(svg);
+  for (const id of ['fac-plan-modal-title', 'fac-plan-modal-body']) {
+    const el = h.window.document.createElement('div');
+    el.id = id;
+    h.window.document.body.appendChild(el);
+  }
+  h.window.GF.openModal = () => {};
+  h.window.GF.API.facilityLayoutRoom = () => new Promise(() => {});   // never settles
+  assert.ok(!svg.innerHTML.includes('fp-r on'));
+  h.window.GF.WWF.openPlanRoom('l1');
+  assert.match(svg.innerHTML, /class="fp-r on"/);
+  h.close();
+});
+
+test('an unknown room id selects nothing', () => {
+  const h = load();
+  renderPlan(h, [ROOM()]);
+  h.window.GF.WWF.openPlanRoom('nope');
+  assert.equal(h.window.GF.WWF._plan.sel, null);
+  h.close();
+});

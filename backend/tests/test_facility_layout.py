@@ -230,3 +230,77 @@ async def test_a_reimport_does_not_move_a_room(client, admin_headers):
     after = await _by_code(client, admin_headers, "F104")
     for k in ("box_x", "box_y", "box_w", "box_h", "box_conf"):
         assert before[k] == after[k]
+
+
+async def test_a_reimport_does_not_revert_a_zone_qa_changed(client, admin_headers):
+    """The packaged register ships a zone, but it is only what the room's
+    printed NAME implied — QA can re-zone a room, and the next import must not
+    quietly put it back. `regime` was already excluded from the import UPDATE;
+    the asymmetry was the bug."""
+    await _import(client, admin_headers)
+    room = await _by_code(client, admin_headers, "C150")
+    assert room["zone"] == "cultivation"
+    r = await client.patch(f"/facility/layout/{room['id']}",
+                           json={"zone": "quality", "regime": "GMP"},
+                           headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+    await _import(client, admin_headers)
+    after = await _by_code(client, admin_headers, "C150")
+    assert after["zone"] == "quality"
+    assert after["regime"] == "GMP"
+    # The drawing's own columns are still refreshed.
+    assert after["area_m2"] == 14.35
+
+
+async def test_a_malformed_id_is_refused_rather_than_crashing(client, admin_headers):
+    """The empty string is not a uuid and not a null. Gating the checks on
+    truthiness let it skip both and reach asyncpg as a uuid parameter — a 500
+    where the caller deserves a 422 — and made an empty room_id silently
+    unlink instead of being rejected."""
+    await _import(client, admin_headers)
+    room = await _by_code(client, admin_headers, "F105")
+    for body in ({"department_id": ""}, {"department_id": "not-a-uuid"},
+                 {"room_id": ""}, {"room_id": "not-a-uuid"}):
+        r = await client.patch(f"/facility/layout/{room['id']}", json=body,
+                               headers=admin_headers)
+        assert r.status_code == 422, f"{body} -> {r.status_code} {r.text}"
+
+
+async def test_null_still_clears_the_link_and_the_department(client, admin_headers):
+    await _import(client, admin_headers)
+    r = await client.post("/facility/rooms",
+                          json={"code": "dry_1a", "name": "Drying 1A", "kind": "dry"},
+                          headers=admin_headers)
+    op_room = r.json()
+    room = await _by_code(client, admin_headers, "F104")
+    r = await client.patch(f"/facility/layout/{room['id']}",
+                           json={"room_id": op_room["id"]}, headers=admin_headers)
+    assert r.status_code == 200 and r.json()["room_id"] == op_room["id"]
+    r = await client.patch(f"/facility/layout/{room['id']}",
+                           json={"room_id": None}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["room_id"] is None
+
+
+async def test_a_deactivated_room_can_still_be_found_and_switched_back_on(client, admin_headers):
+    """Deactivating was a one-way door: the list hard-filtered on is_active, no
+    other route returned the room, and the import does not reset the flag."""
+    await _import(client, admin_headers)
+    room = await _by_code(client, admin_headers, "T163")
+    r = await client.patch(f"/facility/layout/{room['id']}",
+                           json={"is_active": False}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+
+    r = await client.get("/facility/layout", headers=admin_headers)
+    assert "T163" not in [x["code"] for x in r.json()["rooms"]]
+
+    r = await client.get("/facility/layout?include_inactive=true", headers=admin_headers)
+    found = next(x for x in r.json()["rooms"] if x["code"] == "T163")
+    assert found["is_active"] is False
+
+    r = await client.patch(f"/facility/layout/{found['id']}",
+                           json={"is_active": True}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.get("/facility/layout", headers=admin_headers)
+    assert "T163" in [x["code"] for x in r.json()["rooms"]]
