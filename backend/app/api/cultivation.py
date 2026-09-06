@@ -11,17 +11,33 @@ model into the identity the owner confirmed for the incoming genetics:
   - dated batch-level `plant_phase_events`.
 
 Access model, same shape as facility.py:
-  read      — every role above base USER (ELEVATED_ROLES);
-  write     — cultivation manager (CU_MGR), executives, ADMIN (_WRITERS): the
-              cultivar master, phase moves;
-  register  — REGISTERING a batch (and materialising its plant ids, which is
-              the second half of the same act) is open to QA as well
-              (_REGISTRARS = _WRITERS + QA_MGR): the owner's model (2026-09-05)
-              is that "the QA manager, the CEO and COO as well as the
-              cultivation manager can register a batch". What QA may not do
-              is move the batch through its phases — that stays the floor's;
-  cultivar registry — _WRITERS (it is master data, not physical org
-              structure, so unlike rooms it is not ADMIN-only).
+  read   — every role above base USER (ELEVATED_ROLES);
+  write  — cultivation manager (CU_MGR), QA manager (QA_MGR), executives and
+           ADMIN (_WRITERS): the cultivar master, registering a batch,
+           materialising its plant ids, and moving it through its phases.
+           The owner's model (2026-09-05) is that "the QA manager, the CEO and
+           COO as well as the cultivation manager can register a batch" and
+           that "QA should be able to move a batch through its phases or edit
+           the cultivar master" — so QA is a floor writer here, not a reader.
+           _REGISTRARS is kept as an alias of _WRITERS because the two sets
+           were once different and the distinction is worth naming at the
+           routes that register rather than move.
+
+REGISTERING AGAINST A PRODUCT. A batch is grown to one of the official ImB
+products (qc_products — GP_THC26:CBD1 and its window), chosen at registration
+and carried as plant_batches.product_id. It is a TARGET, not a verdict: what
+the lot turns out to be is decided by the Certificate of Quality against the
+product's printed window, not here.
+
+THE PLAN'S EXPECTED DATES. The owner stated the plan's legs on 2026-09-05:
+cloning 7-14 days (imported clones may stay some days more for quarantine and
+acclimatisation, but leave at roughly the same time), vegetation 14-17 days,
+flowering 6-9 weeks with the harvest date set by progressive trichome
+maturation tracking under a microscope. _PHASE_PLAN encodes exactly that and
+nothing more: the server computes the expected window for the phase a batch is
+in and the board renders it verbatim, the same discipline the pre-harvest
+interval already uses. No date is a promise — a window is guidance, and the
+trichome record is what actually decides a cut.
 
 REGISTERING FROM THE PRODUCT SPECIFICATION. The batch form chooses its cultivar
 from the ImB Product Specifications — the per-strain potency ladders in
@@ -44,7 +60,7 @@ database for the duration. So:
     from the last seq rather than restarting.
 """
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from app.worktime import SITE_TODAY_SQL, facility_today
 
@@ -58,10 +74,11 @@ from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
-_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR")
-# Registering a batch — and generating its plant ids — is open to QA too; the
-# same set initiates a clone run (propagation.py). Phase moves are not.
-_REGISTRARS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "QA_MGR")
+_WRITERS = (ADMIN, *EXECUTIVE_ROLES, "CU_MGR", "QA_MGR")
+# The same set, named at the routes that REGISTER a batch rather than move it:
+# registering and materialising plant ids are two halves of one act, and the
+# owner asked for both (plus the moves) to be open to QA.
+_REGISTRARS = _WRITERS
 # Widened vs facility's set: nursery split from clone, plus the terminal states.
 # Must stay in step with plant_batches_phase_check in migration 0045.
 _PHASES = ("nursery", "clone", "veg", "flower", "mother", "drying", "harvested", "destroyed")
@@ -74,6 +91,22 @@ _TERMINAL = ("harvested", "destroyed")
 # partial fill the next call resumes.
 _PLANT_CHUNK = 50
 _MAX_PLANTS = 100000
+
+# The cultivation plan's legs, in days, as the owner stated them (2026-09-05).
+# Code constants rather than a settings table for the same reason the phase
+# task templates are: the plan asks for something real to be shown, not for a
+# new configuration surface. Nursery has no leg of its own — it is a stop
+# INSIDE the cloning leg, so both are measured from the day the batch entered
+# the clone rooms.
+_PHASE_PLAN = {"clone": (7, 14), "nursery": (7, 14), "veg": (14, 17), "flower": (42, 63)}
+_CLONE_LEG = ("clone", "nursery")
+# Imported clones "can stay some days more for the quarantine and
+# accommodation period" — the earliest they leave is unchanged, the latest
+# stretches. Applied to the cloning leg only.
+_IMPORT_QUARANTINE_DAYS = 7
+_CLONE_SOURCES = ("own_stock", "imported")
+# What the batch is expected to do next, for the board's "Next" line.
+_NEXT_PHASE = {"clone": "veg", "nursery": "veg", "veg": "flower", "flower": "harvest"}
 
 
 class CultivarIn(BaseModel):
@@ -93,11 +126,26 @@ class CultivarPatch(BaseModel):
 class BatchIn(BaseModel):
     room_id: str
     cultivar_id: str
+    # The official product this batch is grown to (qc_products). Optional: a
+    # strain whose catalogue page is not approved yet still gets a batch.
+    product_id: str | None = None
+    # own_stock | imported — imported clones carry a quarantine allowance, so
+    # this changes the expected date, which is why it is an enum and not a note.
+    clone_source: str | None = None
     code: str = Field(max_length=64, pattern=r"^[A-Za-z0-9_-]{1,64}$")
     plant_count: int = Field(ge=0, le=_MAX_PLANTS)  # the target/planned headcount
     phase: str = "clone"
     clone_date: date | None = None
     phase_since: date | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+class BatchPatch(BaseModel):
+    """What may be corrected on a registered batch. Deliberately narrow: the
+    code, cultivar, room, phase and count are the batch's identity and its
+    lifecycle, and each already has its own route or is immutable."""
+    product_id: str | None = None
+    clone_source: str | None = None
     note: str | None = Field(default=None, max_length=500)
 
 
@@ -141,6 +189,12 @@ _PHASE_TASK_TEMPLATES: dict = {
         ("Наводнување — преглед на распоред", "Feeding schedule review"),
     ],
     "flower": [
+        # The owner's rule: the harvest date is set by progressive trichome
+        # maturation tracking under a stereo or digital microscope, WITH
+        # DOCUMENTED RECORDS. The task is the prompt; trichome_checks is the
+        # record (app/api/trichome.py).
+        ("Проверка на зрелост на трихоми — микроскоп, документиран запис",
+         "Trichome maturation check — microscope, documented record"),
         ("Дефолијација — долен балдахин", "Defoliation — lower canopy"),
         ("ИПМ — скаутинг пред жетва", "IPM — pre-harvest scouting check"),
         ("Наводнување — премин на цветна исхрана", "Feeding schedule review — bloom transition"),
@@ -191,6 +245,68 @@ async def _generate_phase_tasks(c, user: dict, batch, to_phase: str, occurred_on
             week["id"], week["starts_on"], {"phase_gen": to_phase}, batch["id"])
         ids.append(str(row["id"]))
     return ids
+
+
+async def _site_today(c):
+    """Today as POSTGRES sees the facility — the same clock SITE_TODAY_SQL
+    stamps rows with, so an expected date computed here can never be a day off
+    from the date the record carries (harvest.py resolves it the same way)."""
+    return await c.fetchval(f"SELECT {SITE_TODAY_SQL}")  # nosec B608
+
+
+async def _product_or_422(c, product_id, cultivar_id):
+    """The product a batch is grown to: it must exist, be APPROVED, and belong
+    to the batch's own cultivar — a GP batch targeting an OPM product would
+    print a wrong grade on everything downstream."""
+    uuid_or_422(product_id, "Unknown product")
+    row = await c.fetchrow(
+        "SELECT id, product_code, status, cultivar_id FROM qc_products WHERE id=$1", product_id)
+    if row is None:
+        raise HTTPException(422, "Unknown product")
+    if row["status"] != "APPROVED":
+        raise HTTPException(422, f"{row['product_code']} is {row['status']} — a batch is"
+                                 " registered against an APPROVED product specification")
+    if str(row["cultivar_id"]) != str(cultivar_id):
+        raise HTTPException(422, f"{row['product_code']} is not this cultivar's product")
+    return row
+
+
+def _check_clone_source(v) -> None:
+    if v is not None and v not in _CLONE_SOURCES:
+        raise HTTPException(422, f"clone_source must be one of: {', '.join(_CLONE_SOURCES)}")
+
+
+def _plan_out(r, today) -> dict:
+    """Where the batch is against the plan, computed here so the board renders
+    dates rather than deriving them (two copies of an interval is how a board
+    and a record come to disagree — the same rule the PHI clearance keeps).
+
+    A phase with no stated leg (mother, drying, terminal) yields nothing rather
+    than a guess. `window_state` compares TODAY with the expected window:
+    early = still inside it, in_window = the window is open now, late = past it.
+    Late is not a fault: flowering ends when the trichomes say so."""
+    phase, since = r["phase"], r["phase_since"]
+    out = {"days_in_phase": (today - since).days if since else None,
+           "expected_next_phase": _NEXT_PHASE.get(phase),
+           "expected_from": None, "expected_to": None, "window_state": None,
+           "harvest_window_from": None, "harvest_window_to": None}
+    leg = _PHASE_PLAN.get(phase)
+    if leg is None or since is None:
+        return out
+    lo, hi = leg
+    # The cloning leg is measured from the day the batch ENTERED it, so a batch
+    # that moved clone -> nursery does not restart the count.
+    start = since
+    if phase in _CLONE_LEG:
+        start = r.get("clone_leg_started_on") or since
+        if r.get("clone_source") == "imported":
+            hi += _IMPORT_QUARANTINE_DAYS
+    frm, to = start + timedelta(days=lo), start + timedelta(days=hi)
+    out["expected_from"], out["expected_to"] = frm.isoformat(), to.isoformat()
+    out["window_state"] = "early" if today < frm else ("in_window" if today <= to else "late")
+    if phase == "flower":
+        out["harvest_window_from"], out["harvest_window_to"] = out["expected_from"], out["expected_to"]
+    return out
 
 
 async def _batch_or_404(c, batch_id: str):
@@ -346,18 +462,31 @@ async def next_batch_code(cultivar_id: str = Query(...),
 async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
                        active: bool = Query(True)):
     async with rls(user) as c:
+        today = await _site_today(c)
         rows = await c.fetch(
             "SELECT b.id, b.code, b.room_id, b.cultivar_id, b.strain, b.plant_count,"
-            " b.phase, b.phase_since, b.note, b.is_active,"
+            " b.phase, b.phase_since, b.note, b.is_active, b.product_id, b.clone_source,"
             " cv.code AS cultivar_code, cv.name AS cultivar_name, r.name AS room_name,"
+            " pr.product_code, pr.grade AS product_grade,"
+            " pr.window_min AS product_window_min, pr.window_max AS product_window_max,"
             " (SELECT count(*) FROM plants p WHERE p.batch_id=b.id) AS plants_materialised,"
-            " (SELECT count(*) FROM plants p WHERE p.batch_id=b.id AND p.status='active') AS plants_active"
+            " (SELECT count(*) FROM plants p WHERE p.batch_id=b.id AND p.status='active') AS plants_active,"
+            # The day the batch entered the cloning leg — nursery is a stop
+            # inside it, so the expected date must not restart on the move.
+            " (SELECT min(e.occurred_on) FROM plant_phase_events e"
+            "   WHERE e.batch_id=b.id AND e.to_phase = ANY($2::text[])) AS clone_leg_started_on,"
+            " tc.checked_on AS tc_on, tc.verdict AS tc_verdict, tc.pct_amber AS tc_amber,"
+            " tc.instrument AS tc_instrument"
             " FROM plant_batches b"
             " LEFT JOIN cultivars cv ON cv.id=b.cultivar_id"
             " LEFT JOIN rooms r ON r.id=b.room_id"
+            " LEFT JOIN qc_products pr ON pr.id=b.product_id"
+            " LEFT JOIN LATERAL (SELECT checked_on, verdict, pct_amber, instrument"
+            "   FROM trichome_checks t WHERE t.batch_id=b.id"
+            "   ORDER BY t.checked_on DESC, t.created_at DESC LIMIT 1) tc ON true"
             " WHERE ($1::bool IS FALSE OR b.is_active)"
             " ORDER BY b.phase_since DESC, b.code",
-            active)
+            active, list(_CLONE_LEG))
     return {"batches": [
         {"id": str(r["id"]), "code": r["code"],
          "room_id": str(r["room_id"]) if r["room_id"] else None, "room_name": r["room_name"],
@@ -366,8 +495,19 @@ async def list_batches(user: dict = Depends(require_role(*ELEVATED_ROLES)),
          "strain": r["strain"], "plant_count": r["plant_count"], "phase": r["phase"],
          "phase_since": r["phase_since"].isoformat() if r["phase_since"] else None,
          "note": r["note"], "is_active": r["is_active"],
+         "product_id": str(r["product_id"]) if r["product_id"] else None,
+         "product_code": r["product_code"],
+         "product_grade": float(r["product_grade"]) if r["product_grade"] is not None else None,
+         "product_window": ([float(r["product_window_min"]), float(r["product_window_max"])]
+                            if r["product_window_min"] is not None else None),
+         "clone_source": r["clone_source"],
          "plants_materialised": r["plants_materialised"],
-         "plants_active": r["plants_active"]}
+         "plants_active": r["plants_active"],
+         # A check that was never taken is absent, never a neutral verdict.
+         "latest_trichome": ({"checked_on": r["tc_on"].isoformat(), "verdict": r["tc_verdict"],
+                              "pct_amber": float(r["tc_amber"]) if r["tc_amber"] is not None else None,
+                              "instrument": r["tc_instrument"]} if r["tc_on"] else None),
+         **_plan_out(r, today)}
         for r in rows]}
 
 
@@ -379,21 +519,28 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_REGIST
     _check_phase(body.phase)
     if body.phase in _TERMINAL:
         raise HTTPException(422, "a new batch cannot start in a terminal phase")
+    _check_clone_source(body.clone_source)
     async with rls(user) as c:
         await _room_or_422(c, body.room_id)
         cv = await _cultivar_or_422(c, body.cultivar_id)
+        product = None
+        if body.product_id:
+            product = await _product_or_422(c, body.product_id, cv["id"])
         dup = await c.fetchrow(
             "SELECT id FROM plant_batches WHERE org_id=$1 AND code=$2",
             user["org_id"], body.code)
         if dup is not None:
             raise HTTPException(409, f"batch code {body.code} already exists")
         row = await c.fetchrow(
-            "INSERT INTO plant_batches(org_id, room_id, cultivar_id, code, strain,"
-            " plant_count, phase, phase_since, note, created_by, updated_by)"
-            f" VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,{SITE_TODAY_SQL}),$9,$10,$10)"
+            # SITE_TODAY_SQL is a module constant rendered at import; data is bound.
+            "INSERT INTO plant_batches(org_id, room_id, cultivar_id, code, strain,"  # nosec B608
+            " plant_count, phase, phase_since, note, product_id, clone_source,"
+            " created_by, updated_by)"
+            f" VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::date,{SITE_TODAY_SQL}),$9,$10,$11,$12,$12)"
             " RETURNING *",
             user["org_id"], body.room_id, body.cultivar_id, body.code, cv["name"],
-            body.plant_count, body.phase, body.phase_since, body.note, user["id"])
+            body.plant_count, body.phase, body.phase_since, body.note,
+            product["id"] if product else None, body.clone_source, user["id"])
         await c.execute(
             # The only interpolation is SITE_TODAY_SQL — a module constant
             # rendered from settings.snapshot_tz at import, quote-doubled;
@@ -406,10 +553,51 @@ async def create_batch(body: BatchIn, user: dict = Depends(require_role(*_REGIST
         await safe_emit(c, user, verb="batch_added", object_type="plant_batch",
                         object_id=row["id"], recipients=[],
                         params={"code": row["code"], "cultivar": cv["code"],
-                                "plant_count": row["plant_count"], "phase": row["phase"]})
+                                "plant_count": row["plant_count"], "phase": row["phase"],
+                                "product_code": product["product_code"] if product else None})
     return {"id": str(row["id"]), "code": row["code"], "cultivar_id": body.cultivar_id,
             "room_id": body.room_id, "plant_count": row["plant_count"],
-            "phase": row["phase"], "phase_since": row["phase_since"].isoformat()}
+            "phase": row["phase"], "phase_since": row["phase_since"].isoformat(),
+            "product_id": str(row["product_id"]) if row["product_id"] else None,
+            "product_code": product["product_code"] if product else None,
+            "clone_source": row["clone_source"]}
+
+
+@router.patch("/batches/{batch_id}")
+async def update_batch(batch_id: str, body: BatchPatch,
+                       user: dict = Depends(require_role(*_WRITERS))):
+    """Correct a registered batch's target product, clone source or note.
+
+    Narrow on purpose: the code, cultivar, room, phase and count are the
+    batch's identity and its lifecycle, and each has its own route or is
+    immutable. This exists because the product catalogue arrives after the
+    batches do — an open batch has to be able to name the product it is
+    grown to without being re-registered."""
+    patch = body.model_dump(exclude_unset=True)
+    _check_clone_source(patch.get("clone_source"))
+    async with rls(user) as c:
+        b = await _batch_or_404(c, batch_id)
+        if "product_id" in patch and patch["product_id"] is not None:
+            await _product_or_422(c, patch["product_id"], b["cultivar_id"])
+        fields, args = [], []
+        for col, val in patch.items():
+            # An explicit null CLEARS these three; an absent key leaves them.
+            args.append(val); fields.append(f"{col}=${len(args)}")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(batch_id)
+        await c.execute(
+            # Column names come from BatchPatch's own fields; values are bound.
+            f"UPDATE plant_batches SET {', '.join(fields)}, updated_at=now()"  # nosec B608
+            f" WHERE id=${len(args)}", *args)
+        row = await c.fetchrow(
+            "SELECT b.*, pr.product_code FROM plant_batches b"
+            " LEFT JOIN qc_products pr ON pr.id=b.product_id WHERE b.id=$1", batch_id)
+    return {"id": batch_id, "code": row["code"],
+            "product_id": str(row["product_id"]) if row["product_id"] else None,
+            "product_code": row["product_code"], "clone_source": row["clone_source"],
+            "note": row["note"]}
 
 
 @router.post("/batches/{batch_id}/plants")

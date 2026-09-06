@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, approvals, audit, auth, biosecurity, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, irrigation, notifications, propagation, qc, qms, reports, tasks, waste
+from app.api import ai, approvals, audit, auth, biosecurity, capture, collab, cultivation, decon, demo, documents, facility, harvest, intake, irrigation, notifications, propagation, qc, qms, reports, tasks, trichome, waste
 from app.config import docs_kwargs, settings
 from app.db import close_pools, init_pools, tasks_admin_pool, users_admin_pool
 from app.logging_config import configure_logging
@@ -194,6 +194,9 @@ app.include_router(cultivation.router)
 # Propagation (0065): the mother-plant bank and clone runs — the clone end of
 # cultivation's span, on the same /cultivation prefix.
 app.include_router(propagation.router)
+# Trichome maturation checks (0066): the documented record behind a harvest
+# date, a fourth module on the same /cultivation prefix.
+app.include_router(trichome.router)
 # Second router on the /cultivation prefix: harvest and IPM are cultivation
 # records, kept in their own module because together they carry one interlocking
 # control (the pre-harvest interval) that is easier to break when split up.

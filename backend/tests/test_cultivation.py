@@ -271,10 +271,11 @@ async def test_task_batch_id_cross_org_rejected_on_create_and_patch(client, admi
 
 
 async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_headers, org):
-    """veg/flower transitions each generate their 3-task template, linked to
+    """veg and flower transitions each generate their template — 3 tasks for
+    veg, 4 for flower since the trichome maturation check joined it — linked to
     the batch, in the org's cultivation department and the calendar week
-    covering the move; revisiting a phase already generated (a correction,
-    not the common case) must not duplicate its set."""
+    covering the move; revisiting a phase already generated (a correction, not
+    the common case) must not duplicate its set."""
     await _seed_cultivation_week(org)
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     veg = await _room(client, admin_headers, "veg_c190", "Vegetation 2", "veg")
@@ -305,9 +306,13 @@ async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_hea
     # veg -> flower: generates the flower template ON TOP of the veg set
     mv2 = await client.post(f"/cultivation/batches/{bid}/move",
                             json={"to_phase": "flower", "to_room_id": flower["id"]}, headers=cu_h)
-    assert len(mv2.json()["generated_task_ids"]) == 3
+    assert len(mv2.json()["generated_task_ids"]) == 4
     tl2 = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
-    assert len(tl2.json()["tasks"]) == 6
+    flower_tasks = [x for x in tl2.json()["tasks"] if x["phase_gen"] == "flower"]
+    assert len(tl2.json()["tasks"]) == 7
+    # The owner's rule that the cut is decided by trichome maturation, tracked
+    # under a microscope with documented records, is prompted by the template.
+    assert any("Trichome maturation check" in x["title"] for x in flower_tasks)
 
     # a correction back to veg then forward to flower again must NOT generate
     # a second flower set — idempotent per (batch, phase), not per visit
@@ -316,7 +321,7 @@ async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_hea
     assert mv3.status_code == 200, mv3.text
     assert mv3.json()["generated_task_ids"] == []
     tl3 = await client.get(f"/cultivation/batches/{bid}/tasks", headers=cu_h)
-    assert len(tl3.json()["tasks"]) == 6
+    assert len(tl3.json()["tasks"]) == 7
 
 
 async def test_phase_with_no_template_generates_nothing(client, admin_headers, org):
@@ -339,10 +344,11 @@ async def test_phase_with_no_template_generates_nothing(client, admin_headers, o
 
 # ── registering from the product specification (owner, 2026-09-05) ───────────
 
-async def test_qa_registers_a_batch_and_its_ids_but_does_not_move_it(client, admin_headers):
-    """The owner's model: "the QA manager, the CEO and COO as well as the
-    cultivation manager can register a batch". Moving it through its phases
-    stays the floor's; QC registers nothing."""
+async def test_qa_registers_a_batch_generates_its_ids_and_moves_it(client, admin_headers):
+    """The owner's model, as amended on 2026-09-05: "the QA manager, the CEO
+    and COO as well as the cultivation manager can register a batch", and "QA
+    should be able to move a batch through its phases or edit the cultivar
+    master". QC still registers nothing — it is not a floor role."""
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     _, ceo_h = await _actor(client, admin_headers, "CEO")
@@ -357,8 +363,15 @@ async def test_qa_registers_a_batch_and_its_ids_but_does_not_move_it(client, adm
     bid = r.json()["id"]
     g = await client.post(f"/cultivation/batches/{bid}/plants", headers=qa_h)
     assert g.status_code == 200 and g.json()["complete"] is True
-    assert (await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "veg"},
-                              headers=qa_h)).status_code == 403
+    r = await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "veg"},
+                          headers=qa_h)
+    assert r.status_code == 200, r.text
+    assert r.json()["phase"] == "veg"
+    # …and authors the cultivar master, which QC still may not.
+    assert (await client.post("/cultivation/cultivars", json={"code": "QA1", "name": "QA Strain"},
+                              headers=qa_h)).status_code == 201
+    assert (await client.post("/cultivation/cultivars", json={"code": "QC1", "name": "QC Strain"},
+                              headers=qc_h)).status_code == 403
     r = await client.post("/cultivation/batches", json={**body, "code": "GP092602"}, headers=ceo_h)
     assert r.status_code == 201, r.text
 
@@ -410,3 +423,133 @@ async def test_next_batch_code_is_the_cultivar_head_plus_period_plus_sequence(cl
     r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}", headers=qa_h)
     assert r.json()["seq"] == 2 and r.json()["suggested"] == f"GP{period}02"
     assert (await client.get("/cultivation/batch-code?cultivar_id=nope", headers=qa_h)).status_code == 422
+
+
+# ── the official product, the clone source and the plan's expected dates ─────
+
+async def test_a_batch_is_registered_against_an_approved_product(client, admin_headers):
+    """A batch names the ImB product it is grown to. It is a TARGET, not a
+    verdict: what the lot turns out to be is settled by the Certificate of
+    Quality against that product's window, not here."""
+    from tests.test_products import _approved, _product
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_p", "Clone P", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    other = await _cultivar(client, cu_h, "OPM", "Orange Punch Mimosa")
+    prod = await _approved(client, admin_headers, cv["id"], "GP_THC26:CBD1", 26)
+    draft = await _product(client, admin_headers, cv["id"], "GP_THC24:CBD1", 24)
+    foreign = await _approved(client, admin_headers, other["id"], "OPM_THC22:CBD1", 22)
+
+    base = {"room_id": room["id"], "cultivar_id": cv["id"], "plant_count": 10, "phase": "clone"}
+    r = await client.post("/cultivation/batches",
+                          json={**base, "code": "GP092601", "product_id": draft["id"]},
+                          headers=cu_h)
+    assert r.status_code == 422 and "DRAFT" in r.text
+    r = await client.post("/cultivation/batches",
+                          json={**base, "code": "GP092602", "product_id": foreign["id"]},
+                          headers=cu_h)
+    assert r.status_code == 422 and "not this cultivar's product" in r.text
+    r = await client.post("/cultivation/batches", json={
+        **base, "code": "GP092603", "product_id": prod["id"], "clone_source": "imported"},
+        headers=cu_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["product_code"] == "GP_THC26:CBD1" and r.json()["clone_source"] == "imported"
+
+    row = next(b for b in (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]
+               if b["code"] == "GP092603")
+    assert row["product_code"] == "GP_THC26:CBD1" and row["product_grade"] == 26.0
+    assert row["product_window"] == [23.40, 28.59]
+
+    # A batch registered before its strain's page existed names the product later.
+    r = await client.post("/cultivation/batches", json={**base, "code": "GP092604"}, headers=cu_h)
+    assert r.status_code == 201 and r.json()["product_id"] is None
+    bid = r.json()["id"]
+    assert (await client.patch(f"/cultivation/batches/{bid}",
+                               json={"product_id": foreign["id"]}, headers=cu_h)).status_code == 422
+    r = await client.patch(f"/cultivation/batches/{bid}",
+                           json={"product_id": prod["id"], "clone_source": "own_stock"},
+                           headers=cu_h)
+    assert r.status_code == 200 and r.json()["product_code"] == "GP_THC26:CBD1"
+    assert (await client.patch(f"/cultivation/batches/{bid}", json={"clone_source": "bought"},
+                               headers=cu_h)).status_code == 422
+
+
+async def test_the_board_computes_the_plans_expected_window_for_the_phase(client, admin_headers):
+    """The owner's plan: cloning 7–14 days (imported clones may stay some days
+    more for quarantine), vegetation 14–17, flowering 42–63. The server
+    computes the window and the board renders it — one copy of the interval,
+    the same discipline the pre-harvest interval keeps."""
+    from datetime import timedelta
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "veg_p", "Veg P", kind="veg")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    today = facility_today()
+
+    async def _mk(code, phase, days_ago, **over):
+        r = await client.post("/cultivation/batches", json={
+            "room_id": room["id"], "cultivar_id": cv["id"], "code": code, "plant_count": 5,
+            "phase": phase, "phase_since": (today - timedelta(days=days_ago)).isoformat(),
+            **over}, headers=cu_h)
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    veg = await _mk("GP092610", "veg", 10)
+    flower = await _mk("GP092611", "flower", 50)
+    own = await _mk("GP092612", "clone", 3, clone_source="own_stock")
+    imported = await _mk("GP092613", "clone", 3, clone_source="imported")
+    mother = await _mk("GP092614", "mother", 3)
+
+    board = {b["id"]: b for b in
+             (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]}
+
+    v = board[veg]
+    assert v["days_in_phase"] == 10 and v["expected_next_phase"] == "flower"
+    assert v["expected_from"] == (today + timedelta(days=4)).isoformat()   # 14 − 10
+    assert v["expected_to"] == (today + timedelta(days=7)).isoformat()     # 17 − 10
+    assert v["window_state"] == "early"
+
+    f = board[flower]
+    assert f["expected_next_phase"] == "harvest"
+    assert f["harvest_window_from"] == (today - timedelta(days=8)).isoformat()   # 42 − 50
+    assert f["harvest_window_to"] == (today + timedelta(days=13)).isoformat()    # 63 − 50
+    assert f["window_state"] == "in_window", "the harvest window is open now"
+
+    # Imported clones leave at roughly the same time but may stay longer for
+    # quarantine and acclimatisation: same start, later end.
+    assert board[own]["expected_from"] == board[imported]["expected_from"]
+    assert board[own]["expected_to"] == (today + timedelta(days=11)).isoformat()      # 14 − 3
+    assert board[imported]["expected_to"] == (today + timedelta(days=18)).isoformat()  # 21 − 3
+
+    # Mother stock is not on the production path: no window is invented for it.
+    m = board[mother]
+    assert m["expected_from"] is None and m["window_state"] is None
+    assert m["days_in_phase"] == 3
+
+
+async def test_the_cloning_leg_does_not_restart_when_a_batch_moves_to_nursery(client, admin_headers):
+    """Nursery is a stop INSIDE the cloning leg, so the expected date is
+    measured from the day the batch entered the clone rooms."""
+    from datetime import timedelta
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_n2", "Clone N2", kind="clone")
+    nursery = await _room(client, admin_headers, "nursery_n2", "Nursery N2", kind="nursery")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    today = facility_today()
+    started = today - timedelta(days=6)
+    r = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092620", "plant_count": 5,
+        "phase": "clone", "phase_since": started.isoformat(),
+        "clone_date": started.isoformat()}, headers=cu_h)
+    assert r.status_code == 201, r.text
+    bid = r.json()["id"]
+    r = await client.post(f"/cultivation/batches/{bid}/move",
+                          json={"to_phase": "nursery", "to_room_id": nursery["id"]}, headers=cu_h)
+    assert r.status_code == 200, r.text
+
+    row = next(b for b in (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]
+               if b["id"] == bid)
+    assert row["days_in_phase"] == 0, "it moved today"
+    # …but the leg still ends 7–14 days after it entered cloning, not after the move.
+    assert row["expected_from"] == (started + timedelta(days=7)).isoformat()
+    assert row["expected_to"] == (started + timedelta(days=14)).isoformat()
+    assert row["expected_next_phase"] == "veg"

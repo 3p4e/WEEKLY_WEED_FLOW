@@ -462,7 +462,20 @@ async def harvest_clearance(batch_id: str,
             "   AND (a.applied_at + make_interval(hours => a.rei_hours)) > now()"
             " ORDER BY (a.applied_at + make_interval(hours => a.rei_hours)) DESC",
             b["id"], b["room_id"])
+    # The trichome record the owner's rule makes the real decider of a cut
+    # (0066). Reported beside the interval blocks and NEVER counted into
+    # `clear`: a pre-harvest interval is a control, a maturation reading is an
+    # observation, and conflating them would either invent a gate nobody asked
+    # for or quietly weaken one that exists.
+    async with rls(user) as c:
+        tc = await c.fetchrow(
+            "SELECT checked_on, verdict, pct_amber, instrument FROM trichome_checks"
+            " WHERE batch_id=$1 ORDER BY checked_on DESC, created_at DESC LIMIT 1", b["id"])
     return {
+        "latest_trichome": None if tc is None else {
+            "checked_on": tc["checked_on"].isoformat(), "verdict": tc["verdict"],
+            "pct_amber": float(tc["pct_amber"]) if tc["pct_amber"] is not None else None,
+            "instrument": tc["instrument"]},
         "batch_id": str(b["id"]), "batch_code": b["code"],
         "cultivar_code": b["cultivar_code"], "room_name": b["room_name"],
         "phase": b["phase"], "on": when.isoformat(),
