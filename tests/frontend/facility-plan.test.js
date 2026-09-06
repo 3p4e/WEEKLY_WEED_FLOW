@@ -57,26 +57,29 @@ const ROOM = (over = {}) => ({
   id: 'l1', code: 'C180', name_en: 'FLOWERING PREMISE 1.1',
   name_mk: 'ПРОСТОРИЈА ЗА ЦВЕТАЊЕ 1.1', wing: 'cultivation', zone: 'cultivation',
   regime: 'GACP', grade: null, area_m2: 501.38, net_area_m2: 416.0, perimeter_m: 111.35,
-  plan_x: 0.30125, plan_y: 0.41875, department_id: null, department_name: null,
+  plan_x: 0.30125, plan_y: 0.41875,
+  box_x: 0.28, box_y: 0.1, box_w: 0.06, box_h: 0.55, box_conf: 0.4,
+  department_id: null, department_name: null,
   room_id: null, room_code: null, room_name: null, notes: null, ...over,
 });
 
-function renderPlan(h, rooms, totals) {
+function renderPlan(h, rooms, totals, mode) {
   h.window.GF.WWF._fac.tab = 'plan';
   h.window.GF.WWF._fac.data = { rooms: [], totals: {} };
   h.window.GF.WWF._plan.data = {
     rooms, totals: totals || { cultivation: { rooms: rooms.length, area_m2: 501.38 } },
     vocab: {},
   };
+  if (mode) h.window.GF.WWF._plan.mode = mode;
   h.window.GF.state.view = 'facility';
   return h.window.GF.views.facility();
 }
 
 /* ── the picture ────────────────────────────────────────────────────────── */
 
-test('a pin sits at the register anchor, in percent, over the ground-floor sheet', () => {
+test('drawing mode: a pin sits at the register anchor, in percent, over the ground-floor sheet', () => {
   const h = load();
-  const html = renderPlan(h, [ROOM()]);
+  const html = renderPlan(h, [ROOM()], null, 'drawing');
   assert.match(html, /src="assets\/facility-ground-floor\.png"/);
   assert.match(html, /left:30\.125%/);
   assert.match(html, /top:41\.875%/);
@@ -84,15 +87,84 @@ test('a pin sits at the register anchor, in percent, over the ground-floor sheet
   h.close();
 });
 
-test('zoom scales the stage and leaves every pin coordinate alone', () => {
+test('drawing mode: zoom scales the stage and leaves every pin coordinate alone', () => {
   const h = load();
-  const before = renderPlan(h, [ROOM()]);
+  const before = renderPlan(h, [ROOM()], null, 'drawing');
   assert.match(before, /class="fp-stage-outer" style="width:100%"/);
   h.window.GF.WWF.planZoom(1);
-  const after = renderPlan(h, [ROOM()]);
+  const after = renderPlan(h, [ROOM()], null, 'drawing');
   assert.match(after, /class="fp-stage-outer" style="width:200%"/);
   assert.match(after, /left:30\.125%/);
   assert.match(after, /top:41\.875%/);
+  h.close();
+});
+
+/* ── plan mode: the SVG the app draws itself ─────────────────────────────── */
+
+test('plan mode is the default, and draws an SVG rectangle sized from the room box', () => {
+  const h = load();
+  const html = renderPlan(h, [ROOM()]);
+  assert.equal(h.window.GF.WWF._plan.mode, 'plan');
+  assert.match(html, /<svg class="fp-svg"/);
+  assert.match(html, /class="fp-r[^"]*"[^>]*style="--pin:/);
+  // 1000 x 443 is the frame the register's box_* columns normalise to.
+  assert.match(html, /x="280\.00" y="44\.30" width="60\.00" height="243\.65"/);
+  h.close();
+});
+
+test('a room the register cannot size (no box) is skipped by the plan but stays in the roster', () => {
+  const h = load();
+  const html = renderPlan(h, [ROOM({ id: 'l2', code: 'C88', box_x: null, box_y: null, box_w: null, box_h: null, box_conf: null })]);
+  assert.equal((html.match(/class="fp-r[" ]/g) || []).length, 0);
+  assert.match(html, /fp-row-code">C88/);
+  h.close();
+});
+
+test('a loose fit (low box_conf) is drawn dashed, a confident one is not', () => {
+  const h = load();
+  const loose = renderPlan(h, [ROOM({ box_conf: 0.05 })]);
+  assert.match(loose, /class="fp-r loose"/);
+  const solid = renderPlan(h, [ROOM({ box_conf: 0.4 })]);
+  assert.doesNotMatch(solid, /class="fp-r[^"]*loose/);
+  h.close();
+});
+
+test('the plan viewBox frames the building, not the whole sheet margin', () => {
+  const h = load();
+  // Two rooms nowhere near the sheet edges: the frame must hug them, not the
+  // full 1000 x 443 register frame the boxes are normalised against.
+  const html = renderPlan(h, [
+    ROOM({ box_x: 0.30, box_y: 0.10, box_w: 0.06, box_h: 0.55 }),
+    ROOM({ id: 'l2', code: 'F104', box_x: 0.83, box_y: 0.20, box_w: 0.06, box_h: 0.20, zone: 'post_harvest' }),
+  ]);
+  const m = html.match(/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
+  assert.ok(m, 'expected a viewBox attribute');
+  const [, vx, vy, vw, vh] = m.map(Number);
+  assert.ok(vw < 900, `viewBox width ${vw} should be tighter than the full 1000-wide register frame`);
+  assert.ok(vx > 0, 'the frame should not start at the sheet origin when rooms start well inside it');
+});
+
+test('filtering by zone dims the non-matching rooms instead of removing them', () => {
+  const h = load();
+  const html = renderPlan(h, [ROOM(), ROOM({ id: 'l2', code: 'F104', name_en: 'DRYING ROOM 1A',
+    zone: 'post_harvest', box_x: 0.83, box_y: 0.2, box_w: 0.06, box_h: 0.2 })]);
+  h.window.GF.WWF._plan.zone = 'post_harvest';
+  const shapes = h.window.GF.WWF._planShapes();
+  const groups = shapes.split('</g>').filter(g => g.includes('<g '));
+  const c180 = groups.find(g => g.includes(">C180<"));
+  const f104 = groups.find(g => g.includes(">F104<"));
+  assert.match(c180, /class="fp-r off"/, 'the filtered-out room is dimmed');
+  assert.doesNotMatch(f104, /off/, 'the matching room is not dimmed');
+  h.close();
+});
+
+test('switching to drawing mode and back preserves the selected room', () => {
+  const h = load();
+  renderPlan(h, [ROOM()]);
+  h.window.GF.WWF._plan.sel = 'l1';
+  h.window.GF.WWF.planMode('drawing');
+  assert.equal(h.window.GF.WWF._plan.mode, 'drawing');
+  assert.equal(h.window.GF.WWF._plan.sel, 'l1');
   h.close();
 });
 

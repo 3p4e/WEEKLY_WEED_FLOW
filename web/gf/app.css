@@ -1524,3 +1524,29 @@ body.demo-on .main{padding-bottom:56px}
   color:var(--orange);border-color:var(--orange)}
 /* The icon cluster reads as one group rather than five loose glyphs. */
 .header .icon-btn+.icon-btn{margin-left:-2px}
+
+/* The plan the app draws (facility-view.js, geometry from tasks 0069).
+   Rooms are SVG rects in a normalised 1000 x 443 frame — the same frame the
+   pins use — so plan and drawing agree without any arithmetic in the view. */
+.fp-modes{display:flex;gap:2px;background:rgba(var(--accent-rgb),.07);border:1px solid var(--glass-border);
+  border-radius:9px;padding:3px;flex-shrink:0}
+.fp-mode{font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border:0;border-radius:7px;
+  background:none;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.fp-mode.on{background:rgba(var(--accent-rgb),.15);color:var(--primary)}
+.fp-wrap-plan{background:#0b1512}
+.fp-svg{display:block;width:100%;height:auto}
+.fp-r rect{fill:color-mix(in srgb, var(--pin) 34%, transparent);stroke:var(--pin);
+  stroke-width:1;vector-effect:non-scaling-stroke;transition:fill .12s}
+.fp-r{cursor:pointer}
+.fp-r:hover rect{fill:color-mix(in srgb, var(--pin) 62%, transparent)}
+/* A fit that scored low on wall ink is drawn dashed: the app is saying "about
+   here" rather than implying a survey it never did. */
+.fp-r.loose rect{stroke-dasharray:3 2}
+.fp-r.on rect{fill:color-mix(in srgb, var(--pin) 55%, transparent);stroke-width:1.8}
+/* Filtering dims a room instead of deleting it — a floor plan with holes in it
+   is not a floor plan. */
+.fp-r.off{pointer-events:none}
+.fp-r.off rect{fill:transparent;stroke:var(--line);opacity:.5}
+.fp-r.off .fp-rt{opacity:.25}
+.fp-rt{font:700 4.6px var(--mono);fill:#e9f3ee;opacity:.9;pointer-events:none;
+  paint-order:stroke;stroke:#0b1512;stroke-width:1.5px}

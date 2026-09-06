@@ -184,3 +184,49 @@ async def test_the_board_totals_the_building_by_zone(client, admin_headers):
     # the sick-plant quarantine — just under 4 000 m2 as drawn.
     assert 3900 < totals["cultivation"]["area_m2"] < 4000
     assert totals["airlock"]["rooms"] == 17
+
+
+async def test_every_room_that_can_be_drawn_carries_its_rectangle(client, admin_headers):
+    """A room's SIZE comes from its own A:/P: stamp and is exact; its position
+    and orientation were fitted to the drawing, and `box_conf` is how well the
+    fitted edges landed on wall ink. The app draws the building from these, so
+    the frame has to be sound: inside the unit square, and containing the pin."""
+    await _import(client, admin_headers)
+    r = await client.get("/facility/layout", headers=admin_headers)
+    rooms = r.json()["rooms"]
+    boxed = [x for x in rooms if x["box_x"] is not None]
+    # Only C88 has no stamped area, so only C88 has no rectangle.
+    assert len(boxed) == 190
+    assert [x["code"] for x in rooms if x["box_x"] is None] == ["C88"]
+    for x in boxed:
+        assert 0 <= x["box_x"] and 0 <= x["box_y"]
+        assert x["box_w"] > 0 and x["box_h"] > 0
+        assert x["box_x"] + x["box_w"] <= 1 and x["box_y"] + x["box_h"] <= 1
+        assert 0 <= x["box_conf"] <= 1
+        # The pin sits in its own room — the two are one coordinate space.
+        assert x["box_x"] <= x["plan_x"] <= x["box_x"] + x["box_w"]
+        assert x["box_y"] <= x["plan_y"] <= x["box_y"] + x["box_h"]
+
+
+async def test_the_drawn_rectangle_matches_the_stamped_area(client, admin_headers):
+    """The rectangle is not a decoration: scaled back to metres it must return
+    the area the drawing stamps. A flowering hall is 44.38 x 11.30 m, and the
+    plan frame it is normalised against is 2710 x 1200 points at 14.2 points
+    per metre."""
+    await _import(client, admin_headers)
+    room = await _by_code(client, admin_headers, "C180")
+    w_m = room["box_w"] * 2710 / 14.2
+    h_m = room["box_h"] * 1200 / 14.2
+    # Tall hall: the long side runs down the plan.
+    assert 10.5 < w_m < 12.0
+    assert 43.0 < h_m < 46.0
+    assert abs(w_m * h_m - room["area_m2"]) / room["area_m2"] < 0.06
+
+
+async def test_a_reimport_does_not_move_a_room(client, admin_headers):
+    await _import(client, admin_headers)
+    before = await _by_code(client, admin_headers, "F104")
+    await _import(client, admin_headers)
+    after = await _by_code(client, admin_headers, "F104")
+    for k in ("box_x", "box_y", "box_w", "box_h", "box_conf"):
+        assert before[k] == after[k]

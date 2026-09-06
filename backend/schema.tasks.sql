@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict yys2hKxzOy5v5SSWF3iWOTmGRa2p4tKEtYMKWeHDIuZb1wiYl8CmCUb8uryyMEc
+\restrict rsfFhMDS6ecX2vCv3XZzuA9T2yed0JNeUshM6Iwxo59GwU2VMle8vg882GfhBEb
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -585,7 +585,13 @@ CREATE TABLE public.facility_rooms (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    box_x numeric,
+    box_y numeric,
+    box_w numeric,
+    box_h numeric,
+    box_conf numeric,
     CONSTRAINT facility_rooms_area_check CHECK ((((area_m2 IS NULL) OR (area_m2 > (0)::numeric)) AND ((net_area_m2 IS NULL) OR (net_area_m2 > (0)::numeric)) AND ((perimeter_m IS NULL) OR (perimeter_m > (0)::numeric)))),
+    CONSTRAINT facility_rooms_box_check CHECK ((((box_x IS NULL) = (box_y IS NULL)) AND ((box_x IS NULL) = (box_w IS NULL)) AND ((box_x IS NULL) = (box_h IS NULL)) AND ((box_x IS NULL) OR ((box_x >= (0)::numeric) AND (box_y >= (0)::numeric) AND (box_w > (0)::numeric) AND (box_h > (0)::numeric) AND ((box_x + box_w) <= (1)::numeric) AND ((box_y + box_h) <= (1)::numeric))) AND ((box_conf IS NULL) OR ((box_conf >= (0)::numeric) AND (box_conf <= (1)::numeric))))),
     CONSTRAINT facility_rooms_plan_check CHECK ((((plan_x IS NULL) = (plan_y IS NULL)) AND ((plan_x IS NULL) OR ((plan_x >= (0)::numeric) AND (plan_x <= (1)::numeric) AND (plan_y >= (0)::numeric) AND (plan_y <= (1)::numeric))))),
     CONSTRAINT facility_rooms_regime_check CHECK (((regime IS NULL) OR (regime = ANY (ARRAY['GACP'::text, 'GMP'::text, 'SUPPORT'::text])))),
     CONSTRAINT facility_rooms_wing_check CHECK ((wing = ANY (ARRAY['cultivation'::text, 'processing'::text, 'extraction'::text, 'main'::text, 'technical'::text, 'washing'::text, 'other'::text]))),
@@ -6408,5 +6414,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict yys2hKxzOy5v5SSWF3iWOTmGRa2p4tKEtYMKWeHDIuZb1wiYl8CmCUb8uryyMEc
+\unrestrict rsfFhMDS6ecX2vCv3XZzuA9T2yed0JNeUshM6Iwxo59GwU2VMle8vg882GfhBEb
 

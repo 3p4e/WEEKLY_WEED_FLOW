@@ -10,7 +10,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.68304,
-  "plan_y": 0.43678
+  "plan_y": 0.43678,
+  "box_x": 0.65756,
+  "box_y": 0.40588,
+  "box_w": 0.08598,
+  "box_h": 0.03583,
+  "box_conf": 0.043
  },
  {
   "code": "C16",
@@ -23,7 +28,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.68304,
-  "plan_y": 0.40008
+  "plan_y": 0.40008,
+  "box_x": 0.65756,
+  "box_y": 0.36755,
+  "box_w": 0.08376,
+  "box_h": 0.0375,
+  "box_conf": 0.163
  },
  {
   "code": "C67",
@@ -36,7 +46,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.66195,
-  "plan_y": 0.71843
+  "plan_y": 0.71843,
+  "box_x": 0.63173,
+  "box_y": 0.71422,
+  "box_w": 0.0321,
+  "box_h": 0.01583,
+  "box_conf": 0.1
  },
  {
   "code": "C70",
@@ -49,7 +64,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.45957,
-  "plan_y": 0.73352
+  "plan_y": 0.73352,
+  "box_x": 0.45535,
+  "box_y": 0.65672,
+  "box_w": 0.00627,
+  "box_h": 0.11667,
+  "box_conf": 0.098
  },
  {
   "code": "C72",
@@ -62,7 +82,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.27055,
-  "plan_y": 0.73352
+  "plan_y": 0.73352,
+  "box_x": 0.26716,
+  "box_y": 0.65672,
+  "box_w": 0.00627,
+  "box_h": 0.11667,
+  "box_conf": 0.101
  },
  {
   "code": "C74",
@@ -75,7 +100,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.66252,
-  "plan_y": 0.57027
+  "plan_y": 0.57027,
+  "box_x": 0.6583,
+  "box_y": 0.0,
+  "box_w": 0.01144,
+  "box_h": 0.68417,
+  "box_conf": 0.189
  },
  {
   "code": "C86",
@@ -88,7 +118,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.67287,
-  "plan_y": 0.5431
+  "plan_y": 0.5431,
+  "box_x": 0.6572,
+  "box_y": 0.51505,
+  "box_w": 0.02509,
+  "box_h": 0.0375,
+  "box_conf": 0.235
  },
  {
   "code": "C87",
@@ -101,7 +136,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.68175,
-  "plan_y": 0.55886
+  "plan_y": 0.55886,
+  "box_x": 0.669,
+  "box_y": 0.55588,
+  "box_w": 0.02509,
+  "box_h": 0.0475,
+  "box_conf": 0.299
  },
  {
   "code": "C88",
@@ -114,7 +154,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.67793,
-  "plan_y": 0.6131
+  "plan_y": 0.6131,
+  "box_x": null,
+  "box_y": null,
+  "box_w": null,
+  "box_h": null,
+  "box_conf": null
  },
  {
   "code": "C92",
@@ -127,7 +172,12 @@
   "zone": "airlock",
   "regime": "GACP",
   "plan_x": 0.50377,
-  "plan_y": 0.07882
+  "plan_y": 0.07882,
+  "box_x": 0.50074,
+  "box_y": 0.04005,
+  "box_w": 0.0059,
+  "box_h": 0.04,
+  "box_conf": 0.579
  },
  {
   "code": "C98",
@@ -140,7 +190,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.66825,
-  "plan_y": 0.68795
+  "plan_y": 0.68795,
+  "box_x": 0.63948,
+  "box_y": 0.66672,
+  "box_w": 0.02989,
+  "box_h": 0.0325,
+  "box_conf": 0.381
  },
  {
   "code": "C99",
@@ -153,7 +208,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.67761,
-  "plan_y": 0.20101
+  "plan_y": 0.20101,
+  "box_x": 0.67011,
+  "box_y": 0.18672,
+  "box_w": 0.01845,
+  "box_h": 0.03583,
+  "box_conf": 0.341
  },
  {
   "code": "C100",
@@ -166,7 +226,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.67239,
-  "plan_y": 0.16223
+  "plan_y": 0.16223,
+  "box_x": 0.65867,
+  "box_y": 0.14672,
+  "box_w": 0.01808,
+  "box_h": 0.03667,
+  "box_conf": 0.254
  },
  {
   "code": "C101",
@@ -179,7 +244,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.6786,
-  "plan_y": 0.13295
+  "plan_y": 0.13295,
+  "box_x": 0.66974,
+  "box_y": 0.10588,
+  "box_w": 0.01845,
+  "box_h": 0.04,
+  "box_conf": 0.356
  },
  {
   "code": "C144",
@@ -192,7 +262,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.67763,
-  "plan_y": 0.04617
+  "plan_y": 0.04617,
+  "box_x": 0.67749,
+  "box_y": 0.04422,
+  "box_w": 0.031,
+  "box_h": 0.02833,
+  "box_conf": 0.264
  },
  {
   "code": "C145",
@@ -205,7 +280,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.58317,
-  "plan_y": 0.05042
+  "plan_y": 0.05042,
+  "box_x": 0.53284,
+  "box_y": 0.04088,
+  "box_w": 0.05904,
+  "box_h": 0.03083,
+  "box_conf": 0.477
  },
  {
   "code": "C146",
@@ -218,7 +298,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.63686,
-  "plan_y": 0.08513
+  "plan_y": 0.08513,
+  "box_x": 0.47196,
+  "box_y": 0.08005,
+  "box_w": 0.16531,
+  "box_h": 0.02667,
+  "box_conf": 0.335
  },
  {
   "code": "C147",
@@ -231,7 +316,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.63359,
-  "plan_y": 0.68805
+  "plan_y": 0.68805,
+  "box_x": 0.59631,
+  "box_y": 0.66338,
+  "box_w": 0.05941,
+  "box_h": 0.03583,
+  "box_conf": 0.473
  },
  {
   "code": "C148",
@@ -244,7 +334,12 @@
   "zone": "waste",
   "regime": "SUPPORT",
   "plan_x": 0.51475,
-  "plan_y": 0.04772
+  "plan_y": 0.04772,
+  "box_x": 0.50775,
+  "box_y": 0.04172,
+  "box_w": 0.02288,
+  "box_h": 0.02583,
+  "box_conf": 0.52
  },
  {
   "code": "C149",
@@ -257,7 +352,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.49296,
-  "plan_y": 0.05789
+  "plan_y": 0.05789,
+  "box_x": 0.4631,
+  "box_y": 0.04255,
+  "box_w": 0.03395,
+  "box_h": 0.02667,
+  "box_conf": 0.478
  },
  {
   "code": "C150",
@@ -270,7 +370,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.45905,
-  "plan_y": 0.04892
+  "plan_y": 0.04892,
+  "box_x": 0.4321,
+  "box_y": 0.04588,
+  "box_w": 0.03653,
+  "box_h": 0.02417,
+  "box_conf": 0.432
  },
  {
   "code": "C151",
@@ -283,7 +388,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.39559,
-  "plan_y": 0.05063
+  "plan_y": 0.05063,
+  "box_x": 0.35424,
+  "box_y": 0.04255,
+  "box_w": 0.07011,
+  "box_h": 0.02583,
+  "box_conf": 0.433
  },
  {
   "code": "C151А",
@@ -296,7 +406,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.42554,
-  "plan_y": 0.07397
+  "plan_y": 0.07397,
+  "box_x": 0.42066,
+  "box_y": 0.03838,
+  "box_w": 0.01144,
+  "box_h": 0.04167,
+  "box_conf": 0.408
  },
  {
   "code": "C152",
@@ -309,7 +424,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.3863,
-  "plan_y": 0.09381
+  "plan_y": 0.09381,
+  "box_x": 0.19668,
+  "box_y": 0.08172,
+  "box_w": 0.20849,
+  "box_h": 0.02333,
+  "box_conf": 0.369
  },
  {
   "code": "C153",
@@ -322,7 +442,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.32629,
-  "plan_y": 0.05922
+  "plan_y": 0.05922,
+  "box_x": 0.29631,
+  "box_y": 0.04088,
+  "box_w": 0.09483,
+  "box_h": 0.03,
+  "box_conf": 0.461
  },
  {
   "code": "C154",
@@ -335,7 +460,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.24835,
-  "plan_y": 0.05922
+  "plan_y": 0.05922,
+  "box_x": 0.19188,
+  "box_y": 0.04505,
+  "box_w": 0.069,
+  "box_h": 0.02417,
+  "box_conf": 0.434
  },
  {
   "code": "C154А",
@@ -348,7 +478,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.26595,
-  "plan_y": 0.07496
+  "plan_y": 0.07496,
+  "box_x": 0.26089,
+  "box_y": 0.03755,
+  "box_w": 0.0107,
+  "box_h": 0.04167,
+  "box_conf": 0.422
  },
  {
   "code": "C155",
@@ -361,7 +496,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.27191,
-  "plan_y": 0.09119
+  "plan_y": 0.09119,
+  "box_x": 0.18376,
+  "box_y": 0.08088,
+  "box_w": 0.15572,
+  "box_h": 0.025,
+  "box_conf": 0.377
  },
  {
   "code": "C156",
@@ -374,7 +514,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.18807,
-  "plan_y": 0.04924
+  "plan_y": 0.04924,
+  "box_x": 0.15166,
+  "box_y": 0.04172,
+  "box_w": 0.05018,
+  "box_h": 0.02583,
+  "box_conf": 0.451
  },
  {
   "code": "C157",
@@ -387,7 +532,12 @@
   "zone": "airlock",
   "regime": "GACP",
   "plan_x": 0.17539,
-  "plan_y": 0.09411
+  "plan_y": 0.09411,
+  "box_x": 0.17528,
+  "box_y": 0.08005,
+  "box_w": 0.03469,
+  "box_h": 0.025,
+  "box_conf": 0.334
  },
  {
   "code": "C158",
@@ -400,7 +550,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.13004,
-  "plan_y": 0.24901
+  "plan_y": 0.24901,
+  "box_x": 0.02472,
+  "box_y": 0.22088,
+  "box_w": 0.14945,
+  "box_h": 0.0625,
+  "box_conf": 0.23
  },
  {
   "code": "C164",
@@ -413,7 +568,12 @@
   "zone": "quality",
   "regime": "GACP",
   "plan_x": 0.13167,
-  "plan_y": 0.41275
+  "plan_y": 0.41275,
+  "box_x": 0.12694,
+  "box_y": 0.39505,
+  "box_w": 0.00664,
+  "box_h": 0.03417,
+  "box_conf": 0.357
  },
  {
   "code": "C165",
@@ -426,7 +586,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.12371,
-  "plan_y": 0.41275
+  "plan_y": 0.41275,
+  "box_x": 0.11882,
+  "box_y": 0.41088,
+  "box_w": 0.01513,
+  "box_h": 0.01833,
+  "box_conf": 0.374
  },
  {
   "code": "C166",
@@ -439,7 +604,12 @@
   "zone": "quality",
   "regime": "GACP",
   "plan_x": 0.12153,
-  "plan_y": 0.39599
+  "plan_y": 0.39599,
+  "box_x": 0.12103,
+  "box_y": 0.39422,
+  "box_w": 0.00554,
+  "box_h": 0.05333,
+  "box_conf": 0.277
  },
  {
   "code": "C167",
@@ -452,7 +622,12 @@
   "zone": "warehouse",
   "regime": "GACP",
   "plan_x": 0.13303,
-  "plan_y": 0.59612
+  "plan_y": 0.59612,
+  "box_x": 0.11882,
+  "box_y": 0.43838,
+  "box_w": 0.02731,
+  "box_h": 0.4125,
+  "box_conf": 0.213
  },
  {
   "code": "C168",
@@ -465,7 +640,12 @@
   "zone": "airlock",
   "regime": "GACP",
   "plan_x": 0.17164,
-  "plan_y": 0.63739
+  "plan_y": 0.63739,
+  "box_x": 0.15129,
+  "box_y": 0.63005,
+  "box_w": 0.03137,
+  "box_h": 0.025,
+  "box_conf": 0.435
  },
  {
   "code": "C169",
@@ -478,7 +658,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.29107,
-  "plan_y": 0.64311
+  "plan_y": 0.64311,
+  "box_x": 0.18303,
+  "box_y": 0.63088,
+  "box_w": 0.15572,
+  "box_h": 0.025,
+  "box_conf": 0.417
  },
  {
   "code": "C170",
@@ -491,7 +676,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.42449,
-  "plan_y": 0.64303
+  "plan_y": 0.64303,
+  "box_x": 0.34317,
+  "box_y": 0.63088,
+  "box_w": 0.2524,
+  "box_h": 0.025,
+  "box_conf": 0.427
  },
  {
   "code": "C171",
@@ -504,7 +694,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.63568,
-  "plan_y": 0.38201
+  "plan_y": 0.38201,
+  "box_x": 0.61771,
+  "box_y": 0.10672,
+  "box_w": 0.03764,
+  "box_h": 0.52333,
+  "box_conf": 0.35
  },
  {
   "code": "C172",
@@ -517,7 +712,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.60669,
-  "plan_y": 0.36209
+  "plan_y": 0.36209,
+  "box_x": 0.59483,
+  "box_y": 0.33422,
+  "box_w": 0.0214,
+  "box_h": 0.03417,
+  "box_conf": 0.352
  },
  {
   "code": "C173",
@@ -530,7 +730,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.6067,
-  "plan_y": 0.37618
+  "plan_y": 0.37618,
+  "box_x": 0.59963,
+  "box_y": 0.33255,
+  "box_w": 0.01513,
+  "box_h": 0.04833,
+  "box_conf": 0.241
  },
  {
   "code": "C174",
@@ -543,7 +748,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.59978,
-  "plan_y": 0.12323
+  "plan_y": 0.12323,
+  "box_x": 0.59631,
+  "box_y": 0.10588,
+  "box_w": 0.01956,
+  "box_h": 0.05333,
+  "box_conf": 0.288
  },
  {
   "code": "C175",
@@ -556,7 +766,12 @@
   "zone": "utility",
   "regime": "GACP",
   "plan_x": 0.59893,
-  "plan_y": 0.60987
+  "plan_y": 0.60987,
+  "box_x": 0.59631,
+  "box_y": 0.57422,
+  "box_w": 0.01956,
+  "box_h": 0.05333,
+  "box_conf": 0.331
  },
  {
   "code": "C176",
@@ -569,7 +784,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.60443,
-  "plan_y": 0.52305
+  "plan_y": 0.52305,
+  "box_x": 0.59594,
+  "box_y": 0.40505,
+  "box_w": 0.01956,
+  "box_h": 0.17083,
+  "box_conf": 0.35
  },
  {
   "code": "C177",
@@ -582,7 +802,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.60366,
-  "plan_y": 0.29996
+  "plan_y": 0.29996,
+  "box_x": 0.59557,
+  "box_y": 0.16005,
+  "box_w": 0.01956,
+  "box_h": 0.17083,
+  "box_conf": 0.341
  },
  {
   "code": "C178",
@@ -595,7 +820,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.56215,
-  "plan_y": 0.48685
+  "plan_y": 0.48685,
+  "box_x": 0.47048,
+  "box_y": 0.36922,
+  "box_w": 0.12177,
+  "box_h": 0.1275,
+  "box_conf": 0.207
  },
  {
   "code": "C179",
@@ -608,7 +838,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.55799,
-  "plan_y": 0.31599
+  "plan_y": 0.31599,
+  "box_x": 0.53506,
+  "box_y": 0.31255,
+  "box_w": 0.05683,
+  "box_h": 0.27333,
+  "box_conf": 0.181
  },
  {
   "code": "C180",
@@ -621,7 +856,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.18064,
-  "plan_y": 0.38095
+  "plan_y": 0.38095,
+  "box_x": 0.15166,
+  "box_y": 0.10588,
+  "box_w": 0.05904,
+  "box_h": 0.525,
+  "box_conf": 0.345
  },
  {
   "code": "C181",
@@ -634,7 +874,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.24587,
-  "plan_y": 0.37833
+  "plan_y": 0.37833,
+  "box_x": 0.21476,
+  "box_y": 0.10588,
+  "box_w": 0.05904,
+  "box_h": 0.525,
+  "box_conf": 0.338
  },
  {
   "code": "C182",
@@ -647,7 +892,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.30152,
-  "plan_y": 0.37651
+  "plan_y": 0.37651,
+  "box_x": 0.27712,
+  "box_y": 0.10588,
+  "box_w": 0.05904,
+  "box_h": 0.525,
+  "box_conf": 0.338
  },
  {
   "code": "C183",
@@ -660,7 +910,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.36676,
-  "plan_y": 0.37651
+  "plan_y": 0.37651,
+  "box_x": 0.33985,
+  "box_y": 0.10588,
+  "box_w": 0.05904,
+  "box_h": 0.525,
+  "box_conf": 0.342
  },
  {
   "code": "C184",
@@ -673,7 +928,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.43335,
-  "plan_y": 0.37651
+  "plan_y": 0.37651,
+  "box_x": 0.40258,
+  "box_y": 0.10588,
+  "box_w": 0.06015,
+  "box_h": 0.525,
+  "box_conf": 0.339
  },
  {
   "code": "C185",
@@ -686,7 +946,12 @@
   "zone": "cultivation",
   "regime": "GACP",
   "plan_x": 0.49506,
-  "plan_y": 0.37651
+  "plan_y": 0.37651,
+  "box_x": 0.46974,
+  "box_y": 0.10588,
+  "box_w": 0.05904,
+  "box_h": 0.525,
+  "box_conf": 0.337
  },
  {
   "code": "E12",
@@ -699,7 +964,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.83793,
-  "plan_y": 0.71497
+  "plan_y": 0.71497,
+  "box_x": 0.83506,
+  "box_y": 0.69422,
+  "box_w": 0.00775,
+  "box_h": 0.02333,
+  "box_conf": 0.51
  },
  {
   "code": "E21",
@@ -712,7 +982,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.81537,
-  "plan_y": 0.45776
+  "plan_y": 0.45776,
+  "box_x": 0.78967,
+  "box_y": 0.43672,
+  "box_w": 0.02694,
+  "box_h": 0.03583,
+  "box_conf": 0.122
  },
  {
   "code": "E22",
@@ -725,7 +1000,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.82809,
-  "plan_y": 0.45768
+  "plan_y": 0.45768,
+  "box_x": 0.81808,
+  "box_y": 0.45338,
+  "box_w": 0.02694,
+  "box_h": 0.03583,
+  "box_conf": 0.192
  },
  {
   "code": "E23",
@@ -738,7 +1018,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.8104,
-  "plan_y": 0.5188
+  "plan_y": 0.5188,
+  "box_x": 0.80517,
+  "box_y": 0.49922,
+  "box_w": 0.01328,
+  "box_h": 0.06417,
+  "box_conf": 0.231
  },
  {
   "code": "E24",
@@ -751,7 +1036,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.82139,
-  "plan_y": 0.56782
+  "plan_y": 0.56782,
+  "box_x": 0.81218,
+  "box_y": 0.56755,
+  "box_w": 0.01181,
+  "box_h": 0.04,
+  "box_conf": 0.151
  },
  {
   "code": "E25",
@@ -764,7 +1054,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.8103,
-  "plan_y": 0.54895
+  "plan_y": 0.54895,
+  "box_x": 0.80554,
+  "box_y": 0.51838,
+  "box_w": 0.00664,
+  "box_h": 0.04167,
+  "box_conf": 0.197
  },
  {
   "code": "E26",
@@ -777,7 +1072,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.82819,
-  "plan_y": 0.55714
+  "plan_y": 0.55714,
+  "box_x": 0.82509,
+  "box_y": 0.52005,
+  "box_w": 0.01845,
+  "box_h": 0.04,
+  "box_conf": 0.327
  },
  {
   "code": "E27",
@@ -790,7 +1090,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.8014,
-  "plan_y": 0.60983
+  "plan_y": 0.60983,
+  "box_x": 0.78303,
+  "box_y": 0.57755,
+  "box_w": 0.04834,
+  "box_h": 0.15167,
+  "box_conf": 0.35
  },
  {
   "code": "E31",
@@ -803,7 +1108,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.71695,
-  "plan_y": 0.69063
+  "plan_y": 0.69063,
+  "box_x": 0.71661,
+  "box_y": 0.66422,
+  "box_w": 0.01845,
+  "box_h": 0.0325,
+  "box_conf": 0.234
  },
  {
   "code": "E32",
@@ -816,7 +1126,12 @@
   "zone": "waste",
   "regime": "SUPPORT",
   "plan_x": 0.7168,
-  "plan_y": 0.7086
+  "plan_y": 0.7086,
+  "box_x": 0.70332,
+  "box_y": 0.69755,
+  "box_w": 0.01624,
+  "box_h": 0.07583,
+  "box_conf": 0.326
  },
  {
   "code": "E33",
@@ -829,7 +1144,12 @@
   "zone": "waste",
   "regime": "SUPPORT",
   "plan_x": 0.83943,
-  "plan_y": 0.76607
+  "plan_y": 0.76607,
+  "box_x": 0.83506,
+  "box_y": 0.72505,
+  "box_w": 0.00775,
+  "box_h": 0.04583,
+  "box_conf": 0.591
  },
  {
   "code": "E34",
@@ -842,7 +1162,12 @@
   "zone": null,
   "regime": null,
   "plan_x": 0.85604,
-  "plan_y": 0.55296
+  "plan_y": 0.55296,
+  "box_x": 0.84576,
+  "box_y": 0.53505,
+  "box_w": 0.02103,
+  "box_h": 0.12917,
+  "box_conf": 0.345
  },
  {
   "code": "E34a",
@@ -855,7 +1180,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.85175,
-  "plan_y": 0.69289
+  "plan_y": 0.69289,
+  "box_x": 0.84317,
+  "box_y": 0.66505,
+  "box_w": 0.02325,
+  "box_h": 0.03583,
+  "box_conf": 0.526
  },
  {
   "code": "E35",
@@ -868,7 +1198,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.87089,
-  "plan_y": 0.56868
+  "plan_y": 0.56868,
+  "box_x": 0.8679,
+  "box_y": 0.55755,
+  "box_w": 0.01328,
+  "box_h": 0.10083,
+  "box_conf": 0.338
  },
  {
   "code": "E36",
@@ -881,7 +1216,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.88376,
-  "plan_y": 0.54735
+  "plan_y": 0.54735,
+  "box_x": 0.88192,
+  "box_y": 0.53422,
+  "box_w": 0.01255,
+  "box_h": 0.10083,
+  "box_conf": 0.31
  },
  {
   "code": "E37",
@@ -894,7 +1234,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.89676,
-  "plan_y": 0.53926
+  "plan_y": 0.53926,
+  "box_x": 0.8952,
+  "box_y": 0.53838,
+  "box_w": 0.01033,
+  "box_h": 0.1175,
+  "box_conf": 0.212
  },
  {
   "code": "E38",
@@ -907,7 +1252,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.91624,
-  "plan_y": 0.55512
+  "plan_y": 0.55512,
+  "box_x": 0.90886,
+  "box_y": 0.55422,
+  "box_w": 0.01402,
+  "box_h": 0.10083,
+  "box_conf": 0.277
  },
  {
   "code": "E39",
@@ -920,7 +1270,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.87996,
-  "plan_y": 0.51237
+  "plan_y": 0.51237,
+  "box_x": 0.86937,
+  "box_y": 0.50005,
+  "box_w": 0.01107,
+  "box_h": 0.14667,
+  "box_conf": 0.165
  },
  {
   "code": "E40",
@@ -933,7 +1288,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.88407,
-  "plan_y": 0.46347
+  "plan_y": 0.46347,
+  "box_x": 0.87601,
+  "box_y": 0.44422,
+  "box_w": 0.02694,
+  "box_h": 0.02917,
+  "box_conf": 0.193
  },
  {
   "code": "E41",
@@ -946,7 +1306,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.89271,
-  "plan_y": 0.44477
+  "plan_y": 0.44477,
+  "box_x": 0.87528,
+  "box_y": 0.44255,
+  "box_w": 0.02694,
+  "box_h": 0.015,
+  "box_conf": 0.128
  },
  {
   "code": "E42",
@@ -959,7 +1324,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.90152,
-  "plan_y": 0.45911
+  "plan_y": 0.45911,
+  "box_x": 0.87565,
+  "box_y": 0.44338,
+  "box_w": 0.03247,
+  "box_h": 0.02333,
+  "box_conf": 0.182
  },
  {
   "code": "E43",
@@ -972,7 +1342,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.91475,
-  "plan_y": 0.46322
+  "plan_y": 0.46322,
+  "box_x": 0.90738,
+  "box_y": 0.44922,
+  "box_w": 0.01513,
+  "box_h": 0.065,
+  "box_conf": 0.361
  },
  {
   "code": "E44",
@@ -985,7 +1360,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.9307,
-  "plan_y": 0.55357
+  "plan_y": 0.55357,
+  "box_x": 0.92472,
+  "box_y": 0.51088,
+  "box_w": 0.02066,
+  "box_h": 0.10083,
+  "box_conf": 0.181
  },
  {
   "code": "E45",
@@ -998,7 +1378,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.93341,
-  "plan_y": 0.51748
+  "plan_y": 0.51748,
+  "box_x": 0.92435,
+  "box_y": 0.50172,
+  "box_w": 0.01033,
+  "box_h": 0.095,
+  "box_conf": 0.204
  },
  {
   "code": "E46",
@@ -1011,7 +1396,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.96168,
-  "plan_y": 0.51535
+  "plan_y": 0.51535,
+  "box_x": 0.95498,
+  "box_y": 0.51088,
+  "box_w": 0.01476,
+  "box_h": 0.0275,
+  "box_conf": 0.386
  },
  {
   "code": "E47",
@@ -1024,7 +1414,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.95358,
-  "plan_y": 0.45834
+  "plan_y": 0.45834,
+  "box_x": 0.94096,
+  "box_y": 0.42005,
+  "box_w": 0.01919,
+  "box_h": 0.08917,
+  "box_conf": 0.219
  },
  {
   "code": "E48",
@@ -1037,7 +1432,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.96724,
-  "plan_y": 0.44948
+  "plan_y": 0.44948,
+  "box_x": 0.96089,
+  "box_y": 0.44172,
+  "box_w": 0.00996,
+  "box_h": 0.02417,
+  "box_conf": 0.49
  },
  {
   "code": "E50",
@@ -1050,7 +1450,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.92938,
-  "plan_y": 0.46434
+  "plan_y": 0.46434,
+  "box_x": 0.92362,
+  "box_y": 0.40588,
+  "box_w": 0.00775,
+  "box_h": 0.06,
+  "box_conf": 0.269
  },
  {
   "code": "E51",
@@ -1063,7 +1468,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.9343,
-  "plan_y": 0.46434
+  "plan_y": 0.46434,
+  "box_x": 0.9321,
+  "box_y": 0.40588,
+  "box_w": 0.00775,
+  "box_h": 0.06,
+  "box_conf": 0.237
  },
  {
   "code": "E52",
@@ -1076,7 +1486,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.96643,
-  "plan_y": 0.54227
+  "plan_y": 0.54227,
+  "box_x": 0.96384,
+  "box_y": 0.53838,
+  "box_w": 0.00627,
+  "box_h": 0.03333,
+  "box_conf": 0.471
  },
  {
   "code": "E53",
@@ -1089,7 +1504,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.94971,
-  "plan_y": 0.58998
+  "plan_y": 0.58998,
+  "box_x": 0.94908,
+  "box_y": 0.58922,
+  "box_w": 0.02251,
+  "box_h": 0.01667,
+  "box_conf": 0.345
  },
  {
   "code": "E54",
@@ -1102,7 +1522,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.95016,
-  "plan_y": 0.6081
+  "plan_y": 0.6081,
+  "box_x": 0.9476,
+  "box_y": 0.60505,
+  "box_w": 0.01107,
+  "box_h": 0.03083,
+  "box_conf": 0.388
  },
  {
   "code": "E55",
@@ -1115,7 +1540,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.95892,
-  "plan_y": 0.56702
+  "plan_y": 0.56702,
+  "box_x": 0.95535,
+  "box_y": 0.55255,
+  "box_w": 0.01439,
+  "box_h": 0.05417,
+  "box_conf": 0.38
  },
  {
   "code": "E56",
@@ -1128,7 +1558,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.96329,
-  "plan_y": 0.62002
+  "plan_y": 0.62002,
+  "box_x": 0.95941,
+  "box_y": 0.60338,
+  "box_w": 0.00959,
+  "box_h": 0.03583,
+  "box_conf": 0.385
  },
  {
   "code": "E57",
@@ -1141,7 +1576,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.94736,
-  "plan_y": 0.64271
+  "plan_y": 0.64271,
+  "box_x": 0.94207,
+  "box_y": 0.63838,
+  "box_w": 0.02804,
+  "box_h": 0.02417,
+  "box_conf": 0.521
  },
  {
   "code": "E58",
@@ -1154,7 +1594,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.89964,
-  "plan_y": 0.64273
+  "plan_y": 0.64273,
+  "box_x": 0.87122,
+  "box_y": 0.63838,
+  "box_w": 0.069,
+  "box_h": 0.01917,
+  "box_conf": 0.246
  },
  {
   "code": "E59",
@@ -1167,7 +1612,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.92733,
-  "plan_y": 0.69059
+  "plan_y": 0.69059,
+  "box_x": 0.92214,
+  "box_y": 0.69005,
+  "box_w": 0.01255,
+  "box_h": 0.045,
+  "box_conf": 0.174
  },
  {
   "code": "E60",
@@ -1180,7 +1630,12 @@
   "zone": "waste",
   "regime": "SUPPORT",
   "plan_x": 0.92733,
-  "plan_y": 0.71178
+  "plan_y": 0.71178,
+  "box_x": 0.92325,
+  "box_y": 0.69755,
+  "box_w": 0.01587,
+  "box_h": 0.07583,
+  "box_conf": 0.342
  },
  {
   "code": "E66",
@@ -1193,7 +1648,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.68584,
-  "plan_y": 0.73202
+  "plan_y": 0.73202,
+  "box_x": 0.67232,
+  "box_y": 0.70088,
+  "box_w": 0.031,
+  "box_h": 0.07083,
+  "box_conf": 0.196
  },
  {
   "code": "E66A",
@@ -1206,7 +1666,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.69276,
-  "plan_y": 0.6896
+  "plan_y": 0.6896,
+  "box_x": 0.68819,
+  "box_y": 0.67422,
+  "box_w": 0.01402,
+  "box_h": 0.04167,
+  "box_conf": 0.183
  },
  {
   "code": "E66B",
@@ -1219,7 +1684,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.67028,
-  "plan_y": 0.71318
+  "plan_y": 0.71318,
+  "box_x": 0.66605,
+  "box_y": 0.70338,
+  "box_w": 0.00627,
+  "box_h": 0.07083,
+  "box_conf": 0.157
  },
  {
   "code": "E75",
@@ -1232,7 +1702,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.67659,
-  "plan_y": 0.48408
+  "plan_y": 0.48408,
+  "box_x": 0.67306,
+  "box_y": 0.41588,
+  "box_w": 0.00849,
+  "box_h": 0.0775,
+  "box_conf": 0.072
  },
  {
   "code": "E76",
@@ -1245,7 +1720,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.67659,
-  "plan_y": 0.5041
+  "plan_y": 0.5041,
+  "box_x": 0.66863,
+  "box_y": 0.49505,
+  "box_w": 0.03579,
+  "box_h": 0.01833,
+  "box_conf": 0.349
  },
  {
   "code": "E77",
@@ -1258,7 +1738,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.71228,
-  "plan_y": 0.49938
+  "plan_y": 0.49938,
+  "box_x": 0.7048,
+  "box_y": 0.49922,
+  "box_w": 0.01476,
+  "box_h": 0.04,
+  "box_conf": 0.287
  },
  {
   "code": "E78",
@@ -1271,7 +1756,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.70041,
-  "plan_y": 0.53993
+  "plan_y": 0.53993,
+  "box_x": 0.69557,
+  "box_y": 0.51505,
+  "box_w": 0.02399,
+  "box_h": 0.0375,
+  "box_conf": 0.361
  },
  {
   "code": "E79",
@@ -1284,7 +1774,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.73714,
-  "plan_y": 0.48496
+  "plan_y": 0.48496,
+  "box_x": 0.72103,
+  "box_y": 0.47338,
+  "box_w": 0.06162,
+  "box_h": 0.02583,
+  "box_conf": 0.346
  },
  {
   "code": "E80",
@@ -1297,7 +1792,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.70339,
-  "plan_y": 0.61644
+  "plan_y": 0.61644,
+  "box_x": 0.69483,
+  "box_y": 0.42755,
+  "box_w": 0.02472,
+  "box_h": 0.23,
+  "box_conf": 0.22
  },
  {
   "code": "E81",
@@ -1310,7 +1810,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.76144,
-  "plan_y": 0.61122
+  "plan_y": 0.61122,
+  "box_x": 0.74871,
+  "box_y": 0.57672,
+  "box_w": 0.03173,
+  "box_h": 0.08083,
+  "box_conf": 0.356
  },
  {
   "code": "E82",
@@ -1323,7 +1828,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.77243,
-  "plan_y": 0.50432
+  "plan_y": 0.50432,
+  "box_x": 0.76421,
+  "box_y": 0.50088,
+  "box_w": 0.0155,
+  "box_h": 0.02833,
+  "box_conf": 0.457
  },
  {
   "code": "E83",
@@ -1336,7 +1846,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.79583,
-  "plan_y": 0.49799
+  "plan_y": 0.49799,
+  "box_x": 0.78413,
+  "box_y": 0.47422,
+  "box_w": 0.0203,
+  "box_h": 0.1,
+  "box_conf": 0.378
  },
  {
   "code": "E84",
@@ -1349,7 +1864,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.699,
-  "plan_y": 0.56873
+  "plan_y": 0.56873,
+  "box_x": 0.6941,
+  "box_y": 0.51505,
+  "box_w": 0.01661,
+  "box_h": 0.065,
+  "box_conf": 0.165
  },
  {
   "code": "E85",
@@ -1362,7 +1882,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.7563,
-  "plan_y": 0.56183
+  "plan_y": 0.56183,
+  "box_x": 0.74686,
+  "box_y": 0.55588,
+  "box_w": 0.01587,
+  "box_h": 0.0175,
+  "box_conf": 0.435
  },
  {
   "code": "E89",
@@ -1375,7 +1900,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.67388,
-  "plan_y": 0.64804
+  "plan_y": 0.64804,
+  "box_x": 0.65756,
+  "box_y": 0.63922,
+  "box_w": 0.01845,
+  "box_h": 0.02667,
+  "box_conf": 0.261
  },
  {
   "code": "E90",
@@ -1388,7 +1918,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.76471,
-  "plan_y": 0.53997
+  "plan_y": 0.53997,
+  "box_x": 0.75166,
+  "box_y": 0.52922,
+  "box_w": 0.05351,
+  "box_h": 0.02833,
+  "box_conf": 0.23
  },
  {
   "code": "F91",
@@ -1401,7 +1936,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.67715,
-  "plan_y": 0.31507
+  "plan_y": 0.31507,
+  "box_x": 0.65793,
+  "box_y": 0.30005,
+  "box_w": 0.01993,
+  "box_h": 0.02333,
+  "box_conf": 0.263
  },
  {
   "code": "F93",
@@ -1414,7 +1954,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.67437,
-  "plan_y": 0.34065
+  "plan_y": 0.34065,
+  "box_x": 0.65756,
+  "box_y": 0.32422,
+  "box_w": 0.0321,
+  "box_h": 0.01917,
+  "box_conf": 0.302
  },
  {
   "code": "F94",
@@ -1427,7 +1972,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.6744,
-  "plan_y": 0.3597
+  "plan_y": 0.3597,
+  "box_x": 0.65756,
+  "box_y": 0.34672,
+  "box_w": 0.0321,
+  "box_h": 0.01917,
+  "box_conf": 0.273
  },
  {
   "code": "F95",
@@ -1440,7 +1990,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.71714,
-  "plan_y": 0.35262
+  "plan_y": 0.35262,
+  "box_x": 0.69077,
+  "box_y": 0.34422,
+  "box_w": 0.13542,
+  "box_h": 0.02167,
+  "box_conf": 0.211
  },
  {
   "code": "F96",
@@ -1453,7 +2008,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.70207,
-  "plan_y": 0.19468
+  "plan_y": 0.19468,
+  "box_x": 0.6893,
+  "box_y": 0.0,
+  "box_w": 0.02731,
+  "box_h": 0.21917,
+  "box_conf": 0.152
  },
  {
   "code": "F97",
@@ -1466,7 +2026,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.67939,
-  "plan_y": 0.26046
+  "plan_y": 0.26046,
+  "box_x": 0.67159,
+  "box_y": 0.21672,
+  "box_w": 0.01661,
+  "box_h": 0.085,
+  "box_conf": 0.266
  },
  {
   "code": "F102",
@@ -1479,7 +2044,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.6788,
-  "plan_y": 0.0794
+  "plan_y": 0.0794,
+  "box_x": 0.66458,
+  "box_y": 0.07338,
+  "box_w": 0.01771,
+  "box_h": 0.03083,
+  "box_conf": 0.29
  },
  {
   "code": "F103",
@@ -1492,7 +2062,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.75586,
-  "plan_y": 0.11589
+  "plan_y": 0.11589,
+  "box_x": 0.71882,
+  "box_y": 0.10922,
+  "box_w": 0.09594,
+  "box_h": 0.02,
+  "box_conf": 0.248
  },
  {
   "code": "F104",
@@ -1505,7 +2080,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.727,
-  "plan_y": 0.19958
+  "plan_y": 0.19958,
+  "box_x": 0.7214,
+  "box_y": 0.15172,
+  "box_w": 0.02841,
+  "box_h": 0.21417,
+  "box_conf": 0.293
  },
  {
   "code": "F105",
@@ -1518,7 +2098,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.75796,
-  "plan_y": 0.19763
+  "plan_y": 0.19763,
+  "box_x": 0.7524,
+  "box_y": 0.15172,
+  "box_w": 0.02841,
+  "box_h": 0.21417,
+  "box_conf": 0.295
  },
  {
   "code": "F106",
@@ -1531,7 +2116,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.79056,
-  "plan_y": 0.19763
+  "plan_y": 0.19763,
+  "box_x": 0.78339,
+  "box_y": 0.15172,
+  "box_w": 0.02841,
+  "box_h": 0.21417,
+  "box_conf": 0.459
  },
  {
   "code": "F107",
@@ -1544,7 +2134,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.79884,
-  "plan_y": 0.09037
+  "plan_y": 0.09037,
+  "box_x": 0.66827,
+  "box_y": 0.08005,
+  "box_w": 0.28524,
+  "box_h": 0.025,
+  "box_conf": 0.372
  },
  {
   "code": "F108",
@@ -1557,7 +2152,12 @@
   "zone": "post_harvest",
   "regime": "GMP",
   "plan_x": 0.82107,
-  "plan_y": 0.18278
+  "plan_y": 0.18278,
+  "box_x": 0.79631,
+  "box_y": 0.03922,
+  "box_w": 0.02768,
+  "box_h": 0.16333,
+  "box_conf": 0.244
  },
  {
   "code": "F109",
@@ -1570,7 +2170,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.81983,
-  "plan_y": 0.28763
+  "plan_y": 0.28763,
+  "box_x": 0.81181,
+  "box_y": 0.23422,
+  "box_w": 0.01144,
+  "box_h": 0.06333,
+  "box_conf": 0.341
  },
  {
   "code": "F110",
@@ -1583,7 +2188,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.8402,
-  "plan_y": 0.11268
+  "plan_y": 0.11268,
+  "box_x": 0.83616,
+  "box_y": 0.10588,
+  "box_w": 0.00664,
+  "box_h": 0.02167,
+  "box_conf": 0.411
  },
  {
   "code": "F111",
@@ -1596,7 +2206,12 @@
   "zone": "egress",
   "regime": "SUPPORT",
   "plan_x": 0.85577,
-  "plan_y": 0.1164
+  "plan_y": 0.1164,
+  "box_x": 0.85203,
+  "box_y": 0.11255,
+  "box_w": 0.00664,
+  "box_h": 0.02167,
+  "box_conf": 0.42
  },
  {
   "code": "F112",
@@ -1609,7 +2224,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.85134,
-  "plan_y": 0.18377
+  "plan_y": 0.18377,
+  "box_x": 0.83063,
+  "box_y": 0.17005,
+  "box_w": 0.10406,
+  "box_h": 0.025,
+  "box_conf": 0.204
  },
  {
   "code": "F113",
@@ -1622,7 +2242,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.87262,
-  "plan_y": 0.14138
+  "plan_y": 0.14138,
+  "box_x": 0.85904,
+  "box_y": 0.11005,
+  "box_w": 0.04723,
+  "box_h": 0.05583,
+  "box_conf": 0.332
  },
  {
   "code": "F114",
@@ -1635,7 +2260,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.87552,
-  "plan_y": 0.18255
+  "plan_y": 0.18255,
+  "box_x": 0.85904,
+  "box_y": 0.17255,
+  "box_w": 0.04723,
+  "box_h": 0.05,
+  "box_conf": 0.344
  },
  {
   "code": "F115",
@@ -1648,7 +2278,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.88551,
-  "plan_y": 0.22694
+  "plan_y": 0.22694,
+  "box_x": 0.8583,
+  "box_y": 0.22338,
+  "box_w": 0.03063,
+  "box_h": 0.02833,
+  "box_conf": 0.223
  },
  {
   "code": "F116",
@@ -1661,7 +2296,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.88834,
-  "plan_y": 0.25766
+  "plan_y": 0.25766,
+  "box_x": 0.88524,
+  "box_y": 0.25255,
+  "box_w": 0.02214,
+  "box_h": 0.02833,
+  "box_conf": 0.339
  },
  {
   "code": "F117",
@@ -1674,7 +2314,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.8861,
-  "plan_y": 0.28636
+  "plan_y": 0.28636,
+  "box_x": 0.87897,
+  "box_y": 0.28588,
+  "box_w": 0.01439,
+  "box_h": 0.065,
+  "box_conf": 0.148
  },
  {
   "code": "F118",
@@ -1687,7 +2332,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.87054,
-  "plan_y": 0.28247
+  "plan_y": 0.28247,
+  "box_x": 0.86531,
+  "box_y": 0.24172,
+  "box_w": 0.01107,
+  "box_h": 0.04167,
+  "box_conf": 0.214
  },
  {
   "code": "F119",
@@ -1700,7 +2350,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.79368,
-  "plan_y": 0.37877
+  "plan_y": 0.37877,
+  "box_x": 0.79004,
+  "box_y": 0.37838,
+  "box_w": 0.01661,
+  "box_h": 0.04333,
+  "box_conf": 0.104
  },
  {
   "code": "F120",
@@ -1713,7 +2368,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.81628,
-  "plan_y": 0.38438
+  "plan_y": 0.38438,
+  "box_x": 0.80406,
+  "box_y": 0.36672,
+  "box_w": 0.01661,
+  "box_h": 0.03583,
+  "box_conf": 0.131
  },
  {
   "code": "F121",
@@ -1726,7 +2386,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.8334,
-  "plan_y": 0.37587
+  "plan_y": 0.37587,
+  "box_x": 0.82583,
+  "box_y": 0.31505,
+  "box_w": 0.01771,
+  "box_h": 0.06833,
+  "box_conf": 0.321
  },
  {
   "code": "F122",
@@ -1739,7 +2404,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.85912,
-  "plan_y": 0.3759
+  "plan_y": 0.3759,
+  "box_x": 0.84649,
+  "box_y": 0.31588,
+  "box_w": 0.01771,
+  "box_h": 0.06667,
+  "box_conf": 0.325
  },
  {
   "code": "F123",
@@ -1752,7 +2422,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.83211,
-  "plan_y": 0.32583
+  "plan_y": 0.32583,
+  "box_x": 0.8262,
+  "box_y": 0.31422,
+  "box_w": 0.03764,
+  "box_h": 0.02083,
+  "box_conf": 0.387
  },
  {
   "code": "F124",
@@ -1765,7 +2440,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.82961,
-  "plan_y": 0.29206
+  "plan_y": 0.29206,
+  "box_x": 0.82657,
+  "box_y": 0.29172,
+  "box_w": 0.00812,
+  "box_h": 0.04167,
+  "box_conf": 0.414
  },
  {
   "code": "F125",
@@ -1778,7 +2458,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.83892,
-  "plan_y": 0.29206
+  "plan_y": 0.29206,
+  "box_x": 0.83432,
+  "box_y": 0.29172,
+  "box_w": 0.00812,
+  "box_h": 0.04167,
+  "box_conf": 0.359
  },
  {
   "code": "F126",
@@ -1791,7 +2476,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.84824,
-  "plan_y": 0.29206
+  "plan_y": 0.29206,
+  "box_x": 0.84723,
+  "box_y": 0.29172,
+  "box_w": 0.00886,
+  "box_h": 0.04167,
+  "box_conf": 0.306
  },
  {
   "code": "F127",
@@ -1804,7 +2494,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.85756,
-  "plan_y": 0.29206
+  "plan_y": 0.29206,
+  "box_x": 0.85572,
+  "box_y": 0.29172,
+  "box_w": 0.00812,
+  "box_h": 0.04167,
+  "box_conf": 0.453
  },
  {
   "code": "F128",
@@ -1817,7 +2512,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.85501,
-  "plan_y": 0.25709
+  "plan_y": 0.25709,
+  "box_x": 0.84613,
+  "box_y": 0.23505,
+  "box_w": 0.01181,
+  "box_h": 0.02667,
+  "box_conf": 0.221
  },
  {
   "code": "F129",
@@ -1830,7 +2530,12 @@
   "zone": "production",
   "regime": "GMP",
   "plan_x": 0.91932,
-  "plan_y": 0.16028
+  "plan_y": 0.16028,
+  "box_x": 0.90996,
+  "box_y": 0.08088,
+  "box_w": 0.02325,
+  "box_h": 0.1225,
+  "box_conf": 0.315
  },
  {
   "code": "F130",
@@ -1843,7 +2548,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.92077,
-  "plan_y": 0.25786
+  "plan_y": 0.25786,
+  "box_x": 0.89077,
+  "box_y": 0.25172,
+  "box_w": 0.0321,
+  "box_h": 0.01083,
+  "box_conf": 0.129
  },
  {
   "code": "F131",
@@ -1856,7 +2566,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.94486,
-  "plan_y": 0.27689
+  "plan_y": 0.27689,
+  "box_x": 0.92694,
+  "box_y": 0.22255,
+  "box_w": 0.03026,
+  "box_h": 0.14583,
+  "box_conf": 0.14
  },
  {
   "code": "F132",
@@ -1869,7 +2584,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.96445,
-  "plan_y": 0.28023
+  "plan_y": 0.28023,
+  "box_x": 0.95904,
+  "box_y": 0.27588,
+  "box_w": 0.01255,
+  "box_h": 0.0375,
+  "box_conf": 0.406
  },
  {
   "code": "F133",
@@ -1882,7 +2602,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.93932,
-  "plan_y": 0.20049
+  "plan_y": 0.20049,
+  "box_x": 0.93653,
+  "box_y": 0.18005,
+  "box_w": 0.03284,
+  "box_h": 0.04333,
+  "box_conf": 0.356
  },
  {
   "code": "F134",
@@ -1895,7 +2620,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.96403,
-  "plan_y": 0.16404
+  "plan_y": 0.16404,
+  "box_x": 0.96089,
+  "box_y": 0.14338,
+  "box_w": 0.00886,
+  "box_h": 0.03833,
+  "box_conf": 0.365
  },
  {
   "code": "F135",
@@ -1908,7 +2638,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.96179,
-  "plan_y": 0.0867
+  "plan_y": 0.0867,
+  "box_x": 0.95498,
+  "box_y": 0.08172,
+  "box_w": 0.01476,
+  "box_h": 0.0625,
+  "box_conf": 0.456
  },
  {
   "code": "F136",
@@ -1921,7 +2656,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.94875,
-  "plan_y": 0.124
+  "plan_y": 0.124,
+  "box_x": 0.93653,
+  "box_y": 0.10588,
+  "box_w": 0.01661,
+  "box_h": 0.01917,
+  "box_conf": 0.419
  },
  {
   "code": "F137",
@@ -1934,7 +2674,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.94018,
-  "plan_y": 0.124
+  "plan_y": 0.124,
+  "box_x": 0.93653,
+  "box_y": 0.10588,
+  "box_w": 0.01661,
+  "box_h": 0.01917,
+  "box_conf": 0.419
  },
  {
   "code": "F138",
@@ -1947,7 +2692,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.9421,
-  "plan_y": 0.17038
+  "plan_y": 0.17038,
+  "box_x": 0.93579,
+  "box_y": 0.15422,
+  "box_w": 0.00849,
+  "box_h": 0.03417,
+  "box_conf": 0.382
  },
  {
   "code": "F139",
@@ -1960,7 +2710,12 @@
   "zone": "quality",
   "regime": "GMP",
   "plan_x": 0.95445,
-  "plan_y": 0.16823
+  "plan_y": 0.16823,
+  "box_x": 0.94428,
+  "box_y": 0.14672,
+  "box_w": 0.01365,
+  "box_h": 0.03417,
+  "box_conf": 0.511
  },
  {
   "code": "F141",
@@ -1973,7 +2728,12 @@
   "zone": "waste",
   "regime": "SUPPORT",
   "plan_x": 0.74498,
-  "plan_y": 0.04947
+  "plan_y": 0.04947,
+  "box_x": 0.72989,
+  "box_y": 0.04672,
+  "box_w": 0.0214,
+  "box_h": 0.02417,
+  "box_conf": 0.284
  },
  {
   "code": "F142",
@@ -1986,7 +2746,12 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.7261,
-  "plan_y": 0.05728
+  "plan_y": 0.05728,
+  "box_x": 0.72472,
+  "box_y": 0.04672,
+  "box_w": 0.01734,
+  "box_h": 0.02167,
+  "box_conf": 0.247
  },
  {
   "code": "F143",
@@ -1999,7 +2764,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.70433,
-  "plan_y": 0.05184
+  "plan_y": 0.05184,
+  "box_x": 0.6893,
+  "box_y": 0.04588,
+  "box_w": 0.02952,
+  "box_h": 0.03583,
+  "box_conf": 0.259
  },
  {
   "code": "M1",
@@ -2012,7 +2782,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.95511,
-  "plan_y": 0.38342
+  "plan_y": 0.38342,
+  "box_x": 0.94797,
+  "box_y": 0.36088,
+  "box_w": 0.02325,
+  "box_h": 0.0825,
+  "box_conf": 0.256
  },
  {
   "code": "M1A",
@@ -2025,7 +2800,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.93563,
-  "plan_y": 0.37349
+  "plan_y": 0.37349,
+  "box_x": 0.92694,
+  "box_y": 0.36838,
+  "box_w": 0.01882,
+  "box_h": 0.035,
+  "box_conf": 0.373
  },
  {
   "code": "M2",
@@ -2038,7 +2818,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.92429,
-  "plan_y": 0.33494
+  "plan_y": 0.33494,
+  "box_x": 0.87934,
+  "box_y": 0.31505,
+  "box_w": 0.09188,
+  "box_h": 0.0525,
+  "box_conf": 0.233
  },
  {
   "code": "M3",
@@ -2051,7 +2836,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.866,
-  "plan_y": 0.3277
+  "plan_y": 0.3277,
+  "box_x": 0.86384,
+  "box_y": 0.31338,
+  "box_w": 0.01513,
+  "box_h": 0.0525,
+  "box_conf": 0.348
  },
  {
   "code": "M4",
@@ -2064,7 +2854,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.86568,
-  "plan_y": 0.38957
+  "plan_y": 0.38957,
+  "box_x": 0.86494,
+  "box_y": 0.38838,
+  "box_w": 0.01292,
+  "box_h": 0.03417,
+  "box_conf": 0.184
  },
  {
   "code": "M5",
@@ -2077,7 +2872,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.88507,
-  "plan_y": 0.39452
+  "plan_y": 0.39452,
+  "box_x": 0.8845,
+  "box_y": 0.38755,
+  "box_w": 0.00923,
+  "box_h": 0.015,
+  "box_conf": 0.552
  },
  {
   "code": "M6",
@@ -2090,7 +2890,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.88452,
-  "plan_y": 0.38237
+  "plan_y": 0.38237,
+  "box_x": 0.87823,
+  "box_y": 0.37005,
+  "box_w": 0.00849,
+  "box_h": 0.02167,
+  "box_conf": 0.673
  },
  {
   "code": "M7",
@@ -2103,7 +2908,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.88962,
-  "plan_y": 0.38237
+  "plan_y": 0.38237,
+  "box_x": 0.88782,
+  "box_y": 0.36755,
+  "box_w": 0.00664,
+  "box_h": 0.03417,
+  "box_conf": 0.576
  },
  {
   "code": "M8",
@@ -2116,7 +2926,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.92082,
-  "plan_y": 0.37413
+  "plan_y": 0.37413,
+  "box_x": 0.90812,
+  "box_y": 0.36672,
+  "box_w": 0.01771,
+  "box_h": 0.035,
+  "box_conf": 0.432
  },
  {
   "code": "M9",
@@ -2129,7 +2944,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.89922,
-  "plan_y": 0.38902
+  "plan_y": 0.38902,
+  "box_x": 0.89483,
+  "box_y": 0.35755,
+  "box_w": 0.00627,
+  "box_h": 0.03417,
+  "box_conf": 0.453
  },
  {
   "code": "M10",
@@ -2142,7 +2962,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.90524,
-  "plan_y": 0.38867
+  "plan_y": 0.38867,
+  "box_x": 0.90185,
+  "box_y": 0.37005,
+  "box_w": 0.00627,
+  "box_h": 0.035,
+  "box_conf": 0.568
  },
  {
   "code": "M11",
@@ -2155,7 +2980,12 @@
   "zone": "circulation",
   "regime": "SUPPORT",
   "plan_x": 0.85299,
-  "plan_y": 0.42241
+  "plan_y": 0.42241,
+  "box_x": 0.73247,
+  "box_y": 0.40338,
+  "box_w": 0.21181,
+  "box_h": 0.03667,
+  "box_conf": 0.113
  },
  {
   "code": "M13",
@@ -2168,7 +2998,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.74556,
-  "plan_y": 0.38017
+  "plan_y": 0.38017,
+  "box_x": 0.71956,
+  "box_y": 0.36922,
+  "box_w": 0.05756,
+  "box_h": 0.0325,
+  "box_conf": 0.183
  },
  {
   "code": "M14",
@@ -2181,7 +3016,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.74684,
-  "plan_y": 0.45161
+  "plan_y": 0.45161,
+  "box_x": 0.73173,
+  "box_y": 0.42255,
+  "box_w": 0.05756,
+  "box_h": 0.03167,
+  "box_conf": 0.073
  },
  {
   "code": "M20",
@@ -2194,7 +3034,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.79546,
-  "plan_y": 0.46752
+  "plan_y": 0.46752,
+  "box_x": 0.78967,
+  "box_y": 0.44255,
+  "box_w": 0.01439,
+  "box_h": 0.03083,
+  "box_conf": 0.186
  },
  {
   "code": "T28",
@@ -2207,7 +3052,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.80107,
-  "plan_y": 0.74643
+  "plan_y": 0.74643,
+  "box_x": 0.78303,
+  "box_y": 0.70088,
+  "box_w": 0.05092,
+  "box_h": 0.07,
+  "box_conf": 0.461
  },
  {
   "code": "T49",
@@ -2220,7 +3070,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.60013,
-  "plan_y": 0.9631
+  "plan_y": 0.9631,
+  "box_x": 0.59336,
+  "box_y": 0.93172,
+  "box_w": 0.01476,
+  "box_h": 0.04583,
+  "box_conf": 0.482
  },
  {
   "code": "T61",
@@ -2233,7 +3088,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.94982,
-  "plan_y": 0.68669
+  "plan_y": 0.68669,
+  "box_x": 0.93911,
+  "box_y": 0.66422,
+  "box_w": 0.0321,
+  "box_h": 0.04167,
+  "box_conf": 0.544
  },
  {
   "code": "T62",
@@ -2246,7 +3106,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.94998,
-  "plan_y": 0.71727
+  "plan_y": 0.71727,
+  "box_x": 0.93911,
+  "box_y": 0.70755,
+  "box_w": 0.0321,
+  "box_h": 0.06417,
+  "box_conf": 0.444
  },
  {
   "code": "T63",
@@ -2259,7 +3124,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.87398,
-  "plan_y": 0.72714
+  "plan_y": 0.72714,
+  "box_x": 0.86679,
+  "box_y": 0.66422,
+  "box_w": 0.05498,
+  "box_h": 0.1075,
+  "box_conf": 0.407
  },
  {
   "code": "T64",
@@ -2272,7 +3142,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.74272,
-  "plan_y": 0.72947
+  "plan_y": 0.72947,
+  "box_x": 0.7203,
+  "box_y": 0.66505,
+  "box_w": 0.06199,
+  "box_h": 0.1075,
+  "box_conf": 0.51
  },
  {
   "code": "T65",
@@ -2285,7 +3160,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.86186,
-  "plan_y": 0.72714
+  "plan_y": 0.72714,
+  "box_x": 0.84354,
+  "box_y": 0.70172,
+  "box_w": 0.02325,
+  "box_h": 0.07,
+  "box_conf": 0.492
  },
  {
   "code": "T68",
@@ -2298,7 +3178,12 @@
   "zone": "warehouse",
   "regime": "GMP",
   "plan_x": 0.64536,
-  "plan_y": 0.72947
+  "plan_y": 0.72947,
+  "box_x": 0.6321,
+  "box_y": 0.70005,
+  "box_w": 0.0262,
+  "box_h": 0.07083,
+  "box_conf": 0.291
  },
  {
   "code": "T69",
@@ -2311,7 +3196,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.5181,
-  "plan_y": 0.71444
+  "plan_y": 0.71444,
+  "box_x": 0.42066,
+  "box_y": 0.66422,
+  "box_w": 0.17343,
+  "box_h": 0.09667,
+  "box_conf": 0.24
  },
  {
   "code": "T71",
@@ -2324,7 +3214,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.38357,
-  "plan_y": 0.72047
+  "plan_y": 0.72047,
+  "box_x": 0.31218,
+  "box_y": 0.66422,
+  "box_w": 0.18118,
+  "box_h": 0.1075,
+  "box_conf": 0.41
  },
  {
   "code": "T73",
@@ -2337,7 +3232,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.18328,
-  "plan_y": 0.72176
+  "plan_y": 0.72176,
+  "box_x": 0.15092,
+  "box_y": 0.66505,
+  "box_w": 0.1155,
+  "box_h": 0.10667,
+  "box_conf": 0.382
  },
  {
   "code": "T140",
@@ -2350,7 +3250,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.82877,
-  "plan_y": 0.04998
+  "plan_y": 0.04998,
+  "box_x": 0.78229,
+  "box_y": 0.03922,
+  "box_w": 0.18856,
+  "box_h": 0.04,
+  "box_conf": 0.51
  },
  {
   "code": "T149A",
@@ -2363,7 +3268,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.61694,
-  "plan_y": 0.06125
+  "plan_y": 0.06125,
+  "box_x": 0.59262,
+  "box_y": 0.03922,
+  "box_w": 0.06531,
+  "box_h": 0.04,
+  "box_conf": 0.489
  },
  {
   "code": "T153A",
@@ -2376,7 +3286,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.7758,
-  "plan_y": 0.06652
+  "plan_y": 0.06652,
+  "box_x": 0.76753,
+  "box_y": 0.03755,
+  "box_w": 0.01402,
+  "box_h": 0.04333,
+  "box_conf": 0.434
  },
  {
   "code": "T159",
@@ -2389,7 +3304,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.07925,
-  "plan_y": 0.09246
+  "plan_y": 0.09246,
+  "box_x": 0.03173,
+  "box_y": 0.0,
+  "box_w": 0.04945,
+  "box_h": 0.11167,
+  "box_conf": 0.052
  },
  {
   "code": "T160",
@@ -2402,7 +3322,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.07402,
-  "plan_y": 0.15158
+  "plan_y": 0.15158,
+  "box_x": 0.02509,
+  "box_y": 0.12255,
+  "box_w": 0.07749,
+  "box_h": 0.09667,
+  "box_conf": 0.579
  },
  {
   "code": "T161",
@@ -2415,7 +3340,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.10261,
-  "plan_y": 0.32837
+  "plan_y": 0.32837,
+  "box_x": 0.08266,
+  "box_y": 0.22088,
+  "box_w": 0.03469,
+  "box_h": 0.55333,
+  "box_conf": 0.358
  },
  {
   "code": "T162",
@@ -2428,7 +3358,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.0511,
-  "plan_y": 0.4001
+  "plan_y": 0.4001,
+  "box_x": 0.02472,
+  "box_y": 0.22088,
+  "box_w": 0.05351,
+  "box_h": 0.5675,
+  "box_conf": 0.358
  },
  {
   "code": "T163",
@@ -2441,7 +3376,12 @@
   "zone": "technical",
   "regime": "SUPPORT",
   "plan_x": 0.03024,
-  "plan_y": 0.71323
+  "plan_y": 0.71323,
+  "box_x": 0.02472,
+  "box_y": 0.67755,
+  "box_w": 0.02066,
+  "box_h": 0.04667,
+  "box_conf": 0.22
  },
  {
   "code": "W17",
@@ -2454,7 +3394,12 @@
   "zone": "personnel",
   "regime": "SUPPORT",
   "plan_x": 0.84158,
-  "plan_y": 0.48053
+  "plan_y": 0.48053,
+  "box_x": 0.83764,
+  "box_y": 0.44422,
+  "box_w": 0.00738,
+  "box_h": 0.06083,
+  "box_conf": 0.358
  },
  {
   "code": "W18",
@@ -2467,7 +3412,12 @@
   "zone": "utility",
   "regime": "GMP",
   "plan_x": 0.86037,
-  "plan_y": 0.48053
+  "plan_y": 0.48053,
+  "box_x": 0.84576,
+  "box_y": 0.45088,
+  "box_w": 0.02251,
+  "box_h": 0.06083,
+  "box_conf": 0.312
  },
  {
   "code": "W19",
@@ -2480,6 +3430,11 @@
   "zone": "airlock",
   "regime": "GMP",
   "plan_x": 0.87218,
-  "plan_y": 0.4611
+  "plan_y": 0.4611,
+  "box_x": 0.869,
+  "box_y": 0.45172,
+  "box_w": 0.00664,
+  "box_h": 0.06083,
+  "box_conf": 0.315
  }
 ]

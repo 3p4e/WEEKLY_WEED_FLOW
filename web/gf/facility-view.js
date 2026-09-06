@@ -22,7 +22,7 @@
   GF.WWF._fac = { data: null, loading: false, error: null, tab: 'rooms' };
   // The as-built register (tasks 0068 + api/facility_layout.py): the building
   // as the architect drew it, loaded lazily the first time the plan is opened.
-  GF.WWF._plan = { data: null, loading: false, error: null,
+  GF.WWF._plan = { data: null, loading: false, error: null, mode: 'plan',
                    zone: '', q: '', zoom: 1, sel: null, room: null };
 
   const PHASES = {
@@ -201,8 +201,9 @@
   };
   GF.WWF.planSearch = (v) => {
     GF.WWF._plan.q = v;
-    // Re-render only the markers and the roster, so the field keeps focus.
+    // Re-render only the shapes and the roster, so the field keeps focus.
     const stage = GF.$('fp-stage'); if (stage) stage.innerHTML = GF.WWF._planMarkers();
+    const svg = GF.$('fp-svg'); if (svg) svg.innerHTML = GF.WWF._planShapes();
     const list = GF.$('fp-list'); if (list) list.innerHTML = GF.WWF._planRoster();
   };
 
@@ -239,6 +240,81 @@
       </div>`).join('');
   };
 
+
+  /* ── The plan the app draws itself ────────────────────────────────────
+     Every room carries a rectangle in the same normalised frame as its pin
+     (tasks 0069): the SIZE solved exactly from the area and perimeter the
+     drawing stamps, the POSITION and orientation fitted to the drawing's own
+     wall ink, and `box_conf` recording how well the fitted edges landed on it.
+
+     Drawn as SVG rather than as a picture of the sheet, which buys the three
+     things a scan cannot give: it takes the app's theme, it stays sharp at any
+     zoom on any screen, and a room can be coloured by what it IS. Rooms whose
+     fit scored low are drawn dashed — the app says "about here" rather than
+     implying a survey nobody did. */
+
+  const PLAN_VB_W = 1000;
+  const PLAN_VB_H = 443;          // 2710 x 1200 pt, the frame the boxes normalise to
+  const LOW_CONF = 0.15;
+
+  /* The register's frame is the sheet's frame, and the sheet has margin the
+     building does not fill — a quarter of it is empty site. The DATA stays in
+     that one frame so a room's rectangle and its pin are the same coordinates;
+     only the camera moves. */
+  const planViewBox = (rooms) => {
+    const b = rooms.filter(r => r.box_x != null);
+    if (!b.length) return `0 0 ${PLAN_VB_W} ${PLAN_VB_H}`;
+    const x0 = Math.min(...b.map(r => r.box_x)) * PLAN_VB_W;
+    const y0 = Math.min(...b.map(r => r.box_y)) * PLAN_VB_H;
+    const x1 = Math.max(...b.map(r => r.box_x + r.box_w)) * PLAN_VB_W;
+    const y1 = Math.max(...b.map(r => r.box_y + r.box_h)) * PLAN_VB_H;
+    const m = 6;
+    return `${(x0 - m).toFixed(1)} ${(y0 - m).toFixed(1)} `
+         + `${(x1 - x0 + 2 * m).toFixed(1)} ${(y1 - y0 + 2 * m).toFixed(1)}`;
+  };
+
+  GF.WWF.planMode = (m) => { GF.WWF._plan.mode = m; GF.render.all(); };
+
+  // Which rooms the current filters single out. Unlike the drawing's pins the
+  // plan never removes a room — a floor plan with holes in it is not a floor
+  // plan — so a filtered-out room is dimmed and made unclickable instead.
+  const planMatch = (r) => {
+    const p = GF.WWF._plan;
+    const q = (p.q || '').trim().toLowerCase();
+    if (p.zone && r.zone !== p.zone) return false;
+    if (!q) return true;
+    return (r.code || '').toLowerCase().includes(q)
+        || (r.name_en || '').toLowerCase().includes(q)
+        || (r.name_mk || '').toLowerCase().includes(q);
+  };
+
+  GF.WWF._planShapes = () => {
+    const p = GF.WWF._plan;
+    const rooms = (p.data && p.data.rooms ? p.data.rooms : []).filter(r => r.box_x != null);
+    const anyFilter = !!(p.zone || (p.q || '').trim());
+    // Biggest first, so a small room inside a hall stays clickable above it.
+    return rooms.slice().sort((a, b) => (b.box_w * b.box_h) - (a.box_w * a.box_h))
+      .map(r => {
+        const on = planMatch(r);
+        const x = (r.box_x * PLAN_VB_W).toFixed(2);
+        const y = (r.box_y * PLAN_VB_H).toFixed(2);
+        const w = (r.box_w * PLAN_VB_W).toFixed(2);
+        const h = (r.box_h * PLAN_VB_H).toFixed(2);
+        const cls = 'fp-r'
+          + (p.sel === r.id ? ' on' : '')
+          + (anyFilter && !on ? ' off' : '')
+          + ((r.box_conf != null && r.box_conf < LOW_CONF) ? ' loose' : '');
+        const label = (r.box_w * PLAN_VB_W > 26 && r.box_h * PLAN_VB_H > 11)
+          ? `<text class="fp-rt" x="${(+x + 2.5).toFixed(2)}" y="${(+y + 8).toFixed(2)}">${GF.esc(r.code)}</text>`
+          : '';
+        return `<g class="${cls}" style="--pin:${zCol(r.zone)}"
+            onclick="GF.WWF.openPlanRoom('${r.id}')">
+            <title>${GF.esc(r.code + ' · ' + planName(r)
+              + (r.area_m2 != null ? ' · ' + r.area_m2.toFixed(2) + ' m²' : ''))}</title>
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="0.8"></rect>${label}</g>`;
+      }).join('');
+  };
+
   GF.WWF.facPlan = () => {
     const p = GF.WWF._plan;
     if (p.loading || (!p.data && !p.error)) {
@@ -266,7 +342,13 @@
         <b>${t.rooms}</b> · ${Math.round(t.area_m2)} m²</button>`;
     };
     const legend = `<div class="fp-legend">${Object.keys(ZONES).map(chip).join('')}</div>`;
+    const mode = (k, label) => `<button class="fp-mode${p.mode === k ? ' on' : ''}"
+      onclick="GF.WWF.planMode('${k}')">${label}</button>`;
     const bar = `<div class="fp-bar">
+      <div class="fp-modes">
+        ${mode('plan', AL('Plan', 'Основа'))}
+        ${mode('drawing', AL('Drawing', 'Цртеж'))}
+      </div>
       <input id="fp-q" class="fp-q" placeholder="${AL('Find a room — code or name', 'Најди соба — код или име')}"
              value="${GF.esc(p.q)}" oninput="GF.WWF.planSearch(this.value)">
       <div class="fp-zoom">
@@ -275,17 +357,31 @@
         <button class="btn btn-sm" onclick="GF.WWF.planZoom(0.5)">+</button>
       </div>
     </div>`;
-    return bar + legend + `
-      <div class="fp-wrap">
-        <div class="fp-stage-outer" style="width:${p.zoom * 100}%">
+    // Two representations of one building, over the same register and the same
+    // room card: the plan the app draws, and the architect's own sheet.
+    const stage = p.mode === 'drawing'
+      ? `<div class="fp-stage-outer" style="width:${p.zoom * 100}%">
           <img class="fp-img" src="assets/facility-ground-floor.png" alt="${
             AL('Ground-floor plan', 'Основа на приземје')}">
           <div class="fp-stage${p.zoom < 1.5 ? ' fp-quiet' : ''}" id="fp-stage">${GF.WWF._planMarkers()}</div>
-        </div>
-      </div>
-      <div class="fp-src">${AL(
-        'Ground floor, 1:100 — Medical Cannabis Facility, Petrovec. Conceptual layout, 03/2021.',
-        'Приземје, 1:100 — Медицинска канабис фабрика, Петровец. Концептуална основа, 03/2021.')}</div>
+        </div>`
+      : `<div class="fp-stage-outer" style="width:${p.zoom * 100}%">
+          <svg class="fp-svg" id="fp-svg" viewBox="${planViewBox(p.data.rooms || [])}"
+               preserveAspectRatio="xMidYMid meet" role="img"
+               aria-label="${AL('Ground-floor plan', 'Основа на приземје')}">
+            ${GF.WWF._planShapes()}
+          </svg>
+        </div>`;
+    const src = p.mode === 'drawing'
+      ? AL('Ground floor — Medical Cannabis Facility, Petrovec. Conceptual layout, 03/2021.',
+           'Приземје — Медицинска канабис фабрика, Петровец. Концептуална основа, 03/2021.')
+      : AL('Drawn from the register: each room sized from its stamped area and perimeter, '
+           + 'placed against the architect\'s ground-floor sheet. A dashed room is approximately placed.',
+           'Нацртано од регистарот: секоја соба е димензионирана од запишаната површина и периметар, '
+           + 'поставена според основата на архитектот. Испрекинатите соби се приближно поставени.');
+    return bar + legend + `
+      <div class="fp-wrap${p.mode === 'plan' ? ' fp-wrap-plan' : ''}">${stage}</div>
+      <div class="fp-src">${src}</div>
       <div class="fp-list" id="fp-list">${GF.WWF._planRoster()}</div>`;
   };
 

@@ -36,6 +36,7 @@ from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 router = APIRouter(prefix="/facility/layout", tags=["facility"])
 
 _LAYOUT_PATH = Path(__file__).resolve().parents[1] / "data" / "facility_layout.json"
+_SOURCE = "Layout Full.pdf (ground floor, 03/2021)"
 
 _CLASSIFIERS = (ADMIN, *EXECUTIVE_ROLES, "QA_MGR")
 _IMPORTERS = (ADMIN, *EXECUTIVE_ROLES)
@@ -67,6 +68,7 @@ class LayoutImportIn(BaseModel):
 _SELECT = """
     SELECT f.id, f.code, f.name_en, f.name_mk, f.wing, f.zone, f.regime, f.grade,
            f.floor, f.area_m2, f.net_area_m2, f.perimeter_m, f.plan_x, f.plan_y,
+           f.box_x, f.box_y, f.box_w, f.box_h, f.box_conf,
            f.department_id, f.source, f.notes, f.is_active,
            d.name AS department_name,
            r.id AS room_id, r.code AS room_code, r.name AS room_name, r.kind AS room_kind
@@ -81,7 +83,8 @@ def _out(row) -> dict:
     for k in ("id", "department_id", "room_id"):
         if d.get(k) is not None:
             d[k] = str(d[k])
-    for k in ("area_m2", "net_area_m2", "perimeter_m", "plan_x", "plan_y"):
+    for k in ("area_m2", "net_area_m2", "perimeter_m", "plan_x", "plan_y",
+              "box_x", "box_y", "box_w", "box_h", "box_conf"):
         if d.get(k) is not None:
             d[k] = float(d[k])
     return d
@@ -233,20 +236,26 @@ async def import_layout(body: LayoutImportIn,
                 await c.execute(
                     "UPDATE facility_rooms SET name_en=$1, name_mk=$2, wing=$3, zone=$4,"
                     " area_m2=$5, net_area_m2=$6, perimeter_m=$7, plan_x=$8, plan_y=$9,"
-                    " source=$10, updated_by=$11, updated_at=now() WHERE id=$12",
+                    " box_x=$10, box_y=$11, box_w=$12, box_h=$13, box_conf=$14,"
+                    " source=$15, updated_by=$16, updated_at=now() WHERE id=$17",
                     r["name_en"], r["name_mk"], r["wing"], r["zone"], r["area_m2"],
                     r["net_area_m2"], r["perimeter_m"], r["plan_x"], r["plan_y"],
-                    "Layout Full.pdf (ground floor, 1:100, 03/2021)", user["id"], exists)
+                    r.get("box_x"), r.get("box_y"), r.get("box_w"), r.get("box_h"),
+                    r.get("box_conf"),
+                    _SOURCE, user["id"], exists)
                 updated.append(r["code"])
                 continue
             await c.execute(
                 "INSERT INTO facility_rooms(org_id, code, name_en, name_mk, wing, zone, regime,"
-                " area_m2, net_area_m2, perimeter_m, plan_x, plan_y, source, created_by, updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)",
+                " area_m2, net_area_m2, perimeter_m, plan_x, plan_y,"
+                " box_x, box_y, box_w, box_h, box_conf, source, created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)",
                 user["org_id"], r["code"], r["name_en"], r["name_mk"], r["wing"], r["zone"],
                 r["regime"], r["area_m2"], r["net_area_m2"], r["perimeter_m"],
                 r["plan_x"], r["plan_y"],
-                "Layout Full.pdf (ground floor, 1:100, 03/2021)", user["id"])
+                r.get("box_x"), r.get("box_y"), r.get("box_w"), r.get("box_h"),
+                r.get("box_conf"),
+                _SOURCE, user["id"])
             created.append(r["code"])
         if not body.dry_run and (created or updated):
             await safe_emit(c, user, verb="facility_layout_imported",

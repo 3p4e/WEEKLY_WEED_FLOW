@@ -223,3 +223,37 @@ areas, a search narrows both pins and roster, and clicking a pin opens the room:
 its two names, the stamped areas and perimeter, the zone and regime, the
 cleanliness grade (or "not classified"), the department, and whatever is growing
 in it right now.
+
+## A second representation: the plan the app draws
+
+The pinned drawing above is a scan of the architect's sheet — accurate, but a
+picture: it cannot be themed, does not stay sharp at every zoom, and cannot
+colour a room by what is happening in it. Migration `0069` adds a geometry to
+every room so the app can draw the floor itself, as SVG, alongside the scan
+rather than instead of it. The Floor plan tab carries both, as **Plan** /
+**Drawing**.
+
+**Where the geometry comes from** matters, because the app must not imply a
+survey it did not do:
+
+- The **size** is exact. Every room is stamped with its area and its
+  perimeter, and for a rectangle those two numbers give the sides outright —
+  `w + h = P/2`, `w·h = A`. 187 of 191 rooms solve to a real pair (the rest
+  fall back to a square of the right area; `C88`, whose area is unreadable on
+  the sheet, has no rectangle at all).
+- The **position and orientation** are **fitted**, not read off a second set
+  of coordinates the sheet doesn't give. A rectangle of the known size was
+  slid around the room's own code stamp, in both orientations, scored against
+  the drawing's own wall ink: a correctly placed room has almost no wall
+  inside it and a lot of wall along its border. The same sweep also recovered
+  the sheet's true scale — 14.2 points per metre, not the 1:100 the title
+  block prints; the export is at roughly half that.
+- `box_conf` — the border score, 0 to 1 — is **kept**, not thrown away once
+  the fit is chosen. It is the honest part: a wardrobe packed with locker
+  runs, or a two-metre fire-escape sliver, scores low, and those rooms are
+  drawn dashed in the app rather than pretending every room was surveyed to
+  the same confidence.
+
+The two representations share one coordinate frame — a room's box and its pin
+are the same `plan_x`/`plan_y`/`box_*` columns — so nothing needs reconciling
+between them, and switching modes keeps your zoom, filter and selection.
