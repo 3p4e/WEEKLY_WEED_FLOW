@@ -87,11 +87,22 @@ BEFORE swapping images** → `sed` the image tags and `docker compose up -d --no
 → smoke `/health/ready` for `"ready":true` + both DBs `"ok"`.
 
 Gotchas that cost time:
-- **`curl` is NOT installed in the kvm4-runner container** — `deploy.yml` falls back
-  to `wget` for this reason. Use `wget`, or `docker run --rm --network host
-  curlimages/curl`. A `curl: not found` (rc=127) looks exactly like a dead site.
+- **The `/shell` body key is `cmd`, not `script`** — `{"cmd": "...", "timeout": n}`.
+  The wrong key returns a bare **HTTP 422** that reads like an auth or
+  availability failure. The authoritative shape is the `kvm4.py` heredoc in
+  `.github/workflows/deploy.yml` (and `migration-rehearsal.yml`); copy it rather
+  than guessing. `/shell` runs **as root inside the `kvm4-runner` container**
+  with the docker socket, so `docker …` reaches the whole host.
+- **Neither `curl` NOR `wget` is installed in the kvm4-runner container**
+  (corrected 2026-09-06 — the earlier note here said to use `wget`, and that is
+  wrong). The container is `python:3.12-slim`, so `python3 -c` with `urllib` is
+  the shortest HTTP probe: no image pull, and no `not found` (rc=127)
+  masquerading as a dead site. `docker run --rm --network host curlimages/curl`
+  also works but costs a pull.
 - Long builds: launch with `nohup setsid ... &` writing to a status file and poll,
-  so an HTTP/tool timeout never orphans the deploy.
+  so an HTTP/tool timeout never orphans the deploy. **Foreground `sleep` is
+  blocked in this harness** — poll by running the wait loop *on the box* inside a
+  single long-timeout `/shell` call, or use Bash `run_in_background`.
 - Prove the built images really carry the commit by grepping for a symbol only that
   commit has — far stronger than a version string.
 - Route-existence check in prod: a new route answers **401** unauthenticated;
@@ -120,11 +131,20 @@ Still verify the *substantive* checks yourself before shipping (the CI run, and
 the rehearsal's own restore-and-upgrade-on-real-data step). A green rollup is not
 the same claim as "this migration survives production data".
 
-**Disk:** `/opt` on kvm4 has hit 100% (2026-08-08); **80% / 40 GB free after the
-v91 + v23 builds (2026-08-31)**, so there is room but not a lot of it — two image
-builds cost roughly a point. `docker system df` first; reclaim from images/build
-cache, and **never prune volumes** — they are production data even when the names
-suggest otherwise, and old image tags are the rollback path.
+**Disk:** `/opt` on kvm4 has hit 100% (2026-08-08); 80% / 40 GB free (2026-08-31);
+**93% / ~14 GB free after the v92 + v133 builds (2026-09-06)** — the trend is one
+way, so check before you build rather than after. Two image builds cost roughly a
+point. `docker system df` first; reclaim from images/build cache, and **never
+prune volumes** — they are production data even when the names suggest otherwise,
+and old image tags are the rollback path. Do not read `docker system df`'s
+"RECLAIMABLE" as free space: on 2026-09-06 it offered 23.87 GB from images (all
+42 of which were ACTIVE) and 29.43 GB from volumes (which include the live Letta
+database and the archived QMS registry).
+
+**Version numbers: read the running tag off the host, not out of `docs/`.** The
+frontend was already at `v133`'s predecessor `v132`, built 2026-09-04, with no
+deploy record written for it — planning a deploy from the docs directory alone
+would have re-used a live tag and burned the rollback anchor.
 
 ## Backend test environment (quick reference)
 
