@@ -123,23 +123,32 @@ The owner supplied the specification archive: one folder per strain, one PDF per
 grade, document code `QCSP_001_<ABBR>-<TIER>_v.01`. Read directly from those
 PDFs.
 
-### Strain spellings — RESOLVED
+### Strain spellings — STILL OPEN (an earlier revision of this file wrongly said "resolved")
 
-Neither column of the seed file was uniformly right; the correct set is a mix.
-The specification header is the authority:
+There are **two controlled sources and they disagree**. Both are dated
+`01.06.2026`, both carry per-page document code `QCSP_001_<ABBR>-<TIER>_v.01`,
+both are prepared by the QC Manager and reviewed by the QA Manager — so neither
+supersedes the other on any evidence available here:
 
-| Specification header | was `strain` | was `strain_printed` |
+| Product | Per-strain folder document | `ImB_Specifications…Merged.pdf` |
 | --- | --- | --- |
-| **JELLY DONUTZ** | Jelly Donutz ✓ | Jelly Donuts ✗ |
-| **WEDDING CRASHER** | Wedding Crasher ✓ | Wedding Crusher ✗ |
-| **PURE MICHIGEN** | Pure Michigan ✗ | Pure Michigen ✓ |
-| **GRAPS AND CREME** | Graps & Crème ✗ | Grapes And Cream ✗ |
-| **CLEMOSA A BUD** | Clemosa ✗ | Clemosa A Bud ✓ |
-| **SLEEPY JOY** | — | — |
+| `JD_THC22` | JELLY DONUT**Z** | JELLY DONUT**S** |
+| `GRC_THC10` | **GRAPS AND CREME** | **GRAPES AND CREAM** |
+| `SJ_THC10` | SLEEPY JO**Y** | SLEEPY JO**E** |
+| `WC_THC24` | WEDDING CR**A**SHER | WEDDING CR**U**SHER |
+| `CLE_THC8` | CLEMOSA A BUD | CLEMOSA A BUD — agree |
+| `PUM_THC14` | PURE MICHIGEN | PURE MICHIGEN — agree |
 
-"A Bud" is part of the strain name, not a phenotype marker. `Sleepy Joy` was not
-previously known to be contested; a companion file in the archive calls it
-"Sleepy Joe" and that is wrong.
+Settled regardless of which source wins: **"A Bud" is part of the Clemosa strain
+name**, and **PURE MICHIGEN** is the spelling in both (the seed file's "Pure
+Michigan" is wrong either way). `Sleepy Joy` / `Sleepy Joe` was a sixth contested
+spelling nobody had previously flagged.
+
+**[NEEDS INPUT]** Which of the two controlled documents governs the strain name?
+This is not cosmetic: the name resolves to a cultivar row whose abbreviation is
+the head of every batch code (`GP072501`) and mother ID (`GP26_S1M03-2_nnn`), and
+potency history is attributed to a strain by that head. Two spellings admitted as
+two cultivars splits a strain's tested history in half.
 
 ### Grade sets and nominals — CONFIRMED CORRECT
 
@@ -221,13 +230,40 @@ The app currently implements the PDFs. Adopting the non-overlapping scheme is a
 data change, not a code change — `qc_products` already stores `window_min` /
 `window_max` per product and never assumes ±10 %.
 
-**[NEEDS INPUT]** The archive PDFs are `v.01`; the 48-page consolidated document
-this catalogue was originally seeded from is `QCSP 001 v.03`. Which supersedes
-which?
+### The merged master document — the catalogue is exact against it
+
+`ImB_Specifications_Tran01-Tran02_Merged.pdf` (48 pages, 11.5 MB) is the
+consolidated specification. Parsed in full:
+
+| | |
+| --- | --- |
+| pages | 48 → **42 distinct products**, 22 strains, 6 reprints |
+| pages where tolerance ≠ 10.00 % of nominal | **0 / 48** |
+| pages where window ≠ `[nom − tol, nom × 1.10 − 0.01]` | **0 / 48** |
+| adjacent grade pairs | 20 — **16 overlap**, 4 clean |
+| `imb_products.json` vs this document | **42 / 42 exact** on code, nominal and window |
+
+So what is loaded in production is a faithful transcription of the master
+document. The reprinted pages are `CJ-III`, `FB-I`, `GG-II`, `GP-II`, `GP-IV`,
+`OPM-III`.
+
+Worst ambiguity: a Grape Pie or Cap Junky batch assaying **exactly its own
+nominal, 26.00 %**, satisfies **three** grades (I, II and III). The mildest is
+Permanent Marker I/II, a 0.19-point sliver at 10.80–10.99.
+
+**Jokerz 31 — CONFIRMED.** Page 14: `J31_THC18 : CBD1  16.20 – 19.79 %
+QCSP_001_J31-I_v.01`, Grade I, nominal 18.00 ± 1.80. The seed file's
+`needs_confirmation` flag can be cleared.
+
+**Document versions — RESOLVED, they are not competing.** `QCSP 001 v.03` is the
+*parent* specification document; `QCSP_001_<ABBR>-<TIER>_v.01` is the individual
+product page's own code. Both appear on the same page. Neither supersedes the
+other.
 
 ## Open
 
-- ~~Canonical strain spellings.~~ **RESOLVED 2026-09-06** — see above.
+- Canonical strain spellings — **still open**, see above; two controlled
+  documents disagree on four of them.
 - ~~Whether a CoQ whose Total THC falls outside its product's window should be
   blocked from issuance.~~ **DECIDED 2026-09-06 (owner): no, do not block.**
   A Total Δ9-THC outside the chosen product's window is reported on the CoQ and
