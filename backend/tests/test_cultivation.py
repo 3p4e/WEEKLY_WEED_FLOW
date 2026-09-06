@@ -551,3 +551,149 @@ async def test_the_cloning_leg_does_not_restart_when_a_batch_moves_to_nursery(cl
     assert row["expected_from"] == (started + timedelta(days=7)).isoformat()
     assert row["expected_to"] == (started + timedelta(days=14)).isoformat()
     assert row["expected_next_phase"] == "veg"
+
+
+async def test_clones_carry_their_mothers_id_and_the_fill_stays_resumable(client, admin_headers):
+    """The owner's clone id: every plant cut from GP26_S1M01-1_001 in that
+    mother's first cutting is GP26_S1M01-1_001-01.001 upward. A plant with no
+    known mother keeps the legacy <date>_<cultivar>_<seq>, and the allocation is
+    a pure function of the sequence number so an interrupted fill finishes
+    correctly."""
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_cl", "Clone CL", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m1 = await _mother(client, cu_h, prod["id"], camp["id"])
+    m2 = await _mother(client, cu_h, prod["id"], camp["id"])
+    assert (m1["code"], m2["code"]) == ("GP26_S1M01-1_001", "GP26_S1M02-1_001")
+
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092630",
+        "plant_count": 120, "phase": "clone", "clone_date": "2026-09-01",
+        "product_id": prod["id"]}, headers=cu_h)
+    assert b.status_code == 201, b.text
+    bid = b.json()["id"]
+    # 60 from the first mother, 40 from the second: 20 of the 120 planned have
+    # no mother to name them.
+    r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 120, "batch_id": bid,
+        "product_id": prod["id"],
+        "mothers": [{"mother_plant_id": m1["id"], "cuttings": 60},
+                    {"mother_plant_id": m2["id"], "cuttings": 40}]})
+    assert r.status_code == 201, r.text
+
+    g = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
+    assert g.status_code == 200, g.text
+    body = g.json()
+    assert body["complete"] is True and body["materialised"] == 120
+    assert body["per_mother"] == [{"mother_code": "GP26_S1M01-1_001", "cutting_no": 1, "count": 60},
+                                  {"mother_code": "GP26_S1M02-1_001", "cutting_no": 1, "count": 40}]
+    assert body["legacy"] == 20 and body["capped"] is False
+
+    rows = (await client.get(f"/cultivation/batches/{bid}/plants?limit=200",
+                             headers=cu_h)).json()["plants"]
+    codes = [p["plant_code"] for p in rows]
+    assert codes[0] == "GP26_S1M01-1_001-01.001"
+    assert codes[59] == "GP26_S1M01-1_001-01.060"
+    assert codes[60] == "GP26_S1M02-1_001-01.001"
+    assert codes[99] == "GP26_S1M02-1_001-01.040"
+    # the remainder falls back to the legacy id, and says nothing about a mother
+    assert codes[100] == "20260901_GP_0101" and codes[119] == "20260901_GP_0120"
+    assert rows[0]["mother_code"] == "GP26_S1M01-1_001" and rows[0]["clone_no"] == 1
+    assert rows[100]["mother_plant_id"] is None and rows[100]["cutting_no"] is None
+
+    # A second cutting from the same mother numbers itself 02, so its clones do too.
+    b2 = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092631",
+        "plant_count": 3, "phase": "clone", "clone_date": "2026-09-20"}, headers=cu_h)
+    bid2 = b2.json()["id"]
+    r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 3, "batch_id": bid2,
+        "mothers": [{"mother_plant_id": m1["id"], "cuttings": 3}]})
+    assert r.status_code == 201 and r.json()["mothers"][0]["cutting_no"] == 2
+    await client.post(f"/cultivation/batches/{bid2}/plants", headers=cu_h)
+    rows2 = (await client.get(f"/cultivation/batches/{bid2}/plants", headers=cu_h)).json()["plants"]
+    assert [p["plant_code"] for p in rows2] == ["GP26_S1M01-1_001-02.001",
+                                                "GP26_S1M01-1_001-02.002",
+                                                "GP26_S1M01-1_001-02.003"]
+
+
+async def test_an_interrupted_fill_resumes_with_the_same_ids(client, admin_headers):
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_rs", "Clone RS", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092632",
+        "plant_count": 10, "phase": "clone", "clone_date": "2026-09-01"}, headers=cu_h)
+    bid = b.json()["id"]
+    await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 10, "batch_id": bid,
+        "mothers": [{"mother_plant_id": m["id"], "cuttings": 10}]})
+
+    # Simulate an interrupted fill: materialise, then delete the tail and
+    # resume — the ids that come back must be the ones that were there.
+    await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
+    from app.db import tasks_admin_pool
+    await tasks_admin_pool().execute("DELETE FROM plants WHERE batch_id=$1 AND seq > 4", bid)
+    g = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
+    assert g.json()["complete"] is True
+    rows = (await client.get(f"/cultivation/batches/{bid}/plants", headers=cu_h)).json()["plants"]
+    assert [p["plant_code"] for p in rows] == [
+        f"{m['code']}-01.{n:03d}" for n in range(1, 11)]
+
+
+async def test_a_cutting_of_more_than_999_clones_cannot_be_numbered(client, admin_headers):
+    """.nnn runs 001-999. A cutting bigger than that has to be split, and
+    saying so is better than silently numbering 1000 plants wrongly."""
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_big", "Clone BIG", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092633",
+        "plant_count": 1200, "phase": "clone"}, headers=cu_h)
+    bid = b.json()["id"]
+    await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 1200, "batch_id": bid,
+        "mothers": [{"mother_plant_id": m["id"], "cuttings": 1000}]})
+    r = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
+    assert r.status_code == 422 and "999" in r.text
+    assert (await client.get(f"/cultivation/batches/{bid}/plants",
+                             headers=cu_h)).json()["total"] == 0
+
+
+async def test_a_mother_whose_cuttings_were_not_counted_names_no_clones(client, admin_headers):
+    """Numbering clones 1..n needs an n. Blank cuttings mean "not counted", so
+    those plants keep the legacy id rather than being given invented numbers."""
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_unc", "Clone UNC", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    b = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092634",
+        "plant_count": 3, "phase": "clone", "clone_date": "2026-09-01"}, headers=cu_h)
+    bid = b.json()["id"]
+    await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 3, "batch_id": bid,
+        "mothers": [{"mother_plant_id": m["id"]}]})
+    g = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
+    assert g.json()["per_mother"] == [] and g.json()["legacy"] == 3
+    rows = (await client.get(f"/cultivation/batches/{bid}/plants", headers=cu_h)).json()["plants"]
+    assert [p["plant_code"] for p in rows] == ["20260901_GP_0001", "20260901_GP_0002",
+                                               "20260901_GP_0003"]

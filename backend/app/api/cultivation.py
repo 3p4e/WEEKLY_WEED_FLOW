@@ -70,6 +70,7 @@ from pydantic import BaseModel, Field
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
+from app.plantids import clone_code, legacy_plant_code
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
@@ -620,10 +621,26 @@ async def update_batch(batch_id: str, body: BatchPatch,
 async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REGISTRARS))):
     """Materialise the individual plant rows up to the batch's plant_count.
 
-    CHUNKED and RESUMABLE: it starts from the highest existing seq and inserts in
-    _PLANT_CHUNK-sized transactions, so an interrupted fill is completed by
-    calling again, and each chunk releases the audit chain lock. Plant id is
-    `<clone-date>_<cultivar-code>_<seq>` with seq zero-padded to 4."""
+    CHUNKED and RESUMABLE: it starts from the highest existing seq and inserts
+    in _PLANT_CHUNK-sized transactions, so an interrupted fill is completed by
+    calling again, and each chunk releases the audit chain lock.
+
+    THE ID A PLANT GETS DEPENDS ON WHETHER ITS MOTHER IS KNOWN. When the batch
+    was fed by clone runs that named their mothers, each plant carries the
+    owner's clone id — `<mother>-<cutting>.<clone>`, e.g.
+    GP26_S1M03-2_020-03.147 — and points at the mother it was cut from. A plant
+    with no known mother (imported clones, seed, or the remainder when the runs
+    account for fewer cuttings than the batch plans) keeps the legacy
+    `<clone-date>_<cultivar>_<seq>`.
+
+    THE ALLOCATION IS A PURE FUNCTION OF seq. Segments are laid end to end in a
+    fixed order (run, then mother code), so plant number 61 belongs to the same
+    mother and carries the same id whether it is written in the first call or a
+    resumed one. That is what makes an interrupted fill safe to finish.
+
+    A mother whose cuttings were not counted contributes no ids: numbering
+    clones 1..n needs an n, and inventing one would name plants that may not
+    exist."""
     async with rls(user) as c:
         b = await _batch_or_404(c, batch_id)
         if b["cultivar_id"] is None:
@@ -635,28 +652,63 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REG
             "SELECT occurred_on FROM plant_phase_events WHERE batch_id=$1 AND event='create'"
             " ORDER BY created_at LIMIT 1", batch_id)
         cultivar_code = b["cultivar_code"] or "NA"
-        prefix = (clone_ev or b["phase_since"] or facility_today()).strftime("%Y%m%d")
+        day = clone_ev or b["phase_since"] or facility_today()
+        # The mothers this batch was cut from, in a stable order.
+        segs = await c.fetch(
+            "SELECT cm.mother_plant_id, cm.cutting_no, cm.cuttings, mp.code"
+            " FROM clone_run_mothers cm"
+            " JOIN clone_runs cr ON cr.id = cm.run_id"
+            " JOIN mother_plants mp ON mp.id = cm.mother_plant_id"
+            " WHERE cr.batch_id = $1"
+            " ORDER BY cr.started_on, cr.created_at, mp.code", batch_id)
+
+    # Lay the segments end to end: [(first_seq, last_seq, mother_id, code, cutting_no)].
+    plan, at = [], 1
+    for s in segs:
+        n = s["cuttings"]
+        if not n:
+            continue
+        if n > 999:
+            raise HTTPException(
+                422, f"mother {s['code']} cutting {s['cutting_no']:02d}: {n} clones exceeds the"
+                     " 999 a clone id can number — split the cutting")
+        if at > target:
+            break
+        take = min(int(n), target - at + 1)
+        plan.append((at, at + take - 1, s["mother_plant_id"], s["code"], s["cutting_no"]))
+        at += take
+    capped = at <= sum(int(s["cuttings"] or 0) for s in segs)
+
+    def _row(n: int):
+        """The id and lineage of plant number n — the same answer every call."""
+        for first, last, mid, code, cutting in plan:
+            if first <= n <= last:
+                return (clone_code(code, cutting, n - first + 1), mid, cutting, n - first + 1)
+        return (legacy_plant_code(day, cultivar_code, n), None, None, None)
 
     if have >= target:
         return {"batch_id": batch_id, "target": target, "created": 0,
-                "materialised": have, "complete": True}
+                "materialised": have, "complete": True,
+                "per_mother": [{"mother_code": c_, "cutting_no": cn, "count": last - first + 1}
+                               for first, last, _m, c_, cn in plan],
+                "legacy": max(0, target - (at - 1)), "capped": capped}
 
     created = 0
     seq = have + 1
     while seq <= target:
         top = min(seq + _PLANT_CHUNK - 1, target)
-        rows = [
-            (user["org_id"], batch_id, b["room_id"], b["cultivar_id"],
-             f"{prefix}_{cultivar_code}_{n:04d}", clone_ev, n, user["id"])
-            for n in range(seq, top + 1)
-        ]
+        rows = []
+        for n in range(seq, top + 1):
+            code, mid, cutting, clone_no = _row(n)
+            rows.append((user["org_id"], batch_id, b["room_id"], b["cultivar_id"],
+                         code, clone_ev, n, mid, cutting, clone_no, user["id"]))
         # Fresh rls() per chunk = fresh transaction = the audit lock is taken and
         # released per chunk, not held across the whole fill.
         async with rls(user) as c:
             await c.executemany(
                 "INSERT INTO plants(org_id, batch_id, room_id, cultivar_id, plant_code,"
-                " clone_date, seq, created_by, updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)"
+                " clone_date, seq, mother_plant_id, cutting_no, clone_no, created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)"
                 " ON CONFLICT (batch_id, seq) DO NOTHING", rows)
         created += len(rows)
         seq = top + 1
@@ -665,7 +717,10 @@ async def generate_plants(batch_id: str, user: dict = Depends(require_role(*_REG
         materialised = await c.fetchval(
             "SELECT count(*) FROM plants WHERE batch_id=$1", batch_id)
     return {"batch_id": batch_id, "target": target, "created": created,
-            "materialised": materialised, "complete": materialised >= target}
+            "materialised": materialised, "complete": materialised >= target,
+            "per_mother": [{"mother_code": c_, "cutting_no": cn, "count": last - first + 1}
+                           for first, last, _m, c_, cn in plan],
+            "legacy": max(0, target - (at - 1)), "capped": capped}
 
 
 @router.get("/batches/{batch_id}/plants")
@@ -679,16 +734,21 @@ async def list_plants(batch_id: str, user: dict = Depends(require_role(*ELEVATED
             "SELECT count(*) FROM plants WHERE batch_id=$1"
             " AND ($2::text IS NULL OR status=$2)", batch_id, status)
         rows = await c.fetch(
-            "SELECT id, plant_code, seq, status, status_since, clone_date, reason"
-            " FROM plants WHERE batch_id=$1 AND ($2::text IS NULL OR status=$2)"
-            " ORDER BY seq LIMIT $3 OFFSET $4", batch_id, status, limit, offset)
+            "SELECT p.id, p.plant_code, p.seq, p.status, p.status_since, p.clone_date,"
+            " p.reason, p.mother_plant_id, p.cutting_no, p.clone_no, mp.code AS mother_code"
+            " FROM plants p LEFT JOIN mother_plants mp ON mp.id = p.mother_plant_id"
+            " WHERE p.batch_id=$1 AND ($2::text IS NULL OR p.status=$2)"
+            " ORDER BY p.seq LIMIT $3 OFFSET $4", batch_id, status, limit, offset)
     return {"batch_id": batch_id, "total": total, "limit": limit, "offset": offset,
             "plants": [
                 {"id": str(r["id"]), "plant_code": r["plant_code"], "seq": r["seq"],
                  "status": r["status"],
                  "status_since": r["status_since"].isoformat() if r["status_since"] else None,
                  "clone_date": r["clone_date"].isoformat() if r["clone_date"] else None,
-                 "reason": r["reason"]}
+                 "reason": r["reason"],
+                 "mother_plant_id": str(r["mother_plant_id"]) if r["mother_plant_id"] else None,
+                 "mother_code": r["mother_code"], "cutting_no": r["cutting_no"],
+                 "clone_no": r["clone_no"]}
                 for r in rows]}
 
 
