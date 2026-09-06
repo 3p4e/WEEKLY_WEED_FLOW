@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict z6Ndw72R2ybvIfqcFCcNjRZGH8vMFSzu2j9WqjwOIjfkmexryijnwCHja6aeWvM
+\restrict WcJ9F1nGGlc1mFQkITyWzn4PaRg7Ekln6vtB2GpqqEexMGvQKqj9HCV8nfaE4TU
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -296,7 +296,7 @@ CREATE TABLE public.clone_run_mothers (
     cuttings integer,
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    cutting_no integer,
+    cutting_no integer NOT NULL,
     CONSTRAINT clone_run_mothers_cutting_no_check CHECK (((cutting_no IS NULL) OR ((cutting_no >= 1) AND (cutting_no <= 99)))),
     CONSTRAINT clone_run_mothers_cuttings_check CHECK (((cuttings IS NULL) OR (cuttings >= 0)))
 );
@@ -317,7 +317,6 @@ CREATE TABLE public.clone_runs (
     planned_count integer DEFAULT 0 NOT NULL,
     room_id uuid,
     batch_id uuid,
-    potency_spec_id uuid,
     status text DEFAULT 'started'::text NOT NULL,
     finished_on date,
     note text,
@@ -713,7 +712,17 @@ CREATE TABLE public.mother_plants (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT mother_plants_status_check CHECK ((status = ANY (ARRAY['active'::text, 'retired'::text, 'destroyed'::text])))
+    product_id uuid NOT NULL,
+    campaign_id uuid NOT NULL,
+    mother_no integer NOT NULL,
+    generation integer DEFAULT 1 NOT NULL,
+    stock_no integer NOT NULL,
+    parent_id uuid,
+    CONSTRAINT mother_plants_first_generation_check CHECK (((generation > 1) OR (parent_id IS NULL))),
+    CONSTRAINT mother_plants_generation_check CHECK ((generation >= 1)),
+    CONSTRAINT mother_plants_mother_no_check CHECK (((mother_no >= 1) AND (mother_no <= 99))),
+    CONSTRAINT mother_plants_status_check CHECK ((status = ANY (ARRAY['active'::text, 'retired'::text, 'destroyed'::text]))),
+    CONSTRAINT mother_plants_stock_no_check CHECK (((stock_no >= 1) AND (stock_no <= 999)))
 );
 
 ALTER TABLE ONLY public.mother_plants FORCE ROW LEVEL SECURITY;
@@ -2501,6 +2510,14 @@ ALTER TABLE ONLY public.ipm_applications
 
 ALTER TABLE ONLY public.irrigation_events
     ADD CONSTRAINT irrigation_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mother_plants mother_plants_line_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_line_key UNIQUE (org_id, campaign_id, product_id, mother_no, generation, stock_no);
 
 
 --
@@ -4458,14 +4475,6 @@ ALTER TABLE ONLY public.clone_runs
 
 
 --
--- Name: clone_runs clone_runs_potency_spec_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.clone_runs
-    ADD CONSTRAINT clone_runs_potency_spec_id_fkey FOREIGN KEY (potency_spec_id) REFERENCES public.qc_potency_specs(id) ON DELETE SET NULL;
-
-
---
 -- Name: clone_runs clone_runs_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4650,11 +4659,35 @@ ALTER TABLE ONLY public.irrigation_events
 
 
 --
+-- Name: mother_plants mother_plants_campaign_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.selection_campaigns(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: mother_plants mother_plants_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.mother_plants
     ADD CONSTRAINT mother_plants_cultivar_id_fkey FOREIGN KEY (cultivar_id) REFERENCES public.cultivars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: mother_plants mother_plants_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.mother_plants(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: mother_plants mother_plants_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mother_plants
+    ADD CONSTRAINT mother_plants_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.qc_products(id) ON DELETE RESTRICT;
 
 
 --
@@ -6263,5 +6296,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict z6Ndw72R2ybvIfqcFCcNjRZGH8vMFSzu2j9WqjwOIjfkmexryijnwCHja6aeWvM
+\unrestrict WcJ9F1nGGlc1mFQkITyWzn4PaRg7Ekln6vtB2GpqqEexMGvQKqj9HCV8nfaE4TU
 

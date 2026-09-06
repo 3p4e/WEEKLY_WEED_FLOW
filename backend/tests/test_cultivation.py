@@ -376,32 +376,30 @@ async def test_qa_registers_a_batch_generates_its_ids_and_moves_it(client, admin
     assert r.status_code == 201, r.text
 
 
-async def test_cultivars_carry_their_product_specification(client, admin_headers):
-    """GET /cultivars returns each cultivar WITH its ImB product specification —
-    the potency ladder's grades — so the batch form registers from it. APPROVED
-    wins over DRAFT; no ladder is None, never an empty ladder."""
-    from tests.test_propagation import _approved_ladder, LADDER
+async def test_cultivars_carry_their_official_products(client, admin_headers):
+    """GET /cultivars returns each strain with the official ImB products it is
+    grown to — approved first, drafts flagged — so the batch form registers
+    from the catalogue rather than from a tier ladder."""
+    from tests.test_products import _approved, _product
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     gp = await _cultivar(client, cu_h, "GP", "Grape Pie")
     fb = await _cultivar(client, cu_h, "FB", "Fat Bastard")
 
-    by_code = {c["code"]: c for c in (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
-    assert by_code["GP"]["spec"] is None and by_code["FB"]["spec"] is None
+    by_code = {c["code"]: c for c in
+               (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
+    assert by_code["GP"]["products"] == [] and by_code["FB"]["products"] == []
 
-    # A DRAFT ladder shows, flagged DRAFT.
-    r = await client.post("/qc/potency-specs", json={
-        "cultivar_id": fb["id"], "version": "v0.1", "floor_pct": 13.83, "n_batches": 1,
-        "ranges": LADDER}, headers=admin_headers)
-    assert r.status_code == 201, r.text
-    await _approved_ladder(client, admin_headers, gp["id"], version="v5.2")
+    await _approved(client, admin_headers, gp["id"], "GP_THC26:CBD1", 26)
+    await _approved(client, admin_headers, gp["id"], "GP_THC18:CBD1", 18)
+    await _product(client, admin_headers, fb["id"], "FB_THC18:CBD1", 18)   # DRAFT
 
-    by_code = {c["code"]: c for c in (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
-    assert by_code["FB"]["spec"]["status"] == "DRAFT" and by_code["FB"]["spec"]["version"] == "v0.1"
-    gp_spec = by_code["GP"]["spec"]
-    assert gp_spec["status"] == "APPROVED" and gp_spec["version"] == "v5.2"
-    assert gp_spec["spec_code"] == "PP-QC-SPEC-001" and gp_spec["floor_pct"] == 13.83
-    assert [t["spec"] for t in gp_spec["tiers"]] == ["Spec I", "Spec II", "Spec III", "Spec IV"]
-    assert gp_spec["tiers"][0]["range_max"] == 30 and gp_spec["tiers"][-1]["range_min"] == 13.83
+    by_code = {c["code"]: c for c in
+               (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]}
+    gp_products = by_code["GP"]["products"]
+    assert [p["product_code"] for p in gp_products] == ["GP_THC26:CBD1", "GP_THC18:CBD1"]
+    assert gp_products[0]["window_min"] == 23.40 and gp_products[0]["window_max"] == 28.59
+    assert gp_products[0]["grade"] == 26.0 and gp_products[0]["status"] == "APPROVED"
+    assert by_code["FB"]["products"][0]["status"] == "DRAFT"
 
 
 async def test_next_batch_code_is_the_cultivar_head_plus_period_plus_sequence(client, admin_headers):

@@ -365,14 +365,22 @@ def _spec_out(r) -> dict | None:
 
 @router.get("/cultivars")
 async def list_cultivars(user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    """Every cultivar WITH its product specification — the APPROVED potency
-    ladder if one exists, else the newest DRAFT (its status says which), else
-    none. One query: the lateral picks the ladder, the sub-select folds its
+    """Every cultivar WITH the official products it is grown to (qc_products,
+    approved first) and, while a strain still has no approved page, its legacy
+    potency ladder. One query: the lateral picks the ladder, the sub-select folds its
     grades, so the batch form can show strain + grades without a round trip
     per cultivar."""
     async with rls(user) as c:
         rows = await c.fetch(
             "SELECT cv.id, cv.code, cv.name, cv.name_mk, cv.note, cv.is_active,"
+            # The official catalogue: every product of this strain, live ones
+            # first. This is what the batch form registers against.
+            " (SELECT json_agg(json_build_object('id', p.id, 'product_code', p.product_code,"
+            "     'grade', p.grade, 'nominal_pct', p.nominal_pct, 'window_min', p.window_min,"
+            "     'window_max', p.window_max, 'status', p.status)"
+            "     ORDER BY (p.status='APPROVED') DESC, p.grade DESC)"
+            "   FROM qc_products p WHERE p.cultivar_id = cv.id"
+            "   AND p.status IN ('APPROVED','DRAFT')) AS products,"
             " ps.id AS spec_id, ps.spec_code, ps.version AS spec_version,"
             " ps.status AS spec_status, ps.floor_pct AS spec_floor,"
             " (SELECT json_agg(json_build_object('tier', g.tier, 'range_min', g.range_min,"
@@ -388,6 +396,14 @@ async def list_cultivars(user: dict = Depends(require_role(*ELEVATED_ROLES))):
     return {"cultivars": [
         {"id": str(r["id"]), "code": r["code"], "name": r["name"],
          "name_mk": r["name_mk"], "note": r["note"], "is_active": r["is_active"],
+         "products": [{"id": str(x["id"]), "product_code": x["product_code"],
+                       "grade": float(x["grade"]), "nominal_pct": float(x["nominal_pct"]),
+                       "window_min": float(x["window_min"]), "window_max": float(x["window_max"]),
+                       "status": x["status"]}
+                      for x in (json.loads(r["products"]) if isinstance(r["products"], str)
+                                else (r["products"] or []))],
+         # The legacy ladder, still shown while strains without an approved
+         # product page are graded from it.
          "spec": _spec_out(r)}
         for r in rows]}
 
