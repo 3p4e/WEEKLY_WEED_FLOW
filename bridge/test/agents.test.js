@@ -21,6 +21,8 @@ test('headless profiles encode the permission level', () => {
   assert.deepEqual(headlessArgv(getProvider('claude'), 'do x', 'full'), ['-p', 'do x', '--output-format', 'text', '--dangerously-skip-permissions']);
   assert.deepEqual(headlessArgv(getProvider('codex'), 'do x', 'edit'), ['exec', '--full-auto', 'do x']);
   assert.deepEqual(headlessArgv(getProvider('shell'), 'echo hi', 'plan'), ['-lc', 'echo hi']);
+  assert.deepEqual(headlessArgv(getProvider('moonshot'), 'do x', 'plan'), ['-p', 'do x', '--output-format', 'text', '--permission-mode', 'plan']);
+  assert.deepEqual(headlessArgv(getProvider('moonshot-code'), 'do x', 'full'), ['-p', 'do x', '--output-format', 'text', '--dangerously-skip-permissions']);
 });
 
 test('create validates; a manual run captures output, exit code and review state', async () => {

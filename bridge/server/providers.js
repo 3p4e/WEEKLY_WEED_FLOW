@@ -48,6 +48,36 @@ export const PROVIDERS = [
     argv: (prompt) => (prompt ? ['--message', prompt] : []),
     install: 'python -m pip install aider-chat',
   },
+  // Moonshot ships no coding CLI of its own. Kimi K2/K3 speak the Anthropic
+  // Messages API format, so both rows below reuse the `claude` binary pointed
+  // at a Moonshot host via ANTHROPIC_BASE_URL. Neither has a browser/OAuth
+  // login the way Claude Pro/Max or ChatGPT Plus do — `subscription` mode
+  // here would just delete the token and fail closed — so both are key-only:
+  // the vault stores whichever bearer token the console handed you.
+  //
+  // The two rows are NOT interchangeable credentials against one bill:
+  //   - `moonshot`      = Developer API, pay-per-token, console at
+  //                       platform.moonshot.ai. Token from that console.
+  //   - `moonshot-code` = the separate "Kimi Code" plan (flat monthly fee +
+  //                       quota windows, personal-use ToS). Its token comes
+  //                       from the Kimi Code console, not the Developer API
+  //                       one, and only works against api.kimi.com/coding.
+  // A Developer API key will not draw against the Kimi Code quota, and a
+  // Kimi Code token will not work against the Developer API host.
+  {
+    id: 'moonshot', name: 'Kimi (Moonshot Developer API)', bin: 'claude', vendor: 'Moonshot AI',
+    keyEnv: 'ANTHROPIC_AUTH_TOKEN', subscription: null,
+    extraEnv: { ANTHROPIC_BASE_URL: 'https://api.moonshot.ai/anthropic' },
+    argv: (prompt) => (prompt ? [prompt] : []),
+    install: 'npm i -g @anthropic-ai/claude-code  (pay-per-token; needs a Moonshot Developer API key as a vault credential named ANTHROPIC_AUTH_TOKEN)',
+  },
+  {
+    id: 'moonshot-code', name: 'Kimi Code (subscription plan)', bin: 'claude', vendor: 'Moonshot AI',
+    keyEnv: 'ANTHROPIC_AUTH_TOKEN', subscription: null,
+    extraEnv: { ANTHROPIC_BASE_URL: 'https://api.kimi.com/coding' },
+    argv: (prompt) => (prompt ? [prompt] : []),
+    install: 'npm i -g @anthropic-ai/claude-code  (flat-fee Kimi Code plan; token comes from the Kimi Code console, separate from the Developer API — personal-use ToS)',
+  },
   {
     id: 'shell', name: 'Shell', bin: null, vendor: null, keyEnv: null, subscription: null,
     argv: () => [], install: null,
@@ -81,7 +111,7 @@ export function detect(shell) {
 // Build the child environment for a provider + auth mode. `secret` is
 // {envVar, value} from the vault (key mode only).
 export function buildEnv(provider, authMode, secret, extra = {}) {
-  const env = { ...process.env, ...extra, BRIDGE_SESSION: '1' };
+  const env = { ...process.env, ...(provider.extraEnv || {}), ...extra, BRIDGE_SESSION: '1' };
   // Never leak the workspace's own token / master key into an agent's shell.
   delete env.BRIDGE_TOKEN; delete env.BRIDGE_MASTER_KEY;
   if (authMode === 'subscription') {

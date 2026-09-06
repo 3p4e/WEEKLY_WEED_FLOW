@@ -16,7 +16,8 @@ const MAX_RUNS_PER_AGENT = 50;
 export function headlessArgv(provider, brief, permission) {
   const p = permission;
   switch (provider.id) {
-    case 'claude': return ['-p', brief, '--output-format', 'text', ...(p === 'full' ? ['--dangerously-skip-permissions'] : ['--permission-mode', p === 'edit' ? 'acceptEdits' : 'plan'])];
+    case 'claude': case 'moonshot': case 'moonshot-code':
+      return ['-p', brief, '--output-format', 'text', ...(p === 'full' ? ['--dangerously-skip-permissions'] : ['--permission-mode', p === 'edit' ? 'acceptEdits' : 'plan'])];
     case 'codex': return ['exec', ...(p === 'full' ? ['--dangerously-bypass-approvals-and-sandbox'] : p === 'edit' ? ['--full-auto'] : ['--sandbox', 'read-only']), brief];
     case 'gemini': return ['-p', brief, ...(p === 'full' ? ['--yolo'] : p === 'edit' ? ['--approval-mode', 'auto_edit'] : [])];
     case 'opencode': return ['run', brief];

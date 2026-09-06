@@ -17,6 +17,19 @@ test('subscription mode strips the vendor key; key mode injects it; workspace se
   assert.throws(() => buildEnv(claude, 'weird', null), /auth mode/);
 });
 
+test('moonshot providers reuse the claude binary but redirect it via ANTHROPIC_BASE_URL', () => {
+  const dev = getProvider('moonshot');
+  const plan = getProvider('moonshot-code');
+  assert.equal(dev.bin, 'claude'); assert.equal(plan.bin, 'claude');
+  assert.equal(dev.subscription, null); assert.equal(plan.subscription, null);
+  const devEnv = buildEnv(dev, 'key', { envVar: 'ANTHROPIC_AUTH_TOKEN', value: 'dev-token' });
+  assert.equal(devEnv.ANTHROPIC_BASE_URL, 'https://api.moonshot.ai/anthropic');
+  assert.equal(devEnv.ANTHROPIC_AUTH_TOKEN, 'dev-token');
+  const planEnv = buildEnv(plan, 'key', { envVar: 'ANTHROPIC_AUTH_TOKEN', value: 'plan-token' });
+  assert.equal(planEnv.ANTHROPIC_BASE_URL, 'https://api.kimi.com/coding');
+  assert.equal(planEnv.ANTHROPIC_AUTH_TOKEN, 'plan-token');
+});
+
 test('argv seeds the CLI with the task prompt', () => {
   assert.deepEqual(getProvider('claude').argv('do x'), ['do x']);
   assert.deepEqual(getProvider('gemini').argv('do x'), ['-i', 'do x']);
