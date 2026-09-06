@@ -247,7 +247,13 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sidebar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(var(--accent-rgb),.4) 50%,transparent)}
 
-.brand{display:flex;align-items:center;gap:12px;padding:20px 18px 16px;position:relative}
+.brand{display:flex;align-items:center;gap:12px;padding:18px 16px 14px;position:relative}
+/* The rail is 262px wide and the display face is uppercase with .2em of
+   tracking, so GROWFLOW at the header's 21px broke onto three lines in the
+   sidebar. The lockup sets its own size here and refuses to wrap; the header
+   copy of .gf-name is untouched, where there is room for it. */
+.brand .gf-name{font-size:17px!important;letter-spacing:.12em!important;white-space:nowrap}
+.brand .pp-wordmark{width:104px;height:17px}
 .brand-mark{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
   position:relative;flex-shrink:0}
 .brand-name{font-family:var(--font-brand);font-weight:700;font-size:20px;letter-spacing:-.4px;
@@ -258,8 +264,11 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 
 /* ── Nav ── */
 .nav{padding:2px 10px;display:flex;flex-direction:column;gap:1px}
-.nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;font-weight:600;
-  font-size:13.5px;cursor:pointer;color:var(--ink-2);transition:background .15s,color .15s}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:8px;font-weight:600;
+  font-size:13px;cursor:pointer;color:var(--ink-2);transition:background .15s,color .15s}
+/* One icon column: the labels line up whatever each icon's glyph width is. */
+.nav-item .icon{width:17px;height:17px;flex-shrink:0}
+.nav-item>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-item:hover{background:rgba(var(--accent-rgb),.08);color:var(--ink)}
 .nav-item.active{background:rgba(var(--accent-rgb),.12);color:var(--primary);font-weight:700;
   box-shadow:inset 2px 0 0 var(--primary)}
@@ -279,7 +288,10 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
    the pinned user card, instead of demanding its full content height. */
 .side-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
 .side-divider{height:1px;background:var(--line);margin:10px 16px}
-.side-label{padding:0 14px;font-size:10px;font-weight:700;letter-spacing:.6px;color:var(--ink-3);
+/* Departments used to carry its own label style — two different heading
+   treatments in one rail is what makes a sidebar look thrown together. It is
+   now the same label as every nav group. */
+.side-label{padding:0 14px;font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--ink-4);
   text-transform:uppercase;margin-bottom:6px}
 .dept-list{padding:0 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto;flex:1}
 .dept-row{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:7px;cursor:pointer;
@@ -294,6 +306,15 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .dept-sub::after{content:'';position:absolute;left:15px;top:50%;width:6px;height:1px;background:var(--line)}
 .dept-sub .dept-dot{width:6px;height:6px}
 .dept-row .dept-count{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--ink-3);font-family:var(--mono)}
+/* "Add department" is a control, not a department with the colour drained
+   out of it. Same row metrics, dashed marker, and it only colours on hover. */
+.dept-add{color:var(--ink-3);font-weight:600}
+.dept-add .dept-dot{background:transparent;border:1px dashed currentColor;position:relative}
+.dept-add .dept-dot::before,.dept-add .dept-dot::after{content:'';position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);background:currentColor}
+.dept-add .dept-dot::before{width:6px;height:1px}
+.dept-add .dept-dot::after{width:1px;height:6px}
+.dept-add:hover{color:var(--primary)}
 
 .user-card{display:flex;align-items:center;gap:10px;padding:11px;margin:10px;border-radius:10px;
   background:rgba(var(--accent-rgb),.06);border:1px solid var(--glass-border);cursor:pointer;
@@ -957,7 +978,10 @@ body.demo-on .main{padding-bottom:56px}
 .ntf-meta{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--ink-3);margin-top:2px}
 .ntf-reason{border:1px solid var(--glass-border);border-radius:99px;padding:1px 8px}
 .ntf-done{flex:none}
-.ntf-empty{padding:40px;text-align:center;color:var(--ink-3)}
+/* Empty states carry a sentence or two of guidance, so they get a measure to
+   read at and room to breathe instead of one long centered line. */
+.ntf-empty{padding:36px 24px;text-align:center;color:var(--ink-3);font-size:13px;
+  line-height:1.6;max-width:52ch;margin:0 auto}
 
 /* ── Completion progress (tasks.progress) ─────────────────────────────────
    ring-mini: parent card ring = sub-tasks done fraction (conic, --p 0..100,
@@ -1022,8 +1046,18 @@ body.demo-on .main{padding-bottom:56px}
 /* ── Pass-3 library components (owner's ui-elements.html + nav.js rail) ──── */
 /* nav rail group labels (mockup grouped rail: Operations / Management / System) */
 .nav-group{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;
-  color:var(--ink-4);padding:12px 14px 4px}
-.nav-group:first-child{padding-top:2px}
+  color:var(--ink-4);padding:14px 14px 5px;position:relative}
+.nav-group:first-child{padding-top:4px}
+/* GF.pruneNavGroups hides an anchor group that ended up empty by setting the
+   `hidden` attribute. The UA rule behind `hidden` is display:none at the very
+   bottom of the cascade, and the Mass Weed skin sets .nav-group{display:flex},
+   which outranks it — so the empty FLOOR heading kept rendering. Say it here,
+   with the weight to survive any skin. */
+.nav-group[hidden]{display:none!important}
+/* A hairline above every group but the first: the sections separate without
+   another line of text or another colour. */
+.nav-group:not(:first-child)::before{content:'';position:absolute;left:14px;right:14px;top:6px;
+  height:1px;background:var(--line);opacity:.6}
 
 /* .mw-gauge — semicircular completion gauge (dashboard). Arc gradient and
    needle rotation are inline (value-dependent); geometry lives here. */
@@ -1471,3 +1505,16 @@ body.demo-on .main{padding-bottom:56px}
    once someone zooms in, so below 150 % they are held back to hover. */
 .fp-quiet .fp-pin-lbl{display:none}
 .fp-quiet .fp-pin:hover .fp-pin-lbl{display:inline}
+
+/* ── Header hierarchy ───────────────────────────────────────────────────
+   The header carried two saturated fills side by side (New task in the
+   accent, Voice task in amber) plus five icon buttons, so nothing read as
+   the primary action. Inside the header only, the amber button becomes an
+   outline: it keeps its colour and its prominence, and New task is the one
+   filled control. Boards keep their amber CTA (Register batch, Add room). */
+.header .btn-orange{background:transparent;color:var(--orange);
+  border-color:color-mix(in srgb, var(--orange) 55%, transparent);box-shadow:none}
+.header .btn-orange:hover{background:color-mix(in srgb, var(--orange) 14%, transparent);
+  color:var(--orange);border-color:var(--orange)}
+/* The icon cluster reads as one group rather than five loose glyphs. */
+.header .icon-btn+.icon-btn{margin-left:-2px}

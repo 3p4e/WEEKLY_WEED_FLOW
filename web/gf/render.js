@@ -55,6 +55,29 @@ GF.flashCompleted = (id) => {
 // browser tab's session. See card()/panels() below.
 const _animatedIds = new Set();
 
+/* Drop nav group labels that ended up with nothing under them.
+   The rail emits a label for Floor (and QMS Studio) BEFORE the views that
+   belong there insert themselves, because those views register by
+   monkey-patching GF.render.sidebar — their insertions run after the base
+   renderer returns. When a module has no such views the label is left
+   standing over empty space, which is how a COO came to find a "FLOOR"
+   heading with no rows beneath it. Called from a microtask at the end of
+   render.sidebar, i.e. after the whole patch chain has finished. */
+GF.pruneNavGroups = () => {
+  const nav = GF.$('nav'); if (!nav) return;
+  const kids = Array.from(nav.children);
+  kids.forEach((el, i) => {
+    if (!el.classList.contains('nav-group')) return;
+    let empty = true;
+    for (let j = i + 1; j < kids.length; j++) {
+      if (kids[j].classList.contains('nav-group')) break;
+      // A hidden end-marker (data-nav="floor-end") is an anchor, not an item.
+      if (kids[j].classList.contains('nav-item')) { empty = false; break; }
+    }
+    el.hidden = empty;
+  });
+};
+
 GF.render = {
   all() {
     this.sidebar(); this.header();
@@ -157,6 +180,15 @@ GF.render = {
       + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
+    // Floor and QMS Studio are ANCHOR groups: their label is emitted here, but
+    // the items are inserted afterwards by the full-page views that register
+    // into them (_registerFullPageView monkey-patches this very function, so
+    // its insertions run after this body returns). Which means a label can be
+    // left standing over nothing — a COO opening the task module met a "FLOOR"
+    // heading with no rows under it. The prune runs in a microtask, after the
+    // whole patch chain has finished inserting, and drops any group label that
+    // ended up with no nav item beneath it.
+    queueMicrotask(() => GF.pruneNavGroups());
     GF.syncModuleBtn && GF.syncModuleBtn();
 
     GF.$('side-label').textContent = GF.t('departments');
@@ -188,9 +220,9 @@ GF.render = {
       </div>` + (kids[d.id] || []).map(c => deptRow(c, depth + 1)).join('');
     GF.$('dept-list').innerHTML = (kids[null] || []).map(d => deptRow(d, 0)).join('')
       + (GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin()
-        ? `<div class="dept-row" style="opacity:.7" onclick="GF.WWF.openDeptForm()">
-            <span class="dept-dot" style="background:transparent;border:1px dashed currentColor"></span>${
-            GF.state.lang === 'mk' ? '+ Додади оддел' : '+ Add department'}</div>`
+        ? `<div class="dept-row dept-add" onclick="GF.WWF.openDeptForm()">
+            <span class="dept-dot"></span>${
+            GF.state.lang === 'mk' ? 'Додади оддел' : 'Add department'}</div>`
         : '');
 
     const u = GF.PEOPLE[GF.state.user] || { name: '—', roleLabel: '' };
