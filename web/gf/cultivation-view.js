@@ -1062,7 +1062,7 @@
     // the decon nav item does not exist yet and an anchor on it would silently
     // fall through to append(). Anchoring on a nav key that render.sidebar()
     // itself emits is order-independent.
-    insertBefore: 'mywork',
+    insertBefore: 'floor-end',
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });
 })();

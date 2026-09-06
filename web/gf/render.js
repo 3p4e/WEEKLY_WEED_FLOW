@@ -142,8 +142,18 @@ GF.render = {
     const qmsGroup = activeModule === 'qc' && role && role !== 'USER'
       ? `<div class="nav-group">${AL('QMS Studio', 'QMS Студио')}</div>
          <div data-nav="qms-end" style="display:none"></div>` : '';
+    // THE FLOOR GROUP. Facility, Cultivation, Harvest and Irrigation register
+    // themselves through _registerFullPageView({insertBefore:'mywork'}). When
+    // the task module is not the active one, 'mywork' is not rendered, the
+    // insertion falls through to an append, and those four land underneath
+    // whatever label happens to be last — which is how a COO came to find the
+    // whole floor filed under "System". So the rail always emits a labelled
+    // anchor for them, whichever module is active, and they insert before it.
+    const floorGroup = `<div class="nav-group">${AL('Floor', 'Погон')}</div>`
+      + `<div data-nav="floor-end" style="display:none"></div>`;
     GF.$('nav').innerHTML =
       (activeModule === 'tasks' ? group(AL('Operations', 'Операции'), ops) : '')
+      + floorGroup
       + (activeModule === 'tasks' ? group(AL('Management', 'Менаџмент'), mgr) : '')
       + qmsGroup
       + group(AL('System', 'Систем'), sys);
@@ -157,11 +167,26 @@ GF.render = {
     // a multi-departmental family (delegated subtask both sides see in full).
     const scope = GF.WWF && GF.WWF.deptScope ? GF.WWF.deptScope() : null;
     const sideDepts = scope ? GF.DEPTS.filter(d => d.id === scope || counts[d.id]) : GF.DEPTS;
-    GF.$('dept-list').innerHTML = sideDepts.map(d => `
-      <div class="dept-row ${GF.state.deptFilter === d.id ? 'active' : ''}" onclick="GF.filterDept('${d.id}')">
+    // Departments are a TREE since 2026-09: Cloning and Nursery sit under
+    // Cultivation (departments.parent_id) and its manager runs them. A flat
+    // list said otherwise — it read as eight peers, so the one department that
+    // owns three of the rows looked like a sibling of its own sub-departments.
+    // Children are nested under their parent, in the order the server sent
+    // them, and a child whose parent is out of scope still shows at top level
+    // rather than disappearing.
+    const byId = {}; sideDepts.forEach(d => { byId[d.id] = d; });
+    const kids = {};
+    sideDepts.forEach(d => {
+      const pid = d.parent_id && byId[d.parent_id] ? d.parent_id : null;
+      (kids[pid] = kids[pid] || []).push(d);
+    });
+    const deptRow = (d, depth) => `
+      <div class="dept-row${depth ? ' dept-sub' : ''} ${GF.state.deptFilter === d.id ? 'active' : ''}"
+           onclick="GF.filterDept('${d.id}')">
         <span class="dept-dot" style="background:${d.color}"></span>${GF.esc(GF.depName(d.id))}
         ${counts[d.id] ? `<span class="dept-count">${counts[d.id]}</span>` : ''}
-      </div>`).join('')
+      </div>` + (kids[d.id] || []).map(c => deptRow(c, depth + 1)).join('');
+    GF.$('dept-list').innerHTML = (kids[null] || []).map(d => deptRow(d, 0)).join('')
       + (GF.WWF && GF.WWF.isAdmin && GF.WWF.isAdmin()
         ? `<div class="dept-row" style="opacity:.7" onclick="GF.WWF.openDeptForm()">
             <span class="dept-dot" style="background:transparent;border:1px dashed currentColor"></span>${

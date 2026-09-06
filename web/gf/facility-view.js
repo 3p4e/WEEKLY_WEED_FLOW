@@ -265,7 +265,7 @@
   GF.WWF._registerFullPageView({
     key: 'facility', icon: 'leaf',
     label: () => AL('Facility', 'Капацитет'),
-    insertBefore: 'mywork',   // Operations group of the rail (mockup nav.js)
+    insertBefore: 'floor-end',   // Floor group of the rail
     // Same read gate as GET /facility: every role above base USER.
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });

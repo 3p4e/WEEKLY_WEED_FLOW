@@ -94,7 +94,11 @@ test('the nav item is anchored on a key render.sidebar itself emits, not on a si
   // decon-view.js, so on the first render a 'decon' anchor would not exist yet
   // and the item would silently fall through to append().
   const h = load();
-  assert.equal(h.window.__reg.insertBefore, 'mywork');
+  assert.equal(h.window.__reg.insertBefore, 'floor-end',
+    // The rail emits a labelled Floor group whichever module is active; a
+    // floor view anchored on a task-module key ('mywork') vanished from that
+    // group and appended under System whenever Tasks was not the module.
+    'anchored on the Floor group the rail always emits');
   h.close();
 });
 

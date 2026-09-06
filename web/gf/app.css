@@ -288,6 +288,11 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .dept-row:active{transform:scale(.97)}
 .dept-row.active{background:rgba(var(--accent-rgb),.11);color:var(--ink)}
 .dept-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+/* a sub-department (Cloning, Nursery) reads as belonging to the one above it */
+.dept-sub{padding-left:26px;position:relative}
+.dept-sub::before{content:'';position:absolute;left:15px;top:0;bottom:50%;width:1px;background:var(--line)}
+.dept-sub::after{content:'';position:absolute;left:15px;top:50%;width:6px;height:1px;background:var(--line)}
+.dept-sub .dept-dot{width:6px;height:6px}
 .dept-row .dept-count{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--ink-3);font-family:var(--mono)}
 
 .user-card{display:flex;align-items:center;gap:10px;padding:11px;margin:10px;border-radius:10px;

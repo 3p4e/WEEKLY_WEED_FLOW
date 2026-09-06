@@ -154,7 +154,7 @@
   GF.WWF._registerFullPageView({
     key: 'irrigation', icon: 'drop',
     label: () => AL('Irrigation', 'Наводнување'),
-    insertBefore: 'mywork',   // Operations group of the rail, beside Facility
+    insertBefore: 'floor-end',   // Floor group, beside Facility
     // Same read gate as GET /cultivation/irrigation: every role above base USER.
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });

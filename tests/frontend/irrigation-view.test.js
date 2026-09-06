@@ -109,7 +109,7 @@ test('registers as a full-page view in the operations rail, readable by every ro
   const h = load('IR_MGR');
   const reg = h.window.__reg;
   assert.equal(reg.key, 'irrigation');
-  assert.equal(reg.insertBefore, 'mywork');
+  assert.equal(reg.insertBefore, 'floor-end', 'the Floor group, beside Facility');
   h.window.GF.API.user = { role: 'USER' };
   assert.equal(reg.guard(), false, 'base staff do not see the view');
   h.window.GF.API.user = { role: 'WH_MGR' };

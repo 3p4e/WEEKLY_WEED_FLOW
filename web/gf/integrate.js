@@ -1195,7 +1195,16 @@ GF.WWF._registerFullPageView = ({ key, icon, label, guard, insertBefore, badge }
       item.setAttribute('data-nav', key);
       item.onclick = () => GF.setView(key);
       item.innerHTML = GF.icon(icon) + `<span>${label()}</span>` + (badge ? '<span class="nav-badge-dot" style="display:none"></span>' : '');
-      const before = insertBefore ? nav.querySelector(`[data-nav="${insertBefore}"]`) : null;
+      // A missing anchor used to append, which put the view under whatever
+      // group label happened to be last — the rail's last group is System, so
+      // a floor view could present itself as a system setting. Fall back to
+      // "just before the last group label" instead, which keeps it out of a
+      // group it does not belong to.
+      let before = insertBefore ? nav.querySelector(`[data-nav="${insertBefore}"]`) : null;
+      if (!before) {
+        const groups = nav.querySelectorAll('.nav-group');
+        before = groups.length ? groups[groups.length - 1] : null;
+      }
       if (before) nav.insertBefore(item, before); else nav.appendChild(item);
     }
     item.className = 'nav-item' + (GF.state.view === key ? ' active' : '');

@@ -112,7 +112,7 @@ test('the view registers under the harvest key with a read gate above base USER'
   const h = load();
   const spec = h.window.__reg;
   assert.equal(spec.key, 'harvest');
-  assert.equal(spec.insertBefore, 'mywork',
+  assert.equal(spec.insertBefore, 'floor-end',
     'anchored on a key render.sidebar itself emits, so nav order does not depend on script order');
   h.window.GF.API.user = { role: 'USER' };
   assert.equal(spec.guard(), false, 'base USER must not see the harvest board');
