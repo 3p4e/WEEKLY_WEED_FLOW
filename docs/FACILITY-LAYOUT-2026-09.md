@@ -188,3 +188,38 @@ running across the flowering halls and the drying rooms. Four separate waste exi
 and eight `PPZ` escapes discharge directly to the outside. This is recorded here
 because it constrains where a batch can physically move, but it is not modelled in
 the register yet.
+
+## How the app carries it
+
+**`facility_rooms`** (migration tasks 0068) holds the register: code, both names,
+wing, zone, regime, grade, area, net area, perimeter, the plan anchor, the
+department that runs the room, and a note. It is deliberately not `rooms`:
+`rooms` is the short list of places the app schedules a batch into, keyed by a
+lowercase slug; `facility_rooms` is the whole building, keyed by the architect's
+code. `rooms.facility_room_id` links one to the other, and either can exist
+without the other.
+
+**`/facility/layout`** (`backend/app/api/facility_layout.py`):
+
+| Route | Who | What |
+|---|---|---|
+| `GET /facility/layout` | every role above base USER | the register, filterable by zone, wing, regime or a text query, with per-zone room counts and areas |
+| `GET /facility/layout/{id}` | same | one room, plus the batches currently in the operational room it is linked to |
+| `PATCH /facility/layout/{id}` | ADMIN, executives, QA | the judgement columns only: regime, grade, zone, department, the room link, a note |
+| `POST /facility/layout/import` | ADMIN, executives | loads the packaged register; idempotent on the room code, and it never overwrites a classification somebody made |
+
+The code, name, area, perimeter and anchor are not editable through the API.
+They are what the sheet says, and a correction belongs in the register, not in a
+per-room edit that would leave the app quietly disagreeing with the drawing.
+
+**The board.** The Facility view has two tabs: *Rooms*, the live occupancy board
+that was already there, and *Floor plan*. The plan tab renders
+`web/assets/facility-ground-floor.png` — the sheet itself, cropped to exactly
+the bounds the anchors were normalised against — with one pin per room placed at
+`plan_x` / `plan_y` in percent. Because both sides use the same bounds, the pins
+and the drawing stay aligned at every zoom with no arithmetic in the view. Pins
+are coloured by zone, the legend doubles as a zone filter with room counts and
+areas, a search narrows both pins and roster, and clicking a pin opens the room:
+its two names, the stamped areas and perimeter, the zone and regime, the
+cleanliness grade (or "not classified"), the department, and whatever is growing
+in it right now.

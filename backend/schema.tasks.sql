@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict WcJ9F1nGGlc1mFQkITyWzn4PaRg7Ekln6vtB2GpqqEexMGvQKqj9HCV8nfaE4TU
+\restrict yys2hKxzOy5v5SSWF3iWOTmGRa2p4tKEtYMKWeHDIuZb1wiYl8CmCUb8uryyMEc
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -555,6 +555,44 @@ CREATE TABLE public.events (
 );
 
 ALTER TABLE ONLY public.events FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: facility_rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.facility_rooms (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    code text NOT NULL,
+    name_en text,
+    name_mk text,
+    wing text NOT NULL,
+    zone text,
+    regime text,
+    grade text,
+    floor text DEFAULT 'ground'::text NOT NULL,
+    area_m2 numeric,
+    net_area_m2 numeric,
+    perimeter_m numeric,
+    plan_x numeric,
+    plan_y numeric,
+    department_id uuid,
+    source text,
+    notes text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT facility_rooms_area_check CHECK ((((area_m2 IS NULL) OR (area_m2 > (0)::numeric)) AND ((net_area_m2 IS NULL) OR (net_area_m2 > (0)::numeric)) AND ((perimeter_m IS NULL) OR (perimeter_m > (0)::numeric)))),
+    CONSTRAINT facility_rooms_plan_check CHECK ((((plan_x IS NULL) = (plan_y IS NULL)) AND ((plan_x IS NULL) OR ((plan_x >= (0)::numeric) AND (plan_x <= (1)::numeric) AND (plan_y >= (0)::numeric) AND (plan_y <= (1)::numeric))))),
+    CONSTRAINT facility_rooms_regime_check CHECK (((regime IS NULL) OR (regime = ANY (ARRAY['GACP'::text, 'GMP'::text, 'SUPPORT'::text])))),
+    CONSTRAINT facility_rooms_wing_check CHECK ((wing = ANY (ARRAY['cultivation'::text, 'processing'::text, 'extraction'::text, 'main'::text, 'technical'::text, 'washing'::text, 'other'::text]))),
+    CONSTRAINT facility_rooms_zone_check CHECK (((zone IS NULL) OR (zone = ANY (ARRAY['cultivation'::text, 'post_harvest'::text, 'production'::text, 'quality'::text, 'warehouse'::text, 'airlock'::text, 'circulation'::text, 'personnel'::text, 'technical'::text, 'utility'::text, 'waste'::text, 'egress'::text]))))
+);
+
+ALTER TABLE ONLY public.facility_rooms FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1929,6 +1967,7 @@ CREATE TABLE public.rooms (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     department_id uuid,
+    facility_room_id uuid,
     CONSTRAINT rooms_kind_check CHECK ((kind = ANY (ARRAY['clone'::text, 'nursery'::text, 'veg'::text, 'flower'::text, 'mother'::text, 'dry'::text, 'other'::text])))
 );
 
@@ -2470,6 +2509,22 @@ ALTER TABLE ONLY public.departments
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: facility_rooms facility_rooms_org_id_floor_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.facility_rooms
+    ADD CONSTRAINT facility_rooms_org_id_floor_code_key UNIQUE (org_id, floor, code);
+
+
+--
+-- Name: facility_rooms facility_rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.facility_rooms
+    ADD CONSTRAINT facility_rooms_pkey PRIMARY KEY (id);
 
 
 --
@@ -3313,6 +3368,20 @@ CREATE INDEX events_org_dept_created_idx ON public.events USING btree (org_id, d
 
 
 --
+-- Name: facility_rooms_department_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX facility_rooms_department_id_idx ON public.facility_rooms USING btree (department_id);
+
+
+--
+-- Name: facility_rooms_org_zone_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX facility_rooms_org_zone_idx ON public.facility_rooms USING btree (org_id, zone);
+
+
+--
 -- Name: harvests_batch_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3775,6 +3844,13 @@ CREATE INDEX rooms_department_id_idx ON public.rooms USING btree (department_id)
 
 
 --
+-- Name: rooms_facility_room_id_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX rooms_facility_room_id_key ON public.rooms USING btree (facility_room_id) WHERE (facility_room_id IS NOT NULL);
+
+
+--
 -- Name: task_dependencies_dep_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4045,6 +4121,13 @@ CREATE TRIGGER audit_decon_tool_log AFTER INSERT OR DELETE OR UPDATE ON public.d
 --
 
 CREATE TRIGGER audit_departments AFTER INSERT OR DELETE OR UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
+
+
+--
+-- Name: facility_rooms audit_facility_rooms; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_facility_rooms AFTER INSERT OR DELETE OR UPDATE ON public.facility_rooms FOR EACH ROW EXECUTE FUNCTION app.fn_audit_row();
 
 
 --
@@ -4584,6 +4667,14 @@ ALTER TABLE ONLY public.decon_tool_log
 
 ALTER TABLE ONLY public.departments
     ADD CONSTRAINT departments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: facility_rooms facility_rooms_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.facility_rooms
+    ADD CONSTRAINT facility_rooms_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
 
 
 --
@@ -5131,6 +5222,14 @@ ALTER TABLE ONLY public.rooms
 
 
 --
+-- Name: rooms rooms_facility_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_facility_room_id_fkey FOREIGN KEY (facility_room_id) REFERENCES public.facility_rooms(id) ON DELETE SET NULL;
+
+
+--
 -- Name: selection_campaigns selection_campaigns_cultivar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5419,6 +5518,12 @@ CREATE POLICY events_read ON public.events FOR SELECT USING ((org_id = app.curre
 
 
 --
+-- Name: facility_rooms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.facility_rooms ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: handoffs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5585,6 +5690,13 @@ CREATE POLICY org_isolation ON public.decon_tool_log USING ((org_id = app.curren
 --
 
 CREATE POLICY org_isolation ON public.departments USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
+-- Name: facility_rooms org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.facility_rooms USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
 
 
 --
@@ -6296,5 +6408,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WcJ9F1nGGlc1mFQkITyWzn4PaRg7Ekln6vtB2GpqqEexMGvQKqj9HCV8nfaE4TU
+\unrestrict yys2hKxzOy5v5SSWF3iWOTmGRa2p4tKEtYMKWeHDIuZb1wiYl8CmCUb8uryyMEc
 

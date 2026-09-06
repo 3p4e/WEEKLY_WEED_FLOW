@@ -1417,3 +1417,57 @@ body.demo-on .main{padding-bottom:56px}
 /* the composed mother-plant id, shown before it is written */
 .mb-preview{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:14px;
   letter-spacing:.5px;padding:7px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--ink)}
+
+/* ── Facility floor plan (facility-view.js) ─────────────────────────────
+   The as-built ground-floor sheet with one pin per room. Pins are placed in
+   PERCENT of the image box, because the register stores each room's anchor
+   normalised against the same bounds the image was cropped to — so the pin
+   and the drawing stay aligned at every zoom without any arithmetic here. */
+.fp-bar{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.fp-q{flex:1;min-width:180px;padding:8px 11px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);font:inherit;font-size:13px}
+.fp-zoom{display:flex;align-items:center;gap:6px}
+.fp-zoom span{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:46px;text-align:center}
+.fp-legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fp-chip{display:inline-flex;align-items:center;gap:6px;line-height:1.2;font:inherit;font-size:11px;
+  padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);
+  color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.fp-chip span{width:8px;height:8px;border-radius:999px;background:var(--pin);flex-shrink:0}
+.fp-chip b{font-family:var(--mono);color:var(--ink)}
+.fp-chip.on{border-color:var(--pin);color:var(--ink);background:rgba(var(--accent-rgb),.10)}
+.fp-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;
+  max-height:min(70vh,640px)}
+.fp-stage-outer{position:relative;min-width:100%}
+.fp-img{display:block;width:100%;height:auto}
+.fp-stage{position:absolute;inset:0}
+.fp-pin{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:3px;
+  padding:0;border:0;background:none;cursor:pointer;white-space:nowrap}
+.fp-pin-dot{width:9px;height:9px;border-radius:999px;background:var(--pin);
+  box-shadow:0 0 0 2px #fff,0 0 0 3px rgba(0,0,0,.25);flex-shrink:0}
+.fp-pin-lbl{font:700 9px/1 var(--mono);color:#111;background:rgba(255,255,255,.86);
+  border-radius:3px;padding:1px 3px}
+.fp-pin.on .fp-pin-dot{width:13px;height:13px;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--pin)}
+.fp-pin:hover .fp-pin-lbl{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.fp-src{font-size:11px;color:var(--ink-3);margin:6px 2px 12px}
+.fp-list{display:flex;flex-direction:column;gap:1px}
+.fp-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;
+  font-size:12.5px;color:var(--ink-2)}
+.fp-row:hover{background:rgba(var(--accent-rgb),.07);color:var(--ink)}
+.fp-row-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+.fp-row-code{font-family:var(--mono);font-weight:700;color:var(--ink);min-width:52px}
+.fp-row-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-row-a{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.fp-row-rg{font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--ink-3);min-width:56px;text-align:right}
+.fp-badges{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.fp-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 9px;
+  border-radius:999px;color:var(--pin,var(--ink-2));border:1px solid currentColor}
+.fp-badge-q{color:var(--ink-2)}
+.fp-kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12.5px;
+  color:var(--ink-2);border-bottom:1px solid var(--line)}
+.fp-kv b{color:var(--ink);font-family:var(--mono);font-weight:700}
+.fp-sub{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:14px 0 6px}
+/* Fit view packs 191 pins into one screen; the codes only become readable
+   once someone zooms in, so below 150 % they are held back to hover. */
+.fp-quiet .fp-pin-lbl{display:none}
+.fp-quiet .fp-pin:hover .fp-pin-lbl{display:inline}

@@ -166,7 +166,10 @@ async def purge_org(org_id) -> None:
                   "clone_run_mothers", "clone_runs",
                   "plant_phase_events", "plants", "mother_plants", "selection_campaigns",
                   "plant_batches", "qc_products", "cultivars",
-                  "rooms",
+                  # 0068: rooms.facility_room_id is SET NULL, so `rooms` may go
+                  # either side of facility_rooms — but facility_rooms cites
+                  # departments (SET NULL) and must still precede them.
+                  "rooms", "facility_rooms",
                   "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)

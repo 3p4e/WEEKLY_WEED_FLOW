@@ -19,7 +19,11 @@
    worklog.js (uses AL(), GF.WWF._ensureModal, GF.selectField choosers). */
 
 (function () {
-  GF.WWF._fac = { data: null, loading: false, error: null };
+  GF.WWF._fac = { data: null, loading: false, error: null, tab: 'rooms' };
+  // The as-built register (tasks 0068 + api/facility_layout.py): the building
+  // as the architect drew it, loaded lazily the first time the plan is opened.
+  GF.WWF._plan = { data: null, loading: false, error: null,
+                   zone: '', q: '', zoom: 1, sel: null, room: null };
 
   const PHASES = {
     nursery: { en: 'Nursery',   mk: 'Расадник',   color: '#7FD9C4' },
@@ -80,6 +84,15 @@
     const head = GF.viewHead
       ? GF.viewHead('facility_map', 'facility_sub', addRoomBtn)
       : `<h2>${AL('Facility', 'Капацитет')}</h2>`;
+    // Two boards over the same building: what is growing in it right now
+    // (rooms) and what it IS (the as-built plan, tasks 0068).
+    const tab = (key, label) => `<button class="cj-tab${st.tab === key ? ' on' : ''}"
+      onclick="GF.WWF.facTab('${key}')">${label}</button>`;
+    const tabs = `<div class="cj-tabs">
+      ${tab('rooms', AL('Rooms', 'Соби'))}
+      ${tab('plan', AL('Floor plan', 'Основа'))}
+    </div>`;
+    if (st.tab === 'plan') return head + tabs + GF.WWF.facPlan();
     if (st.loading || (!st.data && !st.error)) {
       return head + `<div class="mw-skel" style="height:96px;margin-bottom:10px"></div>
         <div class="mw-skel" style="height:220px"></div>`;
@@ -121,7 +134,7 @@
         <div class="fac-strains">${rows || `<div class="fr-empty">${AL('Empty', 'Празно')}</div>`}</div>
       </div>`;
     }).join('');
-    return head + kpis + `
+    return head + tabs + kpis + `
       <div class="fac-map">${rooms || `<div class="ntf-empty">${
         canWriteRooms()
           ? AL('No rooms configured yet — use "Add room" above to create the first one.',
@@ -129,6 +142,263 @@
           : AL('No rooms configured yet — a department manager or an administrator sets them up on the facility board.',
                'Сè уште нема соби — менаџер на оддел или администраторот ги поставува на таблата за капацитет.')
         }</div>`}</div>`;
+  };
+
+  /* ── The as-built floor plan ──────────────────────────────────────────
+     The register carries, per room, a normalised anchor (plan_x, plan_y) on
+     the ground-floor sheet, so a marker is placed at exactly the point the
+     architect stamped the room code. The image below the markers is that
+     sheet — assets/facility-ground-floor.png, rendered from the PDF over the
+     same bounds the anchors were normalised against, so the two agree by
+     construction rather than by eye. */
+
+  const ZONES = {
+    cultivation:  { en: 'Cultivation',  mk: 'Одгледување',   color: '#2EA043' },
+    post_harvest: { en: 'Post-harvest', mk: 'По берба',      color: '#D27814' },
+    production:   { en: 'Production',   mk: 'Производство',  color: '#A03CC8' },
+    quality:      { en: 'Quality',      mk: 'Квалитет',      color: '#008CBE' },
+    warehouse:    { en: 'Warehouse',    mk: 'Магацин',       color: '#C8A000' },
+    airlock:      { en: 'Air lock',     mk: 'Тампон зона',   color: '#E63C3C' },
+    circulation:  { en: 'Circulation',  mk: 'Ходници',       color: '#7A7A85' },
+    personnel:    { en: 'Personnel',    mk: 'Персонал',      color: '#3C5AC8' },
+    technical:    { en: 'Technical',    mk: 'Техника',       color: '#5A5A5A' },
+    utility:      { en: 'Utility',      mk: 'Помошни',       color: '#8C8C5A' },
+    waste:        { en: 'Waste',        mk: 'Отпад',         color: '#78462A' },
+    egress:       { en: 'Fire exit',    mk: 'ППЗ излез',     color: '#E61E1E' },
+  };
+  const REGIMES = { GACP: { en: 'GACP', mk: 'ГАЦП' }, GMP: { en: 'GMP', mk: 'ГМП' },
+                    SUPPORT: { en: 'Support', mk: 'Придружни' } };
+  const zLbl = (z) => z && ZONES[z] ? AL(ZONES[z].en, ZONES[z].mk) : AL('Unclassified', 'Некласифицирано');
+  const zCol = (z) => (ZONES[z] || {}).color || 'var(--ink-3)';
+  const planName = (r) => (GF.state.lang === 'mk' && r.name_mk) ? r.name_mk : (r.name_en || r.code);
+  // Grade and regime are QA's call, not the drawing's — the same roles the
+  // server lets through in facility_layout.py's _CLASSIFIERS.
+  const canClassify = () => ['ADMIN', 'OWNER', 'CEO', 'COO', 'QA_MGR'].includes(role());
+
+  GF.WWF.facTab = (key) => {
+    GF.WWF._fac.tab = key;
+    if (key === 'plan') {
+      const p = GF.WWF._plan;
+      if (!p.data && !p.loading && !p.error) GF.WWF.loadPlan();
+    }
+    GF.render.all();
+  };
+
+  GF.WWF.loadPlan = async () => {
+    const p = GF.WWF._plan;
+    p.loading = true; p.error = null;
+    try { p.data = await GF.API.facilityLayout(); }
+    catch (e) { p.error = e.message; }
+    p.loading = false;
+    if (GF.state.view === 'facility') GF.render.all();
+  };
+
+  GF.WWF.planZone = (z) => { GF.WWF._plan.zone = GF.WWF._plan.zone === z ? '' : z; GF.render.all(); };
+  GF.WWF.planZoom = (d) => {
+    const p = GF.WWF._plan;
+    p.zoom = Math.min(6, Math.max(1, Math.round((p.zoom + d) * 10) / 10));
+    GF.render.all();
+  };
+  GF.WWF.planSearch = (v) => {
+    GF.WWF._plan.q = v;
+    // Re-render only the markers and the roster, so the field keeps focus.
+    const stage = GF.$('fp-stage'); if (stage) stage.innerHTML = GF.WWF._planMarkers();
+    const list = GF.$('fp-list'); if (list) list.innerHTML = GF.WWF._planRoster();
+  };
+
+  const planRooms = () => {
+    const p = GF.WWF._plan;
+    const q = (p.q || '').trim().toLowerCase();
+    return (p.data && p.data.rooms ? p.data.rooms : []).filter(r => {
+      if (p.zone && r.zone !== p.zone) return false;
+      if (!q) return true;
+      return (r.code || '').toLowerCase().includes(q)
+          || (r.name_en || '').toLowerCase().includes(q)
+          || (r.name_mk || '').toLowerCase().includes(q);
+    });
+  };
+
+  GF.WWF._planMarkers = () => planRooms().filter(r => r.plan_x != null).map(r => `
+    <button class="fp-pin${GF.WWF._plan.sel === r.id ? ' on' : ''}"
+      style="left:${(r.plan_x * 100).toFixed(3)}%;top:${(r.plan_y * 100).toFixed(3)}%;--pin:${zCol(r.zone)}"
+      title="${GF.esc(r.code + ' · ' + planName(r))}"
+      onclick="event.stopPropagation();GF.WWF.openPlanRoom('${r.id}')">
+      <span class="fp-pin-dot"></span><span class="fp-pin-lbl">${GF.esc(r.code)}</span>
+    </button>`).join('');
+
+  GF.WWF._planRoster = () => {
+    const rows = planRooms();
+    if (!rows.length) return `<div class="fr-empty" style="padding:10px 0">${AL('No room matches.', 'Нема соба што одговара.')}</div>`;
+    return rows.map(r => `
+      <div class="fp-row" onclick="GF.WWF.openPlanRoom('${r.id}')">
+        <span class="fp-row-dot" style="background:${zCol(r.zone)}"></span>
+        <span class="fp-row-code">${GF.esc(r.code)}</span>
+        <span class="fp-row-nm">${GF.esc(planName(r))}</span>
+        <span class="fp-row-a">${r.area_m2 != null ? r.area_m2.toFixed(2) + ' m²' : '—'}</span>
+        <span class="fp-row-rg">${r.regime ? AL(REGIMES[r.regime].en, REGIMES[r.regime].mk) : ''}</span>
+      </div>`).join('');
+  };
+
+  GF.WWF.facPlan = () => {
+    const p = GF.WWF._plan;
+    if (p.loading || (!p.data && !p.error)) {
+      return `<div class="mw-skel" style="height:60px;margin-bottom:10px"></div>
+              <div class="mw-skel" style="height:340px"></div>`;
+    }
+    if (p.error) {
+      return `<div class="panel" style="padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--red-fg,var(--red))">${GF.esc(p.error)}</span>
+        <button class="btn btn-sm" onclick="GF.WWF.loadPlan()">${AL('Retry', 'Обиди се повторно')}</button></div>`;
+    }
+    if (!(p.data.rooms || []).length) {
+      return `<div class="panel" style="padding:18px;text-align:center">
+        <div style="color:var(--ink-2);margin-bottom:10px">${AL(
+          'The ground-floor plan has not been loaded into this organisation yet.',
+          'Основата на приземјето сè уште не е внесена во оваа организација.')}</div>
+        ${isExec() ? `<button class="btn btn-orange btn-sm" onclick="GF.WWF.importPlan()">${
+          AL('Load the ground-floor plan', 'Внеси ја основата')}</button>` : ''}</div>`;
+    }
+    const totals = p.data.totals || {};
+    const chip = (z) => {
+      const t = totals[z]; if (!t) return '';
+      return `<button class="fp-chip${p.zone === z ? ' on' : ''}" onclick="GF.WWF.planZone('${z}')"
+        style="--pin:${zCol(z)}"><span></span>${zLbl(z)}
+        <b>${t.rooms}</b> · ${Math.round(t.area_m2)} m²</button>`;
+    };
+    const legend = `<div class="fp-legend">${Object.keys(ZONES).map(chip).join('')}</div>`;
+    const bar = `<div class="fp-bar">
+      <input id="fp-q" class="fp-q" placeholder="${AL('Find a room — code or name', 'Најди соба — код или име')}"
+             value="${GF.esc(p.q)}" oninput="GF.WWF.planSearch(this.value)">
+      <div class="fp-zoom">
+        <button class="btn btn-sm" onclick="GF.WWF.planZoom(-0.5)">−</button>
+        <span>${Math.round(p.zoom * 100)}%</span>
+        <button class="btn btn-sm" onclick="GF.WWF.planZoom(0.5)">+</button>
+      </div>
+    </div>`;
+    return bar + legend + `
+      <div class="fp-wrap">
+        <div class="fp-stage-outer" style="width:${p.zoom * 100}%">
+          <img class="fp-img" src="assets/facility-ground-floor.png" alt="${
+            AL('Ground-floor plan', 'Основа на приземје')}">
+          <div class="fp-stage${p.zoom < 1.5 ? ' fp-quiet' : ''}" id="fp-stage">${GF.WWF._planMarkers()}</div>
+        </div>
+      </div>
+      <div class="fp-src">${AL(
+        'Ground floor, 1:100 — Medical Cannabis Facility, Petrovec. Conceptual layout, 03/2021.',
+        'Приземје, 1:100 — Медицинска канабис фабрика, Петровец. Концептуална основа, 03/2021.')}</div>
+      <div class="fp-list" id="fp-list">${GF.WWF._planRoster()}</div>`;
+  };
+
+  GF.WWF.importPlan = async () => {
+    if (!isExec()) return;
+    try {
+      const res = await GF.API.facilityLayoutImport({ dry_run: false });
+      GF.toast(`${res.created.length} + ${res.updated.length} ✓`, 'success');
+      GF.WWF._plan.data = null;
+      GF.WWF.loadPlan();
+    } catch (e) { GF.toast(AL('Failed: ', 'Неуспешно: ') + e.message, 'error'); }
+  };
+
+  GF.WWF.openPlanRoom = async (id) => {
+    GF.WWF._plan.sel = id;
+    GF.WWF._ensureModal('fac-plan-modal', '460px');
+    const list = (GF.WWF._plan.data || {}).rooms || [];
+    const r = list.find(x => x.id === id); if (!r) return;
+    GF.$('fac-plan-modal-title').textContent = r.code + ' · ' + planName(r);
+    GF.$('fac-plan-modal-body').innerHTML = GF.WWF._planCard(r, null);
+    GF.openModal('fac-plan-modal');
+    // The detail call adds what is growing in the room right now.
+    try {
+      const full = await GF.API.facilityLayoutRoom(id);
+      GF.WWF._plan.room = full;
+      const body = GF.$('fac-plan-modal-body');
+      if (body) body.innerHTML = GF.WWF._planCard(full, full.batches || []);
+    } catch (e) { /* the card without batches is still the truth of the drawing */ }
+  };
+
+  GF.WWF._planCard = (r, batches) => {
+    const kv = (l, v) => v == null || v === '' ? ''
+      : `<div class="fp-kv"><span>${l}</span><b>${GF.esc(String(v))}</b></div>`;
+    const other = GF.state.lang === 'mk' ? r.name_en : r.name_mk;
+    const grade = r.grade
+      ? GF.esc(r.grade)
+      : `<span style="color:var(--ink-3)">${AL('not classified', 'некласифицирано')}</span>`;
+    const bl = batches == null
+      ? `<div class="fr-empty" style="padding:6px 0">${AL('Loading…', 'Се вчитува…')}</div>`
+      : (batches.length
+        ? batches.map(b => `<div class="sess-row">
+            <span class="fs-dot" style="background:${phCol(b.phase)}"></span>
+            <span style="font-weight:700">${GF.esc(b.code)}</span>
+            <span style="font-family:var(--mono)">${b.plant_count}</span>
+            <span style="flex:1;color:${phCol(b.phase)};font-size:12px">${GF.esc(b.cultivar_name || b.cultivar_code || '')} · ${phLbl(b.phase)}</span>
+          </div>`).join('')
+        : `<div class="fr-empty" style="padding:6px 0">${r.room_id
+            ? AL('Nothing growing here right now.', 'Моментално нема ништо во раст тука.')
+            : AL('Not linked to a room the app schedules.', 'Не е поврзана со соба што апликацијата планира.')}</div>`);
+    return `
+      <div class="fp-badges">
+        <span class="fp-badge" style="--pin:${zCol(r.zone)}">${zLbl(r.zone)}</span>
+        ${r.regime ? `<span class="fp-badge fp-badge-q">${AL(REGIMES[r.regime].en, REGIMES[r.regime].mk)}</span>` : ''}
+      </div>
+      ${other ? `<div style="color:var(--ink-2);font-size:12px;margin-bottom:8px">${GF.esc(other)}</div>` : ''}
+      ${kv(AL('Area', 'Површина'), r.area_m2 != null ? r.area_m2.toFixed(2) + ' m²' : null)}
+      ${kv(AL('Cultivation area', 'Површина за одгледување'), r.net_area_m2 != null ? r.net_area_m2.toFixed(2) + ' m²' : null)}
+      ${kv(AL('Perimeter', 'Периметар'), r.perimeter_m != null ? r.perimeter_m.toFixed(2) + ' m' : null)}
+      <div class="fp-kv"><span>${AL('Cleanliness grade', 'Класа на чистота')}</span><b>${grade}</b></div>
+      ${kv(AL('Department', 'Оддел'), r.department_name)}
+      ${kv(AL('Room', 'Соба'), r.room_name)}
+      ${r.notes ? `<div style="font-size:12px;color:var(--ink-2);margin-top:8px">${GF.esc(r.notes)}</div>` : ''}
+      <div class="fp-sub">${AL('In this room', 'Во оваа соба')}</div>
+      ${bl}
+      ${canClassify() ? `<button class="btn" style="width:100%;justify-content:center;margin-top:10px"
+        onclick="GF.WWF.openPlanClassify('${r.id}')">${GF.icon('settings', 'icon')}${
+        AL('Classify this room', 'Класифицирај ја собата')}</button>` : ''}`;
+  };
+
+  /* ── Classification: the grade, the regime and the link to an operational
+     room. Never the code, name, area or anchor — those are what the drawing
+     says, and the app must not quietly disagree with the sheet. */
+  GF.WWF.openPlanClassify = (id) => {
+    if (!canClassify()) return;
+    const r = ((GF.WWF._plan.data || {}).rooms || []).find(x => x.id === id); if (!r) return;
+    GF.closeModal('fac-plan-modal');
+    GF.WWF._ensureModal('fac-plancls-modal', '420px');
+    GF.$('fac-plancls-modal-title').textContent = AL('Classify ', 'Класифицирај ') + r.code;
+    const rooms = ((GF.WWF._fac.data || {}).rooms || []);
+    GF.$('fac-plancls-modal-body').innerHTML = `
+      <div class="field"><label>${AL('Regime', 'Режим')}</label>
+        ${GF.selectField('pc-regime', { value: r.regime || '', title: AL('Regime', 'Режим'),
+          options: [{ v: '', label: AL('— unset —', '— незададено —') }].concat(
+            Object.keys(REGIMES).map(k => ({ v: k, label: AL(REGIMES[k].en, REGIMES[k].mk) }))) })}</div>
+      <div class="field"><label>${AL('Cleanliness grade', 'Класа на чистота')}</label>
+        <input id="pc-grade" maxlength="40" value="${GF.esc(r.grade || '')}"
+               placeholder="${AL('e.g. D — as the validation master plan states it', 'пр. D — како што стои во планот за валидација')}"></div>
+      <div class="field"><label>${AL('Department', 'Оддел')}</label>
+        ${GF.selectField('pc-dept', { value: r.department_id || '', title: AL('Department', 'Оддел'), searchable: true,
+          options: [{ v: '', label: AL('— none —', '— нема —') }].concat(
+            (GF.DEPTS || []).map(d => ({ v: d.id, label: GF.depName ? GF.depName(d.id) : d.name, color: d.color }))) })}</div>
+      <div class="field"><label>${AL('Room the app schedules', 'Соба што апликацијата планира')}</label>
+        ${GF.selectField('pc-room', { value: r.room_id || '', title: AL('Room', 'Соба'), searchable: true,
+          options: [{ v: '', label: AL('— none —', '— нема —') }].concat(
+            rooms.map(x => ({ v: x.id, label: roomName(x) }))) })}</div>
+      <div class="field"><label>${AL('Note', 'Белешка')}</label>
+        <textarea id="pc-note" rows="2" maxlength="2000">${GF.esc(r.notes || '')}</textarea></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center"
+        onclick="GF.WWF.savePlanClassify('${r.id}')">${GF.t('save')}</button>`;
+    GF.openModal('fac-plancls-modal');
+  };
+
+  GF.WWF.savePlanClassify = async (id) => {
+    const val = (k) => { const el = GF.$(k); return el ? el.value : ''; };
+    const body = { regime: val('pc-regime') || null, grade: val('pc-grade').trim() || null,
+                   department_id: val('pc-dept') || null, room_id: val('pc-room') || null,
+                   notes: val('pc-note').trim() || null };
+    try {
+      await GF.API.facilityLayoutPatch(id, body);
+      GF.closeModal('fac-plancls-modal');
+      GF.toast(GF.t('save') + ' ✓', 'success');
+      GF.WWF.loadPlan();
+    } catch (e) { GF.toast(AL('Save failed: ', 'Неуспешно зачувување: ') + e.message, 'error'); }
   };
 
   /* ── Room detail modal: batches (read-only) + writer controls ── */

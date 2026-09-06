@@ -470,6 +470,12 @@ GF.API = {
   approvalsPending()       { return this._req('GET', '/approvals/pending'); },
   facilityAddRoom(b)       { return this._req('POST', '/facility/rooms', b); },
   facilityPatchRoom(id,b)  { return this._req('PATCH', '/facility/rooms/' + id, b); },
+  // The as-built layout register (tasks 0068): the building as the architect
+  // drew it, 191 rooms keyed by the code printed on the ground-floor sheet.
+  facilityLayout(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/facility/layout' + (u?'?'+u:'')); },
+  facilityLayoutRoom(id)   { return this._req('GET', '/facility/layout/' + id); },
+  facilityLayoutPatch(id,b){ return this._req('PATCH', '/facility/layout/' + id, b); },
+  facilityLayoutImport(b)  { return this._req('POST', '/facility/layout/import', b || {}); },
   activity(q)          { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/activity' + (u?'?'+u:'')); },
   deleteUser(id)   { return this._req('DELETE', '/auth/users/' + id); },
   listDeletedUsers() { return this._req('GET', '/auth/users/deleted'); },
