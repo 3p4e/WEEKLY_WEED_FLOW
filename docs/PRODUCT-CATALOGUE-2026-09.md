@@ -120,9 +120,28 @@ cut into. Usually empty, and it never borrows the strain's number.
 ## Open
 
 - Canonical strain spellings (above).
-- Whether a CoQ whose Total THC falls outside its product's window should be
-  blocked from issuance. It currently prints "does not conform" and is still
-  renderable, which mirrors how the spec limits already behave.
+- ~~Whether a CoQ whose Total THC falls outside its product's window should be
+  blocked from issuance.~~ **DECIDED 2026-09-06 (owner): no, do not block.**
+  A Total Δ9-THC outside the chosen product's window is reported on the CoQ and
+  printed on the document; it does not stop issuance.
+
+  Two separate rules are easy to confuse here, and this decision touches only
+  the second:
+
+  | rule | what it judges | blocks issuance? |
+  | --- | --- | --- |
+  | `overall_conform` | every CoQ line against its **specification** limit | **yes** — `coq_aggregation.py` returns 409 rather than render a certificate asserting conformance for a batch that does not conform. Unchanged; it is a GxP control. |
+  | product-window conformance | Total Δ9-THC against the **product's** ± 10 % window | **no** (this decision) |
+
+  **Not yet built.** An earlier revision of this file claimed the window verdict
+  "currently prints *does not conform* and is still renderable". That was wrong.
+  `qc_coq.product_id` is validated at compile and stored, but nothing reads it
+  back: `_coq_disposition()` returns `None` unless the CoQ carries a frozen
+  *ladder* id, and `_coq_grade_value()` renders only the ladder disposition. So
+  a product-graded CoQ today shows **no grade at all**, rather than a
+  non-conforming one. Outstanding work: a product branch in `_coq_disposition`,
+  `product_code` / `product_conforms` on `_coq_out`, and a product string in
+  `_coq_grade_value`.
 - The header document code on the rendered A4 product page
   (`QCSP 001_GP-THC26_v.03`) follows the archive's per-page style; the v.03
   pages' exact header was not visible in the text extraction.
