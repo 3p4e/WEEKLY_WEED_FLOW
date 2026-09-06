@@ -117,9 +117,87 @@ cut into. Usually empty, and it never borrows the strain's number.
 4. Set target products on open batches (`PATCH /cultivation/batches/{id}`).
 5. Compile CoQs with `product_id` from then on.
 
+## Verified against the controlled specifications (2026-09-06)
+
+The owner supplied the specification archive: one folder per strain, one PDF per
+grade, document code `QCSP_001_<ABBR>-<TIER>_v.01`. Read directly from those
+PDFs.
+
+### Strain spellings — RESOLVED
+
+Neither column of the seed file was uniformly right; the correct set is a mix.
+The specification header is the authority:
+
+| Specification header | was `strain` | was `strain_printed` |
+| --- | --- | --- |
+| **JELLY DONUTZ** | Jelly Donutz ✓ | Jelly Donuts ✗ |
+| **WEDDING CRASHER** | Wedding Crasher ✓ | Wedding Crusher ✗ |
+| **PURE MICHIGEN** | Pure Michigan ✗ | Pure Michigen ✓ |
+| **GRAPS AND CREME** | Graps & Crème ✗ | Grapes And Cream ✗ |
+| **CLEMOSA A BUD** | Clemosa ✗ | Clemosa A Bud ✓ |
+| **SLEEPY JOY** | — | — |
+
+"A Bud" is part of the strain name, not a phenotype marker. `Sleepy Joy` was not
+previously known to be contested; a companion file in the archive calls it
+"Sleepy Joe" and that is wrong.
+
+### Grade sets and nominals — CONFIRMED CORRECT
+
+`imb_products.json`'s nominals match the specification archive on **all 22
+strains, zero differences** (checked programmatically). Grape Pie I–V =
+28/26/24/18/16, Cap Junky I–IV = 28/26/24/20, Jelly Donutz I–IV = 22/20/16/14.
+
+### The windows DO overlap, and the documents say so
+
+Every specification PDF sampled prints the window as **±10 % relative**, upper
+bound `nominal × 1.10 − 0.01`:
+
+| Document | Header | Window |
+| --- | --- | --- |
+| `QCSP_001_GP-I_v.01` | `GRAPE PIE 28.00% ± 2.80%` | 25.20 – 30.79 % |
+| `QCSP_001_GP-II_v.01` | `GRAPE PIE 26.00% ± 2.60%` | 23.40 – 28.59 % |
+| `QCSP_001_GP-III_v.01` | `GRAPE PIE 24.00% ± 2.40%` | 21.60 – 26.39 % |
+| `QCSP_001_CJ-I_v.01` | `CAP JUNKY 28.00% ± 2.80%` | 25.20 – 30.79 % |
+| `QCSP_001_GG-I_v.01` | `GORILLA GLUE 18.00% ± 1.80%` | 16.20 – 19.79 % |
+| `QCSP_001_GG-II_v.01` | `GORILLA GLUE 16.00% ± 1.60%` | 14.40 – 17.59 % |
+
+GP I and GP II overlap across 25.20–28.59; GG I and GG II across 16.20–17.59.
+**This is a quality finding, not a modelling choice.** A measured 26.00 % Grape
+Pie satisfies Grade I, Grade II *and* Grade III as issued, so "which grade is
+this batch?" has three correct answers and the certificate cannot be derived
+from the result alone.
+
+### `_grades_data.json` is NOT the issued specification
+
+The archive root also holds `_grades_data.json`, which encodes a **different,
+non-overlapping** scheme — per-grade absolute tolerances (Grape Pie II `26 ±
+0.6` → 25.40–26.60; Cap Junky I `28 ± 1` → 27.00–29.00), every one of them ≤ 10 %
+and chosen so neighbouring grades do not touch. It matches the owner's stated
+intent exactly. It does **not** match the PDFs:
+
+- Grape Pie IV nominal **20**, but the PDF says **18**;
+- Cap Junky given **five** grades, but only four PDFs exist (I–IV);
+- Jelly Donutz given **three** grades, but four PDFs exist (I–IV);
+- no PDF prints any of its tolerances.
+
+Its **strain names are the correct ones**, which is how the spellings above were
+cross-checked. Read it as a proposal for a future `v.02`, not as the current
+specification. `_master_spec.json`'s `gr` block matches the PDFs' grade sets, but
+its `names` map has all six spellings wrong.
+
+**[NEEDS INPUT]** Which is the controlled state: the issued `v.01` PDFs
+(overlapping ±10 %), or the non-overlapping tolerances in `_grades_data.json`?
+The app currently implements the PDFs. Adopting the non-overlapping scheme is a
+data change, not a code change — `qc_products` already stores `window_min` /
+`window_max` per product and never assumes ±10 %.
+
+**[NEEDS INPUT]** The archive PDFs are `v.01`; the 48-page consolidated document
+this catalogue was originally seeded from is `QCSP 001 v.03`. Which supersedes
+which?
+
 ## Open
 
-- Canonical strain spellings (above).
+- ~~Canonical strain spellings.~~ **RESOLVED 2026-09-06** — see above.
 - ~~Whether a CoQ whose Total THC falls outside its product's window should be
   blocked from issuance.~~ **DECIDED 2026-09-06 (owner): no, do not block.**
   A Total Δ9-THC outside the chosen product's window is reported on the CoQ and
