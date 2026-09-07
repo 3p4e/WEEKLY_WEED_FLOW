@@ -1,7 +1,9 @@
 # Standalone tools
 
 Single-file HTML tools. Each one opens directly in a browser — download the
-file and double-click it. No build step, no server, no install.
+file and double-click it. No build step, no server, no install, and no network:
+nothing is fetched from anywhere, so they behave identically on a machine that
+has never been online.
 
 ## `potency-range-builder.html`
 
@@ -32,6 +34,10 @@ system of record, and this file does not update itself.
   picks the nominals, whether it prefers even numbers, whether it avoids gaps,
   the narrowest band it will accept, and how many grades at most.
 - Add or remove results on any strain, and create new strains from scratch.
+- Light, Auto or Dark, in four colour schemes — Paper, Graphite, Bloom and High
+  contrast. Auto follows the device. In every scheme an overlap is pink and a
+  gap is green: those two carry the meaning of the page, so a scheme changes
+  their temperature but never their hue.
 
 **Conventions it obeys** — the same ones the specification pages print:
 a nominal `N` with tolerance `t` covers `N − t` to `N + t − 0.01`
@@ -44,7 +50,22 @@ at least 22.22 %. A 2-point step stops working above a nominal of 9, a 4-point
 step above 18. The tool reports such a gap as forced rather than pretending a
 tolerance could close it.
 
-**Where your work is kept.** Choices are saved in the browser that made them.
-Published as an artifact with the `db` capability, they are also written into
-the artifact's own store so they survive across browsers and can be read back.
-Opened as a plain file, only the browser copy applies.
+**Where your work is kept.** Choices are saved in the browser that made them,
+and nowhere else — the file has no network of its own. Two routes carry work
+off the machine, both plain files:
+
+- **Save work…** writes a small `.json` of just your changes, which *Load work…*
+  reads back on any machine.
+- **Save a copy with my work in it** writes a fresh copy of the whole page with
+  the ladders, tolerances and hand-entered results embedded in it. That copy
+  opens on its own anywhere, with the work already in place. It is the one to
+  send to someone else: no import step and nothing to install.
+
+A copy's embedded work fills in only the keys the opening browser does not
+already hold, so opening a colleague's copy never quietly overwrites work in
+progress — *Load work…* is the deliberate way to take theirs instead.
+
+Some browsers refuse `localStorage` to a page opened from a `file://` path, and
+a private window can silently discard it. The page detects that, keeps working
+from memory for the session, and says so in the bar at the top rather than
+letting you find out when the work is gone.

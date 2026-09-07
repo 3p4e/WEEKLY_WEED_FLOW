@@ -1,48 +1,389 @@
-<title>Potency Range Builder</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;600&display=swap">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THC Potency Range Builder</title>
+<!--
+  Potency Range Builder — standalone.
+
+  One file, no network. Double-click it: no server, no build step, no internet
+  connection. Nothing is fetched from anywhere, so it behaves identically on a
+  machine that has never been online.
+
+  Your work is kept in this browser and can also be baked into a copy of this
+  very file — "Save a copy with my work in it", at the top of the page. That
+  copy opens on any machine with the ladders, tolerances and hand-entered
+  results already in place.
+
+  The embedded data is a snapshot, not a live view: 106 Total d9-THC results
+  across 72 batches and 20 strains from CoQ_Analysis_Master_v10 (sheet "CoQ
+  Parameter Tracker v10", column M), plus the 42 specification nominals from
+  QCSP 001 v.03. The application is the system of record; this file does not
+  update itself.
+-->
 <style>
+body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F2F5F6;color:#12171A}
+img{max-width:100%}
+[hidden]:not([hidden=until-found]){display:none!important}
+</style>
+</head>
+<body>
+<script>
+/* Runs before anything is painted, so a dark scheme never flashes white.
+   It reads the store directly because LSX does not exist yet; if the browser
+   refuses storage this simply does nothing and the script below sets it. */
+(function(){
+  var d=document.documentElement, s=null, t=null;
+  try{ s=localStorage.getItem("pgrb:v1:__scheme"); t=localStorage.getItem("pgrb:v1:__theme"); }catch(e){}
+  d.setAttribute("data-scheme", /^[a-z]+$/.test(s||"") ? s : "paper");
+  if(t==="dark"||t==="light") d.setAttribute("data-theme", t);
+})();
+</script>
+<style>
+/* ───────────── palettes ─────────────
+   Four schemes, each with a light and a dark palette, selected by
+   data-scheme on the root and switched between light and dark by
+   data-theme (absent = follow the operating system).
+
+   Across every scheme an overlap stays pink and a gap stays green.
+   Those two carry the meaning of the whole page, so a scheme may
+   change their temperature but never their hue — otherwise two
+   people on different schemes would read the same picture
+   differently, which is the one thing a colour choice must not do. */
 :root{
-  --paper:#F2F5F6; --surface:#FFFFFF; --ink:#12171A; --ink-2:#5B676E; --ink-3:#8B979E;
-  --rule:#D7DEE2; --rule-soft:#E9EEF1; --edge:#C9D3D8;
-  --scale:#7C8A92; --scale-soft:#B6C2C8;
-  --dot:#9A4A24; --dot-edge:#FFFFFF;
-  --band:#1F4E68; --band-ghost:#1F4E68; --band-text:#FFFFFF;
-  --overlap:#E2479A; --overlap-text:#FFFFFF;
-  --gap:#2FA660; --gap-text:#FFFFFF;
-  --handle:#FFFFFF; --handle-edge:#12171A;
-  --focus:#9A4A24;
-  --shadow:0 1px 2px rgba(18,23,26,.06),0 8px 24px -18px rgba(18,23,26,.5);
   --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
   --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 }
+
+/* paper — light */
+:root,
+:root[data-scheme="paper"]{
+  color-scheme:light;
+  --paper:#F2F5F6;
+  --surface:#FFFFFF;
+  --ink:#12171A;
+  --ink-2:#5B676E;
+  --ink-3:#8B979E;
+  --rule:#D7DEE2;
+  --rule-soft:#E9EEF1;
+  --edge:#C9D3D8;
+  --scale:#7C8A92;
+  --scale-soft:#B6C2C8;
+  --dot:#9A4A24;
+  --dot-edge:#FFFFFF;
+  --band:#1F4E68;
+  --band-ghost:#1F4E68;
+  --band-text:#FFFFFF;
+  --overlap:#E2479A;
+  --overlap-text:#FFFFFF;
+  --gap:#2FA660;
+  --gap-text:#FFFFFF;
+  --handle:#FFFFFF;
+  --handle-edge:#12171A;
+  --focus:#9A4A24;
+  --shadow:0 1px 2px rgba(18,23,26,.06),0 8px 24px -18px rgba(18,23,26,.5);
+}
+
+/* graphite — light */
+:root[data-scheme="graphite"]{
+  color-scheme:light;
+  --paper:#F4F4F5;
+  --surface:#FFFFFF;
+  --ink:#18181B;
+  --ink-2:#52525B;
+  --ink-3:#8A8A93;
+  --rule:#D9D9DE;
+  --rule-soft:#EBEBEF;
+  --edge:#CBCBD2;
+  --scale:#71717A;
+  --scale-soft:#B4B4BC;
+  --dot:#B45309;
+  --dot-edge:#FFFFFF;
+  --band:#3730A3;
+  --band-ghost:#3730A3;
+  --band-text:#FFFFFF;
+  --overlap:#DB2777;
+  --overlap-text:#FFFFFF;
+  --gap:#15803D;
+  --gap-text:#FFFFFF;
+  --handle:#FFFFFF;
+  --handle-edge:#18181B;
+  --focus:#B45309;
+  --shadow:0 1px 2px rgba(24,24,27,.06),0 8px 24px -18px rgba(24,24,27,.5);
+}
+
+/* bloom — light */
+:root[data-scheme="bloom"]{
+  color-scheme:light;
+  --paper:#F7F3EC;
+  --surface:#FFFDF9;
+  --ink:#221C15;
+  --ink-2:#6B5D4D;
+  --ink-3:#9A8B78;
+  --rule:#E2D9C9;
+  --rule-soft:#EFE9DD;
+  --edge:#D6CAB5;
+  --scale:#8A7C68;
+  --scale-soft:#C2B6A2;
+  --dot:#8A5A2B;
+  --dot-edge:#FFFDF9;
+  --band:#5B4B8A;
+  --band-ghost:#5B4B8A;
+  --band-text:#FFFDF9;
+  --overlap:#C4267E;
+  --overlap-text:#FFFDF9;
+  --gap:#4E7F3C;
+  --gap-text:#FFFDF9;
+  --handle:#FFFDF9;
+  --handle-edge:#221C15;
+  --focus:#8A5A2B;
+  --shadow:0 1px 2px rgba(34,28,21,.07),0 8px 24px -18px rgba(34,28,21,.55);
+}
+
+/* contrast — light */
+:root[data-scheme="contrast"]{
+  color-scheme:light;
+  --paper:#FFFFFF;
+  --surface:#FFFFFF;
+  --ink:#000000;
+  --ink-2:#2B2B2B;
+  --ink-3:#555555;
+  --rule:#8E8E8E;
+  --rule-soft:#C4C4C4;
+  --edge:#5F5F5F;
+  --scale:#2B2B2B;
+  --scale-soft:#8A8A8A;
+  --dot:#B3261E;
+  --dot-edge:#FFFFFF;
+  --band:#003A70;
+  --band-ghost:#003A70;
+  --band-text:#FFFFFF;
+  --overlap:#C2185B;
+  --overlap-text:#FFFFFF;
+  --gap:#1B5E20;
+  --gap-text:#FFFFFF;
+  --handle:#FFFFFF;
+  --handle-edge:#000000;
+  --focus:#B3261E;
+  --shadow:0 0 0 1px rgba(0,0,0,.18);
+}
+
+/* the operating system's choice, unless the page has been told otherwise */
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --paper:#0E1316; --surface:#161D21; --ink:#E7EEF1; --ink-2:#9BA9B1; --ink-3:#6D7B83;
-    --rule:#28333A; --rule-soft:#1E272C; --edge:#33414A;
-    --scale:#8494A0; --scale-soft:#42525C;
-    --dot:#E08A55; --dot-edge:#161D21;
-    --band:#7FB4CD; --band-ghost:#7FB4CD; --band-text:#0E1316;
-    --overlap:#E86BB0; --overlap-text:#1A0A12;
-    --gap:#4CC47C; --gap-text:#06180D;
-    --handle:#161D21; --handle-edge:#E7EEF1;
+  :root:not([data-theme="light"]),
+  :root[data-scheme="paper"]:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#0E1316;
+    --surface:#161D21;
+    --ink:#E7EEF1;
+    --ink-2:#9BA9B1;
+    --ink-3:#6D7B83;
+    --rule:#28333A;
+    --rule-soft:#1E272C;
+    --edge:#33414A;
+    --scale:#8494A0;
+    --scale-soft:#42525C;
+    --dot:#E08A55;
+    --dot-edge:#161D21;
+    --band:#7FB4CD;
+    --band-ghost:#7FB4CD;
+    --band-text:#0E1316;
+    --overlap:#E86BB0;
+    --overlap-text:#1A0A12;
+    --gap:#4CC47C;
+    --gap-text:#06180D;
+    --handle:#161D21;
+    --handle-edge:#E7EEF1;
     --focus:#E08A55;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.9);
   }
+  :root[data-scheme="graphite"]:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#0F0F11;
+    --surface:#17171A;
+    --ink:#E9E9EC;
+    --ink-2:#A1A1AA;
+    --ink-3:#71717A;
+    --rule:#2A2A30;
+    --rule-soft:#1F1F24;
+    --edge:#3A3A42;
+    --scale:#8B8B95;
+    --scale-soft:#45454E;
+    --dot:#F0A868;
+    --dot-edge:#17171A;
+    --band:#A5B4FC;
+    --band-ghost:#A5B4FC;
+    --band-text:#0F0F11;
+    --overlap:#F472B6;
+    --overlap-text:#1A0812;
+    --gap:#4ADE80;
+    --gap-text:#05180C;
+    --handle:#17171A;
+    --handle-edge:#E9E9EC;
+    --focus:#F0A868;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -18px rgba(0,0,0,.95);
+  }
+  :root[data-scheme="bloom"]:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#17130F;
+    --surface:#201B16;
+    --ink:#F0E7DA;
+    --ink-2:#B7A895;
+    --ink-3:#857767;
+    --rule:#332B23;
+    --rule-soft:#251F19;
+    --edge:#443A30;
+    --scale:#9B8C79;
+    --scale-soft:#4C4238;
+    --dot:#E0A96D;
+    --dot-edge:#201B16;
+    --band:#B9A7EA;
+    --band-ghost:#B9A7EA;
+    --band-text:#17130F;
+    --overlap:#F07BC0;
+    --overlap-text:#1B0714;
+    --gap:#7FD08A;
+    --gap-text:#06180B;
+    --handle:#201B16;
+    --handle-edge:#F0E7DA;
+    --focus:#E0A96D;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -18px rgba(0,0,0,.95);
+  }
+  :root[data-scheme="contrast"]:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#000000;
+    --surface:#0C0C0C;
+    --ink:#FFFFFF;
+    --ink-2:#D6D6D6;
+    --ink-3:#A0A0A0;
+    --rule:#5A5A5A;
+    --rule-soft:#333333;
+    --edge:#7A7A7A;
+    --scale:#D6D6D6;
+    --scale-soft:#6A6A6A;
+    --dot:#FF8A7A;
+    --dot-edge:#0C0C0C;
+    --band:#8EC5FF;
+    --band-ghost:#8EC5FF;
+    --band-text:#000000;
+    --overlap:#FF6FB0;
+    --overlap-text:#14000A;
+    --gap:#6EE787;
+    --gap-text:#001A06;
+    --handle:#0C0C0C;
+    --handle-edge:#FFFFFF;
+    --focus:#FF8A7A;
+    --shadow:0 0 0 1px rgba(255,255,255,.22);
+  }
 }
-:root[data-theme="dark"]{
-  --paper:#0E1316; --surface:#161D21; --ink:#E7EEF1; --ink-2:#9BA9B1; --ink-3:#6D7B83;
-  --rule:#28333A; --rule-soft:#1E272C; --edge:#33414A;
-  --scale:#8494A0; --scale-soft:#42525C;
-  --dot:#E08A55; --dot-edge:#161D21;
-  --band:#7FB4CD; --band-ghost:#7FB4CD; --band-text:#0E1316;
-  --overlap:#E86BB0; --overlap-text:#1A0A12;
-  --gap:#4CC47C; --gap-text:#06180D;
-  --handle:#161D21; --handle-edge:#E7EEF1;
+
+/* an explicit choice wins in both directions */
+:root[data-theme="dark"],
+:root[data-theme="dark"][data-scheme="paper"]{
+  color-scheme:dark;
+  --paper:#0E1316;
+  --surface:#161D21;
+  --ink:#E7EEF1;
+  --ink-2:#9BA9B1;
+  --ink-3:#6D7B83;
+  --rule:#28333A;
+  --rule-soft:#1E272C;
+  --edge:#33414A;
+  --scale:#8494A0;
+  --scale-soft:#42525C;
+  --dot:#E08A55;
+  --dot-edge:#161D21;
+  --band:#7FB4CD;
+  --band-ghost:#7FB4CD;
+  --band-text:#0E1316;
+  --overlap:#E86BB0;
+  --overlap-text:#1A0A12;
+  --gap:#4CC47C;
+  --gap-text:#06180D;
+  --handle:#161D21;
+  --handle-edge:#E7EEF1;
   --focus:#E08A55;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.9);
+}
+:root[data-theme="dark"][data-scheme="graphite"]{
+  color-scheme:dark;
+  --paper:#0F0F11;
+  --surface:#17171A;
+  --ink:#E9E9EC;
+  --ink-2:#A1A1AA;
+  --ink-3:#71717A;
+  --rule:#2A2A30;
+  --rule-soft:#1F1F24;
+  --edge:#3A3A42;
+  --scale:#8B8B95;
+  --scale-soft:#45454E;
+  --dot:#F0A868;
+  --dot-edge:#17171A;
+  --band:#A5B4FC;
+  --band-ghost:#A5B4FC;
+  --band-text:#0F0F11;
+  --overlap:#F472B6;
+  --overlap-text:#1A0812;
+  --gap:#4ADE80;
+  --gap-text:#05180C;
+  --handle:#17171A;
+  --handle-edge:#E9E9EC;
+  --focus:#F0A868;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -18px rgba(0,0,0,.95);
+}
+:root[data-theme="dark"][data-scheme="bloom"]{
+  color-scheme:dark;
+  --paper:#17130F;
+  --surface:#201B16;
+  --ink:#F0E7DA;
+  --ink-2:#B7A895;
+  --ink-3:#857767;
+  --rule:#332B23;
+  --rule-soft:#251F19;
+  --edge:#443A30;
+  --scale:#9B8C79;
+  --scale-soft:#4C4238;
+  --dot:#E0A96D;
+  --dot-edge:#201B16;
+  --band:#B9A7EA;
+  --band-ghost:#B9A7EA;
+  --band-text:#17130F;
+  --overlap:#F07BC0;
+  --overlap-text:#1B0714;
+  --gap:#7FD08A;
+  --gap-text:#06180B;
+  --handle:#201B16;
+  --handle-edge:#F0E7DA;
+  --focus:#E0A96D;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -18px rgba(0,0,0,.95);
+}
+:root[data-theme="dark"][data-scheme="contrast"]{
+  color-scheme:dark;
+  --paper:#000000;
+  --surface:#0C0C0C;
+  --ink:#FFFFFF;
+  --ink-2:#D6D6D6;
+  --ink-3:#A0A0A0;
+  --rule:#5A5A5A;
+  --rule-soft:#333333;
+  --edge:#7A7A7A;
+  --scale:#D6D6D6;
+  --scale-soft:#6A6A6A;
+  --dot:#FF8A7A;
+  --dot-edge:#0C0C0C;
+  --band:#8EC5FF;
+  --band-ghost:#8EC5FF;
+  --band-text:#000000;
+  --overlap:#FF6FB0;
+  --overlap-text:#14000A;
+  --gap:#6EE787;
+  --gap-text:#001A06;
+  --handle:#0C0C0C;
+  --handle-edge:#FFFFFF;
+  --focus:#FF8A7A;
+  --shadow:0 0 0 1px rgba(255,255,255,.22);
 }
 *{box-sizing:border-box}
 body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -55,7 +396,7 @@ h1{font-family:var(--serif);font-weight:600;font-size:32px;line-height:1.1;margi
 .status{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--ink-3);white-space:nowrap}
 .status b{color:var(--ink-2);font-weight:500}
 
-.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;margin:0 0 22px;border:1px solid var(--rule);border-radius:3px;background:var(--surface);overflow:hidden}
+.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;margin:0 0 22px;border:1px solid var(--rule);border-radius:3px;background:var(--surface);overflow:hidden}
 .howto > div{padding:12px 16px;font-size:13px;color:var(--ink-2);display:flex;gap:12px;align-items:flex-start}
 .howto > div + div{border-left:1px solid var(--rule-soft)}
 .howto strong{color:var(--ink);font-weight:600;display:block;margin-bottom:2px}
@@ -200,6 +541,20 @@ tr:last-child td{border-bottom:0}
 .copied{font-family:var(--mono);font-size:11px;color:var(--gap);margin-left:8px}
 pre.copyfb{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:8px 10px;margin:6px 0 0;white-space:pre-wrap;user-select:all}
 
+/* the appearance bar and, in the standalone file, the work-in / work-out bar */
+.themebar,.iobar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;padding:10px 16px;
+  background:var(--surface);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow)}
+.iobar{margin-bottom:18px}
+.io-l{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-right:4px}
+.io-msg{flex:1 1 100%;margin:2px 0 0;font-size:12.5px;color:var(--ink-2);min-height:1.2em}
+.seg{display:inline-flex}
+.seg .btn{border-radius:0;margin-left:-1px}
+.seg .btn:first-child{border-radius:3px 0 0 3px;margin-left:0}
+.seg .btn:last-child{border-radius:0 3px 3px 0}
+.seg .btn.on{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:600;position:relative;z-index:1}
+.th-note{font-size:12px;color:var(--ink-3);margin-left:auto}
+@media (max-width:700px){.th-note{margin-left:0;flex:1 1 100%}}
+
 footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-2);max-width:82ch}
 footer p{margin:0 0 8px} footer p:last-child{margin-bottom:0}
 footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
@@ -214,6 +569,28 @@ footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
     </div>
     <div class="status" id="status">Loading…</div>
   </header>
+
+  <div class="themebar">
+    <span class="io-l">Appearance</span>
+    <div class="seg" role="radiogroup" aria-label="Light, automatic or dark">
+      <button class="btn" type="button" role="radio" data-mode="light">Light</button>
+      <button class="btn" type="button" role="radio" data-mode="auto">Auto</button>
+      <button class="btn" type="button" role="radio" data-mode="dark">Dark</button>
+    </div>
+    <label class="tgl num">colours
+      <select id="th-scheme" aria-label="Colour scheme"><option value="paper">Paper</option><option value="graphite">Graphite</option><option value="bloom">Bloom</option><option value="contrast">High contrast</option></select></label>
+    <span class="th-note">Auto follows this device. Overlap stays pink and a gap stays green in every scheme.</span>
+  </div>
+
+  <div class="iobar">
+    <span class="io-l">Your work</span>
+    <button class="btn" type="button" id="io-save-copy">Save a copy with my work in it</button>
+    <button class="btn" type="button" id="io-save-work">Save work…</button>
+    <button class="btn" type="button" id="io-load">Load work…</button>
+    <button class="btn danger" type="button" id="io-clear">Clear all my work</button>
+    <input type="file" id="io-file" accept=".json,application/json" hidden>
+    <p class="io-msg" id="io-msg" role="status"></p>
+  </div>
 
   <div class="howto" aria-label="How to use">
     <div>
@@ -260,11 +637,67 @@ footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
 
   <footer>
     <p><strong>Conventions.</strong> A nominal <code>N</code> with tolerance <code>t</code> covers <code>N − t</code> to <code>N + t − 0.01</code>, matching the specification pages (20.00 ± 2.00 → 18.00 – 21.99). Two neighbours are <em>joined</em> when the lower one's top is exactly 0.01 below the upper one's bottom. Tolerance is capped at 10&nbsp;% of the nominal and never below 0.01.</p>
-    <p><strong>What is saved.</strong> Every change is kept in this browser, and — when the page has been granted storage — in the artifact itself, so it survives reloads and can be read back. Results are read-only; only the nominals and tolerances are yours to change. “Reset” returns a strain to its specification nominals at ±10&nbsp;%.</p>
+    <p><strong>What is saved, and where.</strong> Every change is kept in this browser, on this device — nothing leaves it, because this file talks to nothing. To move your work, or to put it somewhere a cleared browser cannot reach, use <em>Save a copy with my work in it</em>: that writes a fresh copy of this page with the ladders, tolerances and any results you typed already inside it, and it opens on its own on any machine. Source results are read-only; the nominals, the tolerances and your own entered results are yours to change. “Reset” returns a strain to its specification nominals at ±10&nbsp;%.</p>
   </footer>
 </div>
 
 <script>
+/* ───────────── storage ─────────────
+   Three layers, in order of durability:
+
+     1. a copy of this file with the work baked into it   (survives anything)
+     2. localStorage for this page's origin               (survives reloads)
+     3. an in-memory map                                  (survives nothing)
+
+   Layer 2 is not always there. Opened from a file:// path some browsers refuse
+   localStorage outright and every access throws; in a private window it can
+   come back empty without saying so. Every read and write therefore goes
+   through LSX, which keeps its own copy in memory and treats the browser store
+   as a bonus. The page behaves identically either way — the only difference is
+   whether the work is still there tomorrow, and the page says which case it is
+   in rather than leaving you to find out. */
+const MEM = Object.create(null);
+const LSX = (function(){
+  let ok = false;
+  try{ const k="pgrb:probe"; localStorage.setItem(k,"1"); localStorage.removeItem(k); ok = true; }catch(e){}
+  return {
+    get ok(){ return ok; },
+    getItem(k){
+      if(k in MEM) return MEM[k];
+      if(ok){ try{ return localStorage.getItem(k); }catch(e){} }
+      return null;
+    },
+    setItem(k,v){
+      MEM[k]=v;
+      if(ok){ try{ localStorage.setItem(k,v); }catch(e){ ok=false; } }
+    },
+    removeItem(k){
+      delete MEM[k];
+      if(ok){ try{ localStorage.removeItem(k); }catch(e){} }
+    },
+    keys(){
+      const s=new Set(Object.keys(MEM));
+      if(ok){ try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.slice(0,5)==="pgrb:") s.add(k); } }catch(e){} }
+      return Array.from(s).filter(k=>k.slice(0,5)==="pgrb:");
+    }
+  };
+})();
+
+/* A seed is work baked into this file by someone who saved a copy. It fills in
+   only the keys this browser does not already hold, so opening a colleague's
+   copy never silently overwrites work in progress. */
+let SEED_INFO = null;
+(function(){
+  const node=document.getElementById("pgrb-seed"); if(!node) return;
+  let o=null; try{ o=JSON.parse(node.textContent||"null"); }catch(e){ return; }
+  if(!o||!o.keys) return;
+  SEED_INFO={savedAt:o.savedAt||null, applied:0, skipped:0};
+  Object.keys(o.keys).forEach(k=>{
+    if(k.slice(0,5)!=="pgrb:") return;
+    if(LSX.getItem(k)==null){ LSX.setItem(k,o.keys[k]); SEED_INFO.applied++; } else SEED_INFO.skipped++;
+  });
+})();
+
 /* ───────────── data ───────────── */
 const DATA = [["ACC","Amnesia Core Cut",[],[12]],["AB","Apple and Banana",[[16.93,"AB092501","ППК26005"]],[]],["BG","Blue Gelato",[[21.8,"BG1024","ППК25050"],[26.14,"BG1024","197-1-K-26"]],[26]],["BSS","Blue Sunset Sherbet",[[20.39,"BSS052501","NGP-QCG-SOP-024 F3"],[21.03,"BSS1024","ППК25051"],[23.42,"BSS1024_01/1","ППК25176"],[25.01,"BSS1024","197-2-K-26"]],[20,24]],["CJ","Cap Junky",[[14.93,"CJ052501/02","ППК25281"],[16.56,"CJ062501/2","ППК25322"],[18.29,"CJ082501/2","197-5-K-26"],[18.91,"CJ062501/2","197-4-K-26"],[20.29,"CJ052501/01","ППК25280"],[20.84,"CJ082501/2","ППК26003"],[21.51,"CJ062501/1","ППК25321"],[22.3,"CJ092501","ППК26007"],[23.0,"CJ1024","ППК25052"],[23.7,"CJ072501","ППК25367"],[24.05,"CJ052501/01","197-3-K-26"],[24.96,"CJ082501/1","ППК26002"]],[20,24,26,28]],["CC","Cash Cow",[[13.35,"CC112501","ППК26068"],[17.67,"CC012601/1","197-6-K-26"]],[14]],["CF","Chem Flyer",[],[10]],["CLE","Clemosa A Bud",[[8.02,"CLE072501","ППК25370"]],[8]],["FB","Fat Bastard",[[12.39,"FB032601","ППК26127"],[14.68,"FB012601_1","ППК26067"],[16.69,"FB112501","ППК26066"],[18.29,"FB012603V","ППК26110"],[18.86,"FB012602","197-7-K-26"],[20.83,"FB012603","ППК26112"]],[18]],["GG","Gorilla Glue",[[15.35,"GG012601","ППК26062"],[15.95,"GG1024_02","ППК25140"],[16.7,"GG012603","197-8-K-26"],[17.22,"GG1024_01","ППК25104"],[17.59,"GG012603","ППК26114"],[17.94,"GG112501","ППК26061"],[18.67,"GG1024_01","197-9-K-26"],[18.98,"GG032601","ППК26128"]],[16,18]],["GP","Grape Pie",[[13.16,"GP0824_02","ППК26033"],[14.83,"GP082501/2","ППК25381"],[14.99,"GP0824_03","ППК26035"],[15.7,"GP082501/2","197-12-K-26"],[17.05,"GP062501","ППК26058"],[18.52,"GP052501","197-10-K-26"],[18.62,"GP062501","ППК26037"],[18.98,"GP052501","ППК25279"],[19.81,"GP072501/2","ППК25379"],[20.79,"GP0824_01","ППК25105"],[21.29,"GP082501/1","ППК25380"],[21.31,"GP0824_02","ППК26032"],[21.36,"GP072501/1","ППК25378"],[22.61,"GP0824_02","197-11-K-26"],[22.83,"GP062501","ППК26036"],[23.08,"GP0824_02","ППК26059"],[23.19,"GP0824_02","ППК25174"],[23.79,"GP0824_02","ППК25139"],[24.51,"GP062501","ППК26057"],[24.62,"GP0824_03","ППК26034"],[24.89,"GP062501","NGP-QCG-SOP-024 F3"],[25.45,"GP0824_03","ППК25175"],[25.73,"GP092501","ППК26009"],[25.98,"GP0824_03","ППК26060"]],[16,18,24,26,28]],["GRC","Grapes And Cream",[[11.53,"GRC102501","051-6-K-26"]],[10]],["HPA","High Pro Amnesia",[[17.31,"HPA1024","197-13-K-26"],[20.39,"HPA052501","ППК25278"],[21.61,"HPA1024_01","197-14-K-26"],[22.43,"HPA1024_01","ППК25155"]],[18,20,22]],["JD","Jelly Donuts",[[13.93,"JD112501","ППК26065"],[15.16,"JD012603","ППК26111"],[18.16,"JD012601","ППК26064"],[18.58,"JD022601","ППК26115"],[19.64,"JD112501","ППК26063"],[20.32,"JD112501","197-15-K-26"],[20.54,"JD012603","ППК26113"]],[14,16,20,22]],["J31","Jokerz 31",[[17.32,"J31102501","197-16-K-26"],[19.14,"J31102501","051-1-K-26"],[19.84,"J31122501","100-2-K-26"],[20.21,"J31112501","100-1-K-26"],[21.84,"J31122501","100-3-K-26"],[25.27,"J31112501","051-5-K-26"]],[18]],["KC","Kush Crasher",[[17.04,"KC102501","051-4-K-26"]],[16]],["MB","Motor Breath",[[16.82,"MB0824_05","ППК25211"],[18.67,"MB0824_04","ППК25118"]],[18]],["OPM","Orange Punch Mimosa",[[7.91,"OPM122501","197-19-K-26"],[8.0,"OPM112501","ППК26031"],[8.09,"OPM122501","100-4-K-26"],[9.43,"OPM092501","ППК26008"],[14.16,"OPM052501","ППК25257"],[15.38,"OMP1024_01","ППК25117"],[16.55,"OPM1024_03","ППК25210"],[18.04,"OPM1024_02","197-18-K-26"],[18.27,"OPM1024_02","ППК25154"],[20.03,"OPM1024","197-17-K-26"]],[8,10,18,20,22]],["PM","Permanent Marker",[[10.01,"PM072501","ППК25368"],[12.25,"PM092501","197-20-K-26"],[13.33,"PM112501","ППК26030"],[14.06,"PM092501","ППК26004"]],[10,12]],["PUM","Pure Michigen",[],[14]],["SCR","Scrambler",[[17.13,"SCR112501","ППК26069"],[17.84,"SCR012603","197-21-K-26"],[21.92,"SCR022601","ППК26116"],[24.78,"SCR012603","ППК26119"],[25.72,"SCR012603","ППК26118"],[26.32,"SCR012603","ППК26117"]],[18,20]],["SJ","Sleepy Joe",[[9.2,"SJ112501","051-2-K-26"],[10.96,"SJ0925021","ППК26006"],[11.2,"SJ102501","051-3-K-26"]],[10]],["WC","Wedding Crusher",[[21.67,"WC082501","ППК26001"],[22.11,"WC072501","ППК25369"]],[24]]];
 const STRAINS = DATA.map(([a,n,p,spec]) => ({a, n, p, spec}));
@@ -305,7 +738,7 @@ const LS = a => "pgrb:v1:"+a;
 const LS_STRAINS = "pgrb:v1:__strains";
 function defaultState(s){ const tol={}; (s.spec||[]).forEach(n=>tol[n]=maxTol(n)); return {tol, add:[], drop:[]}; }
 function loadLocal(s){
-  try{ const raw=localStorage.getItem(LS(s.a)); if(raw){ const o=JSON.parse(raw); if(o&&(o.tol||o.add)) return sanitize(o); } }catch(e){}
+  try{ const raw=LSX.getItem(LS(s.a)); if(raw){ const o=JSON.parse(raw); if(o&&(o.tol||o.add)) return sanitize(o); } }catch(e){}
   return defaultState(s);
 }
 function sanitize(o){
@@ -332,7 +765,7 @@ function visiblePts(s){
 const BASE = DATA.map(([a,n,p,spec]) => ({a, n, p, spec, own:false}));
 let CUSTOM = [];
 function loadCustom(){
-  try{ const raw=localStorage.getItem(LS_STRAINS); if(raw){ const o=JSON.parse(raw); if(Array.isArray(o)) return o.map(cleanStrain).filter(Boolean); } }catch(e){}
+  try{ const raw=LSX.getItem(LS_STRAINS); if(raw){ const o=JSON.parse(raw); if(Array.isArray(o)) return o.map(cleanStrain).filter(Boolean); } }catch(e){}
   return [];
 }
 function cleanStrain(o){
@@ -346,7 +779,7 @@ function allStrains(){ return BASE.concat(CUSTOM); }
 let byAbbr = {};
 function reindex(){ byAbbr = Object.fromEntries(allStrains().map(s=>[s.a,s])); }
 function saveCustom(){
-  try{ localStorage.setItem(LS_STRAINS, JSON.stringify(CUSTOM.map(s=>({a:s.a,n:s.n})))); }catch(e){}
+  try{ LSX.setItem(LS_STRAINS, JSON.stringify(CUSTOM.map(s=>({a:s.a,n:s.n})))); }catch(e){}
   if(db){ db.doc("strains/custom").set({strains:CUSTOM.map(s=>({abbr:s.a,name:s.n})), updatedAt:new Date().toISOString()}).catch(()=>{}); }
 }
 
@@ -367,7 +800,7 @@ function rangesDoc(s){
 }
 function save(s){
   localEditedAt[s.a]=Date.now();
-  try{ localStorage.setItem(LS(s.a), JSON.stringify({tol:state[s.a].tol, add:state[s.a].add, drop:state[s.a].drop})); }catch(e){}
+  try{ LSX.setItem(LS(s.a), JSON.stringify({tol:state[s.a].tol, add:state[s.a].add, drop:state[s.a].drop})); }catch(e){}
   if(!db) { setStatus("Saved <b>in this browser</b>"); return; }
   clearTimeout(pending[s.a]);
   setStatus("Saving…");
@@ -546,8 +979,8 @@ function nearestDist(a,v){ const i=lowerBound(a,v); let d=Infinity; if(i<a.lengt
    ranges over the NOMINALS too rather than accepting whatever is switched on. */
 const GEN_DEFAULTS = {search:true, evenOnly:true, avoidGaps:true, floor:100, maxGrades:5};
 let genOpts = Object.assign({}, GEN_DEFAULTS);
-try{ const raw=localStorage.getItem("pgrb:v1:__gen"); if(raw) genOpts=Object.assign({}, GEN_DEFAULTS, JSON.parse(raw)||{}); }catch(e){}
-function saveGen(){ try{ localStorage.setItem("pgrb:v1:__gen", JSON.stringify(genOpts)); }catch(e){} }
+try{ const raw=LSX.getItem("pgrb:v1:__gen"); if(raw) genOpts=Object.assign({}, GEN_DEFAULTS, JSON.parse(raw)||{}); }catch(e){}
+function saveGen(){ try{ LSX.setItem("pgrb:v1:__gen", JSON.stringify(genOpts)); }catch(e){} }
 
 function solveTolerances(noms, h, opts, step){   // noms: sorted ints; h: sorted hundredths
   step = step || 1;
@@ -968,7 +1401,7 @@ function deleteStrain(s){
   }
   CUSTOM=CUSTOM.filter(c=>c.a!==s.a); reindex(); saveCustom();
   delete state[s.a];
-  try{ localStorage.removeItem(LS(s.a)); }catch(e){}
+  try{ LSX.removeItem(LS(s.a)); }catch(e){}
   if(db) db.doc("ranges/"+s.a).delete().catch(()=>{});
   if(cards[s.a]){ cards[s.a].remove(); delete cards[s.a]; }
   setStatus(`Deleted <b>${GFesc(s.n)}</b>`);
@@ -1144,49 +1577,135 @@ reindex();
 allStrains().forEach(s=>{ state[s.a]=loadLocal(s); render(s); });
 setStatus("Saved <b>in this browser</b>");
 
-(async()=>{
-  try{
-    if(!window.claude || typeof window.claude.use!=="function") return;
-    // the explanation feature lights up on its own once the viewer answers
-    window.claude.use("sample").then(fn=>{ if(typeof fn==="function"){ sampleFn=fn; Object.keys(proposal).forEach(a=>{ if(byAbbr[a]) render(byAbbr[a]); }); } }).catch(()=>{});
-    db=await window.claude.use("db"); if(!db) return;
-    dbReady=true; setStatus("Connected · saving <b>to the page</b>");
 
-    // Strains created elsewhere arrive first, so a range for one of them lands
-    // on a strain this view already knows about.
-    db.doc("strains/custom").onSnapshot(snap=>{
-      const d=snap.exists&&snap.data(); if(!d||!Array.isArray(d.strains)) return;
-      let added=false;
-      d.strains.forEach(r=>{
-        const s=cleanStrain({a:r.abbr,n:r.name});
-        if(!s || byAbbr[s.a]) return;
-        CUSTOM.push(s); added=true;
-      });
-      if(added){
-        reindex();
-        try{ localStorage.setItem(LS_STRAINS, JSON.stringify(CUSTOM.map(s=>({a:s.a,n:s.n})))); }catch(e){}
-        CUSTOM.forEach(s=>{ if(!state[s.a]){ state[s.a]=loadLocal(s); render(s); } });
-      }
-    }, ()=>{});
+/* ───────────── appearance ─────────────
+   Light / Auto / Dark decides the palette's mode; the scheme decides which of
+   the four palettes. Auto means no data-theme attribute at all, which lets the
+   media query answer — so the page follows the device the way the rest of it
+   does, rather than freezing whatever the device happened to say at load. */
+const SCHEME_KEYS = ["paper", "graphite", "bloom", "contrast"];
+const K_SCHEME="pgrb:v1:__scheme", K_THEME="pgrb:v1:__theme";
+const curScheme = () => { const v=LSX.getItem(K_SCHEME); return SCHEME_KEYS.includes(v)?v:SCHEME_KEYS[0]; };
+const curMode   = () => { const v=LSX.getItem(K_THEME);  return (v==="light"||v==="dark")?v:"auto"; };
+function applyTheme(){
+  const d=document.documentElement, m=curMode();
+  d.setAttribute("data-scheme", curScheme());
+  if(m==="auto") d.removeAttribute("data-theme"); else d.setAttribute("data-theme", m);
+  document.querySelectorAll("[data-mode]").forEach(b=>{
+    const on=b.dataset.mode===m;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on?"true":"false");
+  });
+  const sel=document.getElementById("th-scheme"); if(sel) sel.value=curScheme();
+}
+document.querySelector(".themebar").addEventListener("click", e=>{
+  const b=e.target.closest("[data-mode]"); if(!b) return;
+  LSX.setItem(K_THEME, b.dataset.mode==="auto" ? "" : b.dataset.mode);
+  if(b.dataset.mode==="auto") LSX.removeItem(K_THEME);
+  applyTheme();
+});
+document.getElementById("th-scheme").addEventListener("change", e=>{
+  LSX.setItem(K_SCHEME, e.target.value); applyTheme();
+});
+applyTheme();
 
-    db.collection("ranges").onSnapshot(snap=>{
-      snap.docChanges().forEach(ch=>{
-        if(ch.type==="removed") return;
-        const d=ch.doc.data(); if(!d||!d.abbr) return;
-        if(!byAbbr[d.abbr]){                      // a range for a strain we have not heard of yet
-          if(!d.custom_strain) return;
-          const s=cleanStrain({a:d.abbr,n:d.name||d.abbr});
-          if(!s) return;
-          CUSTOM.push(s); reindex(); state[s.a]=defaultState(s); render(s);
-        }
-        const remoteAt=Date.parse(d.updatedAt||0)||0;
-        if((localEditedAt[d.abbr]||0) > remoteAt) return;      // this browser is newer
-        if(drag.abbr===d.abbr) return;                           // never yank a live drag
-        const merged=sanitize({tol:d.tol, add:d.results_entered, drop:state[d.abbr]&&state[d.abbr].drop});
-        state[d.abbr]=merged; render(byAbbr[d.abbr]);
-        try{ localStorage.setItem(LS(d.abbr), JSON.stringify(merged)); }catch(e){}
-      });
-    }, err=>{ setStatus("Saved in this browser · <b>page storage unavailable</b>"); });
-  }catch(e){ /* page still works from local state */ }
+/* Nothing to connect to: this file is the whole program. `db` stays null, so
+   every `if(db)` path above is inert and saving is purely local. */
+setStatus(LSX.ok ? 'Saved <b>in this browser</b>' : 'Saved <b>for this session only</b>');
+
+/* ───────────── carrying the work between machines ─────────────
+   Two routes out, both plain files, neither needing a server:
+
+     Save work…    a small .json of just your changes
+     Save a copy…  this whole page with the work embedded in it
+
+   The second is the one to send someone else: they double-click it and see
+   what you saw, with no import step and nothing to install. */
+function snapshot(){
+  const keys={};
+  LSX.keys().forEach(k=>{ const v=LSX.getItem(k); if(v!=null) keys[k]=v; });
+  return {format:"pgrb-work", v:1, savedAt:new Date().toISOString(), keys};
+}
+function stamp(){
+  const d=new Date(), p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes());
+}
+function offer(name, text, mime){
+  const url=URL.createObjectURL(new Blob([text],{type:mime+";charset=utf-8"})), a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 400);
+}
+/* Rebuild this document with the work embedded. The clone is stripped back to
+   the state a fresh load starts from — the scales are drawn by script, so
+   shipping the drawn SVG would only bloat the file and go stale on first
+   render — and a seed script is appended to the head. */
+function buildCopy(){
+  const root=document.documentElement.cloneNode(true);
+  const sheet=root.querySelector("#sheet"); if(sheet) sheet.innerHTML="";
+  root.querySelectorAll("input").forEach(i=>{
+    if(i.type==="checkbox"||i.type==="radio") i.removeAttribute("checked"); else i.removeAttribute("value");
+  });
+  const st=root.querySelector("#status"); if(st) st.textContent="Loading…";
+  const note=root.querySelector("#io-msg"); if(note) note.textContent="";
+  const prev=root.querySelector("#pgrb-seed"); if(prev) prev.remove();
+  const seed=document.createElement("script");
+  seed.id="pgrb-seed"; seed.type="application/json";
+  seed.textContent=JSON.stringify(snapshot()).replace(/</g,"\\u003c");
+  root.querySelector("head").appendChild(seed);
+  return "<!doctype html>\n<html lang=\"en\">"+root.innerHTML+"</html>\n";
+}
+function ioSay(t){ const el=document.getElementById("io-msg"); if(el) el.textContent=t; }
+
+document.getElementById("io-save-copy").addEventListener("click", ()=>{
+  const html=buildCopy();
+  offer("potency-range-builder-"+stamp()+".html", html, "text/html");
+  ioSay("Saved a copy of this page with your work inside it — "+Math.round(html.length/1024)+" KB, and it opens on its own.");
+});
+document.getElementById("io-save-work").addEventListener("click", ()=>{
+  offer("potency-ranges-"+stamp()+".json", JSON.stringify(snapshot(), null, 2), "application/json");
+  ioSay("Saved your changes as a .json file. Load it back here, on any machine.");
+});
+document.getElementById("io-load").addEventListener("click", ()=>document.getElementById("io-file").click());
+document.getElementById("io-file").addEventListener("change", e=>{
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    let o=null;
+    try{ o=JSON.parse(String(fr.result)); }catch(err){ ioSay("That file is not readable as saved work."); return; }
+    if(!o||!o.keys||typeof o.keys!=="object"){ ioSay("That file holds no saved work from this tool."); return; }
+    let n=0;
+    Object.keys(o.keys).forEach(k=>{ if(k.slice(0,5)==="pgrb:"){ LSX.setItem(k,o.keys[k]); n++; } });
+    ioSay(n+" saved "+(n===1?"entry":"entries")+" loaded — reloading…");
+    setTimeout(()=>location.reload(), 500);
+  };
+  fr.readAsText(f); e.target.value="";
+});
+document.getElementById("io-clear").addEventListener("click", e=>{
+  const b=e.currentTarget;
+  if(!b.classList.contains("armed")){
+    b.classList.add("armed"); b.textContent="Clear everything — sure?";
+    setTimeout(()=>{ b.classList.remove("armed"); b.textContent="Clear all my work"; }, 4000);
+    return;
+  }
+  LSX.keys().forEach(k=>LSX.removeItem(k));
+  ioSay("Cleared. Reloading…");
+  setTimeout(()=>location.reload(), 400);
+});
+
+/* Say plainly where the work is going, and whether this copy arrived with any. */
+(function(){
+  const bits=[LSX.ok
+    ? "Your work is saved in this browser, on this device."
+    : "This browser will not let the page store anything here, so your work lasts only until you close the tab — use “Save a copy with my work in it” before you do."];
+  if(SEED_INFO){
+    const when=SEED_INFO.savedAt ? new Date(SEED_INFO.savedAt).toLocaleString() : "earlier";
+    bits.push(SEED_INFO.applied
+      ? "This copy arrived with work saved into it ("+when+"), now loaded."
+      : "This copy carries work saved "+when+", but this browser already had its own, which was kept — use Load work… to take the copy's instead.");
+  }
+  ioSay(bits.join(" "));
 })();
+
 </script>
+</body>
+</html>
