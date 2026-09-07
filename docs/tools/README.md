@@ -2,8 +2,7 @@
 
 Single-file HTML tools. Each one opens directly in a browser — download the
 file and double-click it. No build step, no server, no install, and no network:
-nothing is fetched from anywhere, so they behave identically on a machine that
-has never been online.
+open one on a machine that has never been online and it behaves identically.
 
 ## `potency-range-builder.html`
 
@@ -34,10 +33,15 @@ system of record, and this file does not update itself.
   picks the nominals, whether it prefers even numbers, whether it avoids gaps,
   the narrowest band it will accept, and how many grades at most.
 - Add or remove results on any strain, and create new strains from scratch.
-- Light, Auto or Dark, in four colour schemes — Paper, Graphite, Bloom and High
-  contrast. Auto follows the device. In every scheme an overlap is pink and a
-  gap is green: those two carry the meaning of the page, so a scheme changes
-  their temperature but never their hue.
+
+**Appearance.** Light / Auto / Dark, and five colour schemes — Paper, Graphite,
+Bloom, Sepia, High contrast — each with its own light and dark palette. Auto
+means no choice is recorded, so the page follows the device whenever the device
+changes its mind. Two colours never move: **an overlap is pink and a gap is
+green in every scheme and both modes.** Those two carry the meaning of the
+picture, so a scheme may change their temperature but never their hue —
+otherwise two people on different schemes would read the same chart differently.
+That constraint is also why no scheme's bands are pink or green.
 
 **Conventions it obeys** — the same ones the specification pages print:
 a nominal `N` with tolerance `t` covers `N − t` to `N + t − 0.01`
@@ -50,22 +54,36 @@ at least 22.22 %. A 2-point step stops working above a nominal of 9, a 4-point
 step above 18. The tool reports such a gap as forced rather than pretending a
 tolerance could close it.
 
-**Where your work is kept.** Choices are saved in the browser that made them,
-and nowhere else — the file has no network of its own. Two routes carry work
-off the machine, both plain files:
+### Where your work is kept
 
-- **Save work…** writes a small `.json` of just your changes, which *Load work…*
-  reads back on any machine.
-- **Save a copy with my work in it** writes a fresh copy of the whole page with
-  the ladders, tolerances and hand-entered results embedded in it. That copy
-  opens on its own anywhere, with the work already in place. It is the one to
-  send to someone else: no import step and nothing to install.
+Everything you change is written to the browser you changed it in. Nothing is
+sent anywhere — the file has no network code at all.
 
-A copy's embedded work fills in only the keys the opening browser does not
-already hold, so opening a colleague's copy never quietly overwrites work in
-progress — *Load work…* is the deliberate way to take theirs instead.
+That is enough for one person on one machine, and not enough for anything else,
+so the bar at the top offers three ways out:
+
+| | |
+| --- | --- |
+| **Save a copy with my work in it** | writes a fresh copy of the whole page with your ladders, tolerances and typed results already inside it. Send that file to someone and they open it and see what you saw — no import step, nothing to install. |
+| **Save work…** | just your changes, as a small `.json`. |
+| **Load work…** | reads such a `.json` back, on any machine. |
+
+A saved copy fills in only the entries the opening browser does not already
+hold, so opening a colleague's copy never silently overwrites work in progress;
+use **Load work…** when you do want theirs to win.
 
 Some browsers refuse `localStorage` to a page opened from a `file://` path, and
-a private window can silently discard it. The page detects that, keeps working
-from memory for the session, and says so in the bar at the top rather than
-letting you find out when the work is gone.
+a private window can quietly hand back an empty one. The page detects that and
+says so in the bar rather than letting you find out later — in that state the
+work lasts until the tab closes, and **Save a copy** is the way to keep it.
+
+### The published version
+
+The same tool is published as an artifact, which is the copy to send to someone
+who should not have to download a file first. Two differences, both forced by
+the sandbox a published page runs in:
+
+- it cannot hand you a file, so it has no save/load bar — work stays in the
+  browser that made it;
+- it can ask Claude to explain a proposal, which this file cannot, there being
+  no Claude on the other end of a local file.

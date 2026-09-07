@@ -7,23 +7,27 @@
 <!--
   Potency Range Builder — standalone.
 
-  One file, no network. Double-click it: no server, no build step, no internet
-  connection. Nothing is fetched from anywhere, so it behaves identically on a
-  machine that has never been online.
+  One file, no network. Open it by double-clicking; it needs no server, no build
+  step and no internet connection. Nothing is fetched from anywhere, so it
+  behaves the same on a machine that has never been online. The typefaces are
+  the only thing given up for that: the published page loads IBM Plex, this one
+  falls back to whatever the system provides.
 
-  Your work is kept in this browser and can also be baked into a copy of this
-  very file — "Save a copy with my work in it", at the top of the page. That
-  copy opens on any machine with the ladders, tolerances and hand-entered
+  Your work is kept in this browser, and can also be written into a copy of this
+  very file — "Save a copy with my work in it" at the top of the page. That copy
+  opens anywhere, on any machine, with the ladders, tolerances and hand-entered
   results already in place.
 
-  The embedded data is a snapshot, not a live view: 106 Total d9-THC results
-  across 72 batches and 20 strains from CoQ_Analysis_Master_v10 (sheet "CoQ
-  Parameter Tracker v10", column M), plus the 42 specification nominals from
-  QCSP 001 v.03. The application is the system of record; this file does not
-  update itself.
+  The data below is a snapshot, not a live view: 106 Total d9-THC results across
+  72 batches and 20 strains from CoQ_Analysis_Master_v10 (sheet "CoQ Parameter
+  Tracker v10", column M), plus the 42 specification nominals from QCSP 001
+  v.03. The application is the system of record; this file does not update
+  itself.
 -->
 <style>
+:root{color-scheme:light dark}
 body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F2F5F6;color:#12171A}
+@media (prefers-color-scheme:dark){body{background:#0E1316;color:#E7EEF1}}
 img{max-width:100%}
 [hidden]:not([hidden=until-found]){display:none!important}
 </style>
@@ -42,7 +46,7 @@ img{max-width:100%}
 </script>
 <style>
 /* ───────────── palettes ─────────────
-   Four schemes, each with a light and a dark palette, selected by
+   Five schemes, each with a light and a dark palette, selected by
    data-scheme on the root and switched between light and dark by
    data-theme (absent = follow the operating system).
 
@@ -170,6 +174,36 @@ img{max-width:100%}
   --shadow:0 0 0 1px rgba(0,0,0,.18);
 }
 
+/* sepia — light. The only scheme whose bands are warm: every other one
+   runs blue or violet, which is no help to someone who cannot separate
+   those from the page around them. Dots go teal to stay clear of the band. */
+:root[data-scheme="sepia"]{
+  color-scheme:light;
+  --paper:#F5F1E8;
+  --surface:#FFFCF5;
+  --ink:#211B12;
+  --ink-2:#6A6052;
+  --ink-3:#988E7E;
+  --rule:#E0D9C9;
+  --rule-soft:#EEE9DC;
+  --edge:#D0C8B5;
+  --scale:#8A8070;
+  --scale-soft:#C0B7A5;
+  --dot:#1F6E72;
+  --dot-edge:#FFFCF5;
+  --band:#5A3A22;
+  --band-ghost:#5A3A22;
+  --band-text:#FFF8EE;
+  --overlap:#C93583;
+  --overlap-text:#FFFFFF;
+  --gap:#2C8B54;
+  --gap-text:#FFFFFF;
+  --handle:#FFFCF5;
+  --handle-edge:#211B12;
+  --focus:#1F6E72;
+  --shadow:0 1px 2px rgba(33,27,18,.07),0 8px 24px -18px rgba(33,27,18,.5);
+}
+
 /* the operating system's choice, unless the page has been told otherwise */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]),
@@ -276,6 +310,32 @@ img{max-width:100%}
     --handle-edge:#FFFFFF;
     --focus:#FF8A7A;
     --shadow:0 0 0 1px rgba(255,255,255,.22);
+  }
+  :root[data-scheme="sepia"]:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#16120C;
+    --surface:#201A12;
+    --ink:#F0E8DA;
+    --ink-2:#ADA290;
+    --ink-3:#7C7264;
+    --rule:#322A1E;
+    --rule-soft:#251F16;
+    --edge:#423827;
+    --scale:#968B79;
+    --scale-soft:#4E4433;
+    --dot:#5BC3C8;
+    --dot-edge:#201A12;
+    --band:#D9A87A;
+    --band-ghost:#D9A87A;
+    --band-text:#16120C;
+    --overlap:#EE6BAB;
+    --overlap-text:#1B0712;
+    --gap:#4BC77F;
+    --gap-text:#04170C;
+    --handle:#201A12;
+    --handle-edge:#F0E8DA;
+    --focus:#5BC3C8;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px -18px rgba(0,0,0,.9);
   }
 }
 
@@ -384,6 +444,32 @@ img{max-width:100%}
   --handle-edge:#FFFFFF;
   --focus:#FF8A7A;
   --shadow:0 0 0 1px rgba(255,255,255,.22);
+}
+:root[data-theme="dark"][data-scheme="sepia"]{
+  color-scheme:dark;
+  --paper:#16120C;
+  --surface:#201A12;
+  --ink:#F0E8DA;
+  --ink-2:#ADA290;
+  --ink-3:#7C7264;
+  --rule:#322A1E;
+  --rule-soft:#251F16;
+  --edge:#423827;
+  --scale:#968B79;
+  --scale-soft:#4E4433;
+  --dot:#5BC3C8;
+  --dot-edge:#201A12;
+  --band:#D9A87A;
+  --band-ghost:#D9A87A;
+  --band-text:#16120C;
+  --overlap:#EE6BAB;
+  --overlap-text:#1B0712;
+  --gap:#4BC77F;
+  --gap-text:#04170C;
+  --handle:#201A12;
+  --handle-edge:#F0E8DA;
+  --focus:#5BC3C8;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px -18px rgba(0,0,0,.9);
 }
 *{box-sizing:border-box}
 body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -578,7 +664,7 @@ footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
       <button class="btn" type="button" role="radio" data-mode="dark">Dark</button>
     </div>
     <label class="tgl num">colours
-      <select id="th-scheme" aria-label="Colour scheme"><option value="paper">Paper</option><option value="graphite">Graphite</option><option value="bloom">Bloom</option><option value="contrast">High contrast</option></select></label>
+      <select id="th-scheme" aria-label="Colour scheme"><option value="paper">Paper</option><option value="graphite">Graphite</option><option value="bloom">Bloom</option><option value="sepia">Sepia</option><option value="contrast">High contrast</option></select></label>
     <span class="th-note">Auto follows this device. Overlap stays pink and a gap stays green in every scheme.</span>
   </div>
 
@@ -637,7 +723,7 @@ footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
 
   <footer>
     <p><strong>Conventions.</strong> A nominal <code>N</code> with tolerance <code>t</code> covers <code>N − t</code> to <code>N + t − 0.01</code>, matching the specification pages (20.00 ± 2.00 → 18.00 – 21.99). Two neighbours are <em>joined</em> when the lower one's top is exactly 0.01 below the upper one's bottom. Tolerance is capped at 10&nbsp;% of the nominal and never below 0.01.</p>
-    <p><strong>What is saved, and where.</strong> Every change is kept in this browser, on this device — nothing leaves it, because this file talks to nothing. To move your work, or to put it somewhere a cleared browser cannot reach, use <em>Save a copy with my work in it</em>: that writes a fresh copy of this page with the ladders, tolerances and any results you typed already inside it, and it opens on its own on any machine. Source results are read-only; the nominals, the tolerances and your own entered results are yours to change. “Reset” returns a strain to its specification nominals at ±10&nbsp;%.</p>
+    <p><strong>What is saved, and where.</strong> Every change is kept in the browser you make it in — nothing is sent anywhere, because this file talks to nothing. To move your work to another machine, or to keep it somewhere a cleared browser cannot reach, use <em>Save a copy with my work in it</em>: that writes a fresh copy of this page with the ladders, tolerances and any results you typed already inside it, and it opens on its own. Source results are read-only; the nominals, the tolerances and your own entered results are yours to change. “Reset” returns a strain to its specification nominals at ±10&nbsp;%.</p>
   </footer>
 </div>
 
@@ -1580,10 +1666,10 @@ setStatus("Saved <b>in this browser</b>");
 
 /* ───────────── appearance ─────────────
    Light / Auto / Dark decides the palette's mode; the scheme decides which of
-   the four palettes. Auto means no data-theme attribute at all, which lets the
+   the five palettes. Auto means no data-theme attribute at all, which lets the
    media query answer — so the page follows the device the way the rest of it
    does, rather than freezing whatever the device happened to say at load. */
-const SCHEME_KEYS = ["paper", "graphite", "bloom", "contrast"];
+const SCHEME_KEYS = ["paper", "graphite", "bloom", "sepia", "contrast"];
 const K_SCHEME="pgrb:v1:__scheme", K_THEME="pgrb:v1:__theme";
 const curScheme = () => { const v=LSX.getItem(K_SCHEME); return SCHEME_KEYS.includes(v)?v:SCHEME_KEYS[0]; };
 const curMode   = () => { const v=LSX.getItem(K_THEME);  return (v==="light"||v==="dark")?v:"auto"; };
@@ -1609,18 +1695,19 @@ document.getElementById("th-scheme").addEventListener("change", e=>{
 });
 applyTheme();
 
-/* Nothing to connect to: this file is the whole program. `db` stays null, so
-   every `if(db)` path above is inert and saving is purely local. */
+/* No shared store: this page keeps everything in the viewer's own browser, so
+   it can be shared with anyone who has the link. `db` stays null and every
+   `if(db)` path above is inert. */
 setStatus(LSX.ok ? 'Saved <b>in this browser</b>' : 'Saved <b>for this session only</b>');
 
 /* ───────────── carrying the work between machines ─────────────
    Two routes out, both plain files, neither needing a server:
 
      Save work…    a small .json of just your changes
-     Save a copy…  this whole page with the work embedded in it
+     Save a copy…  this entire page with the work written into it
 
-   The second is the one to send someone else: they double-click it and see
-   what you saw, with no import step and nothing to install. */
+   The second is the one to send someone else: they double-click it and see what
+   you saw, with no import step and nothing to install. */
 function snapshot(){
   const keys={};
   LSX.keys().forEach(k=>{ const v=LSX.getItem(k); if(v!=null) keys[k]=v; });
@@ -1631,14 +1718,15 @@ function stamp(){
   return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes());
 }
 function offer(name, text, mime){
-  const url=URL.createObjectURL(new Blob([text],{type:mime+";charset=utf-8"})), a=document.createElement("a");
+  const url=URL.createObjectURL(new Blob([text],{type:mime+";charset=utf-8"}));
+  const a=document.createElement("a");
   a.href=url; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 400);
 }
 /* Rebuild this document with the work embedded. The clone is stripped back to
-   the state a fresh load starts from — the scales are drawn by script, so
-   shipping the drawn SVG would only bloat the file and go stale on first
-   render — and a seed script is appended to the head. */
+   what a fresh load starts from — the scales are drawn by script, so shipping
+   the drawn SVG would only bloat the file and go stale on the first render —
+   and a seed script is added to the head. */
 function buildCopy(){
   const root=document.documentElement.cloneNode(true);
   const sheet=root.querySelector("#sheet"); if(sheet) sheet.innerHTML="";
@@ -1656,14 +1744,14 @@ function buildCopy(){
 }
 function ioSay(t){ const el=document.getElementById("io-msg"); if(el) el.textContent=t; }
 
+document.getElementById("io-save-work").addEventListener("click", ()=>{
+  offer("potency-ranges-"+stamp()+".json", JSON.stringify(snapshot(),null,2), "application/json");
+  ioSay("Saved your changes as a .json file. Load it back here, on any machine.");
+});
 document.getElementById("io-save-copy").addEventListener("click", ()=>{
   const html=buildCopy();
   offer("potency-range-builder-"+stamp()+".html", html, "text/html");
-  ioSay("Saved a copy of this page with your work inside it — "+Math.round(html.length/1024)+" KB, and it opens on its own.");
-});
-document.getElementById("io-save-work").addEventListener("click", ()=>{
-  offer("potency-ranges-"+stamp()+".json", JSON.stringify(snapshot(), null, 2), "application/json");
-  ioSay("Saved your changes as a .json file. Load it back here, on any machine.");
+  ioSay("Saved a copy of this page with your work inside it — "+Math.round(html.length/1024)+" KB, opens on its own.");
 });
 document.getElementById("io-load").addEventListener("click", ()=>document.getElementById("io-file").click());
 document.getElementById("io-file").addEventListener("change", e=>{
@@ -1672,13 +1760,14 @@ document.getElementById("io-file").addEventListener("change", e=>{
   fr.onload=()=>{
     let o=null;
     try{ o=JSON.parse(String(fr.result)); }catch(err){ ioSay("That file is not readable as saved work."); return; }
-    if(!o||!o.keys||typeof o.keys!=="object"){ ioSay("That file holds no saved work from this tool."); return; }
+    if(!o||!o.keys||typeof o.keys!=="object"){ ioSay("That file does not hold work saved from this tool."); return; }
     let n=0;
     Object.keys(o.keys).forEach(k=>{ if(k.slice(0,5)==="pgrb:"){ LSX.setItem(k,o.keys[k]); n++; } });
     ioSay(n+" saved "+(n===1?"entry":"entries")+" loaded — reloading…");
     setTimeout(()=>location.reload(), 500);
   };
-  fr.readAsText(f); e.target.value="";
+  fr.readAsText(f);
+  e.target.value="";
 });
 document.getElementById("io-clear").addEventListener("click", e=>{
   const b=e.currentTarget;
@@ -1692,7 +1781,8 @@ document.getElementById("io-clear").addEventListener("click", e=>{
   setTimeout(()=>location.reload(), 400);
 });
 
-/* Say plainly where the work is going, and whether this copy arrived with any. */
+/* Say plainly where the work is going, and whether this copy arrived with any.
+   There is no Claude here to ask, so the explanation button never appears. */
 (function(){
   const bits=[LSX.ok
     ? "Your work is saved in this browser, on this device."
@@ -1701,7 +1791,7 @@ document.getElementById("io-clear").addEventListener("click", e=>{
     const when=SEED_INFO.savedAt ? new Date(SEED_INFO.savedAt).toLocaleString() : "earlier";
     bits.push(SEED_INFO.applied
       ? "This copy arrived with work saved into it ("+when+"), now loaded."
-      : "This copy carries work saved "+when+", but this browser already had its own, which was kept — use Load work… to take the copy's instead.");
+      : "This copy carries work saved "+when+", but this browser already had its own, which was kept. Load work… to use the copy's instead.");
   }
   ioSay(bits.join(" "));
 })();
