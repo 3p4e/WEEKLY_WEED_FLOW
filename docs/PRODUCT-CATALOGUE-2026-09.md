@@ -206,6 +206,56 @@ The HTML and PDF renderings agree on every value. There is no third reading of
 the issued specification, and no document anywhere in the archive prints a
 tolerance other than ±10 %.
 
+### Why the windows overlap: it is the ladder spacing, not the tolerance
+
+The owner's hand-drawn study (2026-09-06) plots two candidate THC ladders from
+6 % to 30 % with ±10 % bands, colouring each junction **green** where consecutive
+grades leave a clean gap and **pink** where they overlap. Both drawn ladders turn
+green→pink partway up. The arithmetic behind that:
+
+> Two adjacent nominals `L < H` carrying a **relative** ±p band are disjoint
+> **iff** `H/L > (1+p)/(1−p)`.
+> At p = 10 % that threshold is **11/9 = 1.2222** — a step of **22.22 % or more**.
+
+The constraint is on the **ratio**, not the absolute step, which is why a fixed
+step stops working as the ladder climbs:
+
+| step | works while | fails from |
+| --- | --- | --- |
+| 2 points | nominal < 9 % | 10 → 12 upward |
+| 4 points | nominal < 18 % | 20 → 24 upward |
+
+The drawing's ladders reproduce this exactly, including `18 → 22` (ratio
+1.2222…) landing on a **zero-width touch** — neither gap nor overlap.
+
+At ±10 % only about **seven** non-overlapping grades fit between 8 % and 30 %,
+and they must be geometric, e.g. `8.00, 9.78, 11.95, 14.61, 17.86, 21.83, 26.68`
+— not round numbers. So a catalogue of round nominals spaced 2 apart at the top
+of the range **cannot** be non-overlapping at ±10 %. Grape Pie I/II is a ratio of
+1.0769 against a required 1.2222.
+
+**The issued catalogue read the same way — 20 junctions:**
+
+| | |
+| --- | --- |
+| **pink** (overlap) | **16** |
+| **green** (dead band — a result here fits NO grade) | **4** |
+
+The four dead bands are already in the issued specification, so "continuous
+coverage" was never a property of the current scheme either:
+
+| strain | between | dead band |
+| --- | --- | --- |
+| Orange Punch Mimosa | IV → III | **10.99 – 16.20** (5.21 wide) |
+| Grape Pie | IV → III | 19.79 – 21.60 (1.81) |
+| Jelly Donuts | III → II | 17.59 – 18.00 (0.41) |
+| Orange Punch Mimosa | V → IV | 8.80 – 9.00 (0.21) |
+
+So the real choice is not "overlap or not". It is: **keep ±10 % and respace the
+nominals geometrically**, or **keep the round nominals and let the tolerance
+shrink where grades sit close together**. The second is what the derived
+proposal does; the first is what the drawing tests.
+
 ### `_grades_data.json` is NOT the issued specification
 
 The archive root also holds `_grades_data.json`, which encodes a **different,
