@@ -1,0 +1,1192 @@
+<title>Potency Range Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#F2F5F6; --surface:#FFFFFF; --ink:#12171A; --ink-2:#5B676E; --ink-3:#8B979E;
+  --rule:#D7DEE2; --rule-soft:#E9EEF1; --edge:#C9D3D8;
+  --scale:#7C8A92; --scale-soft:#B6C2C8;
+  --dot:#9A4A24; --dot-edge:#FFFFFF;
+  --band:#1F4E68; --band-ghost:#1F4E68; --band-text:#FFFFFF;
+  --overlap:#E2479A; --overlap-text:#FFFFFF;
+  --gap:#2FA660; --gap-text:#FFFFFF;
+  --handle:#FFFFFF; --handle-edge:#12171A;
+  --focus:#9A4A24;
+  --shadow:0 1px 2px rgba(18,23,26,.06),0 8px 24px -18px rgba(18,23,26,.5);
+  --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1316; --surface:#161D21; --ink:#E7EEF1; --ink-2:#9BA9B1; --ink-3:#6D7B83;
+    --rule:#28333A; --rule-soft:#1E272C; --edge:#33414A;
+    --scale:#8494A0; --scale-soft:#42525C;
+    --dot:#E08A55; --dot-edge:#161D21;
+    --band:#7FB4CD; --band-ghost:#7FB4CD; --band-text:#0E1316;
+    --overlap:#E86BB0; --overlap-text:#1A0A12;
+    --gap:#4CC47C; --gap-text:#06180D;
+    --handle:#161D21; --handle-edge:#E7EEF1;
+    --focus:#E08A55;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1316; --surface:#161D21; --ink:#E7EEF1; --ink-2:#9BA9B1; --ink-3:#6D7B83;
+  --rule:#28333A; --rule-soft:#1E272C; --edge:#33414A;
+  --scale:#8494A0; --scale-soft:#42525C;
+  --dot:#E08A55; --dot-edge:#161D21;
+  --band:#7FB4CD; --band-ghost:#7FB4CD; --band-text:#0E1316;
+  --overlap:#E86BB0; --overlap-text:#1A0A12;
+  --gap:#4CC47C; --gap-text:#06180D;
+  --handle:#161D21; --handle-edge:#E7EEF1;
+  --focus:#E08A55;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.9);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1220px;margin:0 auto;padding:36px 22px 72px}
+
+.masthead{display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:1.5px solid var(--ink);margin-bottom:16px}
+h1{font-family:var(--serif);font-weight:600;font-size:32px;line-height:1.1;margin:0 0 6px;letter-spacing:-.015em;text-wrap:balance}
+.dek{margin:0;color:var(--ink-2);font-size:14.5px;max-width:66ch}
+.docline{margin:8px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.status{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--ink-3);white-space:nowrap}
+.status b{color:var(--ink-2);font-weight:500}
+
+.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;margin:0 0 22px;border:1px solid var(--rule);border-radius:3px;background:var(--surface);overflow:hidden}
+.howto > div{padding:12px 16px;font-size:13px;color:var(--ink-2);display:flex;gap:12px;align-items:flex-start}
+.howto > div + div{border-left:1px solid var(--rule-soft)}
+.howto strong{color:var(--ink);font-weight:600;display:block;margin-bottom:2px}
+.howto svg{flex:0 0 auto;width:44px;height:30px;margin-top:2px}
+.sw-pink{fill:var(--overlap)} .sw-green{fill:var(--gap)}
+.sw-band{fill:var(--band)} .sw-handle{fill:var(--handle);stroke:var(--handle-edge);stroke-width:1.5}
+.sw-pill{fill:var(--ink)} .sw-pill-t{fill:var(--paper);font:600 9px var(--mono)}
+.sw-diamond{fill:var(--surface);stroke:var(--ink);stroke-width:1.5}
+
+/* new-strain form */
+.newstrain{background:var(--surface);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);padding:14px 18px 12px;margin:0 0 18px}
+.ns-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+.ns-grid{display:grid;grid-template-columns:minmax(180px,1.5fr) minmax(90px,.6fr) minmax(220px,2fr) auto;gap:10px;align-items:end}
+@media (max-width:820px){.ns-grid{grid-template-columns:1fr}}
+.ns-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ns-f > span{font-size:12px;color:var(--ink-2)}
+.ns-f em{font-style:normal;color:var(--ink-3);font-size:11px}
+.ns-f input,.res-input{font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--paper);
+  border:1px solid var(--edge);border-radius:3px;padding:7px 9px;width:100%;min-width:0}
+.ns-f input:focus,.res-input:focus{outline:2px solid var(--focus);outline-offset:-1px;border-color:var(--focus)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink);padding:8px 16px}
+.btn.primary:hover{background:var(--ink-2);border-color:var(--ink-2);color:var(--paper)}
+.btn.danger{color:var(--dot);border-color:var(--edge)}
+.btn.danger:hover,.btn.danger.armed{color:var(--paper);background:var(--dot);border-color:var(--dot)}
+.ns-msg{margin:10px 0 0;font-size:12.5px;color:var(--ink-2);min-height:1.2em}
+
+/* per-strain results editor */
+.results{border-top:1px solid var(--rule-soft);background:var(--paper);padding:12px 18px 14px}
+.res-row{margin-bottom:12px}.res-row:last-child{margin-bottom:0}
+.res-label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px}
+.res-entry{display:flex;gap:8px;max-width:520px}
+.res-msg{margin:6px 0 0;font-size:12px;color:var(--ink-2);min-height:1.1em}
+.res-none{margin:0;font-size:12.5px;color:var(--ink-3);font-style:italic}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink);
+  background:var(--surface);border:1px solid var(--edge);border-radius:3px;padding:3px 8px;cursor:pointer}
+.chip:hover{border-color:var(--ink-2)}
+.chip:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.chip.off{color:var(--ink-3);text-decoration:line-through;background:transparent;border-style:dashed}
+.chip.own{border-color:var(--dot);color:var(--dot)}
+.chip.own .x{margin-left:5px;opacity:.65}
+.chip.own:hover{background:var(--dot);color:var(--dot-edge);border-color:var(--dot)}
+.linkbtn{font:inherit;font-size:12px;color:var(--dot);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+/* a result you typed reads as hollow; one from a certificate is solid */
+.dot.own{fill:var(--surface);stroke:var(--dot);stroke-width:2}
+
+/* analysis panel */
+.btn.analyse{border-color:var(--band);color:var(--band);font-weight:600}
+.btn.analyse:hover{background:var(--band);color:var(--band-text)}
+.analysis{margin:0 16px 6px;border:1px solid var(--band);border-left-width:3px;border-radius:3px;background:var(--surface);padding:12px 16px 12px;font-size:13px}
+.an-head{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:8px}
+.an-title{font-family:var(--serif);font-weight:600;font-size:15px}
+.an-cov{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.an-cov b{color:var(--ink)}
+.an-grid{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+.an-grid dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);padding-top:3px}
+.an-grid dd{margin:0;display:flex;flex-wrap:wrap;gap:5px 10px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.an-grid dd b{color:var(--ink);font-weight:500}
+.an-grp,.an-gap,.an-join{border:1px solid var(--rule);border-radius:3px;padding:2px 8px;background:var(--paper)}
+.an-grp i{font-style:normal;color:var(--ink-3);margin:0 2px}
+.an-gap.ok{border-color:var(--gap)} .an-gap.bad{border-color:var(--overlap)}
+.an-gap em{font-style:normal;color:var(--overlap)}
+.an-unc{color:var(--overlap)}
+.an-warn{display:block;font-family:var(--sans);font-size:13px}
+.an-warn p{margin:0 0 4px}.an-warn p:last-child{margin:0}
+.an-err{margin:0 0 8px;color:var(--ink-2)}
+.an-opts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:0 0 10px;margin-bottom:10px;border-bottom:1px solid var(--rule-soft)}
+.an-opts-l{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.tgl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer;user-select:none}
+.tgl input{accent-color:var(--band);width:14px;height:14px;cursor:pointer}
+.tgl input:disabled{cursor:default}
+.tgl.num{gap:5px}
+.tgl select{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:1px solid var(--edge);border-radius:3px;padding:2px 5px;cursor:pointer}
+.tgl select:disabled{cursor:default;opacity:.55}
+.an-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.an-hint{font-size:12px;color:var(--ink-3);margin-right:auto}
+.an-busy{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.an-explain{margin:10px 0 0;padding:10px 14px;border-left:2px solid var(--band);background:var(--paper);font-size:13.5px;line-height:1.55;color:var(--ink);white-space:pre-line;max-width:78ch}
+
+.sheet{display:flex;flex-direction:column;gap:14px}
+.strain{background:var(--surface);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);overflow:hidden}
+.strain-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px 4px}
+.strain-name{font-family:var(--serif);font-weight:600;font-size:18px;letter-spacing:-.01em}
+.strain-abbr{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.08em;color:var(--ink-2);border:1px solid var(--edge);border-radius:2px;padding:1px 6px}
+.strain-meta{font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.strain-tools{margin-left:auto;display:flex;gap:6px}
+.btn{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--ink-2);background:transparent;border:1px solid var(--edge);border-radius:3px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--ink);border-color:var(--ink-2)}
+.btn:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.plot{overflow-x:auto;padding:0 4px}
+.plot svg{display:block;width:100%;min-width:900px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+
+/* svg parts */
+.grid{stroke:var(--rule-soft);stroke-width:1}
+.grid-maj{stroke:var(--rule);stroke-width:1}
+.axis{stroke:var(--scale);stroke-width:1.5}
+.tick{stroke:var(--scale-soft);stroke-width:1}
+.tick-maj{stroke:var(--scale);stroke-width:1.25}
+.tlabel{font-family:var(--mono);font-size:10.5px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.dot{fill:var(--dot);stroke:var(--dot-edge);stroke-width:1}
+.shade{fill:var(--band);opacity:.08}
+.ghost{fill:none;stroke:var(--band-ghost);stroke-width:1;stroke-dasharray:3 3;opacity:.6}
+.band{fill:var(--band)}
+.band-nom{stroke:var(--band-text);stroke-width:1.5;opacity:.85}
+.band-label{font-family:var(--mono);font-size:11px;font-weight:500;fill:var(--band-text);font-variant-numeric:tabular-nums;pointer-events:none}
+.band-label.out{fill:var(--ink)}
+.handle{fill:var(--handle);stroke:var(--handle-edge);stroke-width:1.5;cursor:ew-resize}
+.handle:hover,.handle:focus{stroke-width:2.5;outline:none}
+.handle:focus-visible{stroke:var(--focus)}
+.strip-o{fill:var(--overlap)} .strip-g{fill:var(--gap)}
+.strip-t{font-family:var(--mono);font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none}
+.strip-t.o{fill:var(--overlap-text)} .strip-t.g{fill:var(--gap-text)}
+.join{stroke:var(--ink);stroke-width:2}
+.border{fill:var(--surface);stroke:var(--ink);stroke-width:1.5;cursor:ew-resize}
+.border:hover,.border:focus{stroke-width:2.5;fill:var(--ink);outline:none}
+.border:focus-visible{stroke:var(--focus)}
+.toggle{cursor:pointer}
+.pill{fill:none;stroke:var(--rule);stroke-width:1;rx:3;pointer-events:all}
+.toggle:hover .pill{stroke:var(--ink-2)}
+.toggle.on .pill{fill:var(--ink);stroke:var(--ink)}
+.pill-t{font-family:var(--mono);font-size:11px;fill:var(--ink-3);font-variant-numeric:tabular-nums;pointer-events:none}
+.toggle.on .pill-t{fill:var(--paper);font-weight:600}
+/* ○ off · ● on — every whole number 6–30, odd and even alike, is a switch */
+.mark{fill:none;stroke:var(--ink-3);stroke-width:1.5;pointer-events:none}
+.toggle:hover .mark{stroke:var(--ink-2)}
+.toggle.on .mark{fill:var(--paper);stroke:var(--paper)}
+.toggle:focus{outline:none}
+.toggle:focus-visible .pill{stroke:var(--focus);stroke-width:2}
+.drag-t{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ink);font-variant-numeric:tabular-nums;pointer-events:none}
+.drag-bg{fill:var(--surface);stroke:var(--edge);stroke-width:1;rx:2}
+.units{font-family:var(--mono);font-size:10px;fill:var(--ink-3);letter-spacing:.09em}
+
+/* readout */
+.readout{padding:4px 16px 12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:500;text-align:left;padding:6px 10px 4px 0;border-bottom:1px solid var(--rule)}
+td{padding:5px 10px 5px 0;border-bottom:1px solid var(--rule-soft);font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+td.rel{color:var(--ink-2)}
+td.rel .o{color:var(--overlap);font-weight:600} td.rel .g{color:var(--gap);font-weight:600}
+tr:last-child td{border-bottom:0}
+.empty{font-size:13px;color:var(--ink-3);font-style:italic;padding:2px 0 4px}
+.copied{font-family:var(--mono);font-size:11px;color:var(--gap);margin-left:8px}
+pre.copyfb{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:8px 10px;margin:6px 0 0;white-space:pre-wrap;user-select:all}
+
+footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-2);max-width:82ch}
+footer p{margin:0 0 8px} footer p:last-child{margin-bottom:0}
+footer code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <h1>Potency Range Builder</h1>
+      <p class="dek">One strain per scale, every measured Total&nbsp;Δ⁹-THC result as a dot. Switch nominals on, set each one's tolerance, and see where neighbouring ranges overlap or leave a gap — live.</p>
+      <p class="docline">Results: CoQ_Analysis_Master_v10 · sheet “CoQ Parameter Tracker v10” · col M &nbsp;·&nbsp; Starting nominals: QCSP 001 v.03</p>
+    </div>
+    <div class="status" id="status">Loading…</div>
+  </header>
+
+  <div class="howto" aria-label="How to use">
+    <div>
+      <svg viewBox="0 0 44 30"><rect class="sw-pill" x="2" y="8" width="20" height="15" rx="3"/><text class="sw-pill-t" x="12" y="19" text-anchor="middle">20</text><text x="30" y="19" font-size="10" fill="currentColor" opacity=".5">18</text></svg>
+      <div><strong>Switch a nominal on or off</strong>Every whole number from 6 to 30 is a switch — odd as well as even. ○ is off, ● is on. A nominal switched on starts at its full ±10&nbsp;%.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 44 30"><rect class="sw-band" x="8" y="9" width="28" height="12" rx="1.5"/><circle class="sw-handle" cx="8" cy="15" r="4.5"/><circle class="sw-handle" cx="36" cy="15" r="4.5"/></svg>
+      <div><strong>Drag either end to set tolerance</strong>Both ends move together. The dashed outline is the ±10&nbsp;% maximum you cannot exceed.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 44 30"><rect class="sw-pink" x="2" y="10" width="17" height="10" rx="1.5"/><rect class="sw-green" x="25" y="10" width="17" height="10" rx="1.5"/></svg>
+      <div><strong>Pink overlap, green gap</strong>Between two neighbouring nominals that are on. The number is the width in % points.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 44 30"><line x1="4" y1="15" x2="40" y2="15" stroke="currentColor" opacity=".4"/><path class="sw-diamond" d="M22 9 L28 15 L22 21 L16 15 Z"/></svg>
+      <div><strong>Drag the diamond to set a border</strong>Snaps two neighbours to meet at that point — no overlap, no gap — and recalculates both tolerances.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 44 30"><circle cx="10" cy="15" r="3.6" fill="var(--dot)"/><circle cx="21" cy="15" r="3.6" fill="var(--dot)"/><circle cx="32" cy="15" r="3.4" fill="var(--surface)" stroke="var(--dot)" stroke-width="2"/></svg>
+      <div><strong>Add or remove results</strong>Open <em>Results…</em> on any strain to type values in or exclude ones you don't want. Solid dots come from certificates, hollow ones you typed.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 44 30"><rect class="sw-band" x="3" y="10" width="14" height="10" rx="1.5"/><rect class="sw-band" x="18" y="10" width="10" height="10" rx="1.5"/><rect class="sw-band" x="29" y="10" width="12" height="10" rx="1.5"/><circle cx="8" cy="6" r="1.8" fill="var(--dot)"/><circle cx="22" cy="6" r="1.8" fill="var(--dot)"/><circle cx="35" cy="6" r="1.8" fill="var(--dot)"/></svg>
+      <div><strong>Analyse &amp; propose</strong>Groups the results, then finds the tolerances for the nominals that are on which cover the most results with no overlap and, where possible, no gap — applied live, with a summary and an undo.</div>
+    </div>
+  </div>
+
+  <form class="newstrain" id="ns" autocomplete="off">
+    <div class="ns-head">New strain</div>
+    <div class="ns-grid">
+      <label class="ns-f"><span>Strain name</span>
+        <input id="ns-name" type="text" placeholder="e.g. Purple Sunrise" maxlength="60" required></label>
+      <label class="ns-f ns-abbr"><span>Code <em>optional</em></span>
+        <input id="ns-abbr" type="text" placeholder="auto" maxlength="12"></label>
+      <label class="ns-f ns-res"><span>THC&nbsp;% results <em>optional, any separator</em></span>
+        <input id="ns-results" type="text" inputmode="decimal" placeholder="13.8, 14.2  17.1 / 19.9"></label>
+      <button class="btn primary" type="submit">Create strain</button>
+    </div>
+    <p class="ns-msg" id="ns-msg" role="status">Builds an empty scale you fill yourself. Every control below works the same on it — nominals, tolerance handles, overlaps and gaps, border points.</p>
+  </form>
+
+  <div class="sheet" id="sheet"></div>
+
+  <footer>
+    <p><strong>Conventions.</strong> A nominal <code>N</code> with tolerance <code>t</code> covers <code>N − t</code> to <code>N + t − 0.01</code>, matching the specification pages (20.00 ± 2.00 → 18.00 – 21.99). Two neighbours are <em>joined</em> when the lower one's top is exactly 0.01 below the upper one's bottom. Tolerance is capped at 10&nbsp;% of the nominal and never below 0.01.</p>
+    <p><strong>What is saved.</strong> Every change is kept in this browser, and — when the page has been granted storage — in the artifact itself, so it survives reloads and can be read back. Results are read-only; only the nominals and tolerances are yours to change. “Reset” returns a strain to its specification nominals at ±10&nbsp;%.</p>
+  </footer>
+</div>
+
+<script>
+/* ───────────── data ───────────── */
+const DATA = [["ACC","Amnesia Core Cut",[],[12]],["AB","Apple and Banana",[[16.93,"AB092501","ППК26005"]],[]],["BG","Blue Gelato",[[21.8,"BG1024","ППК25050"],[26.14,"BG1024","197-1-K-26"]],[26]],["BSS","Blue Sunset Sherbet",[[20.39,"BSS052501","NGP-QCG-SOP-024 F3"],[21.03,"BSS1024","ППК25051"],[23.42,"BSS1024_01/1","ППК25176"],[25.01,"BSS1024","197-2-K-26"]],[20,24]],["CJ","Cap Junky",[[14.93,"CJ052501/02","ППК25281"],[16.56,"CJ062501/2","ППК25322"],[18.29,"CJ082501/2","197-5-K-26"],[18.91,"CJ062501/2","197-4-K-26"],[20.29,"CJ052501/01","ППК25280"],[20.84,"CJ082501/2","ППК26003"],[21.51,"CJ062501/1","ППК25321"],[22.3,"CJ092501","ППК26007"],[23.0,"CJ1024","ППК25052"],[23.7,"CJ072501","ППК25367"],[24.05,"CJ052501/01","197-3-K-26"],[24.96,"CJ082501/1","ППК26002"]],[20,24,26,28]],["CC","Cash Cow",[[13.35,"CC112501","ППК26068"],[17.67,"CC012601/1","197-6-K-26"]],[14]],["CF","Chem Flyer",[],[10]],["CLE","Clemosa A Bud",[[8.02,"CLE072501","ППК25370"]],[8]],["FB","Fat Bastard",[[12.39,"FB032601","ППК26127"],[14.68,"FB012601_1","ППК26067"],[16.69,"FB112501","ППК26066"],[18.29,"FB012603V","ППК26110"],[18.86,"FB012602","197-7-K-26"],[20.83,"FB012603","ППК26112"]],[18]],["GG","Gorilla Glue",[[15.35,"GG012601","ППК26062"],[15.95,"GG1024_02","ППК25140"],[16.7,"GG012603","197-8-K-26"],[17.22,"GG1024_01","ППК25104"],[17.59,"GG012603","ППК26114"],[17.94,"GG112501","ППК26061"],[18.67,"GG1024_01","197-9-K-26"],[18.98,"GG032601","ППК26128"]],[16,18]],["GP","Grape Pie",[[13.16,"GP0824_02","ППК26033"],[14.83,"GP082501/2","ППК25381"],[14.99,"GP0824_03","ППК26035"],[15.7,"GP082501/2","197-12-K-26"],[17.05,"GP062501","ППК26058"],[18.52,"GP052501","197-10-K-26"],[18.62,"GP062501","ППК26037"],[18.98,"GP052501","ППК25279"],[19.81,"GP072501/2","ППК25379"],[20.79,"GP0824_01","ППК25105"],[21.29,"GP082501/1","ППК25380"],[21.31,"GP0824_02","ППК26032"],[21.36,"GP072501/1","ППК25378"],[22.61,"GP0824_02","197-11-K-26"],[22.83,"GP062501","ППК26036"],[23.08,"GP0824_02","ППК26059"],[23.19,"GP0824_02","ППК25174"],[23.79,"GP0824_02","ППК25139"],[24.51,"GP062501","ППК26057"],[24.62,"GP0824_03","ППК26034"],[24.89,"GP062501","NGP-QCG-SOP-024 F3"],[25.45,"GP0824_03","ППК25175"],[25.73,"GP092501","ППК26009"],[25.98,"GP0824_03","ППК26060"]],[16,18,24,26,28]],["GRC","Grapes And Cream",[[11.53,"GRC102501","051-6-K-26"]],[10]],["HPA","High Pro Amnesia",[[17.31,"HPA1024","197-13-K-26"],[20.39,"HPA052501","ППК25278"],[21.61,"HPA1024_01","197-14-K-26"],[22.43,"HPA1024_01","ППК25155"]],[18,20,22]],["JD","Jelly Donuts",[[13.93,"JD112501","ППК26065"],[15.16,"JD012603","ППК26111"],[18.16,"JD012601","ППК26064"],[18.58,"JD022601","ППК26115"],[19.64,"JD112501","ППК26063"],[20.32,"JD112501","197-15-K-26"],[20.54,"JD012603","ППК26113"]],[14,16,20,22]],["J31","Jokerz 31",[[17.32,"J31102501","197-16-K-26"],[19.14,"J31102501","051-1-K-26"],[19.84,"J31122501","100-2-K-26"],[20.21,"J31112501","100-1-K-26"],[21.84,"J31122501","100-3-K-26"],[25.27,"J31112501","051-5-K-26"]],[18]],["KC","Kush Crasher",[[17.04,"KC102501","051-4-K-26"]],[16]],["MB","Motor Breath",[[16.82,"MB0824_05","ППК25211"],[18.67,"MB0824_04","ППК25118"]],[18]],["OPM","Orange Punch Mimosa",[[7.91,"OPM122501","197-19-K-26"],[8.0,"OPM112501","ППК26031"],[8.09,"OPM122501","100-4-K-26"],[9.43,"OPM092501","ППК26008"],[14.16,"OPM052501","ППК25257"],[15.38,"OMP1024_01","ППК25117"],[16.55,"OPM1024_03","ППК25210"],[18.04,"OPM1024_02","197-18-K-26"],[18.27,"OPM1024_02","ППК25154"],[20.03,"OPM1024","197-17-K-26"]],[8,10,18,20,22]],["PM","Permanent Marker",[[10.01,"PM072501","ППК25368"],[12.25,"PM092501","197-20-K-26"],[13.33,"PM112501","ППК26030"],[14.06,"PM092501","ППК26004"]],[10,12]],["PUM","Pure Michigen",[],[14]],["SCR","Scrambler",[[17.13,"SCR112501","ППК26069"],[17.84,"SCR012603","197-21-K-26"],[21.92,"SCR022601","ППК26116"],[24.78,"SCR012603","ППК26119"],[25.72,"SCR012603","ППК26118"],[26.32,"SCR012603","ППК26117"]],[18,20]],["SJ","Sleepy Joe",[[9.2,"SJ112501","051-2-K-26"],[10.96,"SJ0925021","ППК26006"],[11.2,"SJ102501","051-3-K-26"]],[10]],["WC","Wedding Crusher",[[21.67,"WC082501","ППК26001"],[22.11,"WC072501","ППК25369"]],[24]]];
+const STRAINS = DATA.map(([a,n,p,spec]) => ({a, n, p, spec}));
+
+/* ───────────── geometry & arithmetic ───────────── */
+const NS="http://www.w3.org/2000/svg";
+const W=1000, PAD_L=34, PAD_R=34, LO=5, HI=33, NOM_MIN=6, NOM_MAX=30;
+const R=4, STEP=9, MIN_DX=8.6, TOP=16, LANE_H=36, STRIP_H=12;
+const x  = v  => PAD_L + (v-LO)/(HI-LO)*(W-PAD_L-PAD_R);
+const vx = px => LO + (px-PAD_L)/(W-PAD_L-PAD_R)*(HI-LO);
+const r2 = v => Math.round(v*100)/100;
+const f2 = v => v.toFixed(2);
+const maxTol = n => r2(n*0.10);
+const clampTol = (n,t) => Math.min(maxTol(n), Math.max(0.01, r2(t)));
+const bandOf = (n,t) => ({n, tol:t, lo:r2(n-t), hi:r2(n+t-0.01)});
+const el=(t,a,txt)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e;};
+
+/* relation between two adjacent bands (l lower nominal, h higher) */
+function relation(l,h){
+  if (l.hi >= h.lo) return {kind:"overlap", from:h.lo, to:l.hi, width:r2(l.hi-h.lo+0.01)};
+  const gap = r2(h.lo-l.hi);
+  if (gap <= 0.011) return {kind:"joined", at:h.lo};
+  return {kind:"gap", from:l.hi, to:h.lo, width:r2(gap-0.01)};
+}
+/* the border between L and H may sit anywhere both tolerances stay within 10 % */
+function borderLimits(L,H){
+  const lo = Math.max(r2(0.9*H), r2(L+0.01)), hi = Math.min(r2(1.1*L), r2(H-0.01));
+  return lo <= hi ? {lo,hi} : null;
+}
+
+/* ───────────── state ───────────── */
+/* Per strain: which nominals are on and at what tolerance, plus the viewer's own
+   edits to the plotted results — `add` are results they typed, `drop` are indices
+   of source results they excluded. Source results are never mutated. */
+const state = {};                 // abbr -> { tol: {nominal: tol}, add: [num], drop: [idx] }
+const localEditedAt = {};         // abbr -> ms
+const LS = a => "pgrb:v1:"+a;
+const LS_STRAINS = "pgrb:v1:__strains";
+function defaultState(s){ const tol={}; (s.spec||[]).forEach(n=>tol[n]=maxTol(n)); return {tol, add:[], drop:[]}; }
+function loadLocal(s){
+  try{ const raw=localStorage.getItem(LS(s.a)); if(raw){ const o=JSON.parse(raw); if(o&&(o.tol||o.add)) return sanitize(o); } }catch(e){}
+  return defaultState(s);
+}
+function sanitize(o){
+  const tol={};
+  for(const k in (o.tol||{})){ const n=+k; const t=+o.tol[k];
+    if(Number.isInteger(n)&&n>=NOM_MIN&&n<=NOM_MAX&&isFinite(t)) tol[n]=clampTol(n,t); }
+  const add=(Array.isArray(o.add)?o.add:[]).map(Number).filter(v=>isFinite(v)&&v>=LO&&v<=HI).map(r2);
+  const drop=(Array.isArray(o.drop)?o.drop:[]).map(Number).filter(Number.isInteger);
+  return {tol, add, drop};
+}
+function onNoms(a){ return Object.keys(state[a].tol).map(Number).sort((p,q)=>p-q); }
+function bands(a){ return onNoms(a).map(n=>bandOf(n,state[a].tol[n])); }
+
+/* The results actually plotted: source rows minus the excluded ones, plus the
+   viewer's own values. Each is [value, batch, certificate, kind, key]. */
+function visiblePts(s){
+  const st=state[s.a], drop=new Set(st.drop||[]);
+  const src=(s.p||[]).map((p,i)=>[p[0],p[1],p[2],"source",i]).filter(p=>!drop.has(p[4]));
+  const own=(st.add||[]).map((v,i)=>[v,"entered by hand","not from a certificate","own",i]);
+  return src.concat(own).sort((a,b)=>a[0]-b[0]);
+}
+
+/* ───────────── strains: the imported catalogue plus any the viewer creates ───────────── */
+const BASE = DATA.map(([a,n,p,spec]) => ({a, n, p, spec, own:false}));
+let CUSTOM = [];
+function loadCustom(){
+  try{ const raw=localStorage.getItem(LS_STRAINS); if(raw){ const o=JSON.parse(raw); if(Array.isArray(o)) return o.map(cleanStrain).filter(Boolean); } }catch(e){}
+  return [];
+}
+function cleanStrain(o){
+  if(!o||typeof o.a!=="string"||typeof o.n!=="string") return null;
+  const a=o.a.trim().toUpperCase().replace(/[^A-Z0-9_]/g,"").slice(0,12);
+  const n=o.n.trim().slice(0,60);
+  if(!a||!n) return null;
+  return {a, n, p:[], spec:[], own:true};
+}
+function allStrains(){ return BASE.concat(CUSTOM); }
+let byAbbr = {};
+function reindex(){ byAbbr = Object.fromEntries(allStrains().map(s=>[s.a,s])); }
+function saveCustom(){
+  try{ localStorage.setItem(LS_STRAINS, JSON.stringify(CUSTOM.map(s=>({a:s.a,n:s.n})))); }catch(e){}
+  if(db){ db.doc("strains/custom").set({strains:CUSTOM.map(s=>({abbr:s.a,name:s.n})), updatedAt:new Date().toISOString()}).catch(()=>{}); }
+}
+
+/* ───────────── persistence ───────────── */
+let db=null, dbReady=false; const pending={};
+const statusEl=document.getElementById("status");
+function setStatus(html){ statusEl.innerHTML=html; }
+function rangesDoc(s){
+  const bs=bands(s.a), st=state[s.a], pts=visiblePts(s);
+  return { abbr:s.a, name:s.n, custom_strain:!!s.own,
+    tol:Object.fromEntries(onNoms(s.a).map(n=>[String(n),st.tol[n]])),
+    ranges: bs.map(b=>({nominal:b.n, tol:b.tol, lo:b.lo, hi:b.hi})),
+    joins: bs.slice(1).map((h,i)=>{const r=relation(bs[i],h); return {lower:bs[i].n, upper:h.n, ...r};}),
+    results_entered: (st.add||[]).slice(),
+    results_excluded: (st.drop||[]).map(i=>(s.p[i]||[])[0]).filter(v=>v!=null),
+    results_plotted: pts.length,
+    updatedAt: new Date().toISOString() };
+}
+function save(s){
+  localEditedAt[s.a]=Date.now();
+  try{ localStorage.setItem(LS(s.a), JSON.stringify({tol:state[s.a].tol, add:state[s.a].add, drop:state[s.a].drop})); }catch(e){}
+  if(!db) { setStatus("Saved <b>in this browser</b>"); return; }
+  clearTimeout(pending[s.a]);
+  setStatus("Saving…");
+  pending[s.a]=setTimeout(async()=>{
+    try{ await db.doc("ranges/"+s.a).set(rangesDoc(s)); setStatus("Saved <b>to the page</b>"); }
+    catch(e){ setStatus("Saved in this browser · <b>page save failed</b> ("+(e&&e.code||"error")+")"); }
+  },400);
+}
+
+/* Greedy interval packing: give each item the first lane whose last item ends
+   clear of it. Returns the lane count and stamps `lane` on every item. */
+function pack(items){
+  const laneEnd=[];
+  items.forEach(it=>{
+    let L=0; while(L<laneEnd.length && laneEnd[L] > it.x0-6) L++;
+    laneEnd[L]=it.x1; it.lane=L;
+  });
+  return Math.max(1, laneEnd.length);
+}
+
+/* ───────────── dot stacking ───────────── */
+function levels(pts){ const last=[],lv=[]; for(const p of pts){const px=x(p[0]);let i=0;while(i<last.length&&px-last[i]<MIN_DX)i++;last[i]=px;lv.push(i);} return lv; }
+
+/* ───────────── drawing ───────────── */
+const drag={};   // active drag descriptor
+
+function draw(s){
+  const st=state[s.a], bs=bands(s.a), pts=visiblePts(s), lv=levels(pts);
+  const maxLv = pts.length ? Math.max(...lv)+1 : 1;
+
+  // Lanes are packed, not alternated: with several nominals close together the
+  // old two-lane alternation collided and truncated labels.
+  const rels=[];
+  for(let i=0;i<bs.length-1;i++){
+    const l=bs[i], h=bs[i+1], rel=relation(l,h);
+    const cx = rel.kind==="joined" ? x(rel.at) : null;
+    rels.push({l,h,rel, x0: cx!==null?cx-9:x(rel.from)-1, x1: cx!==null?cx+9:x(rel.to)+1});
+  }
+  const relLanes = pack(rels);
+
+  const items = bs.map(b=>{
+    const bw = x(b.hi)-x(b.lo), inside = bw>=96;
+    const right = x(b.hi)+14 < W-90;
+    let x0 = x(b.lo)-8, x1 = x(b.hi)+8;
+    if(!inside){ if(right) x1 = x(b.hi)+12+86; else x0 = x(b.lo)-12-86; }
+    return {b, inside, right, x0, x1};
+  });
+  const bandLanes = pack(items);
+
+  const axisY   = TOP + maxLv*STEP + 8;
+  const relTop  = axisY + 7;
+  const laneTop = relTop + relLanes*(STRIP_H+5) + 3;
+  const rulerY  = laneTop + bandLanes*LANE_H + 6;
+  const H = rulerY + 48;
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"group","aria-label":`${s.n}: results and potency ranges on a 5 to 33 percent scale`});
+
+  // grid
+  for(let v=LO;v<=HI;v++) svg.appendChild(el("line",{class:v%2?"grid":"grid-maj",x1:x(v),y1:TOP-6,x2:x(v),y2:rulerY}));
+  // shade the dots zone by every active band
+  bs.forEach(b=>svg.appendChild(el("rect",{class:"shade",x:x(b.lo),y:TOP-6,width:Math.max(1,x(b.hi)-x(b.lo)),height:axisY-TOP+6})));
+  // results
+  pts.forEach((p,i)=>{
+    const c=el("circle",{class:"dot"+(p[3]==="own"?" own":""),cx:x(p[0]),cy:axisY-R-3-lv[i]*STEP,r:R});
+    c.appendChild(el("title",null,`${f2(p[0])} % · ${p[1]} · ${p[2]}`)); svg.appendChild(c);});
+  svg.appendChild(el("text",{class:"units",x:W-2,y:TOP+2,"text-anchor":"end"},"TOTAL Δ⁹-THC % w/w"));
+  // axis
+  svg.appendChild(el("line",{class:"axis",x1:x(LO),y1:axisY,x2:x(HI),y2:axisY}));
+
+  // relations between neighbours, each in its packed lane below the axis
+  rels.forEach(({l,h,rel,lane})=>{
+    const cy = relTop + lane*(STRIP_H+5) + STRIP_H/2;
+    if(rel.kind==="joined"){
+      const j=el("line",{class:"join",x1:x(rel.at),y1:cy-7,x2:x(rel.at),y2:cy+7});
+      j.appendChild(el("title",null,`${f2(l.n)} and ${f2(h.n)} meet at ${f2(rel.at)} — no overlap, no gap`)); svg.appendChild(j);
+    }else{
+      const x0=x(rel.from), x1=x(rel.to), w=Math.max(2,x1-x0);
+      const r=el("rect",{class:rel.kind==="overlap"?"strip-o":"strip-g",x:x0,y:cy-STRIP_H/2,width:w,height:STRIP_H,rx:2});
+      r.appendChild(el("title",null,`${rel.kind} between ${f2(l.n)} and ${f2(h.n)}: ${f2(rel.from)} – ${f2(rel.to)} (${f2(rel.width)} wide)`));
+      svg.appendChild(r);
+      // width label at the strip's right end, clear of the border diamond at its midpoint
+      if(w>=58) svg.appendChild(el("text",{class:"strip-t "+(rel.kind==="overlap"?"o":"g"),x:x1-4,y:cy+3.5,"text-anchor":"end"},f2(rel.width)));
+    }
+    const lim=borderLimits(l.n,h.n);
+    if(lim){
+      let B = rel.kind==="joined" ? rel.at : r2((rel.from+rel.to)/2);
+      B=Math.min(lim.hi,Math.max(lim.lo,B));
+      const d=el("path",{class:"border",d:`M${x(B)} ${cy-8} L${x(B)+7} ${cy} L${x(B)} ${cy+8} L${x(B)-7} ${cy} Z`,
+        tabindex:"0",role:"slider","aria-label":`border between ${f2(l.n)} and ${f2(h.n)}`,"aria-valuemin":lim.lo,"aria-valuemax":lim.hi,"aria-valuenow":B,
+        "data-handle":"border","data-l":l.n,"data-h":h.n});
+      d.appendChild(el("title",null,`Drag to set the border between ${f2(l.n)} and ${f2(h.n)} (allowed ${f2(lim.lo)} – ${f2(lim.hi)})`));
+      svg.appendChild(d);
+    }
+  });
+
+  // bands, each in its packed lane
+  items.forEach(({b,inside,right,lane})=>{
+    const y=laneTop+lane*LANE_H+4, h=LANE_H-8, cy=y+h/2;
+    const mt=maxTol(b.n);
+    svg.appendChild(el("rect",{class:"ghost",x:x(b.n-mt),y:y,width:x(b.n+mt-0.01)-x(b.n-mt),height:h,rx:1.5}));
+    const bw=Math.max(2,x(b.hi)-x(b.lo));
+    const rect=el("rect",{class:"band",x:x(b.lo),y:y,width:bw,height:h,rx:1.5});
+    rect.appendChild(el("title",null,`${f2(b.n)} ± ${f2(b.tol)} → ${f2(b.lo)} – ${f2(b.hi)} %`)); svg.appendChild(rect);
+    // nominal marked as two notches, top and bottom, so it never crosses the label
+    svg.appendChild(el("line",{class:"band-nom",x1:x(b.n),y1:y+2,x2:x(b.n),y2:y+7}));
+    svg.appendChild(el("line",{class:"band-nom",x1:x(b.n),y1:y+h-7,x2:x(b.n),y2:y+h-2}));
+    const label=`${f2(b.n)} ± ${f2(b.tol)}`;
+    if(inside) svg.appendChild(el("text",{class:"band-label",x:x(b.n),y:cy+4,"text-anchor":"middle"},label));
+    else svg.appendChild(el("text",{class:"band-label out",x:right?x(b.hi)+12:x(b.lo)-12,y:cy+4,"text-anchor":right?"start":"end"},label));
+    for(const side of ["lo","hi"]){
+      const hd=el("circle",{class:"handle",cx:x(b[side]),cy:cy,r:6.5,tabindex:"0",role:"slider",
+        "aria-label":`${side==="lo"?"lower":"upper"} limit of nominal ${f2(b.n)}`,"aria-valuemin":0.01,"aria-valuemax":mt,"aria-valuenow":b.tol,
+        "data-handle":side,"data-nom":b.n});
+      hd.appendChild(el("title",null,`${side==="lo"?"Lower":"Upper"} limit ${f2(b[side])} — drag to change tolerance (max ± ${f2(mt)})`));
+      svg.appendChild(hd);
+    }
+  });
+
+  // live drag readout
+  if(drag.abbr===s.a && drag.label){
+    const t=el("text",{class:"drag-t",x:drag.label.x,y:drag.label.y,"text-anchor":"middle"},drag.label.text);
+    svg.appendChild(el("rect",{class:"drag-bg",x:drag.label.x-46,y:drag.label.y-12,width:92,height:17}));
+    svg.appendChild(t);
+  }
+
+  // ruler + toggles
+  for(let v=LO;v<=HI;v++){
+    const maj=v%2===0;
+    svg.appendChild(el("line",{class:maj?"tick-maj":"tick",x1:x(v),y1:rulerY,x2:x(v),y2:rulerY+(maj?7:4)}));
+    if(v>=NOM_MIN&&v<=NOM_MAX){
+      const on=st.tol[v]!=null;
+      const g=el("g",{class:"toggle"+(on?" on":""),tabindex:"0",role:"switch","aria-checked":on?"true":"false","aria-label":`nominal ${v} %, ${on?"on":"off"}`,"data-nom":v});
+      g.appendChild(el("rect",{class:"pill",x:x(v)-13,y:rulerY+10,width:26,height:31,rx:3}));
+      g.appendChild(el("text",{class:"pill-t",x:x(v),y:rulerY+23,"text-anchor":"middle"},v));
+      g.appendChild(el("circle",{class:"mark",cx:x(v),cy:rulerY+34,r:3.8}));
+      g.appendChild(el("title",null,`${f2(v)} % — ${on?"ON, click to remove":"OFF, click to add at ± "+f2(maxTol(v))}`));
+      svg.appendChild(g);
+    } else {
+      svg.appendChild(el("text",{class:"tlabel",x:x(v),y:rulerY+23,"text-anchor":"middle"},v));
+    }
+  }
+  return svg;
+}
+
+/* ───────────── analysis: group the results, then propose tolerances ─────────────
+   Everything here works in integer hundredths of a percent so no float drifts.
+
+   Grouping: sort the results and split wherever two neighbours are more than
+   1.00 point apart. A whole-point empty stretch is the natural boundary when
+   nominals themselves are whole numbers.
+
+   Proposal: a chain dynamic programme over the nominals that are on. Each
+   nominal's tolerance is a variable from 0.01 up to its 10 % ceiling. Two
+   neighbours may touch (joined) or leave a gap; they may never overlap. The
+   cost is lexicographic in effect:
+     1. every result left uncovered                      1000 each
+     2. a gap, weighted by how much data lies BELOW it   (a low-end gap is cheap)
+     3. a very narrow band                               (a sliver is a warning sign)
+     4. a border that sits in an empty valley            (small reward)
+   Because tolerances are symmetric, joining every pair leaves one free
+   parameter; the DP explores it exhaustively rather than guessing. */
+const GROUP_SPLIT = 100;   // hundredths: a >1.00-point empty stretch separates groups
+
+function findGroups(h){           // h: sorted integer hundredths
+  if(!h.length) return [];
+  const groups=[]; let cur=[h[0]];
+  for(let i=1;i<h.length;i++){ if(h[i]-h[i-1]>GROUP_SPLIT){ groups.push(cur); cur=[]; } cur.push(h[i]); }
+  groups.push(cur);
+  return groups.map(g=>({lo:g[0], hi:g[g.length-1], n:g.length, center:Math.round(g.reduce((a,b)=>a+b,0)/g.length)}));
+}
+const lowerBound=(a,v)=>{let l=0,r=a.length;while(l<r){const m=(l+r)>>1;a[m]<v?l=m+1:r=m;}return l;};   // first index with a[i] >= v
+const upperBound=(a,v)=>{let l=0,r=a.length;while(l<r){const m=(l+r)>>1;a[m]<=v?l=m+1:r=m;}return l;};  // first index with a[i] > v
+function nearestDist(a,v){ const i=lowerBound(a,v); let d=Infinity; if(i<a.length)d=Math.min(d,a[i]-v); if(i>0)d=Math.min(d,v-a[i-1]); return d; }
+
+/* Generator options. A narrow band is not a compromise, it is an unusable
+   grade — so the floor is a hard preference, not a tiebreak, and the search
+   ranges over the NOMINALS too rather than accepting whatever is switched on. */
+const GEN_DEFAULTS = {search:true, evenOnly:true, avoidGaps:true, floor:100, maxGrades:5};
+let genOpts = Object.assign({}, GEN_DEFAULTS);
+try{ const raw=localStorage.getItem("pgrb:v1:__gen"); if(raw) genOpts=Object.assign({}, GEN_DEFAULTS, JSON.parse(raw)||{}); }catch(e){}
+function saveGen(){ try{ localStorage.setItem("pgrb:v1:__gen", JSON.stringify(genOpts)); }catch(e){} }
+
+function solveTolerances(noms, h, opts, step){   // noms: sorted ints; h: sorted hundredths
+  step = step || 1;
+  const k=noms.length, N=noms.map(n=>n*100), total=h.length||1;
+  const maxT=noms.map(n=>Math.floor(n*10/step));          // in units of `step` hundredths
+  const between=[], below=h.filter(v=>v<N[0]), above=h.filter(v=>v>N[k-1]);
+  for(let i=0;i<k-1;i++) between.push(h.filter(v=>v>N[i]&&v<N[i+1]));
+  const floor=(opts&&opts.floor)||0, gapOn=!opts||opts.avoidGaps!==false;
+  // Below the floor the band stops being a grade anyone can assign. The slope
+  // is steep enough to outweigh several gaps but never a lost result.
+  const bandCost = t => (t<floor ? 30+400*(floor-t)/Math.max(1,floor) : 0) - 0.03*t;
+  const INF=Infinity;
+  let best=new Float64Array(maxT[0]+1).fill(INF), from=[];
+  for(let ti=1;ti<=maxT[0];ti++){
+    const t=ti*step;
+    const unc=lowerBound(below, N[0]-t);          // results below the lower edge
+    best[ti]=1000*unc+bandCost(t);
+  }
+  for(let i=0;i<k-1;i++){
+    const d=N[i+1]-N[i], arr=between[i], nb=new Float64Array(maxT[i+1]+1).fill(INF), arg=new Int32Array(maxT[i+1]+1);
+    const covHighAt=new Int32Array(maxT[i+1]+1), marginAt=new Float64Array(maxT[i+1]+1);
+    for(let bi=1;bi<=maxT[i+1];bi++){ const b=bi*step;
+      covHighAt[bi]=arr.length-lowerBound(arr, N[i+1]-b); marginAt[bi]=Math.min(100, nearestDist(h, N[i+1]-b)); }
+    for(let ai=1;ai<=maxT[i];ai++){
+      if(best[ai]===INF) continue;
+      const a=ai*step;
+      const covLow=upperBound(arr, N[i]+a-1);
+      const fracBelow=upperBound(h, N[i]+a-1)/total;       // share of all results under this band's top
+      const gapUnit=(1+4*fracBelow)*0.25, gapFlat=(gapOn?25:4)*(1+fracBelow);
+      const bimax=Math.min(maxT[i+1], Math.floor((d-a)/step));
+      for(let bi=1;bi<=bimax;bi++){
+        const b=bi*step, unc=arr.length-covLow-covHighAt[bi], w=d-a-b;
+        let c=best[ai]+1000*unc+bandCost(b);
+        if(w>0) c+=w*gapUnit*(gapOn?1:0.15)+gapFlat; else c-=0.3*marginAt[bi];
+        if(c<nb[bi]){ nb[bi]=c; arg[bi]=ai; }
+      }
+    }
+    from.push(arg); best=nb;
+  }
+  let bt=-1, bc=INF;
+  for(let ti=1;ti<=maxT[k-1];ti++){
+    if(best[ti]===INF) continue;
+    const c=best[ti]+1000*(above.length-upperBound(above, N[k-1]+ti*step-1));
+    if(c<bc){ bc=c; bt=ti; }
+  }
+  if(bt<0) return null;
+  const T=new Array(k); T[k-1]=bt;
+  for(let i=k-2;i>=0;i--) T[i]=from[i][T[i+1]];
+  return {tol:T.map(ti=>ti*step/100), cost:bc};
+}
+
+/* ── searching over the nominals themselves ──
+   A ladder is only as good as its narrowest grade, so the search ranges over
+   which nominals to use, not just their tolerances. Even numbers first,
+   because that is what the catalogue prints and what a label reads cleanly. */
+function candidateNominals(vals, opts){
+  if(!vals.length) return [];
+  const lo=Math.max(NOM_MIN, Math.floor(vals[0]/100)-1), hi=Math.min(NOM_MAX, Math.ceil(vals[vals.length-1]/100)+1);
+  const out=[];
+  for(let n=lo;n<=hi;n++){
+    if(opts.evenOnly && n%2) continue;
+    const t=n*10;                                    // a nominal nothing could ever grade is not a candidate
+    if(upperBound(vals, n*100+t)-lowerBound(vals, n*100-t) > 0) out.push(n);
+  }
+  return out;
+}
+function scoreLadder(noms, tolArr, vals, opts){
+  const bs=noms.map((n,i)=>bandOf(n, clampTol(n, tolArr[i])));
+  let unc=0, edge=0, minTol=Infinity, sumTol=0, gapPen=0, idle=0;
+  const total=vals.length||1;
+  bs.forEach(b=>{ minTol=Math.min(minTol,b.tol); sumTol+=b.tol; });
+  vals.forEach(v=>{
+    let inB=null;
+    for(const b of bs){ const lo=Math.round(b.lo*100), hi=Math.round(b.hi*100); if(v>=lo&&v<=hi){ inB=b; break; } }
+    if(!inB){ unc++; return; }
+    const m=Math.min(v-Math.round(inB.lo*100), Math.round(inB.hi*100)-v);   // margin to the nearer edge
+    if(m<25) edge+=(25-m)/25;                                              // a result sitting on an edge
+  });
+  bs.forEach(b=>{ const lo=Math.round(b.lo*100), hi=Math.round(b.hi*100);
+    if(!(upperBound(vals,hi)-lowerBound(vals,lo))) idle++; });
+  for(let i=0;i<bs.length-1;i++){
+    const l=bs[i], h=bs[i+1];
+    if(l.hi < h.lo-0.011){
+      const w=Math.round((h.lo-l.hi)*100)-1, frac=upperBound(vals, Math.round(l.hi*100))/total;
+      const inside=lowerBound(vals, Math.round(h.lo*100))-upperBound(vals, Math.round(l.hi*100));
+      gapPen += (opts.avoidGaps?1:0.2) * (w*0.25*(1+4*frac) + 25*(1+frac)) + inside*600;
+    }
+  }
+  const floorPen = bs.reduce((a,b)=>a + (b.tol*100<opts.floor ? 30+400*(opts.floor-b.tol*100)/Math.max(1,opts.floor) : 0), 0);
+  const oddPen = opts.evenOnly ? 0 : noms.filter(n=>n%2).length*12;
+  // A grade that grades nothing is not width, it is clutter — so the reward for
+  // total width stays small and an idle band costs more than it can ever earn.
+  return { score: 1000*unc + 60*edge + gapPen + floorPen + oddPen + 120*idle + 6*noms.length
+                  - 3*minTol*100 - 0.15*sumTol*100,
+           unc, minTol, bands:bs };
+}
+function searchLadder(vals, opts){
+  const cands=candidateNominals(vals, opts);
+  if(!cands.length) return null;
+  const maxK=Math.min(opts.maxGrades||5, cands.length);
+  const results=[]; let evaluated=0;
+  const pick=(start, cur)=>{
+    if(cur.length){
+      const coarse=solveTolerances(cur, vals, opts, 5);
+      if(coarse){ evaluated++; results.push({noms:cur.slice(), c:scoreLadder(cur, coarse.tol, vals, opts).score}); }
+    }
+    if(cur.length>=maxK) return;
+    for(let i=start;i<cands.length;i++){ cur.push(cands[i]); pick(i+1, cur); cur.pop(); }
+  };
+  pick(0, []);
+  if(!results.length) return null;
+  results.sort((a,b)=>a.c-b.c);
+  let best=null;                                   // re-solve the strongest few at full resolution
+  for(const r of results.slice(0,25)){
+    const ex=solveTolerances(r.noms, vals, opts, 1); if(!ex) continue;
+    const sc=scoreLadder(r.noms, ex.tol, vals, opts);
+    if(!best || sc.score<best.score) best={noms:r.noms, tol:ex.tol, score:sc.score};
+  }
+  return best ? Object.assign(best, {evaluated, candidates:cands}) : null;
+}
+
+function analyse(s){
+  const vals=visiblePts(s).map(p=>Math.round(p[0]*100)).sort((a,b)=>a-b);
+  const groups=findGroups(vals);
+  const opts=genOpts;
+  let noms=onNoms(s.a), nomsProposed=false, searched=null, T=null;
+  if(opts.search){
+    if(!vals.length) return {error:"Nothing to analyse — add results, or switch the ladder search off to work from the nominals alone."};
+    searched=searchLadder(vals, opts);
+    if(!searched) return {error:opts.evenOnly
+      ? "No even nominal between 6 and 30 sits within ±10 % of any result. Allow odd nominals, or check the values."
+      : "No nominal between 6 and 30 sits within ±10 % of any result."};
+    if(noms.length && noms.join()!==searched.noms.join()) nomsProposed=true;
+    if(!noms.length) nomsProposed=true;
+    noms=searched.noms; T=searched.tol;
+  } else {
+    if(!noms.length){
+      if(!groups.length) return {error:"Nothing to analyse — switch nominals on, or add results, or both."};
+      noms=[...new Set(groups.map(g=>Math.min(NOM_MAX,Math.max(NOM_MIN,Math.round(g.center/100)))))].sort((a,b)=>a-b);
+      nomsProposed=true;
+    }
+    const r=solveTolerances(noms, vals, opts, 1);
+    if(!r) return {error:"No tolerance assignment satisfies the constraints for these nominals."};
+    T=r.tol;
+  }
+  const tol={}; noms.forEach((n,i)=>tol[n]=clampTol(n,T[i]));
+  const bs=noms.map(n=>bandOf(n,tol[n]));
+  // coverage
+  const covered=vals.filter(v=>bs.some(b=>v>=Math.round(b.lo*100)&&v<=Math.round(b.hi*100)));
+  const uncovered=vals.filter(v=>!bs.some(b=>v>=Math.round(b.lo*100)&&v<=Math.round(b.hi*100)));
+  // relations
+  const rels=[]; for(let i=0;i<bs.length-1;i++){ const r=relation(bs[i],bs[i+1]); const lim=borderLimits(bs[i].n,bs[i+1].n);
+    const hiH=Math.round(bs[i].hi*100), loH=Math.round(bs[i+1].lo*100);
+    rels.push({lower:bs[i].n, upper:bs[i+1].n, ...r, joinable:!!lim,
+      belowFrac: vals.length? upperBound(vals, hiH)/vals.length : 0,
+      inGap: r.kind==="gap" ? lowerBound(vals, loH)-upperBound(vals, hiH) : 0}); }
+  const gaps=rels.filter(r=>r.kind==="gap"), joins=rels.filter(r=>r.kind==="joined");
+  const slivers=bs.filter(b=>b.tol*100 < (genOpts.floor||50));
+  const idle=bs.filter(b=>!vals.some(v=>v>=Math.round(b.lo*100)&&v<=Math.round(b.hi*100)));
+  const forced=rels.filter(r=>!r.joinable);
+  // results sitting within 0.25 of an edge — the cases a lab re-test could flip
+  const tight=[];
+  vals.forEach(v=>{ for(const b of bs){ const lo=Math.round(b.lo*100), hi=Math.round(b.hi*100);
+    if(v>=lo&&v<=hi){ const m=Math.min(v-lo,hi-v); if(m<25) tight.push({v:v/100, n:b.n, m:m/100}); break; } }});
+  const minTol=bs.length?Math.min(...bs.map(b=>b.tol)):0;
+  return {tol, nomsProposed, noms, groups, total:vals.length, covered:covered.length, uncovered:uncovered.map(v=>v/100),
+          gaps, joins, slivers, idle, forced, tight, minTol, bands:bs, searched};
+}
+
+const proposal={};      // abbr -> {before:{tol}, result}
+function runAnalysis(s){
+  const r=analyse(s);
+  if(r.error){ proposal[s.a]={error:r.error}; render(s); return; }
+  proposal[s.a]={before:{tol:Object.assign({},state[s.a].tol)}, result:r};
+  state[s.a].tol=r.tol; render(s); save(s);
+}
+function analysisPanel(s){
+  const p=proposal[s.a]; if(!p) return null;
+  const box=document.createElement("div"); box.className="analysis";
+  const optRow=`<div class="an-opts">
+      <span class="an-opts-l">Generator</span>
+      <label class="tgl"><input type="checkbox" data-gen="search" ${genOpts.search?"checked":""}> choose the nominals for me</label>
+      <label class="tgl"><input type="checkbox" data-gen="evenOnly" ${genOpts.evenOnly?"checked":""} ${genOpts.search?"":"disabled"}> even numbers only</label>
+      <label class="tgl"><input type="checkbox" data-gen="avoidGaps" ${genOpts.avoidGaps?"checked":""}> avoid gaps</label>
+      <label class="tgl num">narrowest band
+        <select data-gen="floor">${[50,75,100,125,150,200].map(v=>`<option value="${v}" ${genOpts.floor===v?"selected":""}>± ${(v/100).toFixed(2)}</option>`).join("")}</select></label>
+      <label class="tgl num" ${genOpts.search?"":'style="opacity:.45"'}>at most
+        <select data-gen="maxGrades" ${genOpts.search?"":"disabled"}>${[2,3,4,5,6].map(v=>`<option value="${v}" ${genOpts.maxGrades===v?"selected":""}>${v} grades</option>`).join("")}</select></label>
+    </div>`;
+  if(p.error){ box.innerHTML=optRow+`<p class="an-err">${GFesc(p.error)}</p><div class="an-tools"><button class="btn" type="button" data-an="dismiss">Dismiss</button></div>`; return box; }
+  const r=p.result, pct=r.total?Math.round(100*r.covered/r.total):0;
+  const nomLabel = n => f2(n);
+  const groupTxt = r.groups.length ? r.groups.map(g=>{
+      const near=r.noms.reduce((a,b)=>Math.abs(b*100-g.center)<Math.abs(a*100-g.center)?b:a);
+      return `<span class="an-grp"><b>${f2(g.lo/100)}${g.n>1?" – "+f2(g.hi/100):""}</b> <i>${g.n}</i> centre ${f2(g.center/100)} → ${nomLabel(near)}</span>`;
+    }).join("") : `<span class="an-grp"><i>no results</i></span>`;
+  const gapTxt = r.gaps.length ? r.gaps.map(g=>{
+      // A gap with results inside it is never tolerable, wherever it sits.
+      // Otherwise "low end" = no more than about a third of the results sit beneath it.
+      const where = g.inGap>0 ? `${g.inGap} result${g.inGap>1?"s":""} fall in it` : g.belowFrac<=0.35 ? "low end, empty" : g.belowFrac>=0.9 ? "top, empty" : "middle, empty";
+      const ok = g.inGap===0 && g.belowFrac<=0.35;
+      return `<span class="an-gap ${ok?"ok":"bad"}"><b>${f2(g.from)} – ${f2(g.to)}</b> (${f2(g.width)}) between ${nomLabel(g.lower)} and ${nomLabel(g.upper)} · ${where}${g.joinable?"":" · <em>spacing forces it — no tolerance can close it</em>"}</span>`;
+    }).join("") : `<span class="an-gap ok">none — coverage is continuous</span>`;
+  const joinTxt = r.joins.length ? r.joins.map(j=>`<span class="an-join">${nomLabel(j.lower)} | ${nomLabel(j.upper)} at <b>${f2(j.at)}</b></span>`).join("") : `<span class="an-join">none</span>`;
+  const warn=[];
+  if(r.searched && r.nomsProposed) warn.push(`Nominals chosen by the generator: <b>${r.noms.map(nomLabel).join(", ")}</b>${genOpts.evenOnly?" (even numbers only)":""}. Untick “choose the nominals for me” to keep your own.`);
+  else if(r.nomsProposed) warn.push(`No nominal was on, so these were proposed from the groups: <b>${r.noms.map(nomLabel).join(", ")}</b>.`);
+  else if(r.groups.length){
+    const centres=[...new Set(r.groups.map(g=>Math.min(NOM_MAX,Math.max(NOM_MIN,Math.round(g.center/100)))))].sort((a,b)=>a-b);
+    if(centres.join()!==r.noms.join()) warn.push(`The groups themselves centre on <b>${centres.map(nomLabel).join(", ")}</b> — a different ladder from the nominals that are on. Switch those on and analyse again to compare.`);
+  }
+  r.slivers.forEach(b=>warn.push(Math.abs(b.tol-maxTol(b.n))<0.005
+    ? `<b>${f2(b.n)}</b> is at its full ± ${f2(b.tol)} — that is 10 % of ${f2(b.n)}, so a nominal this low cannot have a wider band.`
+    : `<b>${f2(b.n)}</b> gets only ± ${f2(b.tol)} — the nominals either side leave it no room. Consider switching it off.`));
+  r.idle.forEach(b=>warn.push(`<b>${f2(b.n)}</b> covers no result at all.`));
+  r.forced.forEach(g=>warn.push(`<b>${nomLabel(g.lower)}</b> and <b>${nomLabel(g.upper)}</b> are too far apart to ever touch at ±10 %; a gap between them is unavoidable with these nominals.`));
+  const tightTxt = r.tight.length
+    ? r.tight.map(t=>`<span class="an-gap bad"><b>${f2(t.v)}</b> is ${f2(t.m)} from the edge of ${f2(t.n)}</span>`).join("")
+    : `<span class="an-gap ok">none — every result sits clear of its band edges</span>`;
+  box.innerHTML=optRow+`
+    <div class="an-head"><span class="an-title">Proposal applied</span>
+      <span class="an-cov"><b>${r.covered} of ${r.total}</b> results covered · <b>${pct} %</b> · narrowest band <b>± ${f2(r.minTol)}</b>${r.searched?` · ${r.searched.evaluated} ladders tried`:""}</span></div>
+    <dl class="an-grid">
+      <dt>Groups in the data</dt><dd>${groupTxt}</dd>
+      <dt>Gaps</dt><dd>${gapTxt}</dd>
+      <dt>Edge cases</dt><dd>${tightTxt}</dd>
+      <dt>Joined at</dt><dd>${joinTxt}</dd>
+      ${r.uncovered.length?`<dt>Not covered</dt><dd class="an-unc">${r.uncovered.map(f2).join(", ")}</dd>`:""}
+      ${warn.length?`<dt>Notes</dt><dd class="an-warn">${warn.map(w=>`<p>${w}</p>`).join("")}</dd>`:""}
+    </dl>
+    ${p.explain!=null?`<div class="an-explain" aria-live="polite">${GFesc(p.explain)}</div>`:""}
+    ${p.explainErr?`<p class="an-err">${GFesc(p.explainErr)}</p>`:""}
+    <div class="an-tools">
+      <span class="an-hint">The bands and borders above now show this proposal. Drag anything to tweak it.</span>
+      ${sampleFn && p.explain==null && !p.explaining ? `<button class="btn" type="button" data-an="explain">Explain the reasoning</button>` : ""}
+      ${p.explaining ? `<span class="an-busy">Asking Claude…</span>` : ""}
+      <button class="btn" type="button" data-an="undo">Undo proposal</button>
+      <button class="btn" type="button" data-an="dismiss">Keep &amp; close</button>
+    </div>`;
+  return box;
+}
+
+/* ───────────── the reasoning layer: ask Claude to explain a proposal ─────────────
+   The ranges come from the optimiser, never from the model. The model gets the
+   numbers and is asked only to interpret them: why they follow from the data,
+   what the groupings say about the strain, and what to change when a nominal
+   fights the data. Runs on the viewer's own account, on their click. */
+let sampleFn=null;
+function explainPrompt(s, r){
+  const pts=visiblePts(s).map(p=>f2(p[0]));
+  const bands=r.bands.map(b=>`${f2(b.n)} ± ${f2(b.tol)} → ${f2(b.lo)}–${f2(b.hi)}`);
+  const groups=r.groups.map(g=>`${f2(g.lo/100)}–${f2(g.hi/100)} (${g.n} result${g.n>1?"s":""}, centre ${f2(g.center/100)})`);
+  const gaps=r.gaps.map(g=>`${f2(g.from)}–${f2(g.to)} between ${f2(g.lower)} and ${f2(g.upper)}${g.joinable?"":" (forced: too far apart to touch at ±10 %)"}`);
+  const joins=r.joins.map(j=>`${f2(j.lower)}|${f2(j.upper)} at ${f2(j.at)}`);
+  const notes=[];
+  r.slivers.forEach(b=>notes.push(`${f2(b.n)} gets only ± ${f2(b.tol)}`));
+  r.idle.forEach(b=>notes.push(`${f2(b.n)} covers no result`));
+  return [
+    `You are helping a cannabis QC manager set Total Δ9-THC potency grades for one strain. The ranges below were computed by an exact optimiser under fixed rules; do not propose different numbers for them. Explain them.`,
+    ``,
+    `Rules the optimiser obeyed: each nominal N has a symmetric tolerance t, at most 10 % of N, covering N−t to N+t−0.01. Neighbouring grades never overlap; they either touch (joined) or leave a gap. Objective, in order: cover the most results, avoid gaps (a gap low on the scale is tolerable, higher up is not), avoid bands narrower than ±0.50.`,
+    ``,
+    `Strain: ${s.n} (${s.a}).`,
+    `Measured results, % w/w (${pts.length}): ${pts.join(", ")||"none"}.`,
+    `Natural groupings (split where neighbours are more than 1.00 apart): ${groups.join("; ")||"none"}.`,
+    `Nominals that are on${r.nomsProposed?" (proposed from the groupings because none were on)":""}: ${r.noms.map(f2).join(", ")}.`,
+    `Proposed ranges: ${bands.join("; ")}.`,
+    `Coverage: ${r.covered} of ${r.total}. Not covered: ${r.uncovered.length?r.uncovered.map(f2).join(", "):"none"}.`,
+    `Gaps: ${gaps.join("; ")||"none"}. Joined at: ${joins.join("; ")||"none"}.`,
+    notes.length?`Warnings: ${notes.join("; ")}.`:``,
+    ``,
+    `Write for that manager, in plain English, under 170 words, no headings, no bullet lists, no markdown. Three short paragraphs: (1) why these particular tolerances follow from where the results sit — name the specific values that pinned each border; (2) what the groupings say about how this strain actually performs, and whether the nominals that are on match that; (3) if any nominal is starved, idle, or too far from its neighbour, name one concrete alternative nominal set and what it would gain — otherwise say the ladder fits. Be specific and direct; no praise, no hedging.`
+  ].join("\n");
+}
+async function explainProposal(s){
+  const p=proposal[s.a]; if(!p||!p.result||!sampleFn||p.explaining) return;
+  p.explaining=true; p.explainErr=null; render(s);
+  try{
+    const res=await sampleFn(explainPrompt(s,p.result), { modelTier:"default",
+      onText:({text})=>{ p.explain=text; const el=cards[s.a]&&cards[s.a].querySelector(".an-explain"); if(el) el.textContent=text; else { p.explaining=false; render(s); p.explaining=true; } } });
+    p.explain=res.text; if(res.truncated) p.explain+=" …";
+  }catch(e){
+    const code=e&&e.code;
+    if(code==="not_granted"){ sampleFn=null; }
+    else if(code==="rate_limited"){ p.explainErr="Claude is busy — try again in a moment."; }
+    else if(code!=="cancelled"){ p.explainErr="Could not get an explanation right now."; if(e&&e.text) p.explain=e.text; }
+  }
+  p.explaining=false; render(s);
+}
+
+/* ───────────── readout ───────────── */
+function readout(s){
+  const bs=bands(s.a), wrap=document.createElement("div"); wrap.className="readout";
+  if(!bs.length){ wrap.innerHTML=`<p class="empty">No nominal switched on — click a number on the scale.</p>`; return wrap; }
+  const t=document.createElement("table");
+  t.innerHTML=`<thead><tr><th>Nominal</th><th>Tolerance</th><th>Range</th><th>To the next nominal up</th></tr></thead>`;
+  const tb=document.createElement("tbody");
+  bs.forEach((b,i)=>{
+    const tr=document.createElement("tr");
+    let rel="—";
+    if(i<bs.length-1){ const r=relation(b,bs[i+1]);
+      rel = r.kind==="joined" ? `joined at ${f2(r.at)}` : `<span class="${r.kind==="overlap"?"o":"g"}">${r.kind}</span> ${f2(r.width)} (${f2(r.from)} – ${f2(r.to)})`; }
+    tr.innerHTML=`<td>${f2(b.n)}</td><td>± ${f2(b.tol)}</td><td>${f2(b.lo)} – ${f2(b.hi)}</td><td class="rel">${rel}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); wrap.appendChild(t); return wrap;
+}
+function asText(s){
+  const bs=bands(s.a); if(!bs.length) return `${s.n} (${s.a}) — no nominals on`;
+  const lines=[`${s.n} (${s.a})`];
+  bs.forEach((b,i)=>{ let rel=""; if(i<bs.length-1){const r=relation(b,bs[i+1]); rel = r.kind==="joined"?`  joined at ${f2(r.at)}`:`  ${r.kind} ${f2(r.width)}`;}
+    lines.push(`  ${f2(b.n)} ± ${f2(b.tol)}  →  ${f2(b.lo)} – ${f2(b.hi)}${rel}`); });
+  return lines.join("\n");
+}
+
+/* ───────────── card ───────────── */
+const cards={};
+function render(s){
+  let card=cards[s.a];
+  if(!card){
+    card=document.createElement("div"); card.className="strain"; card.dataset.abbr=s.a;
+    card.innerHTML=`<div class="strain-head"><span class="strain-name"></span><span class="strain-abbr"></span><span class="strain-meta"></span>
+      <div class="strain-tools">
+        <button class="btn analyse" data-act="analyse" type="button">Analyse &amp; propose</button>
+        <button class="btn" data-act="results" type="button" aria-expanded="false">Results…</button>
+        <button class="btn" data-act="reset" type="button">${s.own?"Clear nominals":"Reset to specification"}</button>
+        <button class="btn" data-act="clear" type="button">Clear</button>
+        <button class="btn" data-act="copy" type="button">Copy ranges</button>
+        ${s.own?'<button class="btn danger" data-act="delstrain" type="button">Delete strain</button>':""}
+      </div></div>
+      <div class="results" hidden></div>
+      <div class="plot"></div><div class="an"></div><div class="ro"></div>`;
+    card.querySelector(".strain-name").textContent=s.n;
+    card.querySelector(".strain-abbr").textContent=s.a;
+    cards[s.a]=card; document.getElementById("sheet").appendChild(card);
+  }
+  const pts=visiblePts(s), n=pts.length;
+  const own=(state[s.a].add||[]).length, dropped=(state[s.a].drop||[]).length;
+  const extra=[own?`${own} entered`:"", dropped?`${dropped} excluded`:""].filter(Boolean).join(" · ");
+  card.querySelector(".strain-meta").textContent =
+    (n ? `${n} result${n>1?"s":""} · ${f2(pts[0][0])} – ${f2(pts[n-1][0])} %` : "no results — add some below")
+    + (extra?` · ${extra}`:"");
+  const rp=card.querySelector(".results");
+  if(!rp.hidden) rp.replaceChildren(resultsPanel(s));
+  const plot=card.querySelector(".plot"); plot.replaceChildren(draw(s));
+  const an=card.querySelector(".an"); const panel=analysisPanel(s); an.replaceChildren(...(panel?[panel]:[]));
+  const ro=card.querySelector(".ro"); ro.replaceChildren(readout(s));
+}
+
+/* ───────────── results editor ───────────── */
+function resultsPanel(s){
+  const st=state[s.a], drop=new Set(st.drop||[]), wrap=document.createElement("div");
+  const src=(s.p||[]).map((p,i)=>({v:p[0],batch:p[1],cert:p[2],i,off:drop.has(i)}));
+  const own=(st.add||[]).map((v,i)=>({v,i}));
+  const chip = o => `<button class="chip${o.off?" off":""}" type="button" data-res="src" data-i="${o.i}"
+      title="${o.off?"excluded — click to put it back":"click to exclude"}: batch ${GFesc(o.batch)} · ${GFesc(o.cert)}">${f2(o.v)}</button>`;
+  wrap.innerHTML = `
+    <div class="res-row">
+      <label class="res-label" for="in-${s.a}">Add results — one or more numbers, any separator</label>
+      <div class="res-entry">
+        <input id="in-${s.a}" class="res-input" type="text" inputmode="decimal"
+               placeholder="e.g.  13.8, 14.2  17.1 / 19.9" data-res="input" autocomplete="off">
+        <button class="btn" type="button" data-res="addbtn">Add</button>
+      </div>
+      <p class="res-msg" data-res="msg" role="status"></p>
+    </div>
+    ${own.length?`<div class="res-row"><span class="res-label">Entered by hand — click to delete</span>
+      <div class="chips">${own.map(o=>`<button class="chip own" type="button" data-res="own" data-i="${o.i}" title="click to delete">${f2(o.v)}<span class="x">×</span></button>`).join("")}</div></div>`:""}
+    ${src.length?`<div class="res-row"><span class="res-label">From certificates — click to exclude or restore${drop.size?` · <button class="linkbtn" type="button" data-res="restore">restore all ${drop.size}</button>`:""}</span>
+      <div class="chips">${src.map(chip).join("")}</div></div>`:
+      (s.own?`<p class="res-none">A strain you created has no certificate results — everything plotted here is what you enter above.</p>`:"")}`;
+  return wrap;
+}
+function GFesc(t){ return String(t==null?"":t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* Pull every number out of free text: commas, spaces, slashes, newlines all work. */
+function parseResults(text){
+  const raw=String(text||"").match(/-?\d+(?:[.,]\d+)?/g)||[];
+  const ok=[], bad=[];
+  raw.forEach(t=>{ const v=r2(parseFloat(t.replace(",",".")));
+    if(!isFinite(v)) return;
+    if(v<LO||v>HI) bad.push(t); else ok.push(v); });
+  return {ok, bad};
+}
+
+/* ───────────── interactions ───────────── */
+function pointerValue(e, svg){ const rc=svg.getBoundingClientRect(); return vx((e.clientX-rc.left)*(W/rc.width)); }
+
+function openResults(card, s, open){
+  const rp=card.querySelector(".results"), btn=card.querySelector('[data-act="results"]');
+  rp.hidden=!open; btn.setAttribute("aria-expanded", String(!!open));
+  if(open){ rp.replaceChildren(resultsPanel(s)); const i=rp.querySelector('[data-res="input"]'); if(i) i.focus(); }
+}
+function addFromInput(card, s){
+  const input=card.querySelector('[data-res="input"]'), msg=card.querySelector('[data-res="msg"]');
+  if(!input) return;
+  const {ok,bad}=parseResults(input.value);
+  if(!ok.length && !bad.length){ if(msg) msg.textContent="Type one or more numbers, e.g. 13.8, 14.2 17.1"; return; }
+  if(ok.length){
+    state[s.a].add=(state[s.a].add||[]).concat(ok);
+    render(s); save(s);
+  }
+  input.value="";
+  openResults(card,s,true);
+  const m=card.querySelector('[data-res="msg"]');
+  if(m) m.textContent = (ok.length?`Added ${ok.length} result${ok.length>1?"s":""}.`:"")
+    + (bad.length?` ${bad.length} value${bad.length>1?"s":""} outside the ${LO}–${HI} % scale ignored: ${bad.join(", ")}.`:"");
+}
+function deleteStrain(s){
+  if(!s.own) return;
+  const card=cards[s.a];
+  if(card && card.dataset.confirm!=="1"){
+    card.dataset.confirm="1";
+    const b=card.querySelector('[data-act="delstrain"]');
+    b.textContent="Delete — click again"; b.classList.add("armed");
+    setTimeout(()=>{ if(cards[s.a]===card){ card.dataset.confirm=""; b.textContent="Delete strain"; b.classList.remove("armed"); } },4000);
+    return;
+  }
+  CUSTOM=CUSTOM.filter(c=>c.a!==s.a); reindex(); saveCustom();
+  delete state[s.a];
+  try{ localStorage.removeItem(LS(s.a)); }catch(e){}
+  if(db) db.doc("ranges/"+s.a).delete().catch(()=>{});
+  if(cards[s.a]){ cards[s.a].remove(); delete cards[s.a]; }
+  setStatus(`Deleted <b>${GFesc(s.n)}</b>`);
+}
+
+/* ───────────── new strain ───────────── */
+function newStrainAbbr(name){
+  const words=name.trim().toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  let base = words.length>1 ? words.map(w=>w[0]).join("") : (words[0]||"NEW").slice(0,3);
+  base = base.replace(/[^A-Z0-9]/g,"").slice(0,6) || "NEW";
+  let a=base, i=2; while(byAbbr[a]) a = (base+i++).slice(0,8);
+  return a;
+}
+function createStrain(name, abbrWanted, resultsText){
+  const n=String(name||"").trim();
+  const msg=document.getElementById("ns-msg");
+  if(!n){ msg.textContent="Give the strain a name."; return false; }
+  let a=String(abbrWanted||"").trim().toUpperCase().replace(/[^A-Z0-9_]/g,"").slice(0,12);
+  if(!a) a=newStrainAbbr(n);
+  if(byAbbr[a]){ msg.textContent=`The code ${a} is already used by ${byAbbr[a].n}. Choose another.`; return false; }
+  const s=cleanStrain({a,n}); if(!s){ msg.textContent="That name or code cannot be used."; return false; }
+  const {ok,bad}=parseResults(resultsText);
+  CUSTOM.push(s); reindex(); saveCustom();
+  state[s.a]=defaultState(s); state[s.a].add=ok;
+  render(s); save(s);
+  msg.textContent = `Created ${n} (${a})`
+    + (ok.length?` with ${ok.length} result${ok.length>1?"s":""}`:" — add results and switch nominals on")
+    + (bad.length?`. ${bad.length} value${bad.length>1?"s":""} outside the ${LO}–${HI} % scale ignored.`:".");
+  cards[s.a].scrollIntoView({block:"center", behavior:"smooth"});
+  openResults(cards[s.a], s, !ok.length);
+  return true;
+}
+
+document.getElementById("sheet").addEventListener("click", e=>{
+  const card=e.target.closest(".strain"); if(!card) return; const s=byAbbr[card.dataset.abbr];
+  const tg=e.target.closest(".toggle");
+  if(tg){ toggle(s,+tg.dataset.nom); return; }
+  const res=e.target.closest("[data-res]");
+  if(res){
+    const st=state[s.a], kind=res.dataset.res;
+    if(kind==="addbtn"){ addFromInput(card,s); return; }
+    if(kind==="own"){ st.add.splice(+res.dataset.i,1); render(s); save(s); openResults(card,s,true); return; }
+    if(kind==="src"){
+      const i=+res.dataset.i, d=new Set(st.drop);
+      d.has(i)?d.delete(i):d.add(i); st.drop=[...d].sort((p,q)=>p-q);
+      render(s); save(s); openResults(card,s,true); return;
+    }
+    if(kind==="restore"){ st.drop=[]; render(s); save(s); openResults(card,s,true); return; }
+    return;
+  }
+  const an=e.target.closest("[data-an]");
+  if(an){
+    if(an.dataset.an==="explain"){ explainProposal(s); }
+    else if(an.dataset.an==="undo" && proposal[s.a] && proposal[s.a].before){ state[s.a].tol=proposal[s.a].before.tol; delete proposal[s.a]; render(s); save(s); }
+    else { delete proposal[s.a]; render(s); }
+    return;
+  }
+  const btn=e.target.closest("[data-act]");
+  if(btn){
+    const act=btn.dataset.act;
+    if(act==="analyse"){ runAnalysis(s); card.querySelector(".an").scrollIntoView({block:"nearest",behavior:"smooth"}); }
+    else if(act==="reset"){ const keep={add:state[s.a].add,drop:state[s.a].drop}; state[s.a]=Object.assign(defaultState(s),keep); render(s); save(s); }
+    else if(act==="clear"){ state[s.a].tol={}; render(s); save(s); }
+    else if(act==="copy"){ copyText(card, asText(s)); }
+    else if(act==="results"){ openResults(card,s,btn.getAttribute("aria-expanded")!=="true"); }
+    else if(act==="delstrain"){ deleteStrain(s); }
+  }
+});
+function toggle(s,n){
+  const st=state[s.a];
+  if(st.tol[n]!=null) delete st.tol[n]; else st.tol[n]=maxTol(n);
+  render(s); save(s);
+}
+async function copyText(card,text){
+  let ok=false;
+  try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){}
+  const ro=card.querySelector(".ro"); const old=ro.querySelector(".copied,.copyfb"); if(old) old.remove();
+  if(ok){ const sp=document.createElement("span"); sp.className="copied"; sp.textContent="copied"; ro.appendChild(sp); setTimeout(()=>sp.remove(),1800); }
+  else { const pre=document.createElement("pre"); pre.className="copyfb"; pre.textContent=text; ro.appendChild(pre); }
+}
+
+document.getElementById("sheet").addEventListener("pointerdown", e=>{
+  const h=e.target.closest("[data-handle]"); if(!h) return;
+  const card=e.target.closest(".strain"); const s=byAbbr[card.dataset.abbr];
+  e.preventDefault();
+  drag.abbr=s.a; drag.kind=h.dataset.handle; drag.nom=+h.dataset.nom; drag.l=+h.dataset.l; drag.h=+h.dataset.h; drag.pointerId=e.pointerId;
+  applyDrag(e);
+});
+window.addEventListener("pointermove", e=>{ if(drag.abbr && e.pointerId===drag.pointerId) applyDrag(e); });
+window.addEventListener("pointerup", endDrag); window.addEventListener("pointercancel", endDrag);
+function endDrag(e){ if(!drag.abbr) return; const s=byAbbr[drag.abbr]; drag.label=null; const a=drag.abbr; drag.abbr=null; render(s); save(s); }
+
+function applyDrag(e){
+  const s=byAbbr[drag.abbr], svg=cards[s.a].querySelector("svg"); if(!svg) return;
+  const v=pointerValue(e,svg), st=state[s.a];
+  let labelText="", labelX=x(v);
+  if(drag.kind==="lo"||drag.kind==="hi"){
+    const n=drag.nom;
+    const t = drag.kind==="lo" ? clampTol(n, n-v) : clampTol(n, v-n+0.01);
+    st.tol[n]=t; const b=bandOf(n,t);
+    labelText=`${f2(b.lo)} – ${f2(b.hi)}`; labelX=x(drag.kind==="lo"?b.lo:b.hi);
+  } else {
+    const L=drag.l, Hn=drag.h, lim=borderLimits(L,Hn); if(!lim) return;
+    const B=r2(Math.min(lim.hi,Math.max(lim.lo,v)));
+    st.tol[L]=clampTol(L,B-L); st.tol[Hn]=clampTol(Hn,Hn-B);
+    labelText=`border ${f2(B)}`; labelX=x(B);
+  }
+  // keep the readout within the drawing
+  labelX=Math.min(W-50,Math.max(50,labelX));
+  drag.label={x:labelX,y:TOP+10,text:labelText};
+  render(s);
+}
+
+/* keyboard on handles and toggles */
+document.getElementById("sheet").addEventListener("keydown", e=>{
+  const card=e.target.closest(".strain"); if(!card) return; const s=byAbbr[card.dataset.abbr];
+  const tg=e.target.closest(".toggle");
+  if(tg && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); toggle(s,+tg.dataset.nom); return; }
+  const h=e.target.closest("[data-handle]"); if(!h) return;
+  const dir = e.key==="ArrowRight"||e.key==="ArrowUp" ? 1 : e.key==="ArrowLeft"||e.key==="ArrowDown" ? -1 : 0;
+  if(!dir) return; e.preventDefault();
+  const step=(e.shiftKey?0.1:0.01)*dir, st=state[s.a];
+  if(h.dataset.handle==="border"){
+    const L=+h.dataset.l, Hn=+h.dataset.h, lim=borderLimits(L,Hn); if(!lim) return;
+    const cur=bandOf(Hn,st.tol[Hn]).lo; const B=r2(Math.min(lim.hi,Math.max(lim.lo,cur+step)));
+    st.tol[L]=clampTol(L,B-L); st.tol[Hn]=clampTol(Hn,Hn-B);
+  } else {
+    const n=+h.dataset.nom; const sign = h.dataset.handle==="lo" ? -1 : 1;   // right arrow on the lower handle narrows
+    st.tol[n]=clampTol(n, st.tol[n]+sign*step);
+  }
+  render(s); save(s);
+  // restore focus to the same control after re-render
+  const sel = h.dataset.handle==="border" ? `[data-handle="border"][data-l="${h.dataset.l}"]` : `[data-handle="${h.dataset.handle}"][data-nom="${h.dataset.nom}"]`;
+  const again=card.querySelector(sel); if(again) again.focus();
+});
+
+/* Generator toggles: flipping one re-runs the proposal for that strain at once,
+   so the effect of the option is the thing you see, not a promise about it. */
+document.getElementById("sheet").addEventListener("change", e=>{
+  const g=e.target.closest("[data-gen]"); if(!g) return;
+  const card=e.target.closest(".strain"); if(!card) return;
+  const k=g.dataset.gen;
+  genOpts[k] = g.type==="checkbox" ? g.checked : Number(g.value);
+  saveGen();
+  const s=byAbbr[card.dataset.abbr];
+  if(proposal[s.a] && proposal[s.a].before){       // keep the original undo point across re-runs
+    const before=proposal[s.a].before;
+    const r=analyse(s);
+    proposal[s.a] = r.error ? {error:r.error, before} : {before, result:r};
+    if(!r.error){ state[s.a].tol=r.tol; save(s); }
+    render(s);
+  } else { runAnalysis(s); }
+});
+
+/* Enter in a results box adds, without submitting anything */
+document.getElementById("sheet").addEventListener("keydown", e=>{
+  if(e.key!=="Enter") return;
+  const inp=e.target.closest('[data-res="input"]'); if(!inp) return;
+  e.preventDefault();
+  const card=e.target.closest(".strain"); addFromInput(card, byAbbr[card.dataset.abbr]);
+});
+
+/* new-strain form */
+document.getElementById("ns").addEventListener("submit", e=>{
+  e.preventDefault();
+  const name=document.getElementById("ns-name"), abbr=document.getElementById("ns-abbr"), res=document.getElementById("ns-results");
+  if(createStrain(name.value, abbr.value, res.value)){ name.value=""; abbr.value=""; res.value=""; name.focus(); }
+});
+
+/* ───────────── boot ───────────── */
+CUSTOM = loadCustom();
+reindex();
+allStrains().forEach(s=>{ state[s.a]=loadLocal(s); render(s); });
+setStatus("Saved <b>in this browser</b>");
+
+(async()=>{
+  try{
+    if(!window.claude || typeof window.claude.use!=="function") return;
+    // the explanation feature lights up on its own once the viewer answers
+    window.claude.use("sample").then(fn=>{ if(typeof fn==="function"){ sampleFn=fn; Object.keys(proposal).forEach(a=>{ if(byAbbr[a]) render(byAbbr[a]); }); } }).catch(()=>{});
+    db=await window.claude.use("db"); if(!db) return;
+    dbReady=true; setStatus("Connected · saving <b>to the page</b>");
+
+    // Strains created elsewhere arrive first, so a range for one of them lands
+    // on a strain this view already knows about.
+    db.doc("strains/custom").onSnapshot(snap=>{
+      const d=snap.exists&&snap.data(); if(!d||!Array.isArray(d.strains)) return;
+      let added=false;
+      d.strains.forEach(r=>{
+        const s=cleanStrain({a:r.abbr,n:r.name});
+        if(!s || byAbbr[s.a]) return;
+        CUSTOM.push(s); added=true;
+      });
+      if(added){
+        reindex();
+        try{ localStorage.setItem(LS_STRAINS, JSON.stringify(CUSTOM.map(s=>({a:s.a,n:s.n})))); }catch(e){}
+        CUSTOM.forEach(s=>{ if(!state[s.a]){ state[s.a]=loadLocal(s); render(s); } });
+      }
+    }, ()=>{});
+
+    db.collection("ranges").onSnapshot(snap=>{
+      snap.docChanges().forEach(ch=>{
+        if(ch.type==="removed") return;
+        const d=ch.doc.data(); if(!d||!d.abbr) return;
+        if(!byAbbr[d.abbr]){                      // a range for a strain we have not heard of yet
+          if(!d.custom_strain) return;
+          const s=cleanStrain({a:d.abbr,n:d.name||d.abbr});
+          if(!s) return;
+          CUSTOM.push(s); reindex(); state[s.a]=defaultState(s); render(s);
+        }
+        const remoteAt=Date.parse(d.updatedAt||0)||0;
+        if((localEditedAt[d.abbr]||0) > remoteAt) return;      // this browser is newer
+        if(drag.abbr===d.abbr) return;                           // never yank a live drag
+        const merged=sanitize({tol:d.tol, add:d.results_entered, drop:state[d.abbr]&&state[d.abbr].drop});
+        state[d.abbr]=merged; render(byAbbr[d.abbr]);
+        try{ localStorage.setItem(LS(d.abbr), JSON.stringify(merged)); }catch(e){}
+      });
+    }, err=>{ setStatus("Saved in this browser · <b>page storage unavailable</b>"); });
+  }catch(e){ /* page still works from local state */ }
+})();
+</script>
