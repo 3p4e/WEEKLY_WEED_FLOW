@@ -141,6 +141,28 @@ and old image tags are the rollback path. Do not read `docker system df`'s
 42 of which were ACTIVE) and 29.43 GB from volumes (which include the live Letta
 database and the archived QMS registry).
 
+**Check deployability PER SERVICE, not "since the last deploy" (learned the hard
+way 2026-09-07).** The stack has services on independent cadences: backend and
+frontend ship together, **docengine ships on its own**. Asking "what changed since
+the last deploy?" answers only for the services that deploy last, and silently
+hides everything else. On 2026-09-06 that reasoning shipped the DocEngine Studio
+chat/preset UI and its backend proxy while leaving the docengine image that serves
+those routes at a version that 404s them — a user-facing feature broken in
+production for a day, invisible to `git diff <last-deploy>..HEAD` because the
+docengine commits *predate* the commit that was deployed.
+
+The correct question, asked once per service: **what commit is this running image
+built from, and what has changed in its own subtree since?**
+
+    # for each of backend / web / docengine
+    git rev-parse HEAD:<subtree>        # vs the tree recorded in that service's own deploy record
+    # then confirm against the host, because a deploy record can be missing:
+    docker inspect -f '{{.Config.Image}}' <container>
+
+Watch for the **three-tier commit** especially — one change touching frontend,
+backend and docengine. Ship the service that *serves* a route before the tiers
+that call it, or ship all three together.
+
 **Version numbers: read the running tag off the host, not out of `docs/`.** The
 frontend was already at `v133`'s predecessor `v132`, built 2026-09-04, with no
 deploy record written for it — planning a deploy from the docs directory alone

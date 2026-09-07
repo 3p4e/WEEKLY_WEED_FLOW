@@ -129,10 +129,56 @@ the register deliberately does **not** invent one. What the register carries is 
 `regime` and the `zone`; a `grade` column can be added once QA states the
 classification, and the air-lock topology above is the evidence base for it.
 
-**[NEEDS INPUT]** Which classification scheme does the site's validation master plan
-use, and what grade is assigned to each of: cultivation rooms, drying and curing,
-trimming and de-bucking, extraction and FDF production, packaging, the in-process
-control laboratories, and the finished-product warehouses?
+### Grades — ANSWERED by the owner 2026-09-07
+
+The scheme is **EU GMP grades plus CNC** (controlled not classified). The owner's
+rules, in their own terms:
+
+| Area | Grade |
+| --- | --- |
+| `E…` — the **Extraction** department | **D** |
+| `F…` — dry flower processing: **trimming and drying** | officially **CNC**, *operated as* **D** |
+| **Curing** and **packaging** rooms | **D** |
+| Corridors **inside** a Grade D area | **D** |
+| **Perimeter** corridors | **CNC** |
+| Corridors **around Cultivation** | **CNC** |
+| `C…` — **cultivation** rooms | **unclassified** |
+
+**Cultivation being unclassified is correct, not a gap.** GACP (the EMA guideline
+on Good Agricultural and Collection Practice for starting materials of herbal
+origin) defines **no airborne particulate or microbial classification at all** —
+no A/B/C/D, no ISO 14644 class. It governs hygiene, personnel health and training,
+water quality, contamination avoidance, pest management, drying and storage
+conditions, and documentation. Cleanroom classification begins where GMP begins,
+which is exactly the harvest → cure → defoliation boundary already recorded above.
+The owner asked directly whether GACP sets any limits; it does not.
+
+**Recording trimming and drying.** Two facts, and the register should carry both
+rather than collapse them: the **classification of record is CNC**, and the site
+**operates them to Grade D discipline**. Putting `D` in `grade` would make the
+register assert a classification the validation master plan does not grant; the
+recommendation is `grade = "CNC"` with the operating standard in `notes`, so an
+auditor sees the tighter practice as a strength rather than a contradiction.
+`facility_rooms.grade` is nullable free text with no CHECK, so any scheme fits
+without a migration.
+
+**[NEEDS INPUT] — still open, three gaps in the rules above.** The rules cover the
+`E` and `F` wings; they do not reach:
+
+- **`T…` technical** (19 rooms: AHU plant, ethanol warehouse, compressed air)
+- **`M…` main** (15 rooms: entrance, security, cantina, personnel)
+- **`W…`** (3 rooms: wardrobe, laundry, air lock — the laundry serves clean areas)
+
+And within `E` and `F`, "the department is Grade D" would currently sweep in
+**7 warehouses, 3 waste rooms, 8 wardrobes and 1 emergency exit** on the `E` side
+(5 warehouses, 1 waste room, 11 personnel rooms and 2 egress routes on `F`). Do
+waste, egress and finished-goods warehousing really carry D, or are they CNC?
+
+Finally, "corridors inside a Grade D area are D, perimeter corridors are CNC"
+cannot be applied from the drawing alone: **which of the 6 `E` and 6 `F` corridors
+are interior and which are perimeter is not derivable from the plan geometry** and
+needs marking. The 10 cultivation and 2 main corridors follow from the rules as
+CNC without further input.
 
 ## Cultivation capacity, as drawn
 
