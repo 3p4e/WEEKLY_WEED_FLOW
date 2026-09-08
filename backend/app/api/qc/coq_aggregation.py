@@ -53,6 +53,11 @@ class CoqIn(BaseModel):
     # the cultivar's APPROVED potency ladder (PP-QC-SPEC-001). Optional: without
     # it the CoQ simply carries no grade (never invented).
     cultivar_id: str | None = None
+    # The official ImB product the lot is certified against (qc_products).
+    # Optional: a CoQ compiled before the catalogue, or for a strain with no
+    # approved product, still grades on the legacy ladder.
+    product_id: str | None = None
+
 
 
 def _coq_out(r: dict) -> dict:
@@ -76,6 +81,7 @@ def _coq_out(r: dict) -> dict:
         "coq_generated_at": r["coq_generated_at"].isoformat() if r["coq_generated_at"] else None,
         "cultivar_id": str(r["cultivar_id"]) if r.get("cultivar_id") else None,
         "potency_spec_id": str(r["potency_spec_id"]) if r.get("potency_spec_id") else None,
+        "product_id": str(r["product_id"]) if r.get("product_id") else None,
         "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -208,8 +214,28 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         # version APPROVED right now — the printed grade must stay stable and
         # traceable even after the ladder is later superseded. No approved ladder
         # yet → the CoQ carries the cultivar but no grade (never invented).
+        # The official product catalogue (2026-09-05) grades a lot against ONE
+        # product's printed window. Naming a product settles the cultivar too,
+        # and leaves the ladder out of it — two live grade schemes on one
+        # document would be two answers to one question.
+        product_id = None
+        if body.product_id:
+            _uuid_or_422(body.product_id, "product_id")
+            prod = await c.fetchrow(
+                "SELECT id, cultivar_id, product_code, status FROM qc_products WHERE id=$1",
+                body.product_id)
+            if prod is None:
+                raise HTTPException(422, "Unknown product")
+            if prod["status"] != "APPROVED":
+                raise HTTPException(
+                    422, f"{prod['product_code']} is {prod['status']} — a lot is certified"
+                         " against an APPROVED product specification")
+            if body.cultivar_id and str(body.cultivar_id) != str(prod["cultivar_id"]):
+                raise HTTPException(422, f"{prod['product_code']} is not this cultivar's product")
+            product_id = prod["id"]
+            body.cultivar_id = str(prod["cultivar_id"])
         potency_spec_id = None
-        if body.cultivar_id:
+        if body.cultivar_id and product_id is None:
             cv = await c.fetchrow(
                 "SELECT id FROM cultivars WHERE id=$1 AND is_active", body.cultivar_id)
             if cv is None:
@@ -265,7 +291,7 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         row = None
         if not open_oos:
             row = await _compile_coq_tx(c, user, body, spec, certs, params, results,
-                                        potency_spec_id)
+                                        potency_spec_id, product_id)
     if open_oos:
         # §6.16 (C8) — an attempted CoQ compile on an open-OOS batch is itself a
         # reportable deviation, recorded in its own transaction so the 409
@@ -283,7 +309,7 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
 
 
 async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, results,
-                          potency_spec_id=None):
+                          potency_spec_id=None, product_id=None):
     """The aggregation itself — runs INSIDE the caller's transaction, so the
     validation reads, the advisory-locked number mint, and the inserts are one
     atomic unit (no window for a source to be voided or an OOS to open between
@@ -422,12 +448,12 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
         "INSERT INTO qc_coq(org_id, coq_number, batch_id, product_name, manufacture_date,"
         " batch_size, specification_id, spec_reference, overall_conform, comments,"
         " oos_reference, compiled_by, compiled_at, created_by, updated_by,"
-        " cultivar_id, potency_spec_id)"
-        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12,$13,$14) RETURNING *",
+        " cultivar_id, potency_spec_id, product_id)"
+        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12,$13,$14,$15) RETURNING *",
         user["org_id"], coq_number, body.batch_id, body.product_name,
         body.manufacture_date, body.batch_size, body.specification_id, spec_ref,
         overall, body.comments, body.oos_reference, user["id"],
-        body.cultivar_id, potency_spec_id)
+        body.cultivar_id, potency_spec_id, product_id)
     for src_id in sorted(cited_cert_ids):
         src = by_cert[src_id]
         await c.execute(

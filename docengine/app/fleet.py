@@ -910,7 +910,8 @@ async def ensure_fleet(client: LettaClient | None = None) -> dict:
 
 
 async def spawn_ephemeral(
-    client: LettaClient, agent_name: str, name_suffix: str, ctx: FleetContext | None = None
+    client: LettaClient, agent_name: str, name_suffix: str, ctx: FleetContext | None = None,
+    autoclear: bool | None = None,
 ) -> str:
     """Create a short-lived clone of a fleet agent (same persona/datasets/
     model) for exactly ONE isolated exchange, then the caller deletes it.
@@ -923,6 +924,18 @@ async def spawn_ephemeral(
     gf_reg_checker). A fresh clone per exchange keeps that estimate constant
     regardless of how many checks the pipeline runs.
 
+    `autoclear` overrides the cloned agent's own fleet.yaml `autoclear:` flag
+    for THIS clone only. The base agent's flag describes its normal one-shot
+    use (called once, then autoclear wipes the buffer so the next call starts
+    fresh) — but a caller that sends a SECOND turn to the same clone (a nudge,
+    a follow-up) needs that first turn still in the buffer when the second one
+    is composed. With the base agent's autoclear left on, the buffer wipes
+    between turns 1 and 2 and the second turn runs with no memory of the
+    first: observed live on a repair clone whose nudge turn ran at a 5.8k-token
+    estimate right after a 34k-token first turn had the whole document in it,
+    and returned nothing — the agent had already forgotten it. Pass
+    `autoclear=False` for any clone the caller will message more than once.
+
     With `ctx` (what the job's own ensure_fleet_ctx resolved) this makes
     exactly two calls: create and attach. Without it — other callers, tests —
     it re-lists agents, models, embeddings and tools itself, which is what
@@ -930,6 +943,7 @@ async def spawn_ephemeral(
     same job had fetched moments earlier over the same connection."""
     spec = load_fleet()
     ag = next(a for a in spec["agents"] if a["name"] == agent_name)
+    body_ag = ag if autoclear is None else {**ag, "autoclear": autoclear}
     if ctx is not None:
         existing, model, embedding, tool_id, pending = (
             ctx.existing, ctx.model, ctx.embedding, ctx.tool_id, ctx.pending
@@ -955,7 +969,7 @@ async def spawn_ephemeral(
             embedding = cand
 
     body = _build_body(
-        ag,
+        body_ag,
         spec,
         model,
         embedding,

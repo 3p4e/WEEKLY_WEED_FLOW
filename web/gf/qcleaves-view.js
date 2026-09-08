@@ -277,7 +277,7 @@
       create = canWrite() ? `<div class="panel ana-panel" style="margin-bottom:12px"><div class="ana-pt" style="margin-bottom:8px">${AL('New stability study', 'Нова студија за стабилност')}</div><div class="qcs-form">
         <select id="qcl-stype">${STAB_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>${fld('qcl-smat', AL('Material code', 'Код'))}
         ${fld('qcl-material_name_en', AL('Name (EN)', 'Име (EN)'))}${fld('qcl-material_name_mk', AL('Name (MK)', 'Име (MK)'))}
-        ${fld('qcl-sbatches', AL('Batches (comma)', 'Серии (запирки)'))}<input id="qcl-sstarted" type="date">
+        ${fld('qcl-sbatches', AL('Batches (comma)', 'Серии (запирки)'))}${GF.dateField('qcl-sstarted', {})}
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qclCreateStab()">${GF.t('create_task') || 'Create'}</button></div></div>` : '';
       list = stabList();
       // Pull-schedule drawer scaffold — empty + hidden until a row is opened,
@@ -292,7 +292,7 @@
     } else {
       create = canWrite() ? `<div class="panel ana-panel" style="margin-bottom:12px"><div class="ana-pt" style="margin-bottom:8px">${AL('New water result', 'Нов резултат за вода')}</div><div class="qcs-form">
         ${fld('qcl-loc', AL('Location (SL code)', 'Локација (SL)'))}<select id="qcl-grade">${GRADES.map(g => `<option value="${g}">${g}</option>`).join('')}</select>
-        <input id="qcl-wdate" type="date">${fld('qcl-params', AL('Parameters (JSON)', 'Параметри (JSON)'))}
+        ${GF.dateField('qcl-wdate', {})}${fld('qcl-params', AL('Parameters (JSON)', 'Параметри (JSON)'))}
         <select id="qcl-passed" title="${AL('Result', 'Резултат')}"><option value="pass">PASS</option><option value="fail">OOE</option></select>
         ${fld('qcl-ooe', AL('OOE reason (if failing)', 'Причина за OOE (ако не поминал)'))}
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qclCreateWater()">${GF.t('create_task') || 'Create'}</button></div></div>` : '';

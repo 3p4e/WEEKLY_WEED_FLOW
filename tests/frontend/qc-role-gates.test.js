@@ -41,7 +41,7 @@ test('GF.QC_WRITERS / GF.QC_QP / GF.QC_HOQC carry the expected role sets', () =>
 
 function load() {
   return loadGF({
-    files: ['data.js', 'core.js', 'qcsample-view.js', 'qccustody-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'qcsample-view.js', 'qccustody-view.js'],
     preScript: PRE,
   });
 }

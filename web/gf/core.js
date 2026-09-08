@@ -37,6 +37,7 @@ GF.ICONS = {
   plus:'M10 4v12M4 10h12', mic:'M10 3a2.2 2.2 0 012.2 2.2v4.6a2.2 2.2 0 01-4.4 0V5.2A2.2 2.2 0 0110 3zM5 9.5a5 5 0 0010 0M10 14.5V17M7.5 17h5',
   chevL:'M12 5l-5 5 5 5', chevR:'M8 5l5 5-5 5', chevD:'M5 8l5 5 5-5', chevU:'M5 12l5-5 5 5',
   check:'M4 10.5l4 4 8-9', clock:'M10 5.5V10l3 1.8M10 3a7 7 0 100 14 7 7 0 000-14z',
+  calendar:'M4 5.5h12v11H4zM4 9h12M7.5 3.5v3M12.5 3.5v3',
   user:'M10 10a3 3 0 100-6 3 3 0 000 6zM4.5 17a5.5 5.5 0 0111 0', flag:'M5 3v14M5 3.5h9l-2 3 2 3H5',
   leaf:'M4 16c8 0 12-4 12-12C8 4 4 8 4 16zM4 16c1.5-4 3.5-6 6-7.5', grid:'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z',
   timeline:'M3 6h9M3 11h13M3 16h6M14 4v4M9 9v4M16 14v4', chat:'M4 5h12v8H9l-3 3v-3H4z',
@@ -99,6 +100,7 @@ GF.ROLES = {
   wh_mgr:  { en: 'Warehouse Manager',      mk: 'Менаџер за магацин' },
   se_mgr:  { en: 'Security Manager',       mk: 'Менаџер за обезбедување' },
   cu_mgr:  { en: 'Cultivation Manager',    mk: 'Менаџер за одгледување' },
+  ir_mgr:  { en: 'Irrigation Manager',     mk: 'Менаџер за наводнување' },
   mu_mgr:  { en: 'Maintenance Manager',    mk: 'Менаџер за одржување' },
   qp:      { en: 'Qualified Person',       mk: 'Квалификувано лице' },
   operator:{ en: 'Operator',               mk: 'Оператор' },
@@ -123,7 +125,7 @@ GF.QC_HOQC = ['ADMIN', 'QC_MGR', 'QP'];
 const _FULL = { create: true, editAny: true, deleteAny: true, status: 'any', team: true };
 GF.PERMS = {
   admin: _FULL, owner: _FULL, ceo: _FULL, coo: _FULL,
-  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
+  qa_mgr: _FULL, qc_mgr: _FULL, pr_mgr: _FULL, wh_mgr: _FULL, se_mgr: _FULL, cu_mgr: _FULL, ir_mgr: _FULL, mu_mgr: _FULL, qp: _FULL,
   operator: { create: true, editAny: false, deleteAny: false, status: 'own', team: false },
 };
 GF.curRole = () => (GF.PEOPLE[GF.state.user] || {}).role || 'operator';
@@ -260,6 +262,37 @@ GF.localDateStr = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 GF.todayISO = () => GF.localDateStr(new Date());
+
+// The FACILITY's today — the only "what day is it" answer this app may use
+// for record data. The browser's local day is the READER's day: a manager
+// checking a batch from another country, or anyone working the nightly
+// window where Europe/Skopje and UTC sit on different dates, gets a
+// different answer than the database does. The backend already treats this
+// as settled (worktime.facility_today, SITE_TODAY_SQL, and a test suite that
+// bans CURRENT_DATE app-wide); the browser simply had no way to ask.
+//
+// The zone arrives on /auth/me (GF.API.user.facility_tz) and is applied with
+// Intl, so a tab left open across midnight keeps answering correctly rather
+// than freezing on the value it was handed at login. Three fallbacks, in
+// order: the zone; the server's own facility_today from that same response;
+// then the browser's local day — which is what the whole app used before
+// this existed, so the worst case is the old behaviour, never an error.
+GF.facilityTZ = () => (GF.API && GF.API.user && GF.API.user.facility_tz) || '';
+GF.facilityToday = () => {
+  const tz = GF.facilityTZ();
+  if (tz) {
+    try {
+      // en-CA renders ISO-8601 (YYYY-MM-DD) — the format the whole app and
+      // every date input already speak.
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+    } catch (e) { /* unknown zone on this engine — fall through */ }
+  }
+  const served = GF.API && GF.API.user && GF.API.user.facility_today;
+  if (served && /^\d{4}-\d{2}-\d{2}$/.test(served)) return served;
+  return GF.todayISO();
+};
 
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever

@@ -2,6 +2,7 @@
 import uuid
 
 from app.db import users_admin_pool
+from app.worktime import facility_today
 from tests.conftest import create_user, login_and_set_password
 
 
@@ -40,6 +41,28 @@ async def test_password_below_minimum_length_rejected(client, admin_headers):
     r = await client.post("/auth/change-password", json={"new_password": "short"},
                            headers={"Authorization": f"Bearer {tmp_token}"})
     assert r.status_code == 422
+
+
+async def test_password_over_bcrypts_byte_cap_is_a_clean_422_not_a_500(client, admin_headers):
+    """bcrypt hashes only the first 72 BYTES and silently drops the rest, so
+    change-password rejects anything longer up front. The guard is what stands
+    between a user and a passphrase of which only part is ever checked — and
+    the units are bytes, not characters: this password is 40 Cyrillic
+    characters, well under the field's 256-character limit, and 80 bytes.
+
+    Pinned because without the explicit check `hash_password` raises
+    PasswordTooLong, which nothing catches — the user would get a 500 instead
+    of a message telling them what to do."""
+    user, otp = await create_user(client, admin_headers)
+    token = await login_and_set_password(client, user["username"], otp)
+
+    too_long = "ЛозинкаЗаТестирање" * 2 + "Лозинка"      # 43 chars, 86 bytes
+    assert len(too_long) < 256 and len(too_long.encode("utf-8")) > 72
+    r = await client.post("/auth/change-password",
+                          json={"current_password": "NewPassword123456", "new_password": too_long},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 422, r.text
+    assert "bytes" in r.json()["detail"]
 
 
 async def test_old_otp_rejected_after_password_change(client, admin_headers):
@@ -653,3 +676,42 @@ async def test_login_is_case_insensitive_on_username(client, admin_headers):
     # And a completely different case variant also works.
     r = await client.post("/auth/login", json={"email": "MIXEDCASE.LOGIN", "password": password})
     assert r.status_code == 200, r.text
+
+
+async def test_me_carries_the_facility_clock_the_ui_must_reckon_dates_by(client, admin_headers):
+    """The browser cannot work out the facility's day on its own — its own
+    zone is the READER's, and this app's dates belong to the site. The date
+    picker reads these two fields; without them it silently falls back to the
+    browser's day, which is the bug this endpoint exists to close.
+
+    Sent as the zone (so a tab open across midnight stays right) and as
+    today (so a client whose Intl lacks the zone still has an answer)."""
+    from zoneinfo import ZoneInfo
+
+    from app.config import settings
+
+    r = await client.get("/auth/me", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert body["facility_tz"] == settings.snapshot_tz
+    # A real zone, not a label — the client passes it straight to Intl.
+    ZoneInfo(body["facility_tz"])
+
+    assert body["facility_today"] == facility_today().isoformat()
+    # …and additive: the user fields every existing caller reads are untouched.
+    for key in ("id", "username", "role", "must_change_password"):
+        assert key in body
+
+
+async def test_the_irrigation_manager_role_is_provisionable_and_elevated(client, admin_headers):
+    """IR_MGR is new in users migration 0012 (the CHECK and app.is_elevated) and
+    tasks migration 0064 (the tasks DB's own is_elevated). A role that only one
+    database knows logs in to an empty app — that has happened before (tasks
+    0009) — so this reads through both."""
+    user, otp = await create_user(client, admin_headers, role="IR_MGR")
+    assert user["role"] == "IR_MGR"
+    token = await login_and_set_password(client, user["username"], otp)
+    h = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/cultivation/irrigation", headers=h)).status_code == 200
+    assert (await client.get("/tasks", headers=h)).status_code == 200

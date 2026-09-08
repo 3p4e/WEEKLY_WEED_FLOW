@@ -9,12 +9,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import builder, db, fleet  # noqa: E402
+from app import builder, db, fleet, needs  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.letta import LettaError  # noqa: E402
 from app.pipeline import (  # noqa: E402
-    assemble_markdown, run_workflow, _strip_fences, _clean_section, _bilingual_gaps,
-    _brief, _qa_audit_passed, _split_repaired, _section_body, _repair_sections,
+    assemble_markdown, run_workflow, run_revision, RevisionFailed, _strip_fences,
+    _clean_section, _bilingual_gaps, _brief, _qa_audit_passed, _split_repaired,
+    _section_body, _repair_sections, _direct_edit_sections,
     _drop_echoed_heading, _reg_findings_context, _grid_overflow,
 )
 from app.questionnaires import apply_defaults  # noqa: E402
@@ -206,7 +207,7 @@ def _patch_common(monkeypatch, qkey="annex_form"):
     async def fake_ensure_fleet_ctx(client):
         return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
 
-    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None):
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
         return f"tmp-{agent_name}-{name_suffix}"
 
     monkeypatch.setattr(db, "job_get", fake_job_get)
@@ -777,8 +778,17 @@ def test_repair_prompt_forbids_inventing_data_to_satisfy_an_issue():
     prompt quietly drops it."""
     src = inspect.getsource(_repair_sections)
     assert "NEVER invent data" in src
-    assert "BLANK write-ins" in src
     assert "leave that" in src and "unfixed" in src
+    # The prohibition is only half of it: an agent under repair pressure needs
+    # a sanctioned way OUT, or "don't invent" and "fix the issue" simply
+    # conflict and one of them loses. That way out is the [NEEDS INPUT: …]
+    # marker, carried into this prompt (and every other authoring prompt) from
+    # one place so the wording cannot drift between them.
+    assert "needs.INSTRUCTION" in src
+    assert "[NEEDS INPUT:" in needs.INSTRUCTION
+    # …and it must keep saying which blanks are NOT gaps, or every signature
+    # line in the house style acquires a marker.
+    assert "write-in" in needs.INSTRUCTION and "signatures" in needs.INSTRUCTION
 
 
 def test_split_repaired_tolerates_chatter_around_a_correct_document():
@@ -1052,3 +1062,336 @@ async def test_overflow_fails_the_job_before_the_build(monkeypatch):
     assert updates[-1]["result"]["grid_overflow"]
     # the sections are kept, so the named block can actually be looked at
     assert updates[-1]["result"]["sections"]
+
+
+# ---------- direct-edit: run_revision + _direct_edit_sections ----------
+
+_REV_SECTIONS = [
+    {"num": "1.0", "mk": "ЦЕЛ", "en": "PURPOSE", "content": "Стара цел.|Old purpose."},
+    {"num": "2.0", "mk": "ПОДРАЧЈЕ", "en": "SCOPE", "content": "Стар опфат.|Old scope."},
+]
+_REV_META = {"title_mk": "МК", "title_en": "EN", "code": "C-9", "doctype": "SOP", "version": "1.0"}
+
+
+def _marker_block(num: str, mk: str, en: str, content: str) -> str:
+    return f"<<<PP-SECTION {num}|{mk}|{en}>>>\n{content}\n<<<PP-END {num}>>>"
+
+
+def _revise_job(instruction="Tighten the wording.", section_num=None, sections=None):
+    return {
+        "id": "rev-1",
+        "payload": {
+            "source_document_id": "doc-0",
+            "sections": sections if sections is not None else [dict(s) for s in _REV_SECTIONS],
+            "meta": dict(_REV_META),
+            "instruction": instruction,
+            "section_num": section_num,
+        },
+    }
+
+
+def _patch_common_for_revision(monkeypatch, job):
+    updates = []
+
+    async def fake_job_get(jid):
+        return job
+
+    async def fake_job_update(jid, **fields):
+        updates.append(fields)
+
+    async def fake_document_create(job_id, meta):
+        return "doc-1"
+
+    agents = {name: f"agent-{name}" for name in _AGENT_NAMES}
+
+    async def fake_ensure_fleet_ctx(client):
+        return fleet.FleetContext(agents, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
+        return f"tmp-{agent_name}-{name_suffix}"
+
+    monkeypatch.setattr(db, "job_get", fake_job_get)
+    monkeypatch.setattr(db, "job_update", fake_job_update)
+    monkeypatch.setattr(db, "document_create", fake_document_create)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", fake_ensure_fleet_ctx)
+    monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn_ephemeral)
+    return updates
+
+
+@pytest.mark.asyncio
+async def test_run_revision_builds_a_new_document_from_the_editors_reply(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class EditClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:      # the auditor's turn, not the editor's
+                return "PASS"
+            assert "Tighten the wording." in prompt
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=EditClient())
+    assert updates[0]["status"] == "running"
+    assert updates[-1]["status"] == "done"
+    result = updates[-1]["result"]
+    assert result["document_id"] == "doc-1"
+    assert result["source_document_id"] == "doc-0"
+    assert result["section_num"] == "2.0"
+    revised = {s["num"]: s["content"] for s in result["sections"]}
+    assert revised["2.0"] == "Нов опфат.|New scope."
+    assert revised["1.0"] == "Стара цел.|Old purpose."  # untouched section carried over unchanged
+    # the revision cleared the same §6A gate a first draft has to clear
+    assert result["qa_audit"] == "PASS"
+    assert result["qa_repair_rounds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_when_the_qa_audit_does_not_pass(monkeypatch):
+    """The gate that stands between a draft and a controlled document stands in
+    front of an EDIT too. A parseable, bilingual, well-formed revision that the
+    §6A auditor rejects must never reach builder.build — otherwise 'ask the AI
+    to change it' is a way around the gate the first draft had to clear."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(settings, "max_repair_rounds", 0)   # no hand-back: one verdict, final
+
+    class RejectedClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "**Verdict: FIX**\nSection 2.0 contradicts the stated scope."
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("a revision that failed the §6A audit must never be built")
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=RejectedClient())
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["error"] == "§6A audit did not pass"
+    result = updates[-1]["result"]
+    # the evidence a reviewer needs: the verdict, and the document it judged
+    assert "FIX" in result["qa_audit"]
+    assert result["markdown"]
+    assert result["instruction"] == "Tighten the wording."
+
+
+@pytest.mark.asyncio
+async def test_run_revision_hands_a_fix_verdict_back_before_giving_up(monkeypatch):
+    """Same repair-round machinery run_workflow uses: a FIX verdict buys one
+    hand-back to the author, and a PASS on the retry is a legitimate pass."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(settings, "max_repair_rounds", 1)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+    verdicts = []
+
+    class RepairedClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                verdicts.append(prompt)
+                return "PASS" if len(verdicts) > 1 else "**Verdict: FIX**\nTighten section 2.0."
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=RepairedClient())
+    assert updates[-1]["status"] == "done"
+    result = updates[-1]["result"]
+    # and the record must not read as a first-pass PASS
+    assert result["qa_repair_rounds"] == 1
+    assert len(result["qa_audit_history"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_run_revision_rejects_an_unknown_section_without_calling_letta(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="9.9"))
+
+    class MustNotBeCalled:
+        async def send_message(self, agent_id, prompt):
+            raise AssertionError("no section 9.9 exists — Letta must never be asked")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=MustNotBeCalled())
+    assert updates[-1]["status"] == "failed"
+    assert "9.9" in updates[-1]["error"]
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_on_an_unparseable_reply(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job())
+
+    class UselessClient:
+        async def send_message(self, agent_id, prompt):
+            return "I have reviewed the request and will make the changes now."
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("an unparseable reply must never reach the build step")
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=UselessClient())
+    assert updates[-1]["status"] == "failed"
+    assert "no closed sections" in updates[-1]["error"]
+
+
+@pytest.mark.asyncio
+async def test_run_revision_fails_closed_when_the_edit_breaks_bilingual_parity(monkeypatch):
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="1.0"))
+
+    class MonolingualClient:
+        async def send_message(self, agent_id, prompt):
+            # English only — no Cyrillic — and comfortably past
+            # _MIN_TOTAL_TO_JUDGE (120 letters), or the gate rightly declines to
+            # judge a section too short to be sure about.
+            return _marker_block("1.0", "ЦЕЛ", "PURPOSE",
+                                 "This purpose section is written in English only, with no "
+                                 "Macedonian counterpart anywhere in its body, and it is "
+                                 "deliberately long enough to clear the gate's minimum "
+                                 "judging length so the check actually runs on it.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    def _boom(*a, **k):
+        raise AssertionError("must never be built")   # no gate name: the assert below must not pass off this text
+    monkeypatch.setattr(builder, "build", _boom)
+
+    await run_revision("rev-1", client=MonolingualClient())
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["error"].startswith("revision broke bilingual parity")
+    assert "1.0 (no MK)" in updates[-1]["error"]
+
+
+async def _fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
+    return f"tmp-{agent_name}-{name_suffix}"
+
+
+@pytest.mark.asyncio
+async def test_direct_edit_sections_rejects_a_reply_that_widens_past_the_requested_scope(monkeypatch):
+    """Scoped to section 1.0; the reply also (correctly-formed) touches 2.0.
+    That is not accepted quietly — the caller asked for one section."""
+    monkeypatch.setattr(fleet, "spawn_ephemeral", _fake_spawn_ephemeral)
+
+    class WideningClient:
+        async def send_message(self, agent_id, prompt):
+            return (
+                _marker_block("1.0", "ЦЕЛ", "PURPOSE", "Нова цел.|New purpose.") + "\n\n" +
+                _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов опфат.|New scope.")
+            )
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    revised, reason = await _direct_edit_sections(
+        WideningClient(), "gf_sop_author", [dict(s) for s in _REV_SECTIONS],
+        "Reword this.", "job-x", ctx=None, section_num="1.0",
+    )
+    assert revised is None
+    assert "outside the requested scope" in reason
+    assert "2.0" in reason
+
+
+@pytest.mark.asyncio
+async def test_direct_edit_sections_nudges_once_when_the_first_reply_has_no_markers(monkeypatch):
+    """Mirrors _repair_sections' own nudge behaviour — proves the autoclear=False
+    fix actually matters: this fake client returns nothing useful on the first
+    turn and a well-formed reply on the second, which is exactly the shape the
+    reported live failure was missing (a real clone forgot everything by then)."""
+    monkeypatch.setattr(fleet, "spawn_ephemeral", _fake_spawn_ephemeral)
+    calls = []
+
+    class NudgedClient:
+        async def send_message(self, agent_id, prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return "Let me think about how to best address this."
+            return _marker_block("1.0", "ЦЕЛ", "PURPOSE", "Нова цел.|New purpose.")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    revised, reason = await _direct_edit_sections(
+        NudgedClient(), "gf_sop_author", [dict(s) for s in _REV_SECTIONS],
+        "Reword this.", "job-x", ctx=None, section_num="1.0",
+    )
+    assert len(calls) == 2
+    assert revised is not None
+    assert {s["num"]: s["content"] for s in revised}["1.0"] == "Нова цел.|New purpose."
+
+
+# ---------- [NEEDS INPUT: …] reaches the requester ----------
+
+@pytest.mark.asyncio
+async def test_a_generated_documents_open_questions_are_reported_on_the_job(monkeypatch):
+    """The point of the marker: an agent that did not know something says so in
+    place, and the person who asked for the document is HANDED that list rather
+    than having to find the markers by reading forty bilingual pages."""
+    updates = _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class GapClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            if "NO-FINDING" not in prompt and "Draft ONLY" not in prompt and "Design the" not in prompt:
+                return "NO-FINDING"
+            return ("Материјалот се чува во [NEEDS INPUT: cold room code].|"
+                    "The material is stored in [NEEDS INPUT: cold room code].")
+
+    await run_workflow("job-1", client=GapClient())
+    assert updates[-1]["status"] == "done"
+    assert updates[-1]["result"]["needs_input"] == [
+        {"section": "1.0", "item": "cold room code"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_document_with_no_gaps_reports_an_empty_list_not_a_missing_key(monkeypatch):
+    """Callers render this unconditionally — the key is always present, so
+    'nothing outstanding' is a fact the UI can state rather than infer from a
+    missing field."""
+    updates = _patch_common(monkeypatch)
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class CompleteClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A" in prompt:
+                return "PASS"
+            return "Целосен текст.|Complete text."
+
+    await run_workflow("job-1", client=CompleteClient())
+    assert updates[-1]["result"]["needs_input"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_revision_reports_the_questions_left_in_the_document_it_produced(monkeypatch):
+    """A revision is a document in its own right, so it carries its own list —
+    including a gap the EDIT introduced by declining to invent a value."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    class EditWithGapClient:
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "PASS"
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE",
+                                 "Опфатот вклучува [NEEDS INPUT: line clearance frequency].|"
+                                 "The scope covers [NEEDS INPUT: line clearance frequency].")
+
+        async def delete_agent(self, agent_id):
+            pass
+
+    await run_revision("rev-1", client=EditWithGapClient())
+    assert updates[-1]["status"] == "done"
+    assert updates[-1]["result"]["needs_input"] == [
+        {"section": "2.0", "item": "line clearance frequency"},
+    ]

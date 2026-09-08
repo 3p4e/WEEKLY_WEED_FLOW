@@ -50,8 +50,11 @@ test('qc module: correct roles and keys', () => {
 test('cultivation module: correct roles and keys', () => {
   const { GF, close } = loadModules();
   const mod = GF.moduleById('cultivation');
-  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','WH_MGR','MU_MGR']);
-  assert.deepEqual(toJS(mod.keys), ['cultivation','facility','harvest']);
+  // QA_MGR: harvest.py lets QA record a cut to release a pre-harvest-interval
+  // block — the only role that can — so hiding the harvest view from them made
+  // that power unreachable. IR_MGR: the irrigation view is theirs.
+  assert.deepEqual(toJS(mod.roles), ['CU_MGR','PR_MGR','IR_MGR','WH_MGR','MU_MGR','QA_MGR']);
+  assert.deepEqual(toJS(mod.keys), ['cultivation','facility','harvest','irrigation']);
   close();
 });
 
@@ -114,7 +117,17 @@ const ACCESS_TABLE = [
   ['QA_MGR', 'biosecurity', true],
   ['QA_MGR', 'audit',       true],
   ['QA_MGR', 'analytics',   true],
-  ['QA_MGR', 'cultivation', false],
+  // QA_MGR reaches cultivation: harvest.py lets QA record a cut to release a
+  // pre-harvest-interval block — the ONLY role that can — and the module
+  // list used to hide the harvest view from them.
+  ['QA_MGR', 'cultivation', true],
+
+  ['IR_MGR', 'tasks',       true],
+  ['IR_MGR', 'cultivation', true],   // the irrigation view lives in this module
+  ['IR_MGR', 'qc',          false],
+  ['IR_MGR', 'analytics',   true],
+
+  ['PR_MGR', 'cultivation', true],   // harvest: dry weights and the close are production's
 
   ['OWNER',  'tasks',       true],
   ['OWNER',  'qc',          true],

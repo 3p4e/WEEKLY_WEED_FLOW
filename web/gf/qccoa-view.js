@@ -551,8 +551,11 @@
   // Certificate of Quality renders. All optional; blank stays blank on the CoQ.
   const coqMetaPanel = (c) => {
     const t = (k, def) => GF.esc(c[k] || def || '');
-    const inp = (id, k, ph, type) =>
-      `<input id="qcm-${id}" type="${type || 'text'}" placeholder="${ph}" value="${t(k)}">`;
+    const inp = (id, k, ph, type) => (type === 'date'
+      // Dates go through the picker (facility today, not the reader's) — the
+      // hidden-input contract keeps `GF.$('qcm-mfg').value` reading the same.
+      ? GF.dateField(`qcm-${id}`, { value: c[k] || '', placeholder: ph || AL('Pick a date', 'Избери датум') })
+      : `<input id="qcm-${id}" type="${type || 'text'}" placeholder="${ph}" value="${t(k)}">`);
     return `<details class="qms-meta" style="margin-top:10px">
       <summary class="ana-pt" style="cursor:pointer">${AL('CoQ metadata', 'CoQ метаподатоци')}</summary>
       <div class="qcs-form" style="margin-top:8px">
@@ -761,7 +764,7 @@
         <select id="qcq-cultivar" title="${AL('Freezes the APPROVED potency ladder of the cultivar on this CoQ — the batch grades against it', 'Ја замрзнува ОДОБРЕНАТА скала на сортата на овој CoQ — серијата се оценува според неа')}"><option value="">${AL('Cultivar (grades the batch)…', 'Сорта (ја оценува серијата)…')}</option>${cvOpts}</select>
         <input id="qcq-product" placeholder="${AL('Product name (opt.)', 'Име на производ (опц.)')}">
         <input id="qcq-size" placeholder="${AL('Batch size (opt.)', 'Големина (опц.)')}">
-        <label class="ana-note">${AL('Mfg.', 'Произв.')} <input id="qcq-mfg" type="date"></label>
+        <label class="ana-note">${AL('Mfg.', 'Произв.')} ${GF.dateField('qcq-mfg', {})}</label>
         <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcCoqCompile()" title="${AL('Consolidates every approved/released iCoA + eCoA result for the batch against the specification', 'Ги консолидира сите одобрени/ослободени iCoA + eCoA резултати за серијата според спецификацијата')}">${AL('Compile CoQ', 'Состави CoQ')}</button>
       </div>` : '';
     const rows = (cq.list || []).map(q => `

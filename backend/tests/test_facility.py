@@ -47,15 +47,19 @@ async def _batch(client, headers, room, cv, code, plant_count, phase):
     return r.json()
 
 
-async def test_read_gating_and_room_admin_only(client, admin_headers):
+async def test_read_gating_and_a_departmentless_manager_opens_no_room(client, admin_headers):
     _, user_h = await _actor(client, admin_headers, "USER")
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     assert (await client.get("/facility", headers=user_h)).status_code == 403
     assert (await client.get("/facility", headers=qc_h)).status_code == 200
-    # rooms: ADMIN-only — even the cultivation manager may not alter the registry
-    assert (await client.post("/facility/rooms", json={"code": "x1", "name": "X"},
-                              headers=cu_h)).status_code == 403
+    # rooms belong to the department that runs them — and this cultivation
+    # manager has no department, so there is nothing for a room to belong to.
+    # (A manager WITH a department opens their own rooms: see the tests below.)
+    r = await client.post("/facility/rooms", json={"code": "x1", "name": "X", "kind": "veg"},
+                          headers=cu_h)
+    assert r.status_code == 403
+    assert "department" in r.json()["detail"].lower()
     room = await _room(client, admin_headers, "grow_t1", "Grow T1")
     again = await _room(client, admin_headers, "grow_t1", "Grow T1 renamed")
     assert again["id"] == room["id"]          # idempotent, original untouched
@@ -168,3 +172,119 @@ async def test_malformed_room_id_rejected_not_500(client, admin_headers):
     garbage = "not-a-uuid"
     assert (await client.patch(f"/facility/rooms/{garbage}", json={"name": "x"},
                                headers=admin_headers)).status_code == 404
+
+
+# ── rooms belong to the department that runs them (migration 0064) ────────────
+
+async def _department(org, code, name, parent_id=None):
+    from app.db import tasks_admin_pool
+    return str(await tasks_admin_pool().fetchval(
+        "INSERT INTO departments(org_id, code, name, parent_id) VALUES ($1,$2,$3,$4) RETURNING id",
+        org["org_id"], code, name, parent_id))
+
+
+async def _dept_actor(client, admin_headers, role, dept_id):
+    u, otp = await create_user(client, admin_headers, role=role, department_id=dept_id)
+    token = await login_and_set_password(client, u["username"], otp)
+    return u, {"Authorization": f"Bearer {token}"}
+
+
+async def test_a_department_manager_opens_the_rooms_their_department_runs(client, admin_headers, org):
+    """The gate that made the cultivation manager unable to place a batch: a
+    batch REQUIRES a room and only ADMIN could open one. Now cultivation opens
+    the rooms it grows in and production opens its dry rooms — each within its
+    own kinds, and the room is theirs."""
+    cu_d = await _department(org, "cultivation", "Cultivation")
+    pr_d = await _department(org, "production", "Production")
+    _, cu_h = await _dept_actor(client, admin_headers, "CU_MGR", cu_d)
+    _, pr_h = await _dept_actor(client, admin_headers, "PR_MGR", pr_d)
+
+    r = await client.post("/facility/rooms", json={"code": "clone_1", "name": "Clone 1", "kind": "clone"},
+                          headers=cu_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "clone"
+    assert r.json()["department_id"] == cu_d, "a room a manager opens is their department's"
+    # …but a dry room is production's, whoever asks
+    assert (await client.post("/facility/rooms", json={"code": "dry_x", "name": "Dry X", "kind": "dry"},
+                              headers=cu_h)).status_code == 403
+
+    ok = await client.post("/facility/rooms", json={"code": "dry_1", "name": "Dry 1", "kind": "dry"},
+                           headers=pr_h)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["department_id"] == pr_d
+    assert (await client.post("/facility/rooms", json={"code": "veg_x", "name": "Veg X", "kind": "veg"},
+                              headers=pr_h)).status_code == 403
+
+
+async def test_a_manager_cannot_place_a_room_in_another_department(client, admin_headers, org):
+    cu_d = await _department(org, "cultivation", "Cultivation")
+    pr_d = await _department(org, "production", "Production")
+    _, cu_h = await _dept_actor(client, admin_headers, "CU_MGR", cu_d)
+    r = await client.post("/facility/rooms", json={"code": "veg_2", "name": "Veg 2", "kind": "veg",
+                                                   "department_id": pr_d}, headers=cu_h)
+    assert r.status_code == 403
+
+
+async def test_a_manager_may_place_a_room_in_a_sub_department_they_run(client, admin_headers, org):
+    """Cloning is a sub-department of Cultivation; its clone rooms are the
+    cultivation manager's to open."""
+    cu_d = await _department(org, "cultivation", "Cultivation")
+    cl_d = await _department(org, "cloning", "Cloning", parent_id=cu_d)
+    _, cu_h = await _dept_actor(client, admin_headers, "CU_MGR", cu_d)
+    r = await client.post("/facility/rooms", json={"code": "clone_2", "name": "Clone 2", "kind": "clone",
+                                                   "department_id": cl_d}, headers=cu_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["department_id"] == cl_d
+
+
+async def test_executives_open_any_room_and_may_leave_it_unassigned(client, admin_headers):
+    _, owner_h = await _actor(client, admin_headers, "OWNER")
+    r = await client.post("/facility/rooms", json={"code": "dry_o", "name": "Dry O", "kind": "dry"},
+                          headers=owner_h)
+    assert r.status_code == 201, r.text
+    assert r.json()["department_id"] is None
+
+
+async def test_editing_keeps_a_room_within_its_department_and_kind(client, admin_headers, org):
+    cu_d = await _department(org, "cultivation", "Cultivation")
+    _, cu_h = await _dept_actor(client, admin_headers, "CU_MGR", cu_d)
+
+    # Every room that predates 0064 is unassigned. One of the manager's own
+    # KIND stays editable by them — the alternative is that nobody but ADMIN
+    # can touch any existing room — but editing it does not claim it…
+    legacy = await _room(client, admin_headers, "legacy_veg", "Legacy Veg", kind="veg")
+    assert legacy["department_id"] is None
+    assert (await client.patch(f"/facility/rooms/{legacy['id']}", json={"name": "Veg A"},
+                               headers=cu_h)).status_code == 200
+    rooms = {r["code"]: r for r in (await client.get("/facility", headers=cu_h)).json()["rooms"]}
+    assert rooms["legacy_veg"]["department_id"] is None
+    # …and it cannot be retyped into another department's kind
+    assert (await client.patch(f"/facility/rooms/{legacy['id']}", json={"kind": "dry"},
+                               headers=cu_h)).status_code == 403
+    # a room of another department's kind is not theirs to touch at all
+    dry = await _room(client, admin_headers, "dry_l", "Dry L", kind="dry")
+    assert (await client.patch(f"/facility/rooms/{dry['id']}", json={"name": "x"},
+                               headers=cu_h)).status_code == 403
+    # and a manager cannot unassign their own room so that anyone of that
+    # kind could edit it next — only an administrator may
+    mine = (await client.post("/facility/rooms", json={"code": "veg_m", "name": "Veg M", "kind": "veg"},
+                              headers=cu_h)).json()
+    assert (await client.patch(f"/facility/rooms/{mine['id']}", json={"department_id": None},
+                               headers=cu_h)).status_code == 403
+    assert (await client.patch(f"/facility/rooms/{mine['id']}", json={"department_id": None},
+                               headers=admin_headers)).status_code == 200
+
+
+async def test_managers_outside_the_floor_are_refused_at_the_route(client, admin_headers):
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    assert (await client.post("/facility/rooms", json={"code": "qc_room", "name": "QC"},
+                              headers=qc_h)).status_code == 403
+
+
+async def test_the_board_carries_each_rooms_department(client, admin_headers, org):
+    cu_d = await _department(org, "cultivation", "Cultivation")
+    _, cu_h = await _dept_actor(client, admin_headers, "CU_MGR", cu_d)
+    assert (await client.post("/facility/rooms", json={"code": "veg_b", "name": "Veg B", "kind": "veg"},
+                              headers=cu_h)).status_code == 201
+    rooms = (await client.get("/facility", headers=cu_h)).json()["rooms"]
+    assert {r["code"]: r["department_id"] for r in rooms}["veg_b"] == cu_d

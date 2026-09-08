@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.db import rls, rls_users
-from app.deps import dept_scope, require_password_set, uuid_or_404
+from app.deps import dept_family, dept_scope, require_password_set, uuid_or_404
 from app.roles import ELEVATED_ROLES
 from app.notify import participants, safe_emit
 from app.roster import display_name, roster
@@ -351,9 +351,12 @@ async def resolve_handoff(handoff_id: str, body: HandoffResolve, user: dict = De
         # first, which 404'd the exact person the proposal pings (the target
         # dept's scoped manager — the task still sits in the SOURCE dept), so
         # the handoff's primary actor could never resolve it.
+        # …or whose department is the target's parent: Cultivation's manager
+        # receives a handoff addressed to Cloning or Nursery.
+        my_dept = str(user.get("department_id") or "")
+        fam = await dept_family(c, my_dept) if my_dept else []
         target_side = is_head or (
-            user["role"] in _ELEVATED
-            and str(user.get("department_id") or "") == str(h["to_dept_id"]))
+            user["role"] in _ELEVATED and str(h["to_dept_id"]) in fam)
         # Org-wide elevated roles (ADMIN/executives/QP — not dept-scoped) may
         # arbitrate, but the PROPOSER may not accept their own handoff into a
         # department that never consented (second-person rule). They may still

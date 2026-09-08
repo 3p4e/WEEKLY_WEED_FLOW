@@ -823,7 +823,7 @@
   GF.WWF._registerFullPageView({
     key: 'decon', icon: 'shield',
     label: () => AL('Decontamination', 'Деконтаминација'),
-    insertBefore: 'mywork',
+    insertBefore: 'floor-end',
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });
 })();

@@ -247,7 +247,13 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .sidebar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(var(--accent-rgb),.4) 50%,transparent)}
 
-.brand{display:flex;align-items:center;gap:12px;padding:20px 18px 16px;position:relative}
+.brand{display:flex;align-items:center;gap:12px;padding:18px 16px 14px;position:relative}
+/* The rail is 262px wide and the display face is uppercase with .2em of
+   tracking, so GROWFLOW at the header's 21px broke onto three lines in the
+   sidebar. The lockup sets its own size here and refuses to wrap; the header
+   copy of .gf-name is untouched, where there is room for it. */
+.brand .gf-name{font-size:17px!important;letter-spacing:.12em!important;white-space:nowrap}
+.brand .pp-wordmark{width:104px;height:17px}
 .brand-mark{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
   position:relative;flex-shrink:0}
 .brand-name{font-family:var(--font-brand);font-weight:700;font-size:20px;letter-spacing:-.4px;
@@ -258,8 +264,11 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 
 /* ── Nav ── */
 .nav{padding:2px 10px;display:flex;flex-direction:column;gap:1px}
-.nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;font-weight:600;
-  font-size:13.5px;cursor:pointer;color:var(--ink-2);transition:background .15s,color .15s}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:8px;font-weight:600;
+  font-size:13px;cursor:pointer;color:var(--ink-2);transition:background .15s,color .15s}
+/* One icon column: the labels line up whatever each icon's glyph width is. */
+.nav-item .icon{width:17px;height:17px;flex-shrink:0}
+.nav-item>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-item:hover{background:rgba(var(--accent-rgb),.08);color:var(--ink)}
 .nav-item.active{background:rgba(var(--accent-rgb),.12);color:var(--primary);font-weight:700;
   box-shadow:inset 2px 0 0 var(--primary)}
@@ -279,7 +288,10 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
    the pinned user card, instead of demanding its full content height. */
 .side-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
 .side-divider{height:1px;background:var(--line);margin:10px 16px}
-.side-label{padding:0 14px;font-size:10px;font-weight:700;letter-spacing:.6px;color:var(--ink-3);
+/* Departments used to carry its own label style — two different heading
+   treatments in one rail is what makes a sidebar look thrown together. It is
+   now the same label as every nav group. */
+.side-label{padding:0 14px;font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--ink-4);
   text-transform:uppercase;margin-bottom:6px}
 .dept-list{padding:0 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto;flex:1}
 .dept-row{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:7px;cursor:pointer;
@@ -288,7 +300,21 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .dept-row:active{transform:scale(.97)}
 .dept-row.active{background:rgba(var(--accent-rgb),.11);color:var(--ink)}
 .dept-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+/* a sub-department (Cloning, Nursery) reads as belonging to the one above it */
+.dept-sub{padding-left:26px;position:relative}
+.dept-sub::before{content:'';position:absolute;left:15px;top:0;bottom:50%;width:1px;background:var(--line)}
+.dept-sub::after{content:'';position:absolute;left:15px;top:50%;width:6px;height:1px;background:var(--line)}
+.dept-sub .dept-dot{width:6px;height:6px}
 .dept-row .dept-count{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--ink-3);font-family:var(--mono)}
+/* "Add department" is a control, not a department with the colour drained
+   out of it. Same row metrics, dashed marker, and it only colours on hover. */
+.dept-add{color:var(--ink-3);font-weight:600}
+.dept-add .dept-dot{background:transparent;border:1px dashed currentColor;position:relative}
+.dept-add .dept-dot::before,.dept-add .dept-dot::after{content:'';position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);background:currentColor}
+.dept-add .dept-dot::before{width:6px;height:1px}
+.dept-add .dept-dot::after{width:1px;height:6px}
+.dept-add:hover{color:var(--primary)}
 
 .user-card{display:flex;align-items:center;gap:10px;padding:11px;margin:10px;border-radius:10px;
   background:rgba(var(--accent-rgb),.06);border:1px solid var(--glass-border);cursor:pointer;
@@ -307,7 +333,13 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
 .header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(var(--accent-rgb),.35) 50%,transparent);pointer-events:none}
 .hamburger{display:none;background:none;border:none;cursor:pointer;color:var(--ink-2)}
-.search{display:flex;align-items:center;gap:10px;flex:1;max-width:380px;
+/* The header carried a second GROWFLOW lockup right beside the one in the
+   rail, eating about 220px and leaving the search box showing "Search t…".
+   On any viewport wide enough to have the sidebar, the rail is already the
+   brand; the header lockup is only needed once the sidebar becomes a drawer
+   (mobile.css, 880px). */
+@media (min-width:881px){.header .gf-mark{display:none}}
+.search{display:flex;align-items:center;gap:10px;flex:1;min-width:220px;max-width:380px;
   background:rgba(var(--accent-rgb),.06);border:1px solid var(--glass-border);border-radius:10px;padding:0 14px}
 .search input{border:none;background:none;outline:none;padding:10px 0;font-size:13.5px;font-weight:500;
   width:100%;color:var(--ink)}
@@ -561,6 +593,12 @@ input,textarea,select{font-family:inherit;color:var(--ink)}
   visibility:hidden;opacity:0;
   transition:opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),visibility 200ms cubic-bezier(0.23, 1, 0.32, 1)}
 .overlay.open{visibility:visible;opacity:1}
+/* Nested pickers open FROM inside a modal (a date or a select in the task or
+   worklog form), so they must sit above the modal that opened them. Without
+   this every .overlay shares one layer and DOM order — i.e. which overlay
+   happened to be created first in the session — decides which one takes the
+   click. Below #toasts (700) so a toast still shows over an open picker. */
+#gf-datepicker,#gf-chooser{z-index:600}
 /* Flex column so the header + footer stay pinned and ONLY the body scrolls.
    (The previous rule set overflow-y:auto then immediately overflow:hidden on
    the same selector, which clipped tall modals with no way to scroll to Save.) */
@@ -884,6 +922,39 @@ body.demo-on .main{padding-bottom:56px}
 .sel-ck{flex:none;color:var(--primary)}
 .sel-empty{padding:18px;text-align:center;color:var(--ink-3);font-size:13px}
 
+/* ── Date picker (datepicker.js) — replaces <input type=date> ──────────────
+   Rides on .sel-btn for the trigger so a date field and a select field are
+   visually the same control; only the popup body differs. */
+.dp-btn .dp-empty{color:var(--ink-3)}
+.dp-modal{max-width:340px}
+.dp-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.dp-nav{flex:none;width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;line-height:1;border-radius:8px;color:var(--ink-2)}
+.dp-nav:hover{background:var(--primary-soft);color:var(--ink)}
+.dp-sel{flex:1;min-width:0;border:1px solid var(--glass-border);border-radius:8px;padding:7px 8px;
+  font-size:13px;font-family:inherit;background:var(--surface-2);color:var(--ink);cursor:pointer}
+.dp-sel:focus{outline:none;border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 3px var(--primary-soft)}
+.dp-dows,.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.dp-dow{text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--ink-3);padding:4px 0}
+.dp-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:none;
+  border-radius:8px;background:none;color:var(--ink);font-size:13.5px;font-family:inherit;
+  cursor:pointer;transition:transform 160ms cubic-bezier(0.23, 1, 0.32, 1)}
+.dp-cell:hover:not(:disabled){background:var(--primary-soft)}
+.dp-cell:active:not(:disabled){transform:scale(.92)}
+.dp-cell:disabled{opacity:.3;cursor:not-allowed}
+.dp-pad{pointer-events:none}
+/* Today is always legible even when it is not the selection — this control
+   exists to make the facility's today findable at a glance. */
+.dp-today{box-shadow:inset 0 0 0 1.5px var(--primary);font-weight:600}
+.dp-cell.on{background:var(--primary);color:var(--text-on-primary);font-weight:600}
+.dp-foot{display:flex;gap:8px;margin-top:12px}
+.dp-foot .btn{flex:1}
+/* Toolbar-embedded date fields (report/exec-report week jump) size to their
+   content instead of filling the bar the way a form field does. */
+.xr-datefield,.rv-datefield{display:inline-flex}
+.xr-datefield .sel-btn,.rv-datefield .sel-btn{width:auto;padding:6px 10px;font-size:12.5px}
+
 /* ── Add-modal department-fields well (mockup af-modal .af-block) ──────── */
 .af-block{border:1px solid var(--glass-border);border-radius:10px;padding:12px;margin-bottom:12px;
   background:color-mix(in srgb, var(--dept-acc, var(--primary)) 7%, var(--surface-2))}
@@ -913,7 +984,10 @@ body.demo-on .main{padding-bottom:56px}
 .ntf-meta{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--ink-3);margin-top:2px}
 .ntf-reason{border:1px solid var(--glass-border);border-radius:99px;padding:1px 8px}
 .ntf-done{flex:none}
-.ntf-empty{padding:40px;text-align:center;color:var(--ink-3)}
+/* Empty states carry a sentence or two of guidance, so they get a measure to
+   read at and room to breathe instead of one long centered line. */
+.ntf-empty{padding:36px 24px;text-align:center;color:var(--ink-3);font-size:13px;
+  line-height:1.6;max-width:52ch;margin:0 auto}
 
 /* ── Completion progress (tasks.progress) ─────────────────────────────────
    ring-mini: parent card ring = sub-tasks done fraction (conic, --p 0..100,
@@ -978,8 +1052,18 @@ body.demo-on .main{padding-bottom:56px}
 /* ── Pass-3 library components (owner's ui-elements.html + nav.js rail) ──── */
 /* nav rail group labels (mockup grouped rail: Operations / Management / System) */
 .nav-group{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;
-  color:var(--ink-4);padding:12px 14px 4px}
-.nav-group:first-child{padding-top:2px}
+  color:var(--ink-4);padding:14px 14px 5px;position:relative}
+.nav-group:first-child{padding-top:4px}
+/* GF.pruneNavGroups hides an anchor group that ended up empty by setting the
+   `hidden` attribute. The UA rule behind `hidden` is display:none at the very
+   bottom of the cascade, and the Mass Weed skin sets .nav-group{display:flex},
+   which outranks it — so the empty FLOOR heading kept rendering. Say it here,
+   with the weight to survive any skin. */
+.nav-group[hidden]{display:none!important}
+/* A hairline above every group but the first: the sections separate without
+   another line of text or another colour. */
+.nav-group:not(:first-child)::before{content:'';position:absolute;left:14px;right:14px;top:6px;
+  height:1px;background:var(--line);opacity:.6}
 
 /* .mw-gauge — semicircular completion gauge (dashboard). Arc gradient and
    needle rotation are inline (value-dependent); geometry lives here. */
@@ -1283,3 +1367,186 @@ body.demo-on .main{padding-bottom:56px}
   .td-stepper { flex-wrap: wrap; }
   .td-stepper .mw-step { flex: 1 1 40%; }
 }
+
+/* ── cultivation: the batch journey strip, board tabs, product-spec panel ──
+   The strip draws the cultivation → production plan as a line and the batch's
+   position on it (cultivation-view.js GF.WWF.cultJourney). The fill animates
+   to its width one frame after the render inserts it; the current step
+   pulses; the harvest cut — the handoff — is drawn as a diamond. Reduced
+   motion switches every animation off. */
+.cj-wrap{margin-bottom:14px}
+.cj{background:var(--surface-2,transparent);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.cj-off{color:var(--ink-3);font-size:12px}
+.cj-sm{padding:0;border:0;background:none;margin:0 0 2px}
+.cj-head{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
+.cj-legend{font-size:11px;color:var(--ink-3);display:inline-flex;gap:6px;align-items:center}
+.cj-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
+.cj-track{position:relative;height:46px;margin:4px 0}
+.cj-track-sm{height:14px;margin:2px 0 6px}
+.cj-rail{position:absolute;left:7px;right:7px;top:5px;height:4px;border-radius:2px;background:var(--surface-3)}
+.cj-fill{position:absolute;left:7px;top:5px;height:4px;border-radius:2px;max-width:calc(100% - 14px);overflow:hidden;
+  background:linear-gradient(90deg,#3FA34D,#2BE8A0);transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.cj-fill::after{content:'';position:absolute;top:0;bottom:0;width:30%;left:-30%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:gf-energy-sweep 2.4s ease-in-out infinite}
+.cj-steps{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between}
+.cj-step{display:flex;flex-direction:column;align-items:center;width:14px;position:relative}
+.cj-dot{display:block;width:14px;height:14px;border-radius:50%;background:var(--surface-3);border:2px solid var(--line);box-sizing:border-box}
+.cj-done .cj-dot{background:var(--cj-who);border-color:var(--cj-who)}
+.cj-now .cj-dot{background:var(--cj-who);border-color:#fff;animation:cj-pulse 1.6s ease-out infinite}
+.cj-handoff .cj-dot{border-radius:3px;transform:rotate(45deg) scale(.85)}
+.cj-lbl{position:absolute;top:19px;font-size:10px;color:var(--ink-3);white-space:nowrap;left:50%;transform:translateX(-50%)}
+.cj-now .cj-lbl{color:var(--ink);font-weight:700}
+.cj-foot{display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-top:6px;flex-wrap:wrap}
+.cj-now-lbl{font-weight:700;color:var(--cj-who)}
+.cj-run{font-size:11px;color:var(--ink-3);margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cj-chips{display:flex;gap:6px;flex-wrap:wrap}
+.cj-chip{font:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink-3);cursor:pointer}
+.cj-chip.on{color:var(--ink);border-color:rgba(var(--accent-rgb),.5);background:var(--primary-soft)}
+/* lanes: one row per open batch on a shared axis — several operations at
+   different stages at once, which is how the floor actually runs */
+.cj-lanes{margin-bottom:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.cj-axis{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--ink-3);
+  padding:0 0 6px 196px;text-transform:uppercase;letter-spacing:.3px}
+.cj-axis span{flex:1;text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cj-lane{display:grid;grid-template-columns:186px 1fr 210px;gap:10px;align-items:center;
+  padding:6px 8px;border-radius:9px;cursor:pointer}
+.cj-lane:hover{background:var(--surface-3)}
+.cj-lane.on{background:var(--primary-soft)}
+.cj-lane-id{font-size:12px;min-width:0}
+.cj-lane-id .sub{color:var(--ink-3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cj-lane-x{font-size:11px;text-align:right;color:var(--ink-2,var(--ink-3))}
+.cj-x{font-size:11px;margin-top:6px}
+.cj-x-early{color:var(--ink-3)}
+.cj-x-in{color:#2BE8A0}
+.cj-x-late{color:#E0A73E}
+.cj-x-none{color:#E5484D}
+.cj-x-t{color:var(--ink-3)}
+@media (max-width:820px){.cj-axis{display:none}.cj-lane{grid-template-columns:1fr;gap:4px}
+  .cj-lane-x{text-align:left}}
+.cu-spec-t tr.on td{background:var(--primary-soft);font-weight:700}
+.cj-tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line);overflow-x:auto}
+.cj-tab{display:inline-flex;align-items:center;line-height:1.2;font:inherit;font-size:12px;padding:7px 12px;border:0;border-bottom:2px solid transparent;background:none;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.cj-tab.on{color:var(--ink);border-bottom-color:var(--orange)}
+.cj-tab span{font-size:11px;color:var(--ink-3);background:var(--surface-3);border-radius:999px;padding:0 6px;margin-left:4px}
+@keyframes cj-pulse{0%{box-shadow:0 0 0 0 rgba(43,232,160,.55)}100%{box-shadow:0 0 0 10px rgba(43,232,160,0)}}
+@media (max-width:640px){.cj-lbl{display:none}.cj-track{height:22px}}
+@media (prefers-reduced-motion:reduce){.cj-fill{transition:none}.cj-fill::after{animation:none}.cj-now .cj-dot{animation:none}}
+
+/* the product specification (ImB potency ladder) under a cultivar chooser */
+.cu-spec{margin-top:6px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;background:var(--surface-2,transparent)}
+.cu-spec-none{color:var(--ink-3);display:flex;gap:6px;align-items:center}
+.cu-spec-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.cu-spec-head span{color:var(--ink-3);font-size:11px}
+.cu-spec-st{padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700}
+.cu-spec-st.ok{background:rgba(43,232,160,.15);color:#2BE8A0}
+.cu-spec-st.draft{background:rgba(224,167,62,.15);color:#E0A73E}
+.cu-spec-t{width:100%;border-collapse:collapse}
+.cu-spec-t th,.cu-spec-t td{text-align:left;padding:3px 6px;border-top:1px solid var(--line);font-size:11px}
+.cu-spec-t th{color:var(--ink-3);font-weight:600;border-top:0}
+
+/* propagation: the mother bank table and the clone-run mother checklist */
+.pb-table{width:100%;border-collapse:collapse;font-size:12px}
+.pb-table th,.pb-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.pb-table th{color:var(--ink-3);font-weight:600;font-size:11px;white-space:nowrap}
+.pb-table .sub{color:var(--ink-3);font-size:11px}
+.pb-mlist{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
+.pb-mrow{display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer}
+.pb-mrow>span{flex:1;min-width:0}
+.pb-mrow input[type=number]{width:96px;flex:none}
+
+/* the composed mother-plant id, shown before it is written */
+.mb-preview{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:14px;
+  letter-spacing:.5px;padding:7px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--ink)}
+
+/* ── Facility floor plan (facility-view.js) ─────────────────────────────
+   The as-built ground-floor sheet with one pin per room. Pins are placed in
+   PERCENT of the image box, because the register stores each room's anchor
+   normalised against the same bounds the image was cropped to — so the pin
+   and the drawing stay aligned at every zoom without any arithmetic here. */
+.fp-bar{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.fp-q{flex:1;min-width:180px;padding:8px 11px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);font:inherit;font-size:13px}
+.fp-zoom{display:flex;align-items:center;gap:6px}
+.fp-zoom span{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:46px;text-align:center}
+.fp-legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fp-chip{display:inline-flex;align-items:center;gap:6px;line-height:1.2;font:inherit;font-size:11px;
+  padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);
+  color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.fp-chip span{width:8px;height:8px;border-radius:999px;background:var(--pin);flex-shrink:0}
+.fp-chip b{font-family:var(--mono);color:var(--ink)}
+.fp-chip.on{border-color:var(--pin);color:var(--ink);background:rgba(var(--accent-rgb),.10)}
+.fp-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;
+  max-height:min(70vh,640px)}
+.fp-stage-outer{position:relative;min-width:100%}
+.fp-img{display:block;width:100%;height:auto}
+.fp-stage{position:absolute;inset:0}
+.fp-pin{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:3px;
+  padding:0;border:0;background:none;cursor:pointer;white-space:nowrap}
+.fp-pin-dot{width:9px;height:9px;border-radius:999px;background:var(--pin);
+  box-shadow:0 0 0 2px #fff,0 0 0 3px rgba(0,0,0,.25);flex-shrink:0}
+.fp-pin-lbl{font:700 9px/1 var(--mono);color:#111;background:rgba(255,255,255,.86);
+  border-radius:3px;padding:1px 3px}
+.fp-pin.on .fp-pin-dot{width:13px;height:13px;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--pin)}
+.fp-pin:hover .fp-pin-lbl{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.fp-src{font-size:11px;color:var(--ink-3);margin:6px 2px 12px}
+.fp-list{display:flex;flex-direction:column;gap:1px}
+.fp-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;
+  font-size:12.5px;color:var(--ink-2)}
+.fp-row:hover{background:rgba(var(--accent-rgb),.07);color:var(--ink)}
+.fp-row-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+.fp-row-code{font-family:var(--mono);font-weight:700;color:var(--ink);min-width:52px}
+.fp-row-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-row-a{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.fp-row-rg{font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--ink-3);min-width:56px;text-align:right}
+.fp-badges{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.fp-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 9px;
+  border-radius:999px;color:var(--pin,var(--ink-2));border:1px solid currentColor}
+.fp-badge-q{color:var(--ink-2)}
+.fp-kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12.5px;
+  color:var(--ink-2);border-bottom:1px solid var(--line)}
+.fp-kv b{color:var(--ink);font-family:var(--mono);font-weight:700}
+.fp-sub{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:14px 0 6px}
+/* Fit view packs 191 pins into one screen; the codes only become readable
+   once someone zooms in, so below 150 % they are held back to hover. */
+.fp-quiet .fp-pin-lbl{display:none}
+.fp-quiet .fp-pin:hover .fp-pin-lbl{display:inline}
+
+/* ── Header hierarchy ───────────────────────────────────────────────────
+   The header carried two saturated fills side by side (New task in the
+   accent, Voice task in amber) plus five icon buttons, so nothing read as
+   the primary action. Inside the header only, the amber button becomes an
+   outline: it keeps its colour and its prominence, and New task is the one
+   filled control. Boards keep their amber CTA (Register batch, Add room). */
+.header .btn-orange{background:transparent;color:var(--orange);
+  border-color:color-mix(in srgb, var(--orange) 55%, transparent);box-shadow:none}
+.header .btn-orange:hover{background:color-mix(in srgb, var(--orange) 14%, transparent);
+  color:var(--orange);border-color:var(--orange)}
+/* The icon cluster reads as one group rather than five loose glyphs. */
+.header .icon-btn+.icon-btn{margin-left:-2px}
+
+/* The plan the app draws (facility-view.js, geometry from tasks 0069).
+   Rooms are SVG rects in a normalised 1000 x 443 frame — the same frame the
+   pins use — so plan and drawing agree without any arithmetic in the view. */
+.fp-modes{display:flex;gap:2px;background:rgba(var(--accent-rgb),.07);border:1px solid var(--glass-border);
+  border-radius:9px;padding:3px;flex-shrink:0}
+.fp-mode{font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border:0;border-radius:7px;
+  background:none;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.fp-mode.on{background:rgba(var(--accent-rgb),.15);color:var(--primary)}
+.fp-wrap-plan{background:#0b1512}
+.fp-svg{display:block;width:100%;height:auto}
+.fp-r rect{fill:color-mix(in srgb, var(--pin) 34%, transparent);stroke:var(--pin);
+  stroke-width:1;vector-effect:non-scaling-stroke;transition:fill .12s}
+.fp-r{cursor:pointer}
+.fp-r:hover rect{fill:color-mix(in srgb, var(--pin) 62%, transparent)}
+/* A fit that scored low on wall ink is drawn dashed: the app is saying "about
+   here" rather than implying a survey it never did. */
+.fp-r.loose rect{stroke-dasharray:3 2}
+.fp-r.on rect{fill:color-mix(in srgb, var(--pin) 55%, transparent);stroke-width:1.8}
+/* Filtering dims a room instead of deleting it — a floor plan with holes in it
+   is not a floor plan. */
+.fp-r.off{pointer-events:none}
+.fp-r.off rect{fill:transparent;stroke:var(--line);opacity:.5}
+.fp-r.off .fp-rt{opacity:.25}
+.fp-rt{font:700 4.6px var(--mono);fill:#e9f3ee;opacity:.9;pointer-events:none;
+  paint-order:stroke;stroke:#0b1512;stroke-width:1.5px}
