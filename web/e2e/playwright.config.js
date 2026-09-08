@@ -33,7 +33,14 @@ module.exports = defineConfig({
       command: 'bash ../../backend/scripts/run_e2e_backend.sh',
       url: 'http://127.0.0.1:8000/health',
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      // 2026-09-07: the self-hosted runner's host was starved by its
+      // hypervisor node for most of a day (CPU steal measured 25-93%,
+      // /proc/stat), and the backend needed ~65s to answer /health under
+      // that load instead of its normal few seconds. 30s was sized for a
+      // healthy host and failed the whole job on a live backend that was
+      // simply still starting. 180s survives a bad day without masking a
+      // truly broken server, which would still exceed it.
+      timeout: 180_000,
     },
     {
       command: 'bash start-nginx.sh',
