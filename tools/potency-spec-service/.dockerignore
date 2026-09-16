@@ -1,0 +1,11 @@
+# Keep the build context small and clean — the Dockerfile only needs app/, web/,
+# seed.py and requirements.txt.
+.svc-venv/
+**/__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+web/index.test.html
+.pytest_cache/
+.git/
