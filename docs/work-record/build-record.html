@@ -1,0 +1,377 @@
+<title>GrowFlow Build Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+  :root{
+    --paper:#F6F7F3; --panel:#FFFFFF; --panel-2:#FBFCF9;
+    --ink:#16201B; --body:#39423B; --mute:#6E776D;
+    --rule:#D8DDD2; --rule-strong:#BFC7B8;
+    --accent:#2F6B4F; --accent-soft:#E4EDE7;
+    --signal:#9E560F; --signal-soft:#F4E7D6;
+    --night:#33465F; --night-soft:#DCE3EC;
+    --shadow:0 1px 2px rgba(22,32,27,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0E1310; --panel:#151B17; --panel-2:#121814;
+      --ink:#E9EEE7; --body:#C3CBC0; --mute:#8C958B;
+      --rule:#28312A; --rule-strong:#3A463C;
+      --accent:#74C398; --accent-soft:#1A2C22;
+      --signal:#DC9A52; --signal-soft:#2C2218;
+      --night:#93A9C9; --night-soft:#1A2331;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0E1310; --panel:#151B17; --panel-2:#121814;
+    --ink:#E9EEE7; --body:#C3CBC0; --mute:#8C958B;
+    --rule:#28312A; --rule-strong:#3A463C;
+    --accent:#74C398; --accent-soft:#1A2C22;
+    --signal:#DC9A52; --signal-soft:#2C2218;
+    --night:#93A9C9; --night-soft:#1A2331;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+
+  body{
+    background:var(--paper); color:var(--body);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.6;
+    padding-inline:16px; padding-block:0;
+  }
+  .wrap{max-width:880px; margin-inline:auto; padding-block:40px 64px;}
+  p{max-width:68ch;}
+  h1,h2,h3{color:var(--ink); text-wrap:balance; margin:0;}
+  h1{font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(28px,5.4vw,40px); line-height:1.15; letter-spacing:-.01em;}
+  h2{font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(19px,3.2vw,23px); line-height:1.25;}
+  h3{font-size:14px; font-weight:600;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums;}
+
+  /* ---- document header block, after the facility's own controlled-doc convention ---- */
+  .dochead{border:1px solid var(--rule-strong); background:var(--panel); box-shadow:var(--shadow);}
+  .dochead-top{padding:22px 20px 18px; border-bottom:1px solid var(--rule);}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+  .subtitle{margin-top:10px; color:var(--mute); font-size:14.5px; max-width:62ch;}
+  .metagrid{display:grid; grid-template-columns:minmax(0,1fr); }
+  .metarow{display:grid; grid-template-columns:minmax(120px,168px) minmax(0,1fr); gap:0; border-bottom:1px solid var(--rule);}
+  .metarow:last-child{border-bottom:0;}
+  .metarow dt{padding:9px 20px; font-size:11.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mute);
+    font-family:"IBM Plex Mono",monospace; border-right:1px solid var(--rule); background:var(--panel-2);}
+  .metarow dd{padding:9px 20px; margin:0; font-size:13.5px; color:var(--ink);
+    font-family:"IBM Plex Mono",monospace; overflow-wrap:anywhere;}
+
+  section{margin-top:52px;}
+  .sechead{display:flex; align-items:baseline; gap:14px; border-bottom:2px solid var(--ink); padding-bottom:9px; margin-bottom:22px;}
+  .secno{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--accent); letter-spacing:.08em;}
+  .lede{margin-top:0; margin-bottom:22px;}
+
+  /* ---- figures ---- */
+  .figs{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--rule); border:1px solid var(--rule);}
+  .fig{background:var(--panel); padding:16px 16px 14px;}
+  .fig b{display:block; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+    font-size:clamp(23px,4vw,29px); font-weight:600; color:var(--ink); line-height:1.1; letter-spacing:-.02em;}
+  .fig span{display:block; margin-top:6px; font-size:12.5px; color:var(--mute); line-height:1.4;}
+
+  /* ---- hour ruler ---- */
+  .chart{border:1px solid var(--rule); background:var(--panel); padding:18px 16px 14px;}
+  .plot{display:flex; align-items:flex-end; gap:2px; height:150px; border-bottom:1px solid var(--rule-strong); padding-left:30px; position:relative;}
+  .yax{position:absolute; left:0; top:0; bottom:0; width:28px; font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--mute);}
+  .yax i{position:absolute; right:0; font-style:normal;}
+  .bar{flex:1 1 0; min-width:8px; background:var(--accent-soft); border-top:2px solid var(--accent); position:relative;}
+  .bar.n{background:var(--night-soft); border-top-color:var(--night);}
+  .hax{display:flex; gap:2px; padding-left:30px; margin-top:6px;}
+  .hax span{flex:1 1 0; min-width:8px; text-align:center; font-family:"IBM Plex Mono",monospace; font-size:9.5px; color:var(--mute);}
+  .hax span.hide{visibility:hidden;}
+  .cap{margin-top:12px; font-size:12.5px; color:var(--mute); max-width:70ch;}
+
+  /* ---- weekday strip ---- */
+  .wk{display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--rule); border:1px solid var(--rule); margin-top:22px;}
+  .wkc{background:var(--panel); padding:11px 6px; text-align:center;}
+  .wkc em{display:block; font-style:normal; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em; color:var(--mute); text-transform:uppercase;}
+  .wkc b{display:block; margin-top:5px; font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; color:var(--ink);}
+  .wkc.we b{color:var(--signal);}
+  .wkc.we{background:var(--signal-soft);}
+
+  /* ---- day band ---- */
+  .band{border:1px solid var(--rule); background:var(--panel);}
+  .band-h{display:grid; grid-template-columns:96px minmax(0,1fr) 54px; gap:10px; padding:9px 14px; border-bottom:1px solid var(--rule-strong);
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--mute);}
+  .drow{display:grid; grid-template-columns:96px minmax(0,1fr) 54px; gap:10px; align-items:center; padding:5px 14px; border-bottom:1px solid var(--rule);}
+  .drow:last-child{border-bottom:0;}
+  .drow.we{background:var(--signal-soft);}
+  .dlab{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink); white-space:nowrap;}
+  .dlab i{font-style:normal; color:var(--mute);}
+  .drow.we .dlab i{color:var(--signal);}
+  .track{position:relative; height:15px; background:var(--panel-2); border:1px solid var(--rule);}
+  .track u{position:absolute; top:0; bottom:0; width:1px; background:var(--rule); text-decoration:none;}
+  .span{position:absolute; top:2px; bottom:2px; background:var(--accent); min-width:2px; border-radius:1px;}
+  .drow.we .span{background:var(--signal);}
+  .dh{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums;}
+
+  /* ---- ledger ---- */
+  .ledger{display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule);}
+  .lrow{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; background:var(--panel); padding:12px 16px;}
+  .lrow b{font-family:"IBM Plex Mono",monospace; font-size:17px; color:var(--ink); font-weight:600;}
+  .pill{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    padding:3px 9px; border:1px solid currentColor; border-radius:999px;}
+  .pill.ok{color:var(--accent);} .pill.hold{color:var(--signal);}
+
+  ul{padding-left:0; list-style:none; margin:0;}
+  .streams{display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule);}
+  .streams li{background:var(--panel); padding:14px 16px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:start;}
+  .streams strong{color:var(--ink); font-weight:600; font-size:14.5px;}
+  .streams span{display:block; color:var(--mute); font-size:13px; margin-top:3px; max-width:62ch;}
+  .streams em{font-style:normal; font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent); white-space:nowrap; padding-top:3px;}
+
+  .live{display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule);}
+  .live div{background:var(--panel); padding:13px 16px;}
+  .live b{display:block; color:var(--ink); font-size:14px;}
+  .live code{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--accent); overflow-wrap:anywhere;}
+
+  /* ---- attested landmark table ---- */
+  .tw{overflow-x:auto; border:1px solid var(--rule); margin-top:22px;}
+  table{border-collapse:collapse; width:100%; min-width:520px; background:var(--panel);}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--rule); font-size:13px;}
+  th{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mute); background:var(--panel-2); white-space:nowrap;}
+  tr:last-child td{border-bottom:0;}
+  td.n,td.t{font-family:"IBM Plex Mono",monospace; white-space:nowrap; color:var(--ink); font-variant-numeric:tabular-nums;}
+  td.n{color:var(--accent); font-weight:600;}
+  .bar.zero{height:2px; background:var(--rule-strong); border-top:0;}
+
+  .note{border-left:3px solid var(--accent); background:var(--panel); padding:16px 18px; margin-top:22px;}
+  .note p{margin:0 0 10px;} .note p:last-child{margin-bottom:0;}
+  .foot{margin-top:56px; padding-top:18px; border-top:1px solid var(--rule); font-size:12.5px; color:var(--mute);}
+  @media (max-width:520px){
+    .band-h,.drow{grid-template-columns:78px minmax(0,1fr) 44px; gap:7px; padding-inline:10px;}
+    .dlab,.dh{font-size:10.5px;}
+    .metarow{grid-template-columns:minmax(0,1fr);}
+    .metarow dt{border-right:0; border-bottom:1px solid var(--rule);}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="dochead">
+    <div class="dochead-top">
+      <div class="eyebrow">Engagement Record · Purely Plant DOOEL Skopje</div>
+      <h1>GrowFlow Build Record</h1>
+      <p class="subtitle">Tasks initiated, progressed and completed on the WEEKLY_WEED_FLOW platform, reconstructed from the repository's own timestamps — not from recollection.</p>
+    </div>
+    <dl class="metagrid">
+      <div class="metarow"><dt>Document №</dt><dd>WWF-RECORD-2026-0917</dd></div>
+      <div class="metarow"><dt>Coverage</dt><dd>29.06.2026 → 17.09.2026 · 11 weeks</dd></div>
+      <div class="metarow"><dt>Data sources</dt><dd>GitHub API (PRs, Actions) · git commit timestamps · session transcript · task ledger · dated deploy records</dd></div>
+      <div class="metarow"><dt>Prepared for</dt><dd>Blagoj Nikolov, M.Pharm — QC Department Manager</dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <div class="sechead"><span class="secno">01</span><h2>The record in figures</h2></div>
+    <p class="lede">Every number below is counted from the repository, not estimated. The work is not undocumented — it was simply never totalled.</p>
+    <div class="figs">
+      <div class="fig"><b>564</b><span>commits, 29.06 → 16.09</span></div>
+      <div class="fig"><b>1,305,796</b><span>lines added (108,802 removed)</span></div>
+      <div class="fig"><b>1,632</b><span>files under version control</span></div>
+      <div class="fig"><b>494</b><span>source files, of which 124 are test files</span></div>
+      <div class="fig"><b>61</b><span>design, review &amp; deploy documents</span></div>
+      <div class="fig"><b>58</b><span>tracked tasks — 54 completed</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">02</span><h2>GitHub's own record</h2></div>
+    <p class="lede">These timestamps are the strongest evidence in this document, because none of them were written by the machine the work was done on. GitHub stamps them <em>server-side</em>, at the moment each event arrives, and they cannot be back-dated afterwards. Anyone can verify every figure below against the repository's own API.</p>
+    <div class="figs">
+      <div class="fig"><b>53</b><span>pull requests opened</span></div>
+      <div class="fig"><b>47</b><span>merged into the platform</span></div>
+      <div class="fig"><b>1,415</b><span>CI / Actions workflow runs</span></div>
+      <div class="fig"><b>1 h</b><span>median time from opening a PR to merging it</span></div>
+    </div>
+
+    <div class="chart" style="margin-top:22px">
+      <div class="plot">
+        <div class="yax"><i style="top:-6px">8</i><i style="bottom:-6px">0</i></div>
+        <div class="bar n" style="height:37.5%" title="00:00 — 3 PR events"></div>
+        <div class="bar n" style="height:37.5%" title="01:00 — 3 PR events"></div>
+        <div class="bar n" style="height:62.5%" title="02:00 — 5 PR events"></div>
+        <div class="bar n zero" title="03:00 — 0 PR events (the one empty hour)"></div>
+        <div class="bar n" style="height:75%" title="04:00 — 6 PR events"></div>
+        <div class="bar n" style="height:75%" title="05:00 — 6 PR events"></div>
+        <div class="bar" style="height:25%" title="06:00 — 2 PR events"></div>
+        <div class="bar" style="height:12.5%" title="07:00 — 1 PR event"></div>
+        <div class="bar" style="height:37.5%" title="08:00 — 3 PR events"></div>
+        <div class="bar" style="height:75%" title="09:00 — 6 PR events"></div>
+        <div class="bar" style="height:50%" title="10:00 — 4 PR events"></div>
+        <div class="bar" style="height:50%" title="11:00 — 4 PR events"></div>
+        <div class="bar" style="height:25%" title="12:00 — 2 PR events"></div>
+        <div class="bar" style="height:62.5%" title="13:00 — 5 PR events"></div>
+        <div class="bar" style="height:25%" title="14:00 — 2 PR events"></div>
+        <div class="bar" style="height:50%" title="15:00 — 4 PR events"></div>
+        <div class="bar" style="height:75%" title="16:00 — 6 PR events"></div>
+        <div class="bar" style="height:100%" title="17:00 — 8 PR events (busiest)"></div>
+        <div class="bar" style="height:75%" title="18:00 — 6 PR events"></div>
+        <div class="bar" style="height:62.5%" title="19:00 — 5 PR events"></div>
+        <div class="bar" style="height:25%" title="20:00 — 2 PR events"></div>
+        <div class="bar" style="height:25%" title="21:00 — 2 PR events"></div>
+        <div class="bar" style="height:62.5%" title="22:00 — 5 PR events"></div>
+        <div class="bar" style="height:50%" title="23:00 — 4 PR events"></div>
+      </div>
+      <div class="hax">
+        <span>00</span><span class="hide">01</span><span class="hide">02</span><span>03</span><span class="hide">04</span><span class="hide">05</span>
+        <span>06</span><span class="hide">07</span><span class="hide">08</span><span>09</span><span class="hide">10</span><span class="hide">11</span>
+        <span>12</span><span class="hide">13</span><span class="hide">14</span><span>15</span><span class="hide">16</span><span class="hide">17</span>
+        <span>18</span><span class="hide">19</span><span class="hide">20</span><span>21</span><span class="hide">22</span><span>23</span>
+      </div>
+      <p class="cap">All 94 pull-request openings and merges, by the hour GitHub recorded them. Peak 17:00 (8 events); <strong>03:00 is the single empty hour in the day</strong> — shown as a flat rule rather than hidden. <strong>23 of the 94 events — 24.5% — were stamped between midnight and six in the morning</strong>, and <strong>25 of them (26.6%) fell on a Saturday or Sunday</strong>, Sunday alone carrying 18 — more than any weekday except Thursday.</p>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>PR</th><th>Work</th><th>Opened (UTC)</th><th>Merged (UTC)</th></tr></thead>
+        <tbody>
+          <tr><td class="n">#1</td><td>Platform, AI gateway and the first Docker stack</td><td class="t">29.06 · 17:50</td><td class="t">03.07 · 04:50</td></tr>
+          <tr><td class="n">#23</td><td>Unification — QMS Studio, DocEngine, TMS v2, QC LIMS</td><td class="t">14.07 · 09:05</td><td class="t">16.07 · 07:59</td></tr>
+          <tr><td class="n">#38</td><td>Cultivation, QC and waste modules + design system — 346 commits</td><td class="t">17.07 · 05:47</td><td class="t">27.08 · 01:55</td></tr>
+          <tr><td class="n">#41</td><td>Training the agent fleet against the retrieval corpus</td><td class="t">27.08 · 02:44</td><td class="t">29.08 · 17:07</td></tr>
+          <tr><td class="n">#51</td><td>CoQ parameter tracker built from the eCoA database</td><td class="t">04.09 · 04:29</td><td class="t">04.09 · 15:27</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cap">Five landmark pull requests, with the times GitHub recorded. <strong>PR #38 alone ran 40.8 days and carried 346 commits.</strong> Three of these five were opened between 02:00 and 06:00.</p>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">03</span><h2>Hours of the day</h2></div>
+    <p class="lede">Commits by hour of the clock across the full 11 weeks. <strong>All twenty-four hours are occupied</strong> — there is no hour of the day in which this project was not being worked on.</p>
+    <div class="chart">
+      <div class="plot">
+        <div class="yax"><i style="top:-6px">45</i><i style="bottom:-6px">0</i></div>
+        <div class="bar n" style="height:58%" title="00:00 — 26 commits"></div>
+        <div class="bar n" style="height:42%" title="01:00 — 19 commits"></div>
+        <div class="bar n" style="height:42%" title="02:00 — 19 commits"></div>
+        <div class="bar n" style="height:56%" title="03:00 — 25 commits"></div>
+        <div class="bar n" style="height:49%" title="04:00 — 22 commits"></div>
+        <div class="bar n" style="height:49%" title="05:00 — 22 commits"></div>
+        <div class="bar" style="height:40%" title="06:00 — 18 commits"></div>
+        <div class="bar" style="height:29%" title="07:00 — 13 commits"></div>
+        <div class="bar" style="height:44%" title="08:00 — 20 commits"></div>
+        <div class="bar" style="height:69%" title="09:00 — 31 commits"></div>
+        <div class="bar" style="height:69%" title="10:00 — 31 commits"></div>
+        <div class="bar" style="height:38%" title="11:00 — 17 commits"></div>
+        <div class="bar" style="height:53%" title="12:00 — 24 commits"></div>
+        <div class="bar" style="height:49%" title="13:00 — 22 commits"></div>
+        <div class="bar" style="height:33%" title="14:00 — 15 commits"></div>
+        <div class="bar" style="height:49%" title="15:00 — 22 commits"></div>
+        <div class="bar" style="height:47%" title="16:00 — 21 commits"></div>
+        <div class="bar" style="height:67%" title="17:00 — 30 commits"></div>
+        <div class="bar" style="height:96%" title="18:00 — 43 commits"></div>
+        <div class="bar" style="height:100%" title="19:00 — 45 commits (busiest hour)"></div>
+        <div class="bar" style="height:64%" title="20:00 — 29 commits"></div>
+        <div class="bar" style="height:33%" title="21:00 — 15 commits"></div>
+        <div class="bar" style="height:27%" title="22:00 — 12 commits (quietest hour)"></div>
+        <div class="bar" style="height:51%" title="23:00 — 23 commits"></div>
+      </div>
+      <div class="hax">
+        <span>00</span><span class="hide">01</span><span class="hide">02</span><span>03</span><span class="hide">04</span><span class="hide">05</span>
+        <span>06</span><span class="hide">07</span><span class="hide">08</span><span>09</span><span class="hide">10</span><span class="hide">11</span>
+        <span>12</span><span class="hide">13</span><span class="hide">14</span><span>15</span><span class="hide">16</span><span class="hide">17</span>
+        <span>18</span><span class="hide">19</span><span class="hide">20</span><span>21</span><span class="hide">22</span><span>23</span>
+      </div>
+      <p class="cap">Busiest hour 19:00 (45 commits); quietest 22:00 (12) — <strong>never zero</strong>. The six blue bars are 00:00–05:59: <strong>133 commits, 23.6% of all work, made between midnight and six in the morning.</strong></p>
+    </div>
+
+    <div class="wk">
+      <div class="wkc"><em>Mon</em><b>47</b></div>
+      <div class="wkc"><em>Tue</em><b>47</b></div>
+      <div class="wkc"><em>Wed</em><b>117</b></div>
+      <div class="wkc"><em>Thu</em><b>143</b></div>
+      <div class="wkc"><em>Fri</em><b>77</b></div>
+      <div class="wkc we"><em>Sat</em><b>43</b></div>
+      <div class="wkc we"><em>Sun</em><b>90</b></div>
+    </div>
+    <p class="cap">Commits by weekday. <strong>133 of 564 — just under a quarter — landed on a Saturday or Sunday</strong>, with Sunday busier than Monday, Tuesday and Friday.</p>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">04</span><h2>The working days</h2></div>
+    <p class="lede">The most recent working session ran continuously from 27.08 to 17.09 and holds <strong>26,123 messages</strong> across <strong>21 active days</strong>. Each bar below runs from the first to the last activity recorded that day, on a midnight-to-midnight track.</p>
+    <div class="band">
+      <div class="band-h"><span>Day</span><span>00 · · · · · 06 · · · · · 12 · · · · · 18 · · · · 24</span><span>Span</span></div>
+
+      <div class="drow"><span class="dlab">27.08 <i>Thu</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:18.9%;width:14.2%"></span></span><span class="dh">3.4 h</span></div>
+      <div class="drow"><span class="dlab">28.08 <i>Fri</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:50.4%;width:0.5%"></span></span><span class="dh">0.0 h</span></div>
+      <div class="drow we"><span class="dlab">29.08 <i>Sat</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:51.3%;width:25%"></span></span><span class="dh">6.0 h</span></div>
+      <div class="drow we"><span class="dlab">30.08 <i>Sun</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:38.5%;width:60.5%"></span></span><span class="dh">14.5 h</span></div>
+      <div class="drow"><span class="dlab">31.08 <i>Mon</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0.6%;width:10.5%"></span></span><span class="dh">2.5 h</span></div>
+      <div class="drow"><span class="dlab">02.09 <i>Wed</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:29.5%;width:36%"></span></span><span class="dh">8.6 h</span></div>
+      <div class="drow"><span class="dlab">03.09 <i>Thu</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:99.9%;width:0.4%"></span></span><span class="dh">0.0 h</span></div>
+      <div class="drow"><span class="dlab">04.09 <i>Fri</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0%;width:99.1%"></span></span><span class="dh">23.8 h</span></div>
+      <div class="drow we"><span class="dlab">05.09 <i>Sat</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0%;width:100%"></span></span><span class="dh">24.0 h</span></div>
+      <div class="drow we"><span class="dlab">06.09 <i>Sun</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0%;width:79.2%"></span></span><span class="dh">19.0 h</span></div>
+      <div class="drow"><span class="dlab">07.09 <i>Mon</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:4.8%;width:95.1%"></span></span><span class="dh">22.8 h</span></div>
+      <div class="drow"><span class="dlab">08.09 <i>Tue</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0.1%;width:99.6%"></span></span><span class="dh">23.9 h</span></div>
+      <div class="drow"><span class="dlab">09.09 <i>Wed</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:0.2%;width:87.6%"></span></span><span class="dh">21.0 h</span></div>
+      <div class="drow"><span class="dlab">10.09 <i>Thu</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:4.2%;width:94.7%"></span></span><span class="dh">22.7 h</span></div>
+      <div class="drow"><span class="dlab">11.09 <i>Fri</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:28.8%;width:61.3%"></span></span><span class="dh">14.7 h</span></div>
+      <div class="drow we"><span class="dlab">12.09 <i>Sat</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:4.7%;width:88.3%"></span></span><span class="dh">21.2 h</span></div>
+      <div class="drow we"><span class="dlab">13.09 <i>Sun</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:7.6%;width:88.7%"></span></span><span class="dh">21.3 h</span></div>
+      <div class="drow"><span class="dlab">14.09 <i>Mon</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:11.0%;width:88.8%"></span></span><span class="dh">21.3 h</span></div>
+      <div class="drow"><span class="dlab">15.09 <i>Tue</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:14.6%;width:74.0%"></span></span><span class="dh">17.8 h</span></div>
+      <div class="drow"><span class="dlab">16.09 <i>Wed</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:3.3%;width:88.3%"></span></span><span class="dh">21.2 h</span></div>
+      <div class="drow"><span class="dlab">17.09 <i>Thu</i></span><span class="track"><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u><span class="span" style="left:43.9%;width:0.4%"></span></span><span class="dh">0.0 h</span></div>
+    </div>
+    <p class="cap"><strong>Nine of these days span 21 hours or more; 05.09 spans the full twenty-four.</strong> Six are weekend days (amber), four of them over 19 hours. Span is first-to-last activity, so it brackets the working day rather than claiming every minute inside it was hands-on.</p>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">05</span><h2>The task ledger</h2></div>
+    <p class="lede">Fifty-eight tasks were opened, worked and closed out under formal tracking. Four remain open, and each is open for a stated reason rather than through neglect.</p>
+    <div class="ledger">
+      <div class="lrow"><span><b>54</b> &nbsp;tasks completed and verified</span><span class="pill ok">Done</span></div>
+      <div class="lrow"><span><b>1</b> &nbsp;task in progress — QC database ↔ CoQ_Analysis_Master workbook sync</span><span class="pill hold">Active</span></div>
+      <div class="lrow"><span><b>3</b> &nbsp;tasks blocked — CI runner registration, credential rotation, and the PR&nbsp;#52 merge that waits on it</span><span class="pill hold">Blocked</span></div>
+    </div>
+    <p class="cap">A 93% completion rate. The three blocked items all trace to one external dependency — a self-hosted CI runner that must be re-registered by a person with repository-owner rights — not to unfinished engineering.</p>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">06</span><h2>What was built</h2></div>
+    <p class="lede">The commits group into ten substantial workstreams, each shipped with its own tests, documentation and production deployment.</p>
+    <ul class="streams">
+      <li><div><strong>QC / LIMS chain</strong><span>Samples, chain of custody, specifications, potency ladders, CoA / CoQ / eCoA / iCoA issuance, batch genealogy and OOS handling.</span></div><em>Jul–Sep</em></li>
+      <li><div><strong>DocEngine</strong><span>Questionnaire-driven generation of bilingual Macedonian|English controlled GMP documents, through a fixed formatter with a hard pass/fail verification gate.</span></div><em>Jul–Sep</em></li>
+      <li><div><strong>AI agent fleet</strong><span>Eleven stateful Letta agents with scoped RAGflow retrieval behind a LiteLLM gateway; governance memory blocks the agents cannot rewrite.</span></div><em>Aug</em></li>
+      <li><div><strong>ImB product catalogue</strong><span>All 48 specification pages parsed into 42 coded products across 22 strains, with the ±10% window rule verified on every page.</span></div><em>Sep</em></li>
+      <li><div><strong>As-built facility layout</strong><span>191 rooms read as vector text off the architect's A0 ground-floor sheet — code, bilingual name, area, perimeter, zone — then drawn as both a pinned plan and a themed SVG.</span></div><em>Sep</em></li>
+      <li><div><strong>Cultivation &amp; mother bank</strong><span>Batch registration, the multi-batch journey board, structured mother-plant and clone identity, trichome maturation records.</span></div><em>Aug–Sep</em></li>
+      <li><div><strong>Department &amp; permission model</strong><span>Rebuilt against how the facility actually works, after an audit found the model did not describe the floor.</span></div><em>Sep</em></li>
+      <li><div><strong>Design system &amp; navigation</strong><span>Application-wide visual review and rebuild of the left navigation tree and shell.</span></div><em>Jul–Sep</em></li>
+      <li><div><strong>Potency Spec Service</strong><span>A standalone multi-user service with live cross-computer sync, identity-coloured result chains and a two-per-page A4 PDF export.</span></div><em>Sep</em></li>
+      <li><div><strong>Backup &amp; disaster recovery</strong><span>Full offsite backup of the production estate — databases, RAGflow, Letta, object storage, configs — then a complete verified restore onto a rebuilt machine.</span></div><em>Sep</em></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">07</span><h2>Running in production</h2></div>
+    <p class="lede">Not prototypes. These are live, reachable and serving the facility today.</p>
+    <div class="live">
+      <div><b>GrowFlow platform</b><code>wwf.srv1231216.hstgr.cloud</code> — eight containers, health check reporting ready, both databases connected.</div>
+      <div><b>Potency Spec Service</b><code>specs.srv1231216.hstgr.cloud</code> — version 2026.09.16-28, 23 finished Purely Plant specifications published.</div>
+      <div><b>Supporting stack</b><code>RAGflow · 2× Letta · LiteLLM · DocEngine</code> — retrieval, agent state and model routing, all self-hosted.</div>
+      <div><b>Deployment discipline</b><code>7 dated deploy records</code> — each with snapshots taken first, migrations before image swap, and a rollback tag retained.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secno">08</span><h2>Integrity note</h2></div>
+    <div class="note">
+      <p><strong>What this record proves.</strong> That 53 pull requests, 1,415 workflow runs, 564 commits, 1.3 million added lines and 58 tracked tasks exist, at the dates and hours stated, and that the systems listed in §07 respond in production. All of it is recomputable at any time — the §02 figures from GitHub's public API, the rest from the repository itself.</p>
+      <p><strong>Why §02 is the part that settles it.</strong> Local git timestamps are written by the machine that makes the commit, so in principle they can be rewritten. GitHub's are not: it stamps a pull request and a workflow run on its own servers as the event arrives, and nothing done afterwards on this machine can move them. That the two independent records agree — a quarter of the work in both falling between midnight and 06:00, a quarter of it at weekends — is what makes the pattern a finding rather than a claim.</p>
+      <p><strong>What it does not claim.</strong> A day's span is the bracket from first to last recorded activity, not a timesheet of continuous keyboard time. Commit hours are read as recorded in the repository (UTC); the facility runs Europe/Skopje, two hours ahead, so local clock times sit later than shown. Work done in conversation, in review, or in decisions that produced no commit is real but is not counted here — this record therefore <em>understates</em> the effort rather than inflating it.</p>
+      <p><strong>Why it was worth assembling.</strong> The evidence was never missing. It sat in four separate places that had never been read together, which is precisely how months of sustained work come to feel like nothing was done.</p>
+    </div>
+  </section>
+
+  <p class="foot">Compiled 17.09.2026 from the WEEKLY_WEED_FLOW repository, its session transcript and its deploy records · Purely Plant DOOEL Skopje — MK GMP certified facility</p>
+
+</div>
