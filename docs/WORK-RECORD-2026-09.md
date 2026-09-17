@@ -68,8 +68,11 @@ Three of these five were opened between 02:00 and 06:00.
 | Source files | **494**, of which **124** are test files |
 | Documents in `docs/` | **61** |
 
-File counts are as measured on `main` on 17.09.2026. Re-running `collect.py` later will
-report larger numbers as work lands — that is the tool working, not a discrepancy.
+**Measurement point.** These figures were taken on `main` at commit `7b95220`, immediately
+before this record itself was committed. Running `collect.py` now reports one commit more,
+because writing the record added to the thing the record measures. That is the tool being live,
+not a discrepancy — the figures above are pinned to a stated point, and every later run should
+legitimately exceed them.
 
 Commits by month: Jun 1 · Jul 371 · Aug 133 · Sep 59.
 
@@ -152,6 +155,12 @@ commit, so in principle they can be rewritten. GitHub's are not — it stamps a 
 workflow run on its own servers as the event arrives. That the two independent records *agree* —
 about a quarter of the work in each falling between midnight and 06:00, about a quarter at
 weekends — is what makes the pattern a finding rather than a claim.
+
+**The record is inside what it measures.** Committing this document and its script added a commit,
+three files and a pull request to the repository being counted. §1–§2 are therefore pinned to the
+state at `7b95220`, before that landed, and deliberately exclude themselves. Re-running
+`collect.py` returns higher numbers, which is the correct behaviour for a tool reading a live
+repository rather than a snapshot.
 
 **What it does not claim.** A day's span is the bracket from first to last recorded activity, not a
 timesheet of continuous keyboard time. Times are as recorded (UTC); the facility runs
