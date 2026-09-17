@@ -1,0 +1,48 @@
+# ════════════════════════════════════════════════════════════════════════
+#  Potency Spec Service — one container: the live artifact + its database.
+#
+#  Reconciled to the KVM4 host's real Traefik (inspected 2026-09-11):
+#    * Traefik runs on the HOST network, provider=docker, exposedbydefault=false
+#    * entrypoints: web (:80) and websecure (:443), web auto-redirects to websecure
+#    * certresolver: letsencrypt (HTTP-01 challenge on the web entrypoint)
+#  Traefik reaches each service on its OWN bridge network by container IP, so
+#  there is NO shared network and NO `traefik.docker.network` label — this
+#  mirrors the working ragflow-vjcx / agent-zero-9hqu services exactly, only the
+#  router/service name, host and target port differ.
+#
+#  DNS: *.srv1231216.hstgr.cloud already resolves to the box (other services use
+#  it), so specs.srv1231216.hstgr.cloud needs no new record; Let's Encrypt issues
+#  on the first HTTPS request. Change the Host() below to use a different name.
+# ════════════════════════════════════════════════════════════════════════
+name: potency-spec-service
+
+services:
+  specs:
+    build: .
+    image: potency-spec-service:latest
+    container_name: potency-spec-service
+    environment:
+      - DB_PATH=/data/specs.db
+      - STATIC_DIR=web
+      - SEED_ON_EMPTY=1          # first boot auto-seeds the 23 catalogue drafts
+    volumes:
+      # Named volume -> the SQLite database survives restarts / redeploys.
+      - specs_data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.specs.rule=Host(`specs.srv1231216.hstgr.cloud`)"
+      - "traefik.http.routers.specs.entrypoints=websecure"
+      - "traefik.http.routers.specs.tls.certresolver=letsencrypt"
+      - "traefik.http.services.specs.loadbalancer.server.port=8000"
+    restart: unless-stopped
+    healthcheck:
+      # slim image has no curl; probe with stdlib urllib.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  specs_data:
