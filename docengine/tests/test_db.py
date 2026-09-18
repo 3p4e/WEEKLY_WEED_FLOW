@@ -119,6 +119,43 @@ async def test_job_round_trip(dbpool):
     assert await db.job_get("00000000-0000-0000-0000-000000000000") is None
 
 
+async def test_job_update_writes_a_trace_event_per_transition(dbpool):
+    """Each job_update() call that touches status/stage/error must leave a
+    durable docengine.job_events row behind it, oldest first, carrying the
+    row's actual post-update state — not just whatever subset of fields that
+    particular call happened to pass."""
+    jid = await db.job_create("workflow", {"questionnaire": "sop_qc"})
+    assert await db.job_events(jid) == []  # job_create itself logs nothing
+
+    await db.job_update(jid, status="running", stage="generate")
+    await db.job_update(jid, stage="generate 3.0")
+    await db.job_update(jid, status="failed", error="letta: timeout")
+
+    events = await db.job_events(jid)
+    assert [e["stage"] for e in events] == ["generate", "generate 3.0", "generate 3.0"]
+    assert [e["status"] for e in events] == ["running", "running", "failed"]
+    # The stage-only call must carry forward the status already on the row —
+    # RETURNING reflects the merged row, not the fields that one call passed.
+    assert events[1]["status"] == "running"
+    assert events[-1]["error"] == "letta: timeout"
+
+
+async def test_job_update_result_only_call_leaves_no_trace_event(dbpool):
+    """A call that touches neither status, stage nor error (e.g. attaching a
+    result payload after the terminal transition already fired) is not
+    pipeline progress and must not pad the trace with a duplicate row."""
+    jid = await db.job_create("workflow", {})
+    await db.job_update(jid, status="done", stage="done", result={"x": 1})
+    assert len(await db.job_events(jid)) == 1
+
+    await db.job_update(jid, result={"x": 2})
+    assert len(await db.job_events(jid)) == 1
+
+
+async def test_job_events_empty_for_unknown_job(dbpool):
+    assert await db.job_events(str(uuid.uuid4())) == []
+
+
 async def test_document_create_and_read_back(dbpool):
     jid = await db.job_create("build", {})
     did = await db.document_create(jid, {

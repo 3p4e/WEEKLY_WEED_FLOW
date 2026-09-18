@@ -40,8 +40,23 @@ CREATE TABLE IF NOT EXISTS docengine.documents (
   verify      text NOT NULL,                 -- full pp_verify PASS report
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+-- The jobs row's status/stage/error are overwritten on every job_update()
+-- call, so once a job finishes there is no way to see the path it took to
+-- get there — only where it ended up. That is exactly the information a
+-- failed run needs to be debugged without re-running it (the agents do not
+-- reproduce the same draft twice, per pipeline.py). job_events is the
+-- append-only history job_update() writes alongside the row it updates.
+CREATE TABLE IF NOT EXISTS docengine.job_events (
+  id          bigserial PRIMARY KEY,
+  job_id      uuid NOT NULL REFERENCES docengine.jobs(id) ON DELETE CASCADE,
+  status      text,
+  stage       text,
+  error       text,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
 CREATE INDEX IF NOT EXISTS de_jobs_status ON docengine.jobs(status);
 CREATE INDEX IF NOT EXISTS de_docs_code ON docengine.documents(code);
+CREATE INDEX IF NOT EXISTS de_job_events_job ON docengine.job_events(job_id, created_at);
 """
 
 
@@ -94,9 +109,21 @@ async def job_update(jid: str, **fields: Any) -> None:
     # stage/error/result/payload). Every VALUE is a real asyncpg bind
     # parameter in *vals, never interpolated. Same parametrized-with-
     # code-controlled-columns pattern the backend documents in app/demo_org.py.
-    await pool().execute(
-        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)}", *vals  # nosec B608
+    row = await pool().fetchrow(
+        f"UPDATE docengine.jobs SET {', '.join(sets)} WHERE id = ${len(vals)} "
+        "RETURNING status, stage, error",  # nosec B608
+        *vals,
     )
+    # RETURNING (not the caller's **fields) so the event always reflects the
+    # row's actual post-update state — a call that only touches `stage`
+    # still logs the status/error that were already there, instead of two
+    # blanks that would make the trace look like it reset.
+    if row is not None and any(k in fields for k in ("status", "stage", "error")):
+        await pool().execute(
+            "INSERT INTO docengine.job_events (job_id, status, stage, error)"
+            " VALUES ($1,$2,$3,$4)",
+            jid, row["status"], row["stage"], row["error"],
+        )
 
 
 # A job is only ever advanced by the worker that owns it, so a worker killed
@@ -138,6 +165,24 @@ async def job_get(jid: str) -> dict | None:
     for k in ("created_at", "updated_at"):
         d[k] = d[k].isoformat()
     return d
+
+
+async def job_events(jid: str) -> list[dict]:
+    """Oldest-first, so a trace panel can render it top-to-bottom as the run
+    actually happened. Returns [] for a job with no events (created before
+    this table existed, or none of its job_update() calls touched
+    status/stage/error) rather than raising — the caller already has job_get
+    for the 404 case."""
+    rows = await pool().fetch(
+        "SELECT status, stage, error, created_at FROM docengine.job_events"
+        " WHERE job_id = $1 ORDER BY id ASC", jid,
+    )
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["created_at"] = d["created_at"].isoformat()
+        out.append(d)
+    return out
 
 
 async def document_create(job_id: str | None, meta: dict) -> str:
