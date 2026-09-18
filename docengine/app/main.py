@@ -246,6 +246,21 @@ async def get_workflow(jid: str):
     return job
 
 
+@app.get("/workflows/{jid}/trace", dependencies=[Depends(require_api_key)])
+async def get_workflow_trace(jid: str):
+    """The stage-by-stage path a job took, oldest first — what /workflows/{jid}
+    alone can't show once a job is done or failed, because that row holds only
+    the current status/stage/error, not how it got there."""
+    if not _valid_uuid(jid):
+        raise HTTPException(404, "no such job")
+    if not db.ready():
+        raise HTTPException(503, "DocEngine storage unavailable")
+    job = await db.job_get(jid)
+    if not job:
+        raise HTTPException(404, "no such job")
+    return {"job_id": jid, "events": await db.job_events(jid)}
+
+
 # ---------- direct build (Mode B/C: caller supplies the Markdown) ----------
 class BuildIn(BaseModel):
     markdown: str = Field(min_length=20, max_length=400_000)

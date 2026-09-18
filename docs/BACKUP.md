@@ -122,3 +122,47 @@ same mechanics applied per database.
 
 See also `docs/DEPLOY.md` for how the rest of the stack is provisioned on
 KVM4.
+
+## Rotating the offsite backup credentials
+
+Two secrets in `./rclone/rclone.conf` are worth rotating on a schedule, and
+must be rotated immediately after any event where the file (or a copy of it)
+left the deploy host — a VM restore/rebuild that staged it on an intermediate
+machine, for instance:
+
+- **The Google Drive OAuth token** (`[wwf-gdrive]` remote). Revoke and
+  reissue:
+  1. Revoke the existing grant at
+     https://myaccount.google.com/permissions (find the app tied to
+     `wwf-gdrive`, remove access).
+  2. On any machine with a browser: `rclone authorize "drive"`, then paste
+     the new token into `[wwf-gdrive]` in `./rclone/rclone.conf` on the
+     deploy host (mode stays `0600`).
+  3. `docker restart wwf-backup-offsite`.
+  4. Verify: `docker exec wwf-backup-offsite rclone ls wwf-crypt:` still
+     lists the existing dumps (proves the new token can read what the old
+     one wrote) and `db_backup.sh --once` followed by a same-day offsite
+     pass adds one more.
+
+- **The crypt password pair** (`[wwf-crypt]`'s `password`/`password2`,
+  wrapping `wwf-gdrive:wwf-backups`). Rotating this password does **not**
+  re-encrypt files already on Drive — it only changes what new writes use —
+  so treat it as opening a new vault next to the old one, not re-keying the
+  old one:
+  1. Generate two new obscured values: `rclone obscure <new-password>` (run
+     once for `password`, once for `password2`).
+  2. Point `[wwf-crypt]` at a **new** remote path (e.g.
+     `wwf-gdrive:wwf-backups-2` — reusing the old path with a new password
+     makes existing files unreadable through the new config, since crypt
+     derives per-file keys from the password) and set the two new obscured
+     values.
+  3. Keep the **old** password pair recorded offline (a password manager,
+     not this repo) until every backup that used it has aged out of
+     `OFFSITE_RETENTION_DAYS` and is no longer needed — a rotated-away
+     password is the only way to read what was written before rotation.
+  4. `docker restart wwf-backup-offsite`; verify with the same `rclone ls` /
+     round-trip check as above, against the new path.
+
+Either rotation is a config-and-restart change to `wwf-backup-offsite` only —
+it never touches the local `db_backup.sh` loop, the Postgres containers, or
+running application traffic.
