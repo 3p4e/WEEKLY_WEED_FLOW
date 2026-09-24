@@ -16,8 +16,14 @@ rest of the run, and approve the text before it goes forward.
    (edit the section, or ask for it again with an instruction). A *context
    amendment* is a new fact ("the facility has two clone rooms, not one") that
    carries forward into everything drafted afterwards.
-3. **An amendment re-opens every section approved before it, and the document
-   cannot be built until a fresh §6A audit has passed on the amended text.**
+3. **An amendment keeps approvals, flags what it may affect, and forces a fresh
+   audit (option A, chosen over a stricter option B).** Sections written before
+   the new fact keep their approval but carry a visible "written before
+   amendment N" flag. The §6A audit must run again on the final text, told about
+   every amendment so it hunts for contradictions. At signing, the reviewer
+   confirms the flagged sections once, as part of the signature. The rejected
+   option B would have revoked those approvals and required each section to be
+   re-approved individually after every amendment (§5.2 explains why not).
 
 ---
 
@@ -49,18 +55,20 @@ the coroutine, and (c) a record of who decided what about which text.
 ## 2. The rule everything else follows
 
 > **Every verdict — a reviewer's approval, a check result, the §6A PASS — is
-> recorded against the SHA-256 of the exact text it judged. It counts only while
-> that text is unchanged and no amendment has landed after it. The build refuses
-> unless every verdict it needs is current.**
+> recorded against the SHA-256 of the exact text it judged, and counts only while
+> that text is unchanged. The whole-document §6A verdict must also be newer than
+> the latest amendment, because it judges the document against the facts in
+> force. The build refuses unless every verdict it needs is current.**
 
 What follows from it:
 
 - Editing, regenerating or repairing a section makes a new revision with a new
   hash. Its approval and regulatory finding stop counting; it is re-checked and
   must be approved again. Other sections are untouched — drafts are independent.
-- An amendment makes every approval older than it stop counting (those sections
-  were drafted, or approved, without the new fact), and voids any older §6A
-  verdict.
+- An amendment changes no section's text, so no section approval stops
+  counting. What it changes is the facts the document is judged against: every
+  section written before it is flagged, any older §6A verdict is void, and the
+  signer must confirm the flagged sections (§5.2, §5.4).
 - Unchanged text is never re-judged by an AI check. Deterministic gates are
   free to re-run. Asking a non-deterministic auditor about the same bytes again
   until it says PASS is testing into compliance, so the canvas never offers it.
@@ -75,7 +83,7 @@ not by which buttons the UI happens to enable.
 ```
 questionnaire → draft 1.0 → check → [review 1.0] → draft 2.0 → … → [review 9.0]
                                                                         │
-   amend ──► re-open sections approved before it, void §6A ◄────────────┤
+   amend ──► flag sections written before it, void §6A ◄────────────────┤
                                                                         ▼
                §6A audit ──FIX──► [document review] ──► repair / edit ──► re-approve ──► §6A …
                    │PASS
@@ -135,7 +143,8 @@ created_at`. The §6A audit is a row here with `subject_sha` = SHA-256 of
 **`job_decisions`** — every human act, hash-chained per job.
 `job_id, seq, action, num, rev, subject_sha, payload, actor, created_at,
 prev_hash, entry_hash`, where `entry_hash = sha256(prev_hash ‖ canonical row)`.
-Actions: `approve`, `edit`, `regenerate`, `repair`, `amend`, `continue`,
+Actions: `approve`, `edit`, `regenerate`, `repair`, `amend`, `mark_checked`
+(a flagged section checked against the amendments, §5.2), `continue`,
 `abandon`, `sign_build`. `subject_sha` is what was on the reviewer's screen.
 `payload` carries the instruction, amendment text, acknowledgement or answered
 NEEDS INPUT items.
@@ -178,24 +187,48 @@ turns each marker into a question and the answers become one amendment ("drying
 room: DR-02"). A fact supplied for section 6 is usually needed in section 7 as
 well, which is exactly why an answer is an amendment rather than a local edit.
 
-On `amend`: every approval older than it stops counting, including those of
-sections drafted but not yet approved; any older §6A verdict is void; sections
-not yet drafted get the fact in their brief. Before confirming, the UI shows the
-reach — "re-opens 1.0–4.0 (approved) and voids the §6A PASS".
+On `amend` (option A, owner's choice 2026-09-24):
 
-Re-opening *every* earlier approval is deliberate. Sections are drafted from the
-brief independently, so the new fact may belong in any of them; the engine
-cannot know which, and a reviewer should not have to trust that it guessed.
-Re-confirming an unaffected section is one click (a new `approve` on the same
-hash, now newer than the amendment); an affected one is regenerated — the fact
-is in the brief now — or edited.
+- **Sections not yet drafted** get the fact in their brief automatically.
+- **Sections already written are flagged, not re-opened.** A section is
+  *flagged* while its current revision was produced before the latest amendment
+  (its `context_version` is lower than the amendment count) and has not been
+  marked as checked since that amendment. Its approval, if it has one, still
+  counts — the text it approved has not changed. The rail shows a yellow
+  "written before amendment N".
+- **Clearing a flag is optional before signing.** Regenerate the section (the
+  fact is in the brief now) or edit it: either makes a new revision, which clears
+  the flag and, because the text changed, needs approving again. Or **Mark as
+  checked** — an attributed decision recording that this hash was checked
+  against amendments 1…N and is still correct. Anything still flagged at signing
+  is listed there for one confirmation (§5.4).
+- **Any older §6A verdict is void**, and the next audit is told about every
+  amendment (§5.3).
+
+Before confirming, the UI shows the reach — "flags 1.0–4.0 and voids the §6A
+PASS; no approval is lost".
+
+**Why A and not B.** The rejected option B revoked every earlier approval and
+required each section to be re-approved individually after each amendment.
+Standard practice ties an approval to the exact text approved (draft Annex 11
+§13.8's "unbreakable link") and puts the whole-document attestation at the
+signature; neither asks for unchanged sections to be re-approved one by one
+because a new fact arrived. The real risk — an earlier section contradicting the
+new fact — is covered twice under A: by the §6A audit, which is now pointed at
+exactly that, and by the signer's explicit confirmation of every flagged
+section. B's repeated re-approvals of unchanged text would tend to become
+approving without reading, weakening the review rather than strengthening it.
 
 ### 5.3 Document review (§6A)
 
 The audit runs by itself once every section is approved and current and there is
 no current verdict, with the current regulatory findings as context exactly as
-today. PASS → sign & build. FIX → the job parks showing the auditor's issues in
-full, pinned to the sections they name where the text makes that clear.
+today. When the job has amendments, the prompt also lists them, newest last,
+with the instruction to raise as an issue any section that contradicts or
+ignores one ("section 4.0 still says one clone room; amendment 2 says two") —
+this is the automated half of option A's safeguard. PASS → sign & build. FIX →
+the job parks showing the auditor's issues in full, pinned to the sections they
+name where the text makes that clear.
 
 - **Let the agent repair** — `_repair_sections`, as today, but its output lands
   as new, **unapproved** revisions (`origin=repair`) shown as a diff against what
@@ -208,7 +241,16 @@ full, pinned to the sections they name where the text makes that clear.
 ### 5.4 Sign & build
 
 **Shown:** the assembled document, the §6A PASS, open NEEDS INPUT items, the
-full decision log.
+full decision log, and — if any remain — the sections still flagged "written
+before amendment N" with the amendments they predate.
+
+**Confirming the flagged sections.** If any remain, signing requires one
+explicit confirmation: "I have checked sections 1.0–4.0 against amendments 1–2
+and they are correct." It is part of the same act as the signature — the
+`sign_build` decision records each flagged section's number, hash and the
+amendments confirmed, and the signature statement names them. It is not a
+separate click that could be given without signing, or a signature given
+without it.
 
 **Sign & build** re-authenticates the reviewer's password through the existing
 `qc_signatures` mechanism and records an `AUTHORED` signature with
@@ -233,7 +275,8 @@ changes.
 
 **What the signature is not:** approval or release of a controlled document.
 It is the author's attestation that each section was reviewed as the decision
-log shows. The second-person REVIEWED/APPROVED lifecycle, effective date and
+log shows, including that sections written before an amendment were checked
+against it. The second-person REVIEWED/APPROVED lifecycle, effective date and
 supersession do not exist for DocEngine output today — `docengine.documents` has
 no status column — and are out of scope here (§14, decision 6).
 
@@ -250,13 +293,18 @@ Returns the list of reasons the job cannot be built; empty means ready.
 
 1. Every section has a current revision, and bilingual and structure pass on its
    hash.
-2. Its latest `approve` has `subject_sha` equal to that hash and is newer than
-   the latest amendment; if its regulatory check flagged something, the approval
-   carries an acknowledgement.
+2. Its latest `approve` has `subject_sha` equal to that hash; if its regulatory
+   check flagged something, the approval carries an acknowledgement. An
+   amendment alone does not invalidate this (option A).
 3. There is a passing `audit` check whose `subject_sha` equals the SHA-256 of the
    document assembled from the current revisions, newer than the latest
-   amendment.
-4. (`pp_verify` runs inside the build itself, unchanged.)
+   amendment, run with every amendment in its prompt.
+4. Every flagged section (§5.2 — written before the latest amendment and not
+   marked as checked since) is listed in the `sign_build` confirmation with its
+   current hash and the amendments confirmed. The build endpoint refuses a
+   confirmation whose list does not match the flagged set exactly — a section
+   missing, an extra one, or a stale hash.
+5. (`pp_verify` runs inside the build itself, unchanged.)
 
 Called by the sign & build screen (to show what is missing), by the build
 endpoint (to refuse), and by the tests. A direct call to the build endpoint on a
@@ -281,14 +329,18 @@ job that is not ready gets 409 with the reasons, whatever the UI showed.
   CAS on `rev`, validated against the current gate. Records the decision, starts
   `advance()` in the background and returns at once, so no request waits on an
   agent.
-- `POST /workflows/{jid}/build` — `{rev, signature_id, actor}`; refuses unless
-  ready; runs in the background like the rest.
+- `POST /workflows/{jid}/build` — `{rev, signature_id, confirmed: [{num, sha,
+  amendments}], actor}`; refuses unless ready, including an exact match between
+  `confirmed` and the flagged set (§6, item 4); runs in the background like the
+  rest.
 
 **Backend** (`/qms/studio/…`, authoring roles for writes; `actor` is always the
 session username, never read from the request body — as `requested_by` is today):
 `GET …/workflows/{jid}/canvas`, `GET …/sections/{num}/revisions`,
-`POST …/decisions`, and `POST …/sign-and-build {password, statement}`, which
-checks readiness, re-authenticates, writes the signature, then forwards the build.
+`POST …/decisions`, and `POST …/sign-and-build {password, statement,
+confirmed}`, which checks readiness (including that `confirmed` matches the
+flagged set), re-authenticates, writes the signature with the confirmed sections
+named in its statement, then forwards the build.
 
 **Polling, not streaming** — a correction to what I suggested in conversation.
 With interaction at step boundaries nothing on screen changes faster than a step
@@ -306,7 +358,9 @@ A new `canvas` step replaces `running` for canvas jobs; `done` keeps today's
 panels (verify, NEEDS INPUT, chat/revise) unchanged.
 
 - **Left rail:** the sections with a state chip — not drafted · drafting ·
-  needs review · approved · re-confirm (amended) · blocked (bilingual/structure)
+  needs review · approved · blocked (bilingual/structure) — plus a yellow
+  "written before amendment N" marker alongside any of them (§5.2), which never
+  blocks on its own
   — then "§6A audit", then "Sign & build".
 - **Centre:** the selected section rendered MK | EN, with an edit toggle (raw
   bilingual Markdown) and a diff toggle (vs previous, vs approved).
@@ -439,8 +493,14 @@ With the fake Letta client the existing tests use:
   fixes it.
 - An edit or regenerate voids that section's approval and regulatory finding;
   other sections are untouched.
-- An amendment: older approvals stop counting, the §6A PASS is voided, and later
-  draft prompts contain the amendment.
+- An amendment: existing approvals still count; sections written before it are
+  flagged; the §6A PASS is voided; the next audit prompt and later draft
+  prompts contain the amendment.
+- Regenerating or editing a flagged section clears the flag and requires a new
+  approval; `mark_checked` clears it without changing the text or the approval.
+- Sign & build refuses a confirmation that omits a flagged section, adds an
+  unflagged one, or names a stale hash; it accepts one that matches exactly, and
+  the signature statement names the confirmed sections.
 - The §6A audit is never re-run on an unchanged assembled hash.
 - A repair lands as unapproved revisions; approved text never changes without a
   new decision.
