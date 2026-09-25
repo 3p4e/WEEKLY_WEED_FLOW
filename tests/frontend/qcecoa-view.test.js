@@ -25,7 +25,7 @@ const PRE = `
 `;
 
 function load() {
-  return loadGF({ files: ['data.js', 'core.js', 'qcecoa-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'qcecoa-view.js'], preScript: PRE });
 }
 
 const DOC = { id: 'd1', doc_number: 'ECOA-0001', batch_id: 'B1', source_institution: 'Lab X',

@@ -88,4 +88,34 @@ async function gotoModule(page, moduleId) {
   await page.waitForTimeout(150);
 }
 
-module.exports = { seedOrg, login, revealLoginCard, dismissModulePicker, gotoModule };
+/* Pick a date through the app's date control (gf/datepicker.js).
+ *
+ * Date fields are no longer native <input type="date"> — the visible control
+ * is a button and the value lives in a hidden input, because the calendar has
+ * to open on the FACILITY's today rather than the browser's. So a spec cannot
+ * .fill() them, and should not: driving the real control is what proves a
+ * person can actually enter the date.
+ *
+ * Navigates months if the target is not in the month the picker opened on
+ * (the picker opens on today, and a target a few days out can be in the next
+ * month), then clicks the day.
+ */
+async function pickDate(scope, id, iso) {
+  const page = scope.page ? scope.page() : scope;
+  await scope.locator(`#${id}-btn`).click();
+  const modal = page.locator('#gf-datepicker');
+  await modal.waitFor({ state: 'visible' });
+  const cell = modal.locator(`.dp-cell[data-v="${iso}"]`);
+  // At most a year of stepping; the targets these specs use are days away.
+  for (let i = 0; i < 13 && !(await cell.count()); i++) {
+    const [y, m] = iso.split('-').map(Number);
+    const shown = await modal.locator('.dp-sel').first().inputValue();
+    const shownY = Number(await modal.locator('.dp-sel').nth(1).inputValue());
+    const forward = (y > shownY) || (y === shownY && (m - 1) > Number(shown));
+    await modal.locator('.dp-nav').nth(forward ? 1 : 0).click();
+  }
+  await cell.click();
+  await modal.waitFor({ state: 'hidden' });
+}
+
+module.exports = { seedOrg, login, revealLoginCard, dismissModulePicker, gotoModule, pickDate };

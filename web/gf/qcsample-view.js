@@ -391,7 +391,9 @@
           <input id="qsm-qty" type="number" min="0" step="any" placeholder="${AL('Qty', 'Кол.')}" style="width:72px" value="${dv('qty')}" oninput="GF.WWF.qcSampleDraft('qty', this.value)">
           <input id="qsm-unit" placeholder="${AL('unit', 'ед')}" style="width:56px" value="${dv('unit')}" oninput="GF.WWF.qcSampleDraft('unit', this.value)">
           <select id="qsm-kind" onchange="GF.WWF.qcSampleDraft('kind', this.value)"><option value="">${AL('sample type…', 'тип на мостра…')}</option>${Object.keys(KIND).map(k => `<option value="${k}" ${dr.kind === k ? 'selected' : ''}>${k} · ${GF.esc(kindLabel(k))}</option>`).join('')}</select>
-          <input id="qsm-retexp" type="date" title="${AL('Retention expiry', 'Истек на резерва')}" value="${dv('retexp')}" oninput="GF.WWF.qcSampleDraft('retexp', this.value)">
+          ${GF.dateField('qsm-retexp', { value: dv('retexp'),
+            placeholder: AL('Retention expiry', 'Истек на резерва'),
+            onPick: (v) => GF.WWF.qcSampleDraft('retexp', v) })}
           ${GF.selectField('qsm-plan', { value: '', title: AL('Sampling plan', 'План за земање мостри'),
             searchable: true, placeholder: AL('No plan', 'Без план'), options: planOptions })}
           <input id="qsm-notes" placeholder="${AL('Notes (optional)', 'Белешки (опц.)')}" value="${dv('notes')}" oninput="GF.WWF.qcSampleDraft('notes', this.value)">

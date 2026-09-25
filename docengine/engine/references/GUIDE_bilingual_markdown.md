@@ -1,29 +1,45 @@
-# Purely Plant `.docx` — Use the `pp-document-suite` Skill (AUTHORITATIVE)
+# Purely Plant `.docx` — house format and the bilingual Markdown grammar
 
-> **The house format is produced by ONE thing: the `pp-document-suite` skill engine.**
-> Do not hand-roll formatting, do not invent colours, do not guess. Build with the engine,
-> verify with the engine, render to PDF, and eyeball the result. That is the whole job.
+> ⚠️ **Provenance corrected 2026-09-05.** This file used to head itself
+> "Use the `pp-document-suite` Skill (AUTHORITATIVE)" and point at
+> `pp-document-suite/SKILL.md`. Both claims were wrong and contradicted the two
+> accurate provenance documents in this tree:
+>
+> - **The live engine is `docengine/engine/scripts/`** — the only one this service
+>   imports (`app/config.py`: `ENGINE_SCRIPTS = ROOT/"engine"/"scripts"`). That is
+>   engine **line B**; see `../PROVENANCE.md` for its per-file canon.
+> - **`docengine/pp-document-suite/` is a frozen preservation snapshot** of engine
+>   line A. It is not imported by anything and must not be edited.
+> - **`SKILL.md` does not exist in this repo.** It was part of the packaged skill
+>   this snapshot came from; the specs it covered live in `references/` here.
+> - **Both trees are frozen.** Engine development moved to
+>   [3p4e/letta-stack](https://github.com/3p4e/letta-stack) — see `../../DEPRECATED.md`.
+>
+> The house-style rules below are still correct and still what the live engine
+> produces. Only the paths and the "authoritative tree" claim were stale.
 
-The skill lives in this repo at **`pp-document-suite/`** (installed from `pp-document-suite.skill`,
-Google Drive). Its `SKILL.md` is the master spec. The engine is `pp-document-suite/scripts/pp_format.py`
-(SOP/annex), `pp_report.py` (reports/records with native equations & charts), `pp_theme.py`
-(the one canonical palette), `pp_verify.py` (QC gate). The base template
-`pp-document-suite/assets/PP_BASE_TEMPLATE.docx` carries the mandatory running header (PP leaf
-logo + wordmark, bilingual Document name, Code, Version) and the "Page X of Y" footer.
+**The house format is produced by ONE thing: the engine.** Do not hand-roll formatting,
+do not invent colours, do not guess. Build with the engine, verify with the engine, render
+to PDF, and eyeball the result. That is the whole job.
+
+The engine is `engine/scripts/pp_format.py` (SOP/annex), `pp_report.py` (reports/records with
+native equations & charts), `pp_theme.py` (the one canonical palette), `pp_verify.py` (QC gate).
+The base template `engine/assets/PP_BASE_TEMPLATE.docx` carries the mandatory running header
+(PP leaf logo + wordmark, bilingual Document name, Code, Version) and the "Page X of Y" footer.
 
 ## The one command loop
 
 ```
 1. Content lives as bilingual Markdown in TRANS_DIST/md/<code>.md   (convention below)
 2. Build via the engine:   python3 scripts/build_from_md.py TRANS_DIST/md/<code>.md TRANS_DIST/docx/<code>.docx
-3. Verify (skill gate):    python3 pp-document-suite/scripts/pp_verify.py TRANS_DIST/docx/<code>.docx   → RESULT: PASS
+3. Verify (hard gate):     python3 engine/scripts/pp_verify.py TRANS_DIST/docx/<code>.docx   → RESULT: PASS
 4. Render + eyeball:       soffice --headless --convert-to pdf <docx> ; pdftoppm -png <pdf>  → look at it
 ```
 
 `scripts/build_from_md.py` is a thin adapter: it maps the Markdown blocks onto the engine's
 house-style helpers. It does **no** styling of its own — all appearance comes from `pp_format.py`.
 
-## Canonical house style (from `pp_theme.py` / `SKILL.md` — do not deviate)
+## Canonical house style (from `pp_theme.py` / `references/formatting_specs.md` — do not deviate)
 
 - **One house navy = `#2B547E`.** Never introduce a second navy. Label cells `#EDF2F7`,
   zebra rows `#F7FAFC`, accents mint `#E2EFDA` / rose `#FCE4D6` / cream `#FFF2CC`, gray text `#595959`.
@@ -49,7 +65,7 @@ house-style helpers. It does **no** styling of its own — all appearance comes 
   `t=pf.annex_table(d,widths)` → `pf.annex_section_header(t,mk,en)` (navy) / `pf.annex_row(t,values,bold_first,alt)`
   → `pf.annex_finalize(t)` ; `pf.annex_signoff(d)` → `pf.save(d,path)`.
 - Reports/records with formulas/charts/forms: `pp_report.py` (`cover_page`, `chapter`, `calc_step`,
-  `eqn`, `entry_table`, `execution_signoff`, `figure`) — see `SKILL.md` §3.7.
+  `eqn`, `entry_table`, `execution_signoff`, `figure`) — see `references/formatting_specs.md`.
 
 ## Markdown source convention (input to `build_from_md.py`)
 
@@ -68,8 +84,8 @@ mk_title / en_title / code / version / doctype (SOP|ANNEX|FORM|LOG|CHECKLIST) / 
 
 ## MANDATORY workflow & gates
 
-1. Read `pp-document-suite/SKILL.md` (master router: SOP vs Annex; Mode A content / B format / C restyle).
-2. Content per SKILL §2 (SOP 9-section; annex mandatory fields; quantify; cite the clause).
+1. Read `references/formatting_specs.md` (SOP vs Annex; Mode A content / B format / C restyle).
+2. Content per the section rules above (SOP 9-section; annex mandatory fields; quantify; cite the clause).
 3. Build via `scripts/build_from_md.py` (engine). **Never** style by hand.
 4. `pp_verify.py` must print **RESULT: PASS** (font floor ≥ 6 pt, bilingual, fidelity).
 5. Render to PDF and **look at it** — header/logo, navy banners, tables, footer must match the

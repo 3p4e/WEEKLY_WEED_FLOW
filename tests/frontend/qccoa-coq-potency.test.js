@@ -27,7 +27,7 @@ const PRE = `
 `;
 
 function load() {
-  return loadGF({ files: ['data.js', 'core.js', 'qccoa-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'qccoa-view.js'], preScript: PRE });
 }
 
 // Render the batch-CoQ panel with one selected CoQ whose detail carries `potency`.

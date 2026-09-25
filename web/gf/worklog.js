@@ -127,7 +127,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   body.innerHTML = `
     ${crumbs}
     <div class="row" style="gap:10px">
-      <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label><input id="wl-date" type="date" value="${today}"></div>
+      <div class="field" style="flex:1.2"><label>${AL('Date', 'Датум')}</label>${GF.dateField('wl-date', { value: today, clearable: false })}</div>
       <div class="field" style="flex:1"><label>${AL('Start', 'Почеток')}</label><input id="wl-start" type="time" value="09:00"></div>
     </div>
     <div class="row" style="gap:10px">

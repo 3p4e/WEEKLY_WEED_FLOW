@@ -42,7 +42,7 @@ const PRE = `
 `;
 
 function loadReportView() {
-  return loadGF({ files: ['data.js', 'core.js', 'report-view.js'], preScript: PRE });
+  return loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'report-view.js'], preScript: PRE });
 }
 
 function baseReportData(tasks) {
@@ -152,7 +152,7 @@ test('the rendered report carries no hardcoded hex colors — every color is a t
    ────────────────────────────────────────────────────────────────────── */
 test('the boot pin-prefetch is skipped when no token exists (anonymous page load)', async () => {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'report-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'report-view.js'],
     preScript: `
       window.GF = window.GF || {}; window.GF.views = window.GF.views || {};
       window.GF.WWF = window.GF.WWF || {};
@@ -171,7 +171,7 @@ test('the boot pin-prefetch is skipped when no token exists (anonymous page load
 
 test('the boot pin-prefetch still runs when a session token is already present', async () => {
   const h = loadGF({
-    files: ['data.js', 'core.js', 'report-view.js'],
+    files: ['data.js', 'core.js', 'datepicker.js', 'report-view.js'],
     preScript: `
       window.GF = window.GF || {}; window.GF.views = window.GF.views || {};
       window.GF.WWF = window.GF.WWF || {};

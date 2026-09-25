@@ -368,11 +368,12 @@ async def _task_context(conn, names: dict, week_id: str | None = None, limit: in
     M2: *dept* is the caller's department_id when they are a department-scoped
     manager (None for org-wide execs/QP/ADMIN). RLS lets any elevated role read
     every org task, so without this the corpus would ground a manager's AI
-    answer in ALL departments' work; scope it to their own department instead."""
+    answer in ALL departments' work; scope it to their own department — and
+    its sub-departments (app.dept_family), which are theirs too — instead."""
     if week_id and dept:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
-            " WHERE t.is_deleted=false AND t.week_id=$1 AND t.department_id=$2"
+            " WHERE t.is_deleted=false AND t.week_id=$1 AND t.department_id = ANY(app.dept_family($2))"
             " ORDER BY t.created_at DESC LIMIT $3", week_id, dept, limit)
     elif week_id:
         rows = await conn.fetch(
@@ -381,7 +382,7 @@ async def _task_context(conn, names: dict, week_id: str | None = None, limit: in
     elif dept:
         rows = await conn.fetch(
             f"SELECT {_CTX_COLS} FROM tasks t"
-            " WHERE t.is_deleted=false AND t.department_id=$1"
+            " WHERE t.is_deleted=false AND t.department_id = ANY(app.dept_family($1))"
             " ORDER BY t.week_start DESC NULLS LAST, t.created_at DESC LIMIT $2", dept, limit)
     else:
         rows = await conn.fetch(

@@ -143,7 +143,7 @@ async def activity(
     if not org_wide:
         args.append(dept)
         args.append(str(user["id"]))
-        clauses.append(f"(department_id=${len(args)-1}::uuid OR actor_id=${len(args)}::uuid)")
+        clauses.append(f"(department_id = ANY(app.dept_family(${len(args)-1}::uuid)) OR actor_id=${len(args)}::uuid)")
     if before:
         try:
             args.append(datetime.fromisoformat(before))
@@ -189,7 +189,7 @@ async def digest(
     org_wide = user["role"] != "USER" and (not is_dept_scoped_role(user) or dept is None)
     if not org_wide:
         args.append(dept); args.append(str(user["id"]))
-        clauses.append(f"(department_id=${len(args)-1}::uuid OR actor_id=${len(args)}::uuid)")
+        clauses.append(f"(department_id = ANY(app.dept_family(${len(args)-1}::uuid)) OR actor_id=${len(args)}::uuid)")
     where = " AND ".join(clauses)
     async with rls(user) as c:
         by_verb = await c.fetch(

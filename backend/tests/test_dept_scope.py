@@ -411,3 +411,89 @@ async def test_audit_prep_includes_managers_own_task_in_another_department(clien
     assert body["traceability"]["rate"] == 1.0
 
     assert body["status_distribution"].get("completed") == 1
+
+
+# ── sub-departments (migration 0064: departments.parent_id + app.dept_family) ──
+
+async def _child_department(org, parent_id, code="cloning"):
+    from app.db import tasks_admin_pool
+    return str(await tasks_admin_pool().fetchval(
+        "INSERT INTO departments(org_id, code, name, parent_id) VALUES ($1,$2,$3,$4) RETURNING id",
+        org["org_id"], code, code.title(), parent_id))
+
+
+@pytest.mark.asyncio
+async def test_a_parent_departments_manager_sees_its_sub_departments_work(client, admin_headers, org):
+    """Cloning and Nursery are sub-departments of Cultivation, run by the
+    cultivation manager. Their tasks are that manager's OWN scope — in the list
+    and through the by-id guard every task route calls — not foreign work."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    in_child = await _mk_task(client, admin_headers, "scoped: in my sub-department", child)
+    other = await _mk_task(client, admin_headers, "scoped: other dept", d2)
+    _, mgr = await _manager(client, admin_headers, d1)
+
+    ids = {t["id"] for t in (await client.get("/tasks", headers=mgr)).json()}
+    assert in_child["id"] in ids
+    assert other["id"] not in ids
+    assert (await client.get(f"/tasks/{in_child['id']}", headers=mgr)).status_code == 200
+    assert (await client.get(f"/tasks/{other['id']}", headers=mgr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_sub_departments_manager_does_not_inherit_the_parents_scope(client, admin_headers, org):
+    """Scope flows DOWN the tree only."""
+    d1, _ = await _two_departments(org)
+    child = await _child_department(org, d1)
+    in_parent = await _mk_task(client, admin_headers, "scoped: parent-level", d1)
+    _, sub_mgr = await _manager(client, admin_headers, child)
+    ids = {t["id"] for t in (await client.get("/tasks", headers=sub_mgr)).json()}
+    assert in_parent["id"] not in ids
+    assert (await client.get(f"/tasks/{in_parent['id']}", headers=sub_mgr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_files_work_directly_into_a_sub_department(client, admin_headers, org):
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    ok = await client.post("/tasks", json={"title": "clone run", "department_id": child}, headers=mgr)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["department_id"] == child
+    # …and still not into an unrelated department
+    assert (await client.post("/tasks", json={"title": "x", "department_id": d2},
+                              headers=mgr)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_departments_can_be_created_under_a_parent(client, admin_headers, org):
+    d1, _ = await _two_departments(org)
+    r = await client.post("/departments", json={"code": "nursery", "name": "Nursery", "parent_id": d1},
+                          headers=admin_headers)
+    assert r.status_code == 201, r.text
+    assert str(r.json()["parent_id"]) == d1
+    listed = {d["code"]: d for d in (await client.get("/departments", headers=admin_headers)).json()}
+    assert str(listed["nursery"]["parent_id"]) == d1
+    bad = await client.post("/departments", json={"code": "orphan", "name": "Orphan",
+                                                  "parent_id": "00000000-0000-0000-0000-000000000000"},
+                            headers=admin_headers)
+    assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_a_parent_manager_staffs_a_sub_department(client, admin_headers, org):
+    """The account guard follows the same tree: the cultivation manager
+    provisions a clone-room operator INTO Cloning, and still not into an
+    unrelated department."""
+    d1, d2 = await _two_departments(org)
+    child = await _child_department(org, d1)
+    _, mgr = await _manager(client, admin_headers, d1)
+    ok = await client.post("/auth/users", json={
+        "username": f"clone_op_{child[:8]}", "full_name": "Clone Operator",
+        "role": "USER", "department_id": child}, headers=mgr)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["user"]["department_id"] == child
+    no = await client.post("/auth/users", json={
+        "username": f"foreign_op_{d2[:8]}", "full_name": "Foreign Operator",
+        "role": "USER", "department_id": d2}, headers=mgr)
+    assert no.status_code == 403

@@ -679,7 +679,7 @@
           <input id="qec-src" placeholder="${AL('Source lab', 'Изворна лаб.')}">
           <select id="qec-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${(st.specs || []).map(s => `<option value="${s.id}">${GF.esc(s.spec_id + ' · ' + (s.material_code || ''))}</option>`).join('')}</select>
           <input id="qec-mat" placeholder="${AL('Material (optional)', 'Материјал (опц.)')}">
-          <input id="qec-rd" type="date" title="${AL('Report date', 'Датум на извештај')}">
+          ${GF.dateField('qec-rd', { placeholder: AL('Report date', 'Датум на извештај') })}
           <button class="btn btn-sm btn-primary" onclick="GF.WWF.qcEcoaCreate()">${GF.t('create_task') || 'Create'}</button>
         </div>
       </div>` : '';

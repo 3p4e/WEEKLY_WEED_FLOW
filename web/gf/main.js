@@ -117,14 +117,14 @@ GF.openAdd = (weekId, parentId) => {
         onPick: () => GF.renderAddPreview && GF.renderAddPreview() })}</div>
     </div>
     <div class="af-cols">
-      <div class="af-sec">${secT('Due date', 'Рок')}<input id="add-due" class="mw-input" type="date"></div>
+      <div class="af-sec">${secT('Due date', 'Рок')}${GF.dateField('add-due', {})}</div>
       <div class="af-sec">${secT('Recurrence', 'Повторување')}${GF.chipField('add-rec', {
         value: '', clearable: false, title: GF.t('recurrence'), options: recOptions,
         onPick: (v) => GF.syncRecFields(v) })}</div>
     </div>
     <div class="af-cols" id="add-rec-extra" style="display:none">
       <div class="af-sec">${secT('Repeat every', 'Повторувај на секои')}<input id="add-rec-n" class="mw-input" type="number" min="1" max="1000" step="1" value="1"></div>
-      <div class="af-sec">${secT('Until', 'До')}<input id="add-rec-until" class="mw-input" type="date"></div>
+      <div class="af-sec">${secT('Until', 'До')}${GF.dateField('add-rec-until', {})}</div>
     </div>
     <div class="af-sec">
       ${secT('Assignees', 'Задолжени', GF.t('responsible_hint'))}

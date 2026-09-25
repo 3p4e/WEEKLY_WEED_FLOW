@@ -80,6 +80,25 @@ def is_dept_scoped_role(user: dict) -> bool:
     return user["role"] in DEPT_SCOPED_ROLES
 
 
+async def dept_family(c, root) -> list[str]:
+    """A department and every department beneath it, as str uuids.
+
+    Cloning and Nursery sit under Cultivation (departments.parent_id), and the
+    cultivation manager runs them: their scope is Cultivation AND its
+    descendants, not Cultivation alone. This is the Python-side reading of
+    app.dept_family() (tasks migration 0064) for the places that compare in
+    Python rather than in SQL — `is this department one of mine` before a
+    create, a delegation, a handoff, a staff account. SQL predicates call the
+    function directly: `department_id = ANY(app.dept_family($scope))`.
+
+    `c` must be a TASKS-database connection (departments live there). Under
+    RLS a foreign org's rows are invisible, and an unknown root comes back as
+    [root], so a caller's comparison degrades to the exact match it replaced
+    rather than to "nothing matches"."""
+    arr = await c.fetchval("SELECT app.dept_family($1::uuid)", str(root))
+    return [str(x) for x in (arr or [root])]
+
+
 def uuid_or_404(value, detail: str = "Not found") -> None:
     """A malformed (non-uuid) path/body id must be a clean 404, not a 500 from
     asyncpg trying to cast it inside the lookup query."""

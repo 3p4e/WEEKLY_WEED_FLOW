@@ -22,11 +22,17 @@
 
   // step: 'pick' | 'answer' | 'meta' | 'running' | 'done' | 'failed' | 'build'
   const freshBuild = () => ({ md: '', code: '', busy: false, result: null, error: null, verify: null });
+  // The 'done' step's ask/edit panel — a question never mutates anything
+  // (studioChat is a read-only Letta turn); an edit fires a NEW job exactly
+  // like the initial generation, so it reuses poll()/step transitions as-is.
+  const freshChat = () => ({ sectionNum: '', text: '', busy: false, error: null, answer: null });
   GF.WWF._qstu = { step: 'pick', list: null, q: null, qkey: '', answers: {},
                    meta: { title_mk: '', title_en: '', code: '', version: '1.0' },
                    job: null, docs: null, error: null, _poll: null,
                    docOpen: {},            // registry-row expansion: did -> {loading|data|error}
-                   build: freshBuild() };  // Mode B: direct Markdown build
+                   build: freshBuild(),    // Mode B: direct Markdown build
+                   presets: null,          // GET /qms/studio/presets, loaded lazily on first 'done'
+                   chat: freshChat() };
 
   const st = () => GF.WWF._qstu;
 
@@ -80,7 +86,7 @@
                    'Двата наслови и кодот на документот се задолжителни.');
       GF.render.all(); return;
     }
-    s.error = null; s.step = 'running'; s.job = null;
+    s.error = null; s.step = 'running'; s.job = null; s.chat = freshChat();
     GF.render.all();
     try {
       const r = await GF.API.studioStartWorkflow({
@@ -140,7 +146,7 @@
     const s = st();
     if (s._poll) clearTimeout(s._poll);
     Object.assign(s, { step: 'pick', q: null, qkey: '', answers: {}, job: null, error: null,
-                       docOpen: {}, build: freshBuild(),
+                       docOpen: {}, build: freshBuild(), chat: freshChat(),
                        meta: { title_mk: '', title_en: '', code: '', version: '1.0' } });
     loadIndex(); GF.render.all();
   };
@@ -198,6 +204,94 @@
     if (GF.state.view === 'qmsstudio') GF.render.all();
   };
 
+  // ---- ask/edit panel (done step): GET /presets, POST .../chat, POST .../revise ----
+  async function loadPresets() {
+    const s = st();
+    s.presets = 'loading';
+    try { s.presets = (await GF.API.studioPresets()).presets; }
+    catch (e) { s.presets = []; }
+    if (GF.state.view === 'qmsstudio') GF.render.all();
+  }
+
+  GF.WWF.qstuChatSet = (v) => { st().chat.text = v; };          // no re-render: keep the caret in place
+  GF.WWF.qstuChatSection = (v) => { st().chat.sectionNum = v; GF.render.all(); };
+
+  GF.WWF.qstuChatPreset = (key) => {
+    const s = st(); const c = s.chat;
+    const p = (Array.isArray(s.presets) ? s.presets : []).find(x => x.key === key);
+    if (!p) return;
+    c.text = p.instruction; c.error = null; c.answer = null;
+    GF.render.all();
+  };
+
+  GF.WWF.qstuChatAsk = async () => {
+    const s = st(); const c = s.chat;
+    const q = (c.text || '').trim();
+    if (!q || !s.job) return;
+    c.busy = true; c.error = null; c.answer = null;
+    GF.render.all();
+    try {
+      const r = await GF.API.studioChat(s.job.id, { question: q, section_num: c.sectionNum || null });
+      c.answer = r.answer;
+    } catch (e) { c.error = e.message; }
+    c.busy = false;
+    if (GF.state.view === 'qmsstudio') GF.render.all();
+  };
+
+  // Applies directly — no accept/reject step. It builds a NEW verified
+  // document (never overwrites), so this fires exactly like the initial
+  // generation: a fresh job id, reusing the same poll()/step machinery.
+  GF.WWF.qstuRevise = async () => {
+    const s = st(); const c = s.chat;
+    const instruction = (c.text || '').trim();
+    if (!instruction || !s.job) return;
+    c.error = null;
+    GF.render.all();
+    try {
+      const r = await GF.API.studioRevise(s.job.id, { instruction, section_num: c.sectionNum || null });
+      s.job = { id: r.job_id, status: r.status, stage: '' };
+      s.step = 'running'; s.chat = freshChat();
+      poll();
+    } catch (e) { c.error = e.message; GF.render.all(); }
+  };
+
+  const chatPanel = () => {
+    const s = st(); const c = s.chat; const r = (s.job && s.job.result) || {};
+    const sections = r.sections || [];
+    if (s.presets === null) loadPresets();
+    const presetChips = Array.isArray(s.presets) ? s.presets.map(p => `
+      <span class="chip-opt" onclick="GF.WWF.qstuChatPreset('${GF.esc(p.key)}')"
+        >${GF.esc(AL(p.label_en, p.label_mk))}</span>`).join('') : '';
+    const sectionOpts = sections.map(sec => `
+      <option value="${GF.esc(sec.num)}" ${c.sectionNum === sec.num ? 'selected' : ''}
+        >${GF.esc(sec.num)} — ${GF.esc(AL(sec.en, sec.mk))}</option>`).join('');
+    return `
+      <div class="panel ana-panel" style="margin-top:10px">
+        <div class="ana-h">${AL('Ask or edit with AI', 'Прашај или уреди со AI')}</div>
+        <div class="ana-note" style="margin:2px 0 8px">${AL(
+          'Ask a question about this document, or apply an edit — an edit is applied directly and produces a new verified revision; nothing is ever overwritten.',
+          'Прашајте нешто за документот, или применете измена — измената се применува директно и создава нова верификувана ревизија; ништо никогаш не се презапишува.')}</div>
+        ${sections.length ? `
+          <label class="ana-note" style="display:block;margin:0 0 4px">${AL(
+            'Section (optional — leave blank for the whole document)', 'Секција (опционално — оставете празно за целиот документ)')}</label>
+          <select class="qms-search" style="width:100%;margin-bottom:8px" onchange="GF.WWF.qstuChatSection(this.value)">
+            <option value="">${AL('Whole document', 'Целиот документ')}</option>${sectionOpts}
+          </select>` : ''}
+        ${presetChips ? `<div class="chips" style="margin-bottom:8px">${presetChips}</div>` : ''}
+        <textarea rows="3" placeholder="${AL('Ask a question, or describe the edit to make…', 'Поставете прашање или опишете ја измената…')}"
+          style="width:100%;font:12px ui-monospace,monospace;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:10px;color:var(--ink);resize:vertical"
+          oninput="GF.WWF.qstuChatSet(this.value)">${GF.esc(c.text)}</textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" ${c.busy ? 'disabled' : ''} onclick="GF.WWF.qstuChatAsk()"
+            >${c.busy ? AL('Asking…', 'Прашувам…') : AL('Ask', 'Прашај')}</button>
+          <button class="btn btn-primary btn-sm" onclick="GF.WWF.qstuRevise()"
+            >${AL('Apply edit → new revision', 'Примени измена → нова ревизија')}</button>
+        </div>
+        ${c.error ? `<div style="color:var(--red-fg,var(--red));margin-top:8px">${GF.esc(c.error)}</div>` : ''}
+        ${c.answer ? `<div class="qms-hit" style="margin-top:8px"><div class="qms-hit-b">${GF.esc(c.answer)}</div></div>` : ''}
+      </div>`;
+  };
+
   // ---- rendering ----
   const passChip = (ok) => ok
     ? `<span class="chip-opt" style="border-color:var(--green);color:var(--green)">PASS</span>`
@@ -237,18 +331,34 @@
         'Неодговорените прашања автоматски се пополнуваат со најусогласената опција.')}</div>`;
   };
 
+  // House convention for a controlled-document code: <DEPT>SOP_<NNN>, e.g.
+  // QASOP_031 / QCSOP_012, with annexes hanging off their parent as _A<NN>
+  // (QASOP_031_A10). Confirmed by the owner 2026-09-05; the underscore form
+  // is the canonical one of the several spellings the corpus carries.
+  //
+  // The department is the one the questionnaire is written for, so the head
+  // is only known once a bank is chosen — and an ANNEX's code is derived from
+  // its parent SOP, which this wizard does not ask for, so no head is offered
+  // there rather than a guessed one.
+  const DOC_CODE_PREFIX = { sop_qc: 'QCSOP_' };
+  const docCodePrefix = () => DOC_CODE_PREFIX[st().qkey] || '';
+
   const metaStep = () => {
     const s = st(); const m = s.meta;
     const inp = (k, lbl, ph) => `
       <label class="ana-note" style="display:block;margin:8px 0 2px">${lbl}</label>
       <input class="qms-search" style="width:100%" value="${GF.esc(m[k])}" placeholder="${ph}"
         oninput="GF.WWF.qstuMeta('${k}', this.value)">`;
+    const codeInp = (lbl, ph) => `
+      <label class="ana-note" style="display:block;margin:8px 0 2px">${lbl}</label>
+      ${GF.codeField('qstu-code', { prefix: docCodePrefix(), value: m.code, placeholder: ph,
+        style: 'width:100%', maxlength: 64, oninput: "GF.WWF.qstuMeta('code', this.value)" })}`;
     return `
       <div class="panel ana-panel">
         <div class="ana-h">${AL('Document identity', 'Идентитет на документот')}</div>
         ${inp('title_mk', AL('Title (Macedonian)', 'Наслов (македонски)'), 'СОП за …')}
         ${inp('title_en', AL('Title (English)', 'Наслов (англиски)'), 'SOP for …')}
-        ${inp('code', AL('Document code', 'Код на документ'), 'QCSOP-0XX')}
+        ${codeInp(AL('Document code', 'Код на документ'), docCodePrefix() ? docCodePrefix() + '012' : 'QASOP_031')}
         ${inp('version', AL('Version', 'Верзија'), '1.0')}
       </div>
       ${s.error ? `<div style="color:var(--red-fg,var(--red));margin:8px 0">${GF.esc(s.error)}</div>` : ''}
@@ -272,6 +382,44 @@
       </div>`;
   };
 
+  // What the agents did not know, lifted out of the document by the engine
+  // (docengine app/needs.py). The same gaps are visible in the .docx as
+  // [NEEDS INPUT: …] markers, but a marker only helps someone already reading
+  // that page — this is the list, up front, of what the document is waiting on.
+  // Rendered whenever the job carries the key, INCLUDING when it is empty:
+  // "nothing outstanding" is worth stating plainly about a controlled document.
+  const needsPanel = (r) => {
+    const items = r.needs_input;
+    if (!Array.isArray(items)) return '';    // job predates the feature — say nothing
+    if (!items.length) {
+      return `<div class="panel ana-panel" style="margin-top:10px">
+        <div class="ana-h" style="color:var(--green)">✓ ${AL('Nothing outstanding',
+                                                             'Ништо не недостасува')}</div>
+        <div class="ana-note">${AL(
+          'The agents reported no missing facility information for this document.',
+          'Агентите не пријавија недостасувачки податоци за овој документ.')}</div>
+      </div>`;
+    }
+    const rows = items.map(n => `
+      <div class="qms-hit">
+        <div class="qms-hit-h"><span class="mono qms-code">${GF.esc(n.section || '?')}</span></div>
+        <div class="qms-hit-b">${GF.esc(n.item || '')}</div>
+      </div>`).join('');
+    return `
+      <div class="panel ana-panel" style="margin-top:10px">
+        <div class="ana-h">${AL('Needs your input', 'Потребни се вашите податоци')}
+          · ${items.length}</div>
+        <div class="ana-note" style="margin:2px 0 8px">${AL(
+          'The agents did not have these facts and did not invent them — each one is marked ' +
+          '[NEEDS INPUT: …] in the document at the point it belongs. Supply the values and ' +
+          'apply them as an edit below, or fill them in after downloading.',
+          'Агентите ги немаа овие податоци и не ги измислија — секој е означен со ' +
+          '[NEEDS INPUT: …] во документот на соодветното место. Дајте ги вредностите и ' +
+          'применете ги како измена подолу, или пополнете ги по преземањето.')}</div>
+        <div class="qms-list">${rows}</div>
+      </div>`;
+  };
+
   const doneStep = () => {
     const s = st(); const r = (s.job && s.job.result) || {};
     const did = r.document_id;
@@ -288,8 +436,10 @@
           <button class="btn btn-sm" onclick="GF.WWF.qstuReset()">${AL('New document', 'Нов документ')}</button>
         </div>
       </div>
-      ${reg ? `<div class="panel ana-panel"><div class="ana-h">${AL('Regulatory check', 'Регулаторна проверка')}</div>
-               <div class="qms-list">${reg}</div></div>` : ''}`;
+      ${needsPanel(r)}
+      ${reg ? `<div class="panel ana-panel" style="margin-top:10px"><div class="ana-h">${AL('Regulatory check', 'Регулаторна проверка')}</div>
+               <div class="qms-list">${reg}</div></div>` : ''}
+      ${chatPanel()}`;
   };
 
   // authed binary download: fetch with the bearer header, save via blob URL
@@ -359,7 +509,8 @@
           style="width:100%;font:12px ui-monospace,monospace;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px;color:var(--ink);resize:vertical"
           oninput="GF.WWF.qstuBuildSet('md', this.value)">${GF.esc(b.md)}</textarea>
         <label class="ana-note" style="display:block;margin:8px 0 2px">${AL('Document code (optional)', 'Код на документ (опционално)')}</label>
-        <input class="qms-search" style="width:100%" value="${GF.esc(b.code)}" placeholder="QCSOP-0XX"
+        <input class="qms-search" style="width:100%" value="${GF.esc(b.code)}" placeholder="QASOP_031"
+          autocomplete="off" spellcheck="false"
           oninput="GF.WWF.qstuBuildSet('code', this.value)">
         ${b.error ? `
           <div style="color:var(--red-fg,var(--red));margin:10px 0 4px">${b.verify ? passChip(false) + ' ' : ''}${GF.esc(b.error)}</div>

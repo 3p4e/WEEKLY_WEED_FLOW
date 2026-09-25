@@ -52,7 +52,7 @@ async def pending(user: dict = Depends(require_password_set)):
             scope = dept_scope(user)
             if scope:
                 team = await c.fetch(
-                    f"{_BASE} AND ta.user_id <> $1 AND t.department_id = $2"
+                    f"{_BASE} AND ta.user_id <> $1 AND t.department_id = ANY(app.dept_family($2))"
                     f" ORDER BY ta.assigned_at", user["id"], scope)
             else:
                 team = await c.fetch(

@@ -1,0 +1,341 @@
+# The official ImB product catalogue
+
+**Date:** 2026-09-06 · **Status:** implemented on
+`claude/weekly-read-flow-setup-yft7if` (PR #52) · **Ships as:** tasks migrations
+`0066`/`0067`, `app/api/qc/products.py`, `app/plantids.py`,
+`app/data/imb_products.json`.
+
+## What the owner said
+
+> "The two specification PDFs are official regarding the strains and potency
+> ranges and grades and codes."
+> "The nominal values for every potency grade range per strain needs to be the
+> same as in the 2 pdf documents with ImB Specifications I provided."
+
+## What the documents are
+
+`PP_ImB_Specifications_Tran01-1-19.pdf` and `PP_ImB_Specifications_Tran02-20-48.pdf`
+(Drive, 2026-08-31): **48 one-page product specifications**. One page is one
+strain at one nominal Total Δ9-THC:
+
+| | |
+|---|---|
+| Product code | `<ABBR>_THC<nominal>:CBD1` — `GP_THC26:CBD1` |
+| Nominal | `26.00 % ± 2.60 %` |
+| Window | `23.40 – 28.59 %` = nominal × 0.90 … nominal × 1.10 − 0.01 |
+| Document | `QCSP 001 v.03` |
+| Packaging | 400 g triplex alu bag, `PET 12 · ALU 7 · PE 80` |
+
+The ± 10 % relative rule holds on **all 48 pages** (verified by extraction).
+Six pages are reprints of a product that also appears elsewhere, so the
+catalogue is **42 distinct products across 22 strains**. Eight pages print a
+strain name that differs slightly from the August handoff catalogue (Jelly
+Donutz / "Jelly Donuts", Wedding Crasher / "Wedding Crusher", Pure Michigan /
+"Pure Michigen", Graps & Crème / "Grapes And Cream", Clemosa / "Clemosa A
+Bud"); both spellings are kept in the seed file, the August name as `strain`
+and the page's as `strain_printed`. `[NEEDS INPUT: which spelling is
+canonical?]`
+
+## Why a new table rather than the existing ladders
+
+`qc_potency_specs` models a per-cultivar **ladder**: tiers I…IV tiling
+`[floor, 30 %]`, **one APPROVED ladder per cultivar**, non-overlapping, top
+exactly 30.00 %. The official scheme breaks all three:
+
+- a strain sells as several products at once (Grape Pie: THC 28, 26, 24, 18, 16);
+- their windows **overlap** (GP26 23.40–28.59 and GP24 21.60–26.39);
+- `CJ_THC28`'s window reaches **30.79 %**.
+
+So `qc_products` is its own table and the ladders are left exactly as they are,
+readable, so CoQs issued before the catalogue keep printing the grade they were
+issued with. **Approving a cultivar's first product supersedes that cultivar's
+APPROVED ladder** — two live grade schemes would be two answers to one question.
+
+## The table
+
+`qc_products`: `cultivar_id`, `product_code`, `grade`, `nominal_pct`,
+`window_min`, `window_max` (**stored, not derived** — the printed page is the
+specification), `doc_code` / `doc_version`, `source` (the pages it came from),
+`status` DRAFT → APPROVED → SUPERSEDED, `effective_date`, `approved_by`,
+`notes`. `UNIQUE(org, product_code, doc_version)` plus a partial unique index
+for one APPROVED row per code. No 30 % cap anywhere.
+
+## Routes
+
+| Route | Who | What |
+|---|---|---|
+| `GET /qc/products[?cultivar_id&status]` | elevated | the catalogue + `tested {n, avg, min, max}` |
+| `GET /qc/products/{id}` · `…/potency-history` | elevated | the product + its measured history |
+| `POST` / `PATCH /qc/products` | QC writers | author a page; DRAFT only for edits |
+| `POST …/approve` · `…/supersede` | head of QC | approver ≠ author; approve retires the ladder |
+| `POST /qc/products/import {dry_run}` | head of QC | the packaged 42 pages, idempotent |
+| `GET /qc/products/conformance?cultivar_id&total_d9_thc[&product_id]` | elevated | which products a value satisfies |
+| `GET /qc/products/{id}/document` | elevated | the A4 page |
+
+**Conformance replaces disposition.** The ladder answered "which tier?" and
+there was exactly one. Official windows overlap, so the answer is a **list**,
+plus `nearest` (the highest-nominal product the value satisfies) for a reader
+who wants one name. Which product a lot ships as is a packaging decision.
+
+## "Tested so far"
+
+Three sources, each labelled, never blended:
+
+1. **product-level** — APPROVED CoQs that name the product;
+2. **cultivar-level** — APPROVED CoQs that name only the cultivar;
+3. **certificate-level** — Total Δ9-THC results on APPROVED/RELEASED
+   certificates of that cultivar's batches, reached through the batch code.
+   A text join, and it says so.
+
+The measured value is always `qc_coq_lines.result_numeric` for the parameter
+with `computed_kind='total_thc'` (Ph. Eur. 3028: THC + 0.877 × THCA), the same
+read the CoQ's own grade uses. A lot with no measured total contributes nothing.
+
+Per mother plant, `GET /cultivation/mothers/{id}/potency` reports the product's
+figures plus a `traced` subset — lots descended from a batch that mother was
+cut into. Usually empty, and it never borrows the strain's number.
+
+## Identity strings
+
+`app/plantids.py` composes every one:
+
+| | |
+|---|---|
+| Product | `GP_THC26:CBD1`, window from `window_for(26)` |
+| Mother plant | `GP26_S1M03-2_020` |
+| Clone | `GP26_S1M03-2_020-03.147` |
+| Legacy plant | `20260706_GP_0001` |
+
+## Rollout
+
+1. Deploy `0066` and `0067` (0067 refuses to run over pre-existing mother rows;
+   production has none).
+2. `POST /qc/products/import {"dry_run": true}` as a QC manager, then for real.
+   Expect 42 created, 22 cultivars resolved or created.
+3. Approve per product as a **different** QC person or the QP. Each cultivar's
+   first approval supersedes its ladder.
+4. Set target products on open batches (`PATCH /cultivation/batches/{id}`).
+5. Compile CoQs with `product_id` from then on.
+
+## Verified against the controlled specifications (2026-09-06)
+
+The owner supplied the specification archive: one folder per strain, one PDF per
+grade, document code `QCSP_001_<ABBR>-<TIER>_v.01`. Read directly from those
+PDFs.
+
+### Strain spellings — STILL OPEN (an earlier revision of this file wrongly said "resolved")
+
+There are **two controlled sources and they disagree**. Both are dated
+`01.06.2026`, both carry per-page document code `QCSP_001_<ABBR>-<TIER>_v.01`,
+both are prepared by the QC Manager and reviewed by the QA Manager — so neither
+supersedes the other on any evidence available here:
+
+| Product | Per-strain folder document | `ImB_Specifications…Merged.pdf` |
+| --- | --- | --- |
+| `JD_THC22` | JELLY DONUT**Z** | JELLY DONUT**S** |
+| `GRC_THC10` | **GRAPS AND CREME** | **GRAPES AND CREAM** |
+| `SJ_THC10` | SLEEPY JO**Y** | SLEEPY JO**E** |
+| `WC_THC24` | WEDDING CR**A**SHER | WEDDING CR**U**SHER |
+| `CLE_THC8` | CLEMOSA A BUD | CLEMOSA A BUD — agree |
+| `PUM_THC14` | PURE MICHIGEN | PURE MICHIGEN — agree |
+
+Settled regardless of which source wins: **"A Bud" is part of the Clemosa strain
+name**, and **PURE MICHIGEN** is the spelling in both (the seed file's "Pure
+Michigan" is wrong either way). `Sleepy Joy` / `Sleepy Joe` was a sixth contested
+spelling nobody had previously flagged.
+
+**[NEEDS INPUT]** Which of the two controlled documents governs the strain name?
+This is not cosmetic: the name resolves to a cultivar row whose abbreviation is
+the head of every batch code (`GP072501`) and mother ID (`GP26_S1M03-2_nnn`), and
+potency history is attributed to a strain by that head. Two spellings admitted as
+two cultivars splits a strain's tested history in half.
+
+### Grade sets and nominals — CONFIRMED CORRECT
+
+`imb_products.json`'s nominals match the specification archive on **all 22
+strains, zero differences** (checked programmatically). Grape Pie I–V =
+28/26/24/18/16, Cap Junky I–IV = 28/26/24/20, Jelly Donutz I–IV = 22/20/16/14.
+
+### The windows DO overlap, and the documents say so
+
+Every specification PDF sampled prints the window as **±10 % relative**, upper
+bound `nominal × 1.10 − 0.01`:
+
+| Document | Header | Window |
+| --- | --- | --- |
+| `QCSP_001_GP-I_v.01` | `GRAPE PIE 28.00% ± 2.80%` | 25.20 – 30.79 % |
+| `QCSP_001_GP-II_v.01` | `GRAPE PIE 26.00% ± 2.60%` | 23.40 – 28.59 % |
+| `QCSP_001_GP-III_v.01` | `GRAPE PIE 24.00% ± 2.40%` | 21.60 – 26.39 % |
+| `QCSP_001_CJ-I_v.01` | `CAP JUNKY 28.00% ± 2.80%` | 25.20 – 30.79 % |
+| `QCSP_001_GG-I_v.01` | `GORILLA GLUE 18.00% ± 1.80%` | 16.20 – 19.79 % |
+| `QCSP_001_GG-II_v.01` | `GORILLA GLUE 16.00% ± 1.60%` | 14.40 – 17.59 % |
+
+GP I and GP II overlap across 25.20–28.59; GG I and GG II across 16.20–17.59.
+**This is a quality finding, not a modelling choice.** A measured 26.00 % Grape
+Pie satisfies Grade I, Grade II *and* Grade III as issued, so "which grade is
+this batch?" has three correct answers and the certificate cannot be derived
+from the result alone.
+
+### The HTML copies say the same thing (checked exhaustively)
+
+Each strain folder holds an HTML alongside every PDF (HTML written 09:16, PDF
+11:21 the same morning — the PDF is rendered from the HTML). Every HTML for
+every **multi-grade** strain was parsed; single-grade strains cannot overlap by
+definition and are excluded.
+
+| | |
+| --- | --- |
+| HTML documents parsed | **28**, across 9 multi-grade strains |
+| at exactly ±10.00 % | **28 / 28** |
+| adjacent grade pairs | 19 |
+| pairs that **overlap** | **15** |
+| pairs with a clean gap | 4 |
+
+```
+BSS   I/II   21.60–21.99      JD    I/II   19.80–21.99
+CJ    I/II   25.20–28.59      JD  III/IV   14.40–15.39
+CJ   II/III  23.40–26.39      OPM   I/II   19.80–21.99
+CJ  III/IV   21.60–21.99      OPM  II/III  18.00–19.79
+GP    I/II   25.20–28.59      PM    I/II   10.80–10.99
+GP   II/III  23.40–26.39      SCR   I/II   18.00–19.79
+GP   IV/V    16.20–17.59
+HPA   I/II   19.80–21.99      HPA  II/III  18.00–19.79
+```
+
+The HTML and PDF renderings agree on every value. There is no third reading of
+the issued specification, and no document anywhere in the archive prints a
+tolerance other than ±10 %.
+
+### Why the windows overlap: it is the ladder spacing, not the tolerance
+
+The owner's hand-drawn study (2026-09-06) plots two candidate THC ladders from
+6 % to 30 % with ±10 % bands, colouring each junction **green** where consecutive
+grades leave a clean gap and **pink** where they overlap. Both drawn ladders turn
+green→pink partway up. The arithmetic behind that:
+
+> Two adjacent nominals `L < H` carrying a **relative** ±p band are disjoint
+> **iff** `H/L > (1+p)/(1−p)`.
+> At p = 10 % that threshold is **11/9 = 1.2222** — a step of **22.22 % or more**.
+
+The constraint is on the **ratio**, not the absolute step, which is why a fixed
+step stops working as the ladder climbs:
+
+| step | works while | fails from |
+| --- | --- | --- |
+| 2 points | nominal < 9 % | 10 → 12 upward |
+| 4 points | nominal < 18 % | 20 → 24 upward |
+
+The drawing's ladders reproduce this exactly, including `18 → 22` (ratio
+1.2222…) landing on a **zero-width touch** — neither gap nor overlap.
+
+At ±10 % only about **seven** non-overlapping grades fit between 8 % and 30 %,
+and they must be geometric, e.g. `8.00, 9.78, 11.95, 14.61, 17.86, 21.83, 26.68`
+— not round numbers. So a catalogue of round nominals spaced 2 apart at the top
+of the range **cannot** be non-overlapping at ±10 %. Grape Pie I/II is a ratio of
+1.0769 against a required 1.2222.
+
+**The issued catalogue read the same way — 20 junctions:**
+
+| | |
+| --- | --- |
+| **pink** (overlap) | **16** |
+| **green** (dead band — a result here fits NO grade) | **4** |
+
+The four dead bands are already in the issued specification, so "continuous
+coverage" was never a property of the current scheme either:
+
+| strain | between | dead band |
+| --- | --- | --- |
+| Orange Punch Mimosa | IV → III | **10.99 – 16.20** (5.21 wide) |
+| Grape Pie | IV → III | 19.79 – 21.60 (1.81) |
+| Jelly Donuts | III → II | 17.59 – 18.00 (0.41) |
+| Orange Punch Mimosa | V → IV | 8.80 – 9.00 (0.21) |
+
+So the real choice is not "overlap or not". It is: **keep ±10 % and respace the
+nominals geometrically**, or **keep the round nominals and let the tolerance
+shrink where grades sit close together**. The second is what the derived
+proposal does; the first is what the drawing tests.
+
+### `_grades_data.json` is NOT the issued specification
+
+The archive root also holds `_grades_data.json`, which encodes a **different,
+non-overlapping** scheme — per-grade absolute tolerances (Grape Pie II `26 ±
+0.6` → 25.40–26.60; Cap Junky I `28 ± 1` → 27.00–29.00), every one of them ≤ 10 %
+and chosen so neighbouring grades do not touch. It matches the owner's stated
+intent exactly. It does **not** match the PDFs:
+
+- Grape Pie IV nominal **20**, but the PDF says **18**;
+- Cap Junky given **five** grades, but only four PDFs exist (I–IV);
+- Jelly Donutz given **three** grades, but four PDFs exist (I–IV);
+- no PDF prints any of its tolerances.
+
+Its **strain names are the correct ones**, which is how the spellings above were
+cross-checked. Read it as a proposal for a future `v.02`, not as the current
+specification. `_master_spec.json`'s `gr` block matches the PDFs' grade sets, but
+its `names` map has all six spellings wrong.
+
+**[NEEDS INPUT]** Which is the controlled state: the issued `v.01` PDFs
+(overlapping ±10 %), or the non-overlapping tolerances in `_grades_data.json`?
+The app currently implements the PDFs. Adopting the non-overlapping scheme is a
+data change, not a code change — `qc_products` already stores `window_min` /
+`window_max` per product and never assumes ±10 %.
+
+### The merged master document — the catalogue is exact against it
+
+`ImB_Specifications_Tran01-Tran02_Merged.pdf` (48 pages, 11.5 MB) is the
+consolidated specification. Parsed in full:
+
+| | |
+| --- | --- |
+| pages | 48 → **42 distinct products**, 22 strains, 6 reprints |
+| pages where tolerance ≠ 10.00 % of nominal | **0 / 48** |
+| pages where window ≠ `[nom − tol, nom × 1.10 − 0.01]` | **0 / 48** |
+| adjacent grade pairs | 20 — **16 overlap**, 4 clean |
+| `imb_products.json` vs this document | **42 / 42 exact** on code, nominal and window |
+
+So what is loaded in production is a faithful transcription of the master
+document. The reprinted pages are `CJ-III`, `FB-I`, `GG-II`, `GP-II`, `GP-IV`,
+`OPM-III`.
+
+Worst ambiguity: a Grape Pie or Cap Junky batch assaying **exactly its own
+nominal, 26.00 %**, satisfies **three** grades (I, II and III). The mildest is
+Permanent Marker I/II, a 0.19-point sliver at 10.80–10.99.
+
+**Jokerz 31 — CONFIRMED.** Page 14: `J31_THC18 : CBD1  16.20 – 19.79 %
+QCSP_001_J31-I_v.01`, Grade I, nominal 18.00 ± 1.80. The seed file's
+`needs_confirmation` flag can be cleared.
+
+**Document versions — RESOLVED, they are not competing.** `QCSP 001 v.03` is the
+*parent* specification document; `QCSP_001_<ABBR>-<TIER>_v.01` is the individual
+product page's own code. Both appear on the same page. Neither supersedes the
+other.
+
+## Open
+
+- Canonical strain spellings — **still open**, see above; two controlled
+  documents disagree on four of them.
+- ~~Whether a CoQ whose Total THC falls outside its product's window should be
+  blocked from issuance.~~ **DECIDED 2026-09-06 (owner): no, do not block.**
+  A Total Δ9-THC outside the chosen product's window is reported on the CoQ and
+  printed on the document; it does not stop issuance.
+
+  Two separate rules are easy to confuse here, and this decision touches only
+  the second:
+
+  | rule | what it judges | blocks issuance? |
+  | --- | --- | --- |
+  | `overall_conform` | every CoQ line against its **specification** limit | **yes** — `coq_aggregation.py` returns 409 rather than render a certificate asserting conformance for a batch that does not conform. Unchanged; it is a GxP control. |
+  | product-window conformance | Total Δ9-THC against the **product's** ± 10 % window | **no** (this decision) |
+
+  **Not yet built.** An earlier revision of this file claimed the window verdict
+  "currently prints *does not conform* and is still renderable". That was wrong.
+  `qc_coq.product_id` is validated at compile and stored, but nothing reads it
+  back: `_coq_disposition()` returns `None` unless the CoQ carries a frozen
+  *ladder* id, and `_coq_grade_value()` renders only the ladder disposition. So
+  a product-graded CoQ today shows **no grade at all**, rather than a
+  non-conforming one. Outstanding work: a product branch in `_coq_disposition`,
+  `product_code` / `product_conforms` on `_coq_out`, and a product string in
+  `_coq_grade_value`.
+- The header document code on the rendered A4 product page
+  (`QCSP 001_GP-THC26_v.03`) follows the archive's per-page style; the v.03
+  pages' exact header was not visible in the text extraction.

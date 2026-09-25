@@ -6,7 +6,7 @@
 window.GF = window.GF || {};
 
 GF.ALWAYS_FULL_ACCESS_ROLES = new Set(['ADMIN', 'OWNER', 'CEO', 'COO']);
-GF.ELEVATED_MODULE_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','MU_MGR','QP'];
+GF.ELEVATED_MODULE_ROLES = ['ADMIN','OWNER','CEO','COO','QA_MGR','QC_MGR','PR_MGR','WH_MGR','SE_MGR','CU_MGR','IR_MGR','MU_MGR','QP'];
 
 // i18n helper alias — AL is declared in data.js (already loaded).
 const _AL = typeof AL === 'function' ? AL : (en) => en;
@@ -33,10 +33,14 @@ GF.MODULES = [
   {
     id: 'cultivation', icon: 'leaf',
     label: () => _AL('Cultivation & Facility', 'Одгледување и капацитет'),
-    desc:  () => _AL('Growing, rooms, harvest', 'Одгледување, соби, жетва'),
-    roles: ['CU_MGR', 'PR_MGR', 'WH_MGR', 'MU_MGR'],
+    desc:  () => _AL('Growing, irrigation, rooms, harvest', 'Одгледување, наводнување, соби, жетва'),
+    // QA_MGR is here because harvest.py lets QA record a cut to release a
+    // pre-harvest-interval block — it is the ONLY role that can — and a
+    // module list that hid the harvest view from them made that power
+    // unreachable. IR_MGR runs the irrigation view.
+    roles: ['CU_MGR', 'PR_MGR', 'IR_MGR', 'WH_MGR', 'MU_MGR', 'QA_MGR'],
     defaultView: () => 'cultivation',
-    keys: ['cultivation', 'facility', 'harvest'],
+    keys: ['cultivation', 'facility', 'harvest', 'irrigation'],
   },
   {
     id: 'biosecurity', icon: 'shield',
@@ -81,7 +85,7 @@ GF.VIEW_LABEL_KEY = {
   qcspec:'qc_spec', qcpotency:'potency', qcleaves:'qc_leaves',
   qccustody:'custody', qcecoa:'ecoa', qcoos:'oos', qcgenealogy:'genealogy',
   qmsstudio:'qms_studio', qmsregistry:'qms_registry', qmsknow:'knowledge',
-  cultivation:'cultivation', facility:'facility', harvest:'harvest',
+  cultivation:'cultivation', facility:'facility', harvest:'harvest', irrigation:'irrigation',
   decon:'decon', waste:'waste',
   audit:'audit', auditprep:'audit_prep', approvals:'approvals',
   analytics:'analytics', execreport:'exec_report', workload:'workload', exec:'exec_overview',

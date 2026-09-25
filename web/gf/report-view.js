@@ -251,9 +251,9 @@ GF.WWF._reportMarkup = () => {
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(-1)" title="${AL('Previous week', 'Претходна недела')}">◀</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(0)" title="${AL('Current week', 'Тековна недела')}">${AL('Today', 'Денес')}</button>
         <button class="btn btn-sm" onclick="GF.WWF.shiftReportWeek(1)" title="${AL('Next week', 'Следна недела')}">▶</button>
-        <input type="date" value="${GF.WWF._refWeekStart()}" title="${AL('Jump to any week', 'Скокни на било која недела')}"
-          onchange="GF.WWF.jumpReportWeek(this.value)"
-          style="font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)">
+        <span class="rv-datefield" title="${AL('Jump to any week', 'Скокни на било која недела')}"
+          >${GF.dateField('rv-jump', { value: GF.WWF._refWeekStart(), clearable: false,
+             onPick: (v) => { if (v) GF.WWF.jumpReportWeek(v); } })}</span>
       </div>
       <button class="btn btn-sm" onclick="GF.export.open('${isR ? 'report' : 'plan'}')"
         title="${AL('Export raw task data as CSV / JSON', 'Извези сурови податоци како CSV / JSON')}">

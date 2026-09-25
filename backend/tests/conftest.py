@@ -90,6 +90,18 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
+    # mother_plants.parent_id is a self-FK with RESTRICT (a second-generation
+    # mother names the mother it was cut from), so break the chain before the
+    # single-statement delete below. Guarded on the column's existence because
+    # it arrives in tasks 0067 and this helper also runs against 0066.
+    await t.execute("""
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='mother_plants' AND column_name='parent_id') THEN
+            UPDATE public.mother_plants SET parent_id=NULL;
+          END IF;
+        END $$;
+    """)
     for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
                   "notifications", "events", "task_comments",
                   "task_workflow_events", "task_assignees", "task_links", "work_sessions",
@@ -146,8 +158,18 @@ async def purge_org(org_id) -> None:
                   # batches AND rooms (RESTRICT), so they precede both — same
                   # reason as the waste lines above.
                   "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
-                  "plant_phase_events", "plants", "plant_batches", "cultivars",
-                  "rooms",
+                  # 0065/0066: clone_run_mothers -> mother_plants / clone_runs;
+                  # trichome_checks -> plant_batches + rooms; plants -> mother_plants
+                  # (so plants precede mothers now); mother_plants -> qc_products +
+                  # selection_campaigns + itself; plant_batches -> qc_products.
+                  "trichome_checks",
+                  "clone_run_mothers", "clone_runs",
+                  "plant_phase_events", "plants", "mother_plants", "selection_campaigns",
+                  "plant_batches", "qc_products", "cultivars",
+                  # 0068: rooms.facility_room_id is SET NULL, so `rooms` may go
+                  # either side of facility_rooms — but facility_rooms cites
+                  # departments (SET NULL) and must still precede them.
+                  "rooms", "facility_rooms",
                   "calendar_weeks", "departments"):
         await t.execute(f"DELETE FROM {table} WHERE org_id=$1", org_id)
     await users_admin_pool().execute("DELETE FROM organizations WHERE id=$1", org_id)

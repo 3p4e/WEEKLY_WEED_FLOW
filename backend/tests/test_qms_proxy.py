@@ -181,6 +181,61 @@ async def test_studio_authoring_gate(client, admin_headers, de_configured, monke
     assert ("POST", "/workflows") in _FakeDEClient.last.requests
 
 
+async def test_studio_presets_read_gate(client, admin_headers, de_configured, monkeypatch):
+    """Presets are read-only listings — the same elevated gate as the rest of
+    the registry, not the narrower authoring gate /revise itself carries."""
+    _stub_de(monkeypatch, _FakeResponse(json_data={"presets": [{"key": "tighten"}]}))
+    _, uh = await _actor(client, admin_headers, role="USER")
+    assert (await client.get("/qms/studio/presets", headers=uh)).status_code == 403
+    _, mh = await _actor(client, admin_headers, role="QC_MGR")
+    r = await client.get("/qms/studio/presets", headers=mh)
+    assert r.status_code == 200 and r.json()["presets"][0]["key"] == "tighten"
+
+
+async def test_studio_chat_authoring_gate_and_forward(client, admin_headers, de_configured, monkeypatch):
+    _stub_de(monkeypatch, _FakeResponse(json_data={"answer": "Section 2 covers internal QC."}))
+    _, mh = await _actor(client, admin_headers, role="QC_MGR")
+    r = await client.post("/qms/studio/workflows/j1/chat", json={"question": "what?"}, headers=mh)
+    assert r.status_code == 403
+    _, qah = await _actor(client, admin_headers, role="QA_MGR")
+    r = await client.post("/qms/studio/workflows/j1/chat", json={"question": "what?"}, headers=qah)
+    assert r.status_code == 200 and r.json()["answer"].startswith("Section 2")
+    assert ("POST", "/workflows/j1/chat") in _FakeDEClient.last.requests
+
+
+async def test_studio_revise_authoring_gate_and_stamps_requested_by(client, admin_headers, de_configured, monkeypatch):
+    """Same authoring gate as /studio/workflows — a direct edit is document
+    authoring — and requested_by is stamped from the JWT, never trusted from
+    the request body, for the same reason the original workflow POST does."""
+    _stub_de(monkeypatch, _FakeResponse(json_data={"job_id": "rev-1", "status": "queued"}))
+    _, mh = await _actor(client, admin_headers, role="QC_MGR")
+    assert (await client.post("/qms/studio/workflows/j1/revise",
+                              json={"preset_key": "tighten"}, headers=mh)).status_code == 403
+    _, qah = await _actor(client, admin_headers, role="QA_MGR")
+    r = await client.post("/qms/studio/workflows/j1/revise",
+                          json={"preset_key": "tighten", "requested_by": "someone-else"},
+                          headers=qah)
+    assert r.status_code == 200 and r.json()["job_id"] == "rev-1"
+    assert ("POST", "/workflows/j1/revise") in _FakeDEClient.last.requests
+
+
+@pytest.mark.parametrize("path,body", [
+    ("/qms/studio/workflows/%2e%2e/chat", {"question": "x"}),
+    ("/qms/studio/workflows/a%5Cb/revise", {"preset_key": "tighten"}),
+])
+async def test_studio_chat_and_revise_reject_traversal_in_id(client, admin_headers, de_configured,
+                                                              monkeypatch, path, body):
+    """The same H1 guard the GET-based studio routes carry (see
+    test_studio_rejects_traversal_in_id) — jid is interpolated into the
+    forwarded path here too."""
+    _stub_de(monkeypatch, _FakeResponse(json_data={"ok": True}))
+    _FakeDEClient.last = None
+    r = await client.post(path, json=body, headers=admin_headers)
+    assert r.status_code == 400, (path, r.text)
+    assert r.json()["detail"] == "Invalid DocEngine path"
+    assert _FakeDEClient.last is None or _FakeDEClient.last.requests == []
+
+
 async def test_studio_unconfigured_degrades_503(client, admin_headers, monkeypatch):
     monkeypatch.setattr(settings, "docengine_api_key", "")
     r = await client.get("/qms/studio/documents", headers=admin_headers)

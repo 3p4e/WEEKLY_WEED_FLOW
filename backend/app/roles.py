@@ -7,8 +7,17 @@ department managers plus the Qualified Person, and base staff.
   ADMIN                                    — system administrator (DB-seeded only)
   OWNER, CEO, COO                          — executives (OWNER = the business owner)
   QA_MGR, QC_MGR, PR_MGR, WH_MGR,          — department managers (one rank)
-  SE_MGR, CU_MGR, MU_MGR, QP                (QP = Qualified Person)
+  SE_MGR, CU_MGR, IR_MGR, MU_MGR, QP        (QP = Qualified Person)
   USER                                     — department staff / operators
+
+Where the floor's work changes hands (owner's model, 2026-09-05): CU_MGR runs
+everything from seed, import or clone up to and including the harvest CUT;
+PR_MGR takes the lot from the cut onward (dry room, close, and what follows);
+IR_MGR runs irrigation — the fertigation plant and its distribution to every
+room — as a department of its own. Cloning and Nursery are SUB-DEPARTMENTS of
+Cultivation (departments.parent_id), run by the cultivation manager: a
+department-scoped manager's scope is their department plus its descendants
+(app.dept_family in the tasks DB).
 
 Everything except USER is "elevated" (org-wide task read via RLS + audit
 access) — the same meaning ADMIN/DEP_MGR carried before. This module is the
@@ -27,7 +36,7 @@ EXECUTIVE_ROLES = ("OWNER", "CEO", "COO")
 
 # Department managers + the Qualified Person, all at manager rank. A manager may
 # create only USER staff, and only in their own department.
-MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SE_MGR", "CU_MGR", "MU_MGR", "QP")
+MANAGER_ROLES = ("QA_MGR", "QC_MGR", "PR_MGR", "WH_MGR", "SE_MGR", "CU_MGR", "IR_MGR", "MU_MGR", "QP")
 
 # Department managers whose task access is scoped to their own department (plus
 # tasks they personally own or are assigned): GET /tasks and /reports/weekly

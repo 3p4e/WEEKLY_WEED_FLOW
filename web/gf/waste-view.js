@@ -639,7 +639,7 @@
     // Anchored on a key render.sidebar() itself emits, not on a sibling view:
     // _registerFullPageView wraps render.sidebar, so an anchor on another
     // registered view would depend on <script> order.
-    insertBefore: 'mywork',
+    insertBefore: 'floor-end',
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
   });
 })();

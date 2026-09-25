@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { seedOrg, login } = require('../seed');
+const { seedOrg, login, pickDate } = require('../seed');
 
 /** @type {{username: string, password: string}} */
 let creds;
@@ -30,7 +30,7 @@ test('due date + type at creation, weekend session logged; report renders WITHOU
   await test.step('create a task with a due date and a type', async () => {
     await page.getByRole('button', { name: /new task/i }).click();
     await page.locator('#add-title').fill(taskTitle);
-    await page.locator('#add-due').fill(sat);
+    await pickDate(page, 'add-due', sat);
     // task type is the design's inline chip group — every option visible
     await page.locator('#add-type-chips .mw-chip[data-v="lab"]').click();
     await page.getByRole('button', { name: 'Create task' }).click();
@@ -49,7 +49,7 @@ test('due date + type at creation, weekend session logged; report renders WITHOU
     await card.getByRole('button', { name: /log work/i }).click();
     const modal = page.locator('#worklog-modal');
     await expect(modal).toBeVisible();
-    await modal.locator('#wl-date').fill(sat);
+    await pickDate(modal, 'wl-date', sat);
     await modal.locator('#wl-start').fill('10:00');
     await modal.locator('#wl-hours').fill('2.5');
     await modal.locator('.modal-body').getByRole('button', { name: /log work/i }).click();

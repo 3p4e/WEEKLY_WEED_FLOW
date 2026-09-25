@@ -116,9 +116,14 @@ Decisions the owner has to make before the first write to production:
    promotion and signature controls the SOPs mandate).
 2. **Credential** — a dedicated read-only Drive remote with the owner's own client
    id (recommended), or reuse of the backup token (works today, wrong scope).
-3. **Batch key convention** — CU batch as `batch_id`, and one sub-lot separator
+3. ~~**Batch key convention** — CU batch as `batch_id`, and one sub-lot separator
    (`/01` as the manufacturing register writes it, or `_01` as the certificates
-   do).
+   do).~~ **DECIDED 2026-09-05 (owner): `_01`,** the certificate form. It is also
+   the form the existing validators already accept — `cultivation.py`'s
+   `^[A-Za-z0-9_-]{1,64}$` rejects `/`, so the alternative would have required
+   widening a validation pattern to admit a separator the certificates do not
+   use. Manufacturing-register rows carrying `/01` are normalised on read.
+   (The CU-batch-as-`batch_id` half of this item is still open.)
 4. **Stability results** — import as `STABILITY` documents for the record
    (recommended) or leave out.
 

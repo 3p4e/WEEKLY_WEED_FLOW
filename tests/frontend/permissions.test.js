@@ -286,7 +286,10 @@ test('GF.task resolves subtask rows out of GF.state.children as well as the flat
    ──────────────────────────────────────────────────────────────────── */
 
 const FULL_ROLES = ['admin', 'owner', 'ceo', 'coo', 'qa_mgr', 'qc_mgr', 'pr_mgr',
-                    'wh_mgr', 'se_mgr', 'cu_mgr', 'mu_mgr', 'qp'];
+                    'wh_mgr', 'se_mgr', 'cu_mgr',
+                    // Irrigation manager (users migration 0012): a department manager
+                    // like the others, full row like the others.
+                    'ir_mgr', 'mu_mgr', 'qp'];
 
 test('every privileged role really holds the full write row', () => {
   const h = loadGF();

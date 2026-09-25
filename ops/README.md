@@ -279,6 +279,16 @@ interrupted update can never gut the install again.
    than by a manual `config.sh`, set that image's disable-auto-update option
    instead (commonly an env var such as `DISABLE_AUTO_UPDATE`) and recreate the
    container — check the image's own documentation, as this is image-specific.
+
+   **`--replace` only works on a registration that is still alive.** It keeps
+   the old runner id and swaps the key. If the old runner has been offline long
+   enough for GitHub to purge its credentials (it was 16 days on 2026-09-25),
+   `config.sh` still prints "Successfully replaced the runner", and then every
+   `run.sh` fails with `Registration was not found or is not medium trust` /
+   "The runner registration has been deleted from the server". The fix is to
+   delete the stale entry (Settings → Actions → Runners, or
+   `DELETE repos/3p4e/WEEKLY_WEED_FLOW/actions/runners/<id>`) and register
+   fresh, without `--replace`, so a leftover entry fails loudly instead.
 4. **Restart the runner** and confirm the recovery, ideally with the watchdog
    itself rather than by eyeballing it:
 
@@ -293,6 +303,47 @@ from a release — confirm the current policy before relying on this long-term).
 That trade is deliberate: an outage caused by a *neglected upgrade* is announced
 by `ci_freshness` FAILing on a run nobody picks up, whereas the outage caused by
 a *broken auto-update* announced itself to nobody for five days.
+
+## The runner container (`gh-runner-wwf`, rebuilt 2026-09-25)
+
+After the September 2026 VM migration the runner was never re-registered, and
+every CI job queued until GitHub cancelled it, until 2026-09-25. It now has a
+definition in git:
+`ops/gh-runner/`, deployed as the compose stack `/opt/stacks/gh-runner-wwf/`.
+
+- **Image.** `FROM wwf-gh-runner:2.335.1-restored`, which is the `docker export`
+  of the pre-migration runner (`/opt/restore/gh-runner-wwf.tar`, imported with
+  `docker import`). It keeps the Ubuntu 24.04 userland, passwordless sudo, the
+  docker CLI and the hosted toolcache that CI relies on. None of that was ever
+  written down, so it is inherited rather than re-guessed. The Dockerfile swaps
+  in a pinned runner release, checked against the SHA-256 GitHub publishes.
+  The `runner` user is already in GID 988, which is the GID of
+  `/var/run/docker.sock` on this host.
+- **The registration lives in the container's writable layer.** `restart`,
+  `stop` and `start` keep it. `docker compose up --force-recreate` and a rebuild
+  throw it away, so after either one, register again.
+- **Registering.** The entrypoint never registers. It waits until `.runner` and
+  `.credentials` exist, then runs `run.sh`. Register with a fresh token fed on
+  stdin, so the token never lands in `docker inspect`:
+
+  ```sh
+  # token: Settings → Actions → Runners → New self-hosted runner, or
+  #   POST repos/3p4e/WEEKLY_WEED_FLOW/actions/runners/registration-token
+  docker exec -i gh-runner-wwf bash -c 'read -r T; ./config.sh --unattended \
+    --url https://github.com/3p4e/WEEKLY_WEED_FLOW --token "$T" \
+    --name kvm4-wwf --labels self-hosted,linux,x64,kvm4 --work _work \
+    --disableupdate' < regtoken-file
+  shred -u regtoken-file
+  ```
+
+  There is no deregister-on-stop trap. The old entrypoint had one, and it
+  turned every `docker stop` inside a token's validity hour into a silent
+  unregistration.
+- **Upgrading** (a manual job, because of `--disableupdate`): bump
+  `RUNNER_VERSION` and `RUNNER_SHA256` in `ops/gh-runner/Dockerfile`, copy the
+  stack to the host, `docker compose build`, `docker compose up -d
+  --force-recreate`, then register again. Do it within about 30 days of a new
+  release.
 
 ## Safety rules for anything added to this directory
 

@@ -37,40 +37,76 @@ DEMO_ORG_NAME = "GrowFlow Demo"
 # Serializes concurrent resets (two visitors clicking "Try the demo" at once).
 _RESET_LOCK_KEY = 771_2026
 
-# Every org-scoped table in the tasks DB except audit_log, children before
-# parents. Several FK edges are RESTRICT and force ordering: qc_certificates →
-# qc_specifications; the cultivation chain plant_phase_events/plants → batches →
-# cultivars/rooms; corridor_cleanings → manifests/rooms;
-# waste_manifest_lines → batches/rooms; harvests and ipm_applications →
-# batches/rooms; and plant_batches →
-# rooms. Everything else either cascades or is SET NULL, but explicit order
-# keeps the wipe self-evident.
+# EVERY org-scoped table in the tasks DB except audit_log, children before
+# parents. Several FK edges are RESTRICT and force the ordering: the CoQ
+# aggregation → certificates and specifications; certificates →
+# specifications; potency ladders → cultivars; tasks → plant_batches; the
+# cultivation chain plant_phase_events/plants → batches → cultivars/rooms;
+# corridor_cleanings → manifests/rooms; waste_manifest_lines → batches/rooms;
+# harvests, ipm_applications, irrigation_events and biosecurity_events →
+# batches/rooms. Everything else either cascades or is SET NULL, but the
+# explicit order keeps the wipe self-evident.
+#
+# This list is hand-maintained and was silently 14 tables short: the CoQ
+# aggregation, the genealogy, signatures and document files, the eCoA
+# checklist, laboratories, the potency ladders, commercial identities,
+# irrigation and biosecurity events, and task workflow events were all left
+# behind by every demo reset, so each visitor inherited the last one's data.
+# tests/test_demo_wipe_coverage.py now enumerates the database instead of
+# trusting the list, and fails the moment a new org-scoped table escapes it.
 _TASKS_WIPE_ORDER = (
     "ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
-    "task_comments", "task_assignees", "task_links", "work_sessions",
-    "task_progress", "task_dependencies", "notifications", "events",
-    "qc_coa_verifications", "qc_coa_chunks", "qc_coa_extractions",
-    "qc_coa_documents", "qc_oos_notifications", "qc_oos_register",
-    "qc_oos_records", "qc_results", "qc_certificates",
+    "notifications", "events",
+    "task_comments", "task_workflow_events", "task_assignees", "task_links",
+    "work_sessions", "task_progress",
+    # QC LIMS, children before parents. The CoQ aggregation cites certificates
+    # and specifications (both RESTRICT), so it goes before either.
+    "qc_coq_lines", "qc_coq_sources", "qc_coq",
+    "qc_batch_genealogy", "qc_document_files", "qc_signatures",
+    # eCoA/CoA ingestion: everything citing qc_coa_documents goes before it.
+    "qc_field_placeholders", "qc_ecoa_checklist", "qc_coa_chunks",
+    "qc_coa_verifications", "qc_coa_extractions", "qc_coa_documents",
+    "qc_oos_notifications", "qc_oos_register", "qc_oos_records",
+    "qc_results",
     "qc_chain_of_custody", "qc_sample_field_records", "qc_sampling_requests",
-    "qc_samples", "qc_sampling_plans", "qc_spec_parameters",
-    "qc_specifications", "qc_field_placeholders", "qc_water_tests",
-    "qc_stability_studies", "qc_sample_transports",
-    "decon_tool_log", "decon_positive_controls", "decon_swabs", "decon_bleach_log", "decon_step_signoffs", "decon_room_cycles",
+    "qc_sample_transports", "qc_stability_studies", "qc_water_tests",
+    "qc_certificates", "qc_spec_parameters", "qc_samples", "qc_laboratories",
+    "qc_sampling_plans", "qc_specifications",
+    # potency ladders cite cultivars (RESTRICT), so both precede it below.
+    "qc_potency_spec_ranges", "qc_potency_specs",
+    "batch_commercial_identities",
+    # tasks.batch_id cites plant_batches (RESTRICT), so tasks must be gone
+    # before the cultivation chain is purged.
+    "task_dependencies", "tasks",
+    "decon_tool_log", "decon_positive_controls", "decon_swabs",
+    "decon_bleach_log", "decon_step_signoffs", "decon_room_cycles",
     "corridor_cleanings", "waste_manifest_lines", "waste_manifests",
-    "harvests", "ipm_applications",
-    "plant_phase_events", "plants", "plant_batches", "cultivars", "rooms",
-    "tasks", "calendar_weeks", "departments",
+    "harvests", "ipm_applications", "irrigation_events", "biosecurity_events",
+    "trichome_checks", "clone_run_mothers", "clone_runs",
+    "plant_phase_events", "plants", "mother_plants", "selection_campaigns",
+    "plant_batches", "qc_products", "cultivars",
+    # 0068: rooms.facility_room_id is SET NULL so `rooms` may go either side of
+    # facility_rooms, but facility_rooms cites departments (SET NULL) and must
+    # still precede them.
+    "rooms", "facility_rooms",
+    "calendar_weeks", "departments",
 )
 
+# (code, name, name_mk, parent code). Parents precede their children — the
+# seeding loop resolves parent_id from what it has already inserted. Cloning
+# and Nursery are SUB-departments of Cultivation, run by its manager (see
+# roles.py); Irrigation is a department of its own (owner, 2026-09-05).
 _DEPARTMENTS = (
-    ("cultivation",       "Cultivation",       "Одгледување"),
-    ("production",        "Production",        "Производство"),
-    ("qc",                "Quality Control",   "Контрола на квалитет"),
-    ("quality_assurance", "Quality Assurance", "Обезбедување квалитет"),
-    ("logistics",         "Warehouse",         "Магацин"),
-    ("security",          "Security",          "Обезбедување"),
-    ("tooling",           "Maintenance",       "Одржување"),
+    ("cultivation",       "Cultivation",       "Одгледување",           None),
+    ("cloning",           "Cloning",           "Клонирање",             "cultivation"),
+    ("nursery",           "Nursery",           "Расадник",              "cultivation"),
+    ("irrigation",        "Irrigation",        "Наводнување",           None),
+    ("production",        "Production",        "Производство",          None),
+    ("qc",                "Quality Control",   "Контрола на квалитет",  None),
+    ("quality_assurance", "Quality Assurance", "Обезбедување квалитет", None),
+    ("logistics",         "Warehouse",         "Магацин",               None),
+    ("security",          "Security",          "Обезбедување",          None),
+    ("tooling",           "Maintenance",       "Одржување",             None),
 )
 
 
@@ -104,6 +140,7 @@ def _cast_dune():
         ("qc",      "Dr Liet Kynes",       "QC_MGR", "qc",                "QC Manager"),
         ("pr",      "Gurney Halleck",      "PR_MGR", "production",        "Production Manager"),
         ("cu",      "Stilgar",             "CU_MGR", "cultivation",       "Cultivation Manager"),
+        ("ir",      "Otheym",              "IR_MGR", "irrigation",        "Irrigation Manager"),
         ("wh",      "Esmar Tuek",          "WH_MGR", "logistics",         "Warehouse Manager"),
         ("se",      "Duncan Idaho",        "SE_MGR", "security",          "Security Manager"),
         ("mu",      "Shadout Mapes",       "MU_MGR", "tooling",           "Maintenance Manager"),
@@ -341,10 +378,11 @@ async def _reset_locked(org_id: uuid.UUID, data: dict) -> dict:
         async with t.transaction(), u.transaction():
             # departments
             dept_ids: dict[str, uuid.UUID] = {}
-            for code, name, name_mk in _DEPARTMENTS:
+            for code, name, name_mk, parent in _DEPARTMENTS:
                 dept_ids[code] = await t.fetchval(
-                    "INSERT INTO departments(org_id, code, name, name_mk) VALUES ($1,$2,$3,$4) RETURNING id",
-                    org_id, code, name, name_mk)
+                    "INSERT INTO departments(org_id, code, name, name_mk, parent_id)"
+                    " VALUES ($1,$2,$3,$4,$5) RETURNING id",
+                    org_id, code, name, name_mk, dept_ids[parent] if parent else None)
 
             # calendar weeks (prev / cur / next)
             week_ids: dict[str, uuid.UUID] = {}

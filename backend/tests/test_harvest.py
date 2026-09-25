@@ -100,8 +100,8 @@ async def test_read_gating_and_writer_roles(client, admin_headers):
 
 async def test_qa_can_record_a_cut_but_not_a_yield(client, admin_headers):
     """QA's extra write is exactly one action — creating the harvest that carries
-    their PHI release. Recording the yield and closing the lot stay with the
-    cultivation crew, so the widened surface is the minimum the control needs."""
+    their PHI release. Recording the yield and closing the lot are production's,
+    so the widened surface is the minimum the control needs."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c224_h", "Flowering H23")
@@ -579,6 +579,7 @@ async def test_a_harvest_writes_the_cultivation_genealogy_edge(client, admin_hea
 async def test_dry_weight_cannot_exceed_wet_weight(client, admin_headers):
     """Nothing gains mass in a dry room."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c218_h", "Flowering H17")
     cv = await _cultivar(client, cu_h, "DRY1", "Dry One")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-DRY-1", 10,
@@ -587,13 +588,13 @@ async def test_dry_weight_cannot_exceed_wet_weight(client, admin_headers):
 
     over = await client.post(f"/cultivation/harvests/{h['id']}/dry",
                              json={"dry_flower_g": 4000, "dry_trim_g": 900,
-                                   "dry_waste_g": 200}, headers=cu_h)
+                                   "dry_waste_g": 200}, headers=pr_h)
     assert over.status_code == 409
     assert "gains mass" in over.json()["detail"]
 
     ok = await client.post(f"/cultivation/harvests/{h['id']}/dry",
                            json={"dry_flower_g": 900, "dry_trim_g": 150,
-                                 "dry_waste_g": 50}, headers=cu_h)
+                                 "dry_waste_g": 50}, headers=pr_h)
     assert ok.status_code == 200, ok.text
     assert ok.json()["status"] == "dried"
     assert ok.json()["dry_total_g"] == 1100
@@ -606,13 +607,14 @@ async def test_an_implausible_loss_is_reported_and_not_refused(client, admin_hea
     A report that cries wolf on ordinary variation gets ignored on the day it is
     right."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c219_h", "Flowering H18")
     cv = await _cultivar(client, cu_h, "DRY2", "Dry Two")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-DRY-2", 10,
                      phase_since=_days(30))
     h = (await _harvest(client, cu_h, b["id"], "LOT-DRY-2", 10, 5000)).json()
     r = await client.post(f"/cultivation/harvests/{h['id']}/dry",
-                          json={"dry_flower_g": 4500}, headers=cu_h)
+                          json={"dry_flower_g": 4500}, headers=pr_h)
     assert r.status_code == 200, "a 10% loss is odd, not forbidden"
     assert r.json()["moisture_loss_pct"] == 10.0
     assert r.json()["implausible_loss"] is True
@@ -622,6 +624,7 @@ async def test_a_lot_cannot_be_closed_before_its_yield_is_recorded(client, admin
     """Gate 4 — a closed record with no yield in it looks finished, which is worse
     than an open one."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c220_h", "Flowering H19")
     cv = await _cultivar(client, cu_h, "CLOSE", "Close")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-CLOSE", 10,
@@ -629,20 +632,20 @@ async def test_a_lot_cannot_be_closed_before_its_yield_is_recorded(client, admin
     h = (await _harvest(client, cu_h, b["id"], "LOT-CLOSE", 10, 5000)).json()
 
     early = await client.post(f"/cultivation/harvests/{h['id']}/close",
-                              json={}, headers=cu_h)
+                              json={}, headers=pr_h)
     assert early.status_code == 409
     assert "no dry weight" in early.json()["detail"]
 
     await client.post(f"/cultivation/harvests/{h['id']}/dry",
-                      json={"dry_flower_g": 1100}, headers=cu_h)
+                      json={"dry_flower_g": 1100}, headers=pr_h)
     done = await client.post(f"/cultivation/harvests/{h['id']}/close",
-                             json={}, headers=cu_h)
+                             json={}, headers=pr_h)
     assert done.status_code == 200
     assert done.json()["status"] == "closed"
     assert done.json()["closed_at"] is not None
 
     twice = await client.post(f"/cultivation/harvests/{h['id']}/close",
-                              json={}, headers=cu_h)
+                              json={}, headers=pr_h)
     assert twice.status_code == 409
     assert "already closed" in twice.json()["detail"]
 
@@ -651,6 +654,7 @@ async def test_dry_weights_are_correctable_until_the_lot_closes(client, admin_he
     """Correcting a mis-keyed weight before the lot closes is ordinary; the
     alternative is a permanent wrong number. After the close it is final."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c221_h", "Flowering H20")
     cv = await _cultivar(client, cu_h, "FIX", "Fix")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-FIX", 10,
@@ -658,16 +662,16 @@ async def test_dry_weights_are_correctable_until_the_lot_closes(client, admin_he
     h = (await _harvest(client, cu_h, b["id"], "LOT-FIX", 10, 5000)).json()
 
     await client.post(f"/cultivation/harvests/{h['id']}/dry",
-                      json={"dry_flower_g": 110}, headers=cu_h)
+                      json={"dry_flower_g": 110}, headers=pr_h)
     fixed = await client.post(f"/cultivation/harvests/{h['id']}/dry",
-                              json={"dry_flower_g": 1100}, headers=cu_h)
+                              json={"dry_flower_g": 1100}, headers=pr_h)
     assert fixed.status_code == 200
     assert (await client.get(f"/cultivation/harvests/{h['id']}",
                              headers=cu_h)).json()["dry_flower_g"] == 1100
 
-    await client.post(f"/cultivation/harvests/{h['id']}/close", json={}, headers=cu_h)
+    await client.post(f"/cultivation/harvests/{h['id']}/close", json={}, headers=pr_h)
     after = await client.post(f"/cultivation/harvests/{h['id']}/dry",
-                              json={"dry_flower_g": 1200}, headers=cu_h)
+                              json={"dry_flower_g": 1200}, headers=pr_h)
     assert after.status_code == 409
     assert "final" in after.json()["detail"]
 
@@ -679,6 +683,7 @@ async def test_yield_report_flags_a_batch_harvested_with_no_lot(client, admin_he
     cultivation says the crop came off, the yield register says nothing did, and
     there is no lot for a CoA to be issued against."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c222_h", "Flowering H21")
     cv = await _cultivar(client, cu_h, "YR", "Yield report")
@@ -693,7 +698,7 @@ async def test_yield_report_flags_a_batch_harvested_with_no_lot(client, admin_he
     h = (await _harvest(client, cu_h, recorded["id"], "LOT-YR-1", 100, 50000)).json()
     await client.post(f"/cultivation/harvests/{h['id']}/dry",
                       json={"dry_flower_g": 10000, "dry_trim_g": 1500,
-                            "dry_waste_g": 500}, headers=cu_h)
+                            "dry_waste_g": 500}, headers=pr_h)
     await client.post(f"/cultivation/batches/{recorded['id']}/move",
                       json={"to_phase": "harvested"}, headers=cu_h)
     await client.post(f"/cultivation/batches/{ghost['id']}/move",
@@ -727,6 +732,7 @@ async def test_a_lot_still_drying_does_not_distort_the_batch_loss(client, admin_
     """Only DRIED lots enter the loss calculation. Dividing a partial dry weight by
     the whole wet weight would report a batch mid-dry-down as catastrophic loss."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c223_h", "Flowering H22")
     cv = await _cultivar(client, cu_h, "MID", "Mid dry")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-MID", 20,
@@ -734,7 +740,7 @@ async def test_a_lot_still_drying_does_not_distort_the_batch_loss(client, admin_
 
     done = (await _harvest(client, cu_h, b["id"], "LOT-MID-1", 10, 5000)).json()
     await client.post(f"/cultivation/harvests/{done['id']}/dry",
-                      json={"dry_flower_g": 1100}, headers=cu_h)
+                      json={"dry_flower_g": 1100}, headers=pr_h)
     # Still wet — its 5000 g must not be counted as a lot that lost everything.
     assert (await _harvest(client, cu_h, b["id"], "LOT-MID-2", 10, 5000)).status_code == 201
 
@@ -753,3 +759,31 @@ async def test_harvest_filters_are_validated(client, admin_headers):
                              headers=cu_h)).status_code == 422
     assert (await client.get("/cultivation/harvest-clearance/not-a-uuid",
                              headers=cu_h)).status_code == 422
+
+
+# ── the handoff: cultivation cuts, production takes the lot from there ────────
+
+async def test_the_cut_is_cultivations_and_everything_after_it_is_productions(client, admin_headers):
+    """Owner's model (2026-09-05): cultivation runs the plant from seed, import
+    or clone up to and including the CUT; production takes the lot from the dry
+    room onward. Before this, cultivation held both sides and PR_MGR appeared in
+    no gate anywhere — a role with a name and no powers."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
+    room = await _room(client, admin_headers, "c_hand", "Flowering HAND")
+    cv = await _cultivar(client, cu_h, "HAND", "Handoff")
+    b = await _batch(client, cu_h, room["id"], cv["id"], "GP-HAND", 10, phase_since=_days(30))
+
+    # production does not cut…
+    assert (await _harvest(client, pr_h, b["id"], "LOT-HAND-X", 10, 4000)).status_code == 403
+    h = (await _harvest(client, cu_h, b["id"], "LOT-HAND", 10, 4000)).json()
+    # …and cultivation does not dry or close what it cut
+    assert (await client.post(f"/cultivation/harvests/{h['id']}/dry",
+                              json={"dry_flower_g": 900}, headers=cu_h)).status_code == 403
+    assert (await client.post(f"/cultivation/harvests/{h['id']}/close",
+                              json={}, headers=cu_h)).status_code == 403
+    dried = await client.post(f"/cultivation/harvests/{h['id']}/dry",
+                              json={"dry_flower_g": 900}, headers=pr_h)
+    assert dried.status_code == 200, dried.text
+    assert (await client.post(f"/cultivation/harvests/{h['id']}/close",
+                              json={}, headers=pr_h)).status_code == 200

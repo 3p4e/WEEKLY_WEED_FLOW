@@ -11,7 +11,7 @@ import asyncio
 import logging
 import re
 
-from . import builder, db
+from . import builder, db, needs
 from .config import settings
 from .letta import LettaClient, LettaError
 from .questionnaires import QUESTIONNAIRES, apply_defaults
@@ -121,6 +121,17 @@ class BilingualGap(Exception):
     def __init__(self, gaps: list[str]):
         super().__init__("sections are not bilingual: " + ", ".join(gaps))
         self.gaps = gaps
+
+
+class RevisionFailed(Exception):
+    """A direct-edit request (run_revision) could not be turned into a new
+    document — the target section doesn't exist, or the editing agent's reply
+    didn't parse (see _direct_edit_sections). Distinct from QaAuditFailed:
+    there is no auditor verdict here, just a request that didn't land."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class GridOverflow(Exception):
@@ -538,7 +549,12 @@ async def _repair_sections(
     fails the job honestly, which is the correct outcome."""
     from .fleet import spawn_ephemeral  # late import: fleet needs live Letta
 
-    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}", ctx=ctx)
+    # autoclear=False: this clone gets a second turn (the nudge below) if the
+    # first comes back with no section markers. The author's own fleet.yaml
+    # flag is autoclear=true for its normal one-shot per-section use; left on
+    # here it wipes the first turn's context (the whole document, the issues)
+    # before the nudge is composed, so the nudge runs with nothing to act on.
+    tmp_id = await spawn_ephemeral(client, author, f"fix_{job_id[:8]}", ctx=ctx, autoclear=False)
     try:
         reply = await client.send_message(
             tmp_id,
@@ -559,10 +575,10 @@ async def _repair_sections(
             "AFTER the final '<<<PP-END ...>>>' line — never inside a section.\n"
             "- Change only what the issues require; leave everything else byte "
             "for byte as it is.\n"
-            "- NEVER invent data to satisfy an issue. Facility specifics, "
-            "measured values, dates, names and signatures stay BLANK write-ins. "
-            "If an issue cannot be fixed without inventing something, leave that "
-            "one unfixed and say so after the final marker.\n"
+            "- NEVER invent data to satisfy an issue. If an issue cannot be "
+            "fixed without inventing something, leave that one unfixed and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
             "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
             "- Output the document body first, with no preamble.\n\n"
             f"ISSUES:\n{audit.strip()}\n\n"
@@ -598,6 +614,96 @@ async def _repair_sections(
         log.warning("repair reply unusable (%s); first line: %r",
                     reason, (reply or "").strip().split("\n")[0][:160])
     return repaired
+
+
+async def _direct_edit_sections(
+    client: LettaClient, author: str, sections: list[dict], instruction: str, job_id: str,
+    ctx=None, section_num: str | None = None,
+) -> tuple[list[dict] | None, str]:
+    """Apply a person's direct-edit request (chat instruction or a preset) to
+    one section or the whole document, on an ephemeral clone of the section's
+    own author — the same machinery _repair_sections uses for the §6A loop:
+    autoclear off (this clone may get a second, nudge turn), the same
+    never-invent instruction, the same marker protocol so a reply can only
+    ever replace the sections it names.
+
+    Unlike _repair_sections there is no reviewer verdict downstream — the
+    caller (run_revision) asked for this change directly, and whatever comes
+    back that parses is rebuilt and re-verified immediately. What this
+    function still guards: an unparseable reply changes nothing; an invented
+    fact is refused by the same rule that refuses one for an auditor's issue;
+    and when the caller scoped the request to one section, a reply that also
+    touches another is rejected rather than silently widened past what was
+    asked."""
+    from .fleet import spawn_ephemeral
+
+    scope_line = (
+        f"ONLY section {section_num} may change in your reply — every other "
+        "section must be left out entirely, not merely unchanged.\n"
+        if section_num else ""
+    )
+    tmp_id = await spawn_ephemeral(client, author, f"rev_{job_id[:8]}", ctx=ctx, autoclear=False)
+    try:
+        reply = await client.send_message(
+            tmp_id,
+            "A person reviewing this document asked for the change below. "
+            "Reply with the corrected sections and NOTHING else — no plan, no "
+            "commentary, no explanation of what you are about to do. Your reply "
+            "is parsed by a machine, not read by a person.\n\n"
+            f"{scope_line}"
+            "Rules:\n"
+            "- Return ONLY the sections you actually changed. Leave every other "
+            "section out entirely — it is kept exactly as it is. Do not echo the "
+            "whole document.\n"
+            "- Give each returned section in full, wrapped in its original "
+            "'<<<PP-SECTION ...>>>' and '<<<PP-END <number>>>>' marker lines, "
+            "reproduced unchanged. They delimit the document for reassembly and "
+            "are not part of it.\n"
+            "- ONLY text between a matching pair becomes the document. Put any "
+            "remark, summary of what you changed, or request you could not "
+            "satisfy AFTER the final '<<<PP-END ...>>>' line — never inside a "
+            "section.\n"
+            "- Change only what the request below requires; leave everything "
+            "else byte for byte as it is.\n"
+            "- NEVER invent data to satisfy the request. If the request cannot "
+            "be met without inventing something, leave that part unmet and say "
+            "so after the final marker.\n"
+            "- " + needs.INSTRUCTION + "\n"
+            "- Do NOT emit a <!--HEADERDATA--> block; you do not own the header.\n"
+            "- Output the document body first, with no preamble.\n\n"
+            f"REQUEST:\n{instruction.strip()}\n\n"
+            f"DOCUMENT BODY:\n{_section_body(sections)}",
+        )
+        if MARK_OPEN not in (reply or ""):
+            log.info("direct-edit reply had no section markers — nudging once")
+            reply = await client.send_message(
+                tmp_id,
+                "Output the corrected sections NOW: only the "
+                f"{MARK_OPEN}...>>> / <<<PP-END n>>> blocks for the sections you "
+                "changed, nothing before or after them. No commentary, no plan, "
+                "no explanation.",
+            )
+    finally:
+        try:
+            await client.delete_agent(tmp_id)
+        except Exception as e:  # noqa: BLE001
+            log.warning("failed to delete ephemeral editor %s: %s", tmp_id, e)
+    body = _strip_fences(reply)
+    if section_num:
+        # A reply naming a section outside the caller's scope is not "close
+        # enough" — reject it rather than let the edit widen past what was
+        # asked for.
+        named = {m.group(1) for m in _SECTION_OPEN.finditer(body or "")}
+        outside = sorted(named - {section_num})
+        if outside:
+            return None, f"reply touched section(s) outside the requested scope: {outside}"
+    revised, reason = _split_repaired(body, sections)
+    if revised is not None:
+        log.info("direct edit accepted: %s", reason)
+    else:
+        log.warning("direct edit reply unusable (%s); first line: %r",
+                    reason, (reply or "").strip().split("\n")[0][:160])
+    return revised, reason
 
 
 def _reject_headerdata_breakers(field: str, value) -> None:
@@ -700,8 +806,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                     f"Content brief:\n{brief}\n\n"
                     "Return ONLY the bilingual Markdown body — no heading line, no code "
                     "fences, and NO commentary, preamble, or explanation of what you are "
-                    "doing. Your entire reply is inserted verbatim into the document. "
-                    "Unknown facility specifics stay as blank fields.",
+                    "doing. Your entire reply is inserted verbatim into the document.\n\n"
+                    + needs.INSTRUCTION,
                 )
                 sections.append({
                     "num": num, "mk": mk, "en": en,
@@ -721,7 +827,8 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "around your output and a second one conflicts with it. Do NOT use the "
                 "SOP 9-section numbers (1 ЦЕЛ, 6 ПОСТАПКА, ...) — that structure is for "
                 "SOPs only; number any headings you need from 1 upward, or title them by "
-                "intent. Keep every [[FORM:grid]] row to the same column count.",
+                "intent. Keep every [[FORM:grid]] row to the same column count.\n\n"
+                + needs.INSTRUCTION,
             )
             sections.append(
                 {"num": "1.0", "mk": "СОДРЖИНА", "en": "CONTENT",
@@ -830,7 +937,14 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 "formatter in canonical form — they are not the author's and not "
                 "yours to restyle. Do not raise issues about their spacing, level "
                 "or punctuation; no author can act on those and the document "
-                "cannot pass.\n\n" + reg_context + markdown,
+                "cannot pass.\n\n"
+                "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                "the requester has not supplied yet, and are reported to them "
+                "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                "alternative an author has is inventing the value, which is the thing "
+                "this document must never contain. Do raise an issue if a marker is "
+                "used where the answer WAS supplied, or where the blank belongs to a "
+                "human filling the form during execution.\n\n" + reg_context + markdown,
             )
             audits.append(audit)
             if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
@@ -842,11 +956,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 log.warning("job %s repair %d unusable — failing on the audit", job_id, attempt + 1)
                 break
             # A repair can break parity (dropping one language while rewording a
-            # cell). Re-run the same per-section gate rather than trusting it.
-            gaps = _bilingual_gaps(repaired)
-            if gaps:
-                log.warning("job %s repair %d broke bilingual parity %s — discarded",
-                            job_id, attempt + 1, gaps)
+            # cell) or widen a grid row past what the packer will place. Re-run
+            # BOTH per-section gates rather than trusting the repair: they ran
+            # before the audit for reasons a repair does nothing to retire.
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
                 break
             sections = repaired
             markdown = assemble_markdown(meta, sections)
@@ -879,6 +995,13 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
             result={
                 "document_id": did,
                 "markdown": markdown,
+                # Structured, not just the assembled string — a later direct
+                # edit (run_revision) targets one section by number and must
+                # not re-derive section boundaries by re-parsing the rendered
+                # Markdown. `meta` (with doctype filled in, unlike the raw
+                # payload) travels with it for the same reason.
+                "sections": sections,
+                "meta": meta,
                 "verify": result.verify_report,
                 "regulatory": reg_findings,
                 "qa_audit": audits[-1],
@@ -886,6 +1009,11 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
                 # time. Every verdict in order, and how many hand-backs it took.
                 "qa_audit_history": audits,
                 "qa_repair_rounds": len(audits) - 1,
+                # What the agents did NOT know. The document ships with a
+                # visible [NEEDS INPUT: …] marker at each of these points; this
+                # is the same list, lifted out so the requester is TOLD what to
+                # supply instead of having to find the markers by reading.
+                "needs_input": needs.extract_needs(sections),
                 "bytes": result.bytes,
             },
         )
@@ -943,6 +1071,194 @@ async def run_workflow(job_id: str, client: LettaClient | None = None) -> None:
         # run_workflow returns. Its pooled httpx.AsyncClient (see letta.py)
         # must be closed here or the connection/file descriptor it holds
         # outlives the job that opened it, across every job this worker runs.
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001 — cleanup must never mask a job result
+            log.warning("job %s: failed to close Letta client", job_id, exc_info=True)
+
+
+async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
+    """A direct-edit follow-up on a document run_workflow already built — a
+    chat instruction or a preset, scoped to one section or the whole
+    document. `job.payload` for this kind of job is
+    {source_document_id, sections, meta, instruction, section_num}: `sections`
+    and `meta` are the exact structures run_workflow's own "done" result
+    stored, carried forward by the caller rather than re-derived here by
+    re-parsing rendered Markdown.
+
+    Runs _direct_edit_sections (the same repair-clone machinery the §6A audit
+    loop uses) then rebuilds and re-verifies exactly as run_workflow does.
+    There is deliberately no accept/reject step in between: the request was
+    for a direct edit, so a parseable, non-fabricating reply plus the hard
+    pp_verify PASS gate together ARE the new document. What is not
+    deliberate — every revision becomes a NEW row in db.documents, never an
+    edit of the one it started from. That costs nothing to keep and it means
+    the source document, the instruction that was given, and the document it
+    produced all stay on the record, whether or not anyone downstream ever
+    adds a review step of their own."""
+    client = client or LettaClient()
+    sections: list[dict] = []
+    markdown = ""
+    audits: list[str] = []
+    try:
+        job = await db.job_get(job_id)
+        p = job["payload"]
+        meta = dict(p["meta"])
+        sections = [dict(s) for s in p["sections"]]
+        instruction = p["instruction"]
+        section_num = p.get("section_num") or None
+        doctype = meta["doctype"]
+        await db.job_update(job_id, status="running", stage="revise")
+
+        # late import: fleet needs live Letta
+        from .fleet import ensure_fleet_ctx
+
+        ctx = await ensure_fleet_ctx(client)
+        agents = ctx.agents
+        author = SOP_AUTHOR if doctype == "SOP" else ANNEX_AUTHOR
+
+        if section_num and not any(s["num"] == section_num for s in sections):
+            raise RevisionFailed(f"no section {section_num} on this document")
+
+        await db.job_update(job_id, stage="editing" + (f" {section_num}" if section_num else ""))
+        revised, reason = await _direct_edit_sections(
+            client, author, sections, instruction, job_id, ctx=ctx, section_num=section_num,
+        )
+        if revised is None:
+            raise RevisionFailed(reason)
+
+        # Same two structural gates run_workflow enforces before it will build
+        # anything, for the same reason: a revision can drop a language out of
+        # a section, or widen a [[FORM]]/[[TABLE]] row past what the packer
+        # will place, just as easily as a first draft can.
+        gaps = _bilingual_gaps(revised)
+        if gaps:
+            raise BilingualGap(gaps)
+        overflow = _grid_overflow(revised, doctype)
+        if overflow:
+            raise GridOverflow(overflow)
+
+        sections = revised
+        markdown = assemble_markdown(meta, sections)
+
+        # ---- §6A audit ----
+        # The same gate, the same repair loop and the same PASS requirement
+        # run_workflow imposes. A revision reaches exactly the same place — a
+        # registered, downloadable controlled document — so it clears exactly
+        # the same bar; an edit is not a lesser act of authorship than a first
+        # draft. (Unlike run_workflow there is no regulatory-check context to
+        # fold in: this path runs no gf_reg_checker pass, and the source job's
+        # findings were computed on sections this edit may have just changed,
+        # so passing them here would describe a document that no longer
+        # exists. The auditor judges the revised document on its own terms.)
+        await db.job_update(job_id, stage="qa-audit")
+        for attempt in range(max(0, settings.max_repair_rounds) + 1):
+            audit = await client.send_message(
+                agents[QA_AUDITOR],
+                "Run the §6A review on this assembled document Markdown. "
+                "Return verdict PASS or FIX with issues.\n\n"
+                "SCOPE: review the CONTENT. The `<!--HEADERDATA-->` block and the "
+                "`# <number> <MK>|<EN>` section heading lines are emitted by the "
+                "formatter in canonical form — they are not the author's and not "
+                "yours to restyle. Do not raise issues about their spacing, level "
+                "or punctuation; no author can act on those and the document "
+                "cannot pass.\n\n"
+                "[NEEDS INPUT: …] markers are the engine's own placeholder for a fact "
+                "the requester has not supplied yet, and are reported to them "
+                "separately. Treat one as an honest gap, NOT an issue to fix — the "
+                "alternative an author has is inventing the value, which is the thing "
+                "this document must never contain. Do raise an issue if a marker is "
+                "used where the answer WAS supplied, or where the blank belongs to a "
+                "human filling the form during execution.\n\n" + markdown,
+            )
+            audits.append(audit)
+            if _qa_audit_passed(audit) or attempt >= settings.max_repair_rounds:
+                break
+
+            await db.job_update(job_id, stage=f"qa-repair {attempt + 1}")
+            repaired = await _repair_sections(client, author, sections, audit, job_id, ctx=ctx)
+            if repaired is None:
+                log.warning("job %s (revision) repair %d unusable — failing on the audit",
+                            job_id, attempt + 1)
+                break
+            broke = _bilingual_gaps(repaired) or _grid_overflow(repaired, doctype)
+            if broke:
+                log.warning("job %s (revision) repair %d broke a structural gate %s — discarded",
+                            job_id, attempt + 1, broke)
+                break
+            sections = repaired
+            markdown = assemble_markdown(meta, sections)
+
+        if not _qa_audit_passed(audits[-1]):
+            raise QaAuditFailed(audits[-1], audits, markdown)
+
+        await db.job_update(job_id, stage="format")
+        result = await asyncio.to_thread(
+            builder.build, markdown, settings.out_dir, meta["code"]
+        )
+        did = await db.document_create(
+            job_id,
+            {
+                "code": meta["code"], "doctype": doctype,
+                "title_mk": meta["title_mk"], "title_en": meta["title_en"],
+                "version": meta.get("version", "1.0"),
+                "path": str(result.path), "bytes": result.bytes,
+                "verify": result.verify_report,
+            },
+        )
+        await db.job_update(
+            job_id, status="done", stage="done",
+            result={
+                "document_id": did,
+                "markdown": markdown,
+                "sections": sections,
+                "meta": meta,
+                "verify": result.verify_report,
+                "instruction": instruction,
+                "section_num": section_num,
+                "source_document_id": p.get("source_document_id"),
+                "qa_audit": audits[-1],
+                "qa_audit_history": audits,
+                "qa_repair_rounds": len(audits) - 1,
+                "needs_input": needs.extract_needs(sections),
+                "bytes": result.bytes,
+            },
+        )
+    except builder.VerifyFailed as e:
+        log.error("job %s (revision) verify FAILED", job_id)
+        await db.job_update(job_id, status="failed", error="verify FAILED",
+                            result={"verify": e.report, "markdown": markdown, "sections": sections,
+                                    "qa_audit_history": audits})
+    except QaAuditFailed as e:
+        log.error("job %s (revision) §6A audit did not pass", job_id)
+        await db.job_update(job_id, status="failed", error="§6A audit did not pass",
+                            result={"qa_audit": e.verdict,
+                                    "qa_audit_history": e.history,
+                                    "qa_repair_rounds": len(e.history) - 1,
+                                    "markdown": e.markdown,
+                                    "sections": sections,
+                                    "instruction": instruction})
+    except RevisionFailed as e:
+        log.error("job %s (revision) could not be applied: %s", job_id, e.reason)
+        await db.job_update(job_id, status="failed", error=str(e.reason)[:500])
+    except BilingualGap as e:
+        log.error("job %s (revision) bilingual gap: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed",
+                            error="revision broke bilingual parity: " + ", ".join(e.gaps),
+                            result={"bilingual_gaps": e.gaps, "sections": sections})
+    except GridOverflow as e:
+        log.error("job %s (revision) grid overflow: %s", job_id, e.gaps)
+        await db.job_update(job_id, status="failed",
+                            error="revision broke a table/form grid: " + str(e)[:400],
+                            result={"grid_overflow": e.gaps, "sections": sections})
+    except LettaError as e:
+        log.error("job %s (revision) letta error: %s", job_id, e)
+        await db.job_update(job_id, status="failed", error=f"letta: {e}")
+    except Exception as e:  # noqa: BLE001 — job must record any failure
+        log.exception("job %s (revision) failed", job_id)
+        detail = str(e).strip() or repr(e)
+        await db.job_update(job_id, status="failed", error=f"{type(e).__name__}: {detail}"[:500])
+    finally:
         try:
             await client.aclose()
         except Exception:  # noqa: BLE001 — cleanup must never mask a job result

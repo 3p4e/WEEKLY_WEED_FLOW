@@ -210,6 +210,44 @@ async def studio_workflow(jid: str, user: dict = Depends(_require_author)):
     return (await _de_forward("GET", f"/workflows/{jid}")).json()
 
 
+@router.get("/studio/presets")
+async def studio_presets(user: dict = Depends(_require_elevated)):
+    """The direct-edit chat UI's one-click instructions. Read gate only —
+    picking a preset does nothing by itself; sending it through /revise is
+    what requires author role."""
+    return (await _de_forward("GET", "/presets")).json()
+
+
+@router.post("/studio/workflows/{jid}/chat")
+async def studio_chat(jid: str, body: dict = Body(...),
+                      user: dict = Depends(_require_author)):
+    """Ask a question about a finished document. Read-only upstream — see
+    docengine's own /workflows/{jid}/chat docstring — so this proxies with no
+    side effects of its own either. The same generous timeout as /studio/build:
+    the answer is a real Letta turn, not a DB read."""
+    if len(jid) > 64:
+        raise HTTPException(status_code=422, detail="Id too long")
+    if len(str(body)) > 8_000:
+        raise HTTPException(status_code=422, detail="Payload too large")
+    return (await _de_forward("POST", f"/workflows/{jid}/chat", body, timeout=150.0)).json()
+
+
+@router.post("/studio/workflows/{jid}/revise")
+async def studio_revise(jid: str, body: dict = Body(...),
+                        user: dict = Depends(_require_author)):
+    """Start a direct-edit job (chat instruction or preset) against a
+    finished document. Fires and returns a job id exactly like
+    /studio/workflows does — poll the returned id at /studio/workflows/{id}
+    the same way. requested_by is stamped server-side, never trusted from
+    the caller, for the same reason /studio/workflows stamps it."""
+    if len(jid) > 64:
+        raise HTTPException(status_code=422, detail="Id too long")
+    if len(str(body)) > 8_000:
+        raise HTTPException(status_code=422, detail="Payload too large")
+    body["requested_by"] = user["username"]
+    return (await _de_forward("POST", f"/workflows/{jid}/revise", body)).json()
+
+
 @router.post("/studio/build")
 async def studio_build(body: dict = Body(...),
                        user: dict = Depends(_require_author)):

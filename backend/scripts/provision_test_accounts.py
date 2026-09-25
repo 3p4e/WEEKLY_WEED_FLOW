@@ -42,9 +42,13 @@ import time
 DEFAULT_BASE_URL = "https://wwf.srv1231216.hstgr.cloud"
 STATE_FILE = "test_accounts.local.json"
 
-# The 7 canonical departments — codes/names EXACTLY as web/gf/demo.js:41-49.
+# The canonical TOP-LEVEL departments — codes/names as app/demo_org.py's
+# _DEPARTMENTS. Cloning and Nursery are sub-departments of Cultivation there
+# and have no manager role of their own (the cultivation manager runs them),
+# so they get no account trio here.
 DEPARTMENTS = [
     {"code": "cultivation",       "name": "Cultivation",       "name_mk": "Одгледување"},
+    {"code": "irrigation",        "name": "Irrigation",        "name_mk": "Наводнување"},
     {"code": "production",        "name": "Production",        "name_mk": "Производство"},
     {"code": "qc",                "name": "Quality Control",   "name_mk": "Контрола на квалитет"},
     {"code": "quality_assurance", "name": "Quality Assurance", "name_mk": "Обезбедување квалитет"},
@@ -54,9 +58,10 @@ DEPARTMENTS = [
 ]
 
 # dept code -> (username segment, manager role) — segments match the role
-# prefixes (CU/PR/QC/QA/WH/SE/MU) so tt.qc.mgr obviously pairs with QC_MGR.
+# prefixes (CU/IR/PR/QC/QA/WH/SE/MU) so tt.qc.mgr obviously pairs with QC_MGR.
 DEPT_KEY = {
     "cultivation": ("cu", "CU_MGR"),
+    "irrigation": ("ir", "IR_MGR"),
     "production": ("pr", "PR_MGR"),
     "qc": ("qc", "QC_MGR"),
     "quality_assurance": ("qa", "QA_MGR"),
@@ -67,6 +72,7 @@ DEPT_KEY = {
 
 _CAST = {
     "cu": ("Goran Dimitrov", "Ile Trajkovski", "Sara Petreska"),
+    "ir": ("Vlatko Manev", "Ana Izvorska", "Mitko Reskov"),
     "pr": ("Marija Ristova", "Dejan Stankov", "Bojana Miteva"),
     "qc": ("Blagoj Testov", "Kiril Angelov", "Teodora Naumova"),
     "qa": ("Vesna Georgieva", "Filip Karev", "Ivana Zdravkova"),

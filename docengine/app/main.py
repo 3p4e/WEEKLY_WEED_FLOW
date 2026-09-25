@@ -7,6 +7,9 @@
 #   GET  /questionnaires/{key}            full question bank
 #   POST /workflows                       start questionnaire->SOP pipeline
 #   GET  /workflows/{id}                  poll job state (any worker)
+#   POST /workflows/{id}/chat             ask about a finished document — read-only
+#   POST /workflows/{id}/revise           direct-edit a finished document (chat/preset)
+#   GET  /presets                         one-click revise instructions for the UI
 #   POST /build                           direct Markdown -> verified .docx
 #   GET  /documents                       registry list
 #   GET  /documents/{id}                  registry row (verify report incl.)
@@ -27,7 +30,8 @@ from pydantic import BaseModel, Field, field_validator
 from . import builder, db, fleet
 from .config import ENGINE_SCRIPTS, settings
 from .letta import LettaClient, LettaError
-from .pipeline import run_workflow
+from .pipeline import ANNEX_AUTHOR, SOP_AUTHOR, run_revision, run_workflow
+from .presets import PRESETS, PRESETS_BY_KEY
 from .ragflow_api import RagflowUnreachable, list_dataset_names
 from .questionnaires import QUESTIONNAIRES, InvalidAnswer, questionnaire_index, validate_answers
 from .security import require_api_key
@@ -244,6 +248,151 @@ async def get_workflow(jid: str):
     if not job:
         raise HTTPException(404, "no such job")
     return job
+
+
+def _chat_ready_doc(job: dict) -> tuple[list[dict], dict]:
+    """(sections, meta) off a finished job's result, or raise 404/409.
+
+    Both chat and revise need the SAME structured pair run_workflow's "done"
+    result stores — a job built before that field existed (or one that
+    failed) has no `sections`/`meta` to work from, and there is nothing to
+    fall back to that would not risk re-deriving section boundaries by
+    re-parsing rendered Markdown."""
+    if job["status"] != "done":
+        raise HTTPException(404, "no finished document for this job")
+    result = job.get("result") or {}
+    sections, meta = result.get("sections"), result.get("meta")
+    if not sections or not meta:
+        raise HTTPException(
+            409, "this job has no chat/revise-ready document (built before this feature shipped)"
+        )
+    return sections, meta
+
+
+def _section_context(sections: list[dict], section_num: str | None) -> str:
+    """Sections joined for an agent to READ, never to parse back — chat
+    answers a question and is told not to emit the '<<<PP-SECTION' markers
+    _direct_edit_sections relies on, so this join carries no marker syntax
+    for it to echo by mistake."""
+    target = [s for s in sections if not section_num or s["num"] == section_num]
+    return "\n\n".join(f"# {s['num']} {s['mk']}|{s['en']}\n{s['content'].strip()}" for s in target)
+
+
+class ChatIn(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    section_num: str | None = None
+
+
+@app.post("/workflows/{jid}/chat", dependencies=[Depends(require_api_key)])
+async def chat_about_document(jid: str, body: ChatIn):
+    """Answer a question about a finished document. Read-only: nothing this
+    route does can change the document — that is what /revise is for. Runs
+    on an ephemeral clone of the document's own author (autoclear off, in
+    case a caller later wants a short back-and-forth on the same clone; today
+    each call is one turn) so the answer comes from an agent that already
+    understands this document's persona, corpus access and house rules,
+    rather than a generic model call outside the fleet."""
+    if not _valid_uuid(jid):
+        raise HTTPException(404, "no such job")
+    if not db.ready():
+        raise HTTPException(503, "DocEngine storage unavailable")
+    job = await db.job_get(jid)
+    if not job:
+        raise HTTPException(404, "no such job")
+    sections, meta = _chat_ready_doc(job)
+    if body.section_num and not any(s["num"] == body.section_num for s in sections):
+        raise HTTPException(404, f"no section {body.section_num} on this document")
+    if not LettaClient().configured:
+        raise HTTPException(503, "Letta unavailable")
+
+    from .fleet import ensure_fleet_ctx, spawn_ephemeral
+
+    client = LettaClient()
+    try:
+        ctx = await ensure_fleet_ctx(client)
+        author = SOP_AUTHOR if meta.get("doctype") == "SOP" else ANNEX_AUTHOR
+        tmp_id = await spawn_ephemeral(client, author, f"chat_{jid[:8]}", ctx=ctx, autoclear=False)
+        try:
+            reply = await client.send_message(
+                tmp_id,
+                "Answer the question below about this document. This is a "
+                "question, not an edit request: do NOT rewrite any section and "
+                "do NOT emit '<<<PP-SECTION' markers. If the answer is not in "
+                "the document and you cannot verify it against your permitted "
+                "corpus, say so rather than guessing.\n\n"
+                f"QUESTION:\n{body.question.strip()}\n\n"
+                f"DOCUMENT:\n{_section_context(sections, body.section_num)}",
+            )
+        finally:
+            try:
+                await client.delete_agent(tmp_id)
+            except Exception:  # noqa: BLE001
+                log.warning("failed to delete ephemeral chat clone %s", tmp_id, exc_info=True)
+    finally:
+        await client.aclose()
+    return {"answer": (reply or "").strip()}
+
+
+@app.get("/presets", dependencies=[Depends(require_api_key)])
+async def list_presets():
+    # The full instruction text is included, not just the label — the UI can
+    # drop it straight into an editable chat box so a preset is a starting
+    # point a person can tweak, not a black box.
+    return {"presets": PRESETS}
+
+
+class ReviseIn(BaseModel):
+    instruction: str | None = Field(default=None, max_length=4000)
+    preset_key: str | None = None
+    section_num: str | None = None
+    requested_by: str = ""
+
+    @field_validator("instruction")
+    @classmethod
+    def _blank_to_none(cls, v: str | None) -> str | None:
+        return v.strip() if v and v.strip() else None
+
+
+@app.post("/workflows/{jid}/revise", dependencies=[Depends(require_api_key)])
+async def revise_workflow(jid: str, body: ReviseIn):
+    """Start a direct-edit job on a finished document — a chat instruction or
+    a preset, applied to one section or the whole document. Fires the same
+    way /workflows does: a new job row, a background task, polled at
+    /workflows/{new_id}. No accept/reject step: the caller asked for a direct
+    edit, so run_revision's result (pp_verify PASS or a recorded failure) IS
+    the answer. The source job is never touched — the new job's payload
+    carries its own copy of `sections`/`meta`, and run_revision writes a NEW
+    db.documents row, so the original stays downloadable exactly as built."""
+    if not _valid_uuid(jid):
+        raise HTTPException(404, "no such job")
+    if not db.ready():
+        raise HTTPException(503, "DocEngine storage unavailable")
+    source = await db.job_get(jid)
+    if not source:
+        raise HTTPException(404, "no such job")
+    sections, meta = _chat_ready_doc(source)
+    if body.section_num and not any(s["num"] == body.section_num for s in sections):
+        raise HTTPException(404, f"no section {body.section_num} on this document")
+    instruction = body.instruction
+    if not instruction and body.preset_key:
+        preset = PRESETS_BY_KEY.get(body.preset_key)
+        if not preset:
+            raise HTTPException(422, f"unknown preset '{body.preset_key}'")
+        instruction = preset["instruction"]
+    if not instruction:
+        raise HTTPException(422, "instruction or a known preset_key is required")
+    if not LettaClient().configured:
+        raise HTTPException(503, "Letta unavailable")
+    payload = {
+        "source_document_id": (source.get("result") or {}).get("document_id"),
+        "sections": sections,
+        "meta": meta,
+        "instruction": instruction,
+        "section_num": body.section_num,
+    }
+    rid = await db.job_create("revise", payload, body.requested_by)
+    _fire_and_forget(run_revision(rid))
+    return {"job_id": rid, "status": "queued"}
 
 
 # ---------- direct build (Mode B/C: caller supplies the Markdown) ----------

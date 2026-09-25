@@ -315,6 +315,8 @@
 /* Chooser + af-block under the Mass Weed HUD: chamfer + accent glow. */
 :root[data-theme^="mass-weed"] .sel-btn{
   clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px);border-radius:0}
+:root[data-theme^="mass-weed"] .dp-cell,
+:root[data-theme^="mass-weed"] .dp-sel{border-radius:0}
 :root[data-theme^="mass-weed"] .sel-modal{
   box-shadow:var(--sh-3), 0 0 34px rgba(var(--accent-rgb),.35)}
 :root[data-theme^="mass-weed"] .af-block{
@@ -392,8 +394,14 @@
 :root[data-theme^="mass-weed"] .avatars .avatar{
   border-radius:0;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
 
-/* .mw-empty — centered console empty states (inbox, chooser search). */
-:root[data-theme^="mass-weed"] .ntf-empty,
+/* .mw-empty — centered console empty states (chooser search).
+   .ntf-empty used to be uppercased here too. That reads well for a two-word
+   label ("NO MATCHES") and badly for the instructional empty states the
+   boards actually carry — "NO BATCHES YET. A BATCH IS ONE CULTIVAR IN ONE
+   ROOM — REGISTER THE CULTIVAR FIRST…" is two shouted sentences that nobody
+   reads. The display face and the tracking stay; the casing does not. */
+:root[data-theme^="mass-weed"] .ntf-empty{
+  font-family:var(--font-display);letter-spacing:.02em;color:var(--ink-3)}
 :root[data-theme^="mass-weed"] .sel-empty{
   font-family:var(--font-display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 

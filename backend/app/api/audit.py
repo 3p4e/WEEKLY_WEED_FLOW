@@ -110,7 +110,8 @@ async def list_audit(
     dscope = dept_scope(user)
     if dscope:
         args.append(dscope)
-        clauses.append(f"COALESCE(new_values->>'department_id', old_values->>'department_id')=${len(args)}")
+        clauses.append(f"COALESCE(new_values->>'department_id', old_values->>'department_id')"
+                       f" = ANY(app.dept_family(${len(args)}::uuid)::text[])")
 
     where = " AND ".join(clauses)
     args.append(limit)
