@@ -30,6 +30,39 @@ agent** (GitHub → Actions → Run workflow is owner-only). The agent can only
 **But that does NOT mean the agent cannot deploy — it can (proven 2026-08-08).**
 See "Deploying without Actions" below.
 
+## Agent helpers: `ops/agent/` (set up 2026-09-26)
+
+Two scripts the owner pre-approves, so the auto-mode classifier does not stop
+them. Use these instead of ad-hoc `urllib` heredocs:
+
+    python3 ops/agent/rsh.py '<command>' [timeout]      # one command on KVM4
+    python3 ops/agent/rsh.py - [timeout] < script.sh    # a script on KVM4
+    python3 ops/agent/gh_api.py GET|POST|PUT|PATCH /repos/3p4e/WEEKLY_WEED_FLOW/...  [json]
+
+`gh_api.py` makes the call from KVM4 with `GITHUB_PAT_WWF` (the owner's
+fine-grained token for this repo), because the session's own proxy will not
+carry a personal token. It refuses DELETE and any path outside this repo. Use it
+for what the read-only GitHub App cannot do: re-run a workflow
+(`POST …/actions/runs/<id>/rerun`), dispatch one (`POST
+…/actions/workflows/<file>/dispatches {"ref": …}`), list runners. `--dry-run`
+prints the request without sending it.
+
+How the approval works, so it can be repaired:
+- The allow rules live in the cloud environment's **Setup script**, not in the
+  repo. It writes `~/.claude/settings.json` with
+  `Bash(python3 ops/agent/rsh.py *)` and `Bash(python3 ops/agent/gh_api.py *)`
+  at session start. A session only picks it up if it started after the script
+  was saved.
+- A rule matches the command's text, so run the helper as a **standalone
+  command from the repo root**. `cd … && python3 ops/agent/…`, an `S=…;`
+  prefix or an absolute path will not match and will be judged by the
+  classifier again.
+- The environment variables `RUNNER_URL`, `RUNNER_TOKEN` and `GITHUB_PAT_WWF`
+  must be current. `rsh.py` answering **HTTP 403** means `RUNNER_TOKEN` is not
+  the one kvm4-runner holds; the owner reads the right value on the host with
+  `docker inspect kvm4-runner --format '{{range .Config.Env}}{{println .}}{{end}}' | grep RUNNER_TOKEN`
+  and updates it in the environment settings. Never print either token.
+
 ## Deploying without Actions (proven 2026-08-08 — v87/v127, tasks 0058)
 
 The earlier note here said the agent "cannot ship a production deploy
