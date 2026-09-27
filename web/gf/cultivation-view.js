@@ -933,13 +933,11 @@
     if (!wrap || !cv) return;
     // The suggestion is for the CLONING month — the owner's nn is "the nth
     // cloning batch of that strain in that month" — so the clone date travels
-    // with the request. GF.API.cultivationBatchCode takes only the cultivar
-    // (api.js is not this view's to change), so the call is made inline.
+    // with the request (GF.API.cultivationBatchCode carries it as clone_date).
     const clone = ((GF.$('cu-b-clone') || {}).value || '');
     let suggested = '';
     try {
-      const r = await GF.API._req('GET', '/cultivation/batch-code?cultivar_id=' + encodeURIComponent(cv.id)
-        + (clone ? '&clone_date=' + encodeURIComponent(clone) : ''));
+      const r = await GF.API.cultivationBatchCode(cv.id, clone ? { clone_date: clone } : {});
       suggested = (r && r.suggested) || '';
     } catch (e) {
       suggested = '';

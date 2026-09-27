@@ -171,6 +171,13 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
         const side = (room, phase) => room && phase ? `${room} (${phase})` : (room || phase || '');
         const from = side(p.old_room, p.old_phase), to = side(p.room, p.phase);
         const hop = from || to ? `: ${from || '?'} → ${to || '?'}` : '';
+        // A room change keeps the phase clock (CS-06): say so instead of
+        // printing "flower → flower".
+        if (p.room_change) {
+          const where = p.old_room && p.room ? `: ${p.old_room} → ${p.room}` : (p.room ? `: → ${p.room}` : '');
+          return AL(`${a} changed room for ${b.code}${b.count} × ${b.strain}${where}${p.phase ? ` (${p.phase})` : ''}`,
+                    `${a} ја премести во друга просторија ${b.code}${b.count} × ${b.strain}${where}${p.phase ? ` (${p.phase})` : ''}`);
+        }
         return AL(`${a} moved ${b.code}${b.count} × ${b.strain}${hop}`,
                   `${a} премести ${b.code}${b.count} × ${b.strain}${hop}`);
       }

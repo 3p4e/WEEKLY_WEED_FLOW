@@ -111,6 +111,15 @@ for (const lang of ['en', 'mk']) {
   });
 }
 
+test('a room change (the phase clock kept, CS-06) reads as a room change, not as "flower → flower"', () => {
+  const html = render([{ verb: 'batch_moved', params: { code: 'GP072501', strain: 'Gorilla Punch', plant_count: 2000,
+    phase: 'flower', old_phase: 'flower', room: 'Flowering 1.2', old_room: 'Flowering 1.1', room_change: true } }]);
+  assert.match(html, /changed room for GP072501 — 2000 × Gorilla Punch: Flowering 1\.1 → Flowering 1\.2 \(flower\)/);
+  assert.doesNotMatch(html, /flower\) → /);
+  const mk = render([{ verb: 'batch_moved', params: { code: 'GP072501', strain: 'GP', room: 'B', old_room: 'A', room_change: true } }], { lang: 'mk' });
+  assert.match(mk, /друга просторија/);
+});
+
 test('the contract keys win over the fallbacks when both are present', () => {
   const html = render([{ verb: 'batch_added', params: { ...ADDED_NEW, cultivar: 'GP', room_name: 'other' } }]);
   assert.match(html, /Gorilla Punch/);

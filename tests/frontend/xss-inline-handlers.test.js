@@ -149,7 +149,7 @@ test('genealogy links carry the batch code as data and navigate to that exact co
    arguments are identifiers, not text. `grade` / `alias` are the facility
    layout's free-text room grade and its alias (LayoutPatch, review
    2026-09-27, R2-FE-15). */
-const FREE_TEXT = /\.(swab_code|filename|batch_id|batch_code|title|name|full_name|note|notes|reason|subject|location|location_desc|content|comment|username|email|label|desc|description|room_name|campaign|manifest_code|to_location|from_location|lab_name|action_taken|transfer_reason|sample_condition|carrier_ref|strain|cultivar|preview|remark|message|grade|alias)\b/;
+const FREE_TEXT = /\.(swab_code|filename|batch_id|batch_code|title|name|full_name|note|notes|reason|subject|location|location_desc|content|comment|username|email|label|desc|description|room_name|campaign|manifest_code|to_location|from_location|lab_name|action_taken|transfer_reason|sample_condition|carrier_ref|strain|cultivar|preview|remark|message|grade|alias|code)\b/;
 
 test('no inline handler in web/gf interpolates a free-text record field into a JS string', () => {
   const offenders = [];
