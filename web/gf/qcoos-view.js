@@ -270,7 +270,9 @@
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('Open an OOS', 'Отвори OOS')}</div>
         <div class="qcs-form">
-          <input id="qoo-batch" placeholder="${AL('Batch id', 'Серија')}">
+          ${GF.batchCodeField('qoo-batch', {
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qcoos') GF.render.all(); }),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта') })}
           <select id="qoo-type">${TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
           <input id="qoo-test_name" placeholder="${AL('Test name', 'Име на тест')}">
           <input id="qoo-material_code" placeholder="${AL('Material (optional)', 'Материјал (опц.)')}">

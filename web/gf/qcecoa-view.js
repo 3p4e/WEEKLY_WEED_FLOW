@@ -676,7 +676,9 @@
       <div class="panel ana-panel" style="margin-bottom:12px">
         <div class="ana-pt" style="margin-bottom:8px">${AL('Register an incoming CoA', 'Регистрирај дојдовен CoA')}</div>
         <div class="qcs-form">
-          <input id="qec-batch" placeholder="${AL('Batch id', 'Серија')}">
+          ${GF.batchCodeField('qec-batch', {
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qcecoa') GF.render.all(); }),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта') })}
           <input id="qec-src" placeholder="${AL('Source lab', 'Изворна лаб.')}">
           <select id="qec-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${(st.specs || []).map(s => `<option value="${s.id}">${GF.esc(s.spec_id + ' · ' + (s.material_code || ''))}</option>`).join('')}</select>
           <input id="qec-mat" placeholder="${AL('Material (optional)', 'Материјал (опц.)')}">

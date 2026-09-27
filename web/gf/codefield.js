@@ -86,4 +86,73 @@ window.GF = window.GF || {};
     try { el.setSelectionRange(prefix.length + tail.length, prefix.length + tail.length); }
     catch (e) { /* detached */ }
   };
+
+  // ── A batch code with the cultivar as its constant head ────────────────
+  // The facility's batch number is <cultivar code><MMYY><nn> — GP072501 in the
+  // owner's example (2026-09-05) — and the cultivation batch form already
+  // pre-fills the cultivar code as the fixed head. The QC forms that name a
+  // batch (sample, incoming CoA, OOS) were plain text (review 2026-09-27,
+  // INS-12). This control puts a strain chooser in front of the same code
+  // field: pick the strain, its code is there, type the tail. With no strain
+  // chosen it behaves as an ordinary input, and an existing value keeps its
+  // spelling — its strain is preselected when its head matches a known code.
+  //
+  // Global: GF.batchCodeField(id, cfg) → markup string
+  // cfg: { cultivars: [{code, name, is_active}], value, placeholder?,
+  //        oninput?, cls?, selPlaceholder?, selTitle?, maxlength? }
+  GF.batchCodeField = (id, cfg) => {
+    cfg = cfg || {};
+    const cvs = (cfg.cultivars || []).filter(c => c && c.code && c.is_active !== false);
+    const v = cfg.value != null ? String(cfg.value) : '';
+    const head = cvs.map(c => String(c.code)).sort((a, b) => b.length - a.length)
+      .find(code => v.indexOf(code) === 0) || '';
+    const sel = `<select id="${id}-cv" class="${GF.esc(cfg.selCls || 'qcs-cv')}" title="${GF.esc(cfg.selTitle || '')}"`
+      + ` onchange="GF._batchCvPick('${id}')">`
+      + `<option value="">${GF.esc(cfg.selPlaceholder || '')}</option>`
+      + cvs.map(c => `<option value="${GF.esc(c.code)}"${String(c.code) === head ? ' selected' : ''}>${
+          GF.esc(String(c.code) + (c.name ? ' · ' + c.name : ''))}</option>`).join('')
+      + `</select>`;
+    return sel + GF.codeField(id, { prefix: head, value: v, placeholder: cfg.placeholder,
+      maxlength: cfg.maxlength || 64, oninput: cfg.oninput, style: cfg.style, cls: cfg.cls || 'qcs-code' });
+  };
+
+  // The strain changed: swap the head, keep whatever tail was typed, caret
+  // after the head. The input event is re-fired so a view's own oninput
+  // (draft keeping, parent lookups) sees the new value.
+  GF._batchCvPick = (id) => {
+    const el = GF.$(id), sel = GF.$(id + '-cv');
+    if (!el || !sel) return;
+    const old = PRE[id] || '', next = String(sel.value || '');
+    let tail = el.value;
+    if (old && tail.indexOf(old) === 0) tail = tail.slice(old.length);
+    PRE[id] = next;
+    el.value = next + tail;
+    try { el.setSelectionRange(next.length + tail.length, next.length + tail.length); } catch (e) { /* detached */ }
+    try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { /* no Event */ }
+    if (el.focus) el.focus();
+  };
+
+  // The cultivar list for the chooser, fetched once per session and shared by
+  // every form. Returns what is known NOW ([] until the first answer lands)
+  // and calls every registered onLoad when it does, so a form rendered
+  // before the answer re-renders with the strains in. Reset on login
+  // (integrate.js resetCaches) — cultivars are organisation data.
+  let cvCache = null, cvPending = null;
+  const cvWaiters = [];
+  GF.batchCodeCultivars = (onLoad) => {
+    if (cvCache) return cvCache;
+    if (onLoad) cvWaiters.push(onLoad);
+    if (!cvPending && GF.API && GF.API.cultivars) {
+      cvPending = GF.API.cultivars()
+        .then(r => {
+          cvCache = (r && r.cultivars) || [];
+          const ws = cvWaiters.splice(0);
+          ws.forEach(fn => { try { fn(cvCache); } catch (e) { /* a view's re-render must not break the others */ } });
+          return cvCache;
+        })
+        .catch(() => { cvPending = null; return []; });
+    }
+    return [];
+  };
+  GF.batchCodeCultivars.reset = () => { cvCache = null; cvPending = null; cvWaiters.length = 0; };
 })();

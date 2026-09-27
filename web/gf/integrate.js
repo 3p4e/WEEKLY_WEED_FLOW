@@ -295,6 +295,8 @@ GF.WWF.resetCaches = () => {
   });
   // Assistant chat thread (assistant.js re-greets when msgs is empty).
   if (GF.assistant && Array.isArray(GF.assistant.msgs)) GF.assistant.msgs.length = 0;
+  // The strain list behind the QC batch-code fields is organisation data.
+  if (GF.batchCodeCultivars && GF.batchCodeCultivars.reset) GF.batchCodeCultivars.reset();
 };
 
 GF.WWF.loadAndRender = async () => {

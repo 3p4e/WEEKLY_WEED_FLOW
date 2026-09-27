@@ -382,8 +382,13 @@
           <b class="mono">${GF.esc(st.parent.sample_id)}</b>
           <button class="btn btn-sm" onclick="GF.WWF.qcSampleClearParent()">✕</button></div>` : ''}
         <div class="qcs-form">
-          <input id="qsm-batch" placeholder="${AL('Batch id', 'Серија')}" value="${dv('batch', st.parent && st.parent.batch_id)}"
-            oninput="GF.WWF.qcSampleDraft('batch', this.value);GF.WWF.qcSampleParentCheck(this)">
+          ${GF.batchCodeField('qsm-batch', {
+            // The strain is the batch number's constant head (INS-12); the
+            // chooser fills in as soon as the cultivar list is known.
+            cultivars: GF.batchCodeCultivars(() => { if (GF.state.view === 'qcsample') GF.render.all(); }),
+            value: dr.batch != null ? dr.batch : ((st.parent && st.parent.batch_id) || ''),
+            placeholder: AL('Batch id', 'Серија'), selPlaceholder: AL('strain…', 'сорта…'), selTitle: AL('Strain', 'Сорта'),
+            oninput: "GF.WWF.qcSampleDraft('batch', this.value);GF.WWF.qcSampleParentCheck(this)" })}
           <input id="qsm-mat" placeholder="${AL('Material code', 'Код на материјал')}" value="${dv('mat', st.parent && st.parent.material_code)}"
             oninput="GF.WWF.qcSampleDraft('mat', this.value);GF.WWF.qcSampleParentCheck(this)">
           <input id="qsm-type" placeholder="${AL('Type', 'Тип')}" value="${dv('type')}" oninput="GF.WWF.qcSampleDraft('type', this.value)">
