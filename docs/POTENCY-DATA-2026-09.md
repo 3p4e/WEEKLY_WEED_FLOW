@@ -117,13 +117,42 @@ modified 2026-09-06**.
 `docs/coq-tracker/parse_master_v9.py` reads the *v9* layout of the same workbook
 for the fuller parameter set; this note covers only the Total Δ⁹-THC column of v10.
 
+## Decided since (2026-09-18, recorded 2026-09-27)
+
+- **The fitted tolerances apply everywhere; the flat ±10 % rule is retired as a
+  grading method** (owner, 2026-09-18: "±10 % flat is not gonna work so the
+  fitted approach is applicable everywhere according to the new document";
+  a sparse strain such as Wedding Cake takes a nominal of 26 with the full
+  tolerance). In the app: every product window is explicit (`POST /qc/products`,
+  `POST /qc/products/ladder`), the ±10 % of nominal is only the ceiling a
+  window may not exceed, and the finished fitted specs enter as DRAFT products
+  through `POST /qc/products/import-fitted` from the Potency Spec Service's
+  export (`GET /api/specs?status=finished`), with the service id, finish date,
+  result counts and fitted tolerance written into each product's `source` /
+  `notes`. The fitted ladders in the service's 15.09.2026 form are
+  non-overlapping by construction (Cap Junky 14/17/20/24/28 with tolerances
+  1.4/1.4/1.6/2.4/1.6; Grape Pie 16/20/24/28), which is what makes "the next
+  grade" unambiguous.
+- **The out-of-grade rule is built** (`PRODUCT-CATALOGUE-2026-09.md`, "The
+  out-of-grade rule as built"): a CoQ's Total Δ9-THC outside its product's
+  window falls to the product whose window holds it (`regrade_to`), is flagged
+  on the CoQ and printed as REGRADED on the document, sends a
+  `potency_deviation` to the Cultivation and Production managers, and needs a
+  formal OOS naming Total Δ9-THC on the batch before the HoQC can approve. A
+  value in a dead band — Orange Punch Mimosa's 14.16 and 15.38 under the v.03
+  pages — is flagged with no regrade target; under the fitted OPM ladder
+  (8/10/14/17/20) both fall inside a grade.
+
 ## Open
 
-- The ladders themselves. The owner is building them in the range tool; nothing is
-  loaded into `qc_products` from this analysis.
-- Strain spellings remain contested between two controlled documents — see
-  `PRODUCT-CATALOGUE-2026-09.md`. Names here follow the merged master.
-- Whether a batch assaying outside every grade of its strain should regrade to the
-  nearest, and raise an OOS against batch disposition. The owner has described
-  this behaviour; it is not built, and it is not buildable while 16 of 20 adjacent
-  pairs overlap, because "the next grade" is then ambiguous.
+- The finished ladders live in the running Potency Spec Service, which is
+  newer than its copy in git (INS-14); the export must be taken from the live
+  service, and the owner has to state the document version the fitted
+  specification was issued under.
+- Strain spellings: PURE MICHIGEN and CLEMOSA A BUD are applied; the four
+  disputed names remain with the owner — see `PRODUCT-CATALOGUE-2026-09.md`.
+  Names here follow the merged master; the import treats each disputed pair as
+  one strain.
+- Whether the regrade rule's details (OOS required at approval rather than
+  opened by the system; deviation at compile; lower nominal on a tie) match
+  the owner's intent — listed as decisions to confirm.

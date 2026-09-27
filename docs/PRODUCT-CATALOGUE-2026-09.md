@@ -1,9 +1,69 @@
-# The official ImB product catalogue
+# The official product catalogue
 
-**Date:** 2026-09-06 · **Status:** implemented on
-`claude/weekly-read-flow-setup-yft7if` (PR #52) · **Ships as:** tasks migrations
-`0066`/`0067`, `app/api/qc/products.py`, `app/plantids.py`,
-`app/data/imb_products.json`.
+**Date:** 2026-09-06, revised 2026-09-27 · **Status:** backend and QC screens
+implemented (review 2026-09-27, §2.1 / §2.11 — plan commits 2 and 6, INS-03,
+INS-04, INS-05, INS-13, QC-30, AD-12); the fitted specifications themselves are
+loaded by the owner from the Potency Spec Service export (see "Decisions
+recorded 2026-09-27") · **Ships as:** tasks migrations `0066`/`0067`,
+`app/api/qc/products.py`, `app/api/qc/spec_html.py`, `app/plantids.py`,
+`app/data/imb_products.json`, `web/gf/qcpotency-view.js`, `web/gf/qccoa-view.js`.
+
+## Decisions recorded 2026-09-27
+
+Three owner decisions that the earlier revisions of this file, `HANDOFF.md`
+and PR #52 either left open or claimed done. What is built for each:
+
+1. **Windows are explicit; the flat ±10 % rule is retired as a grading method
+   (owner, 2026-09-18: "±10 % flat is not gonna work so the fitted approach is
+   applicable everywhere").** `POST /qc/products`, `POST /qc/products/ladder`
+   and both importers store the window they are given and derive nothing;
+   `plantids.window_for` is reference-only (it describes what the v.03 pages
+   print). ±10 % of the nominal survives as the **ceiling** a window may not
+   exceed (owner, 2026-09-06 — `products._TOLERANCE_CEILING`), fitted or not.
+   The fitted specifications enter through `POST /qc/products/import-fitted`,
+   whose body is the Potency Spec Service's own export
+   (`GET /api/specs?status=finished` on the service, source on branch
+   `claude/sync-potency-spec-service`, `tools/potency-spec-service/`), plus the
+   document version they were issued under. Each range becomes one DRAFT
+   product `<ID>_THC<nominal>:CBD1` with the window the service prints
+   (`N − t … N + t − 0.01`), checked against the service's own arithmetic, the
+   ceiling and non-overlap within the strain; `source` records the service id,
+   finish date and result count, `notes` the fitted tolerance and the
+   decision. Nothing is loaded from git: the copy of the service on the branch
+   is older than the live one (INS-14), so the export is the source of truth.
+   **One specification version is live per strain**: approving a product
+   supersedes the cultivar's APPROVED products of any other `doc_version` (and,
+   as before, the same code's older row and the cultivar's ladder).
+2. **Strain names as in the specifications (owner, 2026-09-06).** Where both
+   controlled sources agree, `imb_products.json` now carries the printed
+   spelling as canonical — `Pure Michigen` (was "Pure Michigan") and `Clemosa A
+   Bud` (was "Clemosa") — with the retired spelling under `retired_spellings`;
+   the import renames a cultivar still carrying it and keeps the old spelling
+   in the cultivar's note. The four disputed names (Jelly Donutz/Donuts, Graps &
+   Crème/Grapes And Cream, Sleepy Joe/Joy, Wedding Crasher/Crusher) keep the
+   August spelling, flagged `spelling_disputed`; both spellings resolve to the
+   ONE cultivar (an alias, never a second cultivar), and the question stays
+   with the owner.
+3. **The out-of-grade rule (owner, 2026-09-06)** — see "Conformance" below.
+
+Decisions the agent made in building this, to confirm with the owner:
+
+- `nearest` (AD-12): the product whose window **contains** the value; when
+  several do (the v.03 windows overlap), the one whose nominal is closest,
+  the **lower** nominal on a tie (never over-label); when none does, the
+  window whose edge is nearest above or below. `regrade_to` is `nearest`
+  only when its window actually holds the value — a value in a dead band is
+  not regraded to a grade that does not hold it.
+- The formal OOS is a **person's act, required at approval**, not opened by
+  the system: a CoQ whose Total Δ9-THC is outside its product's window is
+  approved only once an OOS naming Total Δ9-THC exists on that batch (409
+  otherwise, naming the regrade). The deviation itself is sent at compile to
+  every Cultivation and Production manager (`potency_deviation`). Issuance is
+  not blocked ("NO for now", 2026-09-06).
+- A fitted tolerance above the ceiling is refused on import rather than
+  flagged: the service caps at 10 % itself, so nothing legitimate is refused.
+- Version-level supersession on approval (point 1), which retires a strain's
+  ImB products the moment its first fitted product is approved.
 
 ## What the owner said
 
@@ -66,16 +126,41 @@ for one APPROVED row per code. No 30 % cap anywhere.
 |---|---|---|
 | `GET /qc/products[?cultivar_id&status]` | elevated | the catalogue + `tested {n, avg, min, max}` |
 | `GET /qc/products/{id}` · `…/potency-history` | elevated | the product + its measured history |
-| `POST` / `PATCH /qc/products` | QC writers | author a page; DRAFT only for edits |
-| `POST …/approve` · `…/supersede` | head of QC | approver ≠ author; approve retires the ladder |
-| `POST /qc/products/import {dry_run}` | head of QC | the packaged 42 pages, idempotent |
-| `GET /qc/products/conformance?cultivar_id&total_d9_thc[&product_id]` | elevated | which products a value satisfies |
-| `GET /qc/products/{id}/document` | elevated | the A4 page |
+| `POST` / `PATCH /qc/products` | QC writers | author a page with its **explicit** window; DRAFT only for edits; code ↔ grade ↔ nominal must agree (QC-30); validated before the write |
+| `POST /qc/products/ladder` | QC writers | a strain's whole grade set in one transaction — explicit windows, no overlap, ceiling; overlaps with other versions reported |
+| `POST …/approve` · `…/supersede` | head of QC | approver ≠ author; approve retires the same code, the cultivar's other document version and its ladder |
+| `POST /qc/products/import {dry_run}` | head of QC | the packaged 42 v.03 pages, idempotent; renames retired spellings |
+| `POST /qc/products/import-fitted {specs, doc_version, dry_run}` | head of QC | the Potency Spec Service export → DRAFT products with provenance |
+| `GET /qc/products/conformance?cultivar_id&total_d9_thc[&product_id]` | elevated | `matching[]`, `nearest`, and per product `conforms` / `regrade_to` |
+| `GET /qc/products/{id}/document` | elevated | the A4 page (`spec_html.py`, shared renderer with the ladder page) |
 
-**Conformance replaces disposition.** The ladder answered "which tier?" and
-there was exactly one. Official windows overlap, so the answer is a **list**,
-plus `nearest` (the highest-nominal product the value satisfies) for a reader
-who wants one name. Which product a lot ships as is a packaging decision.
+Once a cultivar has an APPROVED product, `POST /qc/potency-specs`,
+`POST /qc/potency-specs/{id}/approve` and `POST /qc/potency-specs/import`
+answer 409: the ladder is retired for that strain (QC-04). The QC screen
+offers the ladder import only while the org has no product at all.
+
+**Conformance.** The ladder answered "which tier?" and there was exactly one.
+The v.03 windows overlap, so `matching` is a **list**; `nearest` is the one
+product the value belongs to under the owner's next-grade rule (AD-12, above).
+A CoQ compiled with `product_id` carries `potency.kind = "product"` with
+`product_code`, `nominal`, `window_min/max`, `total_d9_thc`, `conforms`,
+`matching`, `nearest`, `regrade_to`, and `product_code` / `product_conforms` /
+`regrade_to` on the CoQ row; `matching` and `nearest` are computed against the
+same **document version** the product belongs to, so an issued certificate's
+verdict does not drift when the catalogue is re-cut. The document's Grade cell
+reads `GP_THC26:CBD1 · nominal 26.00 % · window 23.40–28.59 % — conforms (Total
+Δ9-THC 23.98 %) — QCSP 001 v.03`, or `… — does NOT conform (Total Δ9-THC
+22.10 %) · REGRADED from GP_THC26:CBD1 to GP_THC24:CBD1 — …`.
+
+**The out-of-grade rule as built (owner 2026-09-06; confirm).** When the CoQ's
+Total Δ9-THC is outside the chosen product's window: the lot falls to
+`regrade_to` (the product whose window holds it, or none); the CoQ shows the
+✗ chip and the REGRADED → chip and the .docx prints the line above; at compile
+a `potency_deviation` notification goes to every Cultivation and Production
+manager of the org with the batch, product, value, window and regrade; and
+the HoQC's approval is refused (409) until a formal OOS naming Total Δ9-THC is
+on record for that batch (the §6.4.1 gate then keeps the approval waiting
+until that OOS is CLOSED). Issuance is not blocked.
 
 ## "Tested so far"
 
@@ -101,7 +186,7 @@ cut into. Usually empty, and it never borrows the strain's number.
 
 | | |
 |---|---|
-| Product | `GP_THC26:CBD1`, window from `window_for(26)` |
+| Product | `GP_THC26:CBD1`; the window is stored per product (`window_for(26)` only describes what the v.03 page prints) |
 | Mother plant | `GP26_S1M03-2_020` |
 | Clone | `GP26_S1M03-2_020-03.147` |
 | Legacy plant | `20260706_GP_0001` |
@@ -109,13 +194,23 @@ cut into. Usually empty, and it never borrows the strain's number.
 ## Rollout
 
 1. Deploy `0066` and `0067` (0067 refuses to run over pre-existing mother rows;
-   production has none).
-2. `POST /qc/products/import {"dry_run": true}` as a QC manager, then for real.
-   Expect 42 created, 22 cultivars resolved or created.
-3. Approve per product as a **different** QC person or the QP. Each cultivar's
-   first approval supersedes its ladder.
-4. Set target products on open batches (`PATCH /cultivation/batches/{id}`).
-5. Compile CoQs with `product_id` from then on.
+   production has none). No further migration: the fitted windows are data in
+   `qc_products`.
+2. QC → Product catalogue: **Import ImB pages** — dry run, then for real (or
+   `POST /qc/products/import`). Expect 42 created, 22 cultivars resolved or
+   created; an existing `PUM` "Pure Michigan" / `CLE` "Clemosa" is renamed.
+   Production already holds the 42 v.03 rows, so this step reports 42 skipped
+   and performs only the renames.
+3. Export the FINISHED fitted specs from the Potency Spec Service
+   (`GET /api/specs?status=finished`), paste them into **Fitted
+   specifications**, state the document version the owner issued them under,
+   dry run, then import. Each strain's grades land as DRAFT products.
+4. Approve per product as a **different** QC person or the QP. A cultivar's
+   first approval supersedes its ladder; the first approval of the fitted
+   version supersedes that cultivar's v.03 products — approve a strain's whole
+   fitted set in one sitting.
+5. Set target products on open batches (`PATCH /cultivation/batches/{id}`).
+6. Compile CoQs choosing the product in the compile form from then on.
 
 ## Verified against the controlled specifications (2026-09-06)
 
@@ -312,12 +407,15 @@ other.
 
 ## Open
 
-- Canonical strain spellings — **still open**, see above; two controlled
-  documents disagree on four of them.
+- Canonical strain spellings for the four disputed names — **still open**
+  (see above); PURE MICHIGEN and CLEMOSA A BUD are settled and applied.
 - ~~Whether a CoQ whose Total THC falls outside its product's window should be
   blocked from issuance.~~ **DECIDED 2026-09-06 (owner): no, do not block.**
   A Total Δ9-THC outside the chosen product's window is reported on the CoQ and
-  printed on the document; it does not stop issuance.
+  printed on the document; it does not stop issuance. **Built 2026-09-27** —
+  see "Conformance" and "The out-of-grade rule as built" above; the exact rule
+  (OOS required at approval, deviation to CU/PR at compile) is a decision to
+  confirm.
 
   Two separate rules are easy to confuse here, and this decision touches only
   the second:
@@ -325,17 +423,17 @@ other.
   | rule | what it judges | blocks issuance? |
   | --- | --- | --- |
   | `overall_conform` | every CoQ line against its **specification** limit | **yes** — `coq_aggregation.py` returns 409 rather than render a certificate asserting conformance for a batch that does not conform. Unchanged; it is a GxP control. |
-  | product-window conformance | Total Δ9-THC against the **product's** ± 10 % window | **no** (this decision) |
-
-  **Not yet built.** An earlier revision of this file claimed the window verdict
-  "currently prints *does not conform* and is still renderable". That was wrong.
-  `qc_coq.product_id` is validated at compile and stored, but nothing reads it
-  back: `_coq_disposition()` returns `None` unless the CoQ carries a frozen
-  *ladder* id, and `_coq_grade_value()` renders only the ladder disposition. So
-  a product-graded CoQ today shows **no grade at all**, rather than a
-  non-conforming one. Outstanding work: a product branch in `_coq_disposition`,
-  `product_code` / `product_conforms` on `_coq_out`, and a product string in
-  `_coq_grade_value`.
+  | product-window conformance | Total Δ9-THC against the **product's** stored window | **no** (this decision) — flagged, regraded, OOS required for approval |
+- The document code and version the owner issued the fitted specification
+  under (the 2026-09-18 `Potency_specifications_25.pdf`): the fitted import
+  asks for it rather than inventing one.
+- The live Potency Spec Service holds the finished specs (INS-14: newer than the
+  git copy — e.g. Wedding Cake at nominal 26 exists only there); the export has
+  to come from the running service.
 - The header document code on the rendered A4 product page
   (`QCSP 001_GP-THC26_v.03`) follows the archive's per-page style; the v.03
   pages' exact header was not visible in the text extraction.
+- The A4 product page prints only the people the system recorded (author,
+  approver) with the recorded role and date, never the two named signatories
+  the ladder template carried; confirm that is the intended signature block
+  for the fitted specification.
