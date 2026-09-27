@@ -104,16 +104,20 @@ Everything above is a seam that exists. These are the gaps.
 Note what is **not** on this list: no migration, no new table, no change to
 `qc_coq`, no change to conformance. The catalogue's shape already fits.
 
-## The decision this does not settle
+## The decision — settled by the owner on 2026-09-18
 
 The builder makes it easy to author non-overlapping ladders. The issued
 specification is ± 10 % and **16 of its 20 adjacent grade pairs overlap**, with
-four dead bands on top (see `docs/PRODUCT-CATALOGUE-2026-09.md`). Building this
-integration does not answer which of those is controlled — it only makes either
-one cheap to express.
+four dead bands on top (see `docs/PRODUCT-CATALOGUE-2026-09.md`).
 
-Until the owner settles that, the honest default is: **the builder writes DRAFT
-products and never touches an APPROVED one.** A proposal is a proposal.
+On 2026-09-18 the owner settled which is controlled: **the fitted (data-derived)
+tolerances apply everywhere; the flat ±10 % rule is not the grading method; a
+strain with sparse data gets the full tolerance; the FINISHED specifications in
+the Potency Spec Service are the controlled state.** (Recorded in
+`DECISIONS-2026-09.md` §1.) The consequence for this integration: the builder's
+output is the specification, not a proposal — but it still lands as DRAFT
+products so that a second person approves it, and it never edits an APPROVED
+product in place (supersession only).
 
 ## Sequence, if it is built
 

@@ -36,8 +36,10 @@ navigation; draft → submit workflow.
 ### Document export
 JSON (full snapshot) · CSV (status‑summary + per‑task rows, UTF‑8 BOM) ·
 PDF (A4 table + GMP sign‑off block: Prepared/Reviewed/Approved + dates)
-— *not implemented; out of scope per [`docs/SCOPE.md`](SCOPE.md), WWF is a
-non‑GMP planning tool* · Markdown digest (pushed to AI agents).
+— *the weekly-document PDF is not implemented; QC documents (CoQ .docx, the
+A4 specification page, DocEngine PDFs) and e‑signatures ARE implemented — see
+[`docs/SCOPE.md`](SCOPE.md) "Status 2026-09-27"* · Markdown digest (pushed to
+AI agents).
 
 ### Automated weekly snapshot
 In‑process asyncio job (Thu 18:00 UTC) captures the closing week → writes JSON +
@@ -61,8 +63,9 @@ schema/workflow changes with human approval; proposal lifecycle
 pending → approved → rejected → applied.
 
 ### User & access management
-JWT sessions (configurable TTL, 12 h default); six roles — operator, HOD, QA
-officer, qualified person, executive, admin; department affiliation +
+JWT sessions (configurable TTL, 12 h default); 14 roles (`backend/app/roles.py`:
+ADMIN, OWNER/CEO/COO, the eight department managers QA_MGR/QC_MGR/PR_MGR/
+WH_MGR/SE_MGR/CU_MGR/IR_MGR/MU_MGR, QP, USER); department affiliation +
 cross‑department flag; admin provisioning with one‑time temporary password;
 self‑service password reset (email or shown‑once code); forced first‑login
 change; login‑attempt limiting with timed lockout.
@@ -83,17 +86,14 @@ persisted per device; fully token‑driven design system (CSS custom properties)
 |---|---|
 | API runtime | Python 3.12, FastAPI (async), Uvicorn |
 | Database | PostgreSQL 17 + pgvector |
-| ORM / driver | SQLAlchemy 2.0 async + psycopg3 |
+| Driver | asyncpg (raw SQL); two alembic chains (`alembic_users`, `alembic_tasks`) with `schema.*.sql` baselines diffed in CI |
 | Auth | JWT (HS256), bcrypt |
-| DB security | Postgres RLS, two roles (admin bypass / app no‑bypass) |
-| Frontend | React 18, TypeScript (strict), Vite |
-| PDF | jsPDF + jsPDF‑autotable (client‑side) |
-| Icons | Lucide React |
-| Design system | Custom SUMA (CSS custom properties, 6 themes) |
-| AI agents | Letta (stateful, long‑memory) |
-| Vector DB | Qdrant |
-| Embeddings | VoyageAI |
-| RAG | Letta ↔ Qdrant semantic retrieval |
+| DB security | Postgres RLS on every org table, two roles (admin bypass / app no‑bypass), hash‑chained audit log |
+| Frontend | Vanilla JS (`web/gf/*.js`, no build step), service worker, jsdom unit tests + Playwright e2e |
+| Documents | python‑docx / WeasyPrint server‑side (CoQ .docx, A4 specification page); DocEngine PDFs |
+| Design system | Custom (CSS custom properties, skins) |
+| AI agents | Letta (stateful, long‑memory) via DocEngine and the backend's function catalogue |
+| Retrieval | RAGflow datasets (see `docengine/fleet.yaml`) |
 | Scheduler | asyncio background task (in‑process) |
 | Orchestration | Docker Compose |
 | Reverse proxy / TLS | Traefik + Let's Encrypt |

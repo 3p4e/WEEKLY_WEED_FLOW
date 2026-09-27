@@ -1,11 +1,17 @@
 # GrowFlow — Weekly Production Task Tracker
 
-A standalone **task‑tracking application** for a GMP‑licensed medical‑cannabis
-production facility (Purely Plant). It is the task‑management surface isolated
-from the larger GrowFlow QMS/QC‑LIMS design — every task‑tracking capability,
-none of the QC‑laboratory / CoA / compliance modules. **WWF is an internal
-operational planning tool, not a validated GxP/Part‑11 computerized system and
-not part of the QMS — see [`docs/SCOPE.md`](docs/SCOPE.md).**
+The operations application of a GMP‑licensed medical‑cannabis facility
+(Purely Plant, Petrovec). It began in July 2026 as the task‑tracking surface
+of the GrowFlow design; by September 2026 it also holds the QC / LIMS modules
+(specifications, samples and custody, CoA / eCoA / iCoA, Certificates of
+Quality, OOS, e‑signatures, the official product catalogue), cultivation
+(batches, plant and mother‑plant identity, phases, harvest gates, the
+as‑built facility layout) and DocEngine Studio (controlled‑document
+drafting). The complete list of what the application contains, with dates
+and provenance, is [`docs/review-2026-09-27/inventory.md`](docs/review-2026-09-27/inventory.md);
+the validation status and the open scope decision are in
+[`docs/SCOPE.md`](docs/SCOPE.md). The section below describes the original
+task‑tracking core, which is unchanged.
 
 > Plan, assign, schedule and track production work across the week — by
 > department, person, priority and status — with bilingual EN/МК UI, voice
@@ -32,7 +38,11 @@ not part of the QMS — see [`docs/SCOPE.md`](docs/SCOPE.md).**
   notes, subtasks and dependencies (met / unmet).
 - **Filtering & search** — by day, by department, and free‑text across title /
   room / batch / id; week navigation and roll‑over of unfinished work.
-- **Role‑based permissions** — admin · HOD · QA · QP · operator · viewer.
+- **Role‑based permissions** — 14 roles (`backend/app/roles.py`): ADMIN;
+  the executives OWNER, CEO, COO; the department managers QA_MGR, QC_MGR,
+  PR_MGR, WH_MGR, SE_MGR, CU_MGR, IR_MGR, MU_MGR; the QP; and USER. A
+  manager's scope is their department and its sub‑departments
+  (`docs/DEPARTMENT-MODEL-2026-09.md`).
 - **Bilingual** — English / Македонски throughout (UI, statuses, departments,
   priorities).
 - **Voice task capture** — speak a task; it is parsed into structured fields
