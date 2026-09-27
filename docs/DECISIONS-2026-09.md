@@ -105,6 +105,12 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | A-5 | A work session is split at 06:00, 08:00, 17:00, 22:00 and midnight and each segment bucketed by its own start; a session is at most 24 h. | BC-24 |
 | A-6 | The weekly window is named after the Monday it contains (`W40 2026`, never `W53`). | BC-16 |
 | A-7 | `GET /audit` pages on an opaque per-chain cursor; `before` stays as the documented lossy legacy until the audit view switches. | BC-08 |
+| A-8 | Org-wide weekly pins are hidden from department-scoped roles even when they hold no department, and from every USER. | BC-02 |
+| A-9 | A pending handoff puts the task in the receiving manager's read AND write scope; the status board lists top-level departments only. | BC-04, BC-05 |
+| A-10 | `PATCH /reports/documents/{id}` (whole-document replace), `GET /tasks/tree`, `remember_device` and the legacy qms-api proxy with its settings are deleted outright, not kept behind a role. | BC-07, BC-19 |
+| A-11 | Both users-DB write policies on `profiles` are dropped rather than narrowed (users 0013): `app_user` keeps `profiles_read` only. | BC-21 |
+| A-12 | The production password floor is 12; `PASSWORD_POLICY_OVERRIDE=true` lowers it deliberately and is warned at startup. | BC-23 |
+| A-13 | A work session is at most 24 h (422 on entry; the capture importer skips a longer one with a reason). Snapshot labels and pin titles are Monday-based from now on — a one-time visible change. | BC-24, BC-16 |
 | E-1 | QC batch-id fields carry the cultivar code as their constant head (as on the cultivation form). | INS-12 |
 | E-2 | The custody form sends `from_user_id` = previous recipient, so a QC writer can log a hop on the custodian's behalf. | FE-02 |
 | E-3 | The SOP Registry / Knowledge stub views (which only printed "retired") are deleted from the shell. | FE-21 |
