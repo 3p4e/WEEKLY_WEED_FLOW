@@ -2578,7 +2578,7 @@ ALTER TABLE ONLY public.irrigation_events
 --
 
 ALTER TABLE ONLY public.mother_plants
-    ADD CONSTRAINT mother_plants_line_key UNIQUE (org_id, campaign_id, product_id, mother_no, generation, stock_no);
+    ADD CONSTRAINT mother_plants_line_key UNIQUE (org_id, campaign_id, mother_no, generation, stock_no);
 
 
 --

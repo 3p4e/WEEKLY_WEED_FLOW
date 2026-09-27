@@ -90,18 +90,13 @@ async def purge_org(org_id) -> None:
     children before parents. audit_log rows stay in both (the hash chain
     must never be edited)."""
     t = tasks_admin_pool()
-    # mother_plants.parent_id is a self-FK with RESTRICT (a second-generation
-    # mother names the mother it was cut from), so break the chain before the
-    # single-statement delete below. Guarded on the column's existence because
-    # it arrives in tasks 0067 and this helper also runs against 0066.
-    await t.execute("""
-        DO $$ BEGIN
-          IF EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='mother_plants' AND column_name='parent_id') THEN
-            UPDATE public.mother_plants SET parent_id=NULL;
-          END IF;
-        END $$;
-    """)
+    # mother_plants.parent_id is a self-referencing RESTRICT FK, and that is
+    # fine for the per-org DELETE below: Postgres checks RESTRICT against the
+    # state at the end of the statement, so a parent and its child go in one
+    # DELETE. There used to be an unscoped `UPDATE mother_plants SET
+    # parent_id=NULL` here that rewrote every org's lineage in the shared test
+    # database (review CS-19); demo_org.py's identical wipe order never needed
+    # it either.
     for table in ("ai_agent_bindings", "ai_pins", "weekly_documents", "handoffs",
                   "notifications", "events", "task_comments",
                   "task_workflow_events", "task_assignees", "task_links", "work_sessions",
