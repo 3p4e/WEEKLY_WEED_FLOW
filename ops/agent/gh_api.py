@@ -32,10 +32,16 @@ audit trail of /shell command strings on the host, so a token in `cmd` is a
 token written to disk. It goes to the host as a 0600 file through /file/write
 (whose body is not part of that trail), the one-off python process reads it
 from that file, and the same /shell call shreds the file whether the request
-succeeded or not. If /file/write is unavailable the helper falls back to
-writing the file from the command text with a loud warning, so the exposure
-is at least visible rather than silent. The token is scrubbed from anything
-printed here.
+succeeded or not. If that /shell call itself fails — a 504 from the runner's
+90 s timeout, a dropped connection — a second, best-effort /shell call
+shreds the staged file, so no exit path leaves the owner's token on the host
+(review 2026-09-27, DI2-08). If /file/write is unavailable the helper falls
+back to writing the file from the command text with a loud warning, so the
+exposure is at least visible rather than silent. The token is scrubbed from
+anything printed here.
+
+The dispatch pattern INCLUDES deploy.yml: a production deploy is therefore
+inside the pre-approved command. CLAUDE.md says so.
 
 Prints "HTTP <status>" and the response body. Exit 0 on 2xx, 1 otherwise.
 """
@@ -94,6 +100,11 @@ def allowed(method, path):
     """The allow-list verdict for one request, as (ok, reason)."""
     if ".." in path or re.search(r"\s", path) or "//" in path or not path.startswith("/"):
         return False, "path must be a clean absolute API path under %s" % REPO
+    # No percent-encoding at all: the allow-list has no legitimate encoded
+    # segment, and %2E%2E / %2F would otherwise ride through the GET pattern
+    # as an ordinary path character (review 2026-09-27, DI2-08).
+    if "%" in path or "#" in path:
+        return False, "percent-encoding and fragments are not accepted in the path"
     bare, _, query = path.partition("?")
     if query and method != "GET":
         return False, "only GET may carry a query string"
@@ -108,6 +119,26 @@ def allowed(method, path):
 
 def _sh_quote(s):
     return "'" + s.replace("'", "'\"'\"'") + "'"
+
+
+def _shred_cmd(token_file):
+    """The host-side removal of the staged token file (shred, or rm when
+    shred is absent); idempotent, silent when the file is already gone."""
+    q = _sh_quote(token_file)
+    return "shred -u %s 2>/dev/null || rm -f %s" % (q, q)
+
+
+def _cleanup_token_file(runner, token_file):
+    """Best-effort removal of the staged token in its own /shell call, used
+    when the call that should have removed it did not come back (DI2-08).
+    Never raises: the caller is already handling a failure, and the worst
+    case — the file is still there — is reported, not hidden."""
+    try:
+        runner.shell(_shred_cmd(token_file), 30)
+        print("gh_api: staged token file removed after the failed call", file=sys.stderr)
+    except BaseException as exc:  # noqa: BLE001 — reported, then the original failure surfaces
+        print("gh_api: WARNING: could not remove the staged token file %s on the host (%s) — "
+              "remove it by hand and rotate GITHUB_PAT_WWF" % (token_file, exc), file=sys.stderr)
 
 
 class Runner:
@@ -191,10 +222,10 @@ def main(argv):
     arg = base64.b64encode(json.dumps(
         {"method": method, "path": path, "body": body}).encode()).decode()
     # Whatever happens to the request, the token file is shredded in the SAME
-    # shell call, so no failure path leaves it behind.
-    call = ("python3 -c %s %s %s; rc=$?; shred -u %s 2>/dev/null || rm -f %s; exit $rc"
-            % (_sh_quote(REMOTE), _sh_quote(token_file), arg, _sh_quote(token_file),
-               _sh_quote(token_file)))
+    # shell call, so no failure path INSIDE that call leaves it behind.
+    call = ("python3 -c %s %s %s; rc=$?; %s; exit $rc"
+            % (_sh_quote(REMOTE), _sh_quote(token_file), arg, _shred_cmd(token_file)))
+    staged = False
     try:
         staged = runner.file_write(token_file, token)
         if staged:
@@ -206,7 +237,16 @@ def main(argv):
                   file=sys.stderr)
             cmd = ("umask 077; mkdir -p %s; printf '%%s' %s > %s; %s"
                    % (_sh_quote(TOKEN_DIR), _sh_quote(token), _sh_quote(token_file), call))
-        r = runner.shell(cmd, 90)
+        try:
+            r = runner.shell(cmd, 90)
+        except BaseException:
+            # The call that would have shredded the file did not report back
+            # (timeout, dropped connection, HTTP error, Ctrl-C): whether the
+            # file landed through /file/write or through the fallback's own
+            # command text, it may still be on the host. Shred it in a call
+            # of its own; the outer handlers then report the original failure.
+            _cleanup_token_file(runner, token_file)
+            raise
     except urllib.error.HTTPError as exc:
         print("gh_api: kvm4-runner answered HTTP %d%s" % (
             exc.code, " (RUNNER_TOKEN is stale; see CLAUDE.md)" if exc.code == 403 else ""),

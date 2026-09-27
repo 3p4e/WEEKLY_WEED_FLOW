@@ -563,9 +563,11 @@ print("ok=%s db=%s letta=%s ragflow=%s ready=%s unresolved=%s" % (
 # Age of the newest local dump of each database and of the DocEngine
 # archive, read from inside the backup container (the volume is not on the
 # host path). Dumps older than BACKUP_MAX_AGE_H mean db-backup stopped
-# producing, which nothing else reports. The DocEngine archive is a WARN
-# when absent (the read-only mount may not be deployed yet) and a FAIL when
-# present but stale.
+# producing, which nothing else reports. The DocEngine archive is a FAIL
+# when stale, and when ABSENT while the DocEngine container is running: a
+# stack that produces controlled documents and archives none has lost the
+# docengine_out mount on db-backup (review 2026-09-27, DI2-05). It is only
+# a WARN when there is no DocEngine container to archive from.
 check_backup_fresh() {
   local state out line name age
   if ! docker_ready; then
@@ -596,8 +598,13 @@ done' 2>/dev/null)"
     case "$name" in
       docengine_out)
         if [ "$age" = none ]; then
-          [ "$worst" = PASS ] && worst=WARN
-          detail="${detail}(no DocEngine archive yet — is docengine_out mounted into ${BACKUP_CONTAINER}?) "
+          if [ "$(docker_field "$DOCENGINE_CONTAINER" '{{.State.Status}}')" = running ]; then
+            worst=FAIL
+            detail="${detail}(${DOCENGINE_CONTAINER} is running but NO DocEngine archive exists — docengine_out is not mounted into ${BACKUP_CONTAINER}; its documents are not backed up) "
+          else
+            [ "$worst" = PASS ] && worst=WARN
+            detail="${detail}(no DocEngine archive and no running ${DOCENGINE_CONTAINER}) "
+          fi
         elif [ "$age" -gt "$BACKUP_MAX_AGE_H" ]; then
           worst=FAIL
         fi ;;

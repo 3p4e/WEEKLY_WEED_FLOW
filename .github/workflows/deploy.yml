@@ -257,26 +257,67 @@ jobs:
 
           default = get(f"https://api.github.com/repos/{repo}")["default_branch"]
 
+          # The files CI EXECUTES from the checkout, beyond the workflow files
+          # themselves: a branch that leaves every workflow byte-identical and
+          # changes tests/frontend/package.json's "test" to `echo ok`, or
+          # load_schema.sh to `docker exec wwf-db-tasks psql …`, is green by
+          # construction and root on production while it runs (review
+          # 2026-09-27, DI2-06). What this gate still cannot see is the code
+          # UNDER test — that is the branch's, always, until the runner moves
+          # off the production host (ops/README.md, DECISIONS F-5).
+          ENTRY_POINTS = [
+              "backend/scripts/load_schema.sh",
+              "backend/requirements.txt", "backend/requirements-dev.txt",
+              "docengine/requirements.txt", "docengine/sql/docengine_role.sql",
+              "connector/requirements.txt",
+              # npm ci installs exactly the lockfile, so it is an entry point too
+              "tests/frontend/package.json", "tests/frontend/package-lock.json",
+              "web/e2e/package.json", "web/e2e/package-lock.json",
+              "web/e2e/playwright.config.js",
+          ]
+
+          def blob(path, ref):
+              # 404 = the file does not exist at that ref; reported as "-" and
+              # counted as a difference if the other side has it.
+              url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={ref}"
+              req = urllib.request.Request(url)
+              req.add_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
+              req.add_header("Accept", "application/vnd.github+json")
+              try:
+                  return json.load(urllib.request.urlopen(req, timeout=30)).get("sha")
+              except urllib.error.HTTPError as e:
+                  if e.code == 404:
+                      return None
+                  print(f"::error::cannot read {url}: HTTP {e.code} {e.read().decode()[:300]}")
+                  sys.exit(1)
+
           def tree(ref):
               rows = get(f"https://api.github.com/repos/{repo}/contents/.github/workflows?ref={ref}")
-              return {r["name"]: r["sha"] for r in rows if r.get("type") == "file"}
+              out = {".github/workflows/" + r["name"]: r["sha"] for r in rows if r.get("type") == "file"}
+              for path in ENTRY_POINTS:
+                  out[path] = blob(path, ref)
+              return out
 
           want, have = tree(default), tree(sha)
           diff = sorted(set(want) | set(have))
           bad = [n for n in diff if want.get(n) != have.get(n)]
-          rows = ["| workflow | default branch | deployed commit |", "| --- | --- | --- |"]
+          rows = ["| file | default branch | deployed commit |", "| --- | --- | --- |"]
           for n in diff:
-              rows.append(f"| {n} | {want.get(n, '-')[:12]} | {have.get(n, '-')[:12]} |")
+              rows.append(f"| {n} | {(want.get(n) or '-')[:12]} | {(have.get(n) or '-')[:12]} |")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-              f.write(f"## Workflow files: `{sha[:12]}` vs `{default}`\n\n" + "\n".join(rows) + "\n\n")
+              f.write(f"## Workflow files and CI entry points: `{sha[:12]}` vs `{default}`\n\n"
+                      + "\n".join(rows) + "\n\n")
           if bad:
               for n in bad:
-                  print(f"::error::.github/workflows/{n} differs between {sha} and {default}")
-              print(f"::error::{len(bad)} workflow file(s) differ from the default branch — the CI "
-                    "that ran on this commit is not the CI this repository trusts. Merge the "
-                    "workflow change first, then deploy.")
+                  print(f"::error::{n} differs between {sha} and {default}")
+              print(f"::error::{len(bad)} workflow file(s) or CI entry point(s) differ from the "
+                    "default branch — the CI that ran on this commit did not run the workflows "
+                    "and scripts this repository trusts. Merge the change first, then deploy. "
+                    "(The code under test is still the branch's own; this gate does not vouch "
+                    "for it.)")
               sys.exit(1)
-          print(f"workflow gate passed: {len(want)} files identical to {default}")
+          print(f"workflow gate passed: {len(want)} workflow files and CI entry points identical "
+                f"to {default} (the code under test is the branch's; see ops/README.md)")
           PY
 
       - name: Runner toolchain preflight
@@ -843,7 +884,14 @@ jobs:
             fi
 
             log "== containers =="
-            for ct in "$BACKEND_CT" "$SCHEDULER_CT" "$FRONTEND_CT" "$DOCENGINE_CT" "$USERS_DB_CT" "$TASKS_DB_CT"; do
+            # The DocEngine container is required only when this deploy touches
+            # it: a frontend-only or backend deploy into a stack without one (a
+            # rebuilt host, a staging copy) must not die on a container it would
+            # never swap (review 2026-09-27, DI2-11). Same rule below for the
+            # compose-service derivation.
+            local required_cts="$BACKEND_CT $SCHEDULER_CT $FRONTEND_CT $USERS_DB_CT $TASKS_DB_CT"
+            if [ "$DO_DOCENGINE" = true ]; then required_cts="$required_cts $DOCENGINE_CT"; fi
+            for ct in $required_cts; do
               docker inspect -f '{{.Name}} status={{.State.Status}} image={{.Config.Image}} restarts={{.RestartCount}}' "$ct" \
                 || die "container $ct not found — refusing to deploy into a stack that is not the documented one"
             done
@@ -876,9 +924,12 @@ jobs:
               || die "docker compose config failed in $STACK_DIR"
             log "== compose services:$services"
             local ct svc wdir key
-            for pair in "BACKEND_SVC $BACKEND_CT" "SCHEDULER_SVC $SCHEDULER_CT" \
-                        "FRONTEND_SVC $FRONTEND_CT" "DOCENGINE_SVC $DOCENGINE_CT" \
-                        "USERS_DB_SVC $USERS_DB_CT" "TASKS_DB_SVC $TASKS_DB_CT"; do
+            local -a svc_pairs=("BACKEND_SVC $BACKEND_CT" "SCHEDULER_SVC $SCHEDULER_CT" \
+                                "FRONTEND_SVC $FRONTEND_CT" \
+                                "USERS_DB_SVC $USERS_DB_CT" "TASKS_DB_SVC $TASKS_DB_CT")
+            # DocEngine only when this deploy touches it (DI2-11, as above).
+            if [ "$DO_DOCENGINE" = true ]; then svc_pairs+=("DOCENGINE_SVC $DOCENGINE_CT"); fi
+            for pair in "${svc_pairs[@]}"; do
               key=${pair%% *}
               ct=${pair#* }
               svc=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$ct")

@@ -22,9 +22,13 @@ TASKS_PGDATABASE="${TASKS_PGDATABASE:-wwf_tasks}"
 # registry points at — SOPs, annexes and every released certificate's COQ
 # artefact — and until 2026-09-27 it was in no backup at all: a host or
 # volume loss restored the registry rows from the wwf_tasks dump and every
-# .docx they named was gone (review 2026-09-27, DI-10). Absent directory =
-# skipped with a warning, never an error, so a stack without DocEngine
-# still backs up its databases.
+# .docx they named was gone (review 2026-09-27, DI-10). An absent directory
+# on a stack that has NEVER archived documents is a warning (no DocEngine
+# there, the databases are still backed up). Once a docengine_out archive
+# exists in $BACKUP_DIR the mount is part of this stack's backup, and its
+# absence is a FAILED cycle: rotation stops, so the last good archive is
+# kept instead of aging out 14 days after the mount was silently dropped
+# (review 2026-09-27, DI2-05).
 DOCENGINE_OUT_DIR="${DOCENGINE_OUT_DIR:-/docengine-out}"
 
 # Dumps "$@" (a pg_dump/pg_dumpall command) to "$2.gz", checking pg_dump's own
@@ -79,6 +83,9 @@ dump_once() {
       rm -f "$out"
       ok=0
     fi
+  elif ls "$BACKUP_DIR"/docengine_out_*.tar.gz >/dev/null 2>&1; then
+    echo "[db_backup] ERROR: $DOCENGINE_OUT_DIR is not mounted but this stack has DocEngine archives — the mount was lost; DocEngine documents NOT backed up this cycle, rotation skipped" >&2
+    ok=0
   else
     echo "[db_backup] WARNING: $DOCENGINE_OUT_DIR is not mounted — DocEngine documents NOT backed up this cycle" >&2
   fi

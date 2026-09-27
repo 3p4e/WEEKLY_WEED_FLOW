@@ -79,10 +79,21 @@ Key properties:
   wipe (disk failure mid-rotation, ransomware, `docker volume rm`) cannot
   propagate deletions to Drive. Remote retention is enforced separately by
   age (`OFFSITE_RETENTION_DAYS`, default 60) — and **only while the newest
-  local dump is under 30 h old**. Unconditionally, a wedged `db-backup` with
-  a working `rclone` would have aged the offsite set to empty in 60 days,
-  exactly when it was the only backup left; now the remote rotation pauses
-  and the script says why on every cycle.
+  local dump is under 30 h old, this cycle's `rclone copy` succeeded, and
+  the remote listing shows that newest dump**. Unconditionally, a wedged
+  `db-backup` with a working `rclone` would have aged the offsite set to
+  empty in 60 days, exactly when it was the only backup left (DI-10); a
+  remote that kept accepting deletes while refusing uploads — quota
+  exhausted, an OAuth token revoked for writes — would have done the same
+  under the first guard (DI2-05). Now the remote rotation pauses and the
+  script says why on every cycle. `offsite_backup.sh --once` runs one cycle
+  and exits with the copy's status.
+- **The DocEngine mount is part of the backup once it has been.** A lost
+  `docengine_out` mount on `db-backup` is a warning only on a stack that has
+  never archived documents; once a `docengine_out_*.tar.gz` exists the cycle
+  FAILS (rotation stops, the last archive is kept), and `ops/watchdog.sh`
+  reports `backup_fresh` as FAIL whenever `wwf-docengine` is running with no
+  archive at all (DI2-05).
 - **Status as of 2026-09-27:** the `wwf-backup-offsite` container has not run
   since the 2026-09-19 VM migration (`docs/HANDOFF.md`). Until it is brought
   back — `./rclone/rclone.conf` restored on the new host with the same crypt

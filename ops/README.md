@@ -270,9 +270,15 @@ What the repository now does about it (mitigation, not a fix):
   host-wide `docker image prune` from PR context (it removes only the images
   it built, by label).
 - `deploy.yml` refuses to deploy any commit whose `.github/workflows/` files
-  differ from the default branch's (compared by blob SHA), so a neutered or
-  weaponised workflow cannot be the "green CI" a deploy relies on. Merge the
-  workflow change first, then deploy.
+  **or CI entry points** (`backend/scripts/load_schema.sh`, the four
+  `requirements*.txt`, `docengine/sql/docengine_role.sql`,
+  `package.json` + `package-lock.json` of `tests/frontend` and `web/e2e`, and
+  `playwright.config.js`) differ from the default branch's (compared by blob
+  SHA), so a neutered or weaponised workflow — or a `"test": "echo ok"` — cannot
+  be the "green CI" a deploy relies on. Merge the change first, then deploy.
+  What the gate does NOT prove: the code under test is the branch's own, so
+  "green at this commit" is a statement about the branch's tests, not an
+  independent check (review 2026-09-27, DI2-06).
 
 What actually closes it — pick one, both are host/GitHub settings:
 

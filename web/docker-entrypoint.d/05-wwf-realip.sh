@@ -34,13 +34,20 @@ REFRESH="${WWF_REALIP_REFRESH_S:-60}"
 log() { echo "wwf-realip: $*" >&2; }
 
 resolve_one() {
-  # Every address a name resolves to, one per line. getent first (musl-utils,
-  # in the alpine base image); busybox nslookup as the fallback.
+  # Every address a name resolves to, one per line. getent first (musl-utils
+  # in the alpine base image — whose getent may know `hosts` but not
+  # `ahosts`, so both are tried), busybox nslookup last. The first source
+  # that answers wins.
+  out=""
   if command -v getent >/dev/null 2>&1; then
-    getent ahosts "$1" 2>/dev/null | awk '{print $1}' | sort -u
-    return 0
+    out="$(getent ahosts "$1" 2>/dev/null | awk '{print $1}' | sort -u)"
+    [ -n "$out" ] || out="$(getent hosts "$1" 2>/dev/null | awk '{print $1}' | sort -u)"
   fi
-  nslookup "$1" 2>/dev/null | awk '/^Name:/ {n=1} n && /^Address/ {print $2}' | sort -u
+  if [ -z "$out" ] && command -v nslookup >/dev/null 2>&1; then
+    out="$(nslookup "$1" 2>/dev/null | awk '/^Name:/ {n=1} n && /^Address/ {print $2}' | sort -u)"
+  fi
+  [ -n "$out" ] && printf '%s\n' "$out"
+  return 0
 }
 
 trusted() {
