@@ -207,8 +207,12 @@ GF.views = {
         case 'batch_added':    return `${p.plant_count||''}× ${p.strain||''} → ${p.room||''}`;
         case 'clone_run_started': return `${p.cultivar||''} · ${p.planned_count||''} cuttings`;
         case 'batch_moved':    return `${p.strain||''}: ${p.old_room||''} → ${p.room||''}`;
-        case 'batch_closed':   return AL(`Batch closed: ${p.strain||''}`, `Затворена серија: ${p.strain||''}`);
-        default:               return t || a.verb;
+        case 'handoff':        return AL(`Handoff to ${p.to_dept||''}: ${t}`, `Префрлање до ${p.to_dept||''}: ${t}`);
+        case 'handoff_resolved': return AL(`Handoff ${p.status||''}: ${t}`, `Префрлање ${({accepted:'прифатено',rejected:'одбиено',cancelled:'откажано'})[p.status] || p.status || ''}: ${t}`);
+        case 'oos_opened':     return `${p.oos_number||''} · ${p.batch_id||''}`;
+        case 'decon_swab_positive': return AL(`Positive swab ${p.swab_code||''} — ${p.room||''}`, `Позитивен брис ${p.swab_code||''} — ${p.room||''}`);
+        // No backend code emits batch_closed; an unknown verb reads as words.
+        default:               return t || String(a.verb || '').replace(/_/g, ' ');
       }
     };
     // Severity from real fields: overdue + the quality-automation stuck reasons

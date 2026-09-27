@@ -13,7 +13,35 @@
    Manager rail group; guard = every role above base USER. */
 
 (function () {
-  GF.WWF._apv = { data: null, docs: null, coqs: null, loading: false, error: null, qTab: 'pending' };
+  GF.WWF._apv = { data: null, docs: null, coqs: null, handoffs: [], loading: false, error: null, qTab: 'pending' };
+
+  // Cross-department handoffs waiting on THIS user. The receiving
+  // department's manager is the person a proposal is addressed to, and the
+  // task itself still sits in the source department — so it is on no board
+  // of theirs, and until now nothing listed it for them (review 2026-09-27,
+  // FE-06 / BC-04). There is no list endpoint; the proposals reach the user
+  // as `handoff` notifications, and each task's handoffs are read from
+  // there. A task the server will not show (404) simply contributes nothing.
+  const loadHandoffs = async () => {
+    if (!GF.API.notifications || !GF.API.handoffs || !GF.WWF.handoffRights) return [];
+    let items = [];
+    try { items = (await GF.API.notifications({})) || []; } catch (e) { return []; }
+    const titles = {};
+    const taskIds = [];
+    items.forEach(n => {
+      if (n.verb !== 'handoff' || !n.task_id) return;
+      if (n.params && n.params.title) titles[n.task_id] = n.params.title;
+      if (!taskIds.includes(n.task_id)) taskIds.push(n.task_id);
+    });
+    const lists = await Promise.all(taskIds.map(id => GF.API.handoffs(id).catch(() => [])));
+    const out = [];
+    lists.forEach((hs, i) => (hs || []).forEach(h => {
+      if (h.status !== 'proposed') return;
+      const r = GF.WWF.handoffRights(h);
+      if (r.accept || r.reject) out.push({ ...h, title: titles[taskIds[i]] || '', rights: r });
+    }));
+    return out;
+  };
 
   GF.WWF.loadApprovals = async () => {
     const st = GF.WWF._apv;
@@ -25,7 +53,7 @@
     // already applied — and unlike the polled views, nothing here self-corrects.
     const seq = (st.lseq = (st.lseq || 0) + 1);
     try {
-      const [pending, docs, coqs] = await Promise.all([
+      const [pending, docs, coqs, handoffs] = await Promise.all([
         GF.API.approvalsPending(),
         GF.API.documentStatus ? GF.API.documentStatus({ kind: 'report' }).catch(() => null) : null,
         // QC review/approve/release folds into the unified queue when the LIMS
@@ -33,9 +61,10 @@
         // VOIDED→sent back). Absent / role-forbidden → null, and those rows just
         // don't render — never fabricated.
         GF.API.qcCoqs ? GF.API.qcCoqs().catch(() => null) : null,
+        loadHandoffs().catch(() => []),
       ]);
       if (seq !== st.lseq) return;   // superseded by a newer load — its state already reflects reality
-      st.data = pending; st.docs = docs; st.coqs = coqs;
+      st.data = pending; st.docs = docs; st.coqs = coqs; st.handoffs = handoffs || [];
     } catch (e) {
       if (seq !== st.lseq) return;
       st.error = e.message;
@@ -191,13 +220,27 @@
     const coqUnwired = st.coqs == null;
     const qTabBtn = (key, en, mk) =>
       `<button type="button" class="mwq-tab${qtab === key ? ' on' : ''}" onclick="GF.WWF.apvTab('${key}')">${AL(en, mk)}<span class="mwq-c">${qc[key]}</span></button>`;
+    const handoffs = st.handoffs || [];
+    const dname = (id) => GF.WWF._deptName ? GF.WWF._deptName(id) : (id || '—');
+    const handoffRow = (h) => `
+        <div class="apv-row" data-handoff="${GF.esc(h.id)}">
+          <span class="fs-dot" style="background:var(--blue)"></span>
+          <div class="apv-b"><div class="apv-t">${GF.esc(h.title || AL('Task', 'Задача'))}</div>
+            <div class="apv-sub">${GF.esc(dname(h.from_dept_id))} → ${GF.esc(dname(h.to_dept_id))}${h.note ? ' — ' + GF.esc(h.note) : ''}
+              · ${AL('proposed by', 'предложено од')} ${GF.esc(person(h.requested_by))}${h.created_at ? ' · ' + GF.esc(ago(h.created_at)) : ''}</div></div>
+          ${h.rights && h.rights.accept ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();GF.WWF.apvHandoff('${GF.esc(h.id)}','accepted')">✓ ${AL('Accept', 'Прифати')}</button>` : ''}
+          ${h.rights && h.rights.reject ? `<button class="btn btn-sm" onclick="event.stopPropagation();GF.WWF.apvHandoff('${GF.esc(h.id)}','rejected')">${AL('Reject', 'Одбиј')}</button>` : ''}
+        </div>`;
     return head + `
       <div class="dash-kpis">
         ${kpi(mine.length, AL('Yours to acknowledge', 'Ваши за потврда'), mine.length ? 'var(--orange)' : 'var(--green)')}
+        ${kpi(handoffs.length, AL('Handoffs to decide', 'Префрлања за одлука'), handoffs.length ? 'var(--blue)' : 'var(--green)')}
         ${kpi(team.length, AL('Team pending', 'Тим во исчекување'), team.length ? 'var(--amber)' : 'var(--green)')}
         ${kpi(drafts.length, AL('Drafts awaiting lock', 'Нацрти за заклучување'), drafts.length ? 'var(--blue)' : 'var(--green)')}
         ${kpi(stuck.length, GF.t('stuck'), stuck.length ? 'var(--red)' : 'var(--green)')}
       </div>
+      ${sec(AL('Handoffs to your department', 'Префрлања до вашиот оддел'), handoffs.length,
+            handoffs.map(handoffRow).join('') || empty())}
       <div class="mwq panel">
         <div class="mwq-head">
           <span class="mwq-ttl">${AL('Sign-off queue', 'Редица за потпис')}</span>
@@ -238,12 +281,23 @@
         </div>`).join('') || empty())}`;
   };
 
+  // Accept / reject from the handoffs list. task-extras.js's resolveHandoff
+  // (when loaded) also re-homes the task locally and refreshes any open card;
+  // the approvals list is reloaded either way so the row disappears.
+  GF.WWF.apvHandoff = async (handoffId, status) => {
+    try {
+      if (GF.WWF.resolveHandoff) await GF.WWF.resolveHandoff(handoffId, status);
+      else { await GF.API.resolveHandoff(handoffId, status); GF.toast(AL('Handoff updated ✓', 'Префрлањето е ажурирано ✓'), 'success'); }
+    } catch (e) { GF.toast(AL('Resolve failed: ', 'Неуспешно решавање: ') + e.message, 'error'); }
+    GF.WWF.loadApprovals();
+  };
+
   GF.WWF._registerFullPageView({
     key: 'approvals', icon: 'check',
     label: () => AL('Approvals', 'Одобрувања'),
     insertBefore: 'coord',   // Manager rail group (mockup nav.js)
     guard: () => { const r = (GF.API.user || {}).role; return !!r && r !== 'USER'; },
-    badge: () => { const d = GF.WWF._apv.data; return !!(d && (d.mine || []).length); },
+    badge: () => { const st = GF.WWF._apv; const d = st.data; return !!((d && (d.mine || []).length) || (st.handoffs || []).length); },
   });
 
   // Prefetch once at boot so the nav badge above can light up for a user with
