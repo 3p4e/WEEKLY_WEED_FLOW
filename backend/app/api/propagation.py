@@ -32,7 +32,24 @@ THE OWNER'S MOTHER-PLANT ID (2026-09-05):
 The segments are columns (migration 0067) and the code is composed from them
 by app.plantids.mother_code, then stored: a string cannot answer "what is the
 next mother number in this campaign", cannot stop two mothers claiming one
-line, and cannot be rebuilt if a segment is mistyped.
+line, and cannot be rebuilt if a segment is mistyped. The head (GP) is the
+product code's acronym — the owner's "strain abbreviation" — and the form's
+preview reads it from the same server answer, so the two cannot differ.
+
+THE MOTHER NUMBER IS THE CAMPAIGN'S. "M03 = motherplant number 03 of the
+corresponding Selection campaign" — one number, one line, whatever the
+strain: once GP26_S1M03 exists, M03 of S1 is a Grape Pie 26 line and an OPM22
+mother cannot take it (422). Migration 0070 makes the line key
+(campaign, mother_no, generation, stock_no), and the next-number reads run
+under an advisory lock per campaign, so two registrations at once get M05
+and M06 rather than both M05.
+
+A LATER GENERATION KEEPS ITS LINE. Registering from a parent takes the
+campaign and the mother number FROM the parent — "GP26_S1M03-2_020 … all
+clones made from this -2 (second) cloning generation of motherplant
+selection S1M03" — and refuses a body that says otherwise (422). Only the
+generation advances, and the stock number counts on within the new
+generation.
 
 AND THE CLONE'S ID:
 
@@ -68,10 +85,30 @@ PRODUCT the material is propagated against (qc_products — the page that
 carries the strain, its potency grade and the window). Recorded on the run
 itself, so the record still names it after a newer version of the page
 supersedes it. No product is a fact the run states with NULL, not an error
-that blocks the cutting.
+that blocks the cutting. The date of cloning initiation has no default: the
+owner said the initiator "has to set" it, so the run refuses to start
+without one.
+
+A RUN'S BATCH IS FROZEN ONCE THE BATCH HAS PLANTS. cultivation.generate_plants
+numbers clones from the batch's runs laid end to end, so a run linked, moved
+or unlinked after any plant exists would rename plants already printed. Both
+directions are refused with 409; link the runs first, then fill.
+
+"TESTED SO FAR" IS THE STRAIN'S HISTORY. The owner asked for "the potency
+scores tested so far … from that Specification Strain". Three sources, each
+labelled, the same three the product catalogue defines: APPROVED CoQs that
+name a product of the cultivar, APPROVED CoQs that name only the cultivar,
+and certificate Total THC results attributed to the strain by the batch
+code's head. The strain-level figure counts each lot once (a CoQ and the
+certificate it aggregates are one measurement); the product-level subset
+(CoQs naming THIS product code, any version) is reported beside it. The SQL
+is a self-contained copy of qc/products.py's — the two modules are owned
+separately, and a shared import would couple their release cadences.
 """
 import json
 from datetime import date
+
+from asyncpg.exceptions import UniqueViolationError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -79,7 +116,8 @@ from pydantic import BaseModel, Field
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
-from app.plantids import mother_code
+from app.plantids import (MAX_CUTTING_NO, MAX_GENERATION, MAX_MOTHER_NO, MAX_STOCK_NO,
+                          acronym_of, mother_code)
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 from app.worktime import SITE_TODAY_SQL, facility_today
 
@@ -118,12 +156,13 @@ class CampaignPatch(BaseModel):
 class MotherIn(BaseModel):
     # The five segments of the owner's ID. mother_no and stock_no default to
     # the next free number, so the common case is: pick the product and the
-    # campaign, save.
+    # campaign, save. With a parent, the campaign and the mother number come
+    # FROM the parent (the line is inherited); given here they must agree.
     product_id: str
-    campaign_id: str
-    mother_no: int | None = Field(default=None, ge=1, le=99)
-    generation: int = Field(default=1, ge=1, le=9)
-    stock_no: int | None = Field(default=None, ge=1, le=999)
+    campaign_id: str | None = None
+    mother_no: int | None = Field(default=None, ge=1, le=MAX_MOTHER_NO)
+    generation: int = Field(default=1, ge=1, le=MAX_GENERATION)
+    stock_no: int | None = Field(default=None, ge=1, le=MAX_STOCK_NO)
     parent_id: str | None = None
     phenotype: str | None = Field(default=None, max_length=120)
     room_id: str | None = None
@@ -154,7 +193,9 @@ class CloneRunIn(BaseModel):
     # The official product the material is propagated against (qc_products);
     # replaces the ladder snapshot 0065 took.
     product_id: str | None = None
-    started_on: date | None = None          # the date of cloning initiation
+    # The date of cloning initiation — REQUIRED, no default: "they have to set
+    # the date of cloning initiation" (owner, 2026-09-05).
+    started_on: date
     planned_count: int = Field(default=0, ge=0, le=_MAX_CUTTINGS)
     room_id: str | None = None
     batch_id: str | None = None             # the coded batch the run feeds, if known
@@ -215,6 +256,20 @@ async def _batch_of_cultivar_or_422(c, batch_id, cultivar_id):
     if _sid(b["cultivar_id"]) != _sid(cultivar_id):
         raise HTTPException(422, f"batch {b['code']} is not this cultivar")
     return b
+
+
+async def _batch_unfrozen_or_409(c, batch_id, what: str):
+    """A batch with plant rows has its run membership frozen: the clone ids
+    were numbered from the runs laid end to end, and changing the set now
+    would rename plants that exist (cultivation.generate_plants)."""
+    row = await c.fetchrow(
+        "SELECT b.code, (SELECT count(*) FROM plants p WHERE p.batch_id=b.id) AS n"
+        " FROM plant_batches b WHERE b.id=$1", batch_id)
+    if row is not None and row["n"]:
+        raise HTTPException(
+            409, f"batch {row['code']} already has {row['n']} plant ids numbered from its clone"
+                 f" runs — {what} would renumber them; the runs of a batch are fixed once its"
+                 " plants exist")
 
 
 # ── selection campaigns (the S<n> in a mother-plant ID) ─────────────────────
@@ -304,6 +359,80 @@ _TOTAL_LINE = (
     " WHERE l.coq_id = q.id AND sp.computed_kind='total_thc'"
     " AND l.result_numeric IS NOT NULL LIMIT 1")
 
+# The three sources of "tested so far" for a strain (see the module header).
+# Self-contained copies of qc/products.py::_potency_history's reads.
+_COQ_PRODUCT_SQL = (
+    "SELECT q.id, q.coq_number, q.batch_id AS lot_code, q.compiled_at AS on_at,"
+    " pr.product_code, (" + _TOTAL_LINE + ") AS total_thc"
+    " FROM qc_coq q JOIN qc_products pr ON pr.id = q.product_id"
+    " WHERE pr.cultivar_id=$1 AND q.status='APPROVED' ORDER BY q.compiled_at")
+_COQ_CULTIVAR_SQL = (
+    "SELECT q.id, q.coq_number, q.batch_id AS lot_code, q.compiled_at AS on_at,"
+    " (" + _TOTAL_LINE + ") AS total_thc"
+    " FROM qc_coq q"
+    " WHERE q.product_id IS NULL AND q.cultivar_id=$1 AND q.status='APPROVED'"
+    " ORDER BY q.compiled_at")
+# Certificates of this cultivar's own batches: plant_batches.code is the CU
+# batch (GP072501); a certificate names its batch as free text, so match the
+# certificate's cultivation_batch or its batch_id against those codes.
+_CERT_SQL = (
+    "SELECT ct.id, ct.coa_number, ct.batch_id AS lot_code, ct.report_date AS on_at,"
+    " r.result_numeric AS total_thc"
+    " FROM qc_certificates ct"
+    " JOIN qc_results r ON r.coa_id = ct.id"
+    " JOIN qc_spec_parameters sp ON sp.id = r.parameter_id"
+    " WHERE sp.computed_kind='total_thc' AND r.result_numeric IS NOT NULL"
+    "   AND ct.status = ANY(ARRAY['APPROVED','RELEASED'])"
+    "   AND (ct.batch_id IN (SELECT code FROM plant_batches WHERE cultivar_id=$1 AND code IS NOT NULL)"
+    "     OR ct.cultivation_batch IN (SELECT code FROM plant_batches WHERE cultivar_id=$1"
+    "                                 AND code IS NOT NULL))"
+    " ORDER BY ct.report_date NULLS LAST")
+
+
+def _stats(rows) -> dict:
+    vals = [x["total_thc"] for x in rows]
+    return {"n": len(vals), "avg": round(sum(vals) / len(vals), 2) if vals else None,
+            "min": min(vals) if vals else None, "max": max(vals) if vals else None,
+            "values": rows}
+
+
+def _hist_rows(rs, number_key, source) -> list:
+    return [{"number": r[number_key], "lot_code": r["lot_code"],
+             "total_thc": float(r["total_thc"]), "source": source,
+             "product_code": r["product_code"] if "product_code" in r.keys() else None,
+             "on": r["on_at"].isoformat() if r["on_at"] else None}
+            for r in rs if r["total_thc"] is not None]
+
+
+async def _strain_history(c, cultivar_id, product_code=None) -> dict:
+    """What a specification strain has tested so far, from the three sources,
+    plus the strain-level roll-up that counts each lot once, and the subset
+    that named the given product code (any version of its page)."""
+    stated = _hist_rows(await c.fetch(_COQ_PRODUCT_SQL, cultivar_id), "coq_number", "coq_product")
+    cultivar_level = _hist_rows(await c.fetch(_COQ_CULTIVAR_SQL, cultivar_id),
+                                "coq_number", "coq_cultivar")
+    certs = _hist_rows(await c.fetch(_CERT_SQL, cultivar_id), "coa_number", "certificate")
+    # One measurement per lot: a CoQ aggregates the certificate it was compiled
+    # from, so the same Total THC must not be averaged twice. Strongest source
+    # first, and a source with no lot code cannot be matched, so it counts.
+    seen, strain = set(), []
+    for row in stated + cultivar_level + certs:
+        key = row["lot_code"]
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        strain.append(row)
+    product = [r for r in stated if product_code and r["product_code"] == product_code]
+    return {"strain": _stats(strain), "product": _stats(product),
+            "sources": {"coq_product": _stats(stated), "coq_cultivar": _stats(cultivar_level),
+                        "certificate": _stats(certs)}}
+
+
+def _summary(st) -> dict:
+    return {k: st[k] for k in ("n", "avg", "min", "max")}
+
+
 _MOTHER_SQL = (
     "SELECT m.*, cv.code AS cultivar_code, cv.name AS cultivar_name, r.name AS room_name,"
     " pr.product_code, pr.grade AS product_grade, pr.nominal_pct AS product_nominal,"
@@ -317,28 +446,20 @@ _MOTHER_SQL = (
     # which collided with the mother's own generation (the -2 in its id).
     " (SELECT count(*) FROM clone_run_mothers cm WHERE cm.mother_plant_id=m.id) AS times_cut,"
     " (SELECT coalesce(sum(cm.cuttings), 0) FROM clone_run_mothers cm"
-    "   WHERE cm.mother_plant_id=m.id) AS cuttings_total,"
-    # What this mother's specification strain has tested so far — the owner
-    # asked to see it on the plant itself.
-    " tv.tested_n, tv.tested_avg, tv.tested_min, tv.tested_max"
+    "   WHERE cm.mother_plant_id=m.id) AS cuttings_total"
     " FROM mother_plants m"
     " JOIN cultivars cv ON cv.id=m.cultivar_id"
     " JOIN qc_products pr ON pr.id=m.product_id"
     " JOIN selection_campaigns sc ON sc.id=m.campaign_id"
     " LEFT JOIN rooms r ON r.id=m.room_id"
-    " LEFT JOIN mother_plants pm ON pm.id=m.parent_id"
-    " LEFT JOIN LATERAL (SELECT count(*) AS tested_n, avg(x.v) AS tested_avg,"
-    "     min(x.v) AS tested_min, max(x.v) AS tested_max"
-    "   FROM (SELECT (" + _TOTAL_LINE + ") AS v FROM qc_coq q"
-    "         WHERE q.product_id = m.product_id AND q.status='APPROVED') x"
-    "   WHERE x.v IS NOT NULL) tv ON true")
+    " LEFT JOIN mother_plants pm ON pm.id=m.parent_id")
 
 
 def _fl(v):
     return float(v) if v is not None else None
 
 
-def _mother_out(r, today: date) -> dict:
+def _mother_out(r, today: date, tested=None) -> dict:
     started = r["started_on"]
     return {
         "id": str(r["id"]), "code": r["code"],
@@ -369,10 +490,24 @@ def _mother_out(r, today: date) -> dict:
         # `generation` above, the -2 in its id.
         "times_cut": int(r["times_cut"] or 0),
         "cuttings_total": int(r["cuttings_total"] or 0),
-        # The potency measured for this mother's specification strain so far.
-        "tested": {"n": int(r["tested_n"] or 0), "avg": _fl(r["tested_avg"]),
-                   "min": _fl(r["tested_min"]), "max": _fl(r["tested_max"])},
+        # The potency measured for this mother's specification STRAIN so far
+        # (all three sources, one measurement per lot), and the subset that
+        # named this product. See _strain_history.
+        "tested": _summary(tested["strain"]) if tested else {"n": 0, "avg": None,
+                                                            "min": None, "max": None},
+        "tested_product": _summary(tested["product"]) if tested else {"n": 0, "avg": None,
+                                                                     "min": None, "max": None},
     }
+
+
+async def _tested_for(c, rows) -> dict:
+    """One history read per (cultivar, product code) among the rows."""
+    out = {}
+    for r in rows:
+        key = (str(r["cultivar_id"]), r["product_code"])
+        if key not in out:
+            out[key] = await _strain_history(c, r["cultivar_id"], r["product_code"])
+    return out
 
 
 @router.get("/mothers")
@@ -385,7 +520,9 @@ async def list_mothers(user: dict = Depends(require_role(*ELEVATED_ROLES)),
         rows = await c.fetch(
             _MOTHER_SQL + " WHERE ($1::bool IS FALSE OR m.status='active')"
             " ORDER BY pr.product_code, m.code", active)
-    mothers = [_mother_out(r, today) for r in rows]
+        tested = await _tested_for(c, rows)
+    mothers = [_mother_out(r, today, tested[(str(r["cultivar_id"]), r["product_code"])])
+               for r in rows]
     by_cv: dict = {}
     for m in mothers:
         s = by_cv.setdefault(m["cultivar_id"], {
@@ -418,12 +555,29 @@ async def _product_or_422(c, product_id):
     return row
 
 
+def _head(pr) -> str:
+    """The strain abbreviation the id starts with: the product code's acronym
+    (GP in GP_THC26:CBD1) — one source for the server and the form's preview.
+    A product code that does not parse falls back to the cultivar code, which
+    qc/products.py keeps equal to the acronym on every page it authors."""
+    return acronym_of(pr["product_code"]) or pr["cultivar_code"]
+
+
 async def _campaign_or_422(c, campaign_id):
     uuid_or_422(campaign_id, "Unknown selection campaign")
-    row = await c.fetchrow("SELECT id, seq FROM selection_campaigns WHERE id=$1", campaign_id)
+    row = await c.fetchrow(
+        "SELECT id, seq, cultivar_id FROM selection_campaigns WHERE id=$1", campaign_id)
     if row is None:
         raise HTTPException(422, "Unknown selection campaign")
     return row
+
+
+def _campaign_fits_product(camp, pr) -> None:
+    """A campaign opened for one strain selects mothers of that strain."""
+    if camp["cultivar_id"] is not None and _sid(camp["cultivar_id"]) != _sid(pr["cultivar_id"]):
+        raise HTTPException(
+            422, f"campaign S{camp['seq']} was opened for another strain —"
+                 f" {pr['product_code']} is not a mother of that campaign's strain")
 
 
 async def _next_numbers(c, campaign_id, product_id, mother_no=None, generation=1):
@@ -433,19 +587,42 @@ async def _next_numbers(c, campaign_id, product_id, mother_no=None, generation=1
     mother_no counts PER CAMPAIGN — the owner's words are "motherplant number
     03 of the corresponding Selection campaign", so M03 is the third mother of
     S1 whatever its strain. stock_no counts within one line: the same campaign,
-    product, mother number and generation. Both are max+1, never count(*): a
-    retired plant keeps its number, and reusing it would point two plants at
-    one id."""
+    mother number and generation (the product follows from the number, see
+    _line_owner_or_422). Both are max+1, never count(*): a retired plant keeps
+    its number, and reusing it would point two plants at one id. Past the cap
+    there is no next number, and saying so (422) beats a CHECK violation."""
     next_mother = int(await c.fetchval(
         "SELECT coalesce(max(mother_no), 0) + 1 FROM mother_plants WHERE campaign_id=$1",
         campaign_id) or 1)
     if mother_no is None:
         mother_no = next_mother
+        if mother_no > MAX_MOTHER_NO:
+            raise HTTPException(
+                422, f"this campaign already has mother M{MAX_MOTHER_NO} — the mother id has no"
+                     " room for another mother number in it")
     next_stock = int(await c.fetchval(
         "SELECT coalesce(max(stock_no), 0) + 1 FROM mother_plants"
-        " WHERE campaign_id=$1 AND product_id=$2 AND mother_no=$3 AND generation=$4",
-        campaign_id, product_id, mother_no, generation) or 1)
+        " WHERE campaign_id=$1 AND mother_no=$2 AND generation=$3",
+        campaign_id, mother_no, generation) or 1)
+    if next_stock > MAX_STOCK_NO:
+        raise HTTPException(
+            422, f"line M{mother_no:02d}-{generation} already holds stock number {MAX_STOCK_NO}"
+                 " — the mother id has no room for another plant on this line")
     return mother_no, next_mother, next_stock
+
+
+async def _line_owner_or_422(c, campaign_id, mother_no, pr) -> None:
+    """A mother number names one line of one product: M03 of S1 that already
+    exists as a Grape Pie 26 line cannot also be an OPM22 line."""
+    other = await c.fetchrow(
+        "SELECT DISTINCT pr.product_code FROM mother_plants m"
+        " JOIN qc_products pr ON pr.id = m.product_id"
+        " WHERE m.campaign_id=$1 AND m.mother_no=$2 AND m.product_id <> $3 LIMIT 1",
+        campaign_id, mother_no, pr["id"])
+    if other is not None:
+        raise HTTPException(
+            422, f"M{mother_no:02d} of this campaign is a {other['product_code']} line —"
+                 f" a mother number names one line, and {pr['product_code']} cannot take it")
 
 
 @router.get("/mothers/next-code")
@@ -460,17 +637,19 @@ async def next_mother_code(product_id: str = Query(...), campaign_id: str = Quer
     async with rls(user) as c:
         pr = await _product_or_422(c, product_id)
         camp = await _campaign_or_422(c, campaign_id)
+        _campaign_fits_product(camp, pr)
+        if mother_no is not None:
+            await _line_owner_or_422(c, camp["id"], mother_no, pr)
         chosen, next_mother, next_stock = await _next_numbers(
             c, camp["id"], pr["id"], mother_no, generation)
+    acr = _head(pr)
     return {
-        "acronym": pr["cultivar_code"], "grade": float(pr["grade"]),
+        "acronym": acr, "grade": float(pr["grade"]),
         "product_code": pr["product_code"], "campaign_seq": camp["seq"],
-        "head": mother_code(pr["cultivar_code"], pr["grade"], camp["seq"], chosen,
-                            generation, 1)[:-3],
+        "head": mother_code(acr, pr["grade"], camp["seq"], chosen, generation, 1)[:-3],
         "mother_no": chosen, "next_mother_no": next_mother,
         "generation": generation, "next_stock_no": next_stock,
-        "suggested": mother_code(pr["cultivar_code"], pr["grade"], camp["seq"], chosen,
-                                 generation, next_stock),
+        "suggested": mother_code(acr, pr["grade"], camp["seq"], chosen, generation, next_stock),
     }
 
 
@@ -480,58 +659,89 @@ async def create_mother(body: MotherIn, user: dict = Depends(require_role(*_WRIT
 
     The code is COMPOSED from the segments rather than typed, so the bank
     cannot hold a plant whose id disagrees with its own record. Two mothers may
-    not claim one line (409): an id must identify exactly one plant."""
+    not claim one line (409): an id must identify exactly one plant. The
+    next-number reads and the insert run under one advisory lock per campaign,
+    so two registrations at once cannot both read M04 and both become M05."""
     async with rls(user) as c:
         pr = await _product_or_422(c, body.product_id)
-        camp = await _campaign_or_422(c, body.campaign_id)
-        if body.room_id:
+        if body.room_id is not None:
             await _room_or_422(c, body.room_id)
         generation = body.generation
         parent = None
         if body.parent_id:
             uuid_or_422(body.parent_id, "Unknown parent mother plant")
             parent = await c.fetchrow(
-                "SELECT id, code, generation, product_id FROM mother_plants WHERE id=$1",
-                body.parent_id)
+                "SELECT id, code, generation, product_id, campaign_id, mother_no"
+                " FROM mother_plants WHERE id=$1", body.parent_id)
             if parent is None:
                 raise HTTPException(422, "Unknown parent mother plant")
             if _sid(parent["product_id"]) != _sid(pr["id"]):
                 raise HTTPException(
                     422, f"{parent['code']} is not a {pr['product_code']} mother —"
                          " a clone cannot change its specification strain")
+            # The LINE follows from the parent: the campaign and the mother
+            # number are inherited (GP26_S1M03-1 -> GP26_S1M03-2), and a body
+            # that names another is contradicting the parent it names.
+            if body.campaign_id is not None and body.campaign_id != _sid(parent["campaign_id"]):
+                raise HTTPException(
+                    422, f"{parent['code']} belongs to another selection campaign — a later"
+                         " generation keeps its parent's campaign")
+            if body.mother_no is not None and body.mother_no != parent["mother_no"]:
+                raise HTTPException(
+                    422, f"{parent['code']} is mother M{parent['mother_no']:02d} — a later"
+                         " generation keeps its parent's mother number")
             # The generation FOLLOWS from the parent: a clone of a
             # second-generation mother is third-generation, and a number that
             # said otherwise would be a lie the id then carries.
             generation = parent["generation"] + 1
-        elif generation > 1:
-            # Allowed: the plant a later generation came from may not be in the
-            # bank (an outside clone of a known line). Its own generation is
-            # still recorded.
-            parent = None
+            if generation > MAX_GENERATION:
+                raise HTTPException(
+                    422, f"{parent['code']} is generation {parent['generation']} — the mother"
+                         f" id numbers generations up to {MAX_GENERATION}")
+            camp = await _campaign_or_422(c, str(parent["campaign_id"]))
+            mother_no_wanted = parent["mother_no"]
+        else:
+            if body.campaign_id is None:
+                raise HTTPException(422, "campaign_id is required unless a parent mother is named")
+            camp = await _campaign_or_422(c, body.campaign_id)
+            mother_no_wanted = body.mother_no
+        _campaign_fits_product(camp, pr)
+        # Everything from here reads the campaign's numbers, so serialise on it.
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"mother:{camp['id']}")
+        if mother_no_wanted is not None:
+            await _line_owner_or_422(c, camp["id"], mother_no_wanted, pr)
         mother_no, _next_m, next_stock = await _next_numbers(
-            c, camp["id"], pr["id"], body.mother_no, generation)
+            c, camp["id"], pr["id"], mother_no_wanted, generation)
         stock_no = body.stock_no if body.stock_no is not None else next_stock
-        code = mother_code(pr["cultivar_code"], pr["grade"], camp["seq"],
-                           mother_no, generation, stock_no)
+        code = mother_code(_head(pr), pr["grade"], camp["seq"], mother_no, generation, stock_no)
         dup = await c.fetchval(
             "SELECT 1 FROM mother_plants WHERE org_id=$1 AND code=$2", user["org_id"], code)
         if dup:
             raise HTTPException(409, f"mother plant {code} already exists")
-        row = await c.fetchrow(
-            "INSERT INTO mother_plants(org_id, cultivar_id, product_id, campaign_id,"
-            " mother_no, generation, stock_no, parent_id, code, phenotype, room_id, \"position\","
-            " started_on, source, note, created_by, updated_by)"
-            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING id",
-            user["org_id"], pr["cultivar_id"], pr["id"], camp["id"], mother_no, generation,
-            stock_no, parent["id"] if parent else None, code, body.phenotype,
-            body.room_id or None, body.position, body.started_on, body.source, body.note,
-            user["id"])
+        try:
+            row = await c.fetchrow(
+                # SITE_TODAY_SQL is a module constant rendered at import; data is bound.
+                "INSERT INTO mother_plants(org_id, cultivar_id, product_id, campaign_id,"  # nosec B608
+                " mother_no, generation, stock_no, parent_id, code, phenotype, room_id, \"position\","
+                " started_on, source, note, status_since, created_by, updated_by)"
+                f" VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,{SITE_TODAY_SQL},$16,$16)"
+                " RETURNING id",
+                user["org_id"], pr["cultivar_id"], pr["id"], camp["id"], mother_no, generation,
+                stock_no, parent["id"] if parent else None, code, body.phenotype,
+                body.room_id or None, body.position, body.started_on, body.source, body.note,
+                user["id"])
+        except UniqueViolationError:
+            # The line key or the code: another registration took this line
+            # between the read and the write (only possible from outside the
+            # advisory lock, e.g. a direct SQL insert). Same answer as `dup`.
+            raise HTTPException(409, f"mother plant {code} already exists")
         await safe_emit(c, user, verb="mother_registered", object_type="mother_plant",
                         object_id=row["id"], recipients=[],
                         params={"code": code, "product_code": pr["product_code"],
                                 "campaign": f"S{camp['seq']}"})
         full = await c.fetchrow(_MOTHER_SQL + " WHERE m.id=$1", row["id"])
-    return _mother_out(full, facility_today())
+        tested = await _strain_history(c, full["cultivar_id"], full["product_code"])
+    return _mother_out(full, facility_today(), tested)
 
 
 @router.patch("/mothers/{mother_id}")
@@ -549,7 +759,9 @@ async def update_mother(mother_id: str, body: MotherPatch,
             # A destroyed plant does not come back; a retired one may.
             if cur["status"] == "destroyed" and patch["status"] != "destroyed":
                 raise HTTPException(409, "a destroyed mother plant cannot be reinstated")
-        if patch.get("room_id"):
+        # `is not None`, not truthiness: null clears the room, but "" is a
+        # malformed id and is refused (422) rather than reaching asyncpg.
+        if patch.get("room_id") is not None:
             await _room_or_422(c, patch["room_id"])
         fields, args = [], []
         for col, val in patch.items():
@@ -571,7 +783,8 @@ async def update_mother(mother_id: str, body: MotherPatch,
             f"UPDATE mother_plants SET {', '.join(fields)}, updated_at=now()"  # nosec B608
             f" WHERE id=${len(args)}", *args)
         full = await c.fetchrow(_MOTHER_SQL + " WHERE m.id=$1", mother_id)
-    return _mother_out(full, facility_today())
+        tested = await _strain_history(c, full["cultivar_id"], full["product_code"])
+    return _mother_out(full, facility_today(), tested)
 
 
 # ── clone runs ───────────────────────────────────────────────────────────────
@@ -624,15 +837,17 @@ async def list_clone_runs(user: dict = Depends(require_role(*ELEVATED_ROLES)),
 @router.post("/clone-runs", status_code=201)
 async def create_clone_run(body: CloneRunIn,
                            user: dict = Depends(require_role(*_INITIATORS))):
-    """Initiate cloning: the cultivar, the date, the mothers cut, the cuttings
-    planned, the room they go into — and the batch they feed, if it is already
-    registered. Snapshots the cultivar's APPROVED product specification."""
+    """Initiate cloning: the cultivar, the date the initiator sets, the mothers
+    cut, the cuttings planned, the room they go into — and the batch they feed,
+    if it is already registered and not yet filled with plant ids. Names the
+    official product the material is propagated against, if one is stated."""
     async with rls(user) as c:
         cv = await _cultivar_or_422(c, body.cultivar_id)
-        if body.room_id:
+        if body.room_id is not None:
             await _room_or_422(c, body.room_id)
-        if body.batch_id:
+        if body.batch_id is not None:
             await _batch_of_cultivar_or_422(c, body.batch_id, cv["id"])
+            await _batch_unfrozen_or_409(c, body.batch_id, "linking another run to it")
         if body.code:
             dup = await c.fetchval(
                 "SELECT 1 FROM clone_runs WHERE org_id=$1 AND code=$2", user["org_id"], body.code)
@@ -660,11 +875,11 @@ async def create_clone_run(body: CloneRunIn,
             if _sid(product["cultivar_id"]) != _sid(cv["id"]):
                 raise HTTPException(422, f"{product['product_code']} is not this cultivar's product")
         row = await c.fetchrow(
-            # SITE_TODAY_SQL is a module constant rendered at import; every
-            # value travels in the bound parameters.
-            "INSERT INTO clone_runs(org_id, cultivar_id, code, started_on, planned_count,"  # nosec B608
+            # Every value travels in the bound parameters; the date has no
+            # default (the initiator sets it, owner 2026-09-05).
+            "INSERT INTO clone_runs(org_id, cultivar_id, code, started_on, planned_count,"
             " room_id, batch_id, product_id, note, created_by, updated_by)"
-            f" VALUES ($1,$2,$3,COALESCE($4::date,{SITE_TODAY_SQL}),$5,$6,$7,$8,$9,$10,$10)"
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)"
             " RETURNING id, started_on",
             user["org_id"], cv["id"], body.code, body.started_on, body.planned_count,
             body.room_id or None, body.batch_id or None,
@@ -679,9 +894,10 @@ async def create_clone_run(body: CloneRunIn,
             cutting_no = int(await c.fetchval(
                 "SELECT coalesce(max(cutting_no), 0) + 1 FROM clone_run_mothers"
                 " WHERE mother_plant_id=$1", mid) or 1)
-            if cutting_no > 99:
+            if cutting_no > MAX_CUTTING_NO:
                 raise HTTPException(
-                    409, "this mother has been cut 99 times — the clone id has no room for another")
+                    409, f"this mother has been cut {MAX_CUTTING_NO} times — the clone id has no"
+                         " room for another cutting")
             await c.execute(
                 "INSERT INTO clone_run_mothers(org_id, run_id, mother_plant_id, cuttings,"
                 " cutting_no, created_by) VALUES ($1,$2,$3,$4,$5,$6)",
@@ -706,7 +922,7 @@ async def update_clone_run(run_id: str, body: CloneRunPatch,
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
         cur = await c.fetchrow(
-            "SELECT status, cultivar_id, finished_on FROM clone_runs WHERE id=$1", run_id)
+            "SELECT status, cultivar_id, finished_on, batch_id FROM clone_runs WHERE id=$1", run_id)
         if cur is None:
             raise HTTPException(404, "Clone run not found")
         if cur["status"] in _RUN_TERMINAL and patch:
@@ -714,9 +930,17 @@ async def update_clone_run(run_id: str, body: CloneRunPatch,
         if "status" in patch:
             if patch["status"] not in _RUN_STATUS:
                 raise HTTPException(422, f"status must be one of: {', '.join(_RUN_STATUS)}")
-        if patch.get("batch_id"):
-            await _batch_of_cultivar_or_422(c, patch["batch_id"], cur["cultivar_id"])
-        if patch.get("room_id"):
+        # `is not None`, not truthiness: null unlinks, "" is a malformed id (422).
+        if "batch_id" in patch and patch["batch_id"] != _sid(cur["batch_id"]):
+            if patch["batch_id"] is not None:
+                await _batch_of_cultivar_or_422(c, patch["batch_id"], cur["cultivar_id"])
+            # Leaving a batch whose plants were numbered from this run, or
+            # joining one that is already numbered, renames plants that exist.
+            if cur["batch_id"] is not None:
+                await _batch_unfrozen_or_409(c, cur["batch_id"], "moving this run away from it")
+            if patch["batch_id"] is not None:
+                await _batch_unfrozen_or_409(c, patch["batch_id"], "linking this run to it")
+        if patch.get("room_id") is not None:
             await _room_or_422(c, patch["room_id"])
         fields, args = [], []
         for col, val in patch.items():
@@ -745,25 +969,23 @@ async def mother_potency(mother_id: str, user: dict = Depends(require_role(*ELEV
 
     The owner asked for "the potency scores tested so far, as an average value,
     and info regarding individual Total THC% scores tested so far from that
-    Specification Strain". `product` is that: every APPROVED Certificate of
-    Quality issued against the mother's product. `traced` is the subset whose
-    lot descends from a batch this mother was actually cut into — a smaller,
-    stronger claim, and often empty, because it needs the clone run to name its
-    batch and the harvest to have recorded the lot. Neither is inflated by the
-    other."""
+    Specification Strain". `strain` is that: the three labelled sources
+    (see the module header), rolled up one measurement per lot. `product` is
+    the subset of CoQs that named this mother's product code. `traced` is the
+    subset whose lot descends from a batch this mother was actually cut into —
+    a smaller, stronger claim, and often empty, because it needs the clone run
+    to name its batch and the harvest to have recorded the lot. None is
+    inflated by another."""
     uuid_or_404(mother_id, "Mother plant not found")
     async with rls(user) as c:
         m = await c.fetchrow(
-            "SELECT m.id, m.code, m.product_id, pr.product_code, pr.window_min, pr.window_max"
+            "SELECT m.id, m.code, m.product_id, m.cultivar_id, pr.product_code,"
+            " pr.window_min, pr.window_max"
             " FROM mother_plants m JOIN qc_products pr ON pr.id=m.product_id WHERE m.id=$1",
             mother_id)
         if m is None:
             raise HTTPException(404, "Mother plant not found")
-        product_rows = await c.fetch(
-            "SELECT q.id, q.coq_number, q.batch_id, q.compiled_at,"
-            f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
-            " WHERE q.product_id=$1 AND q.status='APPROVED' ORDER BY q.compiled_at",
-            m["product_id"])
+        history = await _strain_history(c, m["cultivar_id"], m["product_code"])
         # Cut into a batch → the batch's code → the CULTIVATION genealogy edge
         # → the lot a certificate names. A text join at the last hop, which is
         # why this is reported as its own, weaker figure.
@@ -780,25 +1002,14 @@ async def mother_potency(mother_id: str, user: dict = Depends(require_role(*ELEV
             "          JOIN batches ON batches.code = g.parent_batch_id"
             "          WHERE g.relation='CULTIVATION'"
             "          UNION SELECT code FROM batches)"
-            " SELECT q.id, q.coq_number, q.batch_id, q.compiled_at,"
+            " SELECT q.id, q.coq_number, q.batch_id AS lot_code, q.compiled_at AS on_at,"
             f" ({_TOTAL_LINE}) AS total_thc FROM qc_coq q"
             " WHERE q.status='APPROVED' AND q.batch_id IN (SELECT code FROM lots)"
             " ORDER BY q.compiled_at", mother_id)
 
-    def _rows(rs):
-        return [{"coq_number": r["coq_number"], "lot_code": r["batch_id"],
-                 "total_thc": _fl(r["total_thc"]),
-                 "on": r["compiled_at"].isoformat() if r["compiled_at"] else None}
-                for r in rs if r["total_thc"] is not None]
-
-    def _stats(rows):
-        vals = [x["total_thc"] for x in rows]
-        return {"n": len(vals), "avg": round(sum(vals) / len(vals), 2) if vals else None,
-                "min": min(vals) if vals else None, "max": max(vals) if vals else None,
-                "values": rows}
-
     return {"mother_id": str(m["id"]), "code": m["code"],
             "product_code": m["product_code"],
             "window": [_fl(m["window_min"]), _fl(m["window_max"])],
-            "product": _stats(_rows(product_rows)),
-            "traced": _stats(_rows(traced_rows))}
+            "strain": history["strain"], "sources": history["sources"],
+            "product": history["product"],
+            "traced": _stats(_hist_rows(traced_rows, "coq_number", "coq_traced"))}

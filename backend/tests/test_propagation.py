@@ -237,10 +237,12 @@ async def test_a_clone_run_is_initiated_by_cultivation_or_qa_and_names_its_produ
                           headers=cu_h)
     assert r.status_code == 422 and "not this cultivar's product" in r.text
 
+    # The date of cloning initiation has no default: the initiator sets it
+    # (owner, 2026-09-05; review AD-19).
     r = await client.post("/cultivation/clone-runs",
                           json={"cultivar_id": cv["id"], "planned_count": 10}, headers=cu_h)
-    assert r.json()["started_on"] == facility_today().isoformat()
-    assert len((await client.get("/cultivation/clone-runs", headers=qc_h)).json()["runs"]) == 3
+    assert r.status_code == 422, r.text
+    assert len((await client.get("/cultivation/clone-runs", headers=qc_h)).json()["runs"]) == 2
 
 
 async def test_a_run_numbers_its_cuttings_and_the_bank_derives_last_cut_and_times_cut(client, admin_headers):
@@ -325,6 +327,11 @@ async def test_a_mother_shows_what_its_specification_strain_has_tested(client, a
     assert body["window"] == [23.40, 28.59]
     assert body["product"]["n"] == 1 and round(body["product"]["avg"], 2) == 23.98
     assert body["product"]["values"][0]["lot_code"] == "L-M1"
+    # The STRAIN's history is what the owner asked for: the same lot, counted
+    # once, labelled by its source.
+    assert body["strain"]["n"] == 1 and body["strain"]["values"][0]["source"] == "coq_product"
+    assert body["sources"]["coq_product"]["n"] == 1
+    assert body["sources"]["coq_cultivar"]["n"] == 0 and body["sources"]["certificate"]["n"] == 0
     # Nothing links this lot to THIS plant, so the traced figure stays empty
     # rather than borrowing the strain's number.
     assert body["traced"] == {"n": 0, "avg": None, "min": None, "max": None, "values": []}
@@ -348,15 +355,17 @@ async def test_a_run_feeds_a_batch_of_the_same_cultivar_only(client, admin_heade
         "plant_count": 500, "phase": "clone"})).json()
 
     r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": gp["id"], "planned_count": 2000, "batch_id": opm_batch["id"]})
+        "cultivar_id": gp["id"], "planned_count": 2000, "batch_id": opm_batch["id"],
+        "started_on": "2026-09-06"})
     assert r.status_code == 422 and "OPM092601" in r.text
     r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": gp["id"], "planned_count": 2000, "batch_id": gp_batch["id"]})
+        "cultivar_id": gp["id"], "planned_count": 2000, "batch_id": gp_batch["id"],
+        "started_on": "2026-09-06"})
     assert r.status_code == 201, r.text
     assert r.json()["batch_code"] == "GP092601"
 
     r2 = await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": gp["id"], "planned_count": 10})
+        "cultivar_id": gp["id"], "planned_count": 10, "started_on": "2026-09-06"})
     rid = r2.json()["id"]
     assert (await client.patch(f"/cultivation/clone-runs/{rid}",
                                json={"batch_id": opm_batch["id"]}, headers=cu_h)).status_code == 422
@@ -371,11 +380,13 @@ async def test_a_clone_run_finishes_once(client, admin_headers):
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     cv = await _cultivar(client, cu_h)
     r = await client.post("/cultivation/clone-runs", headers=qa_h, json={
-        "cultivar_id": cv["id"], "planned_count": 100, "code": "CR_001"})
+        "cultivar_id": cv["id"], "planned_count": 100, "code": "CR_001",
+        "started_on": "2026-09-06"})
     assert r.status_code == 201, r.text
     rid = r.json()["id"]
     r = await client.post("/cultivation/clone-runs", headers=qa_h, json={
-        "cultivar_id": cv["id"], "planned_count": 5, "code": "CR_001"})
+        "cultivar_id": cv["id"], "planned_count": 5, "code": "CR_001",
+        "started_on": "2026-09-06"})
     assert r.status_code == 409
 
     assert (await client.patch(f"/cultivation/clone-runs/{rid}", json={"note": "x"},
@@ -400,3 +411,211 @@ async def test_a_clone_run_finishes_once(client, admin_headers):
                                headers=cu_h)).status_code == 409
     assert (await client.patch("/cultivation/clone-runs/not-a-uuid", json={"note": "x"},
                                headers=cu_h)).status_code == 404
+
+
+# ── the 2026-09-27 review: CS-03, CS-04, CS-05, CS-10, CS-12, CS-14, CS-15 ───
+
+async def test_a_later_generation_keeps_its_parents_campaign_and_mother_number(client, admin_headers):
+    """CS-03. "all clones made from this -2 (second) cloning generation of
+    motherplant selection S1M03 will have codes like GP26_S1M03-2_020": the
+    line is inherited from the parent, and a body that says otherwise is
+    refused rather than quietly registering M05."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    prod = await _approved_product(client, admin_headers, cv["id"])
+    s1 = await _campaign(client, cu_h)
+    s2 = await _campaign(client, cu_h, "clones")
+    for _ in range(2):
+        await _mother(client, cu_h, prod["id"], s1["id"])
+    m3 = await _mother(client, cu_h, prod["id"], s1["id"])
+    assert m3["code"] == "GP26_S1M03-1_001"
+
+    # Campaign and mother number left out: taken from the parent.
+    gen2 = await client.post("/cultivation/mothers",
+                             json={"product_id": prod["id"], "parent_id": m3["id"]}, headers=cu_h)
+    assert gen2.status_code == 201, gen2.text
+    assert gen2.json()["code"] == "GP26_S1M03-2_001"
+    assert gen2.json()["campaign_id"] == s1["id"] and gen2.json()["mother_no"] == 3
+    # Stated and agreeing: fine, and the stock number counts on within -2.
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "campaign_id": s1["id"], "mother_no": 3,
+        "parent_id": m3["id"]}, headers=cu_h)
+    assert r.status_code == 201 and r.json()["code"] == "GP26_S1M03-2_002"
+    # Contradicting the parent: refused.
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "campaign_id": s2["id"], "parent_id": m3["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "campaign" in r.text
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "mother_no": 5, "parent_id": m3["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "M03" in r.text
+    # No parent and no campaign is nothing to number from.
+    r = await client.post("/cultivation/mothers", json={"product_id": prod["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "campaign_id" in r.text
+
+
+async def test_a_mother_number_names_one_line_per_campaign(client, admin_headers):
+    """CS-04. M01 of S1 is a Grape Pie 26 line: an OPM mother cannot take the
+    number, and an auto-numbered OPM mother takes the campaign's NEXT number.
+    A campaign opened for one strain refuses another strain's mothers."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    gp = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    opm = await _cultivar(client, cu_h, "OPM", "Orange Punch Mimosa")
+    gp_prod = await _approved_product(client, admin_headers, gp["id"])
+    opm_prod = await _approved_product(client, admin_headers, opm["id"], "OPM_THC22:CBD1", 22)
+    camp = await _campaign(client, cu_h)
+    m1 = await _mother(client, cu_h, gp_prod["id"], camp["id"])
+    assert m1["code"] == "GP26_S1M01-1_001"
+
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": opm_prod["id"], "campaign_id": camp["id"], "mother_no": 1}, headers=cu_h)
+    assert r.status_code == 422 and "GP_THC26:CBD1" in r.text
+    r = await client.get(f"/cultivation/mothers/next-code?product_id={opm_prod['id']}"
+                         f"&campaign_id={camp['id']}&mother_no=1", headers=cu_h)
+    assert r.status_code == 422, "the suggestion refuses the same line the save would"
+    other = await _mother(client, cu_h, opm_prod["id"], camp["id"])
+    assert other["code"] == "OPM22_S1M02-1_001"
+    # The same line, a second stock plant: still GP's, still fine.
+    assert (await _mother(client, cu_h, gp_prod["id"], camp["id"], mother_no=1))["code"] == "GP26_S1M01-1_002"
+
+    gp_only = await _campaign(client, cu_h, "phenotypes", cultivar_id=gp["id"])
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": opm_prod["id"], "campaign_id": gp_only["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "another strain" in r.text
+
+
+async def test_two_registrations_at_once_take_different_numbers(client, admin_headers):
+    """CS-04. The next-number read runs under an advisory lock per campaign,
+    so two mothers registered at the same moment become M01 and M02 — never
+    both M01 with one of them a 500."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    gp = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    opm = await _cultivar(client, cu_h, "OPM", "Orange Punch Mimosa")
+    gp_prod = await _approved_product(client, admin_headers, gp["id"])
+    opm_prod = await _approved_product(client, admin_headers, opm["id"], "OPM_THC22:CBD1", 22)
+    camp = await _campaign(client, cu_h)
+    import asyncio
+    a, b = await asyncio.gather(
+        client.post("/cultivation/mothers", json={"product_id": gp_prod["id"],
+                                                  "campaign_id": camp["id"]}, headers=cu_h),
+        client.post("/cultivation/mothers", json={"product_id": opm_prod["id"],
+                                                  "campaign_id": camp["id"]}, headers=cu_h))
+    assert a.status_code == 201 and b.status_code == 201, (a.text, b.text)
+    assert {a.json()["mother_no"], b.json()["mother_no"]} == {1, 2}
+
+
+async def test_number_caps_are_refused_with_a_reason_not_a_500(client, admin_headers):
+    """CS-10. Mother numbers stop at 99, stock numbers at 999, generations at
+    9 — typed or derived from a parent — and each cap answers 422."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    prod = await _approved_product(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    last = await _mother(client, cu_h, prod["id"], camp["id"], mother_no=99)
+    assert last["code"] == "GP26_S1M99-1_001"
+    r = await client.post("/cultivation/mothers",
+                          json={"product_id": prod["id"], "campaign_id": camp["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "M99" in r.text
+    r = await client.get(f"/cultivation/mothers/next-code?product_id={prod['id']}"
+                         f"&campaign_id={camp['id']}", headers=cu_h)
+    assert r.status_code == 422
+    await _mother(client, cu_h, prod["id"], camp["id"], mother_no=99, stock_no=999)
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "campaign_id": camp["id"], "mother_no": 99}, headers=cu_h)
+    assert r.status_code == 422 and "999" in r.text
+    g9 = await _mother(client, cu_h, prod["id"], camp["id"], mother_no=1, generation=9)
+    r = await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "parent_id": g9["id"]}, headers=cu_h)
+    assert r.status_code == 422 and "generation" in r.text
+    assert (await client.post("/cultivation/mothers", json={
+        "product_id": prod["id"], "campaign_id": camp["id"], "mother_no": 100},
+        headers=cu_h)).status_code == 422
+
+
+async def test_the_ids_head_is_the_products_acronym_on_both_sides(client, admin_headers):
+    """CS-12. The server composes the id from the product code's acronym and
+    tells the form what it used, so the preview and the saved id share one
+    source."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h, "OPM", "Orange Punch Mimosa")
+    prod = await _approved_product(client, admin_headers, cv["id"], "OPM_THC8:CBD1", 8)
+    camp = await _campaign(client, cu_h)
+    r = (await client.get(f"/cultivation/mothers/next-code?product_id={prod['id']}"
+                          f"&campaign_id={camp['id']}", headers=cu_h)).json()
+    assert r["acronym"] == "OPM" and r["head"] == "OPM8_S1M01-1_"
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    assert m["code"] == r["suggested"] == "OPM8_S1M01-1_001"
+    # status_since is the FACILITY day, bound explicitly, not the UTC default.
+    assert m["status_since"] == facility_today().isoformat()
+
+
+async def test_an_empty_id_is_refused_rather_than_crashing(client, admin_headers):
+    """CS-15. `room_id: ""` and `batch_id: ""` are malformed ids, not "clear
+    it": they answer 422, while an explicit null still clears."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    prod = await _approved_product(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    room = await _room(client, admin_headers, "mother_e", "Mother E")
+    m = await _mother(client, cu_h, prod["id"], camp["id"], room_id=room["id"])
+    assert (await client.patch(f"/cultivation/mothers/{m['id']}", json={"room_id": ""},
+                               headers=cu_h)).status_code == 422
+    r = await client.patch(f"/cultivation/mothers/{m['id']}", json={"room_id": None}, headers=cu_h)
+    assert r.status_code == 200 and r.json()["room_id"] is None
+    run = (await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 5, "started_on": "2026-09-06",
+        "room_id": room["id"]})).json()
+    for body in ({"batch_id": ""}, {"room_id": ""}):
+        assert (await client.patch(f"/cultivation/clone-runs/{run['id']}", json=body,
+                                   headers=cu_h)).status_code == 422, body
+    r = await client.patch(f"/cultivation/clone-runs/{run['id']}", json={"room_id": None},
+                           headers=cu_h)
+    assert r.status_code == 200 and r.json()["room_id"] is None
+
+
+async def test_a_batch_with_plants_freezes_its_runs(client, admin_headers):
+    """CS-05. Clone ids are numbered from the batch's runs laid end to end, so
+    once any plant exists the run set is fixed: no new run may join the batch,
+    and a run may not be moved away from or into it."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    cv = await _cultivar(client, cu_h)
+    prod = await _approved_product(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m = await _mother(client, cu_h, prod["id"], camp["id"])
+    room = await _room(client, admin_headers, "clone_frz", "Clone FRZ", kind="clone")
+    x = (await client.post("/cultivation/batches", headers=cu_h, json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092601",
+        "plant_count": 4, "phase": "clone"})).json()
+    y = (await client.post("/cultivation/batches", headers=cu_h, json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092602",
+        "plant_count": 4, "phase": "clone"})).json()
+    run = (await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 4, "started_on": "2026-09-01",
+        "batch_id": x["id"], "mothers": [{"mother_plant_id": m["id"], "cuttings": 4}]})).json()
+    loose = (await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 2, "started_on": "2026-08-30"})).json()
+    g = await client.post(f"/cultivation/batches/{x['id']}/plants", headers=cu_h)
+    assert g.status_code == 200 and g.json()["complete"]
+
+    # Relink the fed run to another batch, or unlink it: 409.
+    r = await client.patch(f"/cultivation/clone-runs/{run['id']}", json={"batch_id": y["id"]},
+                           headers=cu_h)
+    assert r.status_code == 409 and "GP092601" in r.text
+    r = await client.patch(f"/cultivation/clone-runs/{run['id']}", json={"batch_id": None},
+                           headers=cu_h)
+    assert r.status_code == 409
+    # An earlier-dated run joining the filled batch would shift every segment.
+    r = await client.patch(f"/cultivation/clone-runs/{loose['id']}", json={"batch_id": x["id"]},
+                           headers=cu_h)
+    assert r.status_code == 409
+    r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 1, "started_on": "2026-09-05",
+        "batch_id": x["id"]})
+    assert r.status_code == 409
+    # The unfilled batch still takes runs, and a note on the fed run is fine.
+    assert (await client.patch(f"/cultivation/clone-runs/{loose['id']}", json={"batch_id": y["id"]},
+                               headers=cu_h)).status_code == 200
+    assert (await client.patch(f"/cultivation/clone-runs/{run['id']}", json={"note": "rooted"},
+                               headers=cu_h)).status_code == 200
+    codes = [p["plant_code"] for p in
+             (await client.get(f"/cultivation/batches/{x['id']}/plants", headers=cu_h)).json()["plants"]]
+    assert codes == [f"{m['code']}-01.00{n}" for n in (1, 2, 3, 4)]
