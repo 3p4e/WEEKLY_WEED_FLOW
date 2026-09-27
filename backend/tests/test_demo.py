@@ -47,6 +47,21 @@ async def _start(client, cast="dune"):
     return body, {"Authorization": f"Bearer {body['access_token']}"}
 
 
+async def test_demo_admin_cannot_list_or_bind_letta_agents(client, demo_on):
+    """Review 2026-09-27, BC-27 (CODE-REVIEW-DEEP M3). The visitor token is the
+    demo cast's ADMIN; /ai/agents lists every agent on the shared Letta
+    instance and /ai/bindings would point corpus_qa at any of them — another
+    tenant's agent and its archival memory, queried by an anonymous visitor.
+    The demo org gets no agent surface at all."""
+    _, h = await _start(client)
+    assert (await client.get("/ai/agents", headers=h)).status_code == 403
+    r = await client.put("/ai/bindings/corpus_qa", json={"letta_agent_id": "agent-someone-elses"}, headers=h)
+    assert r.status_code == 403, r.text
+    assert (await client.delete("/ai/bindings/corpus_qa", headers=h)).status_code == 403
+    # nothing was written
+    assert (await client.get("/ai/bindings", headers=h)).json() == []
+
+
 async def test_disabled_by_default(client):
     # Default settings.demo_enabled is False — the endpoint simply doesn't exist.
     r = await client.post("/demo/start", json={"cast": "dune"})

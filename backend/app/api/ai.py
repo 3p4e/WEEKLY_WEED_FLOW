@@ -15,10 +15,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.api.tasks import _assert_scope_visible, _uuid_or_422
+from app import demo_org
+from app.api.tasks import _assert_scope_visible, _scope_clause, _uuid_or_422
 from app.config import settings
 from app.db import rls
-from app.deps import dept_scope, require_password_set, require_role
+from app.deps import dept_scope, is_dept_scoped_role, require_password_set, require_role
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
 from app.roster import roster
 
@@ -164,6 +165,45 @@ def _function_allowed(function_key: str, role: str) -> bool:
     return allowed is None or role in allowed
 
 
+# The ORG-WIDE narratives the scheduler archives with no subject
+# (scripts/weekly_snapshot.py write_pins): the raw digest, the AI weekly
+# report and the next-week plan. Their body is the whole organisation's work —
+# every active task with its owner and department, the overdue list, stuck
+# tasks, declined assignments and who declined them — which tasks_read RLS
+# and reports.py hide from a base USER, and which the department model
+# confines a scoped manager to their own tree of. Only the invoke keys were
+# gated in list_pins, and the scheduler writes two of these three under keys
+# that are NOT invoke keys, so a USER read the digest anyway (review
+# 2026-09-27, BC-02). A subject-less pin under one of these keys is readable
+# by ORG-WIDE elevated roles only.
+_ORG_WIDE_PIN_KEYS = ("weekly_snapshot", "weekly_report", "next_week_plan")
+
+
+def _restricted_pin_keys(user: dict) -> list[str]:
+    """Function keys whose subject-less (org-wide) pins this caller may not
+    read: everything their role may not invoke, plus the org-wide narratives
+    unless they are an org-wide elevated role. A department-scoped ROLE is
+    excluded even with no department assigned — the org-wide digest is the
+    sensitive surface documents.py refuses such a manager too."""
+    role = user.get("role", "")
+    keys = {k for k in FUNCTION_ROLES if not _function_allowed(k, role)}
+    if role not in ELEVATED_ROLES or is_dept_scoped_role(user):
+        keys.update(_ORG_WIDE_PIN_KEYS)
+    return sorted(keys)
+
+
+async def _refuse_demo_org(actor: dict) -> None:
+    """The public demo's visitor token is the demo cast's ADMIN. Binding an AI
+    function points it at ANY agent on the shared Letta instance — so an
+    anonymous visitor could list every tenant's agents, bind one to corpus_qa
+    and query its archival memory (review 2026-09-27, BC-27; CODE-REVIEW-DEEP
+    M3). The demo org gets no agent surface at all: its bindings are never
+    seeded (demo_org.py) and cannot be created here."""
+    demo_id = await demo_org.get_demo_org_id()
+    if demo_id is not None and str(actor["org_id"]) == str(demo_id):
+        raise HTTPException(403, "AI agent bindings are not available in the demo")
+
+
 class InvokeReq(BaseModel):
     # LOW: cap the free-text prompt so an unbounded body can't drive LLM
     # cost / a memory-DoS at the Letta layer (32 KB is generous for any
@@ -209,11 +249,10 @@ async def functions(user: dict = Depends(require_password_set)):
     role = user.get("role", "")
     visible = {k: v for k, v in CATALOG.items() if _function_allowed(k, role)}
     active = {b["function_key"] for b in bound if b["function_key"] in visible}
-    return {
-        "catalog": visible,
-        "active": sorted(active),
-        "letta_base_url": settings.letta_base_url,
-    }
+    # No `letta_base_url`: the internal agent endpoint is server-side plumbing
+    # that no client reads (web/gf never used it) and every user could see
+    # (review 2026-09-27, BC-18).
+    return {"catalog": visible, "active": sorted(active)}
 
 
 # ── Admin: which Letta agent backs each AI function ─────────────────────────
@@ -232,6 +271,7 @@ async def _letta_agents() -> list[dict]:
 @router.get("/agents")
 async def list_agents(actor: dict = Depends(require_role(ADMIN))):
     """The Letta agents available to bind functions to (drives the Settings AI tab)."""
+    await _refuse_demo_org(actor)
     try:
         return {"agents": await _letta_agents()}
     except Exception as e:
@@ -264,6 +304,7 @@ async def set_binding(function_key: str, body: BindingReq, actor: dict = Depends
     agent = (body.letta_agent_id or "").strip()
     if not agent:
         raise HTTPException(422, "letta_agent_id is required")
+    await _refuse_demo_org(actor)
     # Best-effort defense against a typo'd agent id: reject one the bound Letta
     # instance doesn't actually serve. This is deliberately NOT a hard
     # dependency — if the agent list can't be retrieved (Letta down/offline, as
@@ -290,6 +331,7 @@ async def set_binding(function_key: str, body: BindingReq, actor: dict = Depends
 
 @router.delete("/bindings/{function_key}")
 async def delete_binding(function_key: str, actor: dict = Depends(require_role(ADMIN))):
+    await _refuse_demo_org(actor)
     async with rls(actor) as c:
         await c.execute(
             "DELETE FROM ai_agent_bindings WHERE org_id=$1 AND function_key=$2 AND scope='org'",
@@ -309,26 +351,24 @@ async def list_pins(
     layers stacked:
       1. RLS (org_isolation policy): org-scoped, and a pin with subject_user_id
          set is readable only by its subject or an elevated role.
-      2. FUNCTION_ROLES (this module's invoke-time role tier), applied HERE to
-         org-wide pins only (subject_user_id IS NULL). The scheduler archives
-         the org-wide weekly_report/next_week_plan narrative with no subject,
-         and RLS's subject_user_id IS NULL clause opens those rows to every org
-         member — so without this second gate a base USER could read an
-         elevated-only function's org-wide output here even though invoke()
-         would 403 them for calling that function live. A pin that DOES carry
-         a subject_user_id is a personal pin, not a capability grant: its
-         subject may always read it regardless of this tier (layer 1 already
-         confines it to them or an elevated role)."""
-    role = user.get("role", "")
-    # Function keys this caller's role may not invoke fresh — org-wide
-    # (subject-less) pins for them must not be readable through this list
-    # either. Per-user pins for the same key are untouched (see layer 2 above).
-    restricted = [k for k in FUNCTION_ROLES if not _function_allowed(k, role)]
+      2. _restricted_pin_keys, applied HERE to org-wide pins only
+         (subject_user_id IS NULL): the invoke-time role tier
+         (FUNCTION_ROLES) plus the three org-wide narratives, which are
+         readable by org-wide elevated roles only. RLS's subject_user_id IS
+         NULL clause opens those rows to every org member — so without this
+         second gate a base USER read the whole organisation's digest here
+         even though invoke() and tasks_read both refuse them that data. A
+         pin that DOES carry a subject_user_id is a personal pin, not a
+         capability grant: its subject may always read it regardless of this
+         tier (layer 1 already confines it to them or an elevated role)."""
+    restricted = _restricted_pin_keys(user)
 
     clauses, args = [], []
     if function_key:
         args.append(function_key); clauses.append(f"function_key=${len(args)}")
     if week_id:
+        # Bound straight into a uuid comparison; garbage was a 500 (BC-14).
+        _uuid_or_422(week_id, "week_id")
         args.append(week_id); clauses.append(f"week_id=${len(args)}")
     if restricted:
         args.append(restricted)
@@ -415,18 +455,27 @@ async def _task_context(conn, names: dict, week_id: str | None = None, limit: in
     )
 
 
-async def _family_context(conn, names: dict, task_id: str) -> str:
+async def _family_context(conn, names: dict, user: dict, task_id: str) -> str:
     """TMS T3: scope dependency_advisor to ONE task's family (itself + parent
     + siblings under the same parent) instead of the whole corpus — a
     'suggest dependencies for THIS task' call needs its immediate tree
     neighborhood, not every task in the org. Empty string if the task isn't
-    visible under RLS (the caller gets the generic corpus context instead)."""
+    visible under RLS (the caller gets the generic corpus context instead).
+
+    Each family member passes the caller's OWN scope predicate
+    (tasks._scope_clause), not just the root: a department-scoped manager
+    who sees the root only because they are assigned to it was handed its
+    parent and every sibling in another department (review 2026-09-27,
+    BC-17). Org-wide callers are unaffected (the clause is empty for them)."""
+    args = [task_id]
+    scope = _scope_clause(user, args)
     rows = await conn.fetch(
         f"SELECT {_CTX_COLS} FROM tasks t WHERE t.is_deleted=false AND"
         " (t.id=$1 OR t.parent_id=$1"
         " OR t.parent_id=(SELECT parent_id FROM tasks WHERE id=$1)"
         " OR t.id=(SELECT parent_id FROM tasks WHERE id=$1))"
-        " ORDER BY (t.id=$1) DESC, t.created_at", task_id)
+        f"{scope}"
+        " ORDER BY (t.id=$1) DESC, t.created_at", *args)
     if not rows:
         return ""
 
@@ -470,7 +519,7 @@ async def invoke(function_key: str, body: InvokeReq, user: dict = Depends(requir
             # manager must not read another department's task family via the agent.
             _uuid_or_422(task_id, "task_id")
             await _assert_scope_visible(c, task_id, user)
-            context = await _family_context(c, await roster(user), task_id)
+            context = await _family_context(c, await roster(user), user, task_id)
         elif function_key in _DATA_FUNCS:
             if week_id:
                 _uuid_or_422(week_id, "week_id")
