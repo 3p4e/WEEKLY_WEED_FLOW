@@ -70,6 +70,15 @@ fail-closed, so backend and docengine must ship in the same window:
    service and the `ai-net` network the host already has.
 4. Set `CAPTURE_IMPORT_USER` explicitly in the production env (the code no
    longer falls back to a named account; empty switches the token path off).
+4a. Fix-round-2 host changes, each detailed in `docs/DEPLOY.md`: set
+   `TRAEFIK_HOST` (or `TRAEFIK_CIDRS`) for the frontend so nginx trusts
+   `X-Forwarded-For` from Traefik alone; create the internal `capture`
+   network and attach the backend and capture-mcp to it (the connector
+   leaves `internal`); decide A-12 and set `PASSWORD_POLICY_OVERRIDE=true`
+   if the trial password policy must survive the deploy (the floor is 12
+   otherwise); run the duplicate query for the DocEngine registry identity
+   index before the docengine swap (the service still boots with
+   duplicates, but `/health` reports `registry_identity_unique: false`).
 5. Build backend / frontend / docengine from the merge commit, swap one service
    at a time, smoke `/health/ready`.
 6. Product catalogue, in this order (owner 2026-09-18: the fitted tolerances
