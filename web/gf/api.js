@@ -43,7 +43,17 @@ GF.API = {
     return this._SLOW_PATHS.test(path) ? this._SLOW_TIMEOUT_MS : this._TIMEOUT_MS;
   },
 
+  // The JSON body only — what every wrapper below returns. A caller that
+  // needs a response HEADER as well (the audit trail's X-Next-Cursor) uses
+  // _reqFull, which is the same request with the headers kept.
   async _req(method, path, body, timeoutMs) {
+    return (await this._reqFull(method, path, body, timeoutMs)).data;
+  },
+
+  // { data, headers, status }: the parsed body plus the response Headers.
+  // Same auth, timeout and error handling as _req — this IS _req, with the
+  // headers not thrown away (review 2026-09-27, R2-BC-02 / A-7).
+  async _reqFull(method, path, body, timeoutMs) {
     // Capture the token THIS request actually sends, before the fetch's
     // await hands control back to the event loop. _headers() reads
     // `this.token` synchronously right here, so `sentToken` is exactly what
@@ -139,7 +149,8 @@ GF.API = {
       throw err;
     }
     const ct = res.headers.get('content-type') || '';
-    return ct.includes('application/json') ? res.json() : res.text();
+    const data = await (ct.includes('application/json') ? res.json() : res.text());
+    return { data, headers: res.headers, status: res.status };
   },
 
   async login(username, password) {
@@ -524,9 +535,15 @@ GF.API = {
   addLink(taskId, body)    { return this._req('POST',   '/tasks/' + taskId + '/links', body); },
   deleteLink(taskId, id)   { return this._req('DELETE', '/tasks/' + taskId + '/links/' + id); },
 
-  audit(q = {}) {
+  // One page of the merged audit trail: { rows, next }. `next` is the opaque
+  // per-chain (created_at, id) keyset the server hands back in X-Next-Cursor
+  // (backend/app/api/audit.py); pass it as `cursor` for the following page.
+  // The bare `before` timestamp the view used to send is lossy at a page
+  // boundary inside one transaction's rows and is legacy only (A-7).
+  async auditPage(q = {}) {
     const p = new URLSearchParams(q).toString();
-    return this._req('GET', '/audit' + (p ? '?' + p : ''));
+    const r = await this._reqFull('GET', '/audit' + (p ? '?' + p : ''));
+    return { rows: r.data, next: r.headers.get('X-Next-Cursor') || null };
   },
   auditTables() { return this._req('GET', '/audit/tables'); },
   auditVerify() { return this._req('GET', '/audit/verify'); },
