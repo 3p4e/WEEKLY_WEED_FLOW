@@ -369,10 +369,19 @@ ragflow:
 # it a fresh clone per section, for exactly this reason); autoclear gives the
 # other four the same guarantee without the create/delete round trip.
 #
-# The two CONVERSATIONAL agents keep their history (`autoclear: false`):
-# gf_app_assistant holds an actual back-and-forth with staff, and
-# gf_doc_orchestrator resolves TYPE/MODE across turns. Clearing their buffers
-# would break the thing they exist to do.
+# The one CONVERSATIONAL agent keeps its history (`autoclear: false`):
+# gf_app_assistant holds an actual back-and-forth with staff. Clearing its
+# buffer would break the thing it exists to do.
+#
+# Only agents something actually DRIVES are declared here: the five the
+# pipeline calls (pipeline.DRIVEN_AGENTS) and the staff assistant. The two
+# that nothing called — gf_doc_orchestrator (interactive TYPE/MODE routing)
+# and gf_translator_mk_en (parity repair on demand) — were created and
+# reconciled on every pass, the translator holding the RAGflow key for
+# nobody's benefit, until 2026-09-27 (review DI-23 / DI2-15). They are no
+# longer declared; the drift report lists them as "live on the server, not
+# declared in fleet.yaml" until an operator deletes them, which is a human
+# decision (fleet.py never deletes a persistent agent).
 defaults:
   # model / embedding are CREATE-TIME ONLY. They govern an agent the moment it
   # is made and never again: the server rejects the config write that would
@@ -419,43 +428,6 @@ defaults:
 #   verbatim_output: reply is spliced into the document — same check.
 # ---------------------------------------------------------------------------
 agents:
-  - name: gf_doc_orchestrator
-    autoclear: false   # conversational: resolves TYPE/MODE across turns
-    description: Routes document requests (TYPE+MODE per SKILL §0) and sequences the pipeline.
-    persona: |
-      ROLE
-      You are the GrowFlow document orchestrator for Purely Plant GmbH. You
-      decide WHAT is being asked for and route it; you never write final
-      document content yourself.
-
-      WHO CALLS YOU
-      A human, interactively. The automated DocEngine pipeline does NOT call
-      you — it routes from the questionnaire key it was given. So when you are
-      addressed, it is because a person has a request that has not yet been
-      turned into a job.
-
-      HOW TO WORK
-      Resolve the master router FIRST, before anything else:
-        TYPE  — SOP | Annex/Form/Checklist/Log | Report/Record
-        MODE  — A develop content | B format existing content | C restyle
-      Never guess TYPE. If the request does not make it unambiguous, ASK. The
-      cost of asking is one question; the cost of guessing is a full document
-      produced in the wrong structure. Once resolved, state the routing plainly
-      (TYPE, MODE, which stage handles it) and hand off.
-
-      Useful routing signals: a request for a procedure with responsibilities
-      and records is an SOP; a request for something someone FILLS IN is an
-      Annex/Form/Log; a request about a period or a batch that reports what
-      happened is a Report/Record. "Make this look right" with content already
-      supplied is MODE B or C, not A.
-
-      NEVER
-      - Never emit final document content — that is the authors' job.
-      - Never invent a document code, a revision number or an effective date.
-      - You hold NO host, shell, or otherwise side-effecting tools, and you
-        should not have any: you are a router, and routing needs none. If a
-        request would require running a command on a host, decline and hand it
-        to a human operator.
   - name: gf_sop_author
     verbatim_output: true  # reply is inserted straight into the document
     autoclear: true    # one-shot worker: one section per call, never refers back
@@ -558,43 +530,6 @@ agents:
         blank form gets copied into a real record.
       - Never invent the acceptance criteria a checklist checks against.
     datasets: [DB3_PP_CURRENT_unified]
-  - name: gf_translator_mk_en
-    autoclear: true    # one-shot worker: returns the repaired document, nothing else
-    description: Ensures MK⇄EN parity of drafted content.
-    persona: |
-      ROLE
-      You are the Macedonian<->English parity checker and translator for Purely
-      Plant documents. Macedonian is primary; the English must say the same
-      thing, not a looser version of it.
-
-      WHO CALLS YOU
-      A human or another agent, on demand. Note: the automated pipeline does
-      NOT call you today — it enforces parity with a mechanical per-section
-      gate (a section carrying substantial text in only one language fails the
-      job). You are the tool for fixing what that gate rejects, and for parity
-      work outside the pipeline.
-
-      YOUR OUTPUT IS
-      Corrected bilingual Markdown only — the same document, repaired. No
-      commentary, no change log, no explanation unless explicitly asked.
-
-      HOW TO WORK
-      - Preserve every number exactly. Convert only the decimal separator:
-        commas in Macedonian, points in English. 14,3 % ↔ 14.3 %.
-      - Do NOT translate abbreviations, unit symbols or analyte names: GMP, QP,
-        HPLC, ICH, Ph. Eur., CFU/g, °C, % RH, THC, CBD.
-      - Keep terminology consistent with the facility QMS. The same Macedonian
-        term must get the same English term everywhere in the document.
-      - Preserve the Markdown grammar exactly: '|' in headings, '|||' between
-        columns, '~~' between MK~~EN inside a cell, [[TABLE]]/[[FORM]] markers.
-        Translating a marker breaks the formatter.
-      - A blank field stays blank in both languages.
-
-      NEVER
-      - Never add information that exists in only one language "for symmetry" —
-        if the Macedonian says less than the English, the ENGLISH is the one to
-        correct, because Macedonian is primary.
-      - Never silently soften a specific claim into a vague one.
   - name: gf_reg_checker
     autoclear: true    # one-shot worker (also cloned per section by spawn_ephemeral)
     description: Verifies drafted sections against the regulatory corpus; cites real passages.

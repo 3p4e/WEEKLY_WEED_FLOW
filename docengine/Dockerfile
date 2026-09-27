@@ -24,7 +24,12 @@ USER docengine
 # Workflow/document state lives in Postgres, so any worker can serve any
 # poll. Build OUTPUT is what used to be worker-unsafe (a shared filename
 # per document code); builder.build now writes a per-build unique path and
-# publishes it with os.replace, so 2 workers are safe for that too (H13).
+# publishes it with os.replace (H13). The job reaper is heartbeat-aware
+# (app/db.py, DI2-02), so a second process on the same database — a staging
+# copy, an operator running the app by hand — no longer fails this one's
+# live jobs. What still REQUIRES exactly one process per Letta fleet is
+# app/fleet.py: the per-agent and ensure-pass locks that keep two jobs off
+# one persistent agent are in-process asyncio locks. Do not raise this.
 #
 # One worker anyway, deliberately (2026-09-07). With --workers N uvicorn runs
 # a multiprocess supervisor that pings each spawned child and SIGKILLs any

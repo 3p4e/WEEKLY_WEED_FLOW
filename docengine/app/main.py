@@ -16,9 +16,11 @@
 #   GET  /documents/{id}/download         the .docx (only ever PASS docs)
 #   GET  /documents/{id}/pdf              Gotenberg-rendered PDF
 import asyncio
+import hashlib
 import json
 import logging
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -48,6 +50,10 @@ log = logging.getLogger("docengine")
 # hung (not killed) worker leaves behind, and every job a redeploy killed
 # that was younger than the age threshold (review 2026-09-27, DI-04).
 REAPER_INTERVAL_S = 300
+# How often this process records that it is alive (docengine.workers). The
+# orphan sweep — in this process or any other on the same database — fails
+# only jobs whose worker has not beaten for db.WORKER_STALE_S (DI2-02).
+HEARTBEAT_INTERVAL_S = 60
 
 
 async def _sweep_jobs(where: str) -> None:
@@ -67,10 +73,23 @@ async def _sweep_jobs(where: str) -> None:
         log.warning("%s: job sweep failed", where, exc_info=True)
 
 
+async def _heartbeat(where: str) -> None:
+    try:
+        await db.heartbeat()
+    except Exception:  # noqa: BLE001 — a missed beat is logged, never fatal
+        log.warning("%s: worker heartbeat failed", where, exc_info=True)
+
+
 async def _reaper_loop() -> None:
+    """Beat every HEARTBEAT_INTERVAL_S; sweep every REAPER_INTERVAL_S."""
+    ticks_per_sweep = max(1, REAPER_INTERVAL_S // HEARTBEAT_INTERVAL_S)
+    tick = 0
     while True:
-        await asyncio.sleep(REAPER_INTERVAL_S)
-        await _sweep_jobs("periodic sweep")
+        await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+        await _heartbeat("periodic")
+        tick += 1
+        if tick % ticks_per_sweep == 0:
+            await _sweep_jobs("periodic sweep")
 
 
 @asynccontextmanager
@@ -80,6 +99,7 @@ async def lifespan(app: FastAPI):
     # when those rows appear (a redeploy kills the worker mid-run), and without
     # this they sit at 'running' forever with a poller waiting on them.
     if db.ready():
+        await _heartbeat("startup")
         await _sweep_jobs("startup")
     reaper = asyncio.create_task(_reaper_loop()) if db.ready() else None
     try:
@@ -209,6 +229,9 @@ async def health():
         "datasets_unresolved": rag["unresolved"],
         # what the last ensure_fleet pass concluded; None until a job has run
         "fleet": last.summary() if last else None,
+        # False when init() could not create the (org, code, version) identity
+        # index over existing duplicate rows (DI2-03; docs/DEPLOY.md)
+        "registry_identity_unique": db.identity_index_ok(),
         # the tree the service actually imports (config.ENGINE_SCRIPTS), not a
         # string that named the OTHER copy — see DEPLOY-2026-08-31 review, R3
         "engine": ENGINE_SCRIPTS.parent.name,
@@ -353,32 +376,51 @@ class ChatIn(BaseModel):
     section_num: str | None = None
 
 
-@app.post("/workflows/{jid}/chat", dependencies=[Depends(require_api_key)])
-async def chat_about_document(jid: str, body: ChatIn, org: str = Depends(require_org)):
-    """Answer a question about a finished document. Read-only: nothing this
-    route does can change the document — that is what /revise is for. Runs
-    on an ephemeral clone of the document's own author (autoclear off, in
-    case a caller later wants a short back-and-forth on the same clone; today
-    each call is one turn) so the answer comes from an agent that already
-    understands this document's persona, corpus access and house rules,
-    rather than a generic model call outside the fleet."""
-    job = await _job_or_404(jid, org)
-    sections, meta = _chat_ready_doc(job)
-    if body.section_num and not any(s["num"] == body.section_num for s in sections):
-        raise HTTPException(404, f"no section {body.section_num} on this document")
-    if not LettaClient().configured:
-        raise HTTPException(503, "Letta unavailable")
+# Chat turns in flight and recently finished, keyed by (job, organisation,
+# question, section). The backend proxy gives a turn 170 s and then answers
+# 504 "still answering"; the person retries, and the retry used to start a
+# second full turn while the first one's answer — which lands a moment later
+# — was thrown away at the return statement nobody was waiting on (review
+# 2026-09-27, DI2-09). Now the turn runs as its own task, a retry of the same
+# question attaches to that task instead of starting another, and a finished
+# answer is replayed for CHAT_RESULT_TTL_S. Nothing here is a document
+# mutation: no job row, no build.
+_CHAT_INFLIGHT: dict[str, asyncio.Task] = {}
+_CHAT_DONE: dict[str, tuple[float, str]] = {}
+CHAT_RESULT_TTL_S = 600
 
+
+def _chat_key(jid: str, org: str, body: "ChatIn") -> str:
+    raw = json.dumps([jid, org, body.question.strip(), body.section_num or ""], ensure_ascii=False)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _forget_stale_chat_results(now: float) -> None:
+    for k, (at, _) in list(_CHAT_DONE.items()):
+        if now - at >= CHAT_RESULT_TTL_S:
+            _CHAT_DONE.pop(k, None)
+
+
+async def _chat_turn(jid: str, sections: list[dict], meta: dict, body: "ChatIn") -> str:
+    """One question to an ephemeral clone of the document's author. Runs to
+    completion whether or not the HTTP request that started it is still
+    waiting (see _CHAT_INFLIGHT)."""
     client = LettaClient()
     try:
         # A question must not reconcile the fleet. It used to run the full
         # ~40-call ensure pass — block and config writes included — on every
         # question, which both blew the backend's timeout and reset persistent
         # agents' buffers under whatever job held them (review 2026-09-27,
-        # DI-08 / DI-12). The cached context is reused whenever one is
-        # current; only a cold process resolves one, and that is a job-shaped
-        # wait the caller can see on /health's `fleet`.
-        ctx = fleet.fleet_ctx_cached() or await fleet.ensure_fleet_ctx(client)
+        # DI-08 / DI-12); then only on a cold or expired cache, which is the
+        # first question after ten idle minutes — inside the chat budget
+        # (DI2-09). A cached pass is reused; otherwise the two ids a clone
+        # needs are resolved from read-only listings and nothing is written.
+        ctx = fleet.fleet_ctx_cached()
+        if ctx is None:
+            try:
+                ctx = await fleet.read_only_ctx(client)
+            except fleet.FleetNotReady as e:
+                raise HTTPException(503, str(e))
         author = SOP_AUTHOR if meta.get("doctype") == "SOP" else ANNEX_AUTHOR
         tmp_id = await fleet.spawn_ephemeral(
             client, author, f"chat_{jid[:8]}", ctx=ctx, autoclear=False)
@@ -400,7 +442,50 @@ async def chat_about_document(jid: str, body: ChatIn, org: str = Depends(require
                 log.warning("failed to delete ephemeral chat clone %s", tmp_id, exc_info=True)
     finally:
         await client.aclose()
-    return {"answer": (reply or "").strip()}
+    return (reply or "").strip()
+
+
+@app.post("/workflows/{jid}/chat", dependencies=[Depends(require_api_key)])
+async def chat_about_document(jid: str, body: ChatIn, org: str = Depends(require_org)):
+    """Answer a question about a finished document. Read-only: nothing this
+    route does can change the document — that is what /revise is for. Runs
+    on an ephemeral clone of the document's own author (autoclear off, in
+    case a caller later wants a short back-and-forth on the same clone; today
+    each call is one turn) so the answer comes from an agent that already
+    understands this document's persona, corpus access and house rules,
+    rather than a generic model call outside the fleet.
+
+    The turn outlives the request: a retry of the same question while the
+    first turn is still running attaches to it, and a finished answer is
+    replayed for CHAT_RESULT_TTL_S (`replayed: true`) instead of being spent
+    on a second Letta turn (DI2-09)."""
+    job = await _job_or_404(jid, org)
+    sections, meta = _chat_ready_doc(job)
+    if body.section_num and not any(s["num"] == body.section_num for s in sections):
+        raise HTTPException(404, f"no section {body.section_num} on this document")
+    if not LettaClient().configured:
+        raise HTTPException(503, "Letta unavailable")
+
+    key = _chat_key(jid, org, body)
+    now = time.monotonic()
+    _forget_stale_chat_results(now)
+    done = _CHAT_DONE.get(key)
+    if done is not None:
+        return {"answer": done[1], "replayed": True}
+    task = _CHAT_INFLIGHT.get(key)
+    if task is None:
+        task = _fire_and_forget(_chat_turn(jid, sections, meta, body))
+        _CHAT_INFLIGHT[key] = task
+
+        def _settle(t: asyncio.Task, key: str = key) -> None:
+            _CHAT_INFLIGHT.pop(key, None)
+            if not t.cancelled() and t.exception() is None:
+                _CHAT_DONE[key] = (time.monotonic(), t.result())
+        task.add_done_callback(_settle)
+    # shield: the request going away must not cancel the turn a retry will
+    # want the answer of.
+    answer = await asyncio.shield(task)
+    return {"answer": answer}
 
 
 @app.get("/presets", dependencies=[Depends(require_api_key)])

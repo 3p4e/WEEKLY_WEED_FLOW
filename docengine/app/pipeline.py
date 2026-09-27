@@ -298,11 +298,21 @@ def _bilingual_gaps(sections: list[dict]) -> list[str]:
 # (`\bverdict\b\W{0,12}?(PASS|FIX)`) matched anywhere in a sentence, so
 # "I cannot give a verdict: PASS would be wrong here. FIX section 6." and
 # "Verdict — PASS with the following blocking issue: FIX 3.0" both PASSED the
-# gate (review 2026-09-27, DI-15). Line-anchored, they do not.
+# gate (review 2026-09-27, DI-15). Line-anchored, they do not. Horizontal
+# whitespace only inside the line ([ \t], never \s): under re.M a \s* between
+# the word and the token spanned line breaks, so "Verdict:\n\n\nPASS" was read
+# as one verdict line (DI2-07).
 _QA_VERDICT_LINE = re.compile(
-    r"^\s*[-*>#\s]*[*_]*\s*verdict\s*[*_]*\s*[:—–-]?\s*[*_]*\s*(PASS|FIX)\s*[*_]*[.!]?\s*$",
+    r"^[ \t]*[-*>#\ \t]*[*_]*[ \t]*verdict[ \t]*[*_]*[ \t]*[:—–-]?[ \t]*[*_]*[ \t]*(PASS|FIX)[ \t]*[*_]*[.!]?[ \t]*$",
     re.I | re.M,
 )
+# The one concession to a reply with no verdict line: the reply IS the bare
+# token — optional emphasis and a full stop, nothing else. "PASS with the
+# following blocking issue: …", "PASS, except …", "PASS but section 3 must
+# be FIXED" all passed the gate as single-line replies that started with
+# PASS and carried no FIX token (DI2-07); the fakes and a terse model say
+# "Verdict: PASS" or "PASS" and nothing after it.
+_QA_BARE_PASS = re.compile(r"^[*_]*PASS[*_]*[.!]?$", re.I)
 # A stray machine token outside the verdict line. Case-sensitive on purpose:
 # the persona's token is uppercase, and lower-case prose ("the author should
 # fix the spacing") is not a verdict.
@@ -418,6 +428,14 @@ def _provenance_entry(section: str, agent_name: str, model: str, turn: dict) -> 
 _VERSION_TAIL = re.compile(r"^(.*?)(\d+)$")
 
 
+def _version_key(version: str) -> tuple:
+    """Orders versions the way a document controller reads them: numeric
+    runs compare as numbers ("1.10" after "1.9", "02" after "1"), text runs
+    as text. Used to find the LATEST registered version of a code."""
+    parts = re.findall(r"\d+|[^\d]+", (version or "").strip())
+    return tuple((0, int(x)) if x.isdigit() else (1, x) for x in parts)
+
+
 def _bump_version(version: str) -> str:
     """The next version of a revised document. The registry keyed a revision
     on the SAME code+version as its source, which in a GMP registry is two
@@ -453,18 +471,20 @@ def _qa_audit_passed(verdict: str) -> bool:
     verdict LINE fails (a verdict buried in a sentence is not a verdict); a
     reply with more than one verdict line fails; and a PASS verdict with a FIX
     token anywhere else in the reply fails. The one concession is a reply that
-    is nothing but the single line "PASS" (or "PASS — …") — the simplest
-    honest answer, and what the offline fakes send. A multi-line reply that
-    merely STARTS with PASS ("PASS\\nBlocking issues: …") is not that and is
-    refused. This gate is what stands between a draft and a formatted
-    controlled document, so "probably fine" has to count as not passing."""
+    is nothing but the bare token "PASS" — the simplest honest answer, and
+    what the offline fakes send. Anything after the token on that line
+    ("PASS — no issues found" as much as "PASS with the following blocking
+    issue: …") is not a bare token and is refused: the words after PASS are
+    exactly where a model hedges (DI2-07). A multi-line reply that merely
+    STARTS with PASS ("PASS\\nBlocking issues: …") is refused too. This gate
+    is what stands between a draft and a formatted controlled document, so
+    "probably fine" has to count as not passing."""
     t = (verdict or "").strip()
     if not t:
         return False
     lines = [m.group(1).upper() for m in _QA_VERDICT_LINE.finditer(t)]
     if len(lines) != 1:
-        if not lines and "\n" not in t and t.upper().startswith("PASS") \
-                and not _QA_FIX_TOKEN.search(t):
+        if not lines and _QA_BARE_PASS.match(t):
             return True
         return False
     if lines[0] != "PASS":
@@ -1307,8 +1327,17 @@ async def run_revision(job_id: str, client: LettaClient | None = None) -> None:
         # Lineage and identity (DI-07): the new document supersedes its
         # source and carries the NEXT version. Registering a second row under
         # the source's own code+version was two documents with one identity.
+        # The next version is bumped from the LATEST version registered
+        # under this code — not from the source's: revising the same source
+        # twice ("tighten", then "simplify") bumped 1.0 -> 1.1 both times and
+        # registered two 1.1s (review 2026-09-27, DI2-03). The identity index
+        # in db.py refuses that too; this is what makes the second revision
+        # land at 1.2 instead of failing.
         meta = dict(source_meta)
-        meta["version"] = _bump_version(source_meta.get("version", "1.0"))
+        source_version = str(source_meta.get("version", "1.0") or "1.0")
+        latest = max([source_version, *await db.registered_versions(job.get("org_id"), meta["code"])],
+                     key=_version_key)
+        meta["version"] = _bump_version(latest)
         supersedes_id = p.get("source_document_id")
         await db.job_update(job_id, status="running", stage="revise")
 

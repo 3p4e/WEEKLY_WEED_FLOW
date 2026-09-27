@@ -687,7 +687,8 @@ def test_brief_never_renders_a_key_that_is_not_a_question():
     "reply",
     [
         "PASS",
-        "PASS — no issues found",
+        "**PASS**",
+        "PASS.",
         "I'll run the §6A review on this FORM.\n\n**Verdict: PASS**\n\nChecks: ...",
         "Verdict: PASS",
         "verdict:  pass\nall six checks cleared",
@@ -726,6 +727,19 @@ def test_qa_audit_accepts_a_real_pass_reply(reply):
         # two verdict lines, or a PASS verdict with a FIX token elsewhere
         "Verdict: PASS\nVerdict: FIX",
         "Verdict: PASS\n\nIssue: FIX 3.0 before release",
+        # The single-line shapes from the second review (DI2-07): a reply that
+        # starts with PASS and hedges on the same line, with no FIX token.
+        # Anything after the bare token is where a model hedges, so the
+        # concession is the bare token only — "PASS — no issues found" was
+        # accepted before and is deliberately refused now (the persona and
+        # the fakes say "Verdict: PASS").
+        "PASS with the following blocking issue: 3.0 is missing the QP role",
+        "PASS, except the QP role is missing in 3.0 — must be fixed before release",
+        "PASS but section 3 must be FIXED",
+        "PASS — no issues found",
+        # the verdict pattern must not span line breaks
+        "Verdict:\n\n\nPASS",
+        "Verdict:\nFIX",
     ],
 )
 def test_qa_audit_rejects_anything_short_of_a_clear_pass(reply):
@@ -1349,6 +1363,72 @@ async def test_run_revision_hands_a_fix_verdict_back_before_giving_up(monkeypatc
 ])
 def test_bump_version_increments_the_last_number_and_keeps_its_padding(before, after):
     assert _bump_version(before) == after
+
+
+def test_version_key_orders_versions_the_way_a_document_controller_reads_them():
+    from app.pipeline import _version_key
+    ordered = sorted(["1.9", "1.10", "1.2", "1.0", "A", "A.1"], key=_version_key)
+    assert ordered.index("1.0") < ordered.index("1.2") < ordered.index("1.9") < ordered.index("1.10")
+    assert ordered.index("A") < ordered.index("A.1")
+    assert max(["01", "02", "10"], key=_version_key) == "10"   # not the string max "02"
+    assert max(["1.0", "1.1", "1.2"], key=_version_key) == "1.2"
+
+
+@pytest.mark.asyncio
+async def test_run_revision_bumps_from_the_latest_registered_version_not_the_source(monkeypatch):
+    """Review 2026-09-27, DI2-03. Revising the same source twice bumped its
+    1.0 to 1.1 both times and registered two 1.1s. The next version is taken
+    from the latest version the registry holds under that code: with 1.1
+    and 1.2 already registered, a revision of the 1.0 source lands at 1.3."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+    registered = {}
+    asked = []
+
+    async def capture_document_create(job_id, meta):
+        registered.update(meta)
+        return "doc-3"
+
+    async def fake_registered_versions(org_id, code):
+        asked.append((org_id, code))
+        return ["1.0", "1.2", "1.1"]
+    monkeypatch.setattr(db, "document_create", capture_document_create)
+    monkeypatch.setattr(db, "registered_versions", fake_registered_versions)
+
+    class EditClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "Verdict: PASS"
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов проширен опфат.|New extended scope.")
+
+    await run_revision("rev-1", client=EditClient())
+    assert updates[-1]["status"] == "done", updates[-1]
+    assert asked == [(None, "C-9")]
+    assert registered["version"] == "1.3" and registered["supersedes_id"] == "doc-0"
+    assert "version: 1.3" in updates[-1]["result"]["markdown"]
+
+
+@pytest.mark.asyncio
+async def test_run_revision_records_an_identity_refusal_as_the_jobs_failure(monkeypatch):
+    """When the registry's identity index refuses the row (a race, or an
+    index created after duplicates were made), the job fails with the
+    reason — never a second document under an existing identity."""
+    updates = _patch_common_for_revision(monkeypatch, _revise_job(section_num="2.0"))
+    monkeypatch.setattr(builder, "build", lambda *a, **k: _fake_build_result())
+
+    async def refuse(job_id, meta):
+        raise db.DocumentIdentityTaken(meta["code"], meta["version"])
+    monkeypatch.setattr(db, "document_create", refuse)
+
+    class EditClient(FakeClient):
+        async def send_message(self, agent_id, prompt):
+            if "§6A review" in prompt:
+                return "Verdict: PASS"
+            return _marker_block("2.0", "ПОДРАЧЈЕ", "SCOPE", "Нов проширен опфат.|New extended scope.")
+
+    await run_revision("rev-1", client=EditClient())
+    assert updates[-1]["status"] == "failed"
+    assert "already registered" in updates[-1]["error"] and "C-9" in updates[-1]["error"]
 
 
 @pytest.mark.asyncio

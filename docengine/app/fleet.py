@@ -129,11 +129,14 @@ def last_report() -> FleetReport | None:
 # reset an agent's message buffer under another job's in-flight turn. Two
 # locks close that:
 #   * one asyncio.Lock per persistent agent name, held by the pipeline around
-#     each send and by the reconciler around each buffer reset / config write;
+#     each send and by the reconciler around EVERY write to that agent — tool
+#     attach/detach, memory blocks, sandbox environment, config and buffer
+#     reset (the block and env writes used to run outside it, DI2-10);
 #   * one global lock around the ensure pass itself, plus a short-lived cache
 #     of its result so a job or a question started inside the window reuses
 #     the converged context instead of reconciling again.
-# A single uvicorn worker (Dockerfile) makes in-process locks sufficient.
+# A single uvicorn worker (Dockerfile) makes in-process locks sufficient —
+# they are the reason the service must stay at one worker.
 _AGENT_LOCKS: dict[str, asyncio.Lock] = {}
 _FLEET_LOCK: asyncio.Lock | None = None
 _CTX_CACHE: FleetContext | None = None
@@ -160,11 +163,43 @@ def _fleet_lock() -> asyncio.Lock:
 
 def fleet_ctx_cached() -> FleetContext | None:
     """The last ensure pass's context if it is younger than FLEET_CACHE_S,
-    else None. Read-only: never triggers a reconcile. This is what a chat
-    question uses, so a question never mutates the fleet."""
+    else None. Read-only: never triggers a reconcile. A chat question uses
+    this first and read_only_ctx() when it is None, so a question never
+    mutates the fleet."""
     if _CTX_CACHE is not None and (time.monotonic() - _CTX_AT) < FLEET_CACHE_S:
         return _CTX_CACHE
     return None
+
+
+class FleetNotReady(Exception):
+    """The live fleet lacks something a clone needs (the retrieval tool, the
+    author agent); an ensure pass — a document job — creates it."""
+
+
+async def read_only_ctx(client: LettaClient) -> FleetContext:
+    """A context resolved from LISTINGS alone: the live gf_ agents, the
+    registered retrieval tool, the served model handles. No reconcile, no
+    write of any kind. What a chat question uses when no ensure pass is
+    cached (review 2026-09-27, DI2-09): the first question after ten idle
+    minutes used to run the whole ~40-call ensure pass — block and config
+    writes included — inside the chat budget. Raises FleetNotReady when the
+    tool or the declared agents are not on the server yet; a document job
+    (ensure_fleet_ctx) is what creates them."""
+    spec = load_fleet()
+    live = await client.list_agents()
+    declared = {a["name"] for a in spec["agents"]}
+    agents = {a["name"]: a["id"] for a in live
+              if a.get("name") in declared and TMP_MARKER not in a["name"]}
+    missing = sorted(declared - set(agents))
+    if missing:
+        raise FleetNotReady(
+            "fleet agent(s) not created yet: %s — run a document job first" % ", ".join(missing))
+    tool_id = next((t.get("id") for t in await client.list_tools() if t.get("name") == TOOL_NAME), None)
+    if not tool_id:
+        raise FleetNotReady(f"{TOOL_NAME} is not registered on this Letta — run a document job first")
+    served, served_emb = await _served_handles(client)
+    model, embedding = _resolve_model(spec, live, served, served_emb)
+    return FleetContext(agents, live, model, embedding, tool_id, declared_pending(spec), FleetReport())
 
 
 def invalidate_fleet_cache() -> None:
@@ -587,9 +622,9 @@ async def _reconcile_tool_env(
     is a create-time argument, so every agent that predates RAGFLOW_ALLOWED_
     DATASETS would keep an unenforced scope forever.
 
-    A PATCH replaces the whole set, and gf_doc_orchestrator carries unrelated
-    secrets for a different tool, so only the three OWNED_ENV keys are ever
-    judged or written; everything else the agent carries is merged back.
+    A PATCH replaces the whole set, and an agent may carry unrelated secrets
+    for a tool this module does not own, so only the three OWNED_ENV keys are
+    ever judged or written; everything else the agent carries is merged back.
 
     Revocation is the half this never had. An agent whose `datasets:` was
     removed from fleet.yaml got a scope block saying "you have no corpus" and
@@ -686,9 +721,13 @@ _UNHONOURED: set[tuple[str, str]] = set()
 
 async def _reconcile_config(
     client: LettaClient, agent: dict, ag: dict, spec: dict, label: str,
-    report: FleetReport | None = None,
+    report: FleetReport | None = None, locked: bool = False,
 ) -> bool:
     """Push the declared context window / output ceiling onto a live agent.
+
+    `locked=True` says the caller already holds agent_lock(label) for this
+    agent (the ensure pass holds it around all four reconcilers, DI2-10);
+    the lock is not re-entrant, so it is taken here only when it is not.
 
     Both are passed at creation, which is not enough: an agent created before a
     value was declared keeps whatever Letta guessed, forever. Every one of the
@@ -759,7 +798,7 @@ async def _reconcile_config(
     # land in the middle of a turn a job is holding on this agent (DI-08).
     # The pipeline takes the same lock around every send to a persistent
     # agent, so this waits for that turn to finish rather than cutting it.
-    async with agent_lock(label):
+    async with (agent_lock(label) if not locked else _already_held()):
         if body:
             try:
                 await client.update_agent_config(agent["id"], body)
@@ -791,6 +830,16 @@ async def _reconcile_config(
             except LettaError as e:  # non-fatal: autoclear still bounds it going forward
                 log.warning("could not clear message buffer on %s: %s", label, e)
     return True
+
+
+class _already_held:
+    """No-op context manager for a lock the caller holds."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
 
 
 async def _served_handles(client: LettaClient) -> tuple[set[str] | None, set[str] | None]:
@@ -952,17 +1001,23 @@ async def _ensure_fleet_pass(client: LettaClient | None) -> FleetContext:
                 log.error("%s carries custom tool(s) fleet.yaml does not declare: %s "
                           "— withholding RAGflow credentials", name, ", ".join(unknown))
             revoke = bool(unknown)
-            did = await _reconcile_retrieval_tool(
-                client, cur["id"], ag, tool_id, _custom_tools(cur), name, revoke=revoke
-            )
-            if did:
-                report.note(name, did)
-            for lbl in await _reconcile_blocks(client, cur["id"], ag, spec, name, pending, report):
-                report.note(name, f"block {lbl}")
-            if await _reconcile_tool_env(client, cur, ag, name, revoke=revoke):
-                report.note(name, "tool env revoked" if (revoke or not ag.get("datasets")) else "tool env")
-            if await _reconcile_config(client, cur, ag, spec, name, report):
-                report.note(name, "config")
+            # Every write to a live agent under its lock (DI2-10): a job
+            # holding this agent mid-turn must not have its persona block or
+            # its sandbox environment (the dataset allowlist) replaced under
+            # a tool call that has not executed yet. The pipeline takes the
+            # same lock around each send, so this waits for the turn to end.
+            async with agent_lock(name):
+                did = await _reconcile_retrieval_tool(
+                    client, cur["id"], ag, tool_id, _custom_tools(cur), name, revoke=revoke
+                )
+                if did:
+                    report.note(name, did)
+                for lbl in await _reconcile_blocks(client, cur["id"], ag, spec, name, pending, report):
+                    report.note(name, f"block {lbl}")
+                if await _reconcile_tool_env(client, cur, ag, name, revoke=revoke):
+                    report.note(name, "tool env revoked" if (revoke or not ag.get("datasets")) else "tool env")
+                if await _reconcile_config(client, cur, ag, spec, name, report, locked=True):
+                    report.note(name, "config")
             n_msgs = len(cur.get("message_ids") or [])
             if not ag.get("autoclear") and n_msgs > 100:
                 # A conversational agent is allowed to keep history; it is not

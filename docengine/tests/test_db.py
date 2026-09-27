@@ -261,3 +261,117 @@ async def test_stale_reaper_skips_jobs_the_live_process_still_owns(dbpool):
     assert await db.reap_stale_jobs(exclude=[alive]) == 1
     assert await status_of(dbpool, alive) == "running"
     assert await status_of(dbpool, dead) == "failed"
+
+
+# ── heartbeat-aware reaping (DI2-02) ─────────────────────────────────────────
+async def _worker_row(pool, worker_id: str, beat_age_s: int) -> None:
+    await pool.execute(
+        "INSERT INTO docengine.workers (worker_id, heartbeat_at)"
+        " VALUES ($1, now() - make_interval(secs => $2))"
+        " ON CONFLICT (worker_id) DO UPDATE SET heartbeat_at = EXCLUDED.heartbeat_at",
+        worker_id, float(beat_age_s))
+
+
+async def _owned_job(pool, worker_id: str, status: str = "running") -> str:
+    jid = str(uuid.uuid4())
+    await pool.execute(
+        "INSERT INTO docengine.jobs (id, kind, status, worker_id) VALUES ($1, 'workflow', $2, $3)",
+        jid, status, worker_id)
+    return jid
+
+
+async def test_heartbeat_records_this_worker_and_refreshes_it(dbpool):
+    await db.heartbeat()
+    first = await dbpool.fetchval(
+        "SELECT heartbeat_at FROM docengine.workers WHERE worker_id = $1", db.WORKER_ID)
+    assert first is not None
+    await db.heartbeat()
+    again = await dbpool.fetchval(
+        "SELECT heartbeat_at FROM docengine.workers WHERE worker_id = $1", db.WORKER_ID)
+    assert again >= first
+    assert await dbpool.fetchval("SELECT count(*) FROM docengine.workers") == 1
+
+
+async def test_orphan_reaper_spares_a_worker_that_still_beats_and_fails_one_that_stopped(dbpool):
+    """Review 2026-09-27, DI2-02. Two processes on one database each failed
+    the other's live jobs every sweep ("not THIS worker" read as "gone").
+    A worker is gone when its heartbeat is stale or absent — never merely
+    because it is a different process."""
+    await _worker_row(dbpool, "alive-worker", beat_age_s=30)
+    await _worker_row(dbpool, "dead-worker", beat_age_s=db.WORKER_STALE_S + 60)
+    alive_job = await _owned_job(dbpool, "alive-worker")
+    dead_job = await _owned_job(dbpool, "dead-worker")
+    no_row_job = await _owned_job(dbpool, "never-beat")
+    legacy = await seed_job(dbpool, status="running", age_minutes=1)  # worker_id NULL
+
+    assert await db.reap_orphaned_jobs() == 3
+    assert await status_of(dbpool, alive_job) == "running"
+    for jid in (dead_job, no_row_job, legacy):
+        assert await status_of(dbpool, jid) == "failed"
+    err = await dbpool.fetchval("SELECT error FROM docengine.jobs WHERE id = $1", dead_job)
+    assert "dead-worker" in err and "gone" in err
+    # the beating worker's job is failed once its beats stop
+    await _worker_row(dbpool, "alive-worker", beat_age_s=db.WORKER_STALE_S + 1)
+    assert await db.reap_orphaned_jobs() == 1
+    assert await status_of(dbpool, alive_job) == "failed"
+
+
+async def test_orphan_reaper_yields_to_a_sweep_already_running_elsewhere(dbpool):
+    """One sweep at a time, under a transaction-scoped advisory lock: two
+    processes never race the same rows. While another connection holds the
+    lock the sweep reports 0 and touches nothing; it reaps on the next pass."""
+    gone = await _owned_job(dbpool, "gone-worker")
+    async with dbpool.acquire() as other, other.transaction():
+        assert await other.fetchval("SELECT pg_try_advisory_xact_lock(hashtext('docengine.reaper'))")
+        assert await db.reap_orphaned_jobs() == 0
+        assert await status_of(dbpool, gone) == "running"
+    assert await db.reap_orphaned_jobs() == 1
+    assert await status_of(dbpool, gone) == "failed"
+
+
+async def test_stale_reaper_judges_only_this_workers_jobs(dbpool):
+    """Another live worker knows which of its silent jobs still have a task;
+    its rows are its own to judge (or the orphan sweep's, once it stops
+    beating). Ownerless legacy rows are still this worker's to clean."""
+    await _worker_row(dbpool, "other-worker", beat_age_s=10)
+    theirs = await _owned_job(dbpool, "other-worker")
+    await dbpool.execute("UPDATE docengine.jobs SET updated_at = now() - interval '500 minutes'"
+                         " WHERE id = $1", theirs)
+    mine = await db.job_create("workflow", {}, org_id="org-a")
+    await dbpool.execute("UPDATE docengine.jobs SET status='running',"
+                         " updated_at = now() - interval '500 minutes' WHERE id = $1", mine)
+    legacy = await seed_job(dbpool, status="running", age_minutes=500)
+    assert await db.reap_stale_jobs() == 2
+    assert await status_of(dbpool, theirs) == "running"
+    assert await status_of(dbpool, mine) == "failed"
+    assert await status_of(dbpool, legacy) == "failed"
+
+
+# ── one identity per controlled document (DI2-03) ────────────────────────────
+async def test_the_identity_index_exists_after_init(dbpool):
+    assert db.identity_index_ok() is True
+    assert await dbpool.fetchval(
+        "SELECT indexdef FROM pg_indexes WHERE schemaname='docengine' AND indexname='de_docs_identity'")
+
+
+async def test_registry_refuses_a_second_document_under_an_existing_identity(dbpool):
+    """Review 2026-09-27, DI2-03. A second revision of the same source, or the
+    same questionnaire run twice under one code, registered the same
+    code+version again with different bytes: two controlled documents with
+    one identity. The registry now holds one row per (organisation, code,
+    version) for everything but /build artefacts."""
+    v1 = await _register("org-a", "SOP-X", version="1.0")
+    await _register("org-a", "SOP-X", version="1.1", supersedes_id=v1, source="revise")
+    with pytest.raises(db.DocumentIdentityTaken) as ei:
+        await _register("org-a", "SOP-X", version="1.1", supersedes_id=v1, source="revise")
+    assert "SOP-X" in str(ei.value) and "1.1" in str(ei.value)
+    with pytest.raises(db.DocumentIdentityTaken):
+        await _register("org-a", "SOP-X", version="1.0")  # a re-run of the first draft
+    # another organisation may hold the same code+version; a /build artefact
+    # (a certificate regenerated) is not a controlled-document identity
+    await _register("org-b", "SOP-X", version="1.1")
+    await _register("org-a", "PP-COA-1", version="01", source="build")
+    await _register("org-a", "PP-COA-1", version="01", source="build")
+    assert sorted(await db.registered_versions("org-a", "SOP-X")) == ["1.0", "1.1"]
+    assert await db.registered_versions("org-a", "PP-COA-1") == []   # build rows carry no identity
+    assert await db.registered_versions(None, "SOP-X") == []

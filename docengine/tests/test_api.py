@@ -553,9 +553,21 @@ def test_chat_404_on_unknown_section(client, monkeypatch):
     assert r.status_code == 404
 
 
+def _fresh_chat_state(monkeypatch):
+    """Chat keeps in-flight turns and recent answers per process; a test
+    starts with none so nothing leaks between tests."""
+    monkeypatch.setattr(main, "_CHAT_INFLIGHT", {})
+    monkeypatch.setattr(main, "_CHAT_DONE", {})
+
+
 def test_chat_returns_the_agents_reply_and_never_mutates_anything(client, monkeypatch):
-    """Chat must be read-only: no job is created, no document is built —
-    only an ephemeral clone is spun up, asked one question, and deleted."""
+    """Chat must be read-only: no job is created, no document is built, and
+    the fleet is never reconciled (DI2-09: a cold cache used to run the full
+    ensure pass, writes included, inside the chat budget) — only an
+    ephemeral clone is spun up from read-only listings, asked one question,
+    and deleted."""
+    _fresh_chat_state(monkeypatch)
+    fleet.invalidate_fleet_cache()
     monkeypatch.setattr(db, "ready", lambda: True)
     monkeypatch.setattr(settings, "letta_base", "http://letta.example")
     monkeypatch.setattr(settings, "letta_key", "test-letta-key")
@@ -564,15 +576,19 @@ def test_chat_returns_the_agents_reply_and_never_mutates_anything(client, monkey
         return _done_job()
     monkeypatch.setattr(db, "job_get", _job)
 
-    async def fake_ensure_fleet_ctx(client):
+    async def fake_read_only_ctx(client):
         return fleet.FleetContext({}, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def must_not_reconcile(*a, **k):
+        raise AssertionError("chat must never run the ensure pass")
 
     spawned = []
 
     async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
         spawned.append((agent_name, autoclear))
         return "tmp-chat-1"
-    monkeypatch.setattr(fleet, "ensure_fleet_ctx", fake_ensure_fleet_ctx)
+    monkeypatch.setattr(fleet, "read_only_ctx", fake_read_only_ctx)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", must_not_reconcile)
     monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn_ephemeral)
 
     sent, deleted = [], []
@@ -612,6 +628,150 @@ def test_chat_returns_the_agents_reply_and_never_mutates_anything(client, monkey
     document_block = prompt.split("DOCUMENT:\n", 1)[1]
     assert "Scope text." in document_block  # the document content reached the prompt
     assert "<<<PP-SECTION" not in document_block  # plain headings, not the edit protocol's markers
+    # the same question again inside the TTL is answered from the finished
+    # turn — no second clone, no second Letta turn
+    r = client.post(f"/workflows/{DONE_JOB}/chat", headers=h(),
+                    json={"question": "What does the scope section cover?"})
+    assert r.status_code == 200
+    assert r.json() == {"answer": "The scope section covers internal QC only.", "replayed": True}
+    assert len(sent) == 1 and len(spawned) == 1
+
+
+def test_chat_is_503_not_a_reconcile_when_the_fleet_was_never_created(client, monkeypatch):
+    _fresh_chat_state(monkeypatch)
+    fleet.invalidate_fleet_cache()
+    monkeypatch.setattr(db, "ready", lambda: True)
+    monkeypatch.setattr(settings, "letta_base", "http://letta.example")
+    monkeypatch.setattr(settings, "letta_key", "test-letta-key")
+
+    async def _job(jid):
+        return _done_job()
+    monkeypatch.setattr(db, "job_get", _job)
+
+    async def not_ready(client):
+        raise fleet.FleetNotReady("ragflow_search is not registered on this Letta — run a document job first")
+
+    async def must_not_reconcile(*a, **k):
+        raise AssertionError("chat must never run the ensure pass")
+    monkeypatch.setattr(fleet, "read_only_ctx", not_ready)
+    monkeypatch.setattr(fleet, "ensure_fleet_ctx", must_not_reconcile)
+
+    class _FakeLettaClient:
+        def __init__(self, *a, **k):
+            pass
+
+        @property
+        def configured(self):
+            return True
+
+        async def aclose(self):
+            pass
+    monkeypatch.setattr(main, "LettaClient", _FakeLettaClient)
+    r = client.post(f"/workflows/{DONE_JOB}/chat", headers=h(), json={"question": "q?"})
+    assert r.status_code == 503 and "run a document job first" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_retried_question_attaches_to_the_turn_in_flight(monkeypatch):
+    """Review 2026-09-27, DI2-09. The backend proxy gives a turn 170 s and
+    then answers 504 "still answering"; the person retries. The retry used to
+    start a second full turn while the first one's answer — landing a moment
+    later — was thrown away. The turn now runs as its own task: a retry of
+    the same question waits on THAT task, so one Letta turn serves both, and
+    the answer is kept for a later retry."""
+    _fresh_chat_state(monkeypatch)
+    fleet.invalidate_fleet_cache()
+    monkeypatch.setattr(db, "ready", lambda: True)
+    monkeypatch.setattr(settings, "letta_base", "http://letta.example")
+    monkeypatch.setattr(settings, "letta_key", "test-letta-key")
+
+    async def _job(jid):
+        return _done_job()
+    monkeypatch.setattr(db, "job_get", _job)
+
+    async def fake_read_only_ctx(client):
+        return fleet.FleetContext({}, [], "m", "e", "tool-1", [], fleet.FleetReport())
+
+    async def fake_spawn_ephemeral(client, agent_name, name_suffix, ctx=None, autoclear=None):
+        return "tmp-chat-2"
+    monkeypatch.setattr(fleet, "read_only_ctx", fake_read_only_ctx)
+    monkeypatch.setattr(fleet, "spawn_ephemeral", fake_spawn_ephemeral)
+
+    gate = asyncio.Event()
+    sends: list[str] = []
+
+    class _SlowLetta:
+        def __init__(self, *a, **k):
+            pass
+
+        @property
+        def configured(self):
+            return True
+
+        async def send_message(self, agent_id, text):
+            sends.append(agent_id)
+            await gate.wait()
+            return "Answer after a long think."
+
+        async def delete_agent(self, agent_id):
+            pass
+
+        async def aclose(self):
+            pass
+    monkeypatch.setattr(main, "LettaClient", _SlowLetta)
+    body = main.ChatIn(question="How long is the drying step?")
+
+    first = asyncio.create_task(main.chat_about_document(DONE_JOB, body, org=ORG))
+    await asyncio.sleep(0.01)
+    second = asyncio.create_task(main.chat_about_document(DONE_JOB, body, org=ORG))
+    await asyncio.sleep(0.01)
+    assert len(sends) == 1, "the retry must attach to the turn in flight, not start another"
+    # the first caller goes away (the proxy's 504) — the turn keeps running
+    first.cancel()
+    await asyncio.sleep(0.01)
+    gate.set()
+    assert await second == {"answer": "Answer after a long think."}
+    assert len(sends) == 1
+    # a later retry is served from the finished answer
+    assert await main.chat_about_document(DONE_JOB, body, org=ORG) == \
+        {"answer": "Answer after a long think.", "replayed": True}
+    assert len(sends) == 1
+    # a DIFFERENT question is a new turn
+    other = main.ChatIn(question="Which room?")
+    third = asyncio.create_task(main.chat_about_document(DONE_JOB, other, org=ORG))
+    await asyncio.sleep(0.01)
+    assert len(sends) == 2
+    await third
+
+
+@pytest.mark.asyncio
+async def test_the_reaper_loop_beats_and_sweeps_on_their_own_cadences(monkeypatch):
+    """DI2-02: the loop records this worker's liveness every
+    HEARTBEAT_INTERVAL_S and sweeps every REAPER_INTERVAL_S; the orphan
+    sweep of ANY process trusts a worker that beat recently."""
+    calls = []
+
+    async def fake_sleep(s):
+        calls.append(("sleep", s))
+        if len([c for c in calls if c[0] == "sleep"]) > 6:
+            raise asyncio.CancelledError
+
+    async def fake_beat():
+        calls.append(("beat",))
+
+    async def fake_sweep(where):
+        calls.append(("sweep", where))
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(db, "heartbeat", fake_beat)
+    monkeypatch.setattr(main, "_sweep_jobs", fake_sweep)
+    monkeypatch.setattr(main, "HEARTBEAT_INTERVAL_S", 60)
+    monkeypatch.setattr(main, "REAPER_INTERVAL_S", 180)
+    with pytest.raises(asyncio.CancelledError):
+        await main._reaper_loop()
+    beats = [c for c in calls if c[0] == "beat"]
+    sweeps = [c for c in calls if c[0] == "sweep"]
+    assert len(beats) == 6 and len(sweeps) == 2
+    assert all(c[1] == 60 for c in calls if c[0] == "sleep")
 
 
 @pytest.mark.asyncio

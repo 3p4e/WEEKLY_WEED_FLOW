@@ -1062,13 +1062,23 @@ def test_every_pipeline_worker_declares_autoclear():
         assert by_name[name].get("autoclear") is True, name
 
 
-def test_the_conversational_agents_keep_their_history():
-    """Clearing these would break the thing they exist to do — gf_app_assistant
-    holds a real back-and-forth with staff, and the orchestrator resolves
-    TYPE/MODE across turns."""
+def test_the_conversational_agent_keeps_its_history():
+    """Clearing this would break the thing it exists to do — gf_app_assistant
+    holds a real back-and-forth with staff."""
     by_name = {a["name"]: a for a in load_fleet()["agents"]}
-    for name in ("gf_app_assistant", "gf_doc_orchestrator"):
-        assert by_name[name].get("autoclear") is False, name
+    assert by_name["gf_app_assistant"].get("autoclear") is False
+
+
+def test_only_agents_something_drives_are_declared():
+    """Review 2026-09-27, DI2-15. gf_doc_orchestrator and gf_translator_mk_en
+    were created and reconciled on every pass (the translator holding the
+    RAGflow key) while their own personas said the pipeline never called
+    them. fleet.yaml declares the agents pipeline.py drives plus the one
+    staff assistant, and nothing else; the drift report lists a removed
+    agent as "live on the server, not declared" until an operator deletes it."""
+    from app.pipeline import DRIVEN_AGENTS
+    declared = {a["name"] for a in load_fleet()["agents"]}
+    assert declared == set(DRIVEN_AGENTS) | {"gf_app_assistant"}, declared
 
 
 def test_every_agent_states_its_autoclear_intent_explicitly():
@@ -1165,8 +1175,7 @@ def test_reporting_and_conversational_agents_are_not_verbatim():
     """gf_reg_checker returns findings and gf_app_assistant talks to a person —
     both SHOULD say when a corpus is missing."""
     by_name = {a["name"]: a for a in load_fleet()["agents"]}
-    for name in ("gf_reg_checker", "gf_app_assistant", "gf_qa_auditor",
-                 "gf_translator_mk_en", "gf_doc_orchestrator"):
+    for name in ("gf_reg_checker", "gf_app_assistant", "gf_qa_auditor"):
         assert not by_name[name].get("verbatim_output"), name
 
 
@@ -1724,3 +1733,115 @@ def test_the_tool_paginates_past_the_first_hundred_datasets(monkeypatch):
     out = json.loads(_load_tool_callable()("q", "eCoA_DATABASE"))
     assert seen == [1, 2]
     assert out["ok"] is True and out["searched"] == ["eCoA_DATABASE"]
+
+
+# ── read-only context for chat (DI2-09) and locks around every write (DI2-10) ─
+
+
+class _ListingOnlyClient:
+    """A Letta that can be LISTED and nothing else: any write is an
+    AttributeError, which is the point — read_only_ctx must never need one."""
+
+    def __init__(self, agents, tools):
+        self._agents, self._tools = agents, tools
+
+    async def list_agents(self, name=None):
+        return list(self._agents)
+
+    async def list_tools(self):
+        return list(self._tools)
+
+    async def list_models(self):
+        return []
+
+    async def list_embedding_models(self):
+        return []
+
+
+def _live_fleet(spec):
+    return [{"id": f"id-{a['name']}", "name": a["name"], "tools": [],
+             "llm_config": {"handle": spec["defaults"]["model"]},
+             "embedding_config": {"handle": spec["defaults"]["embedding"]}}
+            for a in spec["agents"]]
+
+
+@pytest.mark.asyncio
+async def test_read_only_ctx_resolves_from_listings_and_writes_nothing():
+    spec = load_fleet()
+    live = _live_fleet(spec) + [{"id": "tmp-1", "name": "gf_sop_author_tmp_chat_x", "tools": []}]
+    ctx = await fleet.read_only_ctx(_ListingOnlyClient(live, [{"id": "tool-9", "name": fleet.TOOL_NAME}]))
+    assert ctx.tool_id == "tool-9"
+    assert ctx.agents == {a["name"]: f"id-{a['name']}" for a in spec["agents"]}
+    assert "gf_sop_author_tmp_chat_x" not in ctx.agents
+    assert ctx.existing == live
+    assert ctx.model and ctx.embedding
+
+
+@pytest.mark.asyncio
+async def test_read_only_ctx_refuses_rather_than_creates_what_is_missing():
+    spec = load_fleet()
+    with pytest.raises(fleet.FleetNotReady, match="ragflow_search is not registered"):
+        await fleet.read_only_ctx(_ListingOnlyClient(_live_fleet(spec), []))
+    with pytest.raises(fleet.FleetNotReady, match="gf_qa_auditor"):
+        live = [a for a in _live_fleet(spec) if a["name"] != "gf_qa_auditor"]
+        await fleet.read_only_ctx(_ListingOnlyClient(live, [{"id": "t", "name": fleet.TOOL_NAME}]))
+
+
+@pytest.mark.asyncio
+async def test_the_ensure_pass_reconciles_every_write_under_the_agents_lock(monkeypatch):
+    """Review 2026-09-27, DI2-10. Only the config reconciler took the agent's
+    lock; a block rewrite or a sandbox-environment PATCH could land under a
+    tool call a job had in flight on that agent. All four reconcilers now
+    run inside agent_lock(name) in the ensure pass."""
+    spec = load_fleet()
+    live = _live_fleet(spec)
+    held: dict[str, list[str]] = {}
+
+    def saw(what):
+        def _rec(label):
+            held.setdefault(label, []).append(what if fleet.agent_lock(label).locked() else f"{what}:UNLOCKED")
+        return _rec
+
+    async def fake_tool(client, agent_id, ag, tool_id, have, label, revoke=False):
+        saw("tool")(label)
+        return None
+
+    async def fake_blocks(client, agent_id, ag, spec, label, pending=None, report=None):
+        saw("blocks")(label)
+        return []
+
+    async def fake_env(client, agent, ag, label, revoke=False):
+        saw("env")(label)
+        return False
+
+    async def fake_config(client, agent, ag, spec, label, report=None, locked=False):
+        saw("config")(label)
+        assert locked is True, "the pass holds the lock; a re-take would deadlock"
+        return False
+
+    async def fake_sweep(client, existing, report):
+        return existing
+
+    async def fake_served(client):
+        return None, None
+
+    async def fake_tool_id(client, spec=None):
+        return "tool-1"
+
+    async def fake_pending(spec, report=None):
+        return []
+    monkeypatch.setattr(fleet, "_reconcile_retrieval_tool", fake_tool)
+    monkeypatch.setattr(fleet, "_reconcile_blocks", fake_blocks)
+    monkeypatch.setattr(fleet, "_reconcile_tool_env", fake_env)
+    monkeypatch.setattr(fleet, "_reconcile_config", fake_config)
+    monkeypatch.setattr(fleet, "_sweep_orphans", fake_sweep)
+    monkeypatch.setattr(fleet, "_served_handles", fake_served)
+    monkeypatch.setattr(fleet, "ensure_tool", fake_tool_id)
+    monkeypatch.setattr(fleet, "resolve_pending", fake_pending)
+
+    ctx = await fleet._ensure_fleet_pass(_ListingOnlyClient(live, [{"id": "tool-1", "name": fleet.TOOL_NAME}]))
+    assert set(ctx.agents) == {a["name"] for a in spec["agents"]}
+    for name in ctx.agents:
+        assert held[name] == ["tool", "blocks", "env", "config"], (name, held[name])
+    # and the pass released every lock
+    assert not any(fleet.agent_lock(n).locked() for n in ctx.agents)
