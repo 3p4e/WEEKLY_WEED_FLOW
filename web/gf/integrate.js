@@ -138,7 +138,10 @@ GF.WWF.toggleArchived = async () => {
 GF.WWF.buildCalendar = (weeks) => {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const ws = (weeks || []).slice().sort((a,b)=> new Date(a.starts_on) - new Date(b.starts_on));
-  const now = new Date(); let todayId = 0;
+  // The facility's day picks the current week: a reader in another zone,
+  // or the 22:00–24:00 UTC window, must not land on a different week than
+  // the server's (review 2026-09-27, FE-07). Noon avoids any DST edge.
+  const now = new Date(GF.facilityToday() + 'T12:00:00'); let todayId = 0;
   // Map into a local first — only replace the calendar once we know we have
   // real weeks. Assigning the (empty) result before the length check would
   // wipe core.js's generated fallback and blank week navigation when /weeks
@@ -297,6 +300,22 @@ GF.WWF.resetCaches = () => {
 GF.WWF.loadAndRender = async () => {
   // Never render one account's cached module data under another's session.
   GF.WWF.resetCaches();
+  // The facility clock (facility_tz / facility_today) rides on the login
+  // response since 14e14f2, but a session restored from sessionStorage was
+  // stored by an older build and lacks it — and without it every date
+  // picker, plant id and "today" fell back to the browser's day (review
+  // 2026-09-27, FE-07). Refresh the profile from /auth/me once, before
+  // anything that prints a date renders. A failure here is not fatal: the
+  // fallbacks in GF.facilityToday remain what the app always did.
+  if (GF.API.user && !GF.API.user.facility_tz && GF.API.me) {
+    try {
+      const fresh = await GF.API.me();
+      if (fresh && fresh.id) {
+        GF.API.user = Object.assign({}, GF.API.user, fresh);
+        try { sessionStorage.setItem('wwf_user', JSON.stringify(GF.API.user)); } catch (e) {}
+      }
+    } catch (e) { if (e && (e.status === 401 || e.message === 'unauthorized')) return; }
+  }
   const u = GF.API.user || {};
   GF.WWF.meId = u.id || 'me';
   GF.state.user = GF.WWF.meId;

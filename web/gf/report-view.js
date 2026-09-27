@@ -286,7 +286,7 @@ GF.WWF._reportMarkup = () => {
     // due_date): a positive-offset facility would otherwise see its "now" sit
     // ahead of the UTC-midnight due date by the timezone offset, adding an
     // extra day to every count (same idiom as GF.WWF.shiftReportWeek above).
-    const today = new Date(GF.todayISO() + 'T00:00:00');
+    const today = new Date(GF.facilityToday() + 'T00:00:00');
     overdueList = `<div style="margin:18px 0" id="report-overdue">
       <div style="font-weight:700;font-size:14px;color:var(--red);margin-bottom:8px">${GF.icon('flag', 'icon', 'var(--red)')} ${AL('Overdue', 'Задоцнети')} (${d.overdue.length})</div>
       ${d.overdue.map(t => {

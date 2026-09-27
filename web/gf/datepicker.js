@@ -31,6 +31,12 @@ window.GF = window.GF || {};
   const REG = {};            // id → cfg (rebuilt every time the form renders)
   let openId = null;
   let viewY = 0, viewM = 0;  // the month the grid is currently showing
+  // Where the KEYBOARD is looking (ISO), which is not the chosen date. The
+  // arrow keys used to write straight into the input, so opening an empty
+  // expiry date, glancing a week ahead with ↓ and dismissing left that week's
+  // date in the field, saved with the form (review 2026-09-27, FE-08). Only
+  // Enter or a click writes a value — the file's own contract above.
+  let cursor = null;
 
   const MK_MONTHS = ['јануари', 'февруари', 'март', 'април', 'мај', 'јуни',
                      'јули', 'август', 'септември', 'октомври', 'ноември', 'декември'];
@@ -106,8 +112,11 @@ window.GF = window.GF || {};
     for (let d = 1; d <= days; d++) {
       const v = iso(viewY, viewM, d);
       const on = v === cur, isToday = v === today, ok = inRange(cfg, v);
+      // `on` is the CHOSEN date (the input's value); `dp-cursor` is only
+      // where the keyboard is looking. The two are different facts.
+      const isCursor = v === cursor;
       cells.push(
-        `<button type="button" class="dp-cell${on ? ' on' : ''}${isToday ? ' dp-today' : ''}"`
+        `<button type="button" class="dp-cell${on ? ' on' : ''}${isToday ? ' dp-today' : ''}${isCursor ? ' dp-cursor' : ''}"`
         + `${ok ? '' : ' disabled'} data-v="${v}"`
         + ` aria-current="${isToday ? 'date' : 'false'}"`
         + ` onclick="GF.pickDate('${openId}', this.dataset.v)">${d}</button>`);
@@ -178,6 +187,9 @@ window.GF = window.GF || {};
     // today — the whole point of this control.
     const at = parse(cur) || parse(GF.facilityToday()) || parse(GF.todayISO());
     viewY = at.y; viewM = at.m;
+    // The keyboard starts on the chosen date, or on today — highlighted,
+    // not written. Enter is what turns it into a value.
+    cursor = iso(at.y, at.m, at.d);
 
     const trigger = ev ? (ev.currentTarget || ev.target) : null;
     const triggerRect = trigger ? trigger.getBoundingClientRect() : null;
@@ -216,38 +228,42 @@ window.GF = window.GF || {};
     }
   };
 
+  // The ONE writer. A click on a day, the Today / Clear buttons and Enter all
+  // come here; nothing else assigns the input.
   GF.pickDate = (id, v) => {
     const cfg = REG[id];
     if (!cfg) return;
     const inp = GF.$(id);
     if (inp) { inp.value = v || ''; GF.syncDate(id); }
-    GF.closeModal('gf-datepicker'); openId = null;
+    GF.closeModal('gf-datepicker'); openId = null; cursor = null;
     if (cfg.onPick) cfg.onPick(v || '');
   };
 
-  // Keyboard: arrows walk days, PageUp/Down change month, Enter picks the
-  // focused day. The grid's buttons are real buttons, so Tab already works —
-  // this adds the calendar-shaped movement on top.
+  // Keyboard: arrows move the CURSOR (highlight + focus only), PageUp/Down
+  // change month, Enter picks the cursor day. The grid's buttons are real
+  // buttons, so Tab already works — this adds the calendar-shaped movement
+  // on top. Dismissing the picker after moving the cursor leaves the input
+  // exactly as it was.
   document.addEventListener('keydown', (e) => {
     const el = GF.$('gf-datepicker');
     if (!el || !el.classList.contains('open') || !openId) return;
     const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
     if (step) {
       e.preventDefault();
-      const cur = (GF.$(openId) || {}).value;
-      const at = parse(cur) || parse(GF.facilityToday());
+      const at = parse(cursor) || parse((GF.$(openId) || {}).value) || parse(GF.facilityToday());
       const d = new Date(at.y, at.m, at.d + step);
       const v = iso(d.getFullYear(), d.getMonth(), d.getDate());
       if (!inRange(REG[openId], v)) return;
-      const inp = GF.$(openId);
-      if (inp) { inp.value = v; GF.syncDate(openId); }
+      cursor = v;
       viewY = d.getFullYear(); viewM = d.getMonth();
       repaint();
+      const cell = el.querySelector('.dp-cell.dp-cursor');
+      if (cell && cell.focus) cell.focus();
     } else if (e.key === 'PageUp' || e.key === 'PageDown') {
       e.preventDefault(); GF._dpMove(e.key === 'PageUp' ? -1 : 1);
     } else if (e.key === 'Enter') {
-      const cur = (GF.$(openId) || {}).value;
-      if (parse(cur)) { e.preventDefault(); GF.pickDate(openId, cur); }
+      const v = parse(cursor) ? cursor : (GF.$(openId) || {}).value;
+      if (parse(v) && inRange(REG[openId], v)) { e.preventDefault(); GF.pickDate(openId, v); }
     }
   });
 })();

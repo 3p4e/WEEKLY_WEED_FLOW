@@ -250,7 +250,19 @@ GF.calendar = { weeks: [], todayId: 0 };
   }
   GF.state.selWeek = GF.calendar.todayId;
 })();
-GF.todayDay = GF.DAYS[(new Date().getDay() + 6) % 7];
+// The facility's day of the week, read live: a tab left open across
+// midnight, or a reader in another zone, gets the facility's answer rather
+// than a value frozen at load in the browser's zone (review 2026-09-27,
+// FE-07). A getter keeps every `GF.todayDay` read site unchanged.
+// GF.facilityToday is defined further down; the getter only runs on read.
+Object.defineProperty(GF, 'todayDay', {
+  configurable: true, enumerable: true,
+  get() {
+    const iso = GF.facilityToday ? GF.facilityToday() : GF.localDateStr(new Date());
+    const d = new Date(iso + 'T00:00:00');
+    return GF.DAYS[((isNaN(d.getTime()) ? new Date() : d).getDay() + 6) % 7];
+  },
+});
 // Format a Date using its LOCAL (browser/facility) calendar day — unlike
 // `d.toISOString()`, which always converts to UTC first: for any positive
 // UTC offset (e.g. Europe/Skopje), converting a local midnight back through

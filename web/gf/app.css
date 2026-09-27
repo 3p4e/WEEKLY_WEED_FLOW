@@ -948,6 +948,7 @@ body.demo-on .main{padding-bottom:56px}
    exists to make the facility's today findable at a glance. */
 .dp-today{box-shadow:inset 0 0 0 1.5px var(--primary);font-weight:600}
 .dp-cell.on{background:var(--primary);color:var(--text-on-primary);font-weight:600}
+.dp-cell.dp-cursor{outline:2px solid var(--primary);outline-offset:-2px}
 .dp-foot{display:flex;gap:8px;margin-top:12px}
 .dp-foot .btn{flex:1}
 /* Toolbar-embedded date fields (report/exec-report week jump) size to their

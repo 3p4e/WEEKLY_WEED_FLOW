@@ -90,7 +90,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
   const keep = resetForm ? null : GF.WWF._WL_FIELDS
     .map((id) => [id, (GF.$(id) || {}).value])
     .filter(([, v]) => v !== undefined);
-  const today = GF.todayISO();
+  const today = GF.facilityToday();
   const me = (GF.API.user || {}).id;
   const elevated = AUDIT_ROLES.includes((GF.API.user || {}).role);
 

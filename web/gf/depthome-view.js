@@ -27,7 +27,7 @@ GF.views = GF.views || {};
       ...attrs.map(a => `<span class="mw-attr">${GF.esc(a.label)} <b>${GF.esc(a.val)}</b></span>`),
       ...(t.tags || []).slice(0, 3).map(tag => `<span class="mw-htag">#${GF.esc(tag)}</span>`),
       t.sessionHours ? `<span class="mw-sub">${GF.esc(t.sessionHours)}h</span>` : '',
-      t.due ? `<span class="mw-due${(t.status !== 'done' && t.due < GF.todayISO()) ? ' mw-due--over' : ''}">${GF.esc(t.due.slice(5))}</span>` : '',
+      t.due ? `<span class="mw-due${(t.status !== 'done' && t.due < GF.facilityToday()) ? ' mw-due--over' : ''}">${GF.esc(t.due.slice(5))}</span>` : '',
       `<span class="prtag ${t.pr}">${GF.prLabel(t.pr)}</span>`,
     ].filter(Boolean).join('');
     return `<div class="mw-tcard${t.status === 'done' ? ' mw-tcard--done' : ''}" style="--mw-acc:${d.color}" onclick="GF.state.expanded.add('${t.id}');GF.setView('mywork')">

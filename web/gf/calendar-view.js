@@ -32,13 +32,13 @@ window.GF = window.GF || {};
   };
 
   GF.views.calendar = () => {
-    const now = new Date();
+    const now = new Date(GF.facilityToday() + 'T12:00:00');   // the facility's month, not the reader's
     const base = new Date(now.getFullYear(), now.getMonth() + GF.state.calOffset, 1);
     const y = base.getFullYear(), m = base.getMonth();
     const first = new Date(y, m, 1);
     const startDow = (first.getDay() + 6) % 7;                  // Monday-first
     const daysIn = new Date(y, m + 1, 0).getDate();
-    const todayISO = GF.todayISO();   // facility-local; UTC toISOString() drifts a day for +offset
+    const todayISO = GF.facilityToday();   // the facility's day (review 2026-09-27, FE-07)
 
     // Bucket every task (top-level + tree children) by due date.
     const kids = Object.values(GF.state.children || {}).flat();
