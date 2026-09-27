@@ -607,15 +607,20 @@
   // an input TO the QP batch-release decision). Coexists with the per-
   // certificate CoQ render above.
   GF.WWF._qccoq = { list: null, sel: null, detail: null, loading: false, error: null,
-                    cultivars: null };
+                    cultivars: null, products: null };
 
   GF.WWF.loadQcCoqs = async () => {
     const st = GF.WWF._qccoq;
     st.loading = true; st.error = null;
     try {
       st.list = await GF.API.qcCoqs({});
-      // cultivar picker data for the compile form — a compiled CoQ freezes the
-      // cultivar's APPROVED potency ladder, so the picker is how grading starts
+      // picker data for the compile form: the APPROVED products of the
+      // official catalogue (a CoQ names the product it certifies against;
+      // the cultivar follows from it), and — for strains with no product yet —
+      // the cultivars, whose APPROVED ladder the CoQ then freezes (legacy).
+      if (st.products === null) {
+        st.products = await GF.API.qcProducts({ status: 'APPROVED' }).catch(() => []);
+      }
       if (st.cultivars === null) {
         st.cultivars = (await GF.API.cultivars().catch(() => ({ cultivars: [] }))).cultivars || [];
       }
@@ -649,8 +654,12 @@
     const pn = g('qcq-product').trim(); if (pn) body.product_name = pn;
     const bs = g('qcq-size').trim(); if (bs) body.batch_size = bs;
     const md = g('qcq-mfg'); if (md) body.manufacture_date = md;
-    // freeze the cultivar's APPROVED potency ladder at compile (Phase B)
-    const cv = g('qcq-cultivar'); if (cv) body.cultivar_id = cv;
+    // The product the lot is certified against (official catalogue): the
+    // cultivar is derived from it server-side. Without a product, a cultivar
+    // alone freezes its APPROVED potency ladder at compile (legacy, Phase B).
+    const pid = g('qcq-productid');
+    if (pid) body.product_id = pid;
+    else { const cv = g('qcq-cultivar'); if (cv) body.cultivar_id = cv; }
     try {
       const coq = await GF.API.qcCompileCoq(body);
       GF.toast(AL('CoQ compiled: ', 'CoQ составен: ') + coq.coq_number);
@@ -701,6 +710,28 @@
     const cult = p.cultivar_name
       ? `<span>${AL('Cultivar', 'Сорта')}</span><b>${GF.esc(p.cultivar_name)}${p.cultivar_code ? ` <span class="ana-note mono">${GF.esc(p.cultivar_code)}</span>` : ''}</b>`
       : '';
+    // The official product (kind "product"): the product it certifies against,
+    // its window, and the owner's out-of-grade verdict (2026-09-06) — conforms,
+    // or does not and falls to the product whose window holds the value.
+    if (p.kind === 'product') {
+      const n2 = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
+      const tot = (p.total_d9_thc !== null && p.total_d9_thc !== undefined)
+        ? ` <span class="ana-note">(Total Δ9-THC ${GF.esc(n2(p.total_d9_thc))} %)</span>` : '';
+      let verdict;
+      if (p.conforms === true) {
+        verdict = `<span class="chip-opt" style="border-color:var(--green);color:var(--green)">✓ ${AL('conforms', 'одговара')}</span>`;
+      } else if (p.conforms === false) {
+        verdict = `<span class="chip-opt" style="border-color:var(--red);color:var(--red)">✗ ${AL('does not conform', 'не одговара')}</span> `
+          + (p.regrade_to
+            ? `<span class="chip-opt qcq-regrade" style="border-color:var(--amber);color:var(--amber)">${AL('REGRADED', 'ПРЕКЛАСИРАНО')} → ${GF.esc(p.regrade_to)}</span>`
+            : `<span class="chip-opt qcq-regrade" style="border-color:var(--amber);color:var(--amber)">${AL('fits no grade — OOS on batch disposition', 'не одговара на ниту една класа — OOS за диспозицијата')}</span>`);
+      } else {
+        verdict = `<span class="ana-note">${AL('Total Δ9-THC not measured', 'вкупен Δ9-THC не е измерен')}</span>`;
+      }
+      return cult
+        + `<span>${AL('Product', 'Производ')}</span><b class="mono">${GF.esc(p.product_code)} <span class="ana-note">· ${AL('nominal', 'номинал')} ${GF.esc(n2(p.nominal))} % · ${GF.esc(n2(p.window_min))}–${GF.esc(n2(p.window_max))} % · ${GF.esc(p.doc_code || '')} ${GF.esc(p.doc_version || '')}</span></b>`
+        + `<span>${AL('Grade', 'Оцена')}</span><b>${verdict}${tot}</b>`;
+    }
     let grade = '';
     if (p.disposition) {
       const tot = (p.total_d9_thc !== null && p.total_d9_thc !== undefined)
@@ -756,12 +787,16 @@
     const specOpts = (st.specs || []).map(s =>
       `<option value="${s.id}">${GF.esc(s.spec_id)} · ${GF.esc(s.material_code)}</option>`).join('');
     const cvOpts = (cq.cultivars || []).filter(v => v.is_active !== false).map(v =>
-      `<option value="${v.id}">${GF.esc(v.code)} · ${GF.esc(v.name)}</option>`).join('');
+      `<option value="${GF.esc(v.id)}">${GF.esc(v.code)} · ${GF.esc(v.name)}</option>`).join('');
+    const n2 = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
+    const prodOpts = (cq.products || []).map(p =>
+      `<option value="${GF.esc(p.id)}">${GF.esc(p.product_code)} · ${GF.esc(p.cultivar_name || p.cultivar_code || '')} · ${GF.esc(n2(p.window_min))}–${GF.esc(n2(p.window_max))} % · ${GF.esc(p.doc_version || '')}</option>`).join('');
     const compile = canWrite() ? `
       <div class="qcs-form" style="margin-bottom:10px">
         <input id="qcq-batch" placeholder="${AL('Batch id', 'Серија')}">
         <select id="qcq-spec"><option value="">${AL('Specification…', 'Спецификација…')}</option>${specOpts}</select>
-        <select id="qcq-cultivar" title="${AL('Freezes the APPROVED potency ladder of the cultivar on this CoQ — the batch grades against it', 'Ја замрзнува ОДОБРЕНАТА скала на сортата на овој CoQ — серијата се оценува според неа')}"><option value="">${AL('Cultivar (grades the batch)…', 'Сорта (ја оценува серијата)…')}</option>${cvOpts}</select>
+        <select id="qcq-productid" title="${AL('The official product the lot is certified against — its window grades the batch; the cultivar follows from it', 'Официјалниот производ според кој се сертифицира серијата — неговиот опсег ја оценува; сортата произлегува од него')}"><option value="">${AL('Product (grades the batch)…', 'Производ (ја оценува серијата)…')}</option>${prodOpts}</select>
+        <select id="qcq-cultivar" title="${AL('Only for a strain with no approved product: freezes the cultivar\'s APPROVED potency ladder on this CoQ (legacy)', 'Само за сорта без одобрен производ: ја замрзнува ОДОБРЕНАТА скала на сортата (застарено)')}"><option value="">${AL('Cultivar (legacy ladder)…', 'Сорта (застарена скала)…')}</option>${cvOpts}</select>
         <input id="qcq-product" placeholder="${AL('Product name (opt.)', 'Име на производ (опц.)')}">
         <input id="qcq-size" placeholder="${AL('Batch size (opt.)', 'Големина (опц.)')}">
         <label class="ana-note">${AL('Mfg.', 'Произв.')} ${GF.dateField('qcq-mfg', {})}</label>

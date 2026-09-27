@@ -106,6 +106,89 @@ test('commercial identity renders only when present', () => {
   assert.ok(!/Commercial identity|Комерцијален идентитет/.test(html), 'no identity row');
 });
 
+test('a product-graded CoQ shows the product, its window and the conformance verdict', () => {
+  const h = load();
+  let html = renderCoqDetail(h, {
+    kind: 'product', product_id: 'p26', product_code: 'GP_THC26:CBD1', product_status: 'APPROVED',
+    doc_code: 'QCSP 001', doc_version: 'v.03', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+    nominal: 26, window_min: 23.4, window_max: 28.59, total_d9_thc: 23.98, conforms: true,
+    matching: ['GP_THC26:CBD1', 'GP_THC24:CBD1'], nearest: 'GP_THC24:CBD1', regrade_to: null,
+  });
+  assert.ok(html.includes('Grape Pie'), 'cultivar row');
+  assert.ok(html.includes('GP_THC26:CBD1'), 'product code');
+  assert.ok(html.includes('23.40–28.59 %') && html.includes('26.00 %'), 'window and nominal');
+  assert.ok(html.includes('QCSP 001 v.03'), 'document cited, not the ladder');
+  assert.ok(!html.includes('PP-QC-SPEC-001'), 'no ladder cited on a product-graded CoQ');
+  assert.match(html, /✓ (conforms|одговара)/);
+  assert.ok(html.includes('23.98'), 'measured Total Δ9-THC shown');
+  assert.ok(!html.includes('qcq-regrade'), 'no regrade chip when it conforms');
+
+  // outside the window: the owner's out-of-grade rule — flagged, and the
+  // product whose window holds the value named
+  html = renderCoqDetail(h, {
+    kind: 'product', product_id: 'p26', product_code: 'GP_THC26:CBD1', product_status: 'APPROVED',
+    doc_code: 'QCSP 001', doc_version: 'v.03', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+    nominal: 26, window_min: 23.4, window_max: 28.59, total_d9_thc: 22.1, conforms: false,
+    matching: ['GP_THC24:CBD1'], nearest: 'GP_THC24:CBD1', regrade_to: 'GP_THC24:CBD1',
+  });
+  assert.match(html, /✗ (does not conform|не одговара)/);
+  assert.ok(html.includes('qcq-regrade') && html.includes('GP_THC24:CBD1'), 'REGRADED → chip');
+  assert.match(html, /REGRADED|ПРЕКЛАСИРАНО/);
+
+  // outside every window of the strain: no regrade target is invented
+  html = renderCoqDetail(h, {
+    kind: 'product', product_id: 'p26', product_code: 'GP_THC26:CBD1', product_status: 'APPROVED',
+    doc_code: 'QCSP 001', doc_version: 'v.03', cultivar_code: 'GP', cultivar_name: 'Grape Pie',
+    nominal: 26, window_min: 23.4, window_max: 28.59, total_d9_thc: 20.29, conforms: false,
+    matching: [], nearest: 'GP_THC18:CBD1', regrade_to: null,
+  });
+  assert.match(html, /fits no grade|не одговара на ниту една класа/);
+  assert.ok(!html.includes('→ GP_THC18:CBD1'), 'the nearest window is not presented as a regrade');
+});
+
+test('the compile form offers the APPROVED products and sends product_id, not cultivar_id', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.WWF._qccoa = Object.assign(w.GF.WWF._qccoa || {}, {
+    coas: [], loading: false, error: null, specs: [], samples: [], labs: [],
+    q: '', status: '', sel: null, detail: null,
+  });
+  w.GF.WWF._qccoq = { list: [], sel: null, loading: false, error: null, detail: null,
+                      cultivars: [{ id: 'cv9', code: 'GP', name: 'Grape Pie', is_active: true }],
+                      products: [{ id: 'p26', product_code: 'GP_THC26:CBD1', cultivar_code: 'GP',
+                                   cultivar_name: 'Grape Pie', window_min: 23.4, window_max: 28.59,
+                                   doc_version: 'v.03', status: 'APPROVED' }] };
+  const html = w.GF.views.qccoa();
+  assert.ok(html.includes('id="qcq-productid"'), 'product select present');
+  assert.ok(html.includes('GP_THC26:CBD1 · Grape Pie · 23.40–28.59 % · v.03'), 'product option rendered');
+  const fields = { 'qcq-batch': 'GP0824_02', 'qcq-spec': 'spec1', 'qcq-product': '',
+                   'qcq-size': '', 'qcq-mfg': '', 'qcq-cultivar': 'cv9', 'qcq-productid': 'p26' };
+  w.document.getElementById = (id) => (id in fields ? { value: fields[id] } : null);
+  let sent = null;
+  w.GF.API.qcCompileCoq = async (b) => { sent = b; return { id: 'x', coq_number: 'CoQ-PP-2026-0011' }; };
+  w.GF.API.qcCoqs = async () => [];
+  w.GF.API.qcProducts = async () => [];
+  w.GF.toast = () => {};
+  await w.GF.WWF.qcCoqCompile();
+  assert.ok(sent, 'compile called');
+  assert.equal(sent.product_id, 'p26', 'the product grades the batch');
+  assert.equal(sent.cultivar_id, undefined, 'the cultivar follows from the product server-side');
+});
+
+test('loadQcCoqs fetches the APPROVED products for the compile form once', async () => {
+  const h = load();
+  const w = h.window;
+  const asked = [];
+  w.GF.API.qcCoqs = async () => [];
+  w.GF.API.qcProducts = async (q) => { asked.push(q); return []; };
+  w.GF.API.cultivars = async () => ({ cultivars: [] });
+  await w.GF.WWF.loadQcCoqs();
+  await w.GF.WWF.loadQcCoqs();
+  // JSON round-trip: the objects were made in the jsdom realm, whose Object
+  // prototype is not Node's, and deepEqual compares prototypes.
+  assert.deepEqual(JSON.parse(JSON.stringify(asked)), [{ status: 'APPROVED' }]);
+});
+
 test('the CoQ compile form carries the cultivar picker and sends cultivar_id', async () => {
   const h = load();
   const w = h.window;

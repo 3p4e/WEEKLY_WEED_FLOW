@@ -1550,3 +1550,25 @@ body.demo-on .main{padding-bottom:56px}
 .fp-r.off .fp-rt{opacity:.25}
 .fp-rt{font:700 4.6px var(--mono);fill:#e9f3ee;opacity:.9;pointer-events:none;
   paint-order:stroke;stroke:#0b1512;stroke-width:1.5px}
+
+/* ── QC product catalogue (qcpotency-view.js) ──────────────────────────
+   Products grouped under their cultivar; the group line is a heading, not a
+   selectable row. The import panel takes the Potency Spec Service export as
+   pasted text; the conformance lookup and the tested-so-far chips sit inside
+   the product's detail. */
+.qcprod-group{display:flex;gap:10px;align-items:center;padding:10px 8px 4px;margin-top:6px;
+  border-bottom:1px solid var(--line);font-weight:600;color:var(--ink-2)}
+.qcprod-group .qms-title{font-weight:600}
+.qcprod-import textarea{width:100%;box-sizing:border-box;font:12px var(--mono);
+  background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;
+  padding:8px 10px;resize:vertical}
+.qcprod-preview{margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px}
+.qcprod-hist{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px;
+  margin-top:4px;align-items:baseline}
+.qcprod-hist b{color:var(--ink);font-weight:500}
+.qcprod-vals{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.qcprod-conf{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.qcprod-conf .qcs-form{margin-top:6px}
+.qcprod-conf-out{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.qcprod-conf-out .ana-note{flex-basis:100%;margin-top:2px}
+.qcprod-legacy summary{list-style:revert}

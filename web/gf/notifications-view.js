@@ -58,6 +58,27 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
                                        `${a} премести ${p.plant_count} × ${p.strain}: ${p.old_room} (${p.old_phase}) → ${p.room} (${p.phase})`);
       case 'batch_closed':   return AL(`${a} closed the ${p.strain} batch in ${p.room} (${p.plant_count} plants)`,
                                        `${a} ја затвори серијата ${p.strain} во ${p.room} (${p.plant_count} растенија)`);
+      // The product catalogue (qc/products.py) and the owner's out-of-grade
+      // rule of 2026-09-06: a Total Δ9-THC outside the certified product's
+      // window is handed to Cultivation and Production as a deviation.
+      case 'potency_deviation': {
+        const w = (p.window_min != null && p.window_max != null) ? ` (${p.window_min}–${p.window_max} %)` : '';
+        const fall = p.regrade_to
+          ? AL(` — the lot falls to ${p.regrade_to}`, ` — серијата паѓа на ${p.regrade_to}`)
+          : AL(' — no grade of the strain holds it', ' — ниту една класа на сортата не ја содржи');
+        return AL(`Potency deviation on batch ${p.batch_id}: Total Δ9-THC ${p.total_d9_thc} % is outside ${p.product_code}${w}${fall}; a formal OOS is required on the batch disposition (${p.coq_number})`,
+                  `Отстапување на јачина кај серија ${p.batch_id}: вкупен Δ9-THC ${p.total_d9_thc} % е надвор од ${p.product_code}${w}${fall}; потребен е формален OOS за диспозицијата на серијата (${p.coq_number})`);
+      }
+      case 'product_created':   return AL(`${a} authored product ${p.product_code} (${p.cultivar})`,
+                                          `${a} состави производ ${p.product_code} (${p.cultivar})`);
+      case 'product_approved':  return AL(`${a} approved product ${p.product_code} (${p.cultivar}${p.doc_version ? ', ' + p.doc_version : ''})`,
+                                          `${a} одобри производ ${p.product_code} (${p.cultivar}${p.doc_version ? ', ' + p.doc_version : ''})`);
+      case 'product_ladder_created': return AL(`${a} authored the ${p.cultivar} ladder ${p.doc_version}: grades ${(p.grades || []).join(', ')}`,
+                                               `${a} ја состави скалата ${p.cultivar} ${p.doc_version}: класи ${(p.grades || []).join(', ')}`);
+      case 'product_catalogue_imported': return AL(`${a} imported the ImB pages ${p.doc_code} ${p.doc_version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе ImB страниците ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
+      case 'fitted_catalogue_imported':  return AL(`${a} imported the fitted specifications ${p.doc_code} ${p.doc_version}: ${p.created} created, ${p.skipped} skipped, ${p.conflicts} conflicts`,
+                                                   `${a} ги внесе фитуваните спецификации ${p.doc_code} ${p.doc_version}: ${p.created} внесени, ${p.skipped} прескокнати, ${p.conflicts} конфликти`);
       default:               return `${a}: ${n.verb} ${t}`;
     }
   };
@@ -86,6 +107,12 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     batch_moved: { en: 'Batches moved', mk: 'Преместени серии' },
     clone_run_started: { en: 'Clone runs started', mk: 'Започнати клонирања' },
     batch_closed: { en: 'Batches closed', mk: 'Затворени серии' },
+    potency_deviation: { en: 'Potency deviations', mk: 'Отстапувања на јачина' },
+    product_created: { en: 'Products authored', mk: 'Составени производи' },
+    product_approved: { en: 'Products approved', mk: 'Одобрени производи' },
+    product_ladder_created: { en: 'Ladders authored', mk: 'Составени скали' },
+    product_catalogue_imported: { en: 'ImB pages imported', mk: 'Внесени ImB страници' },
+    fitted_catalogue_imported: { en: 'Fitted specs imported', mk: 'Внесени фитувани спецификации' },
   };
   const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };
 

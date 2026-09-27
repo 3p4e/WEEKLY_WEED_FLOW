@@ -365,18 +365,24 @@ GF.API = {
   qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
   qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
   qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
-  // The official ImB product catalogue (qc_products) — one page per product,
-  // window = nominal ±10 %. The ladders above stay readable for CoQs issued
-  // before it, but the catalogue is what a batch, a mother and a CoQ now name.
+  // The official product catalogue (qc_products) — one page per product with
+  // the window it stores (the ImB v.03 pages, or the fitted specifications of
+  // 2026-09-18). The ladders above stay readable for CoQs issued before it,
+  // but the catalogue is what a batch, a mother and a CoQ now name.
   qcProducts(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/products' + (u?'?'+u:'')); },
   qcProduct(id)            { return this._req('GET', '/qc/products/' + id); },
   qcProductCreate(b)       { return this._req('POST', '/qc/products', b); },
   qcProductPatch(id, b)    { return this._req('PATCH', '/qc/products/' + id, b); },
+  qcProductLadderCreate(b) { return this._req('POST', '/qc/products/ladder', b); },
   qcApproveProduct(id)     { return this._req('POST', '/qc/products/' + id + '/approve'); },
   qcSupersedeProduct(id)   { return this._req('POST', '/qc/products/' + id + '/supersede'); },
   qcImportProducts(b)      { return this._req('POST', '/qc/products/import', b || {}); },
+  qcImportFittedProducts(b){ return this._req('POST', '/qc/products/import-fitted', b); },
   qcProductPotency(id)     { return this._req('GET', '/qc/products/' + id + '/potency-history'); },
   qcProductConformance(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/products/conformance?' + u); },
+  // The A4 page (GET /qc/products/{id}/document, spec_html.py). A plain
+  // navigation carries no bearer header, so callers fetch it with the token
+  // and open a blob URL (qcpotency-view.js qcPotOpenDoc) — never an <a href>.
   qcProductDocumentUrl(id) { return '/qc/products/' + encodeURIComponent(id) + '/document'; },
   // GET /qc/certificates/{coa_id}/icoa-html?parameter_id=... (the single-
   // parameter internal-CoA HTML view, spec_html.py) is real and migration-
