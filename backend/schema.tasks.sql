@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict rsfFhMDS6ecX2vCv3XZzuA9T2yed0JNeUshM6Iwxo59GwU2VMle8vg882GfhBEb
+\restrict dVg8qWpRDKwdOjzYGdaWx3RFdYvSDgY2DHqloA5zAE47okxolyLcn4TXL4Emo87
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1143,6 +1143,10 @@ CREATE TABLE public.qc_coq (
     cultivar_id uuid,
     potency_spec_id uuid,
     product_id uuid,
+    purpose text DEFAULT 'INITIAL'::text NOT NULL,
+    timepoint text,
+    CONSTRAINT qc_coq_purpose_check CHECK ((purpose = ANY (ARRAY['INITIAL'::text, 'RETEST'::text]))),
+    CONSTRAINT qc_coq_retest_timepoint_check CHECK (((purpose <> 'RETEST'::text) OR (timepoint IS NOT NULL))),
     CONSTRAINT qc_coq_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'VOIDED'::text])))
 );
 
@@ -1266,19 +1270,6 @@ CREATE TABLE public.qc_field_placeholders (
 );
 
 ALTER TABLE ONLY public.qc_field_placeholders FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: qc_lab_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_lab_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 
 --
@@ -1583,19 +1574,6 @@ ALTER TABLE ONLY public.qc_sample_field_records FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: qc_sample_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_sample_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
 -- Name: qc_sample_transports; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1664,19 +1642,6 @@ CREATE TABLE public.qc_samples (
 );
 
 ALTER TABLE ONLY public.qc_samples FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: qc_sampling_plan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_sampling_plan_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 
 --
@@ -1755,19 +1720,6 @@ ALTER TABLE ONLY public.qc_sampling_requests FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: qc_sfr_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_sfr_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
 -- Name: qc_signatures; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1783,23 +1735,10 @@ CREATE TABLE public.qc_signatures (
     statement text,
     signed_at timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT qc_signatures_meaning_check CHECK ((meaning = ANY (ARRAY['AUTHORED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'VERIFIED'::text, 'COQ_ISSUED'::text])))
+    CONSTRAINT qc_signatures_meaning_check CHECK ((meaning = ANY (ARRAY['AUTHORED'::text, 'REVIEWED'::text, 'APPROVED'::text, 'RELEASED'::text, 'VERIFIED'::text, 'COQ_ISSUED'::text, 'COMPILED'::text])))
 );
 
 ALTER TABLE ONLY public.qc_signatures FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: qc_spec_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_spec_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 
 --
@@ -1894,32 +1833,6 @@ ALTER TABLE ONLY public.qc_stability_studies FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: qc_stb_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_stb_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: qc_trn_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_trn_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
 -- Name: qc_water_tests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1942,19 +1855,6 @@ CREATE TABLE public.qc_water_tests (
 );
 
 ALTER TABLE ONLY public.qc_water_tests FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: qc_wt_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.qc_wt_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 
 --
@@ -3622,7 +3522,7 @@ CREATE INDEX qc_coq_lines_coq_idx ON public.qc_coq_lines USING btree (org_id, co
 -- Name: qc_coq_one_approved_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX qc_coq_one_approved_idx ON public.qc_coq USING btree (org_id, batch_id, specification_id) WHERE (status = 'APPROVED'::text);
+CREATE UNIQUE INDEX qc_coq_one_approved_idx ON public.qc_coq USING btree (org_id, batch_id, specification_id, purpose, COALESCE(timepoint, ''::text)) WHERE (status = 'APPROVED'::text);
 
 
 --
@@ -5867,13 +5767,6 @@ CREATE POLICY org_isolation ON public.qc_oos_records USING ((org_id = app.curren
 
 
 --
--- Name: qc_oos_register org_isolation; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY org_isolation ON public.qc_oos_register USING ((org_id = app.current_org_id())) WITH CHECK ((org_id = app.current_org_id()));
-
-
---
 -- Name: qc_potency_spec_ranges org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -6049,6 +5942,13 @@ CREATE POLICY org_isolation_insert ON public.qc_chain_of_custody FOR INSERT WITH
 
 
 --
+-- Name: qc_oos_register org_isolation_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_insert ON public.qc_oos_register FOR INSERT WITH CHECK ((org_id = app.current_org_id()));
+
+
+--
 -- Name: qc_signatures org_isolation_insert; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -6060,6 +5960,13 @@ CREATE POLICY org_isolation_insert ON public.qc_signatures FOR INSERT WITH CHECK
 --
 
 CREATE POLICY org_isolation_select ON public.qc_chain_of_custody FOR SELECT USING ((org_id = app.current_org_id()));
+
+
+--
+-- Name: qc_oos_register org_isolation_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation_select ON public.qc_oos_register FOR SELECT USING ((org_id = app.current_org_id()));
 
 
 --
@@ -6414,5 +6321,5 @@ ALTER TABLE public.work_sessions ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rsfFhMDS6ecX2vCv3XZzuA9T2yed0JNeUshM6Iwxo59GwU2VMle8vg882GfhBEb
+\unrestrict dVg8qWpRDKwdOjzYGdaWx3RFdYvSDgY2DHqloA5zAE47okxolyLcn4TXL4Emo87
 

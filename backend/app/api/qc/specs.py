@@ -7,8 +7,7 @@ from datetime import date
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .common import (ACID_FACTOR, _HOQC, _WRITERS, _dec, _uuid_or_404, _uuid_or_422,
-                     mint_series_number, router)
+from .common import _HOQC, _WRITERS, _dec, _uuid_or_404, _uuid_or_422, mint_series_number, router
 
 
 _SPEC_STATUSES = (
@@ -26,9 +25,7 @@ _COMPUTED_KINDS = ("total_thc", "total_cbd")
 # The Ph. Eur. 3028 factor lives in common.ACID_FACTOR (Decimal) next to
 # derived_total(), the ONE computation of a derived total — review 2026-09-27
 # QC-10/QC-20 found two float copies of it here and a third path that skipped
-# the computation altogether. This float alias only remains until the last
-# caller has moved to derived_total(); nothing new may use it.
-_ACID_FACTOR = float(ACID_FACTOR)
+# the computation altogether.
 
 
 def _looks_acidic(*names: str | None) -> bool:

@@ -1,11 +1,19 @@
 from app.db import rls
-from app.worktime import SITE_TODAY_SQL
+from app.worktime import SITE_TODAY_SQL, TZ
 from app.deps import require_role
 from app.roles import ELEVATED_ROLES
 from fastapi import Depends, HTTPException, Query
 
-from .certificates import _CERT_TYPES, _coa_sop_status
+from .certificates import _ALL_CERT_TYPES, _coa_sop_status
 from .common import _uuid_or_422, router
+
+
+# The register filters accept every type a row may carry, including the
+# retired COQ creation type (QC-07) — existing COQ-type rows stay listable.
+_CERT_TYPES = _ALL_CERT_TYPES
+
+
+_COQ_SOP_STATUS = {"DRAFT": "Draft", "APPROVED": "Approved", "VOIDED": "Voided"}
 
 
 _RETENTION_MODES = ("expiring", "expired")
@@ -72,6 +80,34 @@ async def certificate_register(
             for l in await c.fetch(
                     "SELECT id, name FROM qc_laboratories WHERE id = ANY($1)", lab_ids):
                 lab_names[str(l["id"])] = l["name"]
+        # §6.13 — the register is ONE register (review 2026-09-27 QC-31): the
+        # aggregation CoQs share the CoQ-PP series and the gap scan already
+        # counted them, but the listing left them out. They join here as
+        # cert_type COQ rows (the per-certificate filters that have no CoQ
+        # analogue — laboratory, retention — simply exclude them).
+        coq_rows = []
+        if (cert_type in (None, "COQ") and laboratory_id is None and retention is None):
+            cq_clauses, cq_args = [], []
+            if year is not None:
+                cq_args.append(str(year)); cq_clauses.append(f"split_part(coq_number, '-', 3) = ${len(cq_args)}")
+            if quarter is not None:
+                cq_args.append(quarter)
+                cq_clauses.append("compiled_at IS NOT NULL AND"
+                                  f" extract(quarter FROM compiled_at) = ${len(cq_args)}")
+            if pending:
+                cq_clauses.append("status = 'DRAFT'")
+            if oos_linked:
+                cq_clauses.append("EXISTS (SELECT 1 FROM qc_oos_records o WHERE o.batch_id = qc_coq.batch_id)")
+            cq_where = (" WHERE " + " AND ".join(cq_clauses)) if cq_clauses else ""
+            coq_rows = [dict(r) for r in await c.fetch(
+                f"SELECT * FROM qc_coq{cq_where} ORDER BY coq_number DESC", *cq_args)]
+            batches = list({*batches, *[r["batch_id"] for r in coq_rows]})
+            if batches:
+                oos_open = {}
+                for o in await c.fetch(
+                        "SELECT batch_id, count(*) n FROM qc_oos_records"
+                        " WHERE batch_id = ANY($1) AND status <> 'CLOSED' GROUP BY batch_id", batches):
+                    oos_open[o["batch_id"]] = o["n"]
     out = []
     for r in rows:
         out.append({
@@ -87,7 +123,23 @@ async def certificate_register(
             "superseded_by": superseded_by.get(str(r["id"])),
             "open_oos": oos_open.get(r["batch_id"], 0),
             "coq_document_id": r["coq_document_id"],
+            "record": "certificate",
         })
+    for r in coq_rows:
+        out.append({
+            "id": str(r["id"]), "coa_number": r["coq_number"], "batch_id": r["batch_id"],
+            "cert_type": "COQ", "status": r["status"],
+            "decision": (None if r["overall_conform"] is None
+                         else ("PASS" if r["overall_conform"] else "FAIL")),
+            "sop_status": _COQ_SOP_STATUS.get(r["status"], r["status"]),
+            "report_date": r["compiled_at"].astimezone(TZ).date().isoformat() if r["compiled_at"] else None,
+            "laboratory": None, "retention_start": None, "retention_expiry": None,
+            "archive_ref": None, "supersedes_id": None, "superseded_by": None,
+            "open_oos": oos_open.get(r["batch_id"], 0),
+            "coq_document_id": r["coq_document_id"],
+            "record": "coq",
+        })
+    out.sort(key=lambda x: x["coa_number"], reverse=True)
     return out
 
 

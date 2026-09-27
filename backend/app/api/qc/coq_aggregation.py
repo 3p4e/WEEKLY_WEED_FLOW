@@ -3,18 +3,20 @@ from app.db import rls, users_admin_pool
 from app.deps import require_role
 from app.notify import safe_emit
 from app.roles import ELEVATED_ROLES
+from app.worktime import TZ
 from datetime import date
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .certificates import VoidIn, _mint_cert_number
 from .common import (_COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid_or_422,
-                     check_derived_total_units, router)
+                     check_derived_total_units, derived_total, norm_batch, router)
 from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
 from .laboratories import _lab_scope_set, _result_in_scope
 from .potency import disposition_for
 from .products import conformance_of, names_total_thc
 from .specs import _ACID_FACTOR
+from .signatures import _sig_out
 
 
 _COQ_STATUSES = ("DRAFT", "APPROVED", "VOIDED")
@@ -40,8 +42,59 @@ def _norm_test(name: str | None) -> str:
     return " ".join((name or "").split()).lower()
 
 
+# SQL fragments shared by the three OOS gates (compile / review / render).
+# Batch ids are compared case-insensitively (QC-27) for rows written before
+# batch_id was normalised on write.
+_OPEN_OOS_SQL = ("SELECT count(*) FROM qc_oos_records"
+                 " WHERE upper(batch_id)=upper($1) AND status <> 'CLOSED'")
+# A CLOSED investigation whose Qualified-Person disposition REJECTED the batch
+# (review 2026-09-27 QC-01): no Certificate of Quality is compiled, approved
+# or issued for a rejected batch, whatever a later re-test shows.
+_REJECTED_OOS_SQL = ("SELECT oos_number FROM qc_oos_records"
+                     " WHERE upper(batch_id)=upper($1) AND status='CLOSED'"
+                     " AND disposition='REJECT' ORDER BY closed_at LIMIT 1")
+
+
+async def _assert_batch_not_rejected(c, batch_id: str) -> None:
+    rejected = await c.fetchval(_REJECTED_OOS_SQL, batch_id)
+    if rejected:
+        raise HTTPException(
+            409, f"OOS {rejected} closed with the batch disposition REJECT — a Certificate of"
+                 f" Quality is not compiled for a rejected batch ({batch_id}); a re-test does"
+                 " not overturn a confirmed investigation (QCSOP 012 §6.4.1)")
+
+
+async def _assert_sources_live(c, coq_id) -> None:
+    """Every source certificate a CoQ snapshotted its lines from must still be
+    APPROVED/RELEASED (review 2026-09-27 QC-02). void_certificate and the
+    revision-release path refuse while a live CoQ cites the certificate, but a
+    CoQ whose sources were voided or superseded before this rule existed —
+    or through any path that bypasses it — must not be approved or printed."""
+    dead = await c.fetch(
+        "SELECT s.coa_number, c.status FROM qc_coq_sources s"
+        " JOIN qc_certificates c ON c.id = s.coa_id"
+        " WHERE s.coq_id=$1 AND c.status <> ALL($2::text[]) ORDER BY s.coa_number",
+        coq_id, list(_COQ_SOURCE_STATUSES))
+    if dead:
+        names = ", ".join(f"{d['coa_number']} ({d['status']})" for d in dead[:5])
+        raise HTTPException(
+            409, f"source certificate(s) no longer valid: {names} — the CoQ was compiled from"
+                 " lines of a record that has since been voided or superseded; void this CoQ"
+                 " and recompile from the current certificates (QCSOP 012 §6.6/§6.7)")
+
+
 class CoqIn(BaseModel):
     batch_id: str = Field(max_length=120)
+
+    @field_validator("batch_id")
+    @classmethod
+    def _norm_batch_id(cls, v: str) -> str:
+        # QC-27: every OOS/CoQ gate keys on this text — one canonical form.
+        v = norm_batch(v)
+        if not v:
+            raise ValueError("batch_id must not be blank")
+        return v
+
     specification_id: str
     # §6.4.2 batch identification — nullable; an unknown value stays blank for
     # a human, never invented (GxP).
@@ -58,6 +111,19 @@ class CoqIn(BaseModel):
     # Optional: a CoQ compiled before the catalogue, or for a strain with no
     # approved product, still grades on the legacy ladder.
     product_id: str | None = None
+    # Review 2026-09-27 QC-15 — which testing period this CoQ certifies. The
+    # owner issues CoQs for the initial release AND for later re-test periods
+    # of the same batch against the same specification; they coexist, one
+    # live APPROVED CoQ per (batch, spec, purpose, timepoint). A RETEST CoQ
+    # names its timepoint ('6M', '12M', …).
+    purpose: str = "INITIAL"
+    timepoint: str | None = Field(default=None, max_length=40)
+    # The source certificates to aggregate, by id. Optional: when absent every
+    # usable (APPROVED/RELEASED iCoA/eCoA) certificate of the batch+spec is
+    # consolidated, latest result per parameter. A re-test period names its
+    # own certificates so the initial-release CoQ stays recompilable from the
+    # release-time set once re-test results exist.
+    source_coa_ids: list[str] | None = Field(default=None, max_length=50)
 
 
 
@@ -88,6 +154,8 @@ def _coq_out(r: dict) -> dict:
         "product_code": r.get("product_code"),
         "product_conforms": r.get("product_conforms"),
         "regrade_to": r.get("regrade_to"),
+        "purpose": r.get("purpose") or "INITIAL",
+        "timepoint": r.get("timepoint"),
         "updated_at": r["updated_at"].isoformat(),
     }
 
@@ -198,6 +266,7 @@ async def _regrade_needs_oos(c, user: dict, coq_row: dict) -> str | None:
             f" ({lo:.2f}–{hi:.2f} %) — {falls}; a formal OOS naming Total Δ9-THC must be"
             f" recorded on batch {coq_row['batch_id']} before this CoQ is approved"
             " (out-of-grade rule, owner 2026-09-06)")
+_COQ_PURPOSES = ("INITIAL", "RETEST")
 
 
 async def _coq_disposition(c, coq_row: dict) -> dict | None:
@@ -256,7 +325,16 @@ def _coq_source_out(r: dict) -> dict:
         "id": str(r["id"]), "coa_id": str(r["coa_id"]),
         "coa_number": r["coa_number"], "cert_type": r["cert_type"],
         "issue_date": r["issue_date"].isoformat() if r["issue_date"] else None,
+        # the source certificate's LIVE status (QC-02) — a snapshot line whose
+        # source has been voided/superseded is shown as such, not as bare numbers
+        "coa_status": r.get("coa_status"),
+        "coa_decision": r.get("coa_decision"),
     }
+
+
+_SOURCES_SQL = ("SELECT s.*, c.status AS coa_status, c.decision AS coa_decision"
+                " FROM qc_coq_sources s LEFT JOIN qc_certificates c ON c.id = s.coa_id"
+                " WHERE s.coq_id=$1 ORDER BY s.coa_number")
 
 
 def _coq_criterion(lo, hi, unit) -> str | None:
@@ -291,8 +369,7 @@ async def get_coq(coq_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
             raise HTTPException(404, "CoQ not found")
         lines = await c.fetch(
             "SELECT * FROM qc_coq_lines WHERE coq_id=$1 ORDER BY sorting_order, created_at", coq_id)
-        sources = await c.fetch(
-            "SELECT * FROM qc_coq_sources WHERE coq_id=$1 ORDER BY coa_number", coq_id)
+        sources = await c.fetch(_SOURCES_SQL, coq_id)
         disposition = await _coq_disposition(c, dict(row))
         # Commercial identity (0059) — read-only companion data joined by the
         # batch-code string. Absent row → absent key content; never fabricated,
@@ -318,6 +395,15 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
     (overall_conform=false), never hidden."""
     _uuid_or_422(body.specification_id, "specification_id")
     _uuid_or_422(body.cultivar_id, "cultivar_id")
+    if body.purpose not in _COQ_PURPOSES:
+        raise HTTPException(422, f"purpose must be one of: {', '.join(_COQ_PURPOSES)}")
+    body.timepoint = (body.timepoint or "").strip() or None
+    if body.purpose == "RETEST" and not body.timepoint:
+        raise HTTPException(422, "a RETEST CoQ names its timepoint (e.g. '6M')")
+    if body.purpose == "INITIAL" and body.timepoint:
+        raise HTTPException(422, "an INITIAL-release CoQ carries no timepoint")
+    for sid in body.source_coa_ids or []:
+        _uuid_or_422(sid, "source_coa_ids")
     async with rls(user) as c:
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
                                 body.specification_id)
@@ -357,7 +443,7 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
                 "SELECT id FROM qc_potency_specs WHERE cultivar_id=$1 AND status='APPROVED'",
                 body.cultivar_id)
         certs = await c.fetch(
-            "SELECT * FROM qc_certificates WHERE batch_id=$1 AND specification_id=$2"
+            "SELECT * FROM qc_certificates WHERE upper(batch_id)=upper($1) AND specification_id=$2"
             " AND cert_type = ANY($3::text[]) AND status = ANY($4::text[])"
             " ORDER BY created_at",
             body.batch_id, body.specification_id,
@@ -366,6 +452,17 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
             raise HTTPException(
                 409, "No usable source certificate (APPROVED/RELEASED iCoA or eCoA)"
                      " exists for this batch and specification (§6.4.2)")
+        if body.source_coa_ids:
+            # QC-15: an explicit source set — every id must be one of the
+            # batch's usable certificates (never a certificate of another
+            # batch, specification or status).
+            usable = {str(c_["id"]): c_ for c_ in certs}
+            unknown = [sid for sid in body.source_coa_ids if sid not in usable]
+            if unknown:
+                raise HTTPException(
+                    422, f"{len(unknown)} source_coa_ids are not APPROVED/RELEASED iCoA/eCoA"
+                         " certificates of this batch and specification")
+            certs = [usable[sid] for sid in dict.fromkeys(body.source_coa_ids)]
         cert_ids = [c_["id"] for c_ in certs]
         # §6.3.2 — an eCoA source promoted from an ingested document feeds a CoQ
         # only after its QCT 018 review checklist is ACCEPTED. Matched through
@@ -398,11 +495,10 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         results = await c.fetch(
             "SELECT * FROM qc_results WHERE coa_id = ANY($1::uuid[]) ORDER BY created_at",
             cert_ids)
-        open_oos = await c.fetchval(
-            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
-            body.batch_id)
+        open_oos = await c.fetchval(_OPEN_OOS_SQL, body.batch_id)
         row = None
         if not open_oos:
+            await _assert_batch_not_rejected(c, body.batch_id)
             row = await _compile_coq_tx(c, user, body, spec, certs, params, results,
                                         potency_spec_id, product_id)
             row = await _grade_against_product(c, user, dict(row))
@@ -432,55 +528,96 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
     by_cert = {str(x["id"]): x for x in certs}
     # Latest result per spec parameter across ALL source certificates — a
     # re-test supersedes for reporting; the earlier result stays on its own
-    # certificate (nothing is deleted). "Latest" is by result_date (the date
-    # the measurement was actually available), falling back to entry order.
+    # certificate (nothing is deleted). "Latest" is by MEASUREMENT date
+    # (review 2026-09-27 QC-09): result_date, which every write path now
+    # stamps (add_result defaults it to the facility day, promote carries the
+    # eCoA's report date). A row from before that rule has no measurement
+    # date; the best evidence is the facility day it was entered on, which is
+    # what add_result would have stamped, so that is what it sorts by —
+    # never date.min (an undated eCoA result lost to any dated result) and
+    # never "NULL wins".
+    def _measured(x):
+        return x["result_date"] or x["created_at"].astimezone(TZ).date()
     latest: dict[str, dict] = {}
-    for r in sorted(results, key=lambda x: (x["result_date"] or date.min, x["created_at"])):
+    for r in sorted(results, key=lambda x: (_measured(x), x["created_at"])):
         if r["parameter_id"]:
             latest[str(r["parameter_id"])] = dict(r)
+    # An explicitly cited reference is ALWAYS authenticated, whatever else the
+    # batch carries (QC-31: it used to be validated only when a masked failure
+    # existed, and stored unchecked otherwise). This check once sat nested
+    # under `if not closed_oos:`, which the caller's open-OOS gate made
+    # unreachable, so a fabricated oos_reference sailed straight through.
+    if body.oos_reference:
+        cited = await c.fetchval(
+            "SELECT 1 FROM qc_oos_records WHERE org_id=$1 AND upper(batch_id)=upper($2)"
+            " AND oos_number=$3 AND status='CLOSED'",
+            user["org_id"], body.batch_id, body.oos_reference)
+        if not cited:
+            raise HTTPException(
+                409, f"oos_reference '{body.oos_reference}' does not match a CLOSED OOS"
+                     " record on this batch — cite an existing closed investigation's"
+                     " OOS number, or close the investigation (QCSOP 012 §6.4.1)")
     # §6.4.1 — the CoQ is compiled only on the INVESTIGATION-CONFIRMED result
     # set. A failing result superseded by a later passing re-test must not
     # silently vanish from the batch record: EACH masked failure needs its own
     # OOS trail — a CLOSED investigation on this batch raised against that same
-    # result, or against that same test.
+    # result, or against that same test, whose Phase I INVALIDATED the result.
+    #
+    # Review 2026-09-27 QC-06: a source certificate the Head of QC dispositioned
+    # FAIL is a failed record as a whole, whatever its per-line `complies` say
+    # (a FAIL on a non-numeric observation leaves every line green). None of
+    # its lines may certify conformance: while one of them is the batch's
+    # current line the CoQ compiles as NON-conforming (recorded for the QP,
+    # never printed — the sources carry the certificate's decision), and one
+    # that a later result superseded is treated like a masked failure — it
+    # needs the same invalidating OOS trail.
+    failed_cert_ids = {str(x["id"]) for x in certs if x["decision"] == "FAIL"}
+    failed_winner = any(str(ln["coa_id"]) in failed_cert_ids for ln in latest.values())
     masked_fails = [dict(r) for r in results
-                    if r["complies"] is False and r["parameter_id"]
+                    if r["parameter_id"]
+                    and (r["complies"] is False or str(r["coa_id"]) in failed_cert_ids)
                     and latest.get(str(r["parameter_id"]), {}).get("id") != r["id"]]
     if masked_fails:
-        # An explicitly cited reference is ALWAYS authenticated, whatever else
-        # the batch carries. This check used to sit nested under `if not
-        # closed_oos:`, which the caller's own open-OOS gate (compile_coq, just
-        # above) made unreachable: it already 409s while ANY non-CLOSED OOS
-        # exists, so by the time control arrives here every OOS on the batch is
-        # CLOSED — meaning any OOS history at all skipped the authenticity check
-        # and a fabricated oos_reference sailed straight through.
-        if body.oos_reference:
-            cited = await c.fetchval(
-                "SELECT 1 FROM qc_oos_records WHERE org_id=$1 AND batch_id=$2"
-                " AND oos_number=$3 AND status='CLOSED'",
-                user["org_id"], body.batch_id, body.oos_reference)
-            if not cited:
-                raise HTTPException(
-                    409, f"oos_reference '{body.oos_reference}' does not match a CLOSED OOS"
-                         " record on this batch — cite an existing closed investigation's"
-                         " OOS number, or close the investigation (QCSOP 012 §6.4.1)")
         # Cover is per-PARAMETER, not per-batch. Batch scope was too loose: a
         # closed microbial investigation would otherwise silently license
         # dropping a masked potency failure, because the old counter asked only
         # "does this batch have ANY closed OOS?". An OOS carries result_id
         # (exact result it was raised on) and/or test_name; either binds it.
+        #
+        # Review 2026-09-27 QC-01: cover comes ONLY from a CLOSED investigation
+        # that INVALIDATED the original result (Phase I: assignable laboratory
+        # error, `invalidated IS TRUE`). Any CLOSED OOS naming the test used to
+        # count, whatever it concluded — a Phase II that attributed the failure
+        # to the batch still licensed the passing re-test, which is testing
+        # into compliance. A REJECT disposition is refused before this point.
         oos_rows = await c.fetch(
-            "SELECT result_id, test_name FROM qc_oos_records"
-            " WHERE org_id=$1 AND batch_id=$2 AND status='CLOSED'",
+            "SELECT result_id, test_name, oos_number, invalidated FROM qc_oos_records"
+            " WHERE org_id=$1 AND upper(batch_id)=upper($2) AND status='CLOSED'",
             user["org_id"], body.batch_id)
-        covered_ids = {str(o["result_id"]) for o in oos_rows if o["result_id"]}
-        covered_tests = {_norm_test(o["test_name"]) for o in oos_rows if o["test_name"]}
-        uncovered = sorted({r["test_name"] for r in masked_fails
-                            if str(r["id"]) not in covered_ids
-                            and _norm_test(r["test_name"]) not in covered_tests})
-        if uncovered:
+        covered_ids = {str(o["result_id"]) for o in oos_rows if o["result_id"] and o["invalidated"]}
+        covered_tests = {_norm_test(o["test_name"]) for o in oos_rows
+                         if o["test_name"] and o["invalidated"]}
+        named_ids = {str(o["result_id"]) for o in oos_rows if o["result_id"]}
+        named_tests = {_norm_test(o["test_name"]) for o in oos_rows if o["test_name"]}
+        uncovered, confirmed = set(), set()
+        for r in masked_fails:
+            if str(r["id"]) in covered_ids or _norm_test(r["test_name"]) in covered_tests:
+                continue
+            if str(r["id"]) in named_ids or _norm_test(r["test_name"]) in named_tests:
+                confirmed.add(r["test_name"])
+            else:
+                uncovered.add(r["test_name"])
+        if confirmed:
+            names = ", ".join(sorted(confirmed)[:5])
             raise HTTPException(
-                409, f"{len(uncovered)} test(s) ({', '.join(uncovered[:5])}) had a failing result"
+                409, f"{len(confirmed)} test(s) ({names}) had a failing result superseded by a"
+                     " re-test, and the closed OOS investigation on that test CONFIRMED the"
+                     " result (it was not invalidated by an assignable laboratory error) — the"
+                     " re-test does not replace a confirmed failure (QCSOP 012 §6.4.1)")
+        if uncovered:
+            names = ", ".join(sorted(uncovered)[:5])
+            raise HTTPException(
+                409, f"{len(uncovered)} test(s) ({names}) had a failing result"
                      " superseded by a re-test with no closed OOS investigation naming that same"
                      " test — the CoQ compiles only the investigation-confirmed result set"
                      " (QCSOP 012 §6.4.1; close an OOS against that test, or cite one via"
@@ -502,10 +639,9 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
                 missing.append(p["test_name_en"] or p["test_name_mk"] or "?")
                 continue
             check_derived_total_units(dict(p), ra, rb)
-            val = round(float(ra["result_numeric"]) + _ACID_FACTOR * float(rb["result_numeric"]), 2)
-            lo = float(p["lower_limit"]) if p["lower_limit"] is not None else None
-            hi = float(p["upper_limit"]) if p["upper_limit"] is not None else None
-            complies, _st = _evaluate(val, lo, hi)
+            # ONE computation for every path (QC-10/QC-20): Decimal, half-up.
+            val = derived_total(ra["result_numeric"], rb["result_numeric"])
+            complies, _st = _evaluate(val, p["lower_limit"], p["upper_limit"])
             for comp in (ra, rb):
                 cited_cert_ids.add(str(comp["coa_id"]))
             lines.append({
@@ -548,7 +684,7 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
     # Overall conformance: asserted only when every line complies; a single
     # FAIL makes it false; an unknown (unmeasured verdict) stays null.
     verdicts = [ln["complies"] for ln in lines]
-    if any(v is False for v in verdicts):
+    if any(v is False for v in verdicts) or failed_winner:
         overall = False
     elif all(v is True for v in verdicts):
         overall = True
@@ -562,12 +698,13 @@ async def _compile_coq_tx(c, user: dict, body: CoqIn, spec, certs, params, resul
         "INSERT INTO qc_coq(org_id, coq_number, batch_id, product_name, manufacture_date,"
         " batch_size, specification_id, spec_reference, overall_conform, comments,"
         " oos_reference, compiled_by, compiled_at, created_by, updated_by,"
-        " cultivar_id, potency_spec_id, product_id)"
-        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12,$13,$14,$15) RETURNING *",
+        " cultivar_id, potency_spec_id, product_id, purpose, timepoint)"
+        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$12,$12,$13,$14,$15,$16,$17)"
+        " RETURNING *",
         user["org_id"], coq_number, body.batch_id, body.product_name,
         body.manufacture_date, body.batch_size, body.specification_id, spec_ref,
         overall, body.comments, body.oos_reference, user["id"],
-        body.cultivar_id, potency_spec_id, product_id)
+        body.cultivar_id, potency_spec_id, product_id, body.purpose, body.timepoint)
     for src_id in sorted(cited_cert_ids):
         src = by_cert[src_id]
         await c.execute(
@@ -616,23 +753,27 @@ async def review_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         if cur["compiled_by"] and str(cur["compiled_by"]) == str(user["id"]):
             raise HTTPException(403, "the CoQ is reviewed by a second person —"
                                      " the compiler cannot approve their own compilation (§6.4.3)")
-        # one live APPROVED CoQ per (batch, spec) — two divergent approved
-        # aggregations would hand the QP conflicting release inputs (a partial
-        # unique index in mig 0041 backs this at the DB level).
+        # one live APPROVED CoQ per (batch, spec, purpose, timepoint) — two
+        # divergent approved aggregations for one period would hand the QP
+        # conflicting release inputs (a partial unique index, 0041/0071, backs
+        # this at the DB level). An initial-release CoQ and a re-test-period
+        # CoQ are different periods and coexist (QC-15).
         dup = await c.fetchval(
-            "SELECT coq_number FROM qc_coq WHERE batch_id=$1 AND specification_id=$2"
+            "SELECT coq_number FROM qc_coq WHERE upper(batch_id)=upper($1) AND specification_id=$2"
+            " AND purpose=$4 AND COALESCE(timepoint,'')=COALESCE($5,'')"
             " AND status='APPROVED' AND id <> $3 LIMIT 1",
-            cur["batch_id"], cur["specification_id"], coq_id)
+            cur["batch_id"], cur["specification_id"], coq_id, cur["purpose"], cur["timepoint"])
         if dup:
-            raise HTTPException(409, f"an APPROVED CoQ ({dup}) already exists for this batch"
-                                     " and specification — void it before approving another")
+            raise HTTPException(409, f"an APPROVED CoQ ({dup}) already exists for this batch,"
+                                     " specification and testing period — void it before"
+                                     " approving another")
         # §6.4.1 — the OOS state can change between compile and approval; the
         # HoQC signature must not land on a batch under open investigation.
-        open_oos = await c.fetchval(
-            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
-            cur["batch_id"])
+        open_oos = await c.fetchval(_OPEN_OOS_SQL, cur["batch_id"])
         row = None
         if not open_oos:
+            await _assert_batch_not_rejected(c, cur["batch_id"])
+            await _assert_sources_live(c, coq_id)
             row = await c.fetchrow(
                 "UPDATE qc_coq SET status='APPROVED', reviewed_by=$1, reviewed_at=now(),"
                 " updated_by=$1, updated_at=now() WHERE id=$2 RETURNING *", user["id"], coq_id)
@@ -697,9 +838,10 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
                      " a Certificate of Quality asserting conformance cannot be issued")
         # §6.4.1 — re-check at ISSUANCE time: an OOS opened after compile/
         # approval must block the printable conformance document.
-        open_oos = await c.fetchval(
-            "SELECT count(*) FROM qc_oos_records WHERE batch_id=$1 AND status <> 'CLOSED'",
-            coq["batch_id"])
+        open_oos = await c.fetchval(_OPEN_OOS_SQL, coq["batch_id"])
+        if not open_oos:
+            await _assert_batch_not_rejected(c, coq["batch_id"])
+            await _assert_sources_live(c, coq_id)
         spec = await c.fetchrow("SELECT * FROM qc_specifications WHERE id=$1",
                                 coq["specification_id"])
         params = await c.fetch(
@@ -741,6 +883,13 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         # declares no scope is unjudgeable and flags nothing.
         scope_by_source: dict = {}
         src_coa_ids = list({ln["source_coa_id"] for ln in lines if ln["source_coa_id"]})
+        # QC-25: the "ISO/IEC 17025 accredited" claim in the compliance
+        # statement is made only when EVERY external source certificate names
+        # a registered laboratory carrying an accreditation record (and, below,
+        # nothing is out of scope); an in-house source needs none.
+        accredited_by_lab: dict = {}
+        ext_src_ids: list = []
+        lab_of: dict = {}
         if src_coa_ids:
             lab_of = {r["id"]: r["laboratory_id"] for r in await c.fetch(
                 "SELECT id, laboratory_id FROM qc_certificates WHERE id = ANY($1)", src_coa_ids)}
@@ -748,9 +897,18 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
             scope_by_lab = {}
             if lab_ids:
                 for lr in await c.fetch(
-                        "SELECT id, iso17025_scope FROM qc_laboratories WHERE id = ANY($1)", lab_ids):
+                        "SELECT id, iso17025_scope, accreditation_number, accreditation_body"
+                        " FROM qc_laboratories WHERE id = ANY($1)", lab_ids):
                     scope_by_lab[lr["id"]] = _lab_scope_set(lr["iso17025_scope"])
+                    accredited_by_lab[lr["id"]] = bool(lr["accreditation_number"]
+                                                       or lr["accreditation_body"])
             scope_by_source = {cid: scope_by_lab.get(lab_of.get(cid), set()) for cid in src_coa_ids}
+            ext_src_ids = [s["coa_id"] for s in src_rows if s["cert_type"] == "ECOA"]
+        # Annex 11 e-signatures captured on the CoQ itself (QC-12) — COMPILED /
+        # APPROVED by the roles of record, rendered in the signature block.
+        coq_sigs = [_sig_out(dict(s)) for s in await c.fetch(
+            "SELECT * FROM qc_signatures WHERE object_type='qc_coq' AND object_id=$1"
+            " ORDER BY signed_at", coq_id)]
     if open_oos:
         # §6.16 (C8) — recorded in its own transaction, before the 409.
         async with rls(user) as c2:
@@ -774,7 +932,11 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         "approver_id": coq["reviewed_by"],
         "batch_id": coq["batch_id"], "cultivar_name": cultivar_name,
         "manufacture_date": coq["manufacture_date"] or primary.get("manufacture_date"),
-        "report_date": coq["compiled_at"].date() if coq["compiled_at"] else None,
+        # the facility's calendar day of compilation, not the UTC day asyncpg's
+        # aware timestamp renders under (review 2026-09-27 QC-21): a CoQ
+        # compiled at 23:30 UTC on 31 Dec is numbered in the new facility year
+        # and must print that year's date too.
+        "report_date": coq["compiled_at"].astimezone(TZ).date() if coq["compiled_at"] else None,
         "botanical_type": primary.get("botanical_type"), "chemotype": primary.get("chemotype"),
         "cultivation_batch": primary.get("cultivation_batch"),
         "product_code": primary.get("product_code") or coq["product_name"],
@@ -837,9 +999,14 @@ async def render_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
         names = ", ".join(out_of_scope[:5])
         scope_note = (f"Тестови надвор од ISO 17025 опсегот на лабораторијата: {names}"
                       f"|||Tests outside the laboratory's ISO 17025 scope: {names}")
+    labs_accredited = None
+    if ext_src_ids:
+        labs_accredited = (not out_of_scope and all(
+            lab_of.get(cid) and accredited_by_lab.get(lab_of[cid]) for cid in ext_src_ids))
     md = _coq_markdown(coa_view, dict(spec) if spec else {}, params_by_id, results,
-                       lab=None, scope_note=scope_note, sigs=None, signer_names=signer_names,
-                       potency=potency)
+                       lab=None, scope_note=scope_note, sigs=coq_sigs or None,
+                       signer_names=signer_names, potency=potency,
+                       labs_accredited=labs_accredited)
     build = (await docengine.de_forward(
         "POST", "/build",
         {"markdown": md, "out_name": coq["coq_number"],

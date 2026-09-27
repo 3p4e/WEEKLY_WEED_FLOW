@@ -5,9 +5,10 @@ from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES
 from datetime import date
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from .common import _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422, router, splice_stamps
+from .common import _QP_ROLES, _WRITERS, _uuid_or_404, _uuid_or_422, norm_batch, router, splice_stamps
+from .leaves import _assert_leaf_open
 
 
 _OOS_TYPES = ("OOS", "OOT", "OOE", "OOC")
@@ -41,6 +42,16 @@ _OOS_QP_TARGETS = {"CLOSED"}
 
 class OosIn(BaseModel):
     batch_id: str = Field(max_length=120)
+
+    @field_validator("batch_id")
+    @classmethod
+    def _norm_batch_id(cls, v: str) -> str:
+        # QC-27: an OOS filed as 'p050022' did not block a CoQ for 'P050022'.
+        v = norm_batch(v)
+        if not v:
+            raise ValueError("batch_id must not be blank")
+        return v
+
     result_id: str | None = None
     sample_id: str | None = None
     material_code: str | None = Field(default=None, max_length=120)
@@ -261,6 +272,11 @@ async def update_oos(oos_id: str, body: OosPatch, user: dict = Depends(require_r
             " FROM qc_oos_records WHERE id=$1", oos_id)
         if cur is None:
             raise HTTPException(404, "OOS record not found")
+        # Review 2026-09-27 QC-13: a CLOSED investigation is the record the CoQ
+        # gates rely on (its `invalidated` outcome and QP `disposition` decide
+        # whether a re-test may replace a failure). It is frozen except for a
+        # note; a correction is a follow-up record, not a rewrite.
+        _assert_leaf_open(patch, cur["status"], "CLOSED", "OOS investigation")
         # Setting a batch disposition is a Qualified-Person decision.
         if patch.get("disposition") is not None and user["role"] not in _QP_ROLES:
             raise HTTPException(403, "Disposition is a Qualified-Person decision")
