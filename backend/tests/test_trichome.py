@@ -121,3 +121,45 @@ async def test_the_batch_board_and_the_harvest_clearance_carry_the_latest_verdic
     clear = (await client.get(f"/cultivation/harvest-clearance/{b['id']}", headers=cu_h)).json()
     assert clear["latest_trichome"]["verdict"] == "ready"
     assert clear["clear"] is True, "a verdict never gates the cut"
+
+
+async def test_a_check_is_dated_when_it_happened_and_can_be_corrected(client, admin_headers):
+    """CS-13. A check typed as next year would stay "latest" for a year, so a
+    future date is refused; a mistyped date or reading is corrected in place
+    through PATCH, validated as the row will stand afterwards."""
+    from datetime import timedelta
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qc_h = await _actor(client, admin_headers, "QC_MGR")
+    room = await _room(client, admin_headers, "flower_t6", "Flowering T6")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _batch(client, cu_h, room["id"], cv["id"])
+    today = facility_today()
+    r = await _check(client, cu_h, b["id"], checked_on=(today + timedelta(days=1)).isoformat())
+    assert r.status_code == 422 and "future" in r.text
+    r = await _check(client, cu_h, b["id"], checked_on=(today - timedelta(days=2)).isoformat(),
+                     pct_clear=30, pct_cloudy=60, pct_amber=10, verdict="approaching")
+    assert r.status_code == 201, r.text
+    cid = r.json()["id"]
+
+    assert (await client.patch(f"/cultivation/trichome-checks/{cid}", json={"verdict": "ready"},
+                               headers=qc_h)).status_code == 403
+    assert (await client.patch(f"/cultivation/trichome-checks/{cid}",
+                               json={"checked_on": (today + timedelta(days=3)).isoformat()},
+                               headers=cu_h)).status_code == 422
+    # One percentage corrected on its own must still add up with the other two.
+    assert (await client.patch(f"/cultivation/trichome-checks/{cid}", json={"pct_amber": 40},
+                               headers=cu_h)).status_code == 422
+    assert (await client.patch(f"/cultivation/trichome-checks/{cid}", json={"verdict": None},
+                               headers=cu_h)).status_code == 422
+    r = await client.patch(f"/cultivation/trichome-checks/{cid}", json={
+        "checked_on": (today - timedelta(days=1)).isoformat(), "pct_cloudy": 50, "pct_amber": 20,
+        "verdict": "ready", "note": "re-read the slide"}, headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert r.json()["checked_on"] == (today - timedelta(days=1)).isoformat()
+    assert r.json()["pct_cloudy"] == 50.0 and r.json()["verdict"] == "ready"
+    assert r.json()["note"] == "re-read the slide"
+    board = (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]
+    assert next(x for x in board if x["id"] == b["id"])["latest_trichome"]["verdict"] == "ready"
+    assert (await client.patch("/cultivation/trichome-checks/not-a-uuid", json={"note": "x"},
+                               headers=cu_h)).status_code == 404
+

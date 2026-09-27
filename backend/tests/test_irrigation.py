@@ -143,7 +143,7 @@ async def test_batch_scope_is_optional_and_filters_the_list(client, admin_header
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, ir_h = await _actor(client, admin_headers, "IR_MGR")
     room = await _room(client, admin_headers, "irr_b", "Flowering IB")
-    cv = await _cultivar(client, cu_h, "IRRCV", "Irr cultivar")
+    cv = await _cultivar(client, cu_h, "GP", "Irr cultivar")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-IRRCV", 20)
 
     # one feed scoped to the batch, one room-only

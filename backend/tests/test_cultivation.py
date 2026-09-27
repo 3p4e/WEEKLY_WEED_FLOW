@@ -1,11 +1,15 @@
 """Cultivation — cultivar master, coded batches, per-plant identity (migration
 0045 + app/api/cultivation.py).
 
-Pins the access model (read: every role above USER; write: CU_MGR + executives
-+ ADMIN), the identity scheme the owner confirmed (batch code, plant id
-`<clone-date>_<cultivar>_<seq>`), the resumable chunked plant fill, and the
-audit-lock-safe phase move (batch-level, not per plant).
+Pins the access model (read: every role above USER; write: CU_MGR + QA +
+executives + ADMIN), the identity scheme the owner confirmed (batch code
+<cultivar><MMYY><nn>, legacy plant id `<clone-date>_<batch code>_<seq>`, clone
+id `<mother>-<cutting>.<clone>`), the resumable chunked plant fill, the
+audit-lock-safe phase move (batch-level, not per plant), the phase path and
+who may leave it, and the facility-clock bounds on every recorded date
+(review 2026-09-27, CS-01 … CS-18).
 """
+import asyncio
 import uuid
 from datetime import timedelta
 
@@ -61,7 +65,7 @@ async def test_read_gating_and_cultivar_writers(client, admin_headers):
 async def test_batch_create_is_record_only_then_plants_are_materialised(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "flower_c180", "Flowering 1.1")
-    cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
 
     b = await client.post("/cultivation/batches", json={
         "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072501",
@@ -82,9 +86,14 @@ async def test_batch_create_is_record_only_then_plants_are_materialised(client, 
     lst = (await client.get(f"/cultivation/batches/{bid}/plants",
                             params={"limit": 5}, headers=cu_h)).json()
     assert lst["total"] == 120
-    # plant id shape: <clone-date>_<cultivar>_<seq4>, seq starting at 1
-    assert lst["plants"][0]["plant_code"] == "20260701_FB_0001"
+    # plant id shape: <clone-date>_<batch code>_<seq4>, seq starting at 1. The
+    # BATCH code, not the cultivar: two batches of one cultivar cloned on the
+    # same day must not compute the same ids (CS-02, pinned below).
+    assert lst["plants"][0]["plant_code"] == "20260701_GP072501_0001"
     assert lst["plants"][0]["seq"] == 1
+    # status_since is the FACILITY day, bound explicitly rather than left to
+    # the column's UTC CURRENT_DATE default (CS-14).
+    assert lst["plants"][0]["status_since"] == facility_today().isoformat()
 
 
 async def test_plant_fill_is_resumable_and_idempotent(client, admin_headers):
@@ -95,7 +104,7 @@ async def test_plant_fill_is_resumable_and_idempotent(client, admin_headers):
     room = await _room(client, admin_headers, "flower_c181", "Flowering 1.2")
     cv = await _cultivar(client, cu_h, "GG", "Gorilla Glue")
     b = await client.post("/cultivation/batches", json={
-        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072502",
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GG072502",
         "plant_count": 75, "phase": "clone"}, headers=cu_h)
     bid = b.json()["id"]
 
@@ -116,7 +125,7 @@ async def test_duplicate_batch_code_rejected(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "flower_c182", "Flowering 1.3")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
-    payload = {"room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072503",
+    payload = {"room_id": room["id"], "cultivar_id": cv["id"], "code": "FB072503",
                "plant_count": 10, "phase": "clone"}
     assert (await client.post("/cultivation/batches", json=payload, headers=cu_h)).status_code == 201
     dup = await client.post("/cultivation/batches", json=payload, headers=cu_h)
@@ -129,7 +138,7 @@ async def test_phase_move_is_batch_level_and_terminal_settles_plants(client, adm
     flower = await _room(client, admin_headers, "flower_c183", "Flowering 1.4")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
     b = await client.post("/cultivation/batches", json={
-        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "GP072504",
+        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "FB072504",
         "plant_count": 30, "phase": "veg"}, headers=cu_h)
     bid = b.json()["id"]
     await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
@@ -143,11 +152,18 @@ async def test_phase_move_is_batch_level_and_terminal_settles_plants(client, adm
                                params={"status": "active", "limit": 1}, headers=cu_h)).json()
     assert active["total"] == 30   # a move does NOT change plant status
 
-    # flower -> harvested: terminal, closes the batch and settles active plants
+    # flower -> harvested: terminal, closes the batch and settles active plants.
+    # A terminal move needs a stated reason, server-side and not only in the UI
+    # (CS-17): a direct call with none — or a blank one — is refused.
+    assert (await client.post(f"/cultivation/batches/{bid}/move", json={
+        "to_phase": "harvested"}, headers=cu_h)).status_code == 422
+    assert (await client.post(f"/cultivation/batches/{bid}/move", json={
+        "to_phase": "harvested", "reason": ""}, headers=cu_h)).status_code == 422
     hv = await client.post(f"/cultivation/batches/{bid}/move", json={
-        "to_phase": "harvested"}, headers=cu_h)
-    assert hv.status_code == 200
+        "to_phase": "harvested", "reason": "final pull"}, headers=cu_h)
+    assert hv.status_code == 200, hv.text
     assert hv.json()["phase"] == "harvested" and hv.json()["is_active"] is False
+    assert hv.json()["plants_settled"] == {"harvested": 30, "destroyed": 0}
     harv = (await client.get(f"/cultivation/batches/{bid}/plants",
                              params={"status": "harvested", "limit": 1}, headers=cu_h)).json()
     assert harv["total"] == 30
@@ -163,7 +179,7 @@ async def test_terminal_start_phase_rejected(client, admin_headers):
     room = await _room(client, admin_headers, "flower_c184", "Flowering 1.5")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
     r = await client.post("/cultivation/batches", json={
-        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072505",
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "FB072505",
         "plant_count": 10, "phase": "harvested"}, headers=cu_h)
     assert r.status_code == 422
 
@@ -206,7 +222,7 @@ async def test_task_batch_id_round_trips_and_clears(client, admin_headers, org):
     room = await _room(client, admin_headers, "flower_c185", "Flowering 1.6")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
     b = await client.post("/cultivation/batches", json={
-        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072506",
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "FB072506",
         "plant_count": 10, "phase": "veg"}, headers=cu_h)
     bid = b.json()["id"]
 
@@ -278,11 +294,12 @@ async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_hea
     the common case) must not duplicate its set."""
     await _seed_cultivation_week(org)
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     veg = await _room(client, admin_headers, "veg_c190", "Vegetation 2", "veg")
     flower = await _room(client, admin_headers, "flower_c190", "Flowering 2.0")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
     b = await client.post("/cultivation/batches", json={
-        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "GP072510",
+        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "FB072510",
         "plant_count": 20, "phase": "clone"}, headers=cu_h)
     bid = b.json()["id"]
 
@@ -315,8 +332,11 @@ async def test_phase_move_generates_task_set_and_is_idempotent(client, admin_hea
     assert any("Trichome maturation check" in x["title"] for x in flower_tasks)
 
     # a correction back to veg then forward to flower again must NOT generate
-    # a second flower set — idempotent per (batch, phase), not per visit
-    await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "veg"}, headers=cu_h)
+    # a second flower set — idempotent per (batch, phase), not per visit. A
+    # backward move is a correction of the record: QA authority, with a reason.
+    r = await client.post(f"/cultivation/batches/{bid}/move",
+                          json={"to_phase": "veg", "reason": "moved a day early"}, headers=qa_h)
+    assert r.status_code == 200, r.text
     mv3 = await client.post(f"/cultivation/batches/{bid}/move", json={"to_phase": "flower"}, headers=cu_h)
     assert mv3.status_code == 200, mv3.text
     assert mv3.json()["generated_task_ids"] == []
@@ -330,7 +350,7 @@ async def test_phase_with_no_template_generates_nothing(client, admin_headers, o
     room = await _room(client, admin_headers, "nursery_c191", "Nursery 1", "nursery")
     cv = await _cultivar(client, cu_h, "FB", "Fat Bastard")
     b = await client.post("/cultivation/batches", json={
-        "room_id": room["id"], "cultivar_id": cv["id"], "code": "GP072511",
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "FB072511",
         "plant_count": 5, "phase": "clone"}, headers=cu_h)
     bid = b.json()["id"]
 
@@ -480,12 +500,14 @@ async def test_the_board_computes_the_plans_expected_window_for_the_phase(client
     from datetime import timedelta
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "veg_p", "Veg P", kind="veg")
+    froom = await _room(client, admin_headers, "flower_p", "Flower P")
     cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
     today = facility_today()
 
     async def _mk(code, phase, days_ago, **over):
         r = await client.post("/cultivation/batches", json={
-            "room_id": room["id"], "cultivar_id": cv["id"], "code": code, "plant_count": 5,
+            "room_id": froom["id"] if phase == "flower" else room["id"],
+            "cultivar_id": cv["id"], "code": code, "plant_count": 5,
             "phase": phase, "phase_since": (today - timedelta(days=days_ago)).isoformat(),
             **over}, headers=cu_h)
         assert r.status_code == 201, r.text
@@ -579,7 +601,7 @@ async def test_clones_carry_their_mothers_id_and_the_fill_stays_resumable(client
     # 60 from the first mother, 40 from the second: 20 of the 120 planned have
     # no mother to name them.
     r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": cv["id"], "planned_count": 120, "batch_id": bid,
+        "cultivar_id": cv["id"], "planned_count": 120, "started_on": "2026-09-01", "batch_id": bid,
         "product_id": prod["id"],
         "mothers": [{"mother_plant_id": m1["id"], "cuttings": 60},
                     {"mother_plant_id": m2["id"], "cuttings": 40}]})
@@ -601,7 +623,7 @@ async def test_clones_carry_their_mothers_id_and_the_fill_stays_resumable(client
     assert codes[60] == "GP26_S1M02-1_001-01.001"
     assert codes[99] == "GP26_S1M02-1_001-01.040"
     # the remainder falls back to the legacy id, and says nothing about a mother
-    assert codes[100] == "20260901_GP_0101" and codes[119] == "20260901_GP_0120"
+    assert codes[100] == "20260901_GP092630_0101" and codes[119] == "20260901_GP092630_0120"
     assert rows[0]["mother_code"] == "GP26_S1M01-1_001" and rows[0]["clone_no"] == 1
     assert rows[100]["mother_plant_id"] is None and rows[100]["cutting_no"] is None
 
@@ -611,7 +633,7 @@ async def test_clones_carry_their_mothers_id_and_the_fill_stays_resumable(client
         "plant_count": 3, "phase": "clone", "clone_date": "2026-09-20"}, headers=cu_h)
     bid2 = b2.json()["id"]
     r = await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": cv["id"], "planned_count": 3, "batch_id": bid2,
+        "cultivar_id": cv["id"], "planned_count": 3, "started_on": "2026-09-20", "batch_id": bid2,
         "mothers": [{"mother_plant_id": m1["id"], "cuttings": 3}]})
     assert r.status_code == 201 and r.json()["mothers"][0]["cutting_no"] == 2
     await client.post(f"/cultivation/batches/{bid2}/plants", headers=cu_h)
@@ -635,7 +657,7 @@ async def test_an_interrupted_fill_resumes_with_the_same_ids(client, admin_heade
         "plant_count": 10, "phase": "clone", "clone_date": "2026-09-01"}, headers=cu_h)
     bid = b.json()["id"]
     await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": cv["id"], "planned_count": 10, "batch_id": bid,
+        "cultivar_id": cv["id"], "planned_count": 10, "started_on": "2026-09-01", "batch_id": bid,
         "mothers": [{"mother_plant_id": m["id"], "cuttings": 10}]})
 
     # Simulate an interrupted fill: materialise, then delete the tail and
@@ -666,7 +688,7 @@ async def test_a_cutting_of_more_than_999_clones_cannot_be_numbered(client, admi
         "plant_count": 1200, "phase": "clone"}, headers=cu_h)
     bid = b.json()["id"]
     await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": cv["id"], "planned_count": 1200, "batch_id": bid,
+        "cultivar_id": cv["id"], "planned_count": 1200, "started_on": "2026-09-01", "batch_id": bid,
         "mothers": [{"mother_plant_id": m["id"], "cuttings": 1000}]})
     r = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
     assert r.status_code == 422 and "999" in r.text
@@ -690,10 +712,302 @@ async def test_a_mother_whose_cuttings_were_not_counted_names_no_clones(client, 
         "plant_count": 3, "phase": "clone", "clone_date": "2026-09-01"}, headers=cu_h)
     bid = b.json()["id"]
     await client.post("/cultivation/clone-runs", headers=cu_h, json={
-        "cultivar_id": cv["id"], "planned_count": 3, "batch_id": bid,
+        "cultivar_id": cv["id"], "planned_count": 3, "started_on": "2026-09-01", "batch_id": bid,
         "mothers": [{"mother_plant_id": m["id"]}]})
     g = await client.post(f"/cultivation/batches/{bid}/plants", headers=cu_h)
     assert g.json()["per_mother"] == [] and g.json()["legacy"] == 3
     rows = (await client.get(f"/cultivation/batches/{bid}/plants", headers=cu_h)).json()["plants"]
-    assert [p["plant_code"] for p in rows] == ["20260901_GP_0001", "20260901_GP_0002",
-                                               "20260901_GP_0003"]
+    assert [p["plant_code"] for p in rows] == ["20260901_GP092634_0001", "20260901_GP092634_0002",
+                                               "20260901_GP092634_0003"]
+
+
+# ── the 2026-09-27 review: CS-01 … CS-18 ─────────────────────────────────────
+
+async def _bt(client, headers, room_id, cultivar_id, code, phase="clone", **over):
+    body = {"room_id": room_id, "cultivar_id": cultivar_id, "code": code,
+            "plant_count": 10, "phase": phase, **over}
+    r = await client.post("/cultivation/batches", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def _mv(client, headers, bid, **body):
+    return await client.post(f"/cultivation/batches/{bid}/move", json=body, headers=headers)
+
+
+async def test_a_move_is_bounded_by_the_facility_clock_and_stays_in_order(client, admin_headers):
+    """CS-01. A move dated after the facility's today, or before the batch's
+    latest phase event, is refused: the PHI gate resolves the batch's room on
+    the application date from these events, and a backdated room move used to
+    lift a room-scoped spray block."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    f1 = await _room(client, admin_headers, "flower_b1", "Flowering B1")
+    f2 = await _room(client, admin_headers, "flower_b2", "Flowering B2")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    today = facility_today()
+    b = await _bt(client, cu_h, f1["id"], cv["id"], "GP092640", phase="flower",
+                  phase_since=(today - timedelta(days=10)).isoformat())
+
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f2["id"],
+                  occurred_on=(today + timedelta(days=1)).isoformat())
+    assert r.status_code == 422 and "future" in r.text
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f2["id"],
+                  occurred_on=(today - timedelta(days=11)).isoformat())
+    assert r.status_code == 422 and "before" in r.text
+    # Dated on the phase start itself is fine; the next move cannot predate it.
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f2["id"],
+                  occurred_on=(today - timedelta(days=3)).isoformat())
+    assert r.status_code == 200, r.text
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f1["id"],
+                  occurred_on=(today - timedelta(days=5)).isoformat())
+    assert r.status_code == 422 and "before" in r.text
+    # A batch cannot be registered in the future either.
+    r = await client.post("/cultivation/batches", json={
+        "room_id": f1["id"], "cultivar_id": cv["id"], "code": "GP092641", "plant_count": 1,
+        "phase": "clone", "clone_date": (today + timedelta(days=1)).isoformat()}, headers=cu_h)
+    assert r.status_code == 422 and "future" in r.text
+
+
+async def test_two_batches_of_one_cultivar_cloned_the_same_day_both_get_ids(client, admin_headers):
+    """CS-02. Two flowering rooms of Grape Pie cloned together is the normal
+    plan. The legacy id carries the batch code, so the second fill does not
+    collide with the first on (org, plant_code)."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_two", "Clone Two", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    a = await _bt(client, cu_h, room["id"], cv["id"], "GP092601", clone_date="2026-09-27")
+    b = await _bt(client, cu_h, room["id"], cv["id"], "GP092602", clone_date="2026-09-27")
+    for x in (a, b):
+        g = await client.post(f"/cultivation/batches/{x['id']}/plants", headers=cu_h)
+        assert g.status_code == 200, g.text
+        assert g.json()["complete"] is True
+    pa = (await client.get(f"/cultivation/batches/{a['id']}/plants", headers=cu_h)).json()["plants"]
+    pb = (await client.get(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)).json()["plants"]
+    assert pa[0]["plant_code"] == "20260927_GP092601_0001"
+    assert pb[0]["plant_code"] == "20260927_GP092602_0001"
+    assert not ({p["plant_code"] for p in pa} & {p["plant_code"] for p in pb})
+
+
+async def test_a_room_change_keeps_the_phase_clock(client, admin_headers):
+    """CS-06. A flowering batch moved F1 -> F2 on day 30 is still on day 30: a
+    move to the SAME phase changes the room and nothing else, records one
+    event, and generates no phase tasks."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    f1 = await _room(client, admin_headers, "flower_r1", "Flowering R1")
+    f2 = await _room(client, admin_headers, "flower_r2", "Flowering R2")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    since = (facility_today() - timedelta(days=30)).isoformat()
+    b = await _bt(client, cu_h, f1["id"], cv["id"], "GP092650", phase="flower", phase_since=since)
+
+    # "Move to where you already are" with no room is not a move.
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower")).status_code == 422
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower",
+                      to_room_id=f1["id"])).status_code == 422
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=f2["id"])
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "room" and r.json()["phase_since"] == since
+    assert r.json()["room_id"] == f2["id"] and r.json()["generated_task_ids"] == []
+    row = next(x for x in (await client.get("/cultivation/batches", headers=cu_h)).json()["batches"]
+               if x["id"] == b["id"])
+    assert row["days_in_phase"] == 30 and row["room_name"] == "Flowering R2"
+    # …and the harvest window did not restart.
+    assert row["harvest_window_from"] == (facility_today() + timedelta(days=12)).isoformat()
+
+
+async def test_the_path_is_walked_one_stop_at_a_time_and_backwards_is_a_qa_correction(client, admin_headers):
+    """CS-06. clone -> nursery -> veg -> flower -> drying -> harvested, nursery
+    and drying optional, destroyed from anywhere. A backward move is a
+    correction: QA authority with a reason, or nothing."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    clone = await _room(client, admin_headers, "clone_path", "Clone Path", kind="clone")
+    flower = await _room(client, admin_headers, "flower_path", "Flowering Path")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _bt(client, cu_h, clone["id"], cv["id"], "GP092660")
+
+    r = await _mv(client, cu_h, b["id"], to_phase="flower", to_room_id=flower["id"])
+    assert r.status_code == 422 and "skips" in r.text
+    assert (await _mv(client, cu_h, b["id"], to_phase="drying")).status_code == 422
+    assert (await _mv(client, cu_h, b["id"], to_phase="harvested", reason="x")).status_code == 422
+    assert (await _mv(client, cu_h, b["id"], to_phase="veg")).status_code == 200      # nursery skipped
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower",
+                      to_room_id=flower["id"])).status_code == 200
+    # Backwards: the floor may not; QA may, with a reason.
+    r = await _mv(client, cu_h, b["id"], to_phase="veg", reason="wrong room")
+    assert r.status_code == 403
+    r = await _mv(client, qa_h, b["id"], to_phase="veg")
+    assert r.status_code == 422 and "reason" in r.text
+    r = await _mv(client, qa_h, b["id"], to_phase="veg", reason="moved a day early by mistake")
+    assert r.status_code == 200 and r.json()["kind"] == "backward"
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower")).status_code == 200
+    # flower -> harvested skips the optional drying stop; drying -> harvested too.
+    assert (await _mv(client, cu_h, b["id"], to_phase="drying")).status_code == 200
+    r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
+    assert r.status_code == 200 and r.json()["is_active"] is False
+    # Destroyed is reachable from anywhere; mother stock is off the path.
+    c2 = await _bt(client, cu_h, clone["id"], cv["id"], "GP092661")
+    assert (await _mv(client, cu_h, c2["id"], to_phase="destroyed",
+                      reason="damping off")).status_code == 200
+    m = await _bt(client, cu_h, clone["id"], cv["id"], "GP092662", phase="mother")
+    r = await _mv(client, cu_h, m["id"], to_phase="veg")
+    assert r.status_code == 422 and "mother" in r.text
+    assert (await _mv(client, cu_h, c2["id"], to_phase="mother")).status_code == 409
+
+
+async def test_two_moves_at_once_serialise_on_the_batch_row(client, admin_headers):
+    """CS-06. A forward move and a terminal move fired together: the row lock
+    orders them, so the batch ends closed with every plant settled and never
+    half-closed (phase moved on, is_active false)."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    flower = await _room(client, admin_headers, "flower_race", "Flowering Race")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _bt(client, cu_h, flower["id"], cv["id"], "GP092670", phase="flower")
+    await client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)
+    a, c = await asyncio.gather(
+        _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull"),
+        _mv(client, cu_h, b["id"], to_phase="drying"))
+    assert sorted([a.status_code, c.status_code]) in ([200, 200], [200, 409]), (a.text, c.text)
+    row = next(x for x in (await client.get("/cultivation/batches?active=false",
+                                            headers=cu_h)).json()["batches"] if x["id"] == b["id"])
+    assert row["phase"] == "harvested" and row["is_active"] is False
+    assert (await client.get(f"/cultivation/batches/{b['id']}/plants?status=active",
+                             headers=cu_h)).json()["total"] == 0
+
+
+async def test_closing_after_a_waste_manifest_settles_the_destroyed_plants(client, admin_headers):
+    """CS-07. 150 of 2000 declared destroyed on a manifest and the rest
+    harvested: closing the batch marks 150 plants destroyed, not harvested,
+    with the manifest named as the reason."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    flower = await _room(client, admin_headers, "flower_wm", "Flowering WM")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _bt(client, cu_h, flower["id"], cv["id"], "GP092680", phase="flower", plant_count=40)
+    await client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)
+    m = await client.post("/waste/manifests", json={
+        "manifest_code": "WM-CS07", "waste_type": "plant_material",
+        "reason": "hlvd_eradication", "campaign": "hlvd-2026-09"}, headers=cu_h)
+    assert m.status_code == 201, m.text
+    r = await client.post(f"/waste/manifests/{m.json()['id']}/lines",
+                          json={"batch_id": b["id"], "plant_qty": 15}, headers=cu_h)
+    assert r.status_code == 201, r.text
+
+    r = await _mv(client, cu_h, b["id"], to_phase="harvested", reason="final pull")
+    assert r.status_code == 200, r.text
+    assert r.json()["plants_settled"] == {"harvested": 25, "destroyed": 15}
+    plants = (await client.get(f"/cultivation/batches/{b['id']}/plants?limit=100",
+                               headers=cu_h)).json()["plants"]
+    assert sum(1 for p in plants if p["status"] == "destroyed") == 15
+    assert sum(1 for p in plants if p["status"] == "harvested") == 25
+    gone = [p for p in plants if p["status"] == "destroyed"]
+    assert "WM-CS07" in gone[0]["reason"]
+    assert all(p["status_since"] == facility_today().isoformat() for p in plants)
+
+
+async def test_the_next_batch_number_is_max_plus_one_in_the_cloning_month(client, admin_headers):
+    """CS-09. GP092601 and GP092603 on file suggest 04, not 03 (count); the
+    month is the CLONING month, not the day the form is opened; 99 is the end."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_nn", "Clone NN", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    for code in ("GP082601", "GP082603", "GP0826X1", "GP-SUB"):
+        await _bt(client, cu_h, room["id"], cv["id"], code, clone_date="2026-08-20")
+    r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}&clone_date=2026-08-30",
+                         headers=cu_h)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"prefix": "GP", "period": "0826", "seq": 4, "suggested": "GP082604"}
+    r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}&clone_date=2026-09-01",
+                         headers=cu_h)
+    assert r.json()["suggested"] == "GP092601", "September's first batch, whatever today is"
+    await _bt(client, cu_h, room["id"], cv["id"], "GP092699", clone_date="2026-09-01")
+    r = await client.get(f"/cultivation/batch-code?cultivar_id={cv['id']}&clone_date=2026-09-02",
+                         headers=cu_h)
+    assert r.status_code == 422 and "99" in r.text
+
+
+async def test_a_batch_code_must_carry_its_cultivars_head(client, admin_headers):
+    """CS-09. The strain of a tested lot is read off the batch code's head, so
+    a GP batch cannot be filed as XYZ092601; a concurrent duplicate is a 409."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_hd", "Clone HD", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    r = await client.post("/cultivation/batches", json={
+        "room_id": room["id"], "cultivar_id": cv["id"], "code": "XYZ092601",
+        "plant_count": 1, "phase": "clone"}, headers=cu_h)
+    assert r.status_code == 422 and "GP" in r.text
+    body = {"room_id": room["id"], "cultivar_id": cv["id"], "code": "GP092605",
+            "plant_count": 1, "phase": "clone"}
+    a, b = await asyncio.gather(client.post("/cultivation/batches", json=body, headers=cu_h),
+                                client.post("/cultivation/batches", json=body, headers=cu_h))
+    assert sorted([a.status_code, b.status_code]) == [201, 409], (a.text, b.text)
+
+
+async def test_flowering_happens_in_a_flowering_room(client, admin_headers):
+    """CS-16. The owner: flowering is "in one of the 6 available flowering
+    rooms". A batch cannot be registered in, or moved to, flower in any other
+    kind of room — with or without a room change on the move."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    veg = await _room(client, admin_headers, "veg_fl", "Veg FL", kind="veg")
+    dry = await _room(client, admin_headers, "dry_fl", "Dry FL", kind="dry")
+    flower = await _room(client, admin_headers, "flower_fl", "Flowering FL")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    r = await client.post("/cultivation/batches", json={
+        "room_id": veg["id"], "cultivar_id": cv["id"], "code": "GP092690",
+        "plant_count": 1, "phase": "flower"}, headers=cu_h)
+    assert r.status_code == 422 and "flower" in r.text
+    b = await _bt(client, cu_h, veg["id"], cv["id"], "GP092691", phase="veg")
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower")).status_code == 422
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower",
+                      to_room_id=dry["id"])).status_code == 422
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower",
+                      to_room_id=flower["id"])).status_code == 200
+    # A flowering batch may not be shuffled into a veg room either.
+    assert (await _mv(client, cu_h, b["id"], to_phase="flower",
+                      to_room_id=veg["id"])).status_code == 422
+
+
+async def test_cultivars_carry_no_legacy_ladder(client, admin_headers):
+    """CS-18. The superseded potency ladder rode along as `spec`; nothing read it."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    await _cultivar(client, cu_h, "GP", "Grape Pie")
+    cvs = (await client.get("/cultivation/cultivars", headers=cu_h)).json()["cultivars"]
+    assert cvs and all("spec" not in c for c in cvs)
+    assert all("products" in c for c in cvs)
+
+
+async def test_a_closed_batch_gets_no_plants_and_a_failed_run_names_none(client, admin_headers):
+    """CS-05. Generating plants for a harvested or destroyed batch is refused;
+    the mothers of a run that FAILED (its cuttings did not root) contribute no
+    clone ids, so the fill numbers only the runs that produced plants."""
+    from tests.test_products import _approved
+    from tests.test_propagation import _campaign, _mother
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "clone_fail", "Clone Fail", kind="clone")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    prod = await _approved(client, admin_headers, cv["id"])
+    camp = await _campaign(client, cu_h)
+    m1 = await _mother(client, cu_h, prod["id"], camp["id"])
+    m2 = await _mother(client, cu_h, prod["id"], camp["id"])
+    b = await _bt(client, cu_h, room["id"], cv["id"], "GP092695", plant_count=6,
+                  clone_date="2026-09-01")
+    failed = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 3, "started_on": "2026-09-01",
+        "batch_id": b["id"], "mothers": [{"mother_plant_id": m1["id"], "cuttings": 3}]})
+    assert failed.status_code == 201, failed.text
+    ok = await client.post("/cultivation/clone-runs", headers=cu_h, json={
+        "cultivar_id": cv["id"], "planned_count": 3, "started_on": "2026-09-02",
+        "batch_id": b["id"], "mothers": [{"mother_plant_id": m2["id"], "cuttings": 3}]})
+    assert ok.status_code == 201, ok.text
+    assert (await client.patch(f"/cultivation/clone-runs/{failed.json()['id']}",
+                               json={"status": "failed"}, headers=cu_h)).status_code == 200
+    g = await client.post(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)
+    assert g.status_code == 200, g.text
+    assert g.json()["per_mother"] == [{"mother_code": m2["code"], "cutting_no": 1, "count": 3}]
+    codes = [p["plant_code"] for p in
+             (await client.get(f"/cultivation/batches/{b['id']}/plants", headers=cu_h)).json()["plants"]]
+    assert codes[:3] == [f"{m2['code']}-01.00{n}" for n in (1, 2, 3)]
+    assert codes[3] == "20260901_GP092695_0004"
+
+    closed = await _bt(client, cu_h, room["id"], cv["id"], "GP092696", plant_count=2)
+    await _mv(client, cu_h, closed["id"], to_phase="destroyed", reason="damping off")
+    r = await client.post(f"/cultivation/batches/{closed['id']}/plants", headers=cu_h)
+    assert r.status_code == 409 and "closed" in r.text

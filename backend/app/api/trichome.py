@@ -12,9 +12,13 @@ same reason those are separate: a trichome check IS a cultivation record, it
 simply lives in its own module.
 
 Access model:
-  read   — every role above base USER (ELEVATED_ROLES);
-  record — the cultivation writers (cultivation._WRITERS: CU_MGR, QA_MGR,
-           executives, ADMIN).
+  read    — every role above base USER (ELEVATED_ROLES);
+  record  — the cultivation writers (cultivation._WRITERS: CU_MGR, QA_MGR,
+            executives, ADMIN);
+  correct — the same writers, through PATCH: a mistyped date or percentage is
+            corrected in place rather than left as a second, contradicting
+            row. Nothing is deleted — the check happened; the record of it is
+            what gets put right.
 
 THERE IS NO GATE HERE. Unlike a spray, a trichome check blocks nothing: the
 harvest form shows the latest verdict and says so when none was taken, but a
@@ -22,6 +26,11 @@ cut is never refused for want of one. A check that refused a harvest would turn
 an observation into a control the owner did not ask for — and the crew that
 looks down a microscope must be free to record what they see, including
 "overripe", without the record fighting them.
+
+THE DATE IS BOUNDED. `checked_on` may not lie after the facility's today: the
+board and the harvest form show the LATEST check, and a check typed as next
+year would stay "latest" for a year (review CS-13). A check is an observation
+that has happened, so it is dated when it happened.
 
 The percentages are the three trichome states (clear, cloudy, amber) as read
 under the scope. Each is optional — a check may be qualitative — but if all
@@ -34,7 +43,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.api.cultivation import _WRITERS
+from app.api.cultivation import _WRITERS, _not_after_today, _site_today
 from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
@@ -64,6 +73,22 @@ class TrichomeIn(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+class TrichomePatch(BaseModel):
+    """A correction. The batch is not among the fields: a check belongs to the
+    batch it was taken on, and a check taken on the wrong batch is corrected
+    by recording it on the right one."""
+    checked_on: date | None = None
+    instrument: str | None = None
+    magnification: str | None = Field(default=None, max_length=40)
+    sample_sites: int | None = Field(default=None, ge=1, le=1000)
+    pct_clear: float | None = Field(default=None, ge=0, le=100)
+    pct_cloudy: float | None = Field(default=None, ge=0, le=100)
+    pct_amber: float | None = Field(default=None, ge=0, le=100)
+    verdict: str | None = None
+    image_ref: str | None = Field(default=None, max_length=300)
+    note: str | None = Field(default=None, max_length=1000)
+
+
 def _out(r) -> dict:
     def _f(v):
         return float(v) if v is not None else None
@@ -76,6 +101,7 @@ def _out(r) -> dict:
         "pct_amber": _f(r["pct_amber"]), "verdict": r["verdict"],
         "image_ref": r["image_ref"], "note": r["note"],
         "checked_by": str(r["checked_by"]), "created_at": r["created_at"].isoformat(),
+        "updated_at": r["updated_at"].isoformat(),
     }
 
 
@@ -83,6 +109,22 @@ _SQL = ("SELECT t.*, b.code AS batch_code, r.name AS room_name"
         " FROM trichome_checks t"
         " JOIN plant_batches b ON b.id = t.batch_id"
         " LEFT JOIN rooms r ON r.id = t.room_id")
+
+
+def _check_vocab(instrument, verdict) -> None:
+    if instrument is not None and instrument not in _INSTRUMENTS:
+        raise HTTPException(422, f"instrument must be one of: {', '.join(_INSTRUMENTS)}")
+    if verdict is not None and verdict not in _VERDICTS:
+        raise HTTPException(422, f"verdict must be one of: {', '.join(_VERDICTS)}")
+
+
+def _check_sum(pcts) -> None:
+    if all(v is not None for v in pcts):
+        total = sum(pcts)
+        if not (_SUM_LO <= total <= _SUM_HI):
+            raise HTTPException(
+                422, f"clear + cloudy + amber = {total:g} % — the three states of one field of"
+                     f" view must add up to about 100 %")
 
 
 @router.get("/trichome-checks")
@@ -102,19 +144,11 @@ async def list_checks(user: dict = Depends(require_role(*ELEVATED_ROLES)),
 
 @router.post("/trichome-checks", status_code=201)
 async def record_check(body: TrichomeIn, user: dict = Depends(require_role(*_WRITERS))):
-    if body.instrument not in _INSTRUMENTS:
-        raise HTTPException(422, f"instrument must be one of: {', '.join(_INSTRUMENTS)}")
-    if body.verdict not in _VERDICTS:
-        raise HTTPException(422, f"verdict must be one of: {', '.join(_VERDICTS)}")
-    pcts = (body.pct_clear, body.pct_cloudy, body.pct_amber)
-    if all(v is not None for v in pcts):
-        total = sum(pcts)
-        if not (_SUM_LO <= total <= _SUM_HI):
-            raise HTTPException(
-                422, f"clear + cloudy + amber = {total:g} % — the three states of one field of"
-                     f" view must add up to about 100 %")
+    _check_vocab(body.instrument, body.verdict)
+    _check_sum((body.pct_clear, body.pct_cloudy, body.pct_amber))
     uuid_or_404(body.batch_id, "Batch not found")
     async with rls(user) as c:
+        _not_after_today(body.checked_on, await _site_today(c), "checked_on")
         b = await c.fetchrow(
             "SELECT id, code, phase, room_id FROM plant_batches WHERE id=$1", body.batch_id)
         if b is None:
@@ -138,4 +172,46 @@ async def record_check(body: TrichomeIn, user: dict = Depends(require_role(*_WRI
                         params={"batch": b["code"], "verdict": body.verdict,
                                 "pct_amber": body.pct_amber})
         full = await c.fetchrow(_SQL + " WHERE t.id=$1", row["id"])
+    return _out(full)
+
+
+@router.patch("/trichome-checks/{check_id}")
+async def correct_check(check_id: str, body: TrichomePatch,
+                        user: dict = Depends(require_role(*_WRITERS))):
+    """Correct a recorded check in place — the date, the reading, the verdict.
+
+    The three percentages are validated as they will STAND after the patch,
+    not as they arrive, so a correction of one of them cannot leave the row
+    contradicting the other two. An explicit null clears an optional reading
+    (magnification, sample sites, the percentages, the image, the note); the
+    date, the instrument and the verdict cannot be cleared, only changed."""
+    uuid_or_404(check_id, "Trichome check not found")
+    patch = body.model_dump(exclude_unset=True)
+    _check_vocab(patch.get("instrument"), patch.get("verdict"))
+    for col in ("checked_on", "instrument", "verdict"):
+        if col in patch and patch[col] is None:
+            raise HTTPException(422, f"{col} cannot be cleared — correct it to a value")
+    async with rls(user) as c:
+        cur = await c.fetchrow(_SQL + " WHERE t.id=$1", check_id)
+        if cur is None:
+            raise HTTPException(404, "Trichome check not found")
+        _not_after_today(patch.get("checked_on"), await _site_today(c), "checked_on")
+        after = {k: (patch[k] if k in patch else cur[k])
+                 for k in ("pct_clear", "pct_cloudy", "pct_amber")}
+        _check_sum(tuple(float(v) if v is not None else None for v in after.values()))
+        fields, args = [], []
+        for col, val in patch.items():
+            args.append(val); fields.append(f"{col}=${len(args)}")
+        if not fields:
+            return {"ok": True, "noop": True}
+        args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
+        args.append(check_id)
+        await c.execute(
+            # Column names come from TrichomePatch's own fields; values are bound.
+            f"UPDATE trichome_checks SET {', '.join(fields)}, updated_at=now()"  # nosec B608
+            f" WHERE id=${len(args)}", *args)
+        await safe_emit(c, user, verb="trichome_corrected", object_type="trichome_check",
+                        object_id=check_id, recipients=[],
+                        params={"batch": cur["batch_code"], "fields": sorted(patch)})
+        full = await c.fetchrow(_SQL + " WHERE t.id=$1", check_id)
     return _out(full)

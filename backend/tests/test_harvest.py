@@ -105,7 +105,7 @@ async def test_qa_can_record_a_cut_but_not_a_yield(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c224_h", "Flowering H23")
-    cv = await _cultivar(client, cu_h, "QASURF", "QA surface")
+    cv = await _cultivar(client, cu_h, "GP", "QA surface")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-QASURF", 10,
                      phase_since=_days(30))
 
@@ -174,7 +174,7 @@ async def test_re_entry_interval_is_reported_in_hours_not_days(client, admin_hea
 async def test_a_batch_inside_a_pre_harvest_interval_cannot_be_cut(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c203_h", "Flowering H4")
-    cv = await _cultivar(client, cu_h, "PHI1", "PHI One")
+    cv = await _cultivar(client, cu_h, "GP", "PHI One")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-1", 100,
                      phase_since=_days(20))
 
@@ -203,7 +203,7 @@ async def test_a_batch_inside_a_pre_harvest_interval_cannot_be_cut(client, admin
 async def test_an_elapsed_interval_does_not_block(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c204_h", "Flowering H5")
-    cv = await _cultivar(client, cu_h, "PHI2", "PHI Two")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Two")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-2", 20,
                      phase_since=_days(30))
     await client.post("/cultivation/ipm", json={
@@ -230,7 +230,7 @@ async def test_the_interval_boundary_is_the_clear_date_itself(client, admin_head
     Postgres in the same zone, so the two cannot be a day apart."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c225_h", "Flowering H24")
-    cv = await _cultivar(client, cu_h, "BOUND", "Boundary")
+    cv = await _cultivar(client, cu_h, "GP", "Boundary")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-BOUND", 30,
                      phase_since=_days(40))
 
@@ -265,7 +265,7 @@ async def test_an_application_with_no_declared_phi_does_not_block(client, admin_
     from zero — and neither of them is a block."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c205_h", "Flowering H6")
-    cv = await _cultivar(client, cu_h, "PHI3", "PHI Three")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Three")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-3", 10,
                      phase_since=_days(30))
     await client.post("/cultivation/ipm", json={
@@ -283,7 +283,7 @@ async def test_the_recorder_cannot_clear_their_own_phi_block(client, admin_heade
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c206_h", "Flowering H7")
-    cv = await _cultivar(client, cu_h, "PHI4", "PHI Four")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Four")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-4", 10,
                      phase_since=_days(30))
     await client.post("/cultivation/ipm", json={
@@ -313,7 +313,7 @@ async def test_a_blank_override_reason_is_not_an_override(client, admin_headers)
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c207_h", "Flowering H8")
-    cv = await _cultivar(client, cu_h, "PHI5", "PHI Five")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Five")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-5", 10,
                      phase_since=_days(30))
     await client.post("/cultivation/ipm", json={
@@ -333,7 +333,7 @@ async def test_room_scope_is_resolved_as_of_the_application_date(client, admin_h
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     treated = await _room(client, admin_headers, "c208_h", "Flowering treated")
     clean = await _room(client, admin_headers, "c209_h", "Flowering clean")
-    cv = await _cultivar(client, cu_h, "PHI6", "PHI Six")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Six")
 
     # `was_there` was in the treated room when it was sprayed and has since moved
     # out; `came_later` was elsewhere and has since moved in.
@@ -366,7 +366,7 @@ async def test_room_scope_is_resolved_as_of_the_application_date(client, admin_h
 async def test_a_batch_scoped_application_blocks_regardless_of_room(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c210_h", "Flowering H9")
-    cv = await _cultivar(client, cu_h, "PHI7", "PHI Seven")
+    cv = await _cultivar(client, cu_h, "GP", "PHI Seven")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-7", 10,
                      phase_since=_days(20))
     other = await _batch(client, cu_h, room["id"], cv["id"], "GP-PHI-7B", 10,
@@ -391,7 +391,7 @@ async def test_a_batch_scoped_application_blocks_regardless_of_room(client, admi
 async def test_harvesting_more_plants_than_the_batch_holds_is_refused(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c211_h", "Flowering H10")
-    cv = await _cultivar(client, cu_h, "HC1", "Headcount One")
+    cv = await _cultivar(client, cu_h, "GP", "Headcount One")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-HC-1", 100,
                      phase_since=_days(30))
 
@@ -409,7 +409,7 @@ async def test_harvest_and_destruction_are_counted_against_the_same_batch(client
     declared destroyed."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c212_h", "Flowering H11")
-    cv = await _cultivar(client, cu_h, "HC2", "Headcount Two")
+    cv = await _cultivar(client, cu_h, "GP", "Headcount Two")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-HC-2", 100,
                      phase_since=_days(30))
 
@@ -452,7 +452,7 @@ async def test_concurrent_harvest_and_destruction_do_not_jointly_over_declare(
     concurrent HARVESTS against each other, and add_line never touches it."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c228_h", "Flowering H27")
-    cv = await _cultivar(client, cu_h, "RACE", "Race")
+    cv = await _cultivar(client, cu_h, "GP", "Race")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-RACE", 10,
                      phase_since=_days(30))
     m = await client.post("/waste/manifests", json={
@@ -483,7 +483,7 @@ async def test_a_partial_canopy_pull_retires_no_plants(client, admin_headers):
     is a real harvest event that must not consume the batch."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c213_h", "Flowering H12")
-    cv = await _cultivar(client, cu_h, "HC3", "Headcount Three")
+    cv = await _cultivar(client, cu_h, "GP", "Headcount Three")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-HC-3", 10,
                      phase_since=_days(30))
     assert (await _harvest(client, cu_h, b["id"], "LOT-HC-3a", 0, 2000)).status_code == 201
@@ -495,11 +495,11 @@ async def test_a_partial_canopy_pull_retires_no_plants(client, admin_headers):
 async def test_a_closed_batch_cannot_be_harvested(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c214_h", "Flowering H13")
-    cv = await _cultivar(client, cu_h, "TERM", "Terminal")
+    cv = await _cultivar(client, cu_h, "GP", "Terminal")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-TERM", 10,
                      phase_since=_days(30))
     await client.post(f"/cultivation/batches/{b['id']}/move",
-                      json={"to_phase": "harvested"}, headers=cu_h)
+                      json={"to_phase": "harvested", "reason": "final pull"}, headers=cu_h)
     late = await _harvest(client, cu_h, b["id"], "LOT-TERM", 10, 4000)
     assert late.status_code == 409
     assert "after the final pull" in late.json()["detail"]
@@ -510,7 +510,7 @@ async def test_lot_code_collisions_are_refused(client, admin_headers):
     physical things into one traceability node."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c215_h", "Flowering H14")
-    cv = await _cultivar(client, cu_h, "COL", "Collide")
+    cv = await _cultivar(client, cu_h, "GP", "Collide")
     a = await _batch(client, cu_h, room["id"], cv["id"], "GP-COL-A", 50,
                      phase_since=_days(30))
     other = await _batch(client, cu_h, room["id"], cv["id"], "GP-COL-B", 50,
@@ -535,7 +535,7 @@ async def test_an_uncoded_batch_cannot_produce_a_lot(client, admin_headers):
     and is not, which is worse than refusing."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c216_h", "Flowering H15")
-    cv = await _cultivar(client, cu_h, "NOCODE", "No code")
+    cv = await _cultivar(client, cu_h, "GP", "No code")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-NOCODE", 10,
                      phase_since=_days(30))
     # Legacy shape: a batch predating migration 0045's `code` column.
@@ -554,7 +554,7 @@ async def test_a_harvest_writes_the_cultivation_genealogy_edge(client, admin_hea
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, qc_h = await _actor(client, admin_headers, "QC_MGR")
     room = await _room(client, admin_headers, "c217_h", "Flowering H16")
-    cv = await _cultivar(client, cu_h, "GEN", "Genealogy")
+    cv = await _cultivar(client, cu_h, "GP", "Genealogy")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-GEN", 40,
                      phase_since=_days(30))
 
@@ -581,7 +581,7 @@ async def test_dry_weight_cannot_exceed_wet_weight(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c218_h", "Flowering H17")
-    cv = await _cultivar(client, cu_h, "DRY1", "Dry One")
+    cv = await _cultivar(client, cu_h, "GP", "Dry One")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-DRY-1", 10,
                      phase_since=_days(30))
     h = (await _harvest(client, cu_h, b["id"], "LOT-DRY-1", 10, 5000)).json()
@@ -609,7 +609,7 @@ async def test_an_implausible_loss_is_reported_and_not_refused(client, admin_hea
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c219_h", "Flowering H18")
-    cv = await _cultivar(client, cu_h, "DRY2", "Dry Two")
+    cv = await _cultivar(client, cu_h, "GP", "Dry Two")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-DRY-2", 10,
                      phase_since=_days(30))
     h = (await _harvest(client, cu_h, b["id"], "LOT-DRY-2", 10, 5000)).json()
@@ -626,7 +626,7 @@ async def test_a_lot_cannot_be_closed_before_its_yield_is_recorded(client, admin
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c220_h", "Flowering H19")
-    cv = await _cultivar(client, cu_h, "CLOSE", "Close")
+    cv = await _cultivar(client, cu_h, "GP", "Close")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-CLOSE", 10,
                      phase_since=_days(30))
     h = (await _harvest(client, cu_h, b["id"], "LOT-CLOSE", 10, 5000)).json()
@@ -656,7 +656,7 @@ async def test_dry_weights_are_correctable_until_the_lot_closes(client, admin_he
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c221_h", "Flowering H20")
-    cv = await _cultivar(client, cu_h, "FIX", "Fix")
+    cv = await _cultivar(client, cu_h, "GP", "Fix")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-FIX", 10,
                      phase_since=_days(30))
     h = (await _harvest(client, cu_h, b["id"], "LOT-FIX", 10, 5000)).json()
@@ -686,7 +686,7 @@ async def test_yield_report_flags_a_batch_harvested_with_no_lot(client, admin_he
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c222_h", "Flowering H21")
-    cv = await _cultivar(client, cu_h, "YR", "Yield report")
+    cv = await _cultivar(client, cu_h, "GP", "Yield report")
 
     recorded = await _batch(client, cu_h, room["id"], cv["id"], "GP-YR-OK", 100,
                             phase_since=_days(30))
@@ -700,9 +700,9 @@ async def test_yield_report_flags_a_batch_harvested_with_no_lot(client, admin_he
                       json={"dry_flower_g": 10000, "dry_trim_g": 1500,
                             "dry_waste_g": 500}, headers=pr_h)
     await client.post(f"/cultivation/batches/{recorded['id']}/move",
-                      json={"to_phase": "harvested"}, headers=cu_h)
+                      json={"to_phase": "harvested", "reason": "final pull"}, headers=cu_h)
     await client.post(f"/cultivation/batches/{ghost['id']}/move",
-                      json={"to_phase": "harvested"}, headers=cu_h)
+                      json={"to_phase": "harvested", "reason": "final pull"}, headers=cu_h)
 
     rows = (await client.get("/cultivation/yield", headers=qa_h)).json()["batches"]
     by_code = {r["code"]: r for r in rows}
@@ -734,7 +734,7 @@ async def test_a_lot_still_drying_does_not_distort_the_batch_loss(client, admin_
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c223_h", "Flowering H22")
-    cv = await _cultivar(client, cu_h, "MID", "Mid dry")
+    cv = await _cultivar(client, cu_h, "GP", "Mid dry")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-MID", 20,
                      phase_since=_days(30))
 
@@ -771,7 +771,7 @@ async def test_the_cut_is_cultivations_and_everything_after_it_is_productions(cl
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, pr_h = await _actor(client, admin_headers, "PR_MGR")
     room = await _room(client, admin_headers, "c_hand", "Flowering HAND")
-    cv = await _cultivar(client, cu_h, "HAND", "Handoff")
+    cv = await _cultivar(client, cu_h, "GP", "Handoff")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP-HAND", 10, phase_since=_days(30))
 
     # production does not cut…
@@ -787,3 +787,27 @@ async def test_the_cut_is_cultivations_and_everything_after_it_is_productions(cl
     assert dried.status_code == 200, dried.text
     assert (await client.post(f"/cultivation/harvests/{h['id']}/close",
                               json={}, headers=pr_h)).status_code == 200
+
+
+async def test_a_cut_cannot_be_dated_past_the_interval(client, admin_headers):
+    """CS-01. Posting the "clears on" date while cutting today used to pass the
+    gate with no QA release. The harvest date is bounded by the site's today;
+    a backdated cut is judged on its own date."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    room = await _room(client, admin_headers, "c230_h", "Flowering H30")
+    cv = await _cultivar(client, cu_h, "GP", "Grape Pie")
+    b = await _batch(client, cu_h, room["id"], cv["id"], "GP-FUTURE", 10, phase_since=_days(40))
+    await client.post("/cultivation/ipm", json={
+        "product": "Sulphur", "category": "chemical", "room_id": room["id"],
+        "phi_days": 21, "applied_at": _at(0)}, headers=cu_h)
+    clears = (facility_today() + timedelta(days=21)).isoformat()
+    ahead = await _harvest(client, cu_h, b["id"], "LOT-FUTURE", 10, 4000, harvested_on=clears)
+    assert ahead.status_code == 422, ahead.text
+    assert "future" in ahead.text or "ahead" in ahead.text
+    tomorrow = await _harvest(client, cu_h, b["id"], "LOT-FUTURE", 10, 4000,
+                              harvested_on=(facility_today() + timedelta(days=1)).isoformat())
+    assert tomorrow.status_code == 422
+    today = await _harvest(client, cu_h, b["id"], "LOT-FUTURE", 10, 4000)
+    assert today.status_code == 409 and "pre-harvest interval" in today.text
+    assert (await client.get("/cultivation/harvests", headers=cu_h)).json()["harvests"] == []
+

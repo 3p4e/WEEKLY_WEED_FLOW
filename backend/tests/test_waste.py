@@ -260,7 +260,7 @@ async def test_over_declaring_a_batch_is_refused_across_manifests(client, admin_
     the arithmetic that stops the register balancing."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c180_w", "Flowering 1.1")
-    cv = await _cultivar(client, cu_h, "Bisamber", "Bisamber")
+    cv = await _cultivar(client, cu_h, "GP", "Bisamber")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP072501", 100)
 
     m1 = await _manifest(client, cu_h, "WM-R1")
@@ -294,7 +294,7 @@ async def test_concurrent_lines_on_different_manifests_do_not_jointly_over_decla
     only has room for one of the two lines to be accepted."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c183_w", "Flowering 1.4")
-    cv = await _cultivar(client, cu_h, "RaceLines", "Race Lines")
+    cv = await _cultivar(client, cu_h, "GP", "Race Lines")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP072503", 10)
     m1 = await _manifest(client, cu_h, "WM-RACEL1")
     m2 = await _manifest(client, cu_h, "WM-RACEL2")
@@ -320,7 +320,7 @@ async def test_concurrent_lines_on_different_manifests_do_not_jointly_over_decla
 async def test_a_batch_line_inherits_the_batch_room(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "c181_w", "Flowering 1.2")
-    cv = await _cultivar(client, cu_h, "Bisamber2", "Bisamber 2")
+    cv = await _cultivar(client, cu_h, "GP", "Bisamber 2")
     b = await _batch(client, cu_h, room["id"], cv["id"], "GP072502", 10)
     m = await _manifest(client, cu_h, "WM-ROOM")
     await client.post(f"/waste/manifests/{m['id']}/lines",
@@ -336,7 +336,7 @@ async def test_reconciliation_reports_unaccounted_and_unmanifested_destruction(c
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     _, qa_h = await _actor(client, admin_headers, "QA_MGR")
     room = await _room(client, admin_headers, "c182_w", "Flowering 1.3")
-    cv = await _cultivar(client, cu_h, "Recon", "Recon")
+    cv = await _cultivar(client, cu_h, "GP", "Recon")
 
     partly = await _batch(client, cu_h, room["id"], cv["id"], "GP-PART", 100)
     ghost = await _batch(client, cu_h, room["id"], cv["id"], "GP-GHOST", 50)

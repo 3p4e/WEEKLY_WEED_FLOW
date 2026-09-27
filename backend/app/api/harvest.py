@@ -46,7 +46,10 @@ THE FIVE GATES
      recorded on the harvest row (migration 0051's `harvests_phi_override_check`
      makes the three override columns arrive together or not at all). A recorder
      cannot wave away their own block — if they could, the gate would be
-     decoration.
+     decoration. Nor can they date their way past it: `harvested_on` may not lie
+     after the site's today (422), and cultivation.py refuses a room move dated
+     before the batch's latest phase event, so the room this gate resolves on
+     the application date cannot be rewritten afterwards.
 
   2. HEADCOUNT. Plants harvested plus plants declared destroyed may not exceed
      the batch's plant count, summed across EVERY harvest and EVERY waste
@@ -100,6 +103,7 @@ from app.db import rls
 from app.deps import require_role, uuid_or_404, uuid_or_422
 from app.notify import safe_emit
 from app.roles import ADMIN, ELEVATED_ROLES, EXECUTIVE_ROLES
+from app.worktime import SITE_TODAY_SQL
 
 router = APIRouter(prefix="/cultivation", tags=["cultivation"])
 
@@ -468,9 +472,12 @@ async def harvest_clearance(batch_id: str,
     # observation, and conflating them would either invent a gate nobody asked
     # for or quietly weaken one that exists.
     async with rls(user) as c:
+        # The latest check as of the site's today: a check dated ahead (rows
+        # that predate the bound trichome.py now enforces) is not "latest".
         tc = await c.fetchrow(
-            "SELECT checked_on, verdict, pct_amber, instrument FROM trichome_checks"
-            " WHERE batch_id=$1 ORDER BY checked_on DESC, created_at DESC LIMIT 1", b["id"])
+            "SELECT checked_on, verdict, pct_amber, instrument FROM trichome_checks"  # nosec B608
+            f" WHERE batch_id=$1 AND checked_on <= {SITE_TODAY_SQL}"
+            " ORDER BY checked_on DESC, created_at DESC LIMIT 1", b["id"])
     return {
         "latest_trichome": None if tc is None else {
             "checked_on": tc["checked_on"].isoformat(), "verdict": tc["verdict"],
@@ -576,7 +583,21 @@ async def create_harvest(body: HarvestIn, user: dict = Depends(require_role(*_CU
         elif b["room_id"] is not None:
             room_id = str(b["room_id"])
 
-        when = body.harvested_on or await _site_today(c)
+        # THE HARVEST DATE IS BOUNDED BY THE SITE'S TODAY. Gate 1 below is
+        # evaluated ON the harvest date, and the recorder supplies that date —
+        # so a future date was a way past the gate: post the "clears on" date
+        # while cutting today, and the block list is empty with no QA release
+        # (review CS-01). A cut cannot be recorded before it happened, so the
+        # date is refused rather than clamped. A backdated cut is still
+        # evaluated on its own date, which is the stricter reading: the plants
+        # came off on that day, and the interval had or had not elapsed then.
+        today = await _site_today(c)
+        if body.harvested_on is not None and body.harvested_on > today:
+            raise HTTPException(
+                422, f"harvested_on {body.harvested_on.isoformat()} is after today"
+                     f" ({today.isoformat()}) — a cut is recorded when it happens, not"
+                     " dated ahead of a pre-harvest interval")
+        when = body.harvested_on or today
 
         # Gate 2 — the headcount invariant, across BOTH registers. Either one
         # alone can be satisfied while the two together are impossible.

@@ -76,7 +76,7 @@ async def test_batches_created_via_cultivation_appear_on_the_board(client, admin
     nursery = await _room(client, admin_headers, "nursery_t", "Nursery T", "nursery")
     grow = await _room(client, admin_headers, "grow_t2", "Grow T2")
     cv = await _cultivar(client, cu_h, "GG", "Gorilla Glue")
-    b = await _batch(client, cu_h, nursery, cv, "GP072501", 48, "clone")
+    b = await _batch(client, cu_h, nursery, cv, "GG072501", 48, "clone")
     bid = b["id"]
     assert b["phase_since"] == facility_today().isoformat()
 
@@ -85,7 +85,10 @@ async def test_batches_created_via_cultivation_appear_on_the_board(client, admin
     assert nroom["plant_total"] == 48
     assert board["totals"]["clone"] >= 48
 
-    # move to the grow room + flowering
+    # through veg, then to the grow room + flowering (the path is walked one
+    # stop at a time — cultivation.py's _PATH)
+    assert (await client.post(f"/cultivation/batches/{bid}/move", json={
+        "to_phase": "veg"}, headers=cu_h)).status_code == 200
     mv = await client.post(f"/cultivation/batches/{bid}/move", json={
         "to_phase": "flower", "to_room_id": grow["id"]}, headers=cu_h)
     assert mv.status_code == 200, mv.text
@@ -96,7 +99,7 @@ async def test_batches_created_via_cultivation_appear_on_the_board(client, admin
 
     # a terminal move (harvested) removes it from the board entirely
     hv = await client.post(f"/cultivation/batches/{bid}/move",
-                           json={"to_phase": "harvested"}, headers=cu_h)
+                           json={"to_phase": "harvested", "reason": "cut"}, headers=cu_h)
     assert hv.status_code == 200 and hv.json()["is_active"] is False
     board = (await client.get("/facility", headers=cu_h)).json()
     assert next(r for r in board["rooms"] if r["id"] == grow["id"])["plant_total"] == 0
@@ -112,23 +115,23 @@ async def test_facility_totals_never_500_across_the_full_phase_vocabulary(client
     totals correctly."""
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "allphase_room", "All-Phase Room", "nursery")
+    froom = await _room(client, admin_headers, "allphase_flower", "All-Phase Flower")
     cv = await _cultivar(client, cu_h, "AP", "All Phase")
 
+    # Registered directly in each phase (a batch may be registered mid-plan);
+    # flowering goes into a flowering room, the rest are not tied to a kind.
     non_terminal = ["nursery", "clone", "veg", "flower", "mother", "drying"]
     batches = {}
     for i, phase in enumerate(non_terminal):
-        b = await _batch(client, cu_h, room, cv, f"AP07250{i}", 10, "clone")
-        if phase != "clone":
-            mv = await client.post(f"/cultivation/batches/{b['id']}/move",
-                                   json={"to_phase": phase}, headers=cu_h)
-            assert mv.status_code == 200, mv.text
+        b = await _batch(client, cu_h, froom if phase == "flower" else room, cv,
+                         f"AP07250{i}", 10, phase)
         batches[phase] = b["id"]
 
     # one more batch that actually reaches a terminal phase (harvested) — it
     # must be correctly excluded from the still-active board, not crash it.
-    term = await _batch(client, cu_h, room, cv, "AP072509", 7, "clone")
+    term = await _batch(client, cu_h, froom, cv, "AP072509", 7, "flower")
     hv = await client.post(f"/cultivation/batches/{term['id']}/move",
-                           json={"to_phase": "harvested"}, headers=cu_h)
+                           json={"to_phase": "harvested", "reason": "cut"}, headers=cu_h)
     assert hv.status_code == 200, hv.text
 
     r = await client.get("/facility", headers=cu_h)
@@ -157,7 +160,7 @@ async def test_cultivation_batch_changes_feed_the_activity_stream(client, admin_
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     room = await _room(client, admin_headers, "grow_t4", "Grow T4")
     cv = await _cultivar(client, cu_h, "NL", "Northern Lights")
-    b = await _batch(client, cu_h, room, cv, "GP072504", 12, "veg")
+    b = await _batch(client, cu_h, room, cv, "NL072504", 12, "veg")
     feed = (await client.get("/activity", headers=admin_headers)).json()
     ev = next(e for e in feed if e["verb"] == "batch_added" and e["object_id"] == b["id"])
     assert ev["params"]["cultivar"] == "NL"

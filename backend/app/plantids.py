@@ -24,7 +24,13 @@ CLONE (a plant cut from a known mother):
   is per cutting (001–999) and the cutting number tells them apart (01–99).
 
 LEGACY PLANT (no known mother — imported clones, seed):
-    <clone-date>_<ABBR>_<seq>         20260706_GP_0001   (migration 0045)
+    <clone-date>_<batch code>_<seq>   20260706_GP072501_0001
+  The middle segment is the BATCH CODE, not the cultivar: the batch code is
+  unique per org and already starts with the cultivar abbreviation, so two
+  batches of one cultivar cloned on the same day (the normal plan — one
+  cultivar per flowering room) get distinct ids by construction. Until the
+  2026-09-27 review the segment was the cultivar, and the second batch's fill
+  collided on plants_org_id_plant_code_key at its first chunk (CS-02).
 """
 import re
 from datetime import date
@@ -72,5 +78,18 @@ def clone_code(mother: str, cutting_no: int, clone_no: int) -> str:
     return f"{mother}-{int(cutting_no):02d}.{int(clone_no):03d}"
 
 
-def legacy_plant_code(day: date, cultivar_code: str, seq: int) -> str:
-    return f"{day.strftime('%Y%m%d')}_{cultivar_code}_{int(seq):04d}"
+def legacy_plant_code(day: date, batch_code: str, seq: int) -> str:
+    """<clone-date>_<batch code>_<seq>. The batch code, not the cultivar, is
+    what makes this unique across two batches cloned the same day."""
+    return f"{day.strftime('%Y%m%d')}_{batch_code}_{int(seq):04d}"
+
+
+# Sequence caps the facility's conventions impose. Every check that refuses a
+# number past one of these reads the cap from here, so the message, the
+# suggestion and the schema CHECK cannot drift apart.
+MAX_BATCH_SEQ = 99        # GP092699 is the last batch of GP in 09/26
+MAX_MOTHER_NO = 99        # M99 (mother_plants_mother_no_check)
+MAX_STOCK_NO = 999        # _999 (mother_plants_stock_no_check)
+MAX_GENERATION = 9        # -9 — one bound for typed and parent-derived generations
+MAX_CUTTING_NO = 99       # -99. (clone_run_mothers_cutting_no_check); see CS-11
+MAX_CLONE_NO = 999        # .999 (plants_clone_no_check)
