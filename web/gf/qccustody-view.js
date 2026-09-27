@@ -44,7 +44,7 @@
 
   const chip = (t, c) => `<span class="chip-opt" style="border-color:${c};color:${c}">${GF.esc(t)}</span>`;
   const stChip = (m, s) => { const x = m[s] || { en: s || '—', mk: s || '—', c: 'var(--ink-3)' }; return chip(AL(x.en, x.mk), x.c); };
-  const dt = (s) => s ? GF.esc(String(s).slice(0, 16).replace('T', ' ')) : '—';
+  const dt = (s) => s ? GF.esc(GF.fmtDateTime(s)) : '—';
 
   GF.WWF.loadQcCustody = async () => {
     const st = GF.WWF._qccus;

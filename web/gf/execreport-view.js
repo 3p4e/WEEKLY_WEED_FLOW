@@ -120,7 +120,7 @@ GF.WWF.xrStatusChips = (status, opts) => {
   const chip = (label, s, deptId, updated) => {
     const c = XR_STATUS_STYLE[s] || XR_STATUS_STYLE.missing;
     const click = compact ? '' : ` onclick="GF.WWF.xrToggle('${GF.esc(deptId)}')" style="cursor:pointer"`;
-    return `<span class="xr-chip"${click} title="${GF.esc(label)} — ${xrStatusLbl(s)}${updated ? ' · ' + GF.esc(updated.slice(0, 16).replace('T', ' ')) : ''}">
+    return `<span class="xr-chip"${click} title="${GF.esc(label)} — ${xrStatusLbl(s)}${updated ? ' · ' + GF.esc(GF.fmtDateTime(updated)) : ''}">
       <span class="xr-chip-in" style="background:${c.bg};color:${c.fg};border:1px solid ${c.bd}">
         <span class="dot" style="background:currentColor"></span>${GF.esc(label)}</span></span>`;
   };
@@ -231,7 +231,7 @@ const xrSection = (label, deptId, statusEntry) => {
     ${GF.icon(open ? 'chevD' : 'chevR', 'icon')}
     <b>${GF.esc(label)}</b>
     <span class="xr-chip-in" style="background:${c0.bg};color:${c0.fg};border:1px solid ${c0.bd}">${xrStatusLbl(s)}</span>
-    ${statusEntry && statusEntry.updated_at ? `<span class="sub">${GF.esc(statusEntry.updated_at.slice(0, 16).replace('T', ' '))}</span>` : ''}
+    ${statusEntry && statusEntry.updated_at ? `<span class="sub">${GF.esc(GF.fmtDateTime(statusEntry.updated_at))}</span>` : ''}
     <div class="spacer"></div>
   </div>`;
   let body = '';

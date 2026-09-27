@@ -14,7 +14,7 @@ GF.WWF._collab = {};   // taskId -> { comments, assignees, loaded }
 GF.WWF.canManageTask = (t) =>
   AUDIT_ROLES.includes((GF.API.user || {}).role) || (t && t.owner === GF.WWF.meId);
 
-GF.WWF._when = (iso) => { try { return new Date(iso).toLocaleString(); } catch (e) { return ''; } };
+GF.WWF._when = (iso) => GF.fmtDateTime(iso);
 
 GF.WWF.collabSection = (t) => {
   const c = GF.WWF._collab[t.id];

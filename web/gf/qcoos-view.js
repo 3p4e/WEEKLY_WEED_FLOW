@@ -141,7 +141,7 @@
     const nxt = NEXT[o.status];
     const canClose = o.status !== 'CLOSED';
     const reg = (d.register || []).map(e => `
-      <tr><td class="mono">${GF.esc((e.created_at || '').slice(0, 16).replace('T', ' '))}</td>
+      <tr><td class="mono">${GF.esc(GF.fmtDateTime(e.created_at))}</td>
       <td>${GF.esc(e.action)}</td><td>${GF.esc(e.details || '')}</td></tr>`).join('');
     const notifs = (d.notifications || []).map(n => `
       <div class="qms-row">

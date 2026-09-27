@@ -226,7 +226,7 @@
         <div class="apv-row" onclick="GF.setView('report')">
           <span class="fs-dot" style="background:var(--amber)"></span>
           <div class="apv-b"><div class="apv-t">${GF.esc(GF.state.lang === 'mk' && d.name_mk ? d.name_mk : (d.name || AL('Org-wide', 'Целата организација')))}</div>
-            <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(d.updated_at.slice(0, 16).replace('T', ' ')) : ''}</div></div>
+            <div class="apv-sub">${AL('draft — awaiting lock', 'нацрт — чека заклучување')}${d.updated_at ? ' · ' + GF.esc(GF.fmtDateTime(d.updated_at)) : ''}</div></div>
         </div>`).join('') || empty())}
       ${/* t.id below: same GF.esc()-in-onclick pattern reviewed above ackRow() —
            server-generated task UUID, judged safe for the same reason. */''}

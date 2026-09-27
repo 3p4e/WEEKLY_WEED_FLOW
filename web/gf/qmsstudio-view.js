@@ -575,7 +575,7 @@
         det = `
           <div onclick="event.stopPropagation()" style="margin-top:8px;cursor:auto">
             <div class="ana-note" style="margin:0 0 4px"><span class="mono qms-code">${GF.esc(dd.code || '')}</span>
-              · v${GF.esc(dd.version || '')} · ${GF.esc((dd.created_at || '').slice(0, 16).replace('T', ' '))}</div>
+              · v${GF.esc(dd.version || '')} · ${GF.esc(GF.fmtDateTime(dd.created_at))}</div>
             <div class="ana-note" style="margin:0 0 6px">${GF.esc(dd.title_mk || '')} | ${GF.esc(dd.title_en || '')}</div>
             <div class="ana-h" style="font-size:12px">${AL('Verify report', 'Верификациски извештај')} ${passChip(pass)}</div>
             <pre class="mono" style="white-space:pre-wrap;font-size:11px;margin:4px 0 0">${GF.esc(dd.verify ||

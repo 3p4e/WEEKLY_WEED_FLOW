@@ -110,7 +110,7 @@ GF.WWF._renderWorklog = ({ resetForm = false } = {}) => {
     list = `<div style="font-size:12px;color:var(--ink-3);padding:6px 0">${AL('No work logged yet.', 'Сè уште нема внесена работа.')}</div>`;
   } else {
     list = st.sessions.map(s => {
-      const when = (s.started_at || '').slice(0, 16).replace('T', ' ');
+      const when = GF.fmtDateTime(s.started_at);
       const who = (GF.PEOPLE[s.user_id] || {}).name || '';
       const del = (s.user_id === me || elevated)
         ? `<button class="mini-btn" style="color:var(--red)" title="${GF.t('delete')}" onclick="GF.WWF.deleteSession('${s.id}')">${GF.icon('trash')}</button>` : '';

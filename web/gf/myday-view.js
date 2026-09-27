@@ -86,8 +86,17 @@
     const fullName = meP.name || (GF.API.user || {}).full_name || (GF.API.user || {}).username || '';
     const first = GF.esc(String(fullName).trim().split(/\s+/)[0] || '');
     const hello = first ? `${greet}, ${first}` : greet;
-    const dstr = new Date().toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
-      { weekday: 'long', month: 'long', day: 'numeric' });
+    // The greeting names the FACILITY's day — the reader's browser may be in
+    // another zone, and My Day's "today" tasks are matched on the facility day.
+    let dstr;
+    try {
+      const tz = GF.facilityTZ ? GF.facilityTZ() : '';
+      dstr = new Intl.DateTimeFormat(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
+        { ...(tz ? { timeZone: tz } : {}), weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+    } catch (e) {
+      dstr = new Date().toLocaleDateString(GF.state.lang === 'mk' ? 'mk-MK' : 'en-US',
+        { weekday: 'long', month: 'long', day: 'numeric' });
+    }
     const deck = open.length === 1
       ? AL('1 task on deck', '1 задача на ред')
       : `${open.length} ${AL('tasks on deck', 'задачи на ред')}`;

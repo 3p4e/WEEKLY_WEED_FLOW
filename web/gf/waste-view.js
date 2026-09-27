@@ -325,9 +325,9 @@
     // The signature block: who did what, when. Present on every rung the
     // manifest has actually reached, absent on the ones it has not.
     const sig = [];
-    if (m.sealed_at) sig.push(`${AL('Weighed &amp; sealed', 'Измерено и затворено')}: ${GF.esc(String(m.sealed_at).slice(0, 16).replace('T', ' '))} · ${kg(m.gross_weight_kg)}`);
-    if (m.witnessed_at) sig.push(`${AL('Witnessed', 'Потврдено')}: ${GF.esc(String(m.witnessed_at).slice(0, 16).replace('T', ' '))}`);
-    if (m.disposed_at) sig.push(`${AL('Disposed', 'Уништено')}: ${GF.esc(String(m.disposed_at).slice(0, 16).replace('T', ' '))} · ${GF.esc(m.carrier_ref || '')}`);
+    if (m.sealed_at) sig.push(`${AL('Weighed &amp; sealed', 'Измерено и затворено')}: ${GF.esc(GF.fmtDateTime(m.sealed_at))} · ${kg(m.gross_weight_kg)}`);
+    if (m.witnessed_at) sig.push(`${AL('Witnessed', 'Потврдено')}: ${GF.esc(GF.fmtDateTime(m.witnessed_at))}`);
+    if (m.disposed_at) sig.push(`${AL('Disposed', 'Уништено')}: ${GF.esc(GF.fmtDateTime(m.disposed_at))} · ${GF.esc(m.carrier_ref || '')}`);
     body.innerHTML = `
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:10px">
         ${GF.esc(lbl(WASTE_TYPES, m.waste_type))} · ${GF.esc(lbl(REASONS, m.reason))} ·

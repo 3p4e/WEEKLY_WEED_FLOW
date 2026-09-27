@@ -116,11 +116,15 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
   };
   const verbLabel = (v) => { const l = VERB_LBL[v]; return l ? AL(l.en, l.mk) : v; };
 
+  // Grouped by the FACILITY's day of the instant, compared against the
+  // facility's today — not the UTC day of the stamp against the browser's
+  // day. Between facility midnight and 02:00 those disagreed, and an item
+  // from 00:30 sat under "Yesterday" (review 2026-09-27, FE-05).
   const dayLabel = (iso) => {
-    const d = iso.slice(0, 10), today = GF.localDateStr ? GF.localDateStr(new Date()) : new Date().toISOString().slice(0, 10);
+    const d = GF.fmtDate(iso), today = GF.facilityToday();
     if (d === today) return AL('Today', 'Денес');
-    const y = new Date(Date.now() - 864e5);
-    if (d === (GF.localDateStr ? GF.localDateStr(y) : y.toISOString().slice(0, 10))) return AL('Yesterday', 'Вчера');
+    const y = GF.fmtDate(new Date(new Date(today + 'T12:00:00Z').getTime() - 864e5).toISOString());
+    if (d === y) return AL('Yesterday', 'Вчера');
     return d;
   };
 
@@ -129,7 +133,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
       <div class="ntf-b">
         <div class="ntf-tt">${GF.esc(sentence(n))}</div>
         <div class="ntf-meta"><span class="ntf-reason">${GF.esc(AL(REASONS[n.reason]?.en || n.reason, REASONS[n.reason]?.mk || n.reason))}</span>
-          <span class="ntf-ts">${GF.esc(n.created_at.slice(11, 16))}</span></div>
+          <span class="ntf-ts">${GF.esc(GF.fmtTime(n.created_at))}</span></div>
       </div>
       <button class="mini-btn ntf-done" title="${AL('Done', 'Завршено')}"
         onclick="event.stopPropagation();GF.WWF.notifDone('${GF.esc(n.id)}')">${GF.icon('check', 'icon')}</button>
@@ -145,7 +149,7 @@ window.GF = window.GF || {}; GF.WWF = GF.WWF || {};
     <div class="ntf ntf-feed">
       <div class="ntf-rail"><span class="ntf-fdot ${dotKind(e)}"></span></div>
       <div class="ntf-b"><div class="ntf-tt">${GF.esc(sentence(e))}</div>
-        <div class="ntf-meta"><span class="ntf-ts">${GF.esc(e.created_at.slice(11, 16))}</span>
+        <div class="ntf-meta"><span class="ntf-ts">${GF.esc(GF.fmtTime(e.created_at))}</span>
           ${e.department_id && GF.depName ? `<span class="ntf-reason">${GF.esc(GF.depAbbr(e.department_id) || '')}</span>` : ''}</div></div>
     </div>`;
 

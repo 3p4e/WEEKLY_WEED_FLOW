@@ -95,7 +95,7 @@
         mark = '✓'; col = '#2BE8A0';
       }
     }
-    const when = entry ? new Date(entry.signed_at).toLocaleString() : '';
+    const when = entry ? GF.fmtDateTime(entry.signed_at) : '';
     return `<div class="dc-step" style="display:flex;gap:8px;align-items:center;padding:3px 0">
       <span style="color:${col};width:14px;text-align:center">${mark}</span>
       <span style="flex:1">${GF.esc(AL(s.en, s.mk))}${extra}</span>
@@ -149,7 +149,7 @@
       </div>
       <div style="color:var(--ink-3);font-size:11px;margin-bottom:8px">
         ${GF.esc(cyc.campaign)} · ${GF.esc(cyc.started_on)}
-        ${cyc.released_at ? ' · ' + AL('released ', 'ослободена ') + GF.esc(String(cyc.released_at).slice(0, 10)) : ''}
+        ${cyc.released_at ? ' · ' + AL('released ', 'ослободена ') + GF.esc(GF.fmtDate(cyc.released_at)) : ''}
       </div>
       <div style="margin-bottom:8px">${STEPS.map(s => stepRow(cyc, s)).join('')}</div>
       <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px">
@@ -232,7 +232,7 @@
             `${moves.length} waste movement(s) left the site with no corridor cleaning recorded after them:`,
             `${moves.length} движење(а) на отпад без запишано чистење на коридор потоа:`)}</div>
           ${moves.map(m => `<div style="font-size:11px;color:var(--ink-3)">
-            ${GF.esc(m.manifest_code)} · ${GF.esc(String(m.disposed_at).slice(0, 16).replace('T', ' '))}
+            ${GF.esc(m.manifest_code)} · ${GF.esc(GF.fmtDateTime(m.disposed_at))}
           </div>`).join('')}
         </div>`
       : '';
@@ -260,7 +260,7 @@
     GF.$('dc-cor-modal-title').textContent = AL('Record corridor cleaning', 'Запиши чистење на коридор');
     const manOpts = [{ v: '', label: AL('— none —', '— ништо —') }]
       .concat(manifests.map(m => ({ v: m.id, label: m.manifest_code,
-                                    sub: String(m.disposed_at || '').slice(0, 16).replace('T', ' ') })));
+                                    sub: GF.fmtDateTime(m.disposed_at) })));
     GF.$('dc-cor-modal-body').innerHTML = `
       <div class="field"><label>${AL('What prompted this clean', 'Што го предизвика чистењето')}</label>
         ${GF.selectField('dc-cor-trigger', { value: 'four_hourly',

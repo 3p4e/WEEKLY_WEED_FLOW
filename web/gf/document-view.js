@@ -361,7 +361,7 @@ GF.WWF._ribbonSvg = (segments, weekStart, days) => {
       if (seg.date !== iso) return;
       const x = LEFT + seg.start_h * hw, w = Math.max(2, (seg.end_h - seg.start_h) * hw);
       s += `<rect x="${x.toFixed(1)}" y="${y + 6}" width="${w.toFixed(1)}" height="${ROW - 12}" rx="3" fill="${GF.esc(seg.color)}" fill-opacity="0.92">`
-        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${seg.start.slice(11, 16)}–${seg.end.slice(11, 16)}</title></rect>`;
+        + `<title>${GF.esc(seg.title)} · ${GF.esc(seg.sop)} · ${GF.esc(GF.fmtTime(seg.start))}–${GF.esc(GF.fmtTime(seg.end))}</title></rect>`;
     });
   }
   s += '</svg>';
@@ -446,7 +446,7 @@ GF.WWF._renderDocPanel = () => {
     const chip = isPreview
       ? `<span style="background:rgba(47,217,217,.12);color:#2FD9D9;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(47,217,217,.25)">${AL('PREVIEW — not saved', 'ПРЕГЛЕД — незачуван')}${c.period && c.period.label ? ' · ' + GF.esc(c.period.label) : ''}</span>`
       : locked
-      ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + d.locked_at.slice(0, 16).replace('T', ' ') : ''}</span>`
+      ? `<span style="background:rgba(43,232,160,.12);color:#2BE8A0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(43,232,160,.25)">${AL('LOCKED — submitted record', 'ЗАКЛУЧЕН — поднесен запис')}${d.locked_at ? ' · ' + GF.esc(GF.fmtDateTime(d.locked_at)) : ''}</span>`
       : `<span style="background:rgba(224,167,62,.12);color:#E0A73E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid rgba(224,167,62,.25)">${AL('DRAFT', 'НАЦРТ')}</span>`;
     // A section is editable only on a stored draft (preview has no row to
     // PATCH; locked is immutable). Read rule: body_en falls back to legacy

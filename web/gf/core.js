@@ -323,6 +323,26 @@ GF.fmtDateTime = (ts, opts) => {
   }
 };
 GF.fmtTime = (ts) => GF.fmtDateTime(ts, { date: false });
+// The facility's calendar DAY of an instant (YYYY-MM-DD). `iso.slice(0, 10)`
+// on a UTC stamp gives the UTC day, which is the previous day for anything
+// that happened between facility midnight and 02:00 — that is how the inbox
+// grouped a 00:30 item under "Yesterday". Same fallbacks as facilityToday.
+GF.fmtDate = (ts) => {
+  if (ts == null || ts === '') return '';
+  const s = String(ts);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;   // already a bare date
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
+  const d = new Date(withZone);
+  if (isNaN(d.getTime())) return s.slice(0, 10);
+  const tz = GF.facilityTZ();
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      ...(tz ? { timeZone: tz } : {}), year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+  } catch (e) {
+    return GF.localDateStr(d);
+  }
+};
 
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever

@@ -563,7 +563,7 @@
           const ok = r.verdict === 'VERIFIED';
           return `<div class="qms-row" style="gap:8px">
             ${chip(AL(ok ? 'Verified' : 'Discrepancy', ok ? 'Потврдено' : 'Отстапување'), ok ? 'var(--green)' : 'var(--red)')}
-            <span class="ana-note mono">${GF.esc((r.verified_at || '').replace('T', ' ').slice(0, 16))}</span>
+            <span class="ana-note mono">${GF.esc(GF.fmtDateTime(r.verified_at))}</span>
             <span class="ana-note">${GF.esc(String(r.mismatches)) + '/' + GF.esc(String(r.checked))} ${AL('mismatches', 'отстапувања')}</span>
           </div>`;
         }).join('')}</div>`

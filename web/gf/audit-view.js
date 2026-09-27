@@ -258,7 +258,7 @@ GF.WWF._auditListHtml = () => {
     const a = ACT[e.action] || { c: '#5A6B82', en: e.action, mk: e.action };
     const src = AUDIT_SOURCES[e.source];
     const srcBadge = src ? `<span class="audit-src" style="background:${src.c}14;color:${src.c};font-weight:800;font-size:10px;letter-spacing:.4px;text-transform:uppercase;padding:3px 7px;border-radius:5px;white-space:nowrap">${GF.esc(AL(src.en, src.mk))}</span>` : '';
-    const when = e.created_at ? new Date(e.created_at).toLocaleString() : '';
+    const when = GF.fmtDateTime(e.created_at, { seconds: true });
     const diff = GF.WWF._auditDiff(e);
     const diffHtml = diff.length ? diff.map(([k, ov, nv]) => `
       <div style="display:grid;grid-template-columns:170px 1fr;gap:8px;padding:4px 0;border-top:1px dashed var(--line);font-size:12.5px">
