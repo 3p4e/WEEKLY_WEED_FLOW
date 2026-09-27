@@ -111,19 +111,47 @@ def test_uvicorn_trusts_only_the_frontend_proxy_ip_not_wildcard():
     # uvicorn, and uvicorn takes the RIGHTMOST forwarded address it does not
     # trust. nginx appending its own peer (Traefik) with
     # $proxy_add_x_forwarded_for therefore resolved every client to Traefik
-    # and collapsed the per-IP limiter into one facility-wide bucket. nginx
-    # must forward Traefik's header unchanged, and only when the request
-    # arrived over the Traefik-side interface — a sibling container on the
-    # internal network (arriving at the fixed internal IP) must never get
-    # its own header honoured.
+    # and collapsed the per-IP limiter into one facility-wide bucket.
+    #
+    # R2-BC-03: the first fix trusted the header by the INTERFACE a request
+    # arrived on, which every container on traefik_network can also reach.
+    # Trust is now keyed on Traefik itself: the realip module rewrites
+    # $remote_addr from X-Forwarded-For only when the direct peer is in
+    # set_real_ip_from, and those lines are written at start from the
+    # resolved Traefik container address (web/docker-entrypoint.d/
+    # 05-wwf-realip.sh) — never a hard-coded subnet in nginx.conf. Every
+    # proxied location forwards exactly one address, $remote_addr.
     nginx_conf = (root / "web" / "nginx.conf").read_text()
     directives = [ln for ln in nginx_conf.splitlines() if not ln.strip().startswith("#")]
-    assert not any("$proxy_add_x_forwarded_for" in ln for ln in directives), \
+    body = "\n".join(directives)
+    assert "$proxy_add_x_forwarded_for" not in body, \
         "nginx must not append its own peer to X-Forwarded-For — that peer is Traefik"
+    assert "$http_x_forwarded_for" not in body and "$wwf_client_xff" not in body, \
+        "the raw X-Forwarded-For header must never be forwarded — trust is decided by realip"
     xff_lines = [ln for ln in directives if "X-Forwarded-For" in ln and "proxy_set_header" in ln]
-    assert xff_lines and all("$wwf_client_xff" in ln for ln in xff_lines), \
-        "every proxied location must forward the interface-aware $wwf_client_xff"
-    assert re.search(r"map\s+\$server_addr\s+\$wwf_client_xff", nginx_conf), \
-        "the forwarded header must be decided by the interface the request arrived on"
-    assert re.search(rf"^\s*{re.escape(trusted_ip)}\s+\"\";", nginx_conf, re.M), \
-        "a request arriving on the internal-network interface must have its header dropped"
+    assert xff_lines and all(ln.split()[-1] == "$remote_addr;" for ln in xff_lines), \
+        "every proxied location must forward the realip-resolved $remote_addr and nothing else"
+    assert re.search(r"^\s*real_ip_header\s+X-Forwarded-For;", body, re.M)
+    assert re.search(r"^\s*real_ip_recursive\s+on;", body, re.M)
+    assert re.search(r"^\s*include\s+/etc/nginx/wwf-realip\.d/\*\.conf;", body, re.M), \
+        "the trusted-proxy list is the snippet the entrypoint hook writes, included by wildcard"
+    assert "set_real_ip_from" not in body, \
+        "no hard-coded trusted proxy in nginx.conf: a subnet would trust every container on it"
+    assert "map $server_addr" not in body, "interface-based trust is the R2-BC-03 hole"
+    # the hook: shipped by the Dockerfile into /docker-entrypoint.d, resolves a
+    # NAME (never a range) and writes set_real_ip_from lines; trusts nobody
+    # when the name does not resolve
+    hook = (root / "web" / "docker-entrypoint.d" / "05-wwf-realip.sh").read_text()
+    assert "set_real_ip_from" in hook and "getent" in hook and "WWF_TRAEFIK_HOST" in hook
+    assert "NO proxy is trusted" in hook, "the fail-safe direction must be loud"
+    assert "0.0.0.0/0" not in hook
+    web_dockerfile = (root / "web" / "Dockerfile").read_text()
+    assert "docker-entrypoint.d/05-wwf-realip.sh /docker-entrypoint.d/05-wwf-realip.sh" in web_dockerfile
+    assert "mkdir -p /etc/nginx/wwf-realip.d" in web_dockerfile
+    # compose names the Traefik container for the hook (TRAEFIK_HOST, .env)
+    assert re.search(r"WWF_TRAEFIK_HOST=\$\{TRAEFIK_HOST", compose), \
+        "the frontend service must pass the Traefik container name to the hook"
+    assert "TRAEFIK_HOST=" in (root / ".env.example").read_text()
+    # R2-BC-09: the retired /qms/rag-query route must not linger in the
+    # slow-path location (web/gf/api.js mirrors this list as _SLOW_PATHS)
+    assert "rag-query" not in body, "/qms/rag-query was retired with the qms-api proxy (BC-19)"

@@ -84,18 +84,16 @@ services:
     env_file: .env
     # Trust X-Forwarded-For ONLY from the frontend nginx's fixed IP (below),
     # never '*' — a wildcard would let any container on this shared network
-    # (incl. the internet-exposed capture-mcp) spoof its source IP and defeat
-    # the login rate-limiter. uvicorn reads FORWARDED_ALLOW_IPS with --proxy-headers.
+    # spoof its source IP and defeat the login rate-limiter. uvicorn reads
+    # FORWARDED_ALLOW_IPS with --proxy-headers.
     #
-    # The chain is client -> Traefik -> nginx -> uvicorn. uvicorn takes the
-    # RIGHTMOST address in X-Forwarded-For that is not in this list, so nginx
-    # must forward Traefik's header ("<client>") UNCHANGED rather than append
-    # Traefik's own address to it — appending made every request resolve to
-    # Traefik, and the whole facility shared one login-limiter bucket (review
-    # 2026-09-27, BC-01). web/nginx.conf does that; Traefik's network is an
-    # external one whose subnet this file does not know, so Traefik itself is
-    # deliberately NOT listed here — nginx tells Traefik's traffic apart by
-    # the interface it arrives on instead.
+    # The chain is client -> Traefik -> nginx -> uvicorn. nginx resolves the
+    # real client itself (realip, trusting only the Traefik container's
+    # resolved address — web/nginx.conf and web/docker-entrypoint.d/
+    # 05-wwf-realip.sh, review 2026-09-27 BC-01 / R2-BC-03) and forwards
+    # exactly ONE address; uvicorn takes it because it comes from this one
+    # trusted proxy. Traefik itself is deliberately NOT listed here — nginx
+    # is the only peer uvicorn ever sees.
     environment:
       - FORWARDED_ALLOW_IPS=172.16.31.20
     extra_hosts:
@@ -113,7 +111,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks: [internal]
+    # `capture` is the connector's only way in (see capture-mcp below).
+    networks: [internal, capture]
     restart: unless-stopped
 
   scheduler:
@@ -149,6 +148,14 @@ services:
     image: wwf-growflow:latest
     container_name: wwf-gf-frontend
     depends_on: [backend]
+    # The Traefik container's name (or alias) on traefik_network: nginx trusts
+    # X-Forwarded-For from the addresses this name resolves to and from
+    # nothing else (web/docker-entrypoint.d/05-wwf-realip.sh). Read it off the
+    # host with `docker ps --filter ancestor=traefik` — see docs/DEPLOY.md
+    # "Client address trust". TRAEFIK_CIDRS pins explicit addresses instead.
+    environment:
+      - WWF_TRAEFIK_HOST=${TRAEFIK_HOST:-traefik}
+      - WWF_TRAEFIK_CIDRS=${TRAEFIK_CIDRS:-}
     # Fixed IP so the backend can trust X-Forwarded-For from exactly this proxy
     # (FORWARDED_ALLOW_IPS above) rather than the whole subnet.
     networks:
@@ -264,6 +271,15 @@ services:
   # Reachable only at a secret path behind Traefik TLS; holds a single
   # narrowly-scoped token (valid only on /capture/import). Deployment of
   # this public-but-secret-path service was explicitly user-approved.
+  #
+  # NETWORK PLACEMENT (review 2026-09-27, DI2-14): the one internet-facing
+  # service does NOT sit on `internal` beside the two databases and
+  # DocEngine. It joins `capture`, a network shared with the backend alone,
+  # so the only thing it can open a socket to inside the stack is the
+  # backend (and only /capture/import accepts its token). It keeps
+  # `traefik` because Traefik publishes it. Running unprivileged shrank the
+  # blast radius of a container escape; this shrinks the radius of an
+  # in-process compromise of the MCP server to the one route it exists for.
   capture-mcp:
     build: ./connector
     mem_limit: 512m
@@ -275,7 +291,7 @@ services:
       - WWF_IMPORT_URL=http://weekly_weed_flow-backend-1:8000/capture/import
       - CAPTURE_IMPORT_TOKEN=${CAPTURE_IMPORT_TOKEN:?set in .env}
       - MCP_PATH=${CAPTURE_MCP_PATH:?set in .env}
-    networks: [internal, traefik]
+    networks: [capture, traefik]
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_network"
@@ -293,6 +309,12 @@ networks:
     ipam:
       config:
         - subnet: 172.16.31.0/24
+  # Backend <-> capture connector only (DI2-14). `internal: true` — no route
+  # out of it; the connector reaches the internet through `traefik`, which
+  # Traefik owns, and the databases through nothing.
+  capture:
+    name: weekly_weed_flow_capture
+    internal: true
   traefik:
     name: traefik_network
     external: true
