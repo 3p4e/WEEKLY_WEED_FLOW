@@ -82,14 +82,23 @@
   GF.WWF.loadWaste = async () => {
     const st = GF.WWF._waste;
     st.loading = true; st.error = null;
+    // Stale-response guard (same as qcpotency-view.js): the status filter
+    // fires one load per click, and two quick clicks could let the older
+    // response land last — the register then listed a status the buttons no
+    // longer showed as selected (review 2026-09-27, FE-16).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       if (st.tab === 'recon') {
-        st.recon = (await GF.API.wasteReconciliation()).batches || [];
+        const recon = (await GF.API.wasteReconciliation()).batches || [];
+        if (my !== st.lseq) return;
+        st.recon = recon;
       } else {
         const q = st.statusFilter ? { status: st.statusFilter } : {};
-        st.manifests = (await GF.API.wasteManifests(q)).manifests || [];
+        const manifests = (await GF.API.wasteManifests(q)).manifests || [];
+        if (my !== st.lseq) return;
+        st.manifests = manifests;
       }
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'waste') GF.render.all();
   };

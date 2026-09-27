@@ -277,6 +277,11 @@ GF.API = {
   deconCycleCreate(body)         { return this._req('POST', '/decon/cycles', body); },
   deconStep(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/steps', body); },
   deconRelease(cycleId, body)    { return this._req('POST', '/decon/cycles/' + cycleId + '/release', body || {}); },
+  // The counterpart to release: a cycle with a positive or inconclusive swab
+  // can never pass, cannot take more steps, and blocks a new cycle for the
+  // room in the same campaign — failing it (with a stated reason) is the only
+  // way forward. Same QA-tier gate as release (review 2026-09-27, FE-03).
+  deconFail(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/fail', body); },
   deconBleachLog(q = {})         { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/bleach-log' + (u ? '?' + u : '')); },
   deconBleachAdd(body)           { return this._req('POST', '/decon/bleach-log', body); },
   deconSwabs(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/swabs' + (u ? '?' + u : '')); },
@@ -298,6 +303,10 @@ GF.API = {
   // contact plate/sentinel bioassay, gowning. Second module on /decon.
   biosecurity(q = {})            { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/biosecurity' + (u ? '?' + u : '')); },
   biosecurityLog(body)           { return this._req('POST', '/decon/biosecurity', body); },
+  // Resolve a `pending` check (a contact plate read after incubation, a
+  // sentinel bioassay scored later) to its final result. Same fail-needs-
+  // action_taken gate as logging one (review 2026-09-27, FE-10).
+  biosecurityResult(id, body)    { return this._req('PATCH', '/decon/biosecurity/' + id + '/result', body); },
 
   // ── Destruction / waste manifests (migration 0048) ──
   // A manifest climbs draft -> sealed -> witnessed -> disposed and each rung is a

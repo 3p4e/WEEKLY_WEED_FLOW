@@ -621,8 +621,10 @@ function renderBio(h, events) {
 
 test('an open biosecurity failure is shown with its action taken, on the decon board', () => {
   const h = load('CU_MGR');
+  // `result` is what the API returns for every event; the panel now splits
+  // failures from checks still awaiting a read, so the fixture carries it.
   const body = renderBio(h, [
-    { id: 'b1', kind: 'disinfection_mat', subject: 'Mat entrance', room_name: null,
+    { id: 'b1', kind: 'disinfection_mat', subject: 'Mat entrance', room_name: null, result: 'fail',
       occurred_on: '2026-08-05', action_taken: 'Bleach topped up and re-verified' },
   ]);
   assert.match(body, /Mat entrance/);
