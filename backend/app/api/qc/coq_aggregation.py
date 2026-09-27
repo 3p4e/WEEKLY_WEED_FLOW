@@ -13,6 +13,7 @@ from .common import (_COQ_ROLES, _HOQC, _WRITERS, _evaluate, _uuid_or_404, _uuid
 from .coq_docx import _coq_client, _coq_manifest, _coq_markdown
 from .laboratories import _lab_scope_set, _result_in_scope
 from .potency import disposition_for
+from .products import conformance_of, names_total_thc
 from .specs import _ACID_FACTOR
 
 
@@ -82,16 +83,133 @@ def _coq_out(r: dict) -> dict:
         "cultivar_id": str(r["cultivar_id"]) if r.get("cultivar_id") else None,
         "potency_spec_id": str(r["potency_spec_id"]) if r.get("potency_spec_id") else None,
         "product_id": str(r["product_id"]) if r.get("product_id") else None,
+        # The product verdict (official catalogue): filled by _with_product_fields
+        # on the detail and compile responses; absent (None) on a bare list row.
+        "product_code": r.get("product_code"),
+        "product_conforms": r.get("product_conforms"),
+        "regrade_to": r.get("regrade_to"),
         "updated_at": r["updated_at"].isoformat(),
     }
 
 
+async def _coq_total_thc(c, coq_id) -> float | None:
+    """The batch's Total Δ9-THC: the computed total_thc CoQ line (Ph. Eur. 3028)."""
+    total = await c.fetchval(
+        "SELECT l.result_numeric FROM qc_coq_lines l"
+        " JOIN qc_spec_parameters p ON p.id = l.parameter_id"
+        " WHERE l.coq_id=$1 AND p.computed_kind='total_thc'"
+        " AND l.result_numeric IS NOT NULL LIMIT 1", coq_id)
+    return float(total) if total is not None else None
+
+
+async def _coq_product_disposition(c, coq_row: dict) -> dict | None:
+    """The product branch: the CoQ was compiled against ONE product of the
+    official catalogue (qc_coq.product_id, frozen at compile). Its Total
+    Δ9-THC is judged against that product's printed window; `matching`,
+    `nearest` and `regrade_to` come from the same specification VERSION the
+    product belongs to (its cultivar's products of that doc_version, whether
+    still APPROVED or since SUPERSEDED), so the verdict an issued certificate
+    shows does not drift when the catalogue is re-cut later."""
+    prod = await c.fetchrow(
+        "SELECT p.*, cv.code AS cultivar_code, cv.name AS cultivar_name FROM qc_products p"
+        " JOIN cultivars cv ON cv.id = p.cultivar_id WHERE p.id=$1", coq_row["product_id"])
+    if prod is None:
+        return None
+    siblings = await c.fetch(
+        "SELECT id, product_code, nominal_pct, window_min, window_max, status FROM qc_products"
+        " WHERE cultivar_id=$1 AND doc_version=$2 AND status<>'DRAFT' ORDER BY nominal_pct DESC",
+        prod["cultivar_id"], prod["doc_version"])
+    total_f = await _coq_total_thc(c, coq_row["id"])
+    verdict = conformance_of([dict(s) for s in siblings], total_f, dict(prod))
+    return {
+        "kind": "product",
+        "product_id": str(prod["id"]), "product_code": prod["product_code"],
+        "product_status": prod["status"],
+        "doc_code": prod["doc_code"], "doc_version": prod["doc_version"],
+        "cultivar_code": prod["cultivar_code"], "cultivar_name": prod["cultivar_name"],
+        "nominal": float(prod["nominal_pct"]),
+        "window_min": float(prod["window_min"]), "window_max": float(prod["window_max"]),
+        "total_d9_thc": total_f,
+        "conforms": verdict["conforms"], "matching": verdict["matching"],
+        "nearest": verdict["nearest"], "regrade_to": verdict["regrade_to"],
+    }
+
+
+def _with_product_fields(row: dict, disposition: dict | None) -> dict:
+    """Copy the product verdict onto a qc_coq row dict so _coq_out can print it."""
+    if disposition and disposition.get("kind") == "product":
+        row = dict(row)
+        row["product_code"] = disposition["product_code"]
+        row["product_conforms"] = disposition["conforms"]
+        row["regrade_to"] = disposition["regrade_to"]
+    return row
+
+
+async def _grade_against_product(c, user: dict, row: dict) -> dict:
+    """Right after compile: judge the fresh CoQ against its product and, when
+    the Total Δ9-THC is outside the window, hand the deviation to the
+    Cultivation and Production managers (owner 2026-09-06: the value is
+    accepted, the lot falls to the grade whose window holds it, and the
+    departments that grew and processed it are told). The formal OOS the same
+    rule requires is a person's act, checked at approval (_regrade_needs_oos)."""
+    if not row.get("product_id"):
+        return row
+    disp = await _coq_product_disposition(c, row)
+    row = _with_product_fields(row, disp)
+    if not disp or disp["conforms"] is not False:
+        return row
+    managers = await users_admin_pool().fetch(
+        "SELECT id FROM profiles WHERE org_id=$1 AND is_deleted=false AND is_active"
+        " AND role = ANY($2::text[])", user["org_id"], ["CU_MGR", "PR_MGR"])
+    await safe_emit(c, user, verb="potency_deviation", object_type="qc_coq",
+                    object_id=str(row["id"]),
+                    recipients=[(str(m["id"]), "workflow") for m in managers],
+                    params={"coq_number": row["coq_number"], "batch_id": row["batch_id"],
+                            "cultivar": disp["cultivar_code"],
+                            "product_code": disp["product_code"],
+                            "total_d9_thc": disp["total_d9_thc"],
+                            "window_min": disp["window_min"], "window_max": disp["window_max"],
+                            "regrade_to": disp["regrade_to"]})
+    return row
+
+
+async def _regrade_needs_oos(c, user: dict, coq_row: dict) -> str | None:
+    """The approval half of the out-of-grade rule (owner 2026-09-06): a CoQ
+    whose Total Δ9-THC is outside its product's window is approved only once a
+    formal OOS naming Total Δ9-THC is on record for that batch — the batch
+    disposition is investigated, the value accepted, the regrade documented.
+    Returns the refusal text, or None when nothing stands in the way. (The
+    §6.4.1 gate in review_coq already refuses while any OOS is still open, so
+    in practice the investigation has to be CLOSED.)"""
+    if not coq_row.get("product_id"):
+        return None
+    disp = await _coq_product_disposition(c, coq_row)
+    if not disp or disp["conforms"] is not False:
+        return None
+    rows = await c.fetch(
+        "SELECT test_name FROM qc_oos_records WHERE org_id=$1 AND batch_id=$2",
+        user["org_id"], coq_row["batch_id"])
+    if any(names_total_thc(r["test_name"]) for r in rows):
+        return None
+    lo, hi, tot = disp["window_min"], disp["window_max"], disp["total_d9_thc"]
+    falls = (f"the lot falls to {disp['regrade_to']}" if disp["regrade_to"]
+             else "no grade of this strain holds the value")
+    return (f"Total Δ9-THC {tot:.2f} % is outside {disp['product_code']}'s window"
+            f" ({lo:.2f}–{hi:.2f} %) — {falls}; a formal OOS naming Total Δ9-THC must be"
+            f" recorded on batch {coq_row['batch_id']} before this CoQ is approved"
+            " (out-of-grade rule, owner 2026-09-06)")
+
+
 async def _coq_disposition(c, coq_row: dict) -> dict | None:
-    """The batch's potency grade (Spec I…N) — resolved against the ladder version
-    FROZEN on the CoQ at compile time (qc_coq.potency_spec_id), read against the
-    CoQ's own Total Δ9-THC line. Returns None when the CoQ carries no frozen
-    ladder (no cultivar mapped, or none APPROVED at compile). Freezing the ladder
+    """The batch's potency grade, from the grade source FROZEN on the CoQ at
+    compile time: the official product (qc_coq.product_id → kind "product",
+    _coq_product_disposition) or, for CoQs issued before the catalogue, the
+    ladder version (qc_coq.potency_spec_id → kind "ladder", Spec I…N). Read
+    against the CoQ's own Total Δ9-THC line. Returns None when the CoQ carries
+    neither (no cultivar mapped, or none APPROVED at compile). Freezing the
     id keeps the printed grade stable and traceable after later supersession."""
+    if coq_row.get("product_id"):
+        return await _coq_product_disposition(c, coq_row)
     spec_id = coq_row.get("potency_spec_id")
     if not spec_id:
         return None
@@ -104,15 +222,10 @@ async def _coq_disposition(c, coq_row: dict) -> dict | None:
     ranges = await c.fetch(
         "SELECT tier, range_min, range_max, nominal FROM qc_potency_spec_ranges"
         " WHERE potency_spec_id=$1 ORDER BY tier", spec_id)
-    # The batch's Total Δ9-THC is the computed total_thc CoQ line (Ph. Eur. 3028).
-    total = await c.fetchval(
-        "SELECT l.result_numeric FROM qc_coq_lines l"
-        " JOIN qc_spec_parameters p ON p.id = l.parameter_id"
-        " WHERE l.coq_id=$1 AND p.computed_kind='total_thc'"
-        " AND l.result_numeric IS NOT NULL LIMIT 1", coq_row["id"])
-    total_f = float(total) if total is not None else None
+    total_f = await _coq_total_thc(c, coq_row["id"])
     disp = disposition_for(spec["floor_pct"], [dict(r) for r in ranges], total_f)
     return {
+        "kind": "ladder",
         "potency_spec_id": str(spec["id"]), "version": spec["version"],
         "spec_status": spec["status"],
         "cultivar_code": spec["cultivar_code"], "cultivar_name": spec["cultivar_name"],
@@ -187,7 +300,7 @@ async def get_coq(coq_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES
         commercial = await c.fetchrow(
             "SELECT neu_name, brand, final_label, tranche, thc_bracket"
             " FROM batch_commercial_identities WHERE batch_code=$1", row["batch_id"])
-    return {"coq": _coq_out(dict(row)),
+    return {"coq": _coq_out(_with_product_fields(dict(row), disposition)),
             "lines": [_coq_line_out(dict(r)) for r in lines],
             "sources": [_coq_source_out(dict(r)) for r in sources],
             "potency": disposition,
@@ -292,6 +405,7 @@ async def compile_coq(body: CoqIn, user: dict = Depends(require_role(*_WRITERS))
         if not open_oos:
             row = await _compile_coq_tx(c, user, body, spec, certs, params, results,
                                         potency_spec_id, product_id)
+            row = await _grade_against_product(c, user, dict(row))
     if open_oos:
         # §6.16 (C8) — an attempted CoQ compile on an open-OOS batch is itself a
         # reportable deviation, recorded in its own transaction so the 409
@@ -489,13 +603,16 @@ async def review_coq(coq_id: str, user: dict = Depends(require_role(*_COQ_ROLES)
     approved CoQ is an input TO the QP batch-release decision."""
     _uuid_or_404(coq_id, "CoQ")
     async with rls(user) as c:
-        cur = await c.fetchrow(
-            "SELECT status, compiled_by, batch_id, specification_id FROM qc_coq WHERE id=$1",
-            coq_id)
+        cur = await c.fetchrow("SELECT * FROM qc_coq WHERE id=$1", coq_id)
         if cur is None:
             raise HTTPException(404, "CoQ not found")
         if cur["status"] != "DRAFT":
             raise HTTPException(409, f"a {cur['status']} CoQ cannot be approved")
+        # Out-of-grade rule (owner 2026-09-06): a lot outside its product's
+        # window is approved only with a formal OOS on the batch disposition.
+        needs_oos = await _regrade_needs_oos(c, user, dict(cur))
+        if needs_oos:
+            raise HTTPException(409, needs_oos)
         if cur["compiled_by"] and str(cur["compiled_by"]) == str(user["id"]):
             raise HTTPException(403, "the CoQ is reviewed by a second person —"
                                      " the compiler cannot approve their own compilation (§6.4.3)")

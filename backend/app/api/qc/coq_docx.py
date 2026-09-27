@@ -182,13 +182,37 @@ def _coq_sources(results: list, lab: dict | None):
 
 
 def _coq_grade_value(potency: dict | None) -> str | None:
-    """The potency-grade cell for the meta grid, from the CoQ's frozen ladder
-    disposition (Phase B). The cultivar name is its OWN meta row, so this carries
-    only the grade: Spec tier · nominal · measured Total Δ9-THC · ladder version.
-    Language-neutral (numbers), like the batch/spec cells. None when there's no
-    grade to show — never invented."""
+    """The potency-grade cell for the meta grid, from the CoQ's frozen grade
+    source. The cultivar name is its OWN meta row, so this carries only the
+    grade. Language-neutral (numbers and codes), like the batch/spec cells.
+    None when there's no grade to show — never invented.
+
+    Product (the official catalogue, 2026-09-05): product code · nominal ·
+    window — verdict (measured Total Δ9-THC) — document. When the value is
+    outside the chosen product's window the owner's out-of-grade rule
+    (2026-09-06) prints on the same line: the lot is REGRADED to the product
+    whose window holds it, or, when none does, stated as fitting no grade.
+    Ladder (Phase B, legacy): Spec tier · nominal · measured Total Δ9-THC ·
+    ladder version."""
     if not potency:
         return None
+    if potency.get("kind") == "product":
+        code = potency.get("product_code") or "?"
+        nom, lo, hi = potency.get("nominal"), potency.get("window_min"), potency.get("window_max")
+        gv = f"{code} · nominal {nom:.2f} % · window {lo:.2f}–{hi:.2f} %"
+        tot, conf = potency.get("total_d9_thc"), potency.get("conforms")
+        if conf is True:
+            gv += f" — conforms (Total Δ9-THC {tot:.2f} %)"
+        elif conf is False:
+            gv += f" — does NOT conform (Total Δ9-THC {tot:.2f} %)"
+            if potency.get("regrade_to"):
+                gv += f" · REGRADED from {code} to {potency['regrade_to']}"
+            else:
+                gv += " · fits no grade of this strain — OOS on batch disposition"
+        else:
+            gv += " — Total Δ9-THC not measured"
+        doc = " ".join(x for x in (potency.get("doc_code"), potency.get("doc_version")) if x)
+        return gv + (f" — {doc}" if doc else "")
     disp = potency.get("disposition")
     if disp:
         gv = " · ".join(x for x in (disp.get("spec"), f"nominal {disp['nominal']}%") if x)
