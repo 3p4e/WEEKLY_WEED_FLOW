@@ -220,6 +220,20 @@ async def get_potency_spec(spec_id: str, user: dict = Depends(require_role(*ELEV
     return {"spec": d, "ranges": [_range_out(dict(r)) for r in ranges]}
 
 
+async def _refuse_when_products_live(c, cultivar_id) -> None:
+    """One live grading scheme per strain (owner 2026-09-05; review 2026-09-27
+    QC-04). Once a cultivar has an APPROVED product in the official catalogue,
+    its ladder is retired: a new one can neither be authored nor approved, or a
+    later ladder would silently take grading back from the official page."""
+    live = await c.fetchval(
+        "SELECT product_code FROM qc_products WHERE cultivar_id=$1 AND status='APPROVED'"
+        " ORDER BY grade DESC LIMIT 1", cultivar_id)
+    if live:
+        raise HTTPException(
+            409, f"this cultivar is graded from the official product catalogue ({live} is"
+                 " APPROVED) — its potency ladder is retired; author products instead")
+
+
 @router.post("/potency-specs", status_code=201)
 async def create_potency_spec(body: PotencySpecIn, user: dict = Depends(require_role(*_WRITERS))):
     _uuid_or_422(body.cultivar_id, "cultivar_id")
@@ -232,6 +246,7 @@ async def create_potency_spec(body: PotencySpecIn, user: dict = Depends(require_
             "SELECT id FROM cultivars WHERE id=$1 AND is_active", body.cultivar_id)
         if cv is None:
             raise HTTPException(422, "Unknown or inactive cultivar")
+        await _refuse_when_products_live(c, body.cultivar_id)
         try:
             row = await c.fetchrow(
                 "INSERT INTO qc_potency_specs(org_id, cultivar_id, version, variant, floor_pct,"
@@ -324,6 +339,7 @@ async def approve_potency_spec(spec_id: str, user: dict = Depends(require_role(*
             raise HTTPException(404, "Potency specification not found")
         if cur["status"] != "DRAFT":
             raise HTTPException(409, f"Only a DRAFT ladder can be approved (is {cur['status']})")
+        await _refuse_when_products_live(c, cur["cultivar_id"])
         if str(user["id"]) in (str(cur["created_by"]), str(cur["updated_by"])):
             raise HTTPException(
                 403, "The person approving a potency ladder must be different from the person who"

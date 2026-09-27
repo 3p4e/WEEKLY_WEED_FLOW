@@ -82,22 +82,32 @@ def _parse_rows(strain: str, rows: list[dict]) -> tuple[str, float, list[RangeIn
 
 
 async def resolve_or_create_cultivar(c, user: dict, acronym: str, strain: str,
-                                     dry_run: bool = False):
+                                     dry_run: bool = False, aliases: tuple[str, ...] = ()):
     """Find the cultivar a catalogue row belongs to, creating it if it is new.
 
-    Shared by both catalogue importers (the August ladders and the official
-    product pages) so they resolve a strain identically. Returns
-    (cultivar_row_or_None, created_or_None, conflict_or_None):
+    Shared by every catalogue importer (the August ladders, the official
+    product pages, the fitted specifications) so they resolve a strain
+    identically. Returns (cultivar_row_or_None, created_or_None, conflict_or_None):
 
       - the acronym is free            → create it (or, in a dry run, report it);
+      - the acronym is taken by a cultivar spelt as one of `aliases` (the
+        other controlled spelling of the same strain — "Jelly Donuts" for
+        "Jelly Donutz") → that cultivar, so a spelling dispute never splits a
+        strain's history into two cultivars;
       - the acronym is taken by ANOTHER strain name → look the strain up by
         name; if that fails, report a conflict and never reassign the code —
         a mis-assigned acronym would print a wrong plant id forever;
       - a dry run creates nothing, so the cultivar comes back None and the
         caller reports what it would have done.
     """
+    known = {a.strip().lower() for a in aliases if a}
+    # The alias path is for two spellings of ONE strain: both the incoming
+    # name and the sitting cultivar's name must be known spellings. A new
+    # name under a taken code is still a conflict.
+    same_strain = strain.strip().lower() in known
     cv = await c.fetchrow("SELECT id, code, name FROM cultivars WHERE code=$1", acronym)
-    if cv is not None and cv["name"].strip().lower() != strain.strip().lower():
+    if (cv is not None and cv["name"].strip().lower() != strain.strip().lower()
+            and not (same_strain and cv["name"].strip().lower() in known)):
         by_name = await c.fetchrow(
             "SELECT id, code, name FROM cultivars WHERE lower(name)=lower($1)", strain)
         if by_name is None:
@@ -138,6 +148,17 @@ async def import_potency_catalogue(body: CatalogueImportIn,
 
     created, skipped, conflicts, cultivars_created = [], [], [], []
     async with rls(user) as c:
+        # One live grading scheme (owner 2026-09-05 / 2026-09-18): once any
+        # product of the official catalogue is APPROVED, the per-cultivar
+        # ladders are retired and this import — the retired scheme's only
+        # entry point — is closed, dry run included.
+        live = await c.fetchval(
+            "SELECT count(*) FROM qc_products WHERE org_id=$1 AND status='APPROVED'",
+            user["org_id"])
+        if live:
+            raise HTTPException(
+                409, f"the official product catalogue is live ({live} APPROVED product(s)) —"
+                     " the per-cultivar ladders are retired; import products instead")
         for fam in families:
             for strain, rows in (catalogue.get(fam) or {}).items():
                 acr, floor, ranges = _parse_rows(strain, rows)

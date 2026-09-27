@@ -36,7 +36,9 @@ from fastapi.responses import HTMLResponse
 
 from app.db import rls, users_admin_pool
 from app.deps import require_role
+from app.plantids import grade_str
 from app.roles import ELEVATED_ROLES
+from app.worktime import TZ
 
 from .common import _uuid_or_404, _uuid_or_422, router
 
@@ -68,10 +70,60 @@ def _load_template() -> str:
         raise HTTPException(503, "The ImB specification template is missing from this build")
 
 
+# The three phenotype options rendered UNSELECTED: the app carries no verified
+# phenotype genetics, and a gold tag would fabricate an Indica/Sativa/Hybrid claim.
+_PHENOTYPE_UNSELECTED = ('<span class="ptk-cell"><span class="var-opt">Indica</span>'
+                         '<span class="var-opt">Sativa</span>'
+                         '<span class="var-opt">Hybrid</span></span>')
+
+# The printed title of a signatory's role, from the role the system recorded.
+_ROLE_TITLES = {
+    "QC_MGR": ("QC Manager", "Менаџер за КК"), "QA_MGR": ("QA Manager", "Менаџер за ОК"),
+    "QP": ("Qualified Person", "Квалификувано лице"),
+    "ADMIN": ("System Administrator", "Систем администратор"),
+    "OWNER": ("Owner", "Сопственик"), "CEO": ("CEO", "Извршен директор"),
+    "COO": ("COO", "Оперативен директор"),
+}
+
+
+def _sig(role_en: str, role_mk: str, title_en: str, title_mk: str, name: str, date_txt: str) -> dict:
+    """One block of the template's approval grid. Every value is already
+    escaped by the caller or a constant of this module."""
+    return {"role": f"{role_en} <span class=\"mk\">{role_mk}</span>",
+            "title": f"{title_en} <span class=\"mk\">{title_mk}</span>" if title_en else "",
+            "name": name, "date": date_txt}
+
+
+def _render_spec_page(*, title: str, doc_code: str, strain: str, grade_en: str, grade_mk: str,
+                      product_code: str, nominal_txt: str, range_txt: str, watermark: str,
+                      sig1: dict, sig2: dict, foot_doc: str) -> str:
+    """Fill the owner's own A4 template (app/data/imb_spec_template.html) —
+    shared by the legacy ladder page and the product page so the two can never
+    drift apart. Callers pass values already html-escaped (`_e`)."""
+    doc = _load_template()
+    subs = {
+        "__TITLE__": title, "__DOC_CODE__": doc_code, "__STRAIN_NAME__": strain,
+        "__PHENOTYPE_CELLS__": _PHENOTYPE_UNSELECTED,
+        "__GRADE_EN__": grade_en, "__GRADE_MK__": grade_mk,
+        "__PRODUCT_CODE__": product_code,
+        "__NOMINAL__": nominal_txt, "__RANGE__": range_txt,
+        "__SIG1_ROLE__": sig1["role"], "__SIG1_TITLE__": sig1["title"], "__SIG1_NAME__": sig1["name"],
+        "__QC_DATE__": sig1["date"],
+        "__SIG2_ROLE__": sig2["role"], "__SIG2_TITLE__": sig2["title"], "__SIG2_NAME__": sig2["name"],
+        "__QA_DATE__": sig2["date"],
+        "__DRAFT_WM__": f'<div class="draft-wm">{watermark}</div>' if watermark else "",
+        "__FOOT_DOC__": foot_doc,
+    }
+    for token, value in subs.items():
+        doc = doc.replace(token, value)
+    return doc
+
+
 @router.get("/potency-specs/{spec_id}/document", response_class=HTMLResponse)
 async def spec_document(spec_id: str, tier: int = Query(ge=1, le=6),
                         user: dict = Depends(require_role(*ELEVATED_ROLES))):
-    """One strain × one grade = one A4 page (QCSP 001), from the stored ladder."""
+    """One strain × one grade = one A4 page (QCSP 001), from the stored ladder
+    (legacy: the ladders are read-only since the official catalogue)."""
     _uuid_or_404(spec_id, "Potency specification")
     async with rls(user) as c:
         spec = await c.fetchrow(
@@ -93,34 +145,83 @@ async def spec_document(spec_id: str, tier: int = Query(ge=1, le=6),
     nominal = float(row["nominal"])
     width = float(row["width_pp"]) if row["width_pp"] is not None else round((rmax - rmin) / 2, 2)
     approved = spec["status"] == "APPROVED"
+    # The two signatories are the ladder family's locked roles-of-record
+    # (handoff rule: exactly QC Blagoj Nikolov + QA Jovana Romevska Cvetkovski).
+    # Their printed date is the ladder's effective date once APPROVED; a DRAFT
+    # prints em-dashes + the watermark.
+    date_txt = _ddmmyyyy(spec["effective_date"]) if approved else "—"
+    doc = _render_spec_page(
+        title=f"Purely Plant — Product Specification — {_e(name)} ({_e(acr)}) — Grade {roman}",
+        doc_code=f"QCSP 001_{_e(acr)}-{roman}_v.01", strain=_e(name),
+        grade_en=f"Grade {roman}", grade_mk=f"Класа {roman}",
+        product_code=(_e(row["product_code"]) if "product_code" in row and row.get("product_code")
+                      else f"{_e(acr)}_THC{nominal:g}:CBD1"),
+        nominal_txt=f"{nominal:.2f}% ± {width:.2f}%", range_txt=f"{rmin:.2f} – {rmax:.2f}%",
+        watermark="" if approved else "Draft — not approved",
+        sig1=_sig("Prepared &amp; Approved by", "Изготвил и одобрил", "QC Manager", "Менаџер за КК",
+                  "Blagoj Nikolov", date_txt),
+        sig2=_sig("Reviewed by", "Прегледал", "QA Manager", "Менаџер за ОК",
+                  "Jovana Romevska Cvetkovski", date_txt),
+        foot_doc="QCSP 001 v.03")
+    return HTMLResponse(doc, headers=_HTML_HEADERS)
 
-    doc = _load_template()
-    subs = {
-        "__TITLE__": f"Purely Plant — Product Specification — {_e(name)} ({_e(acr)}) — Grade {roman}",
-        "__DOC_CODE__": f"QCSP 001_{_e(acr)}-{roman}_v.01",
-        "__STRAIN_NAME__": _e(name),
-        # The app carries no verified phenotype genetics — render the three
-        # options UNSELECTED rather than fabricate an Indica/Sativa/Hybrid claim.
-        "__PHENOTYPE_CELLS__": ('<span class="ptk-cell"><span class="var-opt">Indica</span>'
-                                '<span class="var-opt">Sativa</span>'
-                                '<span class="var-opt">Hybrid</span></span>'),
-        "__GRADE_EN__": f"Grade {roman}",
-        "__GRADE_MK__": f"Класа {roman}",
-        "__PRODUCT_CODE__": _e(row["product_code"]) if "product_code" in row and row.get("product_code")
-                            else f"{_e(acr)}_THC{nominal:g}:CBD1",
-        "__NOMINAL__": f"{nominal:.2f}% ± {width:.2f}%",
-        "__RANGE__": f"{rmin:.2f} – {rmax:.2f}%",
-        # The two signatories are the spec family's locked roles-of-record
-        # (handoff rule: exactly QC Blagoj Nikolov + QA Jovana Romevska
-        # Cvetkovski). Their printed date is the ladder's effective date once
-        # APPROVED; a DRAFT prints em-dashes + the watermark.
-        "__QC_DATE__": _ddmmyyyy(spec["effective_date"]) if approved else "—",
-        "__QA_DATE__": _ddmmyyyy(spec["effective_date"]) if approved else "—",
-        "__DRAFT_WM__": "" if approved
-                        else '<div class="draft-wm">Draft — not approved</div>',
-    }
-    for token, value in subs.items():
-        doc = doc.replace(token, value)
+
+@router.get("/products/{product_id}/document", response_class=HTMLResponse)
+async def product_document(product_id: str, user: dict = Depends(require_role(*ELEVATED_ROLES))):
+    """The A4 page of one product of the official catalogue (QCSP 001): the
+    strain at its nominal Total Δ9-THC with the window the product stores —
+    `26.00% ± 2.60%`, `23.40 – 28.59%` for GP_THC26:CBD1.
+
+    The approval grid prints only what the system recorded: the author
+    (created_by, dated the day the row was made) and, once APPROVED, the
+    approver (approved_by, dated the effective date). Nobody is named who
+    never acted on the row; a block whose person the system does not hold
+    stays blank. A DRAFT carries the "Draft — not approved" watermark; a
+    SUPERSEDED product an equally visible "Superseded — not in force" one."""
+    _uuid_or_404(product_id, "Product")
+    async with rls(user) as c:
+        prod = await c.fetchrow(
+            "SELECT p.*, cv.code AS cultivar_code, cv.name AS cultivar_name"
+            " FROM qc_products p JOIN cultivars cv ON cv.id = p.cultivar_id WHERE p.id=$1",
+            product_id)
+        if prod is None:
+            raise HTTPException(404, "Product not found")
+    ids = [v for v in (prod["created_by"], prod["approved_by"]) if v]
+    people: dict = {}
+    if ids:
+        rows = await users_admin_pool().fetch(
+            "SELECT id, full_name, username, role FROM profiles"
+            " WHERE id = ANY($1::uuid[]) AND org_id=$2", ids, prod["org_id"])
+        people = {str(r["id"]): r for r in rows}
+
+    def block(role_en, role_mk, uid, date_txt):
+        p = people.get(str(uid)) if uid else None
+        if p is None:
+            return _sig(role_en, role_mk, "", "", "", "—")
+        title_en, title_mk = _ROLE_TITLES.get(p["role"], (p["role"], p["role"]))
+        return _sig(role_en, role_mk, _e(title_en), _e(title_mk),
+                    _e(p["full_name"] or p["username"]), date_txt)
+
+    acr, name = prod["cultivar_code"], prod["cultivar_name"]
+    g = grade_str(prod["grade"])
+    nominal = float(prod["nominal_pct"])
+    wmin, wmax = float(prod["window_min"]), float(prod["window_max"])
+    status = prod["status"]
+    approved = status == "APPROVED"
+    created_on = prod["created_at"].astimezone(TZ).date() if prod["created_at"] else None
+    doc = _render_spec_page(
+        title=f"Purely Plant — Product Specification — {_e(name)} ({_e(acr)}) — Potency THC {_e(g)}",
+        doc_code=f"{_e(prod['doc_code'])}_{_e(acr)}-THC{_e(g)}_{_e(prod['doc_version'])}",
+        strain=_e(name), grade_en=f"Potency THC {_e(g)}", grade_mk=f"Јачина THC {_e(g)}",
+        product_code=_e(prod["product_code"]),
+        nominal_txt=f"{nominal:.2f}% ± {nominal - wmin:.2f}%",
+        range_txt=f"{wmin:.2f} – {wmax:.2f}%",
+        watermark=("" if approved else "Superseded — not in force" if status == "SUPERSEDED"
+                   else "Draft — not approved"),
+        sig1=block("Prepared by", "Изготвил", prod["created_by"], _ddmmyyyy(created_on)),
+        sig2=block("Approved by", "Одобрил", prod["approved_by"] if status != "DRAFT" else None,
+                   _ddmmyyyy(prod["effective_date"]) if status != "DRAFT" else "—"),
+        foot_doc=f"{_e(prod['doc_code'])} {_e(prod['doc_version'])}")
     return HTMLResponse(doc, headers=_HTML_HEADERS)
 
 

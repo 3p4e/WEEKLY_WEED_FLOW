@@ -33,7 +33,16 @@ PRODUCT_CODE_RE = re.compile(r"^([A-Z][A-Z0-9]{1,11})_THC(\d+(?:\.\d+)?):CBD(\d+
 
 
 def window_for(nominal: float) -> tuple[float, float]:
-    """The printed acceptance window of a product: nominal ± 10 % relative."""
+    """REFERENCE ONLY — the window the issued ImB pages (QCSP 001 v.03) print:
+    nominal ± 10 % relative, two decimals, upper bound nominal × 1.10 − 0.01.
+
+    Owner decision 2026-09-18: the flat ±10 % rule is retired as a grading
+    method — "the fitted approach is applicable everywhere". Nothing in the
+    app derives a product window from a nominal any more: POST /qc/products,
+    /qc/products/ladder and both importers store the window they are given,
+    and ±10 % survives only as the CEILING a window may not exceed
+    (products._TOLERANCE_CEILING). This function describes what the v.03
+    pages say, for tests and provenance; it must not be used to create one."""
     n = float(nominal)
     return round(n * 0.9, 2), round(round(n * 1.1, 2) - 0.01, 2)
 
