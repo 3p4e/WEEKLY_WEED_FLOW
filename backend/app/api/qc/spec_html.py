@@ -145,10 +145,20 @@ async def spec_document(spec_id: str, tier: int = Query(ge=1, le=6),
     nominal = float(row["nominal"])
     width = float(row["width_pp"]) if row["width_pp"] is not None else round((rmax - rmin) / 2, 2)
     approved = spec["status"] == "APPROVED"
-    # The two signatories are the ladder family's locked roles-of-record
-    # (handoff rule: exactly QC Blagoj Nikolov + QA Jovana Romevska Cvetkovski).
-    # Their printed date is the ladder's effective date once APPROVED; a DRAFT
-    # prints em-dashes + the watermark.
+    # Review 2026-09-27 QC-16: the signatory block prints the person the app
+    # actually recorded as approving the ladder (approved_by), not two names
+    # hard-coded in the template — a name in the signature slot asserts an
+    # executed sign-off (the CoQ's H5 rule). No QA review step exists in the
+    # model, so the QA slot says so rather than naming anyone. The printed
+    # date is the ladder's effective date once APPROVED; a DRAFT prints
+    # em-dashes + the watermark.
+    approver_name = None
+    if approved and spec["approved_by"]:
+        prow = await users_admin_pool().fetchrow(
+            "SELECT full_name, username FROM profiles WHERE id=$1 AND org_id=$2",
+            spec["approved_by"], spec["org_id"])
+        if prow:
+            approver_name = prow["full_name"] or prow["username"]
     date_txt = _ddmmyyyy(spec["effective_date"]) if approved else "—"
     doc = _render_spec_page(
         title=f"Purely Plant — Product Specification — {_e(name)} ({_e(acr)}) — Grade {roman}",
@@ -159,9 +169,9 @@ async def spec_document(spec_id: str, tier: int = Query(ge=1, le=6),
         nominal_txt=f"{nominal:.2f}% ± {width:.2f}%", range_txt=f"{rmin:.2f} – {rmax:.2f}%",
         watermark="" if approved else "Draft — not approved",
         sig1=_sig("Prepared &amp; Approved by", "Изготвил и одобрил", "QC Manager", "Менаџер за КК",
-                  "Blagoj Nikolov", date_txt),
+                  _e(approver_name) if approver_name else "—", date_txt),
         sig2=_sig("Reviewed by", "Прегледал", "QA Manager", "Менаџер за ОК",
-                  "Jovana Romevska Cvetkovski", date_txt),
+                  "— (QA review not captured)", "—"),
         foot_doc="QCSP 001 v.03")
     return HTMLResponse(doc, headers=_HTML_HEADERS)
 
@@ -369,9 +379,19 @@ async def icoa_document(coa_id: str, parameter_id: str = Query(...),
         return (f"<div class='sig'><b>{label}</b><div class='nm'>{role_name(uid)}</div>"
                 f"<div class='meta'>of record — no electronic signature captured</div></div>")
 
-    verdict = ("Conforms to Specification" if coa["decision"] == "PASS"
-               else "Does NOT conform to Specification" if coa["decision"] == "FAIL"
-               else "Disposition pending")
+    # Review 2026-09-27 QC-06: the badge is the disposition RECONCILED with the
+    # rows above it — a PASS over a row that does not conform (or is unmeasured)
+    # is not printed as "Conforms" beside "✗ Does not conform". update_coa now
+    # refuses to record such a PASS; a certificate that carries one from before
+    # that rule is flagged, never dressed up.
+    if coa["decision"] == "PASS" and all_pass:
+        verdict = "Conforms to Specification"
+    elif coa["decision"] == "PASS":
+        verdict = "Disposition PASS inconsistent with results — not valid"
+    elif coa["decision"] == "FAIL":
+        verdict = "Does NOT conform to Specification"
+    else:
+        verdict = "Disposition pending"
     # Status gate: an internal CoA must never look released before its data is
     # (same principle as spec_document's __DRAFT_WM__). Archived certs (VOIDED
     # under QCSOP 012 §6.6, or SUPERSEDED by a revision) get the strongest

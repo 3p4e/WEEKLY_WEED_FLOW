@@ -10,8 +10,11 @@ from urllib.parse import quote as _urlquote
 import base64
 import hashlib
 
+from pydantic import field_validator
+
 from .certificates import _mint_cert_number
-from .common import _HOQC, _WRITERS, _evaluate, _lab_verdict_bool, _uuid_or_404, _uuid_or_422, router
+from .common import (_HOQC, _WRITERS, _dec, _evaluate, _lab_verdict_bool, _norm_unit, _uuid_or_404,
+                     _uuid_or_422, norm_batch, reconcile_numeric, router)
 from .laboratories import _resolve_lab
 
 
@@ -39,6 +42,16 @@ def _norm_label(s: str | None) -> str:
 
 class CoaDocIn(BaseModel):
     batch_id: str = Field(max_length=200)
+
+    @field_validator("batch_id")
+    @classmethod
+    def _norm_batch_id(cls, v: str) -> str:
+        # QC-27: every OOS/CoQ gate keys on this text — one canonical form.
+        v = norm_batch(v)
+        if not v:
+            raise ValueError("batch_id must not be blank")
+        return v
+
     source_institution: str | None = Field(default=None, max_length=200)
     laboratory_id: str | None = None
     material_code: str | None = Field(default=None, max_length=120)
@@ -363,6 +376,9 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             # certificate — rebinding its spec/sample/metadata afterwards would
             # break the provenance the verify loop reconciles against.
             raise HTTPException(409, f"Document is {cur['status']} — locked")
+        cur_full = await c.fetchrow(
+            "SELECT sample_id, laboratory_id, source_institution, report_date, material_code"
+            " FROM qc_coa_documents WHERE id=$1", doc_id)
         review_stamp = False
         if "status" in patch and patch["status"] is not None and patch["status"] != cur["status"]:
             target = patch["status"]
@@ -399,16 +415,42 @@ async def update_coa_document(doc_id: str, body: CoaDocPatch,
             return {"ok": True, "noop": True}
         args.append(user["id"]); fields.append(f"updated_by=${len(args)}")
         args.append(doc_id)
+        # Status-guarded (review 2026-09-27 QC-31): the lock check above and this
+        # UPDATE are two statements, and a concurrent promote can land between
+        # them — the predicate makes the write itself refuse a terminal document.
         row = await c.fetchrow(
             f"UPDATE qc_coa_documents SET {', '.join(fields)}, updated_at=now()"
-            f" WHERE id=${len(args)} RETURNING *", *args)
+            f" WHERE id=${len(args)} AND status NOT IN ('PROMOTED','REJECTED') RETURNING *", *args)
+        if row is None:
+            raise HTTPException(409, "Document was promoted or rejected meanwhile — locked")
         # H2: rebinding the specification changes the grading basis, so any
         # ACCEPTED §6.3.2 review no longer covers the current data — drop it back
         # to PENDING. The operator must re-extract/re-grade against the new spec
         # and re-sign; promote_coa_document independently refuses cross-spec grades.
-        if body.specification_id and str(cur["specification_id"]) != str(body.specification_id):
+        # Review 2026-09-27 QC-19: the same holds for every identity the
+        # checklist affirms — the sample it matched (sample_id_match), the
+        # laboratory and institution the method/units were judged for, the
+        # report date and material. Rebinding any of them after ACCEPTED left
+        # the acceptance in force over a record nobody had reviewed.
+        rebound = (body.specification_id
+                   and str(cur["specification_id"]) != str(body.specification_id))
+        for col in ("sample_id", "laboratory_id", "source_institution", "report_date",
+                    "material_code"):
+            if col in patch and _changed(cur_full[col], patch[col]):
+                rebound = True
+        if rebound:
             await _invalidate_checklist(c, user, doc_id)
     return _ecoa_out(dict(row))
+
+
+def _changed(before, after) -> bool:
+    """Value-level change test for the checklist-invalidation rule: uuids and
+    dates compare by their canonical string, text by exact content."""
+    def _s(v):
+        if v is None:
+            return None
+        return v.isoformat() if hasattr(v, "isoformat") else str(v)
+    return _s(before) != _s(after)
 
 
 _CHECKLIST_OUTCOMES = ("PENDING", "ACCEPTED", "REJECTED")
@@ -553,6 +595,16 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
             raise HTTPException(
                 403, "The reviewer signing the checklist decision must be a different"
                      " person than the one who completed it (§6.3.2 second-person review)")
+        # Review 2026-09-27 QC-11: the decision attests the TRANSCRIBED VALUES,
+        # so the person who typed or corrected any of them is a co-author of
+        # what is being reviewed and may not be the one accepting it either.
+        transcribed = await c.fetchval(
+            "SELECT 1 FROM qc_coa_extractions WHERE document_id=$1"
+            " AND (created_by=$2 OR updated_by=$2) LIMIT 1", doc_id, user["id"])
+        if transcribed:
+            raise HTTPException(
+                403, "The reviewer signing the checklist decision must not have transcribed"
+                     " or corrected any of the values under review (§6.3.2 second-person review)")
         if body.outcome == "ACCEPTED":
             # §6.3.2 — accept only a complete, discrepancy-free checklist.
             affirmations = (cur["sample_id_match"], cur["method_per_tqa"],
@@ -590,6 +642,36 @@ async def decide_checklist(doc_id: str, body: ChecklistDecision,
     return _checklist_out(dict(row))
 
 
+async def _doc_decimal_separator(c, doc) -> str:
+    """The decimal convention the transcribed text is read under: the source
+    laboratory's registered `decimal_separator` (QC-03 — stored since the lab
+    register existed and read by nothing until now). A document with no
+    registered laboratory reads as '.'."""
+    if not doc["laboratory_id"]:
+        return "."
+    return await c.fetchval(
+        "SELECT decimal_separator FROM qc_laboratories WHERE id=$1", doc["laboratory_id"]) or "."
+
+
+def _reconcile_unit(unit, param: dict, label: str):
+    """The unit of record for a line graded against a spec parameter (review
+    2026-09-27 QC-17). The specification's unit IS the criterion's unit: a
+    stated unit that differs is refused (0.004 mg/kg was graded against a
+    ≤ 2 µg/kg limit as 0.004 ≤ 2 and printed under "Conforms"); an omitted
+    unit inherits the parameter's. No conversion is attempted — a value in
+    another unit is re-expressed by the transcriber, in writing."""
+    spec_unit = param.get("unit")
+    if unit is None or not str(unit).strip():
+        return spec_unit
+    if spec_unit and _norm_unit(unit) != _norm_unit(spec_unit):
+        nm = param.get("test_name_en") or param.get("test_name_mk") or label
+        raise HTTPException(
+            422, f"'{label}' is stated in {unit} but the specification parameter '{nm}' is"
+                 f" expressed in {spec_unit} — a result is graded only in the criterion's"
+                 " unit; re-express the value in the specification's unit")
+    return unit
+
+
 @router.post("/coa-documents/{doc_id}/extractions", status_code=201)
 async def submit_extractions(doc_id: str, body: ExtractionsIn,
                              user: dict = Depends(require_role(*_WRITERS))):
@@ -605,16 +687,30 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
             raise HTTPException(404, "eCoA document not found")
         if doc["status"] in ("PROMOTED", "REJECTED"):
             raise HTTPException(409, f"Document is {doc['status']} — extractions are closed")
+        sep = await _doc_decimal_separator(c, doc)
         # candidate parameters: the doc's spec, matched by canonical name…
+        # A COMPUTED parameter (Ph. Eur. 3028 derived total) is never a mapping
+        # target (review 2026-09-27 QC-10): a lab line "Total Δ9-THC" used to
+        # map by name onto total_thc and be promoted as a transcribed total,
+        # bypassing the never-transcribed rule add_result enforces. It stays
+        # unmapped and is queued for a human, who maps the COMPONENT lines.
         by_name: dict[str, dict] = {}
         if doc["specification_id"]:
             for p in await c.fetch(
-                    "SELECT * FROM qc_spec_parameters WHERE spec_id=$1", doc["specification_id"]):
+                    "SELECT * FROM qc_spec_parameters WHERE spec_id=$1 AND computed_kind IS NULL",
+                    doc["specification_id"]):
                 pd = dict(p)
                 for key in (pd.get("test_name_en"), pd.get("test_name_mk")):
                     n = _norm_label(key)
                     if n:
                         by_name.setdefault(n, pd)
+        # one mapped extraction per parameter (review 2026-09-27 QC-31): a
+        # re-submitted batch used to append a second row per parameter, promote
+        # inserted both, and verify keyed on whichever came last.
+        taken: dict[str, str] = {
+            str(r["parameter_id"]): r["raw_label"] for r in await c.fetch(
+                "SELECT parameter_id, raw_label FROM qc_coa_extractions"
+                " WHERE document_id=$1 AND parameter_id IS NOT NULL", doc_id)}
         # …plus any label a human has already mapped (org-wide, cross-document).
         ph_rows = await c.fetch(
             "SELECT normalized_label, mapped_parameter_id FROM qc_field_placeholders"
@@ -623,7 +719,8 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
         param_by_id: dict[str, dict] = {}
         if mapped_by_label:
             for p in await c.fetch(
-                    "SELECT * FROM qc_spec_parameters WHERE id = ANY($1::uuid[])",
+                    "SELECT * FROM qc_spec_parameters WHERE id = ANY($1::uuid[])"
+                    " AND computed_kind IS NULL",
                     list(mapped_by_label.values())):
                 param_by_id[str(p["id"])] = dict(p)
 
@@ -645,12 +742,24 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
                     param = candidate
             if param is None:
                 param = by_name.get(nlabel)
+            # QC-03: the numeric of record is read from the transcribed text under
+            # the source laboratory's decimal separator — a supplied numeric that
+            # disagrees is refused, never silently graded.
+            numeric = reconcile_numeric(item.raw_value, item.numeric_value, sep)
+            unit = item.unit
             if param is not None:
+                if str(param["id"]) in taken:
+                    raise HTTPException(
+                        409, f"'{item.raw_label}' maps to a parameter this document already"
+                             f" carries as '{taken[str(param['id'])]}' — one transcribed line"
+                             " per specification parameter; correct the existing extraction")
+                unit = _reconcile_unit(item.unit, param, item.raw_label)
                 lo, hi = param.get("lower_limit"), param.get("upper_limit")
-                complies, _ = _evaluate(item.numeric_value, lo, hi)
-                grade = "graded" if item.numeric_value is not None else "unknown"
+                complies, _ = _evaluate(numeric, lo, hi)
+                grade = "graded" if numeric is not None else "unknown"
                 test_name = param.get("test_name_en") or param.get("test_name_mk")
                 pid = param["id"]
+                taken[str(pid)] = item.raw_label
             else:
                 lo = hi = complies = None
                 grade, test_name, pid = "unmapped", None, None
@@ -670,8 +779,8 @@ async def submit_extractions(doc_id: str, body: ExtractionsIn,
                 " complies, grade_status, confidence, source_page, lab_verdict,"
                 " created_by, updated_by)"
                 " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16) RETURNING *",
-                user["org_id"], doc_id, item.raw_label, item.raw_value, item.numeric_value,
-                item.unit, pid, test_name, lo, hi, complies, grade, item.confidence,
+                user["org_id"], doc_id, item.raw_label, item.raw_value, numeric,
+                unit, pid, test_name, lo, hi, complies, grade, item.confidence,
                 item.source_page, item.lab_verdict, user["id"])
             out.append(_extract_out(dict(row)))
         if doc["status"] == "UPLOADED":
@@ -700,7 +809,8 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
     patch = body.model_dump(exclude_unset=True)
     async with rls(user) as c:
         doc = await c.fetchrow(
-            "SELECT status, specification_id FROM qc_coa_documents WHERE id=$1", doc_id)
+            "SELECT status, specification_id, laboratory_id FROM qc_coa_documents WHERE id=$1",
+            doc_id)
         if doc is None:
             raise HTTPException(404, "Document not found")
         if doc["status"] in ("PROMOTED", "REJECTED"):
@@ -713,9 +823,18 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
         if cur is None:
             raise HTTPException(404, "Extraction not found")
         row = dict(cur)
-        numeric = patch["numeric_value"] if "numeric_value" in patch else row["numeric_value"]
+        # QC-03: a corrected numeric must still agree with the transcribed text
+        # (the raw value is the lab's statement; the numeric is our reading of
+        # it). An untouched numeric is re-read the same way, so a row graded
+        # from a client-parsed number before this rule is corrected on touch.
+        sep = await _doc_decimal_separator(c, doc)
+        numeric = reconcile_numeric(
+            row["raw_value"], patch["numeric_value"] if "numeric_value" in patch else None, sep)
+        if numeric is None and "numeric_value" not in patch:
+            numeric = row["numeric_value"]
         pid = row["parameter_id"]
         lo, hi, test_name = row["lower_limit"], row["upper_limit"], row["test_name"]
+        p = None
         if "parameter_id" in patch:
             pid = patch["parameter_id"]
             if pid:
@@ -729,13 +848,31 @@ async def update_extraction(doc_id: str, eid: str, body: ExtractionPatch,
                     raise HTTPException(422, "Unknown parameter")
                 if doc["specification_id"] is None or p["spec_id"] != doc["specification_id"]:
                     raise HTTPException(422, "Parameter does not belong to this document's specification")
+                if p["computed_kind"] is not None:
+                    # QC-10: a derived total is computed from its components at
+                    # CoQ time, never transcribed — map the component lines.
+                    raise HTTPException(
+                        422, "This parameter is computed (Ph. Eur. 3028 derived total) — map"
+                             " the component results instead; the total is never transcribed")
+                dup = await c.fetchval(
+                    "SELECT raw_label FROM qc_coa_extractions WHERE document_id=$1"
+                    " AND parameter_id=$2 AND id <> $3 LIMIT 1", doc_id, pid, eid)
+                if dup:
+                    raise HTTPException(
+                        409, f"this document already carries '{dup}' mapped to that parameter"
+                             " — one transcribed line per specification parameter")
                 lo, hi = p["lower_limit"], p["upper_limit"]
                 test_name = patch.get("test_name") or p["test_name_en"] or p["test_name_mk"]
             else:
                 lo = hi = None
+        elif pid:
+            p = await c.fetchrow("SELECT * FROM qc_spec_parameters WHERE id=$1", pid)
         if "test_name" in patch and patch["test_name"]:
             test_name = patch["test_name"]
         unit = patch["unit"] if "unit" in patch else row["unit"]
+        if pid and p is not None:
+            # QC-17: the unit of record is the criterion's unit.
+            unit = _reconcile_unit(unit, dict(p), row["raw_label"])
         if pid:
             complies, _ = _evaluate(numeric, lo, hi)
             grade = "graded" if numeric is not None else "unknown"
@@ -786,9 +923,17 @@ async def update_placeholder(ph_id: str, body: PlaceholderPatch,
         # MAPPED transition), so a bad/cross-org id 422s instead of hitting a raw
         # FK violation (500) or persisting a dangling reference.
         if patch.get("mapped_parameter_id"):
-            if await c.fetchrow("SELECT id FROM qc_spec_parameters WHERE id=$1",
-                                patch["mapped_parameter_id"]) is None:
+            _uuid_or_422(patch["mapped_parameter_id"], "mapped_parameter_id")
+            target_p = await c.fetchrow("SELECT id, computed_kind FROM qc_spec_parameters WHERE id=$1",
+                                        patch["mapped_parameter_id"])
+            if target_p is None:
                 raise HTTPException(422, "Unknown parameter")
+            if target_p["computed_kind"] is not None:
+                # QC-10: a label mapped onto a derived total would auto-map every
+                # future CoA's "Total THC" line onto a value that must be computed.
+                raise HTTPException(
+                    422, "This parameter is computed (Ph. Eur. 3028 derived total) — a label"
+                         " cannot be mapped onto it; map the component lines instead")
         fields, args = [], []
         for col in ("status", "mapped_parameter_id", "suggested_test_name"):
             if col in patch:
@@ -841,6 +986,24 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
         mapped = [dict(r) for r in rows if r["parameter_id"] is not None]
         if not mapped:
             raise HTTPException(409, "No mapped results to promote — map the discovered fields first")
+        # QC-31 (defence in depth for rows that predate the one-line-per-
+        # parameter rule): two mapped rows for one parameter would become two
+        # results, and verify would reconcile against whichever came last.
+        seen: dict[str, str] = {}
+        for m in mapped:
+            k = str(m["parameter_id"])
+            if k in seen:
+                raise HTTPException(
+                    409, f"'{m['raw_label']}' and '{seen[k]}' both map to one specification"
+                         " parameter — resolve the duplicate before promoting")
+            seen[k] = m["raw_label"]
+        # QC-09: the CoQ orders results by measurement date, so a promoted
+        # result carries the eCoA's report date. Without one there is no date
+        # to carry — record it on the document rather than invent one.
+        if doc["report_date"] is None:
+            raise HTTPException(
+                409, f"eCoA {doc['doc_number']} has no report_date — record the laboratory's"
+                     " report date before promoting (the CoQ orders results by it)")
         # H2 (§6.3.2): each mapped extraction was graded against whatever spec was
         # active when it was mapped, and its parameter_id / limits / complies are
         # stored from that grading. If the document's specification_id was rebound
@@ -866,17 +1029,37 @@ async def promote_coa_document(doc_id: str, user: dict = Depends(require_role(*_
             user["org_id"], coa_number, doc["batch_id"], doc["specification_id"], doc["sample_id"],
             doc["report_date"], doc["source_institution"], doc["laboratory_id"],
             f"Promoted from {doc['doc_number']}", user["id"])
+        # The verdict of record is RECOMPUTED here from the value and the
+        # limits (review 2026-09-27 QC-05): the extraction's stored `complies`
+        # was graded when the row was mapped, possibly under the old float-vs-
+        # Decimal comparison, and copying it beside a freshly computed `status`
+        # produced rows with status='pass' and complies=false.
+        params_by_id = {str(p["id"]): dict(p) for p in await c.fetch(
+            "SELECT * FROM qc_spec_parameters WHERE id = ANY($1)", param_ids)}
         for m in mapped:
-            _, st = _evaluate(m["numeric_value"], m["lower_limit"], m["upper_limit"])
+            p = params_by_id[str(m["parameter_id"])]
+            if p["computed_kind"] is not None:
+                raise HTTPException(
+                    409, f"'{m['raw_label']}' is mapped onto a Ph. Eur. 3028 derived total —"
+                         " a derived total is computed, never transcribed; map the component"
+                         " lines instead")
+            unit = _reconcile_unit(m["unit"], p, m["raw_label"])
+            # The extraction row holds double precision; the certificate's
+            # result and limits are `numeric`, so they are bound as Decimal
+            # (a float binds as its binary expansion — see common._dec).
+            value, lo, hi = _dec(m["numeric_value"]), p["lower_limit"], p["upper_limit"]
+            complies, st = _evaluate(value, lo, hi)
             await c.execute(
                 "INSERT INTO qc_results(org_id, coa_id, parameter_id, test_name, result_value,"
                 " result_numeric, unit, lower_limit, upper_limit, complies, status, analyst_id,"
-                " source_document_code, source_institution, lab_verdict, created_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$12)",
+                " source_document_code, source_document_date, source_institution, lab_verdict,"
+                " result_date, created_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$16,$14,$15,$16,$12)",
                 user["org_id"], coa["id"], m["parameter_id"],
-                m["test_name"] or m["raw_label"], m["raw_value"], m["numeric_value"], m["unit"],
-                m["lower_limit"], m["upper_limit"], m["complies"], st, user["id"],
-                doc["doc_number"], doc["source_institution"], m["lab_verdict"])
+                m["test_name"] or m["raw_label"], m["raw_value"], value, unit,
+                lo, hi, complies, st, user["id"],
+                doc["doc_number"], doc["source_institution"], m["lab_verdict"],
+                doc["report_date"])
         # Optimistic re-assert (same TOCTOU defense generate_coq uses): the
         # promoted_coa_id IS NULL predicate makes concurrent promotes race-safe
         # — the loser's UPDATE matches 0 rows and the whole transaction (its

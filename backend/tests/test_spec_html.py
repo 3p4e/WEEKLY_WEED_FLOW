@@ -55,8 +55,11 @@ async def test_spec_document_renders_the_archive_layout(client, admin_headers):
     assert "Draft — not approved" in doc
     # the app has no verified phenotype — no gold-tag selection is fabricated
     assert "INDICA-DOMINANT" not in doc
-    # signatories are the locked spec roles-of-record
-    assert "Blagoj Nikolov" in doc and "Jovana Romevska Cvetkovski" in doc
+    # a DRAFT names no signatory (review 2026-09-27 QC-16: the block prints the
+    # RECORDED approver, never names hard-coded in the template), and the QA
+    # slot says the system captures no QA review
+    assert "Blagoj Nikolov" not in doc and "Jovana Romevska Cvetkovski" not in doc
+    assert "QA review not captured" in doc
 
 
 async def test_spec_document_approved_drops_watermark_and_dates(client, admin_headers):
@@ -68,6 +71,9 @@ async def test_spec_document_approved_drops_watermark_and_dates(client, admin_he
                             headers=admin_headers)).text
     assert "Draft — not approved" not in doc
     assert "Grade I" in doc and "28.00% ± 2.00%" in doc and "26.00 – 30.00%" in doc
+    # the QC signatory is the person the app recorded as approving (QC-16)
+    assert "Test User" in doc and "Blagoj Nikolov" not in doc
+    assert "QA review not captured" in doc
 
 
 async def _named_actor(client, admin_headers, role, full_name):
