@@ -70,12 +70,12 @@ test('the long-running agent routes get the deadline nginx gives them, and no ot
 
   // These four are exactly the paths web/nginx.conf reads for 180s (the
   // DocEngine agent block + /intake). The client must outlast the proxy so the
-  // proxy's 504 is what the user sees.
+  // proxy's 504 is what the user sees. (/qms/rag-query left with BC-19 and
+  // is no longer a slow path — review 2026-09-27, R2-BC-09.)
   for (const path of [
     '/qms/studio/workflows/abc-123/chat',
     '/qms/studio/workflows/abc-123/revise',
     '/qms/studio/build',
-    '/qms/rag-query',
     '/intake/bilingual',
   ]) {
     assert.equal(api._timeoutFor(path), api._SLOW_TIMEOUT_MS, path + ' must get the slow-route deadline');
@@ -83,7 +83,7 @@ test('the long-running agent routes get the deadline nginx gives them, and no ot
 
   // Everything else — including /ai, which nginx reads for 60s and whose own
   // backend timeout is 15s — takes the ordinary deadline.
-  for (const path of ['/tasks', '/auth/me', '/ai/summarise',
+  for (const path of ['/tasks', '/auth/me', '/ai/summarise', '/qms/rag-query',
                       '/qms/studio/workflows/abc-123', '/qms/studio/documents']) {
     assert.equal(api._timeoutFor(path), api._TIMEOUT_MS, path + ' must get the ordinary deadline');
   }

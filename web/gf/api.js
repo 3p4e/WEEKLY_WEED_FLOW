@@ -37,7 +37,8 @@ GF.API = {
   // Exactly the paths web/nginx.conf gives its own 180s block — kept in step
   // with that file deliberately, and no wider: /ai is NOT here, because nginx
   // reads it for 60s and its backend timeout is 15s.
-  _SLOW_PATHS: /^\/(?:intake\/|qms\/(?:rag-query|studio\/(?:build|workflows\/[^/]+\/(?:chat|revise))))/,
+  // (`/qms/rag-query` left with BC-19; review 2026-09-27, R2-BC-09.)
+  _SLOW_PATHS: /^\/(?:intake\/|qms\/studio\/(?:build|workflows\/[^/]+\/(?:chat|revise)))/,
 
   _timeoutFor(path) {
     return this._SLOW_PATHS.test(path) ? this._SLOW_TIMEOUT_MS : this._TIMEOUT_MS;
@@ -226,16 +227,23 @@ GF.API = {
   // Registering from the product specification: the next batch number for a
   // cultivar (constant head = the cultivar code, tail suggested from what the
   // org already holds). The code field pre-fills it; the tail stays editable.
-  cultivationBatchCode(cultivarId) { return this._req('GET', '/cultivation/batch-code?cultivar_id=' + encodeURIComponent(cultivarId)); },
+  // `extra` carries any further query key the route takes (clone_date), so a
+  // view never has to bypass this wrapper with an inline _req (R2-FE-18).
+  cultivationBatchCode(cultivarId, extra) {
+    const u = new URLSearchParams(Object.assign({ cultivar_id: cultivarId }, extra || {})).toString();
+    return this._req('GET', '/cultivation/batch-code?' + u);
+  },
   cultivationBatchPatch(id, b)   { return this._req('PATCH', '/cultivation/batches/' + id, b); },
   // Trichome maturation checks (0066): the documented record behind a harvest
   // date. Never a gate — the harvest form shows the latest verdict, nothing more.
   trichomeChecks(q)              { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/cultivation/trichome-checks' + (u?'?'+u:'')); },
   trichomeCheck(b)               { return this._req('POST', '/cultivation/trichome-checks', b); },
+  // A correction of a recorded check (trichome.py; the original stays, the
+  // correction is a new row that names it) — the history list above shows both.
+  trichomeCheckPatch(id, b)      { return this._req('PATCH', '/cultivation/trichome-checks/' + id, b); },
   // Selection campaigns — the S<n> in a mother-plant id, numbered facility-wide.
   campaigns()                    { return this._req('GET', '/cultivation/campaigns'); },
   campaignCreate(b)              { return this._req('POST', '/cultivation/campaigns', b); },
-  campaignPatch(id, b)           { return this._req('PATCH', '/cultivation/campaigns/' + id, b); },
   // Propagation (migration 0065, app/api/propagation.py): the mother-plant
   // bank and clone runs — the clone end of cultivation's span. Same
   // /cultivation prefix, separate server module, like harvest and irrigation.
@@ -372,14 +380,14 @@ GF.API = {
   qcReviewCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/review'); },
   qcVoidCoq(id, reason)    { return this._req('POST', '/qc/coq/' + id + '/void', { reason }); },
   qcRenderCoq(id)          { return this._req('POST', '/qc/coq/' + id + '/render'); },
+  // Annex 11 e-signature on a CoQ (signatures.py): re-authenticated
+  // attestation, listed back with its meaning and the signer.
+  qcCoqSign(id, b)         { return this._req('POST', '/qc/coq/' + id + '/sign', b); },
+  qcCoqSignatures(id)      { return this._req('GET', '/qc/coq/' + id + '/signatures'); },
   // QC potency ladders (PP-QC-SPEC-001 / QCSP 001) + batch commercial identities
   qcPotencySpecs(q)        { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/potency-specs' + (u?'?'+u:'')); },
   qcPotencySpec(id)        { return this._req('GET', '/qc/potency-specs/' + id); },
-  qcCreatePotencySpec(b)   { return this._req('POST', '/qc/potency-specs', b); },
-  qcApprovePotencySpec(id) { return this._req('POST', '/qc/potency-specs/' + id + '/approve'); },
-  qcSupersedePotencySpec(id){ return this._req('POST', '/qc/potency-specs/' + id + '/supersede'); },
   qcImportPotencySpecs(b)  { return this._req('POST', '/qc/potency-specs/import', b || {}); },
-  qcPotencyDisposition(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/potency-disposition?' + u); },
   qcSpecDocumentUrl(id, tier) { return '/qc/potency-specs/' + encodeURIComponent(id) + '/document?tier=' + encodeURIComponent(tier); },
   // The official product catalogue (qc_products) — one page per product with
   // the window it stores (the ImB v.03 pages, or the fitted specifications of
@@ -387,14 +395,11 @@ GF.API = {
   // but the catalogue is what a batch, a mother and a CoQ now name.
   qcProducts(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/products' + (u?'?'+u:'')); },
   qcProduct(id)            { return this._req('GET', '/qc/products/' + id); },
-  qcProductCreate(b)       { return this._req('POST', '/qc/products', b); },
-  qcProductPatch(id, b)    { return this._req('PATCH', '/qc/products/' + id, b); },
   qcProductLadderCreate(b) { return this._req('POST', '/qc/products/ladder', b); },
   qcApproveProduct(id)     { return this._req('POST', '/qc/products/' + id + '/approve'); },
   qcSupersedeProduct(id)   { return this._req('POST', '/qc/products/' + id + '/supersede'); },
   qcImportProducts(b)      { return this._req('POST', '/qc/products/import', b || {}); },
   qcImportFittedProducts(b){ return this._req('POST', '/qc/products/import-fitted', b); },
-  qcProductPotency(id)     { return this._req('GET', '/qc/products/' + id + '/potency-history'); },
   qcProductConformance(q)  { const u = new URLSearchParams(q).toString(); return this._req('GET', '/qc/products/conformance?' + u); },
   // The A4 page (GET /qc/products/{id}/document, spec_html.py). A plain
   // navigation carries no bearer header, so callers fetch it with the token
@@ -403,12 +408,10 @@ GF.API = {
   // GET /qc/certificates/{coa_id}/icoa-html?parameter_id=... (the single-
   // parameter internal-CoA HTML view, spec_html.py) is real and migration-
   // backed but has no frontend caller — sibling gap to the one above.
-  qcCommercialIdentities(q){ const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/commercial-identities' + (u?'?'+u:'')); },
-  qcImportCommercial()     { return this._req('POST', '/qc/commercial-identities/import'); },
-  // PUT/DELETE /qc/commercial-identities/{batch_code} (edit/delete a single
-  // commercial identity) is real and migration-backed but has no frontend
-  // caller — only list + bulk-import are wired here. Feature-completeness
-  // gap, not a bug; out of scope for a Low-severity mechanical fix.
+  // The commercial identities (/qc/commercial-identities, list / import /
+  // PUT / DELETE) are API-only: no screen reads them, so no wrapper is kept
+  // (review 2026-09-27, INV-05 / INV-06; docs/FRONTEND-DESIGN-HANDOVER.md
+  // "API-only routes").
   // QC LIMS — certificate register (QCLB 020 §6.13)
   qcRegister(q)            { const u = new URLSearchParams(q||{}).toString(); return this._req('GET', '/qc/register' + (u?'?'+u:'')); },
   qcRegisterGaps(year)     { return this._req('GET', '/qc/register/gaps?year=' + encodeURIComponent(year)); },
@@ -505,6 +508,10 @@ GF.API = {
 
   departments() { return this._req('GET', '/departments'); },
   createDepartment(b) { return this._req('POST', '/departments', b); },
+  // ADMIN edit of a department's names and head (tasks.py DepartmentPatch);
+  // `head_user_id: null` clears the head. The head is what collab.py routes a
+  // handoff to (DECISIONS A-3).
+  departmentPatch(id, b) { return this._req('PATCH', '/departments/' + id, b); },
   weeks()       { return this._req('GET', '/weeks'); },
   tasks(q = {}) {
     const p = new URLSearchParams(q).toString();

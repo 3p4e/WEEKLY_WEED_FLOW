@@ -98,3 +98,60 @@ test('auditPage sends the query as-is and maps X-Next-Cursor to `next`', async (
   assert.equal(typeof w.GF.API.audit, 'undefined', 'the body-only audit() wrapper is gone with the `before` paging');
   h.close();
 });
+
+/* ── Wrapper inventory (review 2026-09-27, INV-05 / INV-06 / FE-22) ──────
+   The wrappers with no caller are gone; the routes the other views wire this
+   round have theirs; qcProductLadderCreate stays for the catalogue screen.
+   ──────────────────────────────────────────────────────────────────────── */
+
+test('the dead QC / cultivation wrappers are gone and the requested ones exist', () => {
+  const h = load();
+  const api = h.window.GF.API;
+  for (const name of ['qcCreatePotencySpec', 'qcApprovePotencySpec', 'qcSupersedePotencySpec',
+                      'qcPotencyDisposition', 'qcProductCreate', 'qcProductPatch', 'qcProductPotency',
+                      'qcCommercialIdentities', 'qcImportCommercial', 'campaignPatch', 'audit']) {
+    assert.equal(api[name], undefined, `GF.API.${name} has no caller and should not exist`);
+  }
+  for (const name of ['trichomeCheckPatch', 'qcCoqSign', 'qcCoqSignatures', 'departmentPatch',
+                      'qcProductLadderCreate', 'trichomeChecks', 'qcSignatures', 'auditPage', 'cultivationBatchCode']) {
+    assert.equal(typeof api[name], 'function', `GF.API.${name} is expected`);
+  }
+  h.close();
+});
+
+test('the new wrappers hit the routes they are named for, with the body unchanged', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.API.token = 'tok';
+  const calls = [];
+  w.fetch = async (url, opts) => { calls.push([opts.method, url, opts.body]); return jsonResponse(w, {}); };
+  await w.GF.API.trichomeCheckPatch('tc1', { verdict: 'mostly_cloudy', reason: 'typo' });
+  await w.GF.API.qcCoqSign('q1', { meaning: 'approved', password: 'x' });
+  await w.GF.API.qcCoqSignatures('q1');
+  await w.GF.API.departmentPatch('d1', { head_user_id: 'u9' });
+  await w.GF.API.departmentPatch('d1', { head_user_id: null });
+  await w.GF.API.cultivationBatchCode('cv1', { clone_date: '2026-07-25' });
+  await w.GF.API.cultivationBatchCode('cv1');
+  assert.deepEqual(calls, [
+    ['PATCH', '/cultivation/trichome-checks/tc1', JSON.stringify({ verdict: 'mostly_cloudy', reason: 'typo' })],
+    ['POST', '/qc/coq/q1/sign', JSON.stringify({ meaning: 'approved', password: 'x' })],
+    ['GET', '/qc/coq/q1/signatures', undefined],
+    ['PATCH', '/departments/d1', JSON.stringify({ head_user_id: 'u9' })],
+    ['PATCH', '/departments/d1', JSON.stringify({ head_user_id: null })],
+    ['GET', '/cultivation/batch-code?cultivar_id=cv1&clone_date=2026-07-25', undefined],
+    ['GET', '/cultivation/batch-code?cultivar_id=cv1', undefined],
+  ]);
+  h.close();
+});
+
+test('the custody wrapper sends the body the view gives it, unchanged (R2-FE-05: the server rule wins)', async () => {
+  const h = load();
+  const w = h.window;
+  w.GF.API.token = 'tok';
+  let sent = null;
+  w.fetch = async (url, opts) => { sent = [url, opts.body]; return jsonResponse(w, {}); };
+  const body = { from_location: 'Sampling bench', from_user_id: 'S', to_user_id: 'L', note: 'hop 2' };
+  await w.GF.API.qcAddCustody('s1', body);
+  assert.deepEqual(sent, ['/qc/samples/s1/custody', JSON.stringify(body)]);
+  h.close();
+});
