@@ -2,9 +2,10 @@
 
 The owner supplied the Archicad ground-floor sheet on 2026-09-05 and asked that
 the app know the real facility. These tests pin what the register is: the
-building as drawn (import is faithful and idempotent), what it is not (it does
-not invent a cleanliness grade, and it is not the operational `rooms` table),
-and who may classify a room.
+building as drawn (import is faithful and idempotent), what it is not (it is
+not the operational `rooms` table), which cleanliness grades it carries (the
+owner's, 2026-09-06, and only where his rule reaches), and who may classify a
+room.
 """
 import json
 from pathlib import Path
@@ -51,14 +52,6 @@ async def test_the_packaged_register_is_the_drawing(client, admin_headers):
     flowering = [x for x in r.json()["rooms"] if x["name_en"].startswith("FLOWERING")]
     assert len(flowering) == 6
     assert {x["net_area_m2"] for x in flowering} == {416.0}
-
-
-async def test_no_room_is_given_a_cleanliness_grade(client, admin_headers):
-    """No grade appears anywhere on the drawing, so the import must not invent
-    one — assigning it is QA's decision, not the importer's."""
-    await _import(client, admin_headers)
-    r = await client.get("/facility/layout", headers=admin_headers)
-    assert all(x["grade"] is None for x in r.json()["rooms"])
 
 
 async def test_the_gacp_to_gmp_handover_is_recorded(client, admin_headers):
@@ -304,3 +297,53 @@ async def test_a_deactivated_room_can_still_be_found_and_switched_back_on(client
     assert r.status_code == 200, r.text
     r = await client.get("/facility/layout", headers=admin_headers)
     assert "T163" in [x["code"] for x in r.json()["rooms"]]
+
+
+async def test_the_owners_grades_are_seeded_where_his_rule_reaches(client, admin_headers):
+    """INS-07. The owner's scheme (2026-09-06): the extraction department is
+    Grade D; trimming and drying are officially CNC but operated as D; curing
+    and packaging are D; the corridors around cultivation are CNC. Cultivation
+    rooms carry no grade (GACP has none), and rooms the rule did not name stay
+    unclassified rather than guessed."""
+    await _import(client, admin_headers)
+    graded = {"E27": "D", "E36": "D", "E40": "D", "E46": "D", "E90": "D",
+              "E81": "D", "F96": "D", "F104": "D", "F108": "D", "F113": "D", "C153": "D",
+              "C74": "CNC", "C170": "CNC"}
+    for code, grade in graded.items():
+        room = await _by_code(client, admin_headers, code)
+        assert room["grade"] == grade, (code, room["grade"])
+    treated = await _by_code(client, admin_headers, "F104")
+    assert "Officially CNC" in treated["notes"] and "Grade D" in treated["notes"]
+    for code in ("C180", "C171", "T69", "M5", "E23", "F139", "F131", "W18"):
+        assert (await _by_code(client, admin_headers, code))["grade"] is None, code
+    counted = [r for r in _REGISTER if r.get("grade")]
+    assert len(counted) == 34
+
+
+async def test_a_reimport_fills_a_missing_grade_and_keeps_a_set_one(client, admin_headers):
+    """A register imported before the grades were stated picks them up on the
+    next import — and a grade QA set is never overwritten by it."""
+    await _import(client, admin_headers)
+    e27 = await _by_code(client, admin_headers, "E27")
+    f104 = await _by_code(client, admin_headers, "F104")
+    r = await client.patch(f"/facility/layout/{f104['id']}", json={"grade": "C", "notes": "QA"},
+                           headers=admin_headers)
+    assert r.status_code == 200
+    # Simulate the pre-grade register: clear E27's grade as QA might, then re-import.
+    await client.patch(f"/facility/layout/{e27['id']}", json={"grade": None, "notes": None},
+                       headers=admin_headers)
+    assert (await _by_code(client, admin_headers, "E27"))["grade"] is None
+    await _import(client, admin_headers)
+    assert (await _by_code(client, admin_headers, "E27"))["grade"] == "D"
+    after = await _by_code(client, admin_headers, "F104")
+    assert after["grade"] == "C" and after["notes"] == "QA"
+
+
+async def test_is_active_null_is_refused_not_written(client, admin_headers):
+    """CS-15. The column is NOT NULL; null is neither on nor off."""
+    await _import(client, admin_headers)
+    room = await _by_code(client, admin_headers, "C180")
+    r = await client.patch(f"/facility/layout/{room['id']}", json={"is_active": None},
+                           headers=admin_headers)
+    assert r.status_code == 422, r.text
+    assert (await _by_code(client, admin_headers, "C180"))["is_active"] is True

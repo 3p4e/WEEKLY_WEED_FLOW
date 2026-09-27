@@ -18,9 +18,17 @@ Access model, the shape the rest of the facility board uses:
              an operational room are all QA/management judgements;
   import   — ADMIN and the executives only, because it seeds the whole register.
 
-`grade` starts null everywhere and stays null until someone sets it. No
-cleanliness grade appears anywhere on the drawing, so the app has nothing to
-read it from and must not invent one — the doc asks QA for the site's scheme.
+`grade` carries the owner's cleanliness scheme where his rule reaches
+(2026-09-06: EU GMP grades plus CNC — the extraction department is Grade D,
+trimming and drying rooms are officially CNC but operated and recorded as D,
+curing and packaging rooms are D, the corridors around cultivation are CNC),
+seeded from the packaged register together with a `notes` line that quotes
+the rule. No grade appears on the drawing itself, and the app invents none:
+cultivation rooms stay null (GACP defines no cleanliness class), and so do
+the technical, main and washing wings and the E/F corridors, wardrobes,
+sampling rooms and F-wing warehouses the rule did not name. A re-import fills
+a grade or a note only where none is set, so a classification QA made is never
+overwritten.
 """
 import json
 from pathlib import Path
@@ -176,6 +184,11 @@ async def patch_layout_room(layout_id: str, body: LayoutPatch,
         raise HTTPException(422, f"zone must be one of: {', '.join(_ZONES)}")
     if data.get("regime") is not None and data["regime"] not in _REGIMES:
         raise HTTPException(422, f"regime must be one of: {', '.join(_REGIMES)}")
+    # is_active is NOT NULL: an explicit null is neither "on" nor "off", and
+    # writing it through reached Postgres as a constraint violation (a 500
+    # where the caller deserves a 422 — review CS-15).
+    if "is_active" in data and data["is_active"] is None:
+        raise HTTPException(422, "is_active must be true or false, not null")
     room_id = data.pop("room_id", ...)
     async with rls(user) as c:
         cur = await c.fetchrow("SELECT id, code FROM facility_rooms WHERE id=$1", rid)
@@ -238,6 +251,10 @@ async def import_layout(body: LayoutImportIn,
     every judgement column is left exactly as it is: grade, regime, ZONE,
     department, notes, is_active and the operational-room link. Re-importing a
     corrected register therefore never discards a classification somebody made.
+    The one addition is FILLING: the owner's grade and its note from the
+    register land on a room whose grade / note is still null, so a register
+    imported before the grades were stated picks them up without a hand edit
+    per room — and a grade QA set stays exactly as QA set it.
 
     `zone` is in that list even though the packaged register ships one, because
     the shipped value is only what the room's printed NAME implied and QA can
@@ -264,24 +281,29 @@ async def import_layout(body: LayoutImportIn,
                     "UPDATE facility_rooms SET name_en=$1, name_mk=$2, wing=$3,"
                     " area_m2=$4, net_area_m2=$5, perimeter_m=$6, plan_x=$7, plan_y=$8,"
                     " box_x=$9, box_y=$10, box_w=$11, box_h=$12, box_conf=$13,"
+                    # Fill, never overwrite: the register's grade and note land
+                    # only where nothing was set.
+                    " grade=COALESCE(grade, $17), notes=COALESCE(notes, $18),"
                     " source=$14, updated_by=$15, updated_at=now() WHERE id=$16",
                     r["name_en"], r["name_mk"], r["wing"], r["area_m2"],
                     r["net_area_m2"], r["perimeter_m"], r["plan_x"], r["plan_y"],
                     r.get("box_x"), r.get("box_y"), r.get("box_w"), r.get("box_h"),
                     r.get("box_conf"),
-                    _SOURCE, user["id"], exists)
+                    _SOURCE, user["id"], exists, r.get("grade"), r.get("notes"))
                 updated.append(r["code"])
                 continue
             await c.execute(
                 "INSERT INTO facility_rooms(org_id, code, name_en, name_mk, wing, zone, regime,"
                 " area_m2, net_area_m2, perimeter_m, plan_x, plan_y,"
-                " box_x, box_y, box_w, box_h, box_conf, source, created_by, updated_by)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)",
+                " box_x, box_y, box_w, box_h, box_conf, grade, notes, source,"
+                " created_by, updated_by)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,"
+                " $21,$21)",
                 user["org_id"], r["code"], r["name_en"], r["name_mk"], r["wing"], r["zone"],
                 r["regime"], r["area_m2"], r["net_area_m2"], r["perimeter_m"],
                 r["plan_x"], r["plan_y"],
                 r.get("box_x"), r.get("box_y"), r.get("box_w"), r.get("box_h"),
-                r.get("box_conf"),
+                r.get("box_conf"), r.get("grade"), r.get("notes"),
                 _SOURCE, user["id"])
             created.append(r["code"])
         if not body.dry_run and (created or updated):

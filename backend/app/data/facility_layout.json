@@ -15,7 +15,9 @@
   "box_y": 0.40588,
   "box_w": 0.08598,
   "box_h": 0.03583,
-  "box_conf": 0.043
+  "box_conf": 0.043,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C16",
@@ -33,7 +35,9 @@
   "box_y": 0.36755,
   "box_w": 0.08376,
   "box_h": 0.0375,
-  "box_conf": 0.163
+  "box_conf": 0.163,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C67",
@@ -51,7 +55,9 @@
   "box_y": 0.71422,
   "box_w": 0.0321,
   "box_h": 0.01583,
-  "box_conf": 0.1
+  "box_conf": 0.1,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C70",
@@ -69,7 +75,9 @@
   "box_y": 0.65672,
   "box_w": 0.00627,
   "box_h": 0.11667,
-  "box_conf": 0.098
+  "box_conf": 0.098,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C72",
@@ -87,7 +95,9 @@
   "box_y": 0.65672,
   "box_w": 0.00627,
   "box_h": 0.11667,
-  "box_conf": 0.101
+  "box_conf": 0.101,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C74",
@@ -105,7 +115,9 @@
   "box_y": 0.0,
   "box_w": 0.01144,
   "box_h": 0.68417,
-  "box_conf": 0.189
+  "box_conf": 0.189,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C86",
@@ -123,7 +135,9 @@
   "box_y": 0.51505,
   "box_w": 0.02509,
   "box_h": 0.0375,
-  "box_conf": 0.235
+  "box_conf": 0.235,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C87",
@@ -141,7 +155,9 @@
   "box_y": 0.55588,
   "box_w": 0.02509,
   "box_h": 0.0475,
-  "box_conf": 0.299
+  "box_conf": 0.299,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C88",
@@ -159,7 +175,9 @@
   "box_y": null,
   "box_w": null,
   "box_h": null,
-  "box_conf": null
+  "box_conf": null,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C92",
@@ -177,7 +195,9 @@
   "box_y": 0.04005,
   "box_w": 0.0059,
   "box_h": 0.04,
-  "box_conf": 0.579
+  "box_conf": 0.579,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C98",
@@ -195,7 +215,9 @@
   "box_y": 0.66672,
   "box_w": 0.02989,
   "box_h": 0.0325,
-  "box_conf": 0.381
+  "box_conf": 0.381,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C99",
@@ -213,7 +235,9 @@
   "box_y": 0.18672,
   "box_w": 0.01845,
   "box_h": 0.03583,
-  "box_conf": 0.341
+  "box_conf": 0.341,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C100",
@@ -231,7 +255,9 @@
   "box_y": 0.14672,
   "box_w": 0.01808,
   "box_h": 0.03667,
-  "box_conf": 0.254
+  "box_conf": 0.254,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C101",
@@ -249,7 +275,9 @@
   "box_y": 0.10588,
   "box_w": 0.01845,
   "box_h": 0.04,
-  "box_conf": 0.356
+  "box_conf": 0.356,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C144",
@@ -267,7 +295,9 @@
   "box_y": 0.04422,
   "box_w": 0.031,
   "box_h": 0.02833,
-  "box_conf": 0.264
+  "box_conf": 0.264,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C145",
@@ -285,7 +315,9 @@
   "box_y": 0.04088,
   "box_w": 0.05904,
   "box_h": 0.03083,
-  "box_conf": 0.477
+  "box_conf": 0.477,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C146",
@@ -303,7 +335,9 @@
   "box_y": 0.08005,
   "box_w": 0.16531,
   "box_h": 0.02667,
-  "box_conf": 0.335
+  "box_conf": 0.335,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C147",
@@ -321,7 +355,9 @@
   "box_y": 0.66338,
   "box_w": 0.05941,
   "box_h": 0.03583,
-  "box_conf": 0.473
+  "box_conf": 0.473,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C148",
@@ -339,7 +375,9 @@
   "box_y": 0.04172,
   "box_w": 0.02288,
   "box_h": 0.02583,
-  "box_conf": 0.52
+  "box_conf": 0.52,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C149",
@@ -357,7 +395,9 @@
   "box_y": 0.04255,
   "box_w": 0.03395,
   "box_h": 0.02667,
-  "box_conf": 0.478
+  "box_conf": 0.478,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C150",
@@ -375,7 +415,9 @@
   "box_y": 0.04588,
   "box_w": 0.03653,
   "box_h": 0.02417,
-  "box_conf": 0.432
+  "box_conf": 0.432,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C151",
@@ -393,7 +435,9 @@
   "box_y": 0.04255,
   "box_w": 0.07011,
   "box_h": 0.02583,
-  "box_conf": 0.433
+  "box_conf": 0.433,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C151А",
@@ -411,7 +455,9 @@
   "box_y": 0.03838,
   "box_w": 0.01144,
   "box_h": 0.04167,
-  "box_conf": 0.408
+  "box_conf": 0.408,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C152",
@@ -429,7 +475,9 @@
   "box_y": 0.08172,
   "box_w": 0.20849,
   "box_h": 0.02333,
-  "box_conf": 0.369
+  "box_conf": 0.369,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C153",
@@ -447,7 +495,9 @@
   "box_y": 0.04088,
   "box_w": 0.09483,
   "box_h": 0.03,
-  "box_conf": 0.461
+  "box_conf": 0.461,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "C154",
@@ -465,7 +515,9 @@
   "box_y": 0.04505,
   "box_w": 0.069,
   "box_h": 0.02417,
-  "box_conf": 0.434
+  "box_conf": 0.434,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C154А",
@@ -483,7 +535,9 @@
   "box_y": 0.03755,
   "box_w": 0.0107,
   "box_h": 0.04167,
-  "box_conf": 0.422
+  "box_conf": 0.422,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C155",
@@ -501,7 +555,9 @@
   "box_y": 0.08088,
   "box_w": 0.15572,
   "box_h": 0.025,
-  "box_conf": 0.377
+  "box_conf": 0.377,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C156",
@@ -519,7 +575,9 @@
   "box_y": 0.04172,
   "box_w": 0.05018,
   "box_h": 0.02583,
-  "box_conf": 0.451
+  "box_conf": 0.451,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C157",
@@ -537,7 +595,9 @@
   "box_y": 0.08005,
   "box_w": 0.03469,
   "box_h": 0.025,
-  "box_conf": 0.334
+  "box_conf": 0.334,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C158",
@@ -555,7 +615,9 @@
   "box_y": 0.22088,
   "box_w": 0.14945,
   "box_h": 0.0625,
-  "box_conf": 0.23
+  "box_conf": 0.23,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C164",
@@ -573,7 +635,9 @@
   "box_y": 0.39505,
   "box_w": 0.00664,
   "box_h": 0.03417,
-  "box_conf": 0.357
+  "box_conf": 0.357,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C165",
@@ -591,7 +655,9 @@
   "box_y": 0.41088,
   "box_w": 0.01513,
   "box_h": 0.01833,
-  "box_conf": 0.374
+  "box_conf": 0.374,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C166",
@@ -609,7 +675,9 @@
   "box_y": 0.39422,
   "box_w": 0.00554,
   "box_h": 0.05333,
-  "box_conf": 0.277
+  "box_conf": 0.277,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C167",
@@ -627,7 +695,9 @@
   "box_y": 0.43838,
   "box_w": 0.02731,
   "box_h": 0.4125,
-  "box_conf": 0.213
+  "box_conf": 0.213,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C168",
@@ -645,7 +715,9 @@
   "box_y": 0.63005,
   "box_w": 0.03137,
   "box_h": 0.025,
-  "box_conf": 0.435
+  "box_conf": 0.435,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C169",
@@ -663,7 +735,9 @@
   "box_y": 0.63088,
   "box_w": 0.15572,
   "box_h": 0.025,
-  "box_conf": 0.417
+  "box_conf": 0.417,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C170",
@@ -681,7 +755,9 @@
   "box_y": 0.63088,
   "box_w": 0.2524,
   "box_h": 0.025,
-  "box_conf": 0.427
+  "box_conf": 0.427,
+  "grade": "CNC",
+  "notes": "CNC — owner, 2026-09-06: \"all corridors that are encompassing Cultivation department are CNC\"."
  },
  {
   "code": "C171",
@@ -699,7 +775,9 @@
   "box_y": 0.10672,
   "box_w": 0.03764,
   "box_h": 0.52333,
-  "box_conf": 0.35
+  "box_conf": 0.35,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C172",
@@ -717,7 +795,9 @@
   "box_y": 0.33422,
   "box_w": 0.0214,
   "box_h": 0.03417,
-  "box_conf": 0.352
+  "box_conf": 0.352,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C173",
@@ -735,7 +815,9 @@
   "box_y": 0.33255,
   "box_w": 0.01513,
   "box_h": 0.04833,
-  "box_conf": 0.241
+  "box_conf": 0.241,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C174",
@@ -753,7 +835,9 @@
   "box_y": 0.10588,
   "box_w": 0.01956,
   "box_h": 0.05333,
-  "box_conf": 0.288
+  "box_conf": 0.288,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C175",
@@ -771,7 +855,9 @@
   "box_y": 0.57422,
   "box_w": 0.01956,
   "box_h": 0.05333,
-  "box_conf": 0.331
+  "box_conf": 0.331,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C176",
@@ -789,7 +875,9 @@
   "box_y": 0.40505,
   "box_w": 0.01956,
   "box_h": 0.17083,
-  "box_conf": 0.35
+  "box_conf": 0.35,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C177",
@@ -807,7 +895,9 @@
   "box_y": 0.16005,
   "box_w": 0.01956,
   "box_h": 0.17083,
-  "box_conf": 0.341
+  "box_conf": 0.341,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C178",
@@ -825,7 +915,9 @@
   "box_y": 0.36922,
   "box_w": 0.12177,
   "box_h": 0.1275,
-  "box_conf": 0.207
+  "box_conf": 0.207,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C179",
@@ -843,7 +935,9 @@
   "box_y": 0.31255,
   "box_w": 0.05683,
   "box_h": 0.27333,
-  "box_conf": 0.181
+  "box_conf": 0.181,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C180",
@@ -861,7 +955,9 @@
   "box_y": 0.10588,
   "box_w": 0.05904,
   "box_h": 0.525,
-  "box_conf": 0.345
+  "box_conf": 0.345,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C181",
@@ -879,7 +975,9 @@
   "box_y": 0.10588,
   "box_w": 0.05904,
   "box_h": 0.525,
-  "box_conf": 0.338
+  "box_conf": 0.338,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C182",
@@ -897,7 +995,9 @@
   "box_y": 0.10588,
   "box_w": 0.05904,
   "box_h": 0.525,
-  "box_conf": 0.338
+  "box_conf": 0.338,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C183",
@@ -915,7 +1015,9 @@
   "box_y": 0.10588,
   "box_w": 0.05904,
   "box_h": 0.525,
-  "box_conf": 0.342
+  "box_conf": 0.342,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C184",
@@ -933,7 +1035,9 @@
   "box_y": 0.10588,
   "box_w": 0.06015,
   "box_h": 0.525,
-  "box_conf": 0.339
+  "box_conf": 0.339,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "C185",
@@ -951,7 +1055,9 @@
   "box_y": 0.10588,
   "box_w": 0.05904,
   "box_h": 0.525,
-  "box_conf": 0.337
+  "box_conf": 0.337,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E12",
@@ -969,7 +1075,9 @@
   "box_y": 0.69422,
   "box_w": 0.00775,
   "box_h": 0.02333,
-  "box_conf": 0.51
+  "box_conf": 0.51,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E21",
@@ -987,7 +1095,9 @@
   "box_y": 0.43672,
   "box_w": 0.02694,
   "box_h": 0.03583,
-  "box_conf": 0.122
+  "box_conf": 0.122,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E22",
@@ -1005,7 +1115,9 @@
   "box_y": 0.45338,
   "box_w": 0.02694,
   "box_h": 0.03583,
-  "box_conf": 0.192
+  "box_conf": 0.192,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E23",
@@ -1023,7 +1135,9 @@
   "box_y": 0.49922,
   "box_w": 0.01328,
   "box_h": 0.06417,
-  "box_conf": 0.231
+  "box_conf": 0.231,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E24",
@@ -1041,7 +1155,9 @@
   "box_y": 0.56755,
   "box_w": 0.01181,
   "box_h": 0.04,
-  "box_conf": 0.151
+  "box_conf": 0.151,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E25",
@@ -1059,7 +1175,9 @@
   "box_y": 0.51838,
   "box_w": 0.00664,
   "box_h": 0.04167,
-  "box_conf": 0.197
+  "box_conf": 0.197,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E26",
@@ -1077,7 +1195,9 @@
   "box_y": 0.52005,
   "box_w": 0.01845,
   "box_h": 0.04,
-  "box_conf": 0.327
+  "box_conf": 0.327,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E27",
@@ -1095,7 +1215,9 @@
   "box_y": 0.57755,
   "box_w": 0.04834,
   "box_h": 0.15167,
-  "box_conf": 0.35
+  "box_conf": 0.35,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E31",
@@ -1113,7 +1235,9 @@
   "box_y": 0.66422,
   "box_w": 0.01845,
   "box_h": 0.0325,
-  "box_conf": 0.234
+  "box_conf": 0.234,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E32",
@@ -1131,7 +1255,9 @@
   "box_y": 0.69755,
   "box_w": 0.01624,
   "box_h": 0.07583,
-  "box_conf": 0.326
+  "box_conf": 0.326,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E33",
@@ -1149,7 +1275,9 @@
   "box_y": 0.72505,
   "box_w": 0.00775,
   "box_h": 0.04583,
-  "box_conf": 0.591
+  "box_conf": 0.591,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E34",
@@ -1167,7 +1295,9 @@
   "box_y": 0.53505,
   "box_w": 0.02103,
   "box_h": 0.12917,
-  "box_conf": 0.345
+  "box_conf": 0.345,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E34a",
@@ -1185,7 +1315,9 @@
   "box_y": 0.66505,
   "box_w": 0.02325,
   "box_h": 0.03583,
-  "box_conf": 0.526
+  "box_conf": 0.526,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E35",
@@ -1203,7 +1335,9 @@
   "box_y": 0.55755,
   "box_w": 0.01328,
   "box_h": 0.10083,
-  "box_conf": 0.338
+  "box_conf": 0.338,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E36",
@@ -1221,7 +1355,9 @@
   "box_y": 0.53422,
   "box_w": 0.01255,
   "box_h": 0.10083,
-  "box_conf": 0.31
+  "box_conf": 0.31,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E37",
@@ -1239,7 +1375,9 @@
   "box_y": 0.53838,
   "box_w": 0.01033,
   "box_h": 0.1175,
-  "box_conf": 0.212
+  "box_conf": 0.212,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E38",
@@ -1257,7 +1395,9 @@
   "box_y": 0.55422,
   "box_w": 0.01402,
   "box_h": 0.10083,
-  "box_conf": 0.277
+  "box_conf": 0.277,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E39",
@@ -1275,7 +1415,9 @@
   "box_y": 0.50005,
   "box_w": 0.01107,
   "box_h": 0.14667,
-  "box_conf": 0.165
+  "box_conf": 0.165,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E40",
@@ -1293,7 +1435,9 @@
   "box_y": 0.44422,
   "box_w": 0.02694,
   "box_h": 0.02917,
-  "box_conf": 0.193
+  "box_conf": 0.193,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E41",
@@ -1311,7 +1455,9 @@
   "box_y": 0.44255,
   "box_w": 0.02694,
   "box_h": 0.015,
-  "box_conf": 0.128
+  "box_conf": 0.128,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E42",
@@ -1329,7 +1475,9 @@
   "box_y": 0.44338,
   "box_w": 0.03247,
   "box_h": 0.02333,
-  "box_conf": 0.182
+  "box_conf": 0.182,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E43",
@@ -1347,7 +1495,9 @@
   "box_y": 0.44922,
   "box_w": 0.01513,
   "box_h": 0.065,
-  "box_conf": 0.361
+  "box_conf": 0.361,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E44",
@@ -1365,7 +1515,9 @@
   "box_y": 0.51088,
   "box_w": 0.02066,
   "box_h": 0.10083,
-  "box_conf": 0.181
+  "box_conf": 0.181,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E45",
@@ -1383,7 +1535,9 @@
   "box_y": 0.50172,
   "box_w": 0.01033,
   "box_h": 0.095,
-  "box_conf": 0.204
+  "box_conf": 0.204,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E46",
@@ -1401,7 +1555,9 @@
   "box_y": 0.51088,
   "box_w": 0.01476,
   "box_h": 0.0275,
-  "box_conf": 0.386
+  "box_conf": 0.386,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E47",
@@ -1419,7 +1575,9 @@
   "box_y": 0.42005,
   "box_w": 0.01919,
   "box_h": 0.08917,
-  "box_conf": 0.219
+  "box_conf": 0.219,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E48",
@@ -1437,7 +1595,9 @@
   "box_y": 0.44172,
   "box_w": 0.00996,
   "box_h": 0.02417,
-  "box_conf": 0.49
+  "box_conf": 0.49,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E50",
@@ -1455,7 +1615,9 @@
   "box_y": 0.40588,
   "box_w": 0.00775,
   "box_h": 0.06,
-  "box_conf": 0.269
+  "box_conf": 0.269,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E51",
@@ -1473,7 +1635,9 @@
   "box_y": 0.40588,
   "box_w": 0.00775,
   "box_h": 0.06,
-  "box_conf": 0.237
+  "box_conf": 0.237,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E52",
@@ -1491,7 +1655,9 @@
   "box_y": 0.53838,
   "box_w": 0.00627,
   "box_h": 0.03333,
-  "box_conf": 0.471
+  "box_conf": 0.471,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E53",
@@ -1509,7 +1675,9 @@
   "box_y": 0.58922,
   "box_w": 0.02251,
   "box_h": 0.01667,
-  "box_conf": 0.345
+  "box_conf": 0.345,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E54",
@@ -1527,7 +1695,9 @@
   "box_y": 0.60505,
   "box_w": 0.01107,
   "box_h": 0.03083,
-  "box_conf": 0.388
+  "box_conf": 0.388,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E55",
@@ -1545,7 +1715,9 @@
   "box_y": 0.55255,
   "box_w": 0.01439,
   "box_h": 0.05417,
-  "box_conf": 0.38
+  "box_conf": 0.38,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E56",
@@ -1563,7 +1735,9 @@
   "box_y": 0.60338,
   "box_w": 0.00959,
   "box_h": 0.03583,
-  "box_conf": 0.385
+  "box_conf": 0.385,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E57",
@@ -1581,7 +1755,9 @@
   "box_y": 0.63838,
   "box_w": 0.02804,
   "box_h": 0.02417,
-  "box_conf": 0.521
+  "box_conf": 0.521,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E58",
@@ -1599,7 +1775,9 @@
   "box_y": 0.63838,
   "box_w": 0.069,
   "box_h": 0.01917,
-  "box_conf": 0.246
+  "box_conf": 0.246,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E59",
@@ -1617,7 +1795,9 @@
   "box_y": 0.69005,
   "box_w": 0.01255,
   "box_h": 0.045,
-  "box_conf": 0.174
+  "box_conf": 0.174,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E60",
@@ -1635,7 +1815,9 @@
   "box_y": 0.69755,
   "box_w": 0.01587,
   "box_h": 0.07583,
-  "box_conf": 0.342
+  "box_conf": 0.342,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E66",
@@ -1653,7 +1835,9 @@
   "box_y": 0.70088,
   "box_w": 0.031,
   "box_h": 0.07083,
-  "box_conf": 0.196
+  "box_conf": 0.196,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E66A",
@@ -1671,7 +1855,9 @@
   "box_y": 0.67422,
   "box_w": 0.01402,
   "box_h": 0.04167,
-  "box_conf": 0.183
+  "box_conf": 0.183,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E66B",
@@ -1689,7 +1875,9 @@
   "box_y": 0.70338,
   "box_w": 0.00627,
   "box_h": 0.07083,
-  "box_conf": 0.157
+  "box_conf": 0.157,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E75",
@@ -1707,7 +1895,9 @@
   "box_y": 0.41588,
   "box_w": 0.00849,
   "box_h": 0.0775,
-  "box_conf": 0.072
+  "box_conf": 0.072,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E76",
@@ -1725,7 +1915,9 @@
   "box_y": 0.49505,
   "box_w": 0.03579,
   "box_h": 0.01833,
-  "box_conf": 0.349
+  "box_conf": 0.349,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E77",
@@ -1743,7 +1935,9 @@
   "box_y": 0.49922,
   "box_w": 0.01476,
   "box_h": 0.04,
-  "box_conf": 0.287
+  "box_conf": 0.287,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E78",
@@ -1761,7 +1955,9 @@
   "box_y": 0.51505,
   "box_w": 0.02399,
   "box_h": 0.0375,
-  "box_conf": 0.361
+  "box_conf": 0.361,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E79",
@@ -1779,7 +1975,9 @@
   "box_y": 0.47338,
   "box_w": 0.06162,
   "box_h": 0.02583,
-  "box_conf": 0.346
+  "box_conf": 0.346,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E80",
@@ -1797,7 +1995,9 @@
   "box_y": 0.42755,
   "box_w": 0.02472,
   "box_h": 0.23,
-  "box_conf": 0.22
+  "box_conf": 0.22,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "E81",
@@ -1815,7 +2015,9 @@
   "box_y": 0.57672,
   "box_w": 0.03173,
   "box_h": 0.08083,
-  "box_conf": 0.356
+  "box_conf": 0.356,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "E82",
@@ -1833,7 +2035,9 @@
   "box_y": 0.50088,
   "box_w": 0.0155,
   "box_h": 0.02833,
-  "box_conf": 0.457
+  "box_conf": 0.457,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E83",
@@ -1851,7 +2055,9 @@
   "box_y": 0.47422,
   "box_w": 0.0203,
   "box_h": 0.1,
-  "box_conf": 0.378
+  "box_conf": 0.378,
+  "grade": "D",
+  "notes": "Grade D — Extraction department (owner, 2026-09-06: \"E means Extraction department so it must be Area Grade D\")."
  },
  {
   "code": "E84",
@@ -1869,7 +2075,9 @@
   "box_y": 0.51505,
   "box_w": 0.01661,
   "box_h": 0.065,
-  "box_conf": 0.165
+  "box_conf": 0.165,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E85",
@@ -1887,7 +2095,9 @@
   "box_y": 0.55588,
   "box_w": 0.01587,
   "box_h": 0.0175,
-  "box_conf": 0.435
+  "box_conf": 0.435,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E89",
@@ -1905,7 +2115,9 @@
   "box_y": 0.63922,
   "box_w": 0.01845,
   "box_h": 0.02667,
-  "box_conf": 0.261
+  "box_conf": 0.261,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "E90",
@@ -1923,7 +2135,9 @@
   "box_y": 0.52922,
   "box_w": 0.05351,
   "box_h": 0.02833,
-  "box_conf": 0.23
+  "box_conf": 0.23,
+  "grade": "D",
+  "notes": "Grade D — owner, 2026-09-06: \"Curing Room and Packaging rooms are Grade D\"."
  },
  {
   "code": "F91",
@@ -1941,7 +2155,9 @@
   "box_y": 0.30005,
   "box_w": 0.01993,
   "box_h": 0.02333,
-  "box_conf": 0.263
+  "box_conf": 0.263,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F93",
@@ -1959,7 +2175,9 @@
   "box_y": 0.32422,
   "box_w": 0.0321,
   "box_h": 0.01917,
-  "box_conf": 0.302
+  "box_conf": 0.302,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F94",
@@ -1977,7 +2195,9 @@
   "box_y": 0.34672,
   "box_w": 0.0321,
   "box_h": 0.01917,
-  "box_conf": 0.273
+  "box_conf": 0.273,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F95",
@@ -1995,7 +2215,9 @@
   "box_y": 0.34422,
   "box_w": 0.13542,
   "box_h": 0.02167,
-  "box_conf": 0.211
+  "box_conf": 0.211,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F96",
@@ -2013,7 +2235,9 @@
   "box_y": 0.0,
   "box_w": 0.02731,
   "box_h": 0.21917,
-  "box_conf": 0.152
+  "box_conf": 0.152,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "F97",
@@ -2031,7 +2255,9 @@
   "box_y": 0.21672,
   "box_w": 0.01661,
   "box_h": 0.085,
-  "box_conf": 0.266
+  "box_conf": 0.266,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F102",
@@ -2049,7 +2275,9 @@
   "box_y": 0.07338,
   "box_w": 0.01771,
   "box_h": 0.03083,
-  "box_conf": 0.29
+  "box_conf": 0.29,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F103",
@@ -2067,7 +2295,9 @@
   "box_y": 0.10922,
   "box_w": 0.09594,
   "box_h": 0.02,
-  "box_conf": 0.248
+  "box_conf": 0.248,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F104",
@@ -2085,7 +2315,9 @@
   "box_y": 0.15172,
   "box_w": 0.02841,
   "box_h": 0.21417,
-  "box_conf": 0.293
+  "box_conf": 0.293,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "F105",
@@ -2103,7 +2335,9 @@
   "box_y": 0.15172,
   "box_w": 0.02841,
   "box_h": 0.21417,
-  "box_conf": 0.295
+  "box_conf": 0.295,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "F106",
@@ -2121,7 +2355,9 @@
   "box_y": 0.15172,
   "box_w": 0.02841,
   "box_h": 0.21417,
-  "box_conf": 0.459
+  "box_conf": 0.459,
+  "grade": "D",
+  "notes": "Officially CNC; operated and recorded as Grade D at the owner's instruction (2026-09-06): \"Trimming and Drying Rooms are officially CNC but we consider it as Grade D and we act like it is\"."
  },
  {
   "code": "F107",
@@ -2139,7 +2375,9 @@
   "box_y": 0.08005,
   "box_w": 0.28524,
   "box_h": 0.025,
-  "box_conf": 0.372
+  "box_conf": 0.372,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F108",
@@ -2157,7 +2395,9 @@
   "box_y": 0.03922,
   "box_w": 0.02768,
   "box_h": 0.16333,
-  "box_conf": 0.244
+  "box_conf": 0.244,
+  "grade": "D",
+  "notes": "Grade D — owner, 2026-09-06: \"Curing Room and Packaging rooms are Grade D\"."
  },
  {
   "code": "F109",
@@ -2175,7 +2415,9 @@
   "box_y": 0.23422,
   "box_w": 0.01144,
   "box_h": 0.06333,
-  "box_conf": 0.341
+  "box_conf": 0.341,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F110",
@@ -2193,7 +2435,9 @@
   "box_y": 0.10588,
   "box_w": 0.00664,
   "box_h": 0.02167,
-  "box_conf": 0.411
+  "box_conf": 0.411,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F111",
@@ -2211,7 +2455,9 @@
   "box_y": 0.11255,
   "box_w": 0.00664,
   "box_h": 0.02167,
-  "box_conf": 0.42
+  "box_conf": 0.42,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F112",
@@ -2229,7 +2475,9 @@
   "box_y": 0.17005,
   "box_w": 0.10406,
   "box_h": 0.025,
-  "box_conf": 0.204
+  "box_conf": 0.204,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F113",
@@ -2247,7 +2495,9 @@
   "box_y": 0.11005,
   "box_w": 0.04723,
   "box_h": 0.05583,
-  "box_conf": 0.332
+  "box_conf": 0.332,
+  "grade": "D",
+  "notes": "Grade D — owner, 2026-09-06: \"Curing Room and Packaging rooms are Grade D\"."
  },
  {
   "code": "F114",
@@ -2265,7 +2515,9 @@
   "box_y": 0.17255,
   "box_w": 0.04723,
   "box_h": 0.05,
-  "box_conf": 0.344
+  "box_conf": 0.344,
+  "grade": "D",
+  "notes": "Grade D — owner, 2026-09-06: \"Curing Room and Packaging rooms are Grade D\"."
  },
  {
   "code": "F115",
@@ -2283,7 +2535,9 @@
   "box_y": 0.22338,
   "box_w": 0.03063,
   "box_h": 0.02833,
-  "box_conf": 0.223
+  "box_conf": 0.223,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F116",
@@ -2301,7 +2555,9 @@
   "box_y": 0.25255,
   "box_w": 0.02214,
   "box_h": 0.02833,
-  "box_conf": 0.339
+  "box_conf": 0.339,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F117",
@@ -2319,7 +2575,9 @@
   "box_y": 0.28588,
   "box_w": 0.01439,
   "box_h": 0.065,
-  "box_conf": 0.148
+  "box_conf": 0.148,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F118",
@@ -2337,7 +2595,9 @@
   "box_y": 0.24172,
   "box_w": 0.01107,
   "box_h": 0.04167,
-  "box_conf": 0.214
+  "box_conf": 0.214,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F119",
@@ -2355,7 +2615,9 @@
   "box_y": 0.37838,
   "box_w": 0.01661,
   "box_h": 0.04333,
-  "box_conf": 0.104
+  "box_conf": 0.104,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F120",
@@ -2373,7 +2635,9 @@
   "box_y": 0.36672,
   "box_w": 0.01661,
   "box_h": 0.03583,
-  "box_conf": 0.131
+  "box_conf": 0.131,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F121",
@@ -2391,7 +2655,9 @@
   "box_y": 0.31505,
   "box_w": 0.01771,
   "box_h": 0.06833,
-  "box_conf": 0.321
+  "box_conf": 0.321,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F122",
@@ -2409,7 +2675,9 @@
   "box_y": 0.31588,
   "box_w": 0.01771,
   "box_h": 0.06667,
-  "box_conf": 0.325
+  "box_conf": 0.325,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F123",
@@ -2427,7 +2695,9 @@
   "box_y": 0.31422,
   "box_w": 0.03764,
   "box_h": 0.02083,
-  "box_conf": 0.387
+  "box_conf": 0.387,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F124",
@@ -2445,7 +2715,9 @@
   "box_y": 0.29172,
   "box_w": 0.00812,
   "box_h": 0.04167,
-  "box_conf": 0.414
+  "box_conf": 0.414,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F125",
@@ -2463,7 +2735,9 @@
   "box_y": 0.29172,
   "box_w": 0.00812,
   "box_h": 0.04167,
-  "box_conf": 0.359
+  "box_conf": 0.359,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F126",
@@ -2481,7 +2755,9 @@
   "box_y": 0.29172,
   "box_w": 0.00886,
   "box_h": 0.04167,
-  "box_conf": 0.306
+  "box_conf": 0.306,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F127",
@@ -2499,7 +2775,9 @@
   "box_y": 0.29172,
   "box_w": 0.00812,
   "box_h": 0.04167,
-  "box_conf": 0.453
+  "box_conf": 0.453,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F128",
@@ -2517,7 +2795,9 @@
   "box_y": 0.23505,
   "box_w": 0.01181,
   "box_h": 0.02667,
-  "box_conf": 0.221
+  "box_conf": 0.221,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F129",
@@ -2535,7 +2815,9 @@
   "box_y": 0.08088,
   "box_w": 0.02325,
   "box_h": 0.1225,
-  "box_conf": 0.315
+  "box_conf": 0.315,
+  "grade": "D",
+  "notes": "Grade D — owner, 2026-09-06: \"Curing Room and Packaging rooms are Grade D\"."
  },
  {
   "code": "F130",
@@ -2553,7 +2835,9 @@
   "box_y": 0.25172,
   "box_w": 0.0321,
   "box_h": 0.01083,
-  "box_conf": 0.129
+  "box_conf": 0.129,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F131",
@@ -2571,7 +2855,9 @@
   "box_y": 0.22255,
   "box_w": 0.03026,
   "box_h": 0.14583,
-  "box_conf": 0.14
+  "box_conf": 0.14,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F132",
@@ -2589,7 +2875,9 @@
   "box_y": 0.27588,
   "box_w": 0.01255,
   "box_h": 0.0375,
-  "box_conf": 0.406
+  "box_conf": 0.406,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F133",
@@ -2607,7 +2895,9 @@
   "box_y": 0.18005,
   "box_w": 0.03284,
   "box_h": 0.04333,
-  "box_conf": 0.356
+  "box_conf": 0.356,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F134",
@@ -2625,7 +2915,9 @@
   "box_y": 0.14338,
   "box_w": 0.00886,
   "box_h": 0.03833,
-  "box_conf": 0.365
+  "box_conf": 0.365,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F135",
@@ -2643,7 +2935,9 @@
   "box_y": 0.08172,
   "box_w": 0.01476,
   "box_h": 0.0625,
-  "box_conf": 0.456
+  "box_conf": 0.456,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F136",
@@ -2661,7 +2955,9 @@
   "box_y": 0.10588,
   "box_w": 0.01661,
   "box_h": 0.01917,
-  "box_conf": 0.419
+  "box_conf": 0.419,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F137",
@@ -2679,7 +2975,9 @@
   "box_y": 0.10588,
   "box_w": 0.01661,
   "box_h": 0.01917,
-  "box_conf": 0.419
+  "box_conf": 0.419,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F138",
@@ -2697,7 +2995,9 @@
   "box_y": 0.15422,
   "box_w": 0.00849,
   "box_h": 0.03417,
-  "box_conf": 0.382
+  "box_conf": 0.382,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F139",
@@ -2715,7 +3015,9 @@
   "box_y": 0.14672,
   "box_w": 0.01365,
   "box_h": 0.03417,
-  "box_conf": 0.511
+  "box_conf": 0.511,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F141",
@@ -2733,7 +3035,9 @@
   "box_y": 0.04672,
   "box_w": 0.0214,
   "box_h": 0.02417,
-  "box_conf": 0.284
+  "box_conf": 0.284,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F142",
@@ -2751,7 +3055,9 @@
   "box_y": 0.04672,
   "box_w": 0.01734,
   "box_h": 0.02167,
-  "box_conf": 0.247
+  "box_conf": 0.247,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "F143",
@@ -2769,7 +3075,9 @@
   "box_y": 0.04588,
   "box_w": 0.02952,
   "box_h": 0.03583,
-  "box_conf": 0.259
+  "box_conf": 0.259,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M1",
@@ -2787,7 +3095,9 @@
   "box_y": 0.36088,
   "box_w": 0.02325,
   "box_h": 0.0825,
-  "box_conf": 0.256
+  "box_conf": 0.256,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M1A",
@@ -2805,7 +3115,9 @@
   "box_y": 0.36838,
   "box_w": 0.01882,
   "box_h": 0.035,
-  "box_conf": 0.373
+  "box_conf": 0.373,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M2",
@@ -2823,7 +3135,9 @@
   "box_y": 0.31505,
   "box_w": 0.09188,
   "box_h": 0.0525,
-  "box_conf": 0.233
+  "box_conf": 0.233,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M3",
@@ -2841,7 +3155,9 @@
   "box_y": 0.31338,
   "box_w": 0.01513,
   "box_h": 0.0525,
-  "box_conf": 0.348
+  "box_conf": 0.348,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M4",
@@ -2859,7 +3175,9 @@
   "box_y": 0.38838,
   "box_w": 0.01292,
   "box_h": 0.03417,
-  "box_conf": 0.184
+  "box_conf": 0.184,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M5",
@@ -2877,7 +3195,9 @@
   "box_y": 0.38755,
   "box_w": 0.00923,
   "box_h": 0.015,
-  "box_conf": 0.552
+  "box_conf": 0.552,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M6",
@@ -2895,7 +3215,9 @@
   "box_y": 0.37005,
   "box_w": 0.00849,
   "box_h": 0.02167,
-  "box_conf": 0.673
+  "box_conf": 0.673,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M7",
@@ -2913,7 +3235,9 @@
   "box_y": 0.36755,
   "box_w": 0.00664,
   "box_h": 0.03417,
-  "box_conf": 0.576
+  "box_conf": 0.576,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M8",
@@ -2931,7 +3255,9 @@
   "box_y": 0.36672,
   "box_w": 0.01771,
   "box_h": 0.035,
-  "box_conf": 0.432
+  "box_conf": 0.432,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M9",
@@ -2949,7 +3275,9 @@
   "box_y": 0.35755,
   "box_w": 0.00627,
   "box_h": 0.03417,
-  "box_conf": 0.453
+  "box_conf": 0.453,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M10",
@@ -2967,7 +3295,9 @@
   "box_y": 0.37005,
   "box_w": 0.00627,
   "box_h": 0.035,
-  "box_conf": 0.568
+  "box_conf": 0.568,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M11",
@@ -2985,7 +3315,9 @@
   "box_y": 0.40338,
   "box_w": 0.21181,
   "box_h": 0.03667,
-  "box_conf": 0.113
+  "box_conf": 0.113,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M13",
@@ -3003,7 +3335,9 @@
   "box_y": 0.36922,
   "box_w": 0.05756,
   "box_h": 0.0325,
-  "box_conf": 0.183
+  "box_conf": 0.183,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M14",
@@ -3021,7 +3355,9 @@
   "box_y": 0.42255,
   "box_w": 0.05756,
   "box_h": 0.03167,
-  "box_conf": 0.073
+  "box_conf": 0.073,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "M20",
@@ -3039,7 +3375,9 @@
   "box_y": 0.44255,
   "box_w": 0.01439,
   "box_h": 0.03083,
-  "box_conf": 0.186
+  "box_conf": 0.186,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T28",
@@ -3057,7 +3395,9 @@
   "box_y": 0.70088,
   "box_w": 0.05092,
   "box_h": 0.07,
-  "box_conf": 0.461
+  "box_conf": 0.461,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T49",
@@ -3075,7 +3415,9 @@
   "box_y": 0.93172,
   "box_w": 0.01476,
   "box_h": 0.04583,
-  "box_conf": 0.482
+  "box_conf": 0.482,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T61",
@@ -3093,7 +3435,9 @@
   "box_y": 0.66422,
   "box_w": 0.0321,
   "box_h": 0.04167,
-  "box_conf": 0.544
+  "box_conf": 0.544,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T62",
@@ -3111,7 +3455,9 @@
   "box_y": 0.70755,
   "box_w": 0.0321,
   "box_h": 0.06417,
-  "box_conf": 0.444
+  "box_conf": 0.444,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T63",
@@ -3129,7 +3475,9 @@
   "box_y": 0.66422,
   "box_w": 0.05498,
   "box_h": 0.1075,
-  "box_conf": 0.407
+  "box_conf": 0.407,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T64",
@@ -3147,7 +3495,9 @@
   "box_y": 0.66505,
   "box_w": 0.06199,
   "box_h": 0.1075,
-  "box_conf": 0.51
+  "box_conf": 0.51,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T65",
@@ -3165,7 +3515,9 @@
   "box_y": 0.70172,
   "box_w": 0.02325,
   "box_h": 0.07,
-  "box_conf": 0.492
+  "box_conf": 0.492,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T68",
@@ -3183,7 +3535,9 @@
   "box_y": 0.70005,
   "box_w": 0.0262,
   "box_h": 0.07083,
-  "box_conf": 0.291
+  "box_conf": 0.291,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T69",
@@ -3201,7 +3555,9 @@
   "box_y": 0.66422,
   "box_w": 0.17343,
   "box_h": 0.09667,
-  "box_conf": 0.24
+  "box_conf": 0.24,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T71",
@@ -3219,7 +3575,9 @@
   "box_y": 0.66422,
   "box_w": 0.18118,
   "box_h": 0.1075,
-  "box_conf": 0.41
+  "box_conf": 0.41,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T73",
@@ -3237,7 +3595,9 @@
   "box_y": 0.66505,
   "box_w": 0.1155,
   "box_h": 0.10667,
-  "box_conf": 0.382
+  "box_conf": 0.382,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T140",
@@ -3255,7 +3615,9 @@
   "box_y": 0.03922,
   "box_w": 0.18856,
   "box_h": 0.04,
-  "box_conf": 0.51
+  "box_conf": 0.51,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T149A",
@@ -3273,7 +3635,9 @@
   "box_y": 0.03922,
   "box_w": 0.06531,
   "box_h": 0.04,
-  "box_conf": 0.489
+  "box_conf": 0.489,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T153A",
@@ -3291,7 +3655,9 @@
   "box_y": 0.03755,
   "box_w": 0.01402,
   "box_h": 0.04333,
-  "box_conf": 0.434
+  "box_conf": 0.434,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T159",
@@ -3309,7 +3675,9 @@
   "box_y": 0.0,
   "box_w": 0.04945,
   "box_h": 0.11167,
-  "box_conf": 0.052
+  "box_conf": 0.052,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T160",
@@ -3327,7 +3695,9 @@
   "box_y": 0.12255,
   "box_w": 0.07749,
   "box_h": 0.09667,
-  "box_conf": 0.579
+  "box_conf": 0.579,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T161",
@@ -3345,7 +3715,9 @@
   "box_y": 0.22088,
   "box_w": 0.03469,
   "box_h": 0.55333,
-  "box_conf": 0.358
+  "box_conf": 0.358,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T162",
@@ -3363,7 +3735,9 @@
   "box_y": 0.22088,
   "box_w": 0.05351,
   "box_h": 0.5675,
-  "box_conf": 0.358
+  "box_conf": 0.358,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "T163",
@@ -3381,7 +3755,9 @@
   "box_y": 0.67755,
   "box_w": 0.02066,
   "box_h": 0.04667,
-  "box_conf": 0.22
+  "box_conf": 0.22,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "W17",
@@ -3399,7 +3775,9 @@
   "box_y": 0.44422,
   "box_w": 0.00738,
   "box_h": 0.06083,
-  "box_conf": 0.358
+  "box_conf": 0.358,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "W18",
@@ -3417,7 +3795,9 @@
   "box_y": 0.45088,
   "box_w": 0.02251,
   "box_h": 0.06083,
-  "box_conf": 0.312
+  "box_conf": 0.312,
+  "grade": null,
+  "notes": null
  },
  {
   "code": "W19",
@@ -3435,6 +3815,8 @@
   "box_y": 0.45172,
   "box_w": 0.00664,
   "box_h": 0.06083,
-  "box_conf": 0.315
+  "box_conf": 0.315,
+  "grade": null,
+  "notes": null
  }
 ]
