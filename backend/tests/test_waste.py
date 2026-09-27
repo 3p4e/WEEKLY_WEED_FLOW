@@ -376,6 +376,111 @@ async def test_reconciliation_reports_unaccounted_and_unmanifested_destruction(c
     assert {r["code"]: r for r in rec2}["GP-PART"]["disposed_destroyed"] == 30
 
 
+async def test_production_manager_records_manifests(client, admin_headers):
+    """Review 2026-09-27, BC-12: everything from the harvest cut onward is
+    production's (DEPARTMENT-MODEL-2026-09), yet only the cultivation manager
+    could draft, seal or dispose a manifest — a trim or packaging load needed
+    the cultivation manager's signature. The two-person witness rule is
+    unchanged."""
+    _, pr_h = await _actor(client, admin_headers, "PR_MGR")
+    _, qa_h = await _actor(client, admin_headers, "QA_MGR")
+    m = await _manifest(client, pr_h, "WM-PROD", waste_type="trim", reason="failed_qc")
+    assert (await client.post(f"/waste/manifests/{m['id']}/lines",
+                              json={"weight_kg": 12.5}, headers=pr_h)).status_code == 201
+    assert (await client.post(f"/waste/manifests/{m['id']}/seal",
+                              json={"gross_weight_kg": 12.5}, headers=pr_h)).status_code == 200
+    assert (await client.post(f"/waste/manifests/{m['id']}/witness", json={},
+                              headers=pr_h)).status_code == 403, "production still does not witness"
+    assert (await client.post(f"/waste/manifests/{m['id']}/witness", json={},
+                              headers=qa_h)).status_code == 200
+    done = await client.post(f"/waste/manifests/{m['id']}/dispose",
+                             json={"carrier_ref": "C-PR-1"}, headers=pr_h)
+    assert done.status_code == 200 and done.json()["status"] == "disposed"
+
+
+async def _locked_transaction(sql, *args):
+    """Start a transaction on a fresh admin connection, run `sql` in it and
+    return the (still open) connection + transaction — the caller decides
+    when it commits. The audit trigger's advisory lock and the row lock are
+    both held until then, which is what makes the race deterministic."""
+    from app.db import tasks_admin_pool
+    conn = await tasks_admin_pool().acquire()
+    tx = conn.transaction()
+    await tx.start()
+    try:
+        await conn.execute(sql, *args)
+    except Exception:
+        # Never leak an aborted transaction: it keeps its row lock AND the
+        # audit trigger's advisory lock until it ends, which stalls every
+        # audited write in the suite.
+        await tx.rollback()
+        await tasks_admin_pool().release(conn)
+        raise
+    return conn, tx
+
+
+async def _release(conn, tx):
+    from app.db import tasks_admin_pool
+    await tx.commit()
+    await tasks_admin_pool().release(conn)
+
+
+async def test_a_line_delete_racing_a_seal_cannot_leave_a_sealed_empty_manifest(client, admin_headers):
+    """Review 2026-09-27, BC-06. delete_line read the status with a plain
+    SELECT and then deleted; a seal committing in between produced a SEALED
+    manifest with no lines — Gate 1 broken, silently. Every mutating path
+    now takes the manifest row FOR UPDATE: the delete waits for the in-flight
+    seal, re-reads `sealed`, and answers 409 with the line intact.
+
+    The seal is simulated by an open transaction holding the row (its UPDATE
+    is exactly what seal_manifest issues), so the interleaving is fixed
+    rather than left to scheduling."""
+    cu, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    m = await _manifest(client, cu_h, "WM-RACE-SEAL")
+    line_id = (await client.post(f"/waste/manifests/{m['id']}/lines",
+                                 json={"weight_kg": 10}, headers=cu_h)).json()["id"]
+
+    conn, tx = await _locked_transaction(
+        "UPDATE waste_manifests SET status='sealed', gross_weight_kg=10, weighed_at=now(),"
+        " weighed_by=$2::uuid, sealed_at=now(), updated_at=now() WHERE id=$1", m["id"], cu["id"])
+    try:
+        delete = asyncio.create_task(
+            client.delete(f"/waste/manifests/{m['id']}/lines/{line_id}", headers=cu_h))
+        await asyncio.sleep(0.5)
+        assert not delete.done(), "the delete must block on the seal's row lock, not race past it"
+    finally:
+        await _release(conn, tx)
+    r = await delete
+    assert r.status_code == 409, r.text
+    detail = (await client.get(f"/waste/manifests/{m['id']}", headers=cu_h)).json()
+    assert detail["status"] == "sealed" and len(detail["lines"]) == 1, \
+        "a sealed manifest kept its line"
+
+
+async def test_two_seals_racing_resolve_to_one_weigher(client, admin_headers):
+    """The same lock, other direction: two seals no longer both succeed with
+    the last writer in weighed_by (the field Gate 3 reads)."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    _, coo_h = await _actor(client, admin_headers, "COO")
+    m = await _manifest(client, cu_h, "WM-RACE-2SEAL")
+    await client.post(f"/waste/manifests/{m['id']}/lines", json={"weight_kg": 3}, headers=cu_h)
+    r1, r2 = await asyncio.gather(
+        client.post(f"/waste/manifests/{m['id']}/seal", json={"gross_weight_kg": 3}, headers=cu_h),
+        client.post(f"/waste/manifests/{m['id']}/seal", json={"gross_weight_kg": 3}, headers=coo_h))
+    assert sorted([r1.status_code, r2.status_code]) == [200, 409]
+
+
+async def test_duplicate_manifest_codes_racing_are_both_answered_409(client, admin_headers):
+    """Review 2026-09-27, BC-26: two creates with the same code racing past
+    the pre-check — the loser hit the unique index and got an unmapped 500."""
+    _, cu_h = await _actor(client, admin_headers, "CU_MGR")
+    body = {"manifest_code": "WM-RACE-DUP", "waste_type": "trim", "reason": "routine_cull"}
+    r1, r2 = await asyncio.gather(
+        client.post("/waste/manifests", json=body, headers=cu_h),
+        client.post("/waste/manifests", json=body, headers=cu_h))
+    assert sorted([r1.status_code, r2.status_code]) == [201, 409]
+
+
 async def test_enumerations_are_rejected_with_a_named_list(client, admin_headers):
     _, cu_h = await _actor(client, admin_headers, "CU_MGR")
     bad_type = await client.post("/waste/manifests", json={
