@@ -229,7 +229,12 @@ async def login(body: LoginReq, request: Request):
     days = settings.remember_device_expire_days if body.remember_device else None
     pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
     token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)
-    return {"access_token": token, "token_type": "bearer", "user": _public(row)}
+    # The facility clock travels with the login, not only with /auth/me: a
+    # normal sign-in never called /auth/me, so the date picker fell back to the
+    # browser's day (review 2026-09-27, FE-07). Same two fields as me().
+    return {"access_token": token, "token_type": "bearer",
+            "user": {**_public(row), "facility_tz": settings.snapshot_tz,
+                     "facility_today": facility_today().isoformat()}}
 
 
 @router.get("/me")

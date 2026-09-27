@@ -294,6 +294,36 @@ GF.facilityToday = () => {
   return GF.todayISO();
 };
 
+// The ONE way to print an instant. The backend serialises timestamptz as ISO
+// 8601 in UTC; printing that string as-is showed every clock 1–2 h early in
+// Skopje (review 2026-09-27, FE-05), worst on the re-entry line. Renders in
+// the facility zone; a stamp without an offset is taken as UTC, not local.
+// `opts.date=false` prints the time only; `opts.seconds=true` adds seconds.
+GF.fmtDateTime = (ts, opts) => {
+  if (ts == null || ts === '') return '';
+  const s = String(ts);
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z';
+  const d = new Date(withZone);
+  if (isNaN(d.getTime())) return s;
+  const o = opts || {};
+  const tz = GF.facilityTZ();
+  const spec = {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    ...(o.date === false ? {} : { year: 'numeric', month: '2-digit', day: '2-digit' }),
+    ...(o.seconds ? { second: '2-digit' } : {}),
+  };
+  if (tz) spec.timeZone = tz;
+  try {
+    // en-CA keeps ISO order (YYYY-MM-DD, HH:MM); the comma en-CA inserts
+    // between date and time is dropped so the output reads like the ISO
+    // stamps the app printed before.
+    return new Intl.DateTimeFormat('en-CA', spec).format(d).replace(',', '');
+  } catch (e) {
+    return s.slice(0, 16).replace('T', ' ');
+  }
+};
+GF.fmtTime = (ts) => GF.fmtDateTime(ts, { date: false });
+
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever
 // called in normal operation — it always drives tasks from the real API.
