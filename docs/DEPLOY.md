@@ -362,6 +362,13 @@ docker compose up -d --no-deps docengine
 # 4. (optional, after a clean week) REVOKE CREATE ON DATABASE wwf_tasks FROM app_admin;
 ```
 
+Steps 1–3 are **one operation**. After step 1 the schema belongs to
+`docengine`, and the service's startup DDL needs the owner: a DocEngine
+restarted as `app_admin` between steps 1 and 3 fails at `db.init()` with
+"permission denied for schema docengine" (the running container is
+unaffected until it restarts). CI runs the whole DocEngine suite as this
+role, so the service is proven to work under it before it reaches the host.
+
 ### Organisation scope backfill (rollout step for the owner, from 2026-09-27)
 
 Every DocEngine job and document is now scoped to an organisation

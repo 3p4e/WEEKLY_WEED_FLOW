@@ -227,16 +227,23 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -r docengine/requirements.txt pytest pytest-asyncio
-      - name: Create the docengine database
+      - name: Create the docengine database and its least-privilege role
         env:
           PGPASSWORD: postgres
-        # The app creates its own schema at init() (CREATE SCHEMA/TABLE IF NOT
-        # EXISTS), so only the database itself is needed here.
-        run: psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
+        # The suite runs as the SAME role production is meant to run as
+        # (docengine/sql/docengine_role.sql: owns schema `docengine`, no
+        # BYPASSRLS, nothing on public) rather than as the superuser, so a
+        # startup DDL or a query the role cannot perform fails here and not on
+        # the host after the DSN is rotated (review 2026-09-27, DI-09).
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -c "CREATE DATABASE docengine_test;"
+          psql -h localhost -U postgres -d docengine_test -v ON_ERROR_STOP=1 \
+            -v pw=testpw_docengine -v dbname=docengine_test -f docengine/sql/docengine_role.sql
       - name: Run tests
         working-directory: docengine
         env:
-          DOCENGINE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/docengine_test
+          DOCENGINE_DATABASE_URL: postgresql://docengine:testpw_docengine@localhost:5432/docengine_test
         run: python -m pytest -v
 
   migrations:

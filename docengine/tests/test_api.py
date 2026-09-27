@@ -1,5 +1,6 @@
 # API surface: auth gate, questionnaires, direct build (PASS + FAIL), and
 # graceful degradation with no DB/Letta configured. Fully offline.
+import asyncio
 import sys
 from pathlib import Path
 
@@ -611,6 +612,48 @@ def test_chat_returns_the_agents_reply_and_never_mutates_anything(client, monkey
     document_block = prompt.split("DOCUMENT:\n", 1)[1]
     assert "Scope text." in document_block  # the document content reached the prompt
     assert "<<<PP-SECTION" not in document_block  # plain headings, not the edit protocol's markers
+
+
+@pytest.mark.asyncio
+async def test_sweep_runs_both_reapers_and_shields_jobs_with_a_live_task(monkeypatch):
+    """DI-04: the orphan sweep (worker gone, any age) runs first, then the
+    age sweep, which is told which jobs this process still has a task for
+    so a slow-but-alive job is never failed under it. Neither can raise
+    out of the sweep: the service must stay up whatever the database says."""
+    calls = []
+
+    async def fake_orphans():
+        calls.append("orphans")
+        return 2
+
+    async def fake_stale(exclude=()):
+        calls.append(("stale", sorted(exclude)))
+        return 1
+    monkeypatch.setattr(db, "reap_orphaned_jobs", fake_orphans)
+    monkeypatch.setattr(db, "reap_stale_jobs", fake_stale)
+    monkeypatch.setattr(main, "_running_jobs", {"job-a": object(), "job-b": object()})
+    await main._sweep_jobs("test")
+    assert calls == ["orphans", ("stale", ["job-a", "job-b"])]
+
+    async def boom(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(db, "reap_orphaned_jobs", boom)
+    await main._sweep_jobs("test")  # logged, not raised
+
+
+@pytest.mark.asyncio
+async def test_fire_and_forget_tracks_the_job_until_its_task_ends(monkeypatch):
+    monkeypatch.setattr(main, "_running_jobs", {})
+    gate = asyncio.Event()
+
+    async def job():
+        await gate.wait()
+    task = main._fire_and_forget(job(), job_id="job-x")
+    await asyncio.sleep(0)
+    assert "job-x" in main._running_jobs
+    gate.set()
+    await task
+    assert "job-x" not in main._running_jobs
 
 
 def test_workflow_rejects_an_answer_key_that_is_not_a_question(client, monkeypatch):

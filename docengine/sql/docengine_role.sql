@@ -72,9 +72,20 @@ BEGIN
 END
 $$;
 
--- app_admin keeps its own rights on the schema so the backend's demo wipe and
--- any operator query still work; the service itself no longer uses them.
-GRANT USAGE ON SCHEMA docengine TO app_admin;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA docengine TO app_admin;
-ALTER DEFAULT PRIVILEGES FOR ROLE docengine IN SCHEMA docengine
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_admin;
+-- app_admin keeps DML on the schema so the backend's demo wipe and any
+-- operator query still work; the service itself no longer uses them. It does
+-- NOT keep CREATE: the service's startup DDL (CREATE TABLE IF NOT EXISTS,
+-- ALTER TABLE ... ADD COLUMN IF NOT EXISTS) needs the owner, so after this
+-- file has run the service must connect as `docengine` — rotate the DSN and
+-- recreate the container in the same operation, never restart it as
+-- app_admin in between. Conditional: a bare cluster (CI) has no app_admin.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_admin') THEN
+    EXECUTE 'GRANT USAGE ON SCHEMA docengine TO app_admin';
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA docengine TO app_admin';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE docengine IN SCHEMA docengine '
+            'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_admin';
+  END IF;
+END
+$$;
