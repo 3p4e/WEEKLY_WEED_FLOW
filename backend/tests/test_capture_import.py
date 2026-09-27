@@ -166,7 +166,7 @@ async def test_static_capture_token_acts_as_configured_user(client, admin_header
     the configured user; the token opens no other route."""
     user, otp = await create_user(client, admin_headers, full_name="Capture Bot Target")
     token = await login_and_set_password(client, user["username"], otp)
-    monkeypatch.setenv("CAPTURE_IMPORT_TOKEN", "test-capture-token-123")
+    monkeypatch.setenv("CAPTURE_IMPORT_TOKEN", _REAL_TOKEN)
     monkeypatch.setenv("CAPTURE_IMPORT_USER", user["username"])
 
     r = await client.post("/capture/import", json=_payload(ref="conn-1"),
@@ -174,7 +174,7 @@ async def test_static_capture_token_acts_as_configured_user(client, admin_header
     assert r.status_code == 401
 
     r = await client.post("/capture/import", json=_payload(ref="conn-1"),
-                          headers={"Authorization": "Bearer test-capture-token-123"})
+                          headers={"Authorization": f"Bearer {_REAL_TOKEN}"})
     assert r.status_code == 200, r.text
     assert r.json()["created"] == 1
     # Owner defaulted to the configured capture user, not anyone else.
@@ -183,8 +183,46 @@ async def test_static_capture_token_acts_as_configured_user(client, admin_header
     assert any(t.get("external_ref") == "conn-1" for t in r.json())
 
     # The static token is NOT a general credential.
-    r = await client.get("/tasks", headers={"Authorization": "Bearer test-capture-token-123"})
+    r = await client.get("/tasks", headers={"Authorization": f"Bearer {_REAL_TOKEN}"})
     assert r.status_code == 401
+
+
+# 48 hex characters — what `openssl rand -hex 24` (the documented generator) yields.
+_REAL_TOKEN = "3f1c9e7a5b2d4c8e6a0f1b3d5c7e9a2b4d6f8c0e1a3b5d7f"
+
+
+async def test_placeholder_or_short_capture_token_is_treated_as_unset(client, admin_headers, org, monkeypatch):
+    """Review 2026-09-27, BC-11: .env.example shipped CAPTURE_IMPORT_TOKEN=
+    change-me and nothing guarded it, so a deployment that copied the
+    template accepted `Bearer change-me` on /capture/import as the ADMIN
+    capture user. A placeholder or a token shorter than 32 characters is now
+    unset: the route falls back to normal auth (401 for the bearer)."""
+    user, _ = await create_user(client, admin_headers, full_name="Capture Bot Target 2")
+    monkeypatch.setenv("CAPTURE_IMPORT_USER", user["username"])
+    for weak in ("change-me", "CHANGE_ME", "test-capture-token-123", "x" * 31):
+        monkeypatch.setenv("CAPTURE_IMPORT_TOKEN", weak)
+        r = await client.post("/capture/import", json=_payload(ref="weak-1"),
+                              headers={"Authorization": f"Bearer {weak}"})
+        assert r.status_code == 401, f"{weak!r} was honoured: {r.status_code} {r.text}"
+
+
+async def test_non_ascii_authorization_header_is_401_not_500(client, admin_headers, org, monkeypatch):
+    """Review 2026-09-27, BC-18: hmac.compare_digest(str, str) raises TypeError
+    on any non-ASCII character, so one Cyrillic letter in the header was a 500
+    whenever a token was configured. It is compared as bytes after an ASCII
+    check now — a non-ASCII header simply is not the token."""
+    user, _ = await create_user(client, admin_headers, full_name="Capture Bot Target 3")
+    monkeypatch.setenv("CAPTURE_IMPORT_TOKEN", _REAL_TOKEN)
+    monkeypatch.setenv("CAPTURE_IMPORT_USER", user["username"])
+    # Raw bytes on the wire (httpx refuses to encode a non-ASCII str header
+    # itself); Starlette decodes header values as latin-1, so the handler
+    # receives "Bearer tökén".
+    r = await client.post("/capture/import", json=_payload(ref="lat-1"),
+                          headers={"Authorization": b"Bearer t\xf6k\xe9n"})
+    assert r.status_code == 401, r.text
+    # and the comparison itself, with the full non-ASCII range
+    from app.api.capture import _capture_actor
+    assert await _capture_actor("Bearer токен") is None
 
 
 async def _two_departments(org):

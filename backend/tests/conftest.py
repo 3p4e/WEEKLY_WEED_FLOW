@@ -222,6 +222,22 @@ async def create_user(client, admin_headers, *, role="USER", full_name="Test Use
     return body["user"], body["otp"]
 
 
+def iter_routes(app):
+    """Every real endpoint route on the app, flattened.
+
+    FastAPI >= 0.139 registers an included APIRouter on `app.routes` as ONE
+    `_IncludedRouter` entry with an empty path and keeps the endpoints on its
+    `original_router`; a walk over `app.routes` that reads `.path` therefore
+    sees no application route at all, and any structural test written that
+    way passes vacuously. Recurse into the included routers instead."""
+    for route in app.routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from iter_routes(inner)
+        else:
+            yield route
+
+
 async def login_and_set_password(client, username, otp, new_password="NewPassword123456"):
     """First-login flow: OTP login -> forced change-password -> real session."""
     r = await client.post("/auth/login", json={"email": username, "password": otp})

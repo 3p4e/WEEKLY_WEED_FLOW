@@ -1,8 +1,11 @@
-"""QMS Studio federation proxy (app/api/qms.py) — Phase 1 of the GrowFlow
-unification. Pins: the role gate (base USER 403), the unconfigured-key 503
-(the local/dev/e2e degradation state), upstream-down → 503 with the exact
-detail string the frontend keys on, forwarding with the X-API-Key injected
-server-side, and download header passthrough.
+"""QMS Studio DocEngine façade (app/api/qms.py). Pins: the role gates (base
+USER 403, authoring limited to QA/QP/admin), the unconfigured-key 503 (the
+local/dev/e2e degradation state), forwarding with the API key injected
+server-side, download header passthrough, and traversal guards on ids.
+
+The Phase-1 qms-api proxy this file used to cover was removed with the
+retired qms-api service (review 2026-09-27, BC-19); its seven /qms/ routes
+must stay gone — see test_legacy_qms_api_proxy_routes_are_gone.
 """
 import httpx
 import pytest
@@ -58,82 +61,6 @@ class _FakeClient:
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
-
-
-@pytest.fixture
-def qms_configured(monkeypatch):
-    monkeypatch.setattr(settings, "qms_api_key", "test-qms-key")
-    yield
-
-
-def _stub_client(monkeypatch, response):
-    monkeypatch.setattr(qms_mod, "_client", lambda: _FakeClient(response))
-
-
-async def test_base_user_gets_403(client, admin_headers, qms_configured):
-    _, uh = await _actor(client, admin_headers)
-    assert (await client.get("/qms/stats", headers=uh)).status_code == 403
-
-
-async def test_unconfigured_key_degrades_to_503(client, admin_headers, monkeypatch):
-    monkeypatch.setattr(settings, "qms_api_key", "")
-    r = await client.get("/qms/stats", headers=admin_headers)
-    assert r.status_code == 503
-    assert r.json()["detail"] == "QMS service unavailable"
-
-
-async def test_upstream_down_is_a_friendly_503(client, admin_headers, qms_configured, monkeypatch):
-    _stub_client(monkeypatch, httpx.ConnectError("refused"))
-    r = await client.get("/qms/documents", headers=admin_headers)
-    assert r.status_code == 503
-    assert r.json()["detail"] == "QMS service unavailable"
-
-
-async def test_forwarding_returns_upstream_payload(client, admin_headers, qms_configured, monkeypatch):
-    _stub_client(monkeypatch, _FakeResponse(json_data={"documents": [{"code": "QA_00.02"}]}))
-    r = await client.get("/qms/documents", headers=admin_headers)
-    assert r.status_code == 200
-    assert r.json()["documents"][0]["code"] == "QA_00.02"
-    assert _FakeClient.last.requests == [("GET", "/api/documents")]
-
-
-async def test_real_client_injects_api_key(qms_configured):
-    # the un-stubbed factory must carry the server-side key header
-    c = qms_mod._client()
-    try:
-        assert c.headers["X-API-Key"] == "test-qms-key"
-        assert str(c.base_url).startswith(settings.qms_api_url)
-    finally:
-        await c.aclose()
-
-
-async def test_rag_query_forwards_and_caps_size(client, admin_headers, qms_configured, monkeypatch):
-    _stub_client(monkeypatch, _FakeResponse(json_data={"db1_results": [], "db2_results": []}))
-    r = await client.post("/qms/rag-query", json={"query": "cleaning validation"},
-                          headers=admin_headers)
-    assert r.status_code == 200
-    assert ("POST", "/api/rag-query") in _FakeClient.last.requests
-    big = {"query": "x" * 9000}
-    assert (await client.post("/qms/rag-query", json=big,
-                              headers=admin_headers)).status_code == 422
-
-
-async def test_download_passes_through_content_headers(client, admin_headers, qms_configured, monkeypatch):
-    _stub_client(monkeypatch, _FakeResponse(
-        content=b"PK\x03\x04fake-docx",
-        headers={"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                 "content-disposition": 'attachment; filename="QA_00.02.docx"'}))
-    r = await client.get("/qms/download/generated_sops/QA_00.02.docx", headers=admin_headers)
-    assert r.status_code == 200
-    assert r.content.startswith(b"PK")
-    assert "wordprocessingml" in r.headers["content-type"]
-    assert "QA_00.02.docx" in r.headers["content-disposition"]
-
-
-async def test_upstream_4xx_is_not_masked_as_503(client, admin_headers, qms_configured, monkeypatch):
-    _stub_client(monkeypatch, _FakeResponse(status_code=404))
-    r = await client.get("/qms/documents/NOPE_00.00", headers=admin_headers)
-    assert r.status_code == 404
 
 
 # ════════════════════ QMS Studio — DocEngine surface ════════════════════
@@ -340,3 +267,25 @@ def test_build_path_of_certificate_pipeline_is_forwardable():
     """The two QC callers (coq_aggregation, coq_docx) forward a fixed '/build'.
     Pinned so the guard can never regress the certificate pipeline."""
     _assert_forwardable("/build")
+
+
+def test_legacy_qms_api_proxy_routes_are_gone():
+    """qms-api is retired platform-wide and nothing in web/gf called its
+    proxy any more; the routes were an authenticated door onto an upstream
+    that no longer exists, kept alive for no reader (review 2026-09-27,
+    BC-19). The DocEngine registry (/qms/studio/documents) is the successor.
+    Pinned by path so a copy-paste revival is a red test, not a silent one."""
+    from app.main import app
+    from tests.conftest import iter_routes
+    live = {getattr(r, "path", "") for r in iter_routes(app)}
+    for gone in ("/qms/documents", "/qms/stats", "/qms/hierarchy", "/qms/families",
+                 "/qms/documents/{code}", "/qms/rag-query", "/qms/download/{path:path}",
+                 "/tasks/tree"):
+        assert gone not in live, f"{gone} is a retired route"
+    # the successor surface is still there
+    assert "/qms/studio/documents" in live
+    # and the settings the proxy read are gone with it (BC-19 also names them)
+    from app.config import Settings
+    for field in ("qms_api_url", "qms_api_key", "letta_mcp_url", "qdrant_url",
+                  "remember_device_expire_days"):
+        assert field not in Settings.model_fields, f"dead setting {field} still declared"

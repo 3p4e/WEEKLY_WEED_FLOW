@@ -8,6 +8,25 @@ async def test_health(client):
     assert r.json()["status"] == "healthy"
 
 
+async def test_health_ready_does_not_echo_database_errors(client, monkeypatch):
+    """Review 2026-09-27, BC-18: /health/ready is public through nginx and
+    returned asyncpg's message — host, role, the auth failure — verbatim. The
+    body names only which side failed; the detail goes to the log."""
+    import app.main as main_module
+
+    class _BrokenPool:
+        async def fetchval(self, *a, **k):
+            raise ConnectionRefusedError("db-users.internal:5432 role app_admin password authentication failed")
+
+    monkeypatch.setattr(main_module, "users_admin_pool", lambda: _BrokenPool())
+    r = await client.get("/health/ready")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["ready"] is False
+    assert body["databases"]["users"] == "error"
+    assert "app_admin" not in r.text and "5432" not in r.text
+
+
 async def test_login_by_username(client, org):
     r = await client.post("/auth/login", json={"email": org["username"], "password": org["password"]})
     assert r.status_code == 200, r.text

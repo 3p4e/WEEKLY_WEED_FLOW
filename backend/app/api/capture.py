@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.api.tasks import _assert_scope_visible
 from app.api.weekwindow import ensure_week
+from app.config import capture_import_token
 from app.db import rls, rls_users, users_admin_pool
 from app.deps import dept_scope, require_password_set
 from app.worktime import TZ
@@ -106,8 +107,15 @@ def _tz(dt: datetime | None) -> datetime | None:
 
 async def _capture_actor(authorization: str | None) -> dict | None:
     """The connector path: a static token (env CAPTURE_IMPORT_TOKEN, only
-    honored on this route) acting as the configured capture user."""
-    token = os.environ.get("CAPTURE_IMPORT_TOKEN", "")
+    honored on this route) acting as the configured capture user.
+
+    The token passes through config.capture_import_token first: a placeholder
+    (".env.example" used to ship `change-me`) or a value shorter than 32
+    characters is treated as UNSET, so a deployment that copied the template
+    accepts only real user sessions here instead of handing an ADMIN-
+    equivalent import authority to anyone who can read the template (review
+    2026-09-27, BC-11). config.py warns about it at startup."""
+    token = capture_import_token(os.environ.get("CAPTURE_IMPORT_TOKEN", ""))
     username = os.environ.get("CAPTURE_IMPORT_USER", "qcm.blani")
     # LOW (reviewed, Wave 3 item 4) — accepted as an operational concern, not
     # a code bug: this single static token grants full import authority as
@@ -126,7 +134,14 @@ async def _capture_actor(authorization: str | None) -> dict | None:
     #
     # Constant-time compare so the static token can't be recovered byte-by-byte
     # via response-timing (same reason security.py always pays the bcrypt cost).
-    if not token or not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
+    # Compared as BYTES: hmac.compare_digest(str, str) raises TypeError on any
+    # non-ASCII character, and an Authorization header is client-supplied —
+    # one Cyrillic letter in it turned every import into a 500 whenever the
+    # token was configured (review 2026-09-27, BC-18). A header that is not
+    # pure ASCII cannot equal an ASCII token, so it is simply not the token.
+    if not token or not authorization or not authorization.isascii():
+        return None
+    if not hmac.compare_digest(authorization.encode("ascii"), f"Bearer {token}".encode("ascii")):
         return None
     row = await users_admin_pool().fetchrow(
         "SELECT id, org_id, username, full_name, role, department_id, function_role,"

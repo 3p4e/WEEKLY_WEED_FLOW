@@ -106,3 +106,24 @@ def test_uvicorn_trusts_only_the_frontend_proxy_ip_not_wildcard():
     # the frontend must actually hold that IP statically, or the trust is dead
     assert f"ipv4_address: {trusted_ip}" in compose, \
         "frontend must have the static ipv4_address the backend trusts"
+
+    # Review 2026-09-27, BC-01: the chain is client -> Traefik -> nginx ->
+    # uvicorn, and uvicorn takes the RIGHTMOST forwarded address it does not
+    # trust. nginx appending its own peer (Traefik) with
+    # $proxy_add_x_forwarded_for therefore resolved every client to Traefik
+    # and collapsed the per-IP limiter into one facility-wide bucket. nginx
+    # must forward Traefik's header unchanged, and only when the request
+    # arrived over the Traefik-side interface — a sibling container on the
+    # internal network (arriving at the fixed internal IP) must never get
+    # its own header honoured.
+    nginx_conf = (root / "web" / "nginx.conf").read_text()
+    directives = [ln for ln in nginx_conf.splitlines() if not ln.strip().startswith("#")]
+    assert not any("$proxy_add_x_forwarded_for" in ln for ln in directives), \
+        "nginx must not append its own peer to X-Forwarded-For — that peer is Traefik"
+    xff_lines = [ln for ln in directives if "X-Forwarded-For" in ln and "proxy_set_header" in ln]
+    assert xff_lines and all("$wwf_client_xff" in ln for ln in xff_lines), \
+        "every proxied location must forward the interface-aware $wwf_client_xff"
+    assert re.search(r"map\s+\$server_addr\s+\$wwf_client_xff", nginx_conf), \
+        "the forwarded header must be decided by the interface the request arrived on"
+    assert re.search(rf"^\s*{re.escape(trusted_ip)}\s+\"\";", nginx_conf, re.M), \
+        "a request arriving on the internal-network interface must have its header dropped"

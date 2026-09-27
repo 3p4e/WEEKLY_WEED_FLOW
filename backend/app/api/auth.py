@@ -124,7 +124,10 @@ def _rate_limit_clear(*keys: str) -> None:
 class LoginReq(BaseModel):
     email: str = Field(max_length=254)            # accepts username or email
     password: str = Field(max_length=256)
-    remember_device: bool = False
+    # No `remember_device`: the client never sent it (web/gf/api.js login
+    # posts email+password only), so the long-lived token it minted was an
+    # unreachable code path with a config knob of its own (review 2026-09-27,
+    # BC-19). Every session token lives access_token_expire_minutes.
 
 
 class ChangePwReq(BaseModel):
@@ -225,10 +228,16 @@ async def login(body: LoginReq, request: Request):
             "event": "login_failed", "identifier": identifier, "ip": ip,
             "reason": "inactive_or_unknown" if not active else "bad_password"}})
         raise invalid
-    _rate_limit_clear(f"ip:{ip}", id_key)
-    days = settings.remember_device_expire_days if body.remember_device else None
+    # A success clears the ACCOUNT's budget only — the person proved they own
+    # it, so their earlier typos are forgiven. It must NOT clear the IP bucket:
+    # that bucket is shared by everyone behind one address, and clearing it on
+    # any success meant one legitimate login from the office (or from the
+    # attacker's own throwaway account) reset the brute-force counter for the
+    # whole address (review 2026-09-27, BC-01). Failures age out of the IP
+    # bucket on their own after _LOGIN_WINDOW_S.
+    _rate_limit_clear(id_key)
     pwv = row["password_set_at"].isoformat() if row["password_set_at"] else None
-    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv, days=days)
+    token = create_access_token(str(row["id"]), row["role"], str(row["org_id"]), password_set_at=pwv)
     # The facility clock travels with the login, not only with /auth/me: a
     # normal sign-in never called /auth/me, so the date picker fell back to the
     # browser's day (review 2026-09-27, FE-07). Same two fields as me().

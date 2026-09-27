@@ -86,6 +86,16 @@ services:
     # never '*' — a wildcard would let any container on this shared network
     # (incl. the internet-exposed capture-mcp) spoof its source IP and defeat
     # the login rate-limiter. uvicorn reads FORWARDED_ALLOW_IPS with --proxy-headers.
+    #
+    # The chain is client -> Traefik -> nginx -> uvicorn. uvicorn takes the
+    # RIGHTMOST address in X-Forwarded-For that is not in this list, so nginx
+    # must forward Traefik's header ("<client>") UNCHANGED rather than append
+    # Traefik's own address to it — appending made every request resolve to
+    # Traefik, and the whole facility shared one login-limiter bucket (review
+    # 2026-09-27, BC-01). web/nginx.conf does that; Traefik's network is an
+    # external one whose subnet this file does not know, so Traefik itself is
+    # deliberately NOT listed here — nginx tells Traefik's traffic apart by
+    # the interface it arrives on instead.
     environment:
       - FORWARDED_ALLOW_IPS=172.16.31.20
     extra_hosts:

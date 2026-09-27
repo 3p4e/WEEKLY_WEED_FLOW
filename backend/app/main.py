@@ -242,8 +242,15 @@ async def health_ready(response: Response):
         try:
             await pool().fetchval("SELECT 1")
             checks[name] = "ok"
-        except Exception as e:                      # noqa: BLE001 - reported, not raised
-            checks[name] = f"{type(e).__name__}: {e}"
+        except Exception:                           # noqa: BLE001 - reported, not raised
+            # This route is public through nginx, and asyncpg's message names
+            # the database host, role and the auth failure — free
+            # reconnaissance. The body says only WHICH side failed; the
+            # detail goes to the log, where an operator reads it (review
+            # 2026-09-27, BC-18).
+            request_logger.error("health_ready_failed", extra={"fields": {"database": name}},
+                                 exc_info=True)
+            checks[name] = "error"
     ready = all(v == "ok" for v in checks.values())
     if not ready:
         response.status_code = 503
