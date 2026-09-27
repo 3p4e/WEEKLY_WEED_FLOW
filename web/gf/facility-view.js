@@ -76,8 +76,14 @@
   GF.WWF.loadFacility = async () => {
     const st = GF.WWF._fac;
     st.loading = true; st.error = null;
-    try { st.data = await GF.API.facility(); }
-    catch (e) { st.error = e.message; }
+    // Stale-response guard (as in waste-view.js): a room save and a retry can
+    // overlap; the older snapshot must not land last (R2-FE-13).
+    const my = (st.lseq = (st.lseq || 0) + 1);
+    try {
+      const data = await GF.API.facility();
+      if (my !== st.lseq) return;
+      st.data = data;
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'facility') GF.render.all();
   };

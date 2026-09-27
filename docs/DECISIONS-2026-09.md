@@ -129,6 +129,7 @@ finding ids are those of `docs/REVIEW-2026-09-27.md`.
 | E-8 | (Fix round 2) The production manager's waste/decon/biosecurity actions mirror the server's `dry`-room rule client-side and FAIL OPEN when the room registry cannot be read — the server's 403 stays the gate. | R2-FE-03 |
 | E-9 | (Fix round 2) `GET /audit`'s legacy `before` parameter has no client any more (the view pages by cursor); the backend may retire it. | R2-BC-02 |
 | E-10 | (Fix round 2) A changed shell file without a service-worker VERSION bump fails the frontend suite (hash fixture in `tests/frontend/fixtures/shell-hash.json`). | FE-13 |
+| E-11 | (Fix round 2) A feed record carries a day field and an IPM application a day and a time, both defaulting to the facility's now; the form refuses a future feed day and an application more than 5 minutes ahead. The server accepts any date (backdating a record written up the next morning is the point) — the future bound is client-side only. | R2-FE-12 |
 | F-1 | Canon D5 content floor: a revision with fewer words/characters than its source fails, so the "tighten" / "simplify" presets usually fail with a D5 message — accept, or relax D5 for wording-only edits. | DI-07 |
 | F-2 | Direct `/build` documents stay unaudited (`audited=false` recorded) rather than running the §6A audit synchronously. | DI-06 |
 | F-3 | DocEngine is fail-closed on organisation scope: backend and docengine must ship together. | DI-13 |

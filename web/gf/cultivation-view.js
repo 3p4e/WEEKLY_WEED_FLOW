@@ -147,18 +147,25 @@
   GF.WWF.loadCultivation = async () => {
     const st = GF.WWF._cult;
     st.loading = true; st.error = null;
+    // Stale-response guard (as in waste-view.js): the show-closed toggle and
+    // every save fire a load, and an older response landing last would put
+    // back the list the toggle had just replaced (review 2026-09-27b, R2-FE-13).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const [b, cv] = await Promise.all([
         GF.API.cultivationBatches(!st.showClosed),
         GF.API.cultivars(),
       ]);
-      st.batches = b.batches || [];
-      st.cultivars = cv.cultivars || [];
       // Clone runs are a separate module (propagation-view.js); the strip only
       // needs to know which run fed a batch, so a missing API is not an error.
-      try { st.runs = GF.API.cloneRuns ? ((await GF.API.cloneRuns(false)).runs || []) : []; }
-      catch (_) { st.runs = []; }
-    } catch (e) { st.error = e.message; }
+      let runs;
+      try { runs = GF.API.cloneRuns ? ((await GF.API.cloneRuns(false)).runs || []) : []; }
+      catch (_) { runs = []; }
+      if (my !== st.lseq) return;
+      st.batches = b.batches || [];
+      st.cultivars = cv.cultivars || [];
+      st.runs = runs;
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'cultivation') GF.render.all();
   };

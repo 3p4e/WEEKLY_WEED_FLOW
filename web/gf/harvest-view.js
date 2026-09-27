@@ -656,6 +656,9 @@
         <input id="hv-i-dose" maxlength="120" placeholder="2 ml/L"></div>
       <div class="field"><label>${AL('Target pest', 'Целен штетник')}</label>
         <input id="hv-i-target" maxlength="200"></div>
+      <div class="field"><label>${AL('Applied on (facility time)', 'Применето на (време во објектот)')}</label>
+        <div style="display:flex;gap:6px">${GF.dateField('hv-i-day', { value: GF.facilityToday(), max: GF.facilityToday() })}
+        <input id="hv-i-time" type="time" value="${GF.esc(GF.facilityTimeNow())}" style="max-width:110px"></div></div>
       <div class="field"><label>${AL('Re-entry interval (hours)', 'Интервал за повторен влез (часови)')}</label>
         <input id="hv-i-rei" type="number" min="0" step="1"></div>
       <div class="field"><label>${AL('Pre-harvest interval (days)', 'Интервал пред жетва (денови)')}</label>
@@ -707,8 +710,19 @@
                   'Интервалот за повторен влез и интервалот пред жетва мора да бидат цели броеви — оставете празно само ако не важи никаков'), 'error');
       return;
     }
+    // When the spray actually happened (FE-20): the re-entry and pre-harvest
+    // windows run from it, so a spray logged the next morning keeps its real
+    // time. A moment ahead of now is refused; an unresolvable zone leaves it
+    // to the server's own "now", as before.
+    const day = ((GF.$('hv-i-day') || {}).value || '');
+    const hhmm = ((GF.$('hv-i-time') || {}).value || '');
+    const appliedAt = GF.facilityInstant(day, hhmm);
+    if (appliedAt && new Date(appliedAt).getTime() > Date.now() + 5 * 60 * 1000) {
+      GF.toast(AL('An application cannot be dated in the future', 'Третманот не може да биде во иднина'), 'error'); return;
+    }
     try {
       await GF.API.ipmApply({
+        applied_at: appliedAt || undefined,
         product,
         active_ingredient: ((GF.$('hv-i-ai') || {}).value || '').trim() || null,
         category: (GF.$('hv-i-cat') || {}).value,

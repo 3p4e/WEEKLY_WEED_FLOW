@@ -28,8 +28,15 @@
   GF.WWF.loadIrrigation = async () => {
     const st = GF.WWF._irr;
     st.loading = true; st.error = null;
-    try { st.feeds = (await GF.API.irrigation()).feeds || []; }
-    catch (e) { st.error = e.message; }
+    // Stale-response guard (as in waste-view.js): a save reloads while the
+    // first load may still be in flight; the older list must not land last
+    // and hide the feed just recorded (R2-FE-13).
+    const my = (st.lseq = (st.lseq || 0) + 1);
+    try {
+      const feeds = (await GF.API.irrigation()).feeds || [];
+      if (my !== st.lseq) return;
+      st.feeds = feeds;
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'irrigation') GF.render.all();
   };
@@ -76,6 +83,8 @@
         ${GF.selectField('ir-f-room', { value: roomOpts[0] ? roomOpts[0].v : '', title: AL('Room', 'Соба'), options: roomOpts })}</div>
       <div class="field"><label>${AL('Batch (if only one)', 'Батч (ако е само еден)')}</label>
         ${GF.selectField('ir-f-batch', { value: '', title: AL('Batch', 'Батч'), options: batchOpts, searchable: true })}</div>
+      <div class="field"><label>${AL('Fed on', 'Датум на хранење')}</label>
+        ${GF.dateField('ir-f-date', { value: GF.facilityToday(), max: GF.facilityToday() })}</div>
       <div class="field"><label>${AL('Method', 'Метод')}</label>
         ${GF.selectField('ir-f-method', { value: '', title: AL('Method', 'Метод'), options: FEED_METHODS.map(t => ({ v: t.v, label: AL(t.en, t.mk) })) })}</div>
       <div class="row" style="gap:10px">
@@ -115,9 +124,16 @@
       const raw = ((GF.$(id) || {}).value || '').trim();
       return raw === '' ? null : parseFloat(raw);
     };
+    // The day the feed was given, on the facility's calendar (FE-20): a feed
+    // logged the next morning must not be recorded as today's.
+    const fedOn = ((GF.$('ir-f-date') || {}).value || '');
+    if (fedOn && fedOn > GF.facilityToday()) {
+      GF.toast(AL('A feed cannot be dated after today', 'Хранењето не може да биде подоцна од денес'), 'error'); return;
+    }
     try {
       await GF.API.irrigationLog({
         room_id: room,
+        applied_on: fedOn || null,
         batch_id: ((GF.$('ir-f-batch') || {}).value || '') || null,
         method: ((GF.$('ir-f-method') || {}).value || '') || null,
         water_volume_l: num('ir-f-vol'),

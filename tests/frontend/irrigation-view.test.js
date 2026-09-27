@@ -30,7 +30,7 @@ const PRE = `
 `;
 
 function load(role) {
-  const h = loadGF({ files: ['data.js', 'core.js', 'irrigation-view.js'], preScript: PRE });
+  const h = loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'irrigation-view.js'], preScript: PRE });
   if (role) h.window.GF.API.user = { role };
   return h;
 }
@@ -124,7 +124,7 @@ test('registers as a full-page view in the operations rail, readable by every ro
 // overwritten and every assertion here would pass vacuously.
 
 function loadForms(role) {
-  const h = loadGF({ files: ['data.js', 'core.js', 'irrigation-view.js'], preScript: PRE });
+  const h = loadGF({ files: ['data.js', 'core.js', 'datepicker.js', 'irrigation-view.js'], preScript: PRE });
   const w = h.window;
   if (role) w.GF.API.user = { role };
   w.__modals = []; w.__closed = []; w.__toasts = [];
@@ -173,6 +173,25 @@ test('a blank feed reading is sent as null, a room is required, and a value roun
     assert.equal(w.__feed.feed_ec, null,
       'a reading left blank is "not measured" (null), never coerced to 0');
     assert.deepEqual(w.__closed, ['ir-feed-modal'], 'a saved feed closes the form');
+    assert.equal(w.__feed.applied_on, w.GF.facilityToday(),
+      'the feed carries the facility day it was given (FE-20), today by default');
+    h.close();
+  });
+});
+
+test('a feed logged the next morning keeps its own day, and a day after today is refused (FE-20)', () => {
+  const h = loadForms('IR_MGR');
+  const w = h.window;
+  return w.GF.WWF.feedForm().then(async () => {
+    w.document.getElementById('ir-f-room').value = 'r1';
+    w.document.getElementById('ir-f-date').value = '2026-07-29';
+    await w.GF.WWF.feedSave();
+    assert.equal(w.__feed.applied_on, '2026-07-29');
+    w.__feed = undefined;
+    w.document.getElementById('ir-f-date').value = '2999-01-01';
+    await w.GF.WWF.feedSave();
+    assert.equal(w.__feed, undefined, 'a future feed day must not be sent');
+    assert.match(w.__toasts.at(-1)[0], /after today/);
     h.close();
   });
 });

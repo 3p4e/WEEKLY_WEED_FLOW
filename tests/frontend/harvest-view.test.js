@@ -689,6 +689,38 @@ test('an IPM application scoped to neither a room nor a batch is refused before 
   });
 });
 
+test('an IPM application carries the facility wall-clock moment it was applied, with the zone offset (FE-20)', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.user = Object.assign(w.GF.API.user || {}, { facility_tz: 'Europe/Skopje' });
+  return w.GF.WWF.ipmForm().then(async () => {
+    w.document.getElementById('hv-i-product').value = 'Neem oil';
+    w.document.getElementById('hv-i-room').value = 'r1';
+    w.document.getElementById('hv-i-day').value = '2026-07-29';
+    w.document.getElementById('hv-i-time').value = '07:30';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied.applied_at, '2026-07-29T07:30:00+02:00', 'CEST, not the browser zone');
+    w.__applied = undefined;
+    w.document.getElementById('hv-i-day').value = '2999-01-01';
+    await w.GF.WWF.ipmSave();
+    assert.equal(w.__applied, undefined, 'a spray dated in the future is refused before the request');
+    assert.match(w.__toasts.at(-1)[0], /future/);
+    h.close();
+  });
+});
+
+test('facilityInstant uses the offset of the day itself (CET in winter, CEST in summer)', () => {
+  const h = loadForms('CU_MGR');
+  const w = h.window;
+  w.GF.API.user = Object.assign(w.GF.API.user || {}, { facility_tz: 'Europe/Skopje' });
+  assert.equal(w.GF.facilityInstant('2026-01-15', '09:00'), '2026-01-15T09:00:00+01:00');
+  assert.equal(w.GF.facilityInstant('2026-07-15', '09:00'), '2026-07-15T09:00:00+02:00');
+  assert.equal(w.GF.facilityInstant('bad', '09:00'), null);
+  w.GF.API.user.facility_tz = '';
+  assert.equal(w.GF.facilityInstant('2026-07-15', '09:00'), null, 'no zone → the server stamps its own now');
+  h.close();
+});
+
 test('a blank interval is sent as null and a stated zero is sent as zero', () => {
   const h = loadForms('CU_MGR');
   const w = h.window;

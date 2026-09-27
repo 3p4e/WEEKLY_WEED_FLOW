@@ -69,15 +69,19 @@
   GF.WWF.loadPropagation = async () => {
     const st = GF.WWF._prop;
     st.loading = true; st.error = null;
+    // Stale-response guard (as in waste-view.js): "show all" and every save
+    // fire a load; the older response must not land last (R2-FE-13).
+    const my = (st.lseq = (st.lseq || 0) + 1);
     try {
       const [m, r, camps] = await Promise.all([
         GF.API.mothers(!st.showAll), GF.API.cloneRuns(!st.showAll),
         GF.API.campaigns ? GF.API.campaigns() : Promise.resolve({ campaigns: [] })]);
+      if (my !== st.lseq) return;
       st.mothers = m.mothers || [];
       st.byCultivar = m.by_cultivar || [];
       st.runs = r.runs || [];
       st.campaigns = camps.campaigns || [];
-    } catch (e) { st.error = e.message; }
+    } catch (e) { if (my !== st.lseq) return; st.error = e.message; }
     st.loading = false;
     if (GF.state.view === 'cultivation') GF.render.all();
   };

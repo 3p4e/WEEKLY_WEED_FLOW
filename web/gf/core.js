@@ -291,6 +291,33 @@ GF.todayISO = () => GF.localDateStr(new Date());
 // then the browser's local day — which is what the whole app used before
 // this existed, so the worst case is the old behaviour, never an error.
 GF.facilityTZ = () => (GF.API && GF.API.user && GF.API.user.facility_tz) || '';
+// An instant typed as a facility wall-clock day + time ("2026-09-27", "07:30")
+// → ISO-8601 with the facility zone's offset for that day, so the server
+// stores the moment the floor meant, whatever zone the browser is in.
+// null when the zone or the offset cannot be resolved: the caller then omits
+// the field and the server stamps its own "now" (the behaviour before).
+GF.facilityInstant = (day, hhmm) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^\d{2}:\d{2}$/.test(hhmm || '')) return null;
+  const tz = GF.facilityTZ();
+  if (!tz) return null;
+  try {
+    const probe = new Date(day + 'T' + hhmm + ':00Z');
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+      .formatToParts(probe).find(p => p.type === 'timeZoneName');
+    const m = name && /GMT(?:([+-])(\d{2}):?(\d{2}))?$/.exec(name.value);
+    if (!m) return null;
+    const off = m[1] ? `${m[1]}${m[2]}:${m[3]}` : '+00:00';
+    return `${day}T${hhmm}:00${off}`;
+  } catch (e) { return null; }
+};
+// The facility's wall-clock time now, "HH:MM" (browser clock when no zone).
+GF.facilityTimeNow = () => {
+  const tz = GF.facilityTZ();
+  try {
+    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false,
+      ...(tz ? { timeZone: tz } : {}) }).format(new Date());
+  } catch (e) { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+};
 GF.facilityToday = () => {
   const tz = GF.facilityTZ();
   if (tz) {
