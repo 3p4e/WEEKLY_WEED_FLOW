@@ -476,10 +476,27 @@ GF.WWF.install = () => {
 
   GF.deleteTask = (id) => GF.toast(GF.state.lang==='mk'?'Бришењето е оневозможено (ревизија)':'Delete disabled (audit retention)','info');
 
+  // A note is shown on the card the instant it is typed, then written to
+  // the server. The write used to be fire-and-forget (`.catch(() => {})`),
+  // so on a 403, 409, 422 or a network error the note stayed on screen as
+  // saved and vanished on reload with no message (review 2026-09-27,
+  // FE-19). Now a failed write takes the optimistic note back off the card
+  // and says so.
   const origAddNote = GF.addNote;
-  GF.addNote = (taskId) => { const el = GF.$('note-'+taskId); const v = el && el.value.trim();
+  GF.addNote = async (taskId) => { const el = GF.$('note-'+taskId); const v = el && el.value.trim();
     origAddNote(taskId);
-    if (v) GF.API.addProgress(taskId, { day_label: GF.todayDay, note: v }).catch(()=>{}); };
+    if (!v) return;
+    try {
+      await GF.API.addProgress(taskId, { day_label: GF.todayDay, note: v });
+    } catch (e) {
+      const t = GF.task(taskId);
+      if (t && Array.isArray(t.notes)) {
+        const i = t.notes.map(n => n.n).lastIndexOf(v);
+        if (i >= 0) t.notes.splice(i, 1);
+      }
+      GF.render.panels();
+      GF.toast(AL('Note not saved: ', 'Белешката не е зачувана: ') + e.message, 'error');
+    } };
 
   // GF.once spans the ENTIRE chain below — translate, then createTask, then
   // the per-helper assign loop. The old inline guard only covered the
@@ -983,6 +1000,13 @@ GF.WWF.openDeptForm = () => {
       <input id="dept-name" maxlength="120"></div>
     <div class="field"><label>${AL('Name (Macedonian)', 'Име (МК)')}</label>
       <input id="dept-name-mk" maxlength="120"></div>
+    <div class="field"><label>${AL('Parent department (optional)', 'Надреден оддел (опционално)')}</label>
+      ${GF.selectField('dept-parent', { value: '', title: AL('Parent department', 'Надреден оддел'),
+        options: [{ v: '', label: AL('— top level —', '— највисоко ниво —') }]
+          .concat((GF.DEPTS || []).filter(d => !d.parent_id).map(d => ({ v: d.id, label: GF.state.lang === 'mk' ? d.mk : d.name }))) })}
+      <div style="color:var(--ink-3);font-size:11px;margin-top:3px">${AL(
+        'A sub-department (Cloning, Nursery under Cultivation) is run by its parent’s manager.',
+        'Под-оддел (Клонирање, Расадник под Одгледување) го води менаџерот на надредениот оддел.')}</div></div>
     <div class="row" style="gap:10px"><div class="spacer"></div>
       <button class="btn btn-primary" onclick="GF.WWF.saveDept()">${GF.t('save')}</button></div>`;
   GF.openModal('dept-form-modal');
@@ -994,6 +1018,11 @@ GF.WWF.saveDept = async () => {
   const code = ((GF.$('dept-code') || {}).value || '').trim().toLowerCase();
   const name = ((GF.$('dept-name') || {}).value || '').trim();
   const nameMk = ((GF.$('dept-name-mk') || {}).value || '').trim();
+  // DepartmentIn.parent_id: the Cloning/Nursery model could not be created
+  // from the app because the form had no parent field (review 2026-09-27,
+  // FE-15). Only top-level departments are offered — one level, as the
+  // backend's dept_family walk is used today.
+  const parentId = ((GF.$('dept-parent') || {}).value || '') || null;
   if (!/^[a-z0-9_]{1,64}$/.test(code)) {   // mirrors DepartmentIn.code server-side
     GF.toast(AL('Code must be lowercase letters, digits, underscore only (1-64 characters)',
                 'Кодот смее да содржи само мали букви, цифри и долна црта (1-64 знаци)'), 'error');
@@ -1001,7 +1030,7 @@ GF.WWF.saveDept = async () => {
   }
   if (!name) { GF.toast(AL('Enter a department name', 'Внесете име на одделот'), 'error'); return; }
   try {
-    await GF.API.createDepartment({ code, name, name_mk: nameMk || null });
+    await GF.API.createDepartment({ code, name, name_mk: nameMk || null, parent_id: parentId });
     GF.closeModal('dept-form-modal');
     GF.toast(GF.t('save') + ' ✓', 'success');
     await GF.WWF.loadAndRender();

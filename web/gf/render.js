@@ -15,7 +15,11 @@ GF.progress = (t) => {
   if (Number.isFinite(t.progressPct) && t.progressPct > 0) return t.progressPct;
   return { done: 100, working: 50, review: 75, stuck: 25, postponed: 10, pending: 0 }[t.status] ?? 0;
 };
-GF.HANDOFF = { clone:'veg', veg:'flower', flower:'prod', prod:'qc', qc:'qa', qa:'whout', irr:'prod', whin:'prod', maint:'irr' };
+// The department handoff pipeline, keyed by REAL department id. integrate.js
+// fills it from CODE_HANDOFF once /departments has loaded; until then it is
+// empty. (The old seed was keyed by demo department ids that never matched
+// a real one — review 2026-09-27, FE-21.)
+GF.HANDOFF = {};
 
 // The Mass Weed status pill opens an explicit picker (mockup interaction)
 // instead of blind-cycling through the six states. Falls back to the cycle

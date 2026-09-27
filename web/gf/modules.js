@@ -28,7 +28,7 @@ GF.MODULES = [
     roles: ['QC_MGR', 'QA_MGR', 'QP'],
     defaultView: () => 'qccoa',
     keys: ['qccoa','qcregister','qcsample','qclab','qcspec','qcpotency','qcleaves',
-           'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio','qmsregistry','qmsknow'],
+           'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio'],
   },
   {
     id: 'cultivation', icon: 'leaf',
@@ -84,7 +84,7 @@ GF.VIEW_LABEL_KEY = {
   qccoa:'coa', qcregister:'register', qcsample:'qc_sample', qclab:'qc_lab',
   qcspec:'qc_spec', qcpotency:'potency', qcleaves:'qc_leaves',
   qccustody:'custody', qcecoa:'ecoa', qcoos:'oos', qcgenealogy:'genealogy',
-  qmsstudio:'qms_studio', qmsregistry:'qms_registry', qmsknow:'knowledge',
+  qmsstudio:'qms_studio',
   cultivation:'cultivation', facility:'facility', harvest:'harvest', irrigation:'irrigation',
   decon:'decon', waste:'waste',
   audit:'audit', auditprep:'audit_prep', approvals:'approvals',

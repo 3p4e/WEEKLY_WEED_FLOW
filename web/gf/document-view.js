@@ -17,9 +17,16 @@ GF.WWF._docDeptParam = () => {
 
 GF.WWF.setDocDept = (v) => { GF.WWF._doc.deptId = v || ''; GF.WWF.loadDocument(); };
 
+// GET /reports/documents is gated on ELEVATED_ROLES; a base USER opening the
+// report used to see "Couldn't load the document: Insufficient role" plus a
+// Retry button for a request that can never succeed (review 2026-09-27,
+// FE-14). The panel is simply not theirs.
+GF.WWF._docElevated = () => ELEVATED_ROLES.includes((GF.API.user || {}).role);
+
 GF.WWF.loadDocument = async () => {
   const st = GF.WWF._report, ds = GF.WWF._doc;
   const seq = ++ds._seq;   // only the newest load may write state (no last-response-wins races)
+  if (!GF.WWF._docElevated()) { ds.loading = false; ds.error = null; ds.data = null; GF.WWF._renderDocPanel(); return; }
   ds.loading = true; ds.error = null; GF.WWF._renderDocPanel();
   try {
     const q = { kind: st.mode };
@@ -401,7 +408,8 @@ GF.WWF._renderDocPanel = () => {
   // Reuse integrate.js's shared ELEVATED_ROLES (same classic-script scope) so a
   // new non-elevated role can't slip past a hand-rolled `!== 'USER'` check and
   // show Compile/Lock buttons that then 403 on the backend's require_role gate.
-  const elevated = ELEVATED_ROLES.includes((GF.API.user || {}).role);
+  const elevated = GF.WWF._docElevated();
+  if (!elevated) { el.innerHTML = ''; return; }   // not a panel a base USER has (see loadDocument)
   const kindLbl = st.mode === 'plan' ? AL('Plan document', 'Документ План') : AL('Report document', 'Документ Извештај');
 
   // Custom-range control (elevated only): draft a report/plan for ANY interval

@@ -176,7 +176,6 @@ GF.API = {
   },
   me() { return this._req('GET', '/auth/me'); },
   directory()      { return this._req('GET', '/auth/directory'); },
-  listUsers()      { return this._req('GET', '/auth/users'); },
   createUser(body) { return this._req('POST', '/auth/users', body); },
   updateUser(id, body) { return this._req('PATCH', '/auth/users/' + id, body); },
   resetPassword(id)    { return this._req('POST', '/auth/users/' + id + '/reset-password'); },
@@ -273,7 +272,6 @@ GF.API = {
   // an all-negative swab set — the server rejects violations with 409, so the
   // UI should surface `detail` rather than pre-guessing the rule.
   deconCycles(campaign)          { return this._req('GET',  '/decon/cycles' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
-  deconCycle(id)                 { return this._req('GET',  '/decon/cycles/' + id); },
   deconCycleCreate(body)         { return this._req('POST', '/decon/cycles', body); },
   deconStep(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/steps', body); },
   deconRelease(cycleId, body)    { return this._req('POST', '/decon/cycles/' + cycleId + '/release', body || {}); },
@@ -282,7 +280,6 @@ GF.API = {
   // room in the same campaign — failing it (with a stated reason) is the only
   // way forward. Same QA-tier gate as release (review 2026-09-27, FE-03).
   deconFail(cycleId, body)       { return this._req('POST', '/decon/cycles/' + cycleId + '/fail', body); },
-  deconBleachLog(q = {})         { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/bleach-log' + (u ? '?' + u : '')); },
   deconBleachAdd(body)           { return this._req('POST', '/decon/bleach-log', body); },
   deconSwabs(q = {})             { const u = new URLSearchParams(q).toString(); return this._req('GET', '/decon/swabs' + (u ? '?' + u : '')); },
   deconSwabAdd(body)             { return this._req('POST', '/decon/swabs', body); },
@@ -293,7 +290,6 @@ GF.API = {
   // cleaning recorded after them. Read the flags; do not recompute the interval
   // client-side, or the two copies will disagree about what "overdue" means.
   deconCorridors(campaign)       { return this._req('GET',  '/decon/corridors' + (campaign ? '?campaign=' + encodeURIComponent(campaign) : '')); },
-  deconCorridorCleanings(roomId) { return this._req('GET',  '/decon/corridors/' + roomId + '/cleanings'); },
   deconCorridorClean(body)       { return this._req('POST', '/decon/corridors/cleanings', body); },
   // Two real, migration-backed decon routes have no frontend caller at all
   // (product/feature-completeness gap, not a bug — no UI built here):
@@ -504,7 +500,6 @@ GF.API = {
     return this._req('GET', '/tasks' + (p ? '?' + p : ''));
   },
   getTask(id)          { return this._req('GET', '/tasks/' + id); },
-  taskTree(q = {})     { const p = new URLSearchParams(q).toString(); return this._req('GET', '/tasks/tree' + (p ? '?' + p : '')); },
   createTask(t)        { return this._req('POST', '/tasks', t); },
   updateTask(id, patch){ return this._req('PATCH', '/tasks/' + id, patch); },
   // TMS T1 — dependency graph (blocker edges) + cross-department handoffs
@@ -554,7 +549,6 @@ GF.API = {
   },
   compileDocument(body)     { return this._req('POST', '/reports/documents/compile', body); },
   previewDocument(body)     { return this._req('POST', '/reports/documents/preview', body); },
-  patchDocument(id, content){ return this._req('PATCH', '/reports/documents/' + id, { content }); },
   patchDocumentSection(id, key, patch) { return this._req('PATCH', '/reports/documents/' + id + '/sections/' + encodeURIComponent(key), patch); },
   lockDocument(id)          { return this._req('POST', '/reports/documents/' + id + '/lock'); },
 

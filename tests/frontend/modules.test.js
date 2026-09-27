@@ -43,7 +43,7 @@ test('qc module: correct roles and keys', () => {
   const mod = GF.moduleById('qc');
   assert.deepEqual(toJS(mod.roles), ['QC_MGR','QA_MGR','QP']);
   assert.deepEqual(toJS(mod.keys), ['qccoa','qcregister','qcsample','qclab','qcspec','qcpotency','qcleaves',
-    'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio','qmsregistry','qmsknow']);
+    'qccustody','qcecoa','qcoos','qcgenealogy','qmsstudio']);
   close();
 });
 

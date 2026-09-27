@@ -75,9 +75,10 @@ GF.icon = (n, cls = 'icon', stroke) => `<svg class="${cls}" viewBox="0 0 20 20"$
 // ── i18n ──
 GF.state = {
   lang: localStorage.getItem('gf_lang') || 'en',
-  user: localStorage.getItem('gf_user') || 'marko',
-  aiBase: localStorage.getItem('gf_ai_base') || '',
-  aiProvider: localStorage.getItem('gf_ai_provider') || 'builtin',
+  // The session user; integrate.js sets it from the login on loadAndRender.
+  // The old 'marko' seed default, and the aiBase / aiProvider fields, were
+  // demo-era state that nothing read any more (review 2026-09-27, FE-21).
+  user: localStorage.getItem('gf_user') || '',
   view: localStorage.getItem('gf_view') || 'mywork',
   selWeek: 0, selDay: 'All', deptFilter: null, tagFilter: null, search: '',
   tasks: [], expanded: new Set(), teleOpen: false,
@@ -355,6 +356,19 @@ GF.fmtDate = (ts) => {
     return GF.localDateStr(d);
   }
 };
+// Whole days from a calendar day to the facility's today — the ONE "days
+// in phase" rule. The Facility and Cultivation boards each had their own
+// (one from Date.now() and rounded, one from the facility day) and showed
+// "1 d" and "0 d" for the same batch after noon (review 2026-09-27, FE-17).
+// Both views should read this. Null for a missing or malformed day.
+GF.daysSince = (day) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(day || ''));
+  if (!m) return null;
+  const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(GF.facilityToday());
+  if (!t) return null;
+  const a = Date.UTC(+m[1], +m[2] - 1, +m[3]), b = Date.UTC(+t[1], +t[2] - 1, +t[3]);
+  return Math.round((b - a) / 86400000);
+};
 
 // ── Storage ──
 // integrate.js (loaded last) overrides both methods before this is ever
@@ -618,7 +632,6 @@ GF.setView = (v) => {
   try { localStorage.setItem('gf_view', v); } catch (e) {}
   if (GF.render && GF.render.all) GF.render.all();
 };
-GF.setUser = (u) => { GF.state.user = u; localStorage.setItem('gf_user', u); GF.render.all(); };
 GF.selectWeek = (id) => { GF.state.selWeek = Math.max(0, Math.min(GF.calendar.weeks.length - 1, id)); GF.render.all(); };
 GF.selectDay = (d) => { GF.state.selDay = d; GF.render.panels(); GF.render.dayPills(); };
 GF.filterDept = (id) => { GF.state.deptFilter = GF.state.deptFilter === id ? null : id; GF.render.all(); };
