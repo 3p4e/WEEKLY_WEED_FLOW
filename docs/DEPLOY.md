@@ -334,11 +334,67 @@ Compose service (added to the stack's compose.yaml):
 ```
 
 The workflow-state schema lives in the `wwf_tasks` DB under a dedicated
-`docengine` schema, auto-created at startup. This requires the service's DB
-role to hold `CREATE ON DATABASE wwf_tasks` (granted once per stack:
-`GRANT CREATE ON DATABASE wwf_tasks TO app_admin;`). Without it the service
-still boots and serves `/health`, `/questionnaires`, and direct `/build`, but
-`/workflows` answers 503 "DocEngine storage unavailable".
+`docengine` schema. The tables are created and (additively) altered by the
+service at startup. Without a working `DOCENGINE_DATABASE_URL` the service
+still boots and serves `/health` and `/questionnaires`, but `/workflows`,
+`/build` and `/documents` all answer 503 "DocEngine storage unavailable"
+(a build that is registered nowhere is not a controlled document).
+
+### DocEngine database role (rollout step for the owner, from 2026-09-27)
+
+Production still connects DocEngine as **`app_admin`** — BYPASSRLS and DML on
+every table of every organisation — for a service whose inputs are LLM
+output, retrieved corpus text and author-supplied markdown (review
+2026-09-27, DI-09). The code needs nothing beyond its own schema. The
+dedicated role is defined in `docengine/sql/docengine_role.sql`; it owns
+schema `docengine`, is `NOBYPASSRLS`, and has no privilege on `public` or
+`app` (proven on the test cluster: DDL on its own schema works, `SELECT`
+on any public table is refused). Rollout, one time, on the host:
+
+```sh
+# 1. create the role and hand the schema over (idempotent; re-run is safe)
+docker exec -i wwf-db-tasks psql -U postgres -d wwf_tasks -v ON_ERROR_STOP=1 \
+  -v pw='<openssl rand -hex 24>' -f - < docengine/sql/docengine_role.sql
+# 2. rotate the DSN in /opt/stacks/wwf_app/docengine.env
+#    DOCENGINE_DATABASE_URL=postgresql://docengine:<that password>@wwf-db-tasks:5432/wwf_tasks
+# 3. recreate the one service, then check /health reports db:true
+docker compose up -d --no-deps docengine
+# 4. (optional, after a clean week) REVOKE CREATE ON DATABASE wwf_tasks FROM app_admin;
+```
+
+### Organisation scope backfill (rollout step for the owner, from 2026-09-27)
+
+Every DocEngine job and document is now scoped to an organisation
+(`org_id`, review DI-13): the backend sends the signed-in user's org id as
+`X-Org-Id` on every call and DocEngine filters every read by it. Rows
+registered before this change carry `org_id = NULL` and are **reachable
+through no organisation** until backfilled — fail closed, never "whoever
+asks first". With one real organisation, once, on the host:
+
+```sh
+docker exec -i wwf-db-tasks psql -U postgres -d wwf_tasks -v ON_ERROR_STOP=1 -c "
+  UPDATE docengine.documents SET org_id = '<the real organisation uuid>' WHERE org_id IS NULL;
+  UPDATE docengine.jobs      SET org_id = '<the real organisation uuid>' WHERE org_id IS NULL;"
+```
+
+The organisation id is `organizations.id` in `wwf_users` (the demo org, slug
+`demo`, must NOT be used: the demo's anonymous ADMIN token would then see the
+real registry). Ship the backend that sends `X-Org-Id` (`app/docengine.py`
+`de_forward(..., org_id=user["org_id"])` from every `/qms/studio/*` route and
+the COQ builder) in the same deploy as this DocEngine, or Studio answers
+400 "X-Org-Id required" until it lands.
+
+### Deploying DocEngine
+
+`deploy.yml` has a `docengine` scope since 2026-09-27: it builds the image
+from `docengine/` at the dispatched SHA, checksums the sources inside the
+image against the checkout, snapshots both databases (the service runs
+additive DDL at startup), bumps the one image line, recreates the one
+service and probes `/health` from inside the container for `ok:true` and
+`db:true`. `docker-compose.yml` now defines the service (with its healthcheck
+and the `docengine_out` volume) so CI validates what runs; the host's
+`compose.yaml` keeps its `docengine.env` and `ainet` network exactly as
+documented in `docs/LETTA-CUTOVER-PHASE1-2026-08-22.md`.
 
 Backend env (app.env): `DOCENGINE_URL=http://docengine:8000` and
 `DOCENGINE_API_KEY=<same secret as the service's DOCENGINE_API_KEY>`. An

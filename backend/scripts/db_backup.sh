@@ -17,6 +17,15 @@ USERS_PGHOST="${USERS_PGHOST:-wwf-db-users}"
 TASKS_PGHOST="${TASKS_PGHOST:-wwf-db-tasks}"
 USERS_PGDATABASE="${USERS_PGDATABASE:-wwf_users}"
 TASKS_PGDATABASE="${TASKS_PGDATABASE:-wwf_tasks}"
+# The DocEngine's output volume (docengine_out), mounted read-only into this
+# container by docker-compose.yml. It holds every controlled document the
+# registry points at — SOPs, annexes and every released certificate's COQ
+# artefact — and until 2026-09-27 it was in no backup at all: a host or
+# volume loss restored the registry rows from the wwf_tasks dump and every
+# .docx they named was gone (review 2026-09-27, DI-10). Absent directory =
+# skipped with a warning, never an error, so a stack without DocEngine
+# still backs up its databases.
+DOCENGINE_OUT_DIR="${DOCENGINE_OUT_DIR:-/docengine-out}"
 
 # Dumps "$@" (a pg_dump/pg_dumpall command) to "$2.gz", checking pg_dump's own
 # exit code (a bare `pg_dump | gzip` hides it behind gzip's, which still exits
@@ -57,8 +66,25 @@ dump_once() {
     echo "[db_backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) dumping globals@$host -> ${out}.gz"
     dump_and_gzip "globals@$host" "$out" pg_dumpall -h "$host" -U "$PGUSER" --globals-only || ok=0
   done
+  # The produced documents, as one tarball beside the dumps of the registry
+  # that names them. tar's own exit code is checked (a vanished file mid-run
+  # is a failure, not a partial archive that looks whole), then gzip -t.
+  if [ -d "$DOCENGINE_OUT_DIR" ]; then
+    out="$BACKUP_DIR/docengine_out_${ts}.tar.gz"
+    echo "[db_backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) archiving $DOCENGINE_OUT_DIR -> $out"
+    if tar -C "$DOCENGINE_OUT_DIR" -czf "$out" . && gzip -t "$out" 2>/dev/null; then
+      :
+    else
+      echo "[db_backup] ERROR: archive of $DOCENGINE_OUT_DIR failed" >&2
+      rm -f "$out"
+      ok=0
+    fi
+  else
+    echo "[db_backup] WARNING: $DOCENGINE_OUT_DIR is not mounted — DocEngine documents NOT backed up this cycle" >&2
+  fi
   if [ "$ok" -eq 1 ]; then
-    find "$BACKUP_DIR" -name 'wwf_*.sql.gz' -mtime "+${RETENTION_DAYS}" -print -delete
+    find "$BACKUP_DIR" \( -name 'wwf_*.sql.gz' -o -name 'docengine_out_*.tar.gz' \) \
+      -mtime "+${RETENTION_DAYS}" -print -delete
   else
     echo "[db_backup] one or more dumps failed this cycle — skipping rotation so existing good backups are kept" >&2
   fi

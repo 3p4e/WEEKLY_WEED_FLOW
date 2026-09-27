@@ -22,7 +22,6 @@ _pool: asyncpg.Pool | None = None
 WORKER_ID = os.environ.get("DOCENGINE_WORKER_ID") or uuid.uuid4().hex
 
 _SCHEMA = """
-CREATE SCHEMA IF NOT EXISTS docengine;
 CREATE TABLE IF NOT EXISTS docengine.jobs (
   id          uuid PRIMARY KEY,
   kind        text NOT NULL,                 -- 'workflow' | 'revise'
@@ -90,6 +89,15 @@ async def init() -> None:
         return  # tests / degraded mode: endpoints depending on DB 503
     _pool = await asyncpg.create_pool(settings.database_url, min_size=1, max_size=5)
     async with _pool.acquire() as c:
+        # The schema is created only when it is absent. `CREATE SCHEMA IF NOT
+        # EXISTS` checks CREATE ON DATABASE before it checks existence, and
+        # that privilege is exactly what the service's own role must not hold
+        # (docengine/sql/docengine_role.sql creates the schema and hands it
+        # over; review 2026-09-27, DI-09). Under a role that may create
+        # schemas — a test cluster, a first boot as superuser — this still
+        # creates it.
+        if not await c.fetchval("SELECT 1 FROM pg_namespace WHERE nspname = 'docengine'"):
+            await c.execute("CREATE SCHEMA docengine")
         await c.execute(_SCHEMA)
 
 

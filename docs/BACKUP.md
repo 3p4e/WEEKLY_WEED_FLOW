@@ -6,23 +6,40 @@ This document describes what exists now, its scope, and its honest limits.
 
 ## Scope
 
-Backs up **only WWF's own two Postgres databases** (`wwf_users` in
-`wwf-db-users` and `wwf_tasks` in `wwf-db-tasks` on KVM4). It does **not**
-cover:
+Backs up **WWF's own two Postgres databases** (`wwf_users` in `wwf-db-users`
+and `wwf_tasks` in `wwf-db-tasks` on KVM4) **and the DocEngine output volume**
+(`docengine_out` — every controlled document the `docengine.documents`
+registry points at: SOPs, annexes and every released certificate's COQ
+artefact). Until 2026-09-27 the volume was in no backup at all, so a host or
+volume loss would have restored the registry rows from the `wwf_tasks` dump
+with every `.docx` they name gone and every download answering 410
+(review DI-10). It does **not** cover:
 
 - Letta's own Postgres (a separate, pre-existing stack on the same host,
   outside this repo).
-- Qdrant's vector store.
+- RAGflow's datasets and vector store.
 - The Docker volumes for any other service on the box.
 
 ## Mechanism
 
 `backend/scripts/db_backup.sh`, run in the `db-backup` container
 (`docker-compose.yml`): a loop that dumps BOTH databases with `pg_dump`
-back-to-back, gzips them, deletes anything older than `RETENTION_DAYS`
-(default 14), then sleeps 24 hours and repeats. Files land in the
-`weekly_weed_flow_backups` named Docker volume as
-`wwf_users_<UTC timestamp>.sql.gz` + `wwf_tasks_<UTC timestamp>.sql.gz`.
+back-to-back, gzips them, archives the DocEngine output volume (mounted
+read-only at `/docengine-out`) as one tarball, deletes anything older than
+`RETENTION_DAYS` (default 14), then sleeps 24 hours and repeats. Files land in
+the `weekly_weed_flow_backups` named Docker volume as
+`wwf_users_<UTC timestamp>.sql.gz` + `wwf_tasks_<UTC timestamp>.sql.gz` +
+`docengine_out_<UTC timestamp>.tar.gz` (plus the two `*_globals_*` role
+dumps). A cycle in which any of these fails skips the rotation, so the last
+good set is kept. If the volume is not mounted the script says so on every
+cycle and backs up the databases anyway — the watchdog's `backup_fresh`
+check reports the missing archive as a WARN (`ops/README.md`).
+
+**Freshness is watched.** `ops/watchdog.sh` (`backup_fresh`, `offsite_fresh`)
+FAILs when the newest local dump is older than 30 h and, when the offsite
+container is running, when the newest remote object is older than 48 h. Before
+2026-09-27 the only freshness signal was a warning inside the nightly
+migration rehearsal.
 
 The two dumps are **not atomic as a pair** — they run seconds apart, so a
 restore of both can disagree by whatever happened in that gap (e.g. a
@@ -61,7 +78,16 @@ Key properties:
 - **`copy`, never `sync`** — the offsite pass only ever ADDS files. A local
   wipe (disk failure mid-rotation, ransomware, `docker volume rm`) cannot
   propagate deletions to Drive. Remote retention is enforced separately by
-  age (`OFFSITE_RETENTION_DAYS`, default 60).
+  age (`OFFSITE_RETENTION_DAYS`, default 60) — and **only while the newest
+  local dump is under 30 h old**. Unconditionally, a wedged `db-backup` with
+  a working `rclone` would have aged the offsite set to empty in 60 days,
+  exactly when it was the only backup left; now the remote rotation pauses
+  and the script says why on every cycle.
+- **Status as of 2026-09-27:** the `wwf-backup-offsite` container has not run
+  since the 2026-09-19 VM migration (`docs/HANDOFF.md`). Until it is brought
+  back — `./rclone/rclone.conf` restored on the new host with the same crypt
+  password pair, then `docker compose up -d backup-offsite` — there is **no
+  offsite copy**, and the watchdog reports it as a WARN naming this state.
 - **Config custody:** `./rclone/rclone.conf` on the deploy host (mode 0600,
   git-ignored) holds the Drive OAuth token and the crypt password pair.
   ⚠️ **Losing the crypt password means every offsite backup becomes
@@ -88,9 +114,11 @@ restored is a hope, not a backup.
 
 ## Restore procedure (tested — see below)
 
-1. Stop the app so nothing writes during the restore:
+1. Stop the app so nothing writes during the restore — **including DocEngine**,
+   which writes its registry into `wwf_tasks` (schema `docengine`) and its
+   documents into `docengine_out`:
    ```bash
-   docker stop weekly_weed_flow-backend-1 wwf-scheduler
+   docker stop weekly_weed_flow-backend-1 wwf-scheduler wwf-docengine
    ```
 2. Pick a matching-timestamp PAIR of dumps from the volume and restore each
    into a **fresh** database in its own container (never restore over the
@@ -112,8 +140,22 @@ restored is a hope, not a backup.
      "SELECT 'tasks',count(*) FROM tasks UNION ALL SELECT 'work_sessions',count(*) FROM work_sessions UNION ALL SELECT 'ai_pins',count(*) FROM ai_pins"
    ```
 4. Only once satisfied, rename databases (or repoint the four
-   `*_DATABASE_URL`s) to cut the app over, then restart the two containers
+   `*_DATABASE_URL`s) to cut the app over, then restart the three containers
    stopped in step 1.
+5. **DocEngine documents.** Restore the archive taken with the same timestamp
+   as the `wwf_tasks` dump you restored — the registry rows in that dump name
+   exactly the files in that archive:
+   ```bash
+   docker exec wwf-db-backup ls /backups | grep docengine_out_
+   # into a scratch directory first, never straight over the live volume
+   docker run --rm -v weekly_weed_flow_backups:/backups:ro -v weekly_weed_flow_docengine_out:/out \
+     alpine sh -c 'mkdir -p /out/.restore && tar -xzf /backups/docengine_out_<TIMESTAMP>.tar.gz -C /out/.restore && ls /out/.restore | wc -l'
+   ```
+   Spot-check a few `path` values from `docengine.documents` against the
+   restored files, then move them into place (`mv /out/.restore/* /out/`) and
+   remove `.restore`. A row whose file is missing answers 410 on download;
+   `SELECT id, code, version, path FROM docengine.documents` lists what to
+   expect.
 
 **The single-DB version of this procedure was actually run, not just
 written down** (v1: dump via `db_backup.sh --once`, restore into a scratch
